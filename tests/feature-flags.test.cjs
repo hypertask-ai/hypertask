@@ -341,20 +341,10 @@ test("Haiku default is an Owner + QA feature, including system ID zero only afte
   assert.equal(await flags.isFeatureEnabled(key, 0), false);
 });
 
-test("Haiku 5.5 is an Owner + QA feature and respects OFF", async () => {
-  const flagName = flags.HTPR_7010_HAIKU_5_5_FLAG;
-  assert.equal(flagName, "htpr-7010-haiku-5-5");
-  assert.equal(flags.defaultFeatureFlagMode(flagName), "OWNER_AND_QA");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === flagName);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.shippedOn, "2026-10-08");
-  assert.equal(await flags.isFeatureEnabled(flagName, 6), true);
-  assert.equal(await flags.isFeatureEnabled(flagName, 985), true);
-  assert.equal(await flags.isFeatureEnabled(flagName, 7), false);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(flagName, 6), false);
-  assert.equal(await flags.isFeatureEnabled(flagName, 985), false);
+test("Haiku 5.5 is permanent and its flag is gone", async () => {
+  assert.equal(flags.HTPR_7010_HAIKU_5_5_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7010-haiku-5-5"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7010-haiku-5-5"), false);
 });
 
 test("invite email bugfix defaults to Everyone and respects OFF", async () => {
@@ -577,37 +567,21 @@ test("board-back is no longer registered", async () => {
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7003-board-back"), false);
 });
 
-test("no-loading-flash bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7004_NO_LOADING_FLASH_FLAG: key } = flags;
-  assert.equal(key, "htpr-7004-no-loading-flash");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("permanent cached refresh behavior is no longer registered as a flag", async () => {
+  assert.equal(flags.HTPR_7004_NO_LOADING_FLASH_FLAG, undefined);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7004-no-loading-flash"), false);
 });
 
-test("phone-first-load-js bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG: key } = flags;
-  assert.equal(key, "htpr-7008-phone-first-load-js");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("phone-first-load JavaScript behavior no longer has a registry flag", async () => {
+  assert.equal(flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG, undefined);
+  assert.ok(!definitions.some(entry => entry.key === "htpr-7008-phone-first-load-js"));
+  assert.ok(!(await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7008-phone-first-load-js"));
 });
 
-test("phone-first-paint bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7008_PHONE_FIRST_PAINT_FLAG: key } = flags;
-  assert.equal(key, "htpr-7008-phone-first-paint");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("phone first paint no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7008-phone-first-paint"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7008-phone-first-paint"), false);
 });
 
 test("subtask-link is absent from the registry after becoming permanent", async () => {

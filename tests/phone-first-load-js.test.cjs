@@ -47,34 +47,38 @@ function compile(file, mocks) {
   return exports;
 }
 
-test("phone inbox flag on and pending skip legacy downloads; off and desktop warm only inbox modules", async () => {
+test("phone inbox skips legacy downloads; desktop warms only inbox modules", async () => {
   const file = "src/hooks/useInboxLegacyWarm.ts";
-  const source = read(file);
-  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let callback;
-  function visit(node) {
-    if (ts.isCallExpression(node) && node.expression.getText(ast) === "useEffect" && node.arguments[0]?.getText(ast).includes("legacyImports")) callback = node.arguments[0].getText(ast);
-    ts.forEachChild(node, visit);
-  }
-  visit(ast);
-  assert.ok(callback, "exercise the real import scheduling effect");
-  const code = ts.transpileModule(`export const effect = ${callback};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  for (const [mobile, enabled, resolved, pathname, expected, viewport] of [
-    [true, true, true, "/project", 0], [true, true, true, "/inbox", 0],
-    [true, false, undefined, "/project", 0], [true, false, undefined, "/inbox", 0],
-    [true, false, true, "/project", 0], [true, false, true, "/inbox", 0],
-    [true, false, false, "/project", 0], [true, false, false, "/inbox", 2],
-    [false, true, true, "/project", 0], [false, true, true, "/inbox", 2],
-    [true, false, false, "/my-tasks", 0],
-    [false, true, true, "/project", 0, 390],
-    [false, false, undefined, "/inbox", 0, 390],
+  const code = ts.transpileModule(read(file), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const [mobile, viewport, pathname, warm] of [
+    [true, 390, "/project", false], [true, 390, "/inbox", false],
+    [true, 390, "/my-tasks", false],
+    [false, 1440, "/project", false], [false, 1440, "/inbox", true],
+    [false, 1440, "/my-tasks", false], [false, 1440, null, false],
+    [false, 390, "/project", false], [false, 390, "/inbox", false],
+    [true, 1440, "/inbox", true],
+    [true, 767, "/inbox", false], [false, 768, "/inbox", true],
   ]) {
     const imports = [];
+    const effects = [];
     const exports = {};
-    vm.runInNewContext(code, { exports, window: { innerWidth: viewport ?? (mobile ? 390 : 1440) }, mbl: mobile, phoneFirstLoadJs: enabled, phoneJsFlagValue: resolved, pathname, require: id => { imports.push(id); return {}; } });
-    exports.effect();
+    vm.runInNewContext(code, {
+      exports,
+      window: { innerWidth: viewport },
+      require: id => {
+        if (id === "react") return { useEffect: callback => effects.push(callback) };
+        imports.push(id);
+        return {};
+      },
+    }, { filename: file });
+    exports.useInboxLegacyWarm(pathname, mobile);
+    assert.equal(effects.length, 1, "exercise the real import scheduling effect");
+    effects[0]();
     await new Promise(resolve => setImmediate(resolve));
-    assert.equal(imports.length, expected, JSON.stringify({ mobile, enabled, resolved, pathname }));
+    assert.deepEqual(imports, warm ? [
+      "@/lib/firstScreen/comment",
+      "@/components/Modals/RemindMe/RemindMeComponent",
+    ] : [], JSON.stringify({ mobile, viewport, pathname }));
   }
 });
 

@@ -3,8 +3,6 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
@@ -312,9 +310,7 @@ function DictationProviderDropdown({
 
 const AiFeaturesSection = () => {
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const haiku55Enabled = useFlag(
-    HTPR_7010_HAIKU_5_5_FLAG,
-  ) || haikuDefaultEnabled;
+  const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));

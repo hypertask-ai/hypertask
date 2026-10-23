@@ -15,22 +15,40 @@ type SigningKeyDatabase = Pick<PrismaClient, 'featureFlag'> & {
   agentWebhookSubscription: SigningKeyModel
 }
 
+function assertSealingWorks() {
+  const probe = 'whsec_sweep-preflight'
+  if (openWebhookSigningKey(sealWebhookSigningKey(probe)) !== probe) throw new Error()
+}
+
+function verifiedSeal(plain: string): string | null {
+  try {
+    const sealed = sealWebhookSigningKey(plain)
+    return openWebhookSigningKey(sealed) === plain ? sealed : null
+  } catch {
+    return null
+  }
+}
+
 export async function sweepWebhookSigningKeys(db: SigningKeyDatabase, deadline = Date.now() + 20_000) {
-  const counts = { scanned: 0, encrypted: 0, conflicts: 0, remaining: 0 }
+  const counts = { scanned: 0, encrypted: 0, conflicts: 0, failed: 0, remaining: 0 }
   try {
     const flag = await db.featureFlag.findUnique({
       where: { key: SEALED_WEBHOOK_KEYS_FLAG },
       select: { mode: true },
     })
     if (flag?.mode !== 'EVERYONE') return counts
+    assertSealingWorks()
 
     for (const model of [db.webhookSubscription, db.agentWebhookSubscription]) {
       const rows = await model.findMany({ where: pending, select, orderBy: { id: 'asc' }, take: 100 })
       for (const row of rows) {
         if (Date.now() >= deadline) break
         counts.scanned++
-        const secret = sealWebhookSigningKey(row.secret)
-        if (openWebhookSigningKey(secret) !== row.secret) throw new Error()
+        const secret = verifiedSeal(row.secret)
+        if (secret === null) {
+          counts.failed++
+          continue
+        }
         const result = await model.updateMany({
           where: { id: row.id, secret: row.secret },
           data: { secret },

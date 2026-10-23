@@ -929,7 +929,7 @@ test('workflow uses trusted pinned production code, correct events, permissions 
     assert.ok(trusted.includes(pin[0]));
   }
   assert.match(workflow, /ref: production\s*persist-credentials: false/);
-  assert.match(workflow, /node-version: 24/);
+  assert.match(workflow, /node-version: \^24\.\d+\.\d+/);
   assert.match(workflow, /MCP_TOKEN: \$\{\{ secrets\.HYPERTASK_MCP_TOKEN \}\}/);
   assert.match(workflow, /run: node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile\s*$/);
   assert.doesNotMatch(workflow, /--pr|EVENT_NAME|PR_NUMBER/);

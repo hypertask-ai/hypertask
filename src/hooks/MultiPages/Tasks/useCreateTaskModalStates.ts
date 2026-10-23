@@ -1,5 +1,4 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
 import {
@@ -32,7 +31,6 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import { shouldShowGuestWriterIntro } from "@/lib/demo/guestBoardBuild";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
-import { useFlag } from "@/hooks/useFlag";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useGetAllProjectsMinimal } from "../useGetAllProjectsMinimal";
 import { useHyperMention } from "./useHyperMention";
@@ -148,7 +146,7 @@ const useCreateTaskModalGlobalStates = () => {
   const { postHyperMention } = useHyperMention();
   const { data: userPreferences } = useGetUserPreferences();
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const haiku55Enabled = true;
   const defaultBilling = deriveCurrentBoardBilling(_currentProject);
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
     ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled)

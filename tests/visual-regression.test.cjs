@@ -88,7 +88,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.match(workflow, /name: visual-regression/);
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /timeout-minutes: 35/);
-  assert.match(workflow, /node-version: 24/);
+  assert.match(workflow, /node-version: \^24\.\d+\.\d+/);
   assert.match(workflow, /@playwright\/test@1\.64\.0/);
   assert.match(workflow, /github\.event\.pull_request\.base\.sha \|\| inputs\.base/);
   assert.match(workflow, /github\.event\.pull_request\.head\.sha \|\| inputs\.head/);

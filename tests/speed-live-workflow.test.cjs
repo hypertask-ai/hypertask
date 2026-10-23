@@ -22,7 +22,7 @@ test('live speed is scheduled and dispatchable only on production, on hosted liv
   assert.deepEqual(job.permissions, { contents: 'read' });
   assert.deepEqual(workflow.concurrency, { group: 'speed-live', 'cancel-in-progress': false });
   for (const row of job.steps.filter(row => row.uses)) assert.match(row.uses, /@[a-f0-9]{40}$/);
-  assert.equal(job.steps.find(row => row.uses?.startsWith('actions/setup-node@')).with['node-version'], 24);
+  assert.match(String(job.steps.find(row => row.uses?.startsWith('actions/setup-node@')).with['node-version']), /^\^24\.\d+\.\d+$/);
   const privateCheckout = step('Checkout private read-only guard');
   assert.equal(privateCheckout.with.repository, 'hypertask-ai/company-skills');
   assert.equal(privateCheckout.with['ssh-key'], '${{ secrets.COMPANY_SKILLS_DEPLOY_KEY }}');

@@ -1,7 +1,7 @@
 
 import { useEffect, useLayoutEffect } from "react";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7004_NO_LOADING_FLASH_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { focusManager } from "@tanstack/react-query";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
@@ -13,7 +13,6 @@ import type { useTaskDetailInitialScrollValue } from "./useTaskDetailInitialScro
 export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue) {
   const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
-  const noLoadingFlash = useFlag(HTPR_7004_NO_LOADING_FLASH_FLAG);
   const { cachedLayout } = useTaskContext();
   const { embedded, _currentTask, _parsedTask, handleKeyDown, handleKeyUp, sharedLink, isRecording, showMentionList, currentTask, carousalItems, getTask, setNonEssentialReady, readinessTaskRef, currentUser, updateActiveItemAndItemInView, setStickyElementHeight, showAiChatInterface, onWindowFocus } = context;
 
@@ -46,8 +45,8 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
   ]);
 
   useEffect(() => {
-    getTask(flagReady && !dedupe && !(noLoadingFlash && (cachedLayout || window.history.state?.cachedTaskDetail?.taskId === _parsedTask.id)));
-  }, [_currentTask, _parsedTask.id, noLoadingFlash, cachedLayout, dedupe, flagReady]);
+    getTask(flagReady && !dedupe && !(cachedLayout || window.history.state?.cachedTaskDetail?.taskId === _parsedTask.id));
+  }, [_currentTask, _parsedTask.id, cachedLayout, dedupe, flagReady]);
 
   useEffect(() => {
     const readinessTask = `${_parsedTask.projectId}:${_parsedTask.id}`;

@@ -73,28 +73,35 @@ test("creator hydration enables description quoting without changing the frozen 
   assert.equal(children().find((child) => child?.type === Editor).props.user.id, 6, "a changed initialization seed must not replace the hydrated creator");
 });
 
-test("flag-off cached network and HTTP refresh failures recover through the authorized route, while embedded behavior is unchanged", () => {
+test("cached network and HTTP refresh failures retry in place, while embedded behavior is unchanged", () => {
   const source = read("src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx");
   for (const embedded of [false, true]) {
     for (const error of [new TypeError("Failed to fetch"), new Error("Unable to load task")]) {
       const effects = [];
       const replacements = [];
+      const timers = new Map();
+      const retries = [];
+      const cancellations = [];
       const previous = global.window;
       const href = "https://app.hypertask.ai/detail/project-15/43?reply=true#comment-12";
-      global.window = { location: { href, replace: (url) => replacements.push(url) } };
+      global.window = {
+        location: { href, replace: (url) => replacements.push(url) },
+        setTimeout: (callback, delay) => { timers.set(1, { callback, delay }); return 1; },
+        clearTimeout: id => { cancellations.push(id); timers.delete(id); },
+      };
       try {
         const Detail = compile(source, {
           react: { useRef: (initial) => ({ current: initial }), useEffect: (effect) => effects.push(effect) },
           "react/jsx-runtime": require("react/jsx-runtime"),
-          "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "comments" ? {} : { data: task, error, isError: true } },
+          "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "comments" ? {} : { data: task, error, isError: true, refetch: () => retries.push(task.id) } },
           "@/app/unauthorized/page": { __esModule: true, default: () => null },
           "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: () => ["cached-task-detail"], TaskAccessDeniedError: class extends Error {} },
           "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: () => null, useTaskContext: () => ({}) },
           "@/lib/realtime/taskDetailRefresh": { shouldPreserveTaskEditorContent: () => false },
           "@/app/detail/[...slug]/TaskDetailComp": { __esModule: true, default: () => null },
           "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
-          "@/hooks/useFlag": { useFlag: key => key !== "htpr-7004-no-loading-flash" },
-          "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
+          "@/hooks/useFlag": { useFlag: () => true },
+          "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout" },
           "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
           "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
           "@/lib/state": { useRecoilValue: () => ({ id: 6 }) },
@@ -102,9 +109,25 @@ test("flag-off cached network and HTTP refresh failures recover through the auth
           "@/utils/api/Task Detail": {},
         }).default;
         const result = Detail({ taskId: 42, projectId: 15, uniqueIndex: 43, initialTask: task, embedded });
-        if (!embedded) result.props.children.type(result.props.children.props);
-        effects.forEach((effect) => effect());
-        assert.deepEqual(replacements, embedded ? [] : [href], "cached failures must not silently leave incomplete metadata forever");
+        if (!embedded) {
+          const refresh = result.props.children;
+          assert.equal(refresh.type(refresh.props), refresh.props.children, "cached content stays visible during recovery");
+        } else {
+          assert.equal(result.props.children, "Unable to load this task");
+        }
+        const cleanups = effects.map((effect) => effect()).filter(Boolean);
+        assert.deepEqual(replacements, [], "transient failures must not reload the cached detail");
+        assert.equal(timers.size, embedded ? 0 : 1);
+        assert.deepEqual(retries, [], "refetch waits for the backoff timer");
+        if (!embedded) {
+          const timer = timers.get(1);
+          assert.equal(timer.delay, 1000);
+          timer.callback();
+          assert.deepEqual(retries, [task.id], "the scheduled retry refetches the cached task once");
+        }
+        cleanups.forEach(cleanup => cleanup());
+        assert.equal(timers.size, 0);
+        assert.deepEqual(cancellations, embedded ? [] : [1]);
       } finally {
         global.window = previous;
       }

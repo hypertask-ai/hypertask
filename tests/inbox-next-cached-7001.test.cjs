@@ -66,7 +66,7 @@ function fixture(t, { authenticatedId = 2343, inboxAccountId = 2343, cached = tr
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => {
-      assert.ok([flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG].includes(key), key);
+      assert.ok([flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG].includes(key), key);
       return false;
     } },
     "@/lib/flags/keys": flags,

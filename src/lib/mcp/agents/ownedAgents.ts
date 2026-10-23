@@ -155,6 +155,7 @@ export type AgentManagementDatabase = AgentManagementTransaction & {
         revokedAt: true
         createdAt: true
         visibility: true
+        credentialTeamId: true
         members: {
           orderBy: { id: 'asc' }
           select: {
@@ -164,7 +165,7 @@ export type AgentManagementDatabase = AgentManagementTransaction & {
           }
         }
       }
-    }): Promise<OwnedAgentRow[]>
+    }): Promise<Array<OwnedAgentRow & { credentialTeamId: string | null }>>
   }
   $transaction<T>(
     callback: (transaction: AgentManagementTransaction) => Promise<T>,
@@ -179,6 +180,7 @@ export type OwnedAgent = {
   created_at: string
   visibility: 'PRIVATE' | 'TEAM'
   boards: Array<{ id: number; name: string }>
+  team_bound?: boolean
 }
 
 export type OwnedAgentDetail = OwnedAgent & {
@@ -195,7 +197,8 @@ export type DeleteOwnedAgentResult = {
 export async function listOwnedAgents(
   database: AgentManagementDatabase,
   userId: number,
-  teamId?: string
+  teamId?: string,
+  options: { teamBound?: boolean } = {}
 ): Promise<OwnedAgent[]> {
   const agents = await database.agent.findMany({
     where: {
@@ -210,6 +213,7 @@ export async function listOwnedAgents(
       revokedAt: true,
       createdAt: true,
       visibility: true,
+      credentialTeamId: true,
       members: {
         orderBy: { id: 'asc' },
         select: {
@@ -221,7 +225,11 @@ export async function listOwnedAgents(
     },
   })
 
-  return agents.map(toOwnedAgent)
+  return agents.map((agent) =>
+    options.teamBound
+      ? { ...toOwnedAgent(agent), team_bound: agent.credentialTeamId != null }
+      : toOwnedAgent(agent)
+  )
 }
 
 function toOwnedAgent(agent: OwnedAgentRow): OwnedAgent {

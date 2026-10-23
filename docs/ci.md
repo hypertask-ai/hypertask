@@ -106,7 +106,7 @@ The `premerge-evidence.timer` reconciles all open production PRs every two minut
 
 The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing `.claude/skills/ship/scripts/**` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.
 
-- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only` and `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`. The full shell suite also contains live authenticated checks and is deliberately excluded.
+- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only`, `python3 .claude/skills/ship/scripts/premerge-evidence.test.py` and `python3 .claude/skills/ship/scripts/ci-why.test.py`. The full shell suite also contains live authenticated checks and is deliberately excluded.
 - Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, and Git for repository-scope detection. Neither offline test path nor its called code needs Node, so the workflow does not install it. No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
 - Uses a temporary HOME and the harnesses' temporary state and local Git/GitHub/Hypertask fixtures. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
 

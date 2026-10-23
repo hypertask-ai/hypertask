@@ -173,8 +173,8 @@ async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSa
         showAssigneeModal: context.showAssignModal, toggleAssigneeModal: context.toggleModal, showTooltip: false });
     } },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: preferences }) },
-    "@/hooks/useFlag": { useFlag: key => loadPath === "shared" && ["htpr-7009-dedupe-task-detail-reads", "htpr-7004-no-loading-flash"].includes(key) },
-    "@/lib/flags/keys": { HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
+    "@/hooks/useFlag": { useFlag: key => loadPath === "shared" && key === "htpr-7009-dedupe-task-detail-reads" },
+    "@/lib/flags/keys": {},
     "@/lib/constants": constants,
     "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
     "@/lib/state": { useRecoilValue: () => user },

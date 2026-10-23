@@ -11,6 +11,8 @@ Written from the HTPR-7574 live QA runs (PRs 1835 and 1847).
 
 ## How to drive it
 
+Agent lists are not always read-only for QA. `GET /api/agents/owned` can create a default Hyper AI agent and board membership on every accessible team that lacks an active owned agent; `GET /api/agents?teamId=<sandbox-team>` can seed that team too. Establish pre-existing agent and membership ids through non-seeding reads before opening these lists or the invite picker. Stop if seeding could affect a board outside the permitted QA scope. Record any automatically seeded ids separately from the two throwaway fixtures.
+
 1. Doctor: read the merge SHA's successful Production deployment, require `POST /api/app-shell/bootstrap` HTTP 200 and `slices.user.data.id=985`, and capture signed-in `/my-tasks` with `phone-shot.sh --state` before judging the feature.
 2. Confirm effective flags with `GET /api/flags`: `htpr-7574-owned-unattached-agents` and `htpr-7574-invite-picker-latest-members` must both be true for 985. Effective flags do not prove configured modes; read those with `ht-flag get`. Do not change flags or use admin credentials.
 3. Create two throwaway agents through **Agents → Agent Chat → Add agent**, which creates them unattached. Keep one (`-u`) never on any board. For the other (`-w`), owner detail → **Board access** → check QA Sandbox; require add response 200 and membership after reload. Team listing must confirm write role. Do not use the ordinary board-attaching creation flow for `-u`.
@@ -38,4 +40,4 @@ Record command navigation to the register and the reachable No board group witho
 
 ## Cleanup
 
-Delete only this run's recorded names/ids through owner detail **Archive or delete → Delete agent → confirmation**. Match DELETE by method and route family, because UUID detail URLs can canonicalize to slugs. Require HTTP 200 deletion and HTTP 404 detail for each, reload Agents and verify names absent, and confirm both ids absent from owned/team lists. Compare pre-existing ids against the baseline. Never revoke all tokens, alter other agents, change tasks, or write flags.
+Delete only this run's recorded names/ids through owner detail **Archive or delete → Delete agent → confirmation**. Match DELETE by method and route family, because UUID detail URLs can canonicalize to slugs. Require HTTP 200 deletion and HTTP 404 detail for each, reload Agents and verify names absent, and confirm both ids absent from owned/team lists. Compare pre-existing ids against the baseline, accounting separately for automatic seeds. Do not delete default agents as throwaway fixtures or remove them just to restore the original list count; list reads can recreate them. Never revoke all tokens, alter other agents, change tasks, or write flags.

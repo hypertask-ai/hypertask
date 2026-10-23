@@ -44,7 +44,8 @@ export function summarize(samples) {
 }
 
 // A path whose measurement changed gets a new version; only same-version history is its baseline.
-export const PATH_VERSIONS = { 'ticket-warm': 2, search: 2, 'page-navigation': 2, 'ctrl-j': 2 };
+// Board paths version 2 (2026-10-23, YPER4-615): the page scrolls the card itself; Playwright's pre-scroll waited about 3 s on a busy phone.
+export const PATH_VERSIONS = { board: 2, 'board-returning': 2, 'ticket-warm': 2, search: 2, 'page-navigation': 2, 'ctrl-j': 2 };
 export const SEARCH_IDLE_PAUSE_MS = 3000;
 
 // Saved by the app after a board visit; with it the server sends a ready-made board (HTPR-6934). The QA login filter drops it.
@@ -132,8 +133,6 @@ export function browserObserver() {
 export const boardCardPrefix = boardId => `/detail/project-${boardId}/`;
 
 export async function ready(page, surface, landedBoard) {
-  // view=default bypasses saved filters; scrolling keeps newer QA cards from hiding task 43 below the viewport.
-  if (surface === 'board') await page.locator(`a[href="${TASK}"]`).first().scrollIntoViewIfNeeded();
   return page.evaluate(async ({ surface, task, title, cardPrefix }) => {
     const visible = element => {
       if (!element) return false;
@@ -154,7 +153,7 @@ export async function ready(page, surface, landedBoard) {
       }
       if (surface === 'board') {
         const card = document.querySelector(`a[href="${task}"]`);
-        // Late board reflows can push the already-scrolled card below the viewport again.
+        // view=default bypasses saved filters; newer QA cards and late reflows push task 43 below a phone screen, so scroll it here.
         if (card && !visible(card)) card.scrollIntoView({ block: 'center' });
         return visible(card) && document.body.textContent.includes('QA Sandbox');
       }

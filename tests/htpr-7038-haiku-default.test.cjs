@@ -29,12 +29,11 @@ function moduleWithStubs(file, stubs, extra = "") {
   return loadedModule.exports;
 }
 
-function harness(enabled, plan = "Free", legacyHaiku = false) {
+function harness(enabled, plan = "Free") {
   const checks = [], calls = [], reservations = [];
   const flags = { isFeatureEnabled: async (key, id) => {
     checks.push([key, id]);
-    return key === keys.HTPR_7038_HAIKU_DEFAULT_FLAG ? enabled
-      : key === keys.HTPR_7010_HAIKU_5_5_FLAG ? legacyHaiku : false;
+    return key === keys.HTPR_7038_HAIKU_DEFAULT_FLAG && enabled;
   } };
   const gate = moduleWithStubs("src/app/api/ai/_lib/planGate.ts", {
     "@/lib/flags": flags, "@/lib/flags/keys": keys,
@@ -91,9 +90,9 @@ async function main() {
       const h = harness(enabled, plan);
       const context = await h.byok.getAiDefaultModelContext({ trustedTeamId: "fixture-team", userId: 7 });
       assert.equal(context.haikuDefaultEnabled, enabled);
-      assert.equal(context.haiku55Enabled, enabled);
+      assert.equal(context.haiku55Enabled, true);
       const option = catalog.getDefaultAiModelOptionForPlan(plan, false, context.haiku55Enabled, context.haikuDefaultEnabled);
-      assert.equal(option.id, enabled ? "claude-haiku-5-5" : plan === "BYOK" ? "gemini-3.5-flash-lite" : "gpt-6-luna");
+      assert.equal(option.id, enabled || plan !== "Free" ? "claude-haiku-5-5" : "gpt-6-luna");
       assert.equal(catalog.resolveAiModelOption(["gpt-6-luna"], option, context.haiku55Enabled).id, "gpt-6-luna");
       if (enabled) {
         await h.gate.assertModelAllowedForPlan(null, option, null);
@@ -121,7 +120,7 @@ async function main() {
       if (plan !== "BYOK") {
         const request = { userId: 7, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } };
         const selected = await editor.selectTaskWriterModel(request);
-        assert.equal(selected.modelId, enabled ? "claude-haiku-5.5" : "gpt-6-luna");
+        assert.equal(selected.modelId, enabled || plan !== "Free" ? "claude-haiku-5.5" : "gpt-6-luna");
         if (enabled) {
           storedPreference = { taskWriter: "gpt-6-luna" };
           const saved = await editor.selectTaskWriterModel(request);
@@ -130,13 +129,13 @@ async function main() {
       }
       for (const feature of ["summaries", "questionSuggestions", "statusUpdates"]) {
         const system = ladder.resolveSystemModel(feature, {}, context.haiku55Enabled, context);
-        assert.equal(system.model, enabled ? "anthropic/claude-haiku-5.5" : "google/gemini-3.5-flash-lite");
+        assert.equal(system.model, enabled || plan !== "Free" ? "anthropic/claude-haiku-5.5" : "google/gemini-3.5-flash-lite");
         const model = h.byok.resolveAutomaticAiModel("gateway", system.model, "vck_fixture", { haiku55Enabled: context.haiku55Enabled, lookup: { trustedTeamId: "fixture-team", userId: 7 }, feature: "summary" });
         h.modelApi.configureAiModelUsage(model, { userId: 7, teamId: "fixture-team", feature: "summary" });
         await model.doGenerate({ prompt: [], maxOutputTokens: 700, responseFormat: { type: "json" }, temperature: 0.4 });
         const call = h.calls.at(-1);
         assert.equal(call.modelId, system.model);
-        if (enabled) {
+        if (catalog.isHaiku55Model(system.model)) {
           assert.equal(call.params.providerOptions.anthropic.thinking.type, "disabled");
           assert.equal(call.params.temperature, undefined);
         } else {
@@ -147,8 +146,7 @@ async function main() {
       }
     }
   }
-  // HTPR-7010 alone retains the old Free default and paid Haiku behaviour.
-  const legacy = harness(false, "Free", true);
+  const legacy = harness(false, "Free");
   const legacyContext = await legacy.byok.getAiDefaultModelContext({ userId: 7 });
   assert.equal(catalog.defaultModelKeyFor(legacyContext), "gpt-6-luna");
   assert.equal(catalog.defaultModelKeyFor({ ...legacyContext, plan: "Pro" }), "claude-haiku-5-5");
@@ -160,7 +158,7 @@ async function main() {
   await model.doGenerate({ prompt: [], maxOutputTokens: 500 });
   assert.ok(anonymous.checks.some(([key, id]) => key === keys.HTPR_7038_HAIKU_DEFAULT_FLAG && id === 0));
   const off = harness(false);
-  assert.equal(await off.gate.haiku55ModelEnabled(7), false);
+  assert.equal(await off.gate.haiku55ModelEnabled(7), true);
   await assert.rejects(off.modelApi.resolveAiModel("claude", "claude-haiku-5-5", "fixture-direct").doGenerate({ prompt: [] }), /unavailable/);
   for (const provider of ["claude", "openrouter"]) {
     const h = harness(true);
