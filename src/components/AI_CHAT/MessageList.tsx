@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, inViewObjectAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys";
 
 interface MessageListProps { sidebarKey?: string; active?: boolean; hidden?: boolean }
 
@@ -36,7 +36,9 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const onlyViewedTicket = useFlag(HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG);
   const viewedTaskId = useRecoilValue(inViewObjectAtom)?.taskId;
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
-  const pendingFollowup = useRecoilValue(composeTaskSkillFollowupAtom);
+  const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
+  const pendingFollowup = skillFollowupEnabled ? pendingFollowupState : null;
   const waitingForSkillFollowup = Boolean(pendingFollowup) &&
     pendingFollowup?.taskId === (viewedTaskId ?? newTicketId);
   const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&

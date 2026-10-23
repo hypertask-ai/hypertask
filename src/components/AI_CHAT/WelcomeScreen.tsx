@@ -12,7 +12,7 @@ import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG } from "@/lib/flags/keys"
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
@@ -114,7 +114,9 @@ export const WelcomeScreen = () => {
   const taskDetailDataReady = !isDetailPage || taskDetailNonEssentialReady;
   const oneQuestionsCallEnabled = useFlag(HTPR_7586_ONE_QUESTIONS_CALL_FLAG);
   const questionsTaskId = useRecoilValue(composeTaskQuestionsTaskIdAtom);
-  const pendingFollowup = useRecoilValue(composeTaskSkillFollowupAtom);
+  const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
+  const pendingFollowup = skillFollowupEnabled ? pendingFollowupState : null;
   const hasPendingTicketQuestions = pendingFollowup?.taskId === taskId || oneQuestionsCallEnabled && questionsTaskId === taskId;
   const taskQuestions = useQuery({
     queryKey: ["task-questions", taskId],
