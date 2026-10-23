@@ -546,6 +546,43 @@ An earlier 3-run probe (load 13) showed the same shape with cards 241 to 756 ms 
 
 **Next probe.** The phone limiter is still main-thread render: hydration between code arrival (about 5.6 s) and the local read (6.5 s) on the first visit, and about 2 s of CPU after `g` then `b`. Profile which card subcomponents dominate a 10-card commit on the throttled phone.
 
+### 2026-10-23 evening: phone g then b draws the whole board in one synchronous render; each card sets up its own data watchers (HTPR-7677)
+
+https://app.hypertask.ai/detail/project-15/7677 (filed, not started).
+
+**Daily read.** Can't verify: `--latest` is still the 2026-10-22 06:17 UTC run on 0f0854834; production is 295207dc1 and moved again during this round. `speed-live.yml` ran at 09:31 UTC and skipped in 18 s. Closed the two stranded QA tickets with fresh gates: HTPR-7588 (proof ok) and HTPR-7395 (new live QA on production 295207dc1: on 7627 and 7909 ms, off 11087 ms, identical screenshot 3 of 3). HTPR-7507 still waits on two complete daily runs; HTPR-7554 is a reverted no-go.
+
+**Method.** Live CDP CPU profiles of `g` then `b` from My Tasks, phone profile, QA 2343, board 6859 (10 cards), 500 us sampling. The profile is aligned on a 20 ms `__navProbe` busy loop run at the key press: `Profiler.start` returned about 2.7 s before the first sample, so the profile start time cannot be used. Segments come from the app's own marks. Three cohorts of 3: `prof` (fresh context, 12 s on My Tasks), `clean` (22 s on My Tasks, load 11.7 to 14.7), `warm` (board visited first, then My Tasks 22 s, the daily harness cohort, load 17 to 25, deploy during the run). Profiling slows JavaScript: card visible 2.8 to 3.5 s against the harness 2.1 to 2.6 s. Scripts and rows: `~/.local/state/vcc-evidence/SPEED-2026-10-23-phone-nav/` (`profile.mjs`, `analyze.mjs`, `seg.mjs`, `chain.mjs`, `hooks.mjs`, `findings.md`).
+
+**What found it.** In the warm cohort the device copy is published at 1.6 to 2.0 s, then one task of 1.1 to 1.5 s runs until `ht-board-first-commit`. 870 ms of it sits under `flushSyncWorkAcrossRoots` > `performSyncWorkOnRoot`: a synchronous render. Leading explanation, not traced to the setter: react-query notifies through `useSyncExternalStore`, whose store updates React renders on the sync lane. renderRootSync 685 ms, commit 190 ms, and 170 ms of passive effects flushed inside `flushSpawnedWork` before the browser may paint (React flushes passive effects of a sync-lane commit at once). Inclusive cost per owner (mean of 3, render window 935 to 1086 ms):
+
+| Owner | Warm | Clean |
+|---|---|---|
+| Card component, chunk 7063 (`task.tsx`) | 112 ms | 113 ms |
+| TanStack Query core, all observers | 141 ms | 118 ms |
+| Per card: drafts (`task.tsx:146`, `useGetUserDrafts`) | 33 ms | 29 ms |
+| Per card: running timers (`TaskTagsRow.tsx:53`, `useBoardRunningTimers`) | 40 ms | 35 ms |
+| Per card: custom fields (`TaskTagsRow.tsx:213`) | 20 ms | 14 ms |
+| Query observer subscriptions in passive effects | 51 ms | 47 ms |
+| react-beautiful-dnd (DragDropContext, Draggable, Droppable) | 61 ms | 117 ms |
+| Passive effects flushed before paint | 169 ms | 241 ms |
+
+The three per-card hooks read board-wide lists with one shared key each, so ten cards create about thirty observers for three answers. Scored: lift them to the board, gain 3 / cost 2 / risk 2 = 0.75 (was idea 4 at 0.50 before it was measured); about 90 to 140 ms profiled on 10 cards, growing with card count, about 4% of the end-to-end phone path, so the ticket's primary metric is the app's own query-published to first-commit step with at least 10 interleaved pairs.
+
+**False leads.**
+- PostHog in the window: in the `prof` cohort the 8 s authenticated fallback (`AUTHENTICATED_ANALYTICS_MAX_WAIT_MS`; My Tasks emits no readiness event) fired about 13 to 16 s after a phone opened My Tasks and landed inside `g` then `b`: about 180 ms CPU (chunk 78278 evaluation and `init`) plus 150 KB, local read start 1.2 to 1.6 s. In the daily harness the chunk starts at 3.8 to 4.6 s, after content. Real only for a phone user who navigates in that window; check PostHog field data before filing.
+- The forced layout from `scrollWidth` in `LandingPageSection.tsx:101` (94 ms in a passive effect): removing the read moves the same layout to the next frame, and the harness rAF check forces layout anyway.
+- Deferring passive effects past paint: at most about 170 ms profiled minus the layout paint needs anyway, about 75 ms, inside the 2097 to 2618 ms daily range.
+- Key press to `/project` request was 428 and 606 ms in two warm samples, behind a 212 to 382 ms task with about 90 ms of garbage collection; 128 ms in the third. High host load, not app code.
+
+**Lessons.**
+- Align a CDP CPU profile with a named busy function run at the start mark; `Profiler.start` can return seconds before sampling begins.
+- A wait before the timed action that crosses an app timer (PostHog's 8 s fallback) changes the cohort; read the request list for analytics chunks before blaming the app.
+- A sync-lane commit flushes all passive effects before paint; on such a path count effect cost as content time.
+- Count per-item hooks that read board-wide keys: their cost is per card, invisible on a 10-card fixture's median but linear in board size.
+
+**Next probe.** HTPR-7677 on/off. Then whether the board page shell renders twice on `g` then `b` (once at route mount, once at the data publish), and starting the device-copy read at the key press (HTPR-7588's next probe).
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -594,6 +631,7 @@ Confirmed, comparable saved-ms total in this seed: **not established**. Future e
 | Re-baseline phone daily read | Profile fixed 2026-10-11; older phone days not comparable | Run the daily harness at host load below 12, record as the new phone baseline |
 | Live description sooner after a server description (HTPR-7367) | Controls arrive about 1 s later with the server description | Time the editor chunk against the live swap; if it gates the transition, nest a Suspense with the static frame as fallback; ABAB phone N=5 |
 | Account-based flag A/B on a shared board | HTPR-6934 verdict pending | Seed inboxes for both accounts, run desktop and inbox when load is low |
+| Per-card board-wide data watchers (HTPR-7677) | Drafts, running timers and custom fields: about 90 to 140 ms of a 1 s phone render on 10 cards (2026-10-23 profiles) | Lift to the board behind a flag; one-observer-per-list test; live phone on/off of query-published to first-commit, at least 10 interleaved pairs |
 | Flag readers redraw after load (HTPR-7560) | `useFlag` context swaps to an equal new object after hydration; 399 readers | Per-key subscription behind a server flag, live ABAB phone N=5, render-count test |
 | Name the React work in a phone tap from the board (HTPR-7395) | Tap window is 5.4 s React, 1.4 s module eval, 1.2 s idle of 10.8 s | Local production build with source maps, phone profile, CPU profile the tap; then defer the pointerdown Firebase and emoji warm until the ticket paints, ABAB N=5 at load under 20 |
 
