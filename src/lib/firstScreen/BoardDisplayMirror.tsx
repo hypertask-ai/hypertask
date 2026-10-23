@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { useRecoilValue } from "@/lib/state";
 import { fcmAtom, currentUserAtom, boardLayoutPreferenceAtom, appShellRailAtom, appShellRailExpandedAtom, showQuickTipsAtom,
   showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom,
@@ -13,6 +14,7 @@ import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
 export default function BoardDisplayMirror({ accountId }: { accountId: number | null }) {
   const enabled = useFlag(BOARD_FIRST_SCREEN_FLAG);
   const desktopChat = useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG);
+  const hydrated = useHydrated();
   const user = useRecoilValue(currentUserAtom);
   const fcm = useRecoilValue(fcmAtom);
   const boardLayout = useRecoilValue(boardLayoutPreferenceAtom);
@@ -31,6 +33,11 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
   const chatPinned = useRecoilValue(aiChatPinnedAtom);
   const chatWidth = useRecoilValue(aiChatSidebarWidthPxAtom);
   const chatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
+  useLayoutEffect(() => {
+    if (!hydrated) return;
+    document.documentElement.removeAttribute("data-ticket-sidebar");
+    document.documentElement.style.removeProperty("--ticket-sidebar-width");
+  }, [hydrated]);
   useEffect(() => {
     if (!enabled || accountId === null || user?.id !== accountId) return;
     const mirror = () => {

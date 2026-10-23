@@ -429,3 +429,49 @@ test('layout lock: phone ticket opened from a board card stays on screen while t
   expect(hiddenAt, `layout lock: the ticket vanished ${Math.round(hiddenAt - shownAt)}ms after it showed`).toBe(0)
   await expect(page.locator('#title-input')).toBeVisible()
 })
+
+for (const expanded of [false, true]) {
+  test(`HTPR-7615: saved closed chat and ${expanded ? 'expanded' : 'collapsed'} left rail are correct from first paint`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Desktop', 'Desktop first-paint regression')
+    test.setTimeout(60_000)
+    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { longThreadDetailPath: string }
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.addInitScript((railExpanded) => {
+      const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
+      localStorage.setItem('recoil-persist', JSON.stringify({ ...saved,
+        appShellRail: true, appShellRailExpanded: railExpanded,
+        aiChatAutoOpenSuppressed: true, aiChatPinned: false, openAiChatByDefault: true,
+        keepAiChatClosed: false, isAiChatSidebarMode: true, aiChatSidebarWidthPx: 517,
+      }))
+      const firstRailWidth = () => {
+        const body = document.querySelector('#body')?.getBoundingClientRect()
+        const rail = document.querySelector('.app-shell-rail')?.getBoundingClientRect()
+        if (body?.width && rail?.width) (window as unknown as { __firstRailWidth: number }).__firstRailWidth = rail.width
+        else requestAnimationFrame(firstRailWidth)
+      }
+      requestAnimationFrame(firstRailWidth)
+      const shifts: Array<{ value: number; body: boolean }> = []
+      ;(window as unknown as { __sidebarShifts: typeof shifts }).__sidebarShifts = shifts
+      new PerformanceObserver(list => {
+        for (const entry of list.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean; sources: Array<{ node: Element | null }> }>) {
+          if (!entry.hadRecentInput) shifts.push({ value: entry.value, body: entry.sources.some(source => source.node?.id === 'body') })
+        }
+      }).observe({ type: 'layout-shift', buffered: true })
+    }, expanded)
+    await page.goto(withRealtime(fixture.longThreadDetailPath), { waitUntil: 'load' })
+    await expect(page.locator('#title-input')).toBeVisible()
+    await page.waitForTimeout(6000)
+    const measurements = await page.evaluate(() => {
+      const body = document.querySelector('#body')!.getBoundingClientRect()
+      return { x: body.x, width: body.width, firstRailWidth: (window as unknown as { __firstRailWidth: number }).__firstRailWidth, railWidth: document.querySelector('.app-shell-rail')!.getBoundingClientRect().width,
+        shifts: (window as unknown as { __sidebarShifts: Array<{ value: number; body: boolean }> }).__sidebarShifts }
+    })
+    await testInfo.attach('saved-sidebar-first-paint', { body: JSON.stringify(measurements), contentType: 'application/json' })
+    expect(measurements.shifts.filter(shift => shift.body)).toEqual([])
+    expect(measurements.shifts.reduce((sum, shift) => sum + shift.value, 0)).toBeLessThan(0.1)
+    expect(measurements.firstRailWidth).toBe(expanded ? 130 : 48)
+    expect(measurements.railWidth).toBe(expanded ? 130 : 48)
+    expect(measurements.x).toBeCloseTo(expanded ? 217 : 176, 0)
+    expect(measurements.width).toBeCloseTo(1136, 0)
+  })
+}
