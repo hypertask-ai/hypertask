@@ -44,6 +44,7 @@ let consumeFails;
 let ownerEmail;
 let legacyAllowed;
 let legacyKey;
+let legacyMode;
 let transactionTail = Promise.resolve();
 let wrapped;
 const prisma = {
@@ -121,7 +122,7 @@ const prisma = {
       if (query.where.id === 123) {
         if (!legacyAllowed) return null;
         if (query.select.taskId) return { taskId: 900 };
-        return { text: `Question: Switch ${legacyKey} to Off?` };
+        return { text: `Question: Switch ${legacyKey} to ${legacyMode}?` };
       }
       assert.equal(locks.at(-1), "policy-reaction-lock");
       assert.deepEqual(query, {
@@ -208,7 +209,7 @@ test.beforeEach(() => {
   ctx = { user: { id: 6 }, agentId: "agent-b", agentRole: "write" };
   limited = null; roleRefusal = null; ownerEmail = "valentin.yeo@gmail.com";
   reviews = new Map(); stored = new Map([[key, { key, mode: "OWNER_AND_QA" }]]); changes = [];
-  locks = []; broadcasts = 0; writeFails = false; consumeFails = false; legacyAllowed = true; legacyKey = key; wrapped = 0;
+  locks = []; broadcasts = 0; writeFails = false; consumeFails = false; legacyAllowed = true; legacyKey = key; legacyMode = "Off"; wrapped = 0;
   delete process.env.VERCEL_GIT_COMMIT_SHA;
   policy = { editedAt: null, status: "Normal", reactions: [{ userId: 6, agentId: null, agentDisplayName: null, isDeleted: false, unified: "1f44d", createdAt: new Date(0) }] };
 });
@@ -415,7 +416,7 @@ for (const category of ["money", "access", "data-deletion", "customer-email"]) {
 }
 test("Question plus human thumbs-up still allows a high-risk flag to switch Everyone on", async () => {
   const high = definitions.find((flag) => flag.releaseRisk?.highRisk);
-  stored.set(high.key, { key: high.key, mode: "OWNER_AND_QA" }); policy = null; legacyKey = high.key;
+  stored.set(high.key, { key: high.key, mode: "OWNER_AND_QA" }); policy = null; legacyKey = high.key; legacyMode = "Everyone";
   const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
   assert.equal((await switchFlag({ key: high.key, mode: "EVERYONE", reason })).status, 200);
 });

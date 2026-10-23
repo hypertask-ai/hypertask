@@ -129,7 +129,7 @@
         "api": ["^(GET|PATCH) /api/mcp/flags$", "^POST /api/mcp/flags/reviews$"]
       },
       "exclusions": {
-        "mcp": "Only the flag owner's agent sessions may change release modes, after recent human approval or a review recorded by a different owner agent; general MCP clients cannot manage flags.",
+        "mcp": "Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags.",
         "cli": "The session-only ht-flag script uses the agent identity directly; the public CLI does not expose release controls.",
         "ai_chat": "Feature flag release controls are restricted to approved owner agent sessions, not AI Chat tools.",
         "hyperai": "The embedded agent inherits the human session and cannot use the agent-only flag route."
