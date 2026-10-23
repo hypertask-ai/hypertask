@@ -330,7 +330,7 @@ async function createManifestBoardAtomically(
     const createdTasks: (TaskCreatedGlobally & { priority: Priority | null; estimate: Estimate | null })[] = []
     const analyticsKeys: string[] = []
     const deliveryIds: string[] = []
-    const sectionRanks = new Map<number, string>()
+    const sectionRanks = new Map<number, string | undefined>()
     for (const [index, task] of manifest.tasks.entries()) {
       const section = sectionRows[task.sectionIndex]
       const priority = PriorityConstants.find((value) => value.priority_index === task.priority)
