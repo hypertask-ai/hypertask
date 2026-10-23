@@ -5,6 +5,7 @@ import { getBoardDocument, type BoardDocument } from "@/lib/firstScreen/boardDoc
 import { adoptBoardDocument, excludeBoardDocumentRestore } from "@/lib/firstScreen/boardAdoption";
 import { getInboxDocument, type InboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { adoptInboxDocument, excludeInboxDocumentRestore } from "@/lib/firstScreen/inboxAdoption";
+import { getTicketShellSeed, type TicketShellSeed } from "@/lib/firstScreen/ticketShell";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
 import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
@@ -91,6 +92,20 @@ const inboxInitialValues = (snapshot: InboxDocument): StateInitialValues => {
     [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
 };
 
+const shellInitialValues = (display: BoardDisplay): StateInitialValues => {
+  const values: StateInitialValues[number][] = [[boardLayoutPreferenceAtom, display.boardLayout],
+    [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed], [showQuickTipsAtom, display.quickTips],
+    [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
+    [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
+    [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat],
+    [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+  if (display.board.chatWidth !== undefined && display.board.chatSidebarMode !== undefined) {
+    values.push([aiChatSidebarWidthPxAtom, display.board.chatWidth], [isAiChatSidebarModeAtom, display.board.chatSidebarMode]);
+  }
+  return values;
+};
+
 function isPublicSharePath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
   return pathname === "/share" || pathname.startsWith("/share/");
@@ -119,6 +134,7 @@ export default function Provider({
   initialIsApple,
   authenticatedUserId,
   firstScreen,
+  shellSeed,
   flagProvider: FlagProvider = FeatureFlagProvider,
 }: {
   children: ReactNode;
@@ -126,16 +142,20 @@ export default function Provider({
   initialIsApple: boolean;
   authenticatedUserId: number | null;
   firstScreen?: BoardDocument | InboxDocument | null;
+  shellSeed?: TicketShellSeed | null;
   flagProvider?: typeof FeatureFlagProvider;
 }) {
   const pathname = usePathname();
   const publicShare = isPublicSharePath(pathname);
   const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0) ?? getInboxDocument(firstScreen ?? null, authenticatedUserId ?? 0));
   const snapshot = initialDocument?.scope.accountId === authenticatedUserId ? initialDocument : null;
+  const [initialShell] = useState(() => getTicketShellSeed(shellSeed ?? null, authenticatedUserId ?? 0));
+  const shell = getTicketShellSeed(initialShell, authenticatedUserId ?? 0);
   const initialValues = useMemo(() => {
+    if (!snapshot && shell) return shellInitialValues(shell.display);
     const inbox = getInboxDocument(snapshot, authenticatedUserId ?? 0);
     return inbox ? inboxInitialValues(inbox) : boardInitialValues(getBoardDocument(snapshot, authenticatedUserId ?? 0));
-  }, [snapshot, authenticatedUserId]);
+  }, [snapshot, shell, authenticatedUserId]);
   const queryBoundary = useMemo(
     () => createQueryBoundary(authenticatedUserId, snapshot),
     [authenticatedUserId, snapshot],
@@ -185,7 +205,7 @@ export default function Provider({
         }}
       >
         <DeviceProvider initialIsApple={initialIsApple}>
-          <MobileViewProvider initialIsMobile={initialIsMobile}>
+          <MobileViewProvider initialIsMobile={shell?.display.isMobile ?? initialIsMobile}>
             <StateRoot key={`state-account-${authenticatedUserId ?? "guest"}`} initialValues={initialValues}>
               <UndoProvider>
                 <MobileBlockingProvider>
@@ -194,7 +214,7 @@ export default function Provider({
                       {publicShare ? (
                         <PublicShell><ThemeListener />{children}</PublicShell>
                       ) : (
-                        <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
+                        <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags ?? shell?.flags}>
                           <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
                           <MobileViewFlagBridge />

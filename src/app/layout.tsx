@@ -29,6 +29,7 @@ import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
 import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
+import { getServerTicketShell } from "@/lib/firstScreen/serverTicketShell";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import { buildTicketSidebarBootScript, TICKET_SIDEBAR_BOOT_CSS } from "@/lib/ticketSidebarBoot";
 import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
@@ -59,7 +60,7 @@ export default async function RootLayout(
   const analyticsSession = verifySession(
     cookieStore.get(SESSION_COOKIE)?.value,
   );
-  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument()]);
+  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), getServerTicketShell()]);
   let identifyEventIds = false;
   if (analyticsSession) {
     try {
@@ -70,7 +71,7 @@ export default async function RootLayout(
       if (enabled) identifyEventIds = true;
     } catch {}
   }
-  const [device, boardDocument, inboxDocument] = await firstScreenPromise;
+  const [device, boardDocument, inboxDocument, shellSeed] = await firstScreenPromise;
   const firstScreen = boardDocument ?? inboxDocument;
   const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
     (boardDocument.display as BoardDisplay).isMobile &&
@@ -189,6 +190,7 @@ export default async function RootLayout(
           initialIsApple={device.isApple}
           authenticatedUserId={analyticsSession?.id ?? null}
           firstScreen={firstScreen}
+          shellSeed={shellSeed}
           flagProvider={flagReaderSubscribe ? SubscribedFeatureFlagProvider : FeatureFlagProvider}
         >
           {children}
