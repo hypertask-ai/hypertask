@@ -33,6 +33,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -92,8 +93,12 @@ type ControlledComposer = {
 
 export function AI_Tiptap_Container({
   controlledComposer,
+  disabled = false,
+  active = true,
 }: {
   controlledComposer?: ControlledComposer;
+  disabled?: boolean;
+  active?: boolean;
 } = {}) {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
@@ -173,6 +178,7 @@ export function AI_Tiptap_Container({
     aiChatExplicitOpenAtAtom
   );
   const focusRootRef = useRef<HTMLDivElement>(null);
+  const audioButtonId = `ai-chat-audio-button-${useId()}`;
   useEffect(() => {
     if (
       explicitOpenAt === null ||
@@ -205,7 +211,7 @@ export function AI_Tiptap_Container({
   }, []);
 
   useEffect(() => {
-    if (isMbl) return;
+    if (isMbl || !active || disabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
       const cmdControl = e.metaKey || e.ctrlKey;
       if (!cmdControl || !e.shiftKey) return;
@@ -220,14 +226,14 @@ export function AI_Tiptap_Container({
           active!.isContentEditable);
       if (inOtherField) return;
       if (e.keyCode === 70) return;
-      const anchor = document.getElementById("ai-chat-audio-button");
+      const anchor = focusRootRef.current?.querySelector<HTMLElement>(`[id="${audioButtonId}"]`);
       if (!anchor) return;
       e.preventDefault();
       anchor.click();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isMbl]);
+  }, [isMbl, active, disabled, audioButtonId]);
 
   const isEditorEmpty =
     useEditorState({
@@ -247,7 +253,15 @@ export function AI_Tiptap_Container({
   }
 
   return (
-    <div className={`p-2 relative`} ref={focusRootRef}>
+    <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root inert={disabled || !active || undefined}
+      onKeyDownCapture={controlledComposer ? (event) => {
+        if (isMbl || !active || disabled || !(event.metaKey || event.ctrlKey) || !event.shiftKey || event.keyCode !== 68) return;
+        const recorder = focusRootRef.current?.querySelector<HTMLElement>(`[id="${audioButtonId}"]`);
+        if (!recorder) return;
+        event.preventDefault();
+        event.stopPropagation();
+        recorder.click();
+      } : undefined}>
       {!controlledComposer && showScrollUpIndicator && !isTyping && (
         <ScrollToTopButton onClick={scrollMessagesToBottom} />
       )}
@@ -417,7 +431,8 @@ export function AI_Tiptap_Container({
                 <AudioButton
                   callbackHandler={controlledComposer.onDictation}
                   editor={controlledEditor}
-                  id="ai-chat-audio-button"
+                  id={audioButtonId}
+                  active={active}
                   toggleRecording={controlledComposer.onRecordingChange}
                   globalRecording={controlledComposer.isRecording}
                   hasText={hasComposerText}
@@ -434,7 +449,8 @@ export function AI_Tiptap_Container({
               <AudioButton
                 callbackHandler={controlledComposer.onDictation}
                 editor={null}
-                id="ai-chat-audio-button"
+                id={audioButtonId}
+                active={active}
                 toggleRecording={controlledComposer.onRecordingChange}
                 globalRecording={controlledComposer.isRecording}
                 hasText={hasComposerText}
@@ -452,7 +468,8 @@ export function AI_Tiptap_Container({
               <AudioButton
                 callbackHandler={audioTiptapCallback}
                 editor={editor}
-                id="ai-chat-audio-button"
+                id={audioButtonId}
+                active={active}
                 toggleRecording={toggleRecording!}
                 globalRecording={isRecording}
                 hasText={hasComposerText}

@@ -36,6 +36,7 @@ export type IChatRole = "human" | "assistant";
 
 export interface IChatSession {
   id: string;
+  agentId?: string | null;
   createdAt: Date;
   updatedAt: Date;
   userId: number;

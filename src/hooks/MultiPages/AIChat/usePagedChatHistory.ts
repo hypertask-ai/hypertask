@@ -1,19 +1,23 @@
+import { getNativeSidebarChat } from "@/lib/agents/chatViewerState";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { AI_Chat_API, isPagedChatSessions, mergeSessionHistory, mergeSessionTranscript, type ChatSessionScope, type ChatSessionSummary, type TPagedChatSessionsResponse } from "@/utils/api/ai_chat";
-import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 
 type Transcript = IChatSession & { pendingMessageIds?: string[]; pendingTitle?: string };
 type History = InfiniteData<TPagedChatSessionsResponse, string | null>;
 const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSummary => {
   if ("hasMessages" in session) return session;
   const { id, createdAt, updatedAt, userId, taskId, projectId, title, messages } = session;
-  return { id, createdAt, updatedAt, userId, taskId, projectId, title, agentId: null, teamId: null, hasMessages: messages.length > 0 };
+  return { id, createdAt, updatedAt, userId, taskId, projectId, title, agentId: session.agentId ?? null, teamId: null, hasMessages: messages.length > 0 };
 };
 const staleTime = 1000 * 60 * 3;
 
 export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>) {
+  const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
   const queryClient = useQueryClient();
   const summaryKey = ["chat-session-summaries", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, "history"];
   const transcriptPrefix = ["aiChatTranscript", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG];
@@ -59,7 +63,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     staleTime,
   });
 
-  const historySessions = enabled ? mergeSessionHistory<Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt">>(
+  const historySessions = enabled ? mergeSessionHistory<Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "agentId">>(
     summaryQuery.data?.pages.flatMap((page) => page.sessions) ?? [], []
   ) : [];
   const activeSummary = historySessions.find((session) => session.id === activeSession);
@@ -101,7 +105,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       const before = queryClient.getQueryData<Transcript>(key);
       let incoming: IChatSession | null;
       try {
-        incoming = await AI_Chat_API.getSessionTranscript(sessionId!, signal);
+        incoming = await AI_Chat_API.getSessionTranscript(sessionId!, signal, sidebarChat?.sessionId === sessionId ? sidebarChat.projectId : undefined);
       } catch (error) {
         if ((error as { response?: { status?: number } }).response?.status !== 404) throw error;
         return null;

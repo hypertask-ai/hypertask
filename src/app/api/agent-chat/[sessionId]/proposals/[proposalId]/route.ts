@@ -2,7 +2,7 @@ import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope"
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
-import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
+import { loadUserAgentChatSession, sidebarChatProjectId } from "@/lib/agents/chatAccess";
 import { AGENT_CHAT_TICKET_CONFIRM_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { getAgentRole } from "@/lib/mcp/agents/scopes";
@@ -23,7 +23,8 @@ async function confirmProposal(
   { params }: { params: Promise<{ sessionId: string; proposalId: string }> }
 ) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const sessionUser = await getSessionUser(request.headers);
+    const userId = sessionUser?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -48,6 +49,8 @@ async function confirmProposal(
     const access = await loadUserAgentChatSession({
       sessionId,
       userId,
+      sidebarProjectId: sidebarChatProjectId(request.headers),
+      actingAgentId: sessionUser?.agentId,
       select: { agent: { select: { id: true, displayName: true } } },
     });
     if (!access.ok) {

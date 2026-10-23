@@ -8,11 +8,12 @@ import { composeTaskQuestionsTaskIdAtom, inViewObjectAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG } from "@/lib/flags/keys";
 
-interface MessageListProps {}
+interface MessageListProps { sidebarKey?: string; active?: boolean; hidden?: boolean }
 
 const isSavedOrLocalComposeIntro = (content: string) => / from your note\. Want me to refine it\?/.test(content);
 
-export const MessageList: React.FC<MessageListProps> = () => {
+export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = true, hidden = false }) => {
+  const scrollPositions = useRef(new Map<string, { top: number; away: boolean }>());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const {
@@ -66,9 +67,12 @@ export const MessageList: React.FC<MessageListProps> = () => {
   }, []);
 
   useLayoutEffect(() => {
-    scrollMessagesToBottom("auto");
+    if (!active) return;
+    const saved = sidebarKey ? scrollPositions.current.get(sidebarKey) : undefined;
+    if (saved?.away && messageListRef.current) messageListRef.current.scrollTop = saved.top;
+    else scrollMessagesToBottom("auto");
     handleMessageListScroll(messageListRef.current);
-  }, [currentSession?.messages]);
+  }, [currentSession?.messages, sidebarKey, active]);
 
   useLayoutEffect(() => {
     scrollMessagesToBottom("auto");
@@ -79,7 +83,14 @@ export const MessageList: React.FC<MessageListProps> = () => {
   return (
     <div
       ref={messageListRef}
-      onScroll={(event) => handleMessageListScroll(event.currentTarget)}
+      hidden={hidden}
+      onScroll={(event) => {
+        if (!active) return;
+        const element = event.currentTarget;
+        if (sidebarKey) scrollPositions.current.set(sidebarKey, { top: element.scrollTop,
+          away: element.scrollTop + element.clientHeight < element.scrollHeight - 4 });
+        handleMessageListScroll(element);
+      }}
       className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto p-2 max-h-full space-y-2 scrollbar-thin  hover:scrollbar-thumb-gray-500  scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
     >
       {messages.map((message) => (

@@ -118,7 +118,7 @@ async function run(operation, mode = 'OFF', options = {}) {
     jsonwebtoken: { default: { decode: () => ({ jti: 'fixture-jti', exp: 1800000000 }) } },
     '@/lib/agents/visibility': { accessibleAgentWhere: () => ({ userId }) },
     '@/utils/controllers/agents/boardMembers': { getAgentTeamIds: async () => new Map() },
-    '@/lib/agents/chatAccess': { ensureChatParticipant: fn('participant', undefined), loadUserAgentChatSession: async () => ({ ok: true }), userTeamIds: async () => [] },
+    '@/lib/agents/chatAccess': { sidebarChatProjectId: () => undefined, loadSidebarChatRequest: async () => ({ ok: true }), ensureChatParticipant: fn('participant', undefined), loadUserAgentChatSession: async () => ({ ok: true }), userTeamIds: async () => [] },
     ...options.mocks,
   };
   const reader = load('src/lib/mcp/readJsonBody.ts', {});

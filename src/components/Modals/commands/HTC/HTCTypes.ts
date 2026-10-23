@@ -10,6 +10,7 @@ export interface CommandListProps {
     commandRef: RefObject<HTMLDivElement | null>;
     onClickHandler:any
     isMobile?: boolean;
+    inline?: boolean;
 
 }
 
