@@ -19,7 +19,7 @@ const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title"
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" } };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardBack = true, boardColumns = true, inboxNextOpen = true } = {}) {
+function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardBack = true, boardColumns = true } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -77,7 +77,7 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     "next/navigation": { usePathname: () => nextPath, useRouter: () => ({ replace: url => routerCalls.push(url), refresh: () => routerCalls.push("refresh") }) },
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) }, "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : key === flags.HTPR_7003_BOARD_BACK_FLAG ? boardBack : key === flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG ? inboxNextOpen : true },
+    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : key === flags.HTPR_7003_BOARD_BACK_FLAG ? boardBack : true },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -490,7 +490,7 @@ test("Forward during protected board Back restores the cached ticket despite a l
 
 for (const method of ["cached-task-detail-navigation", "popstate", "pathname"]) {
   test(`protected board Back clears on ${method} departure and remains visible on a delayed revisit`, async t => {
-    const f = fixture(t, { stableChildren: true, inboxNextOpen: false });
+    const f = fixture(t, { stableChildren: true });
     await f.openFromBoard(); await f.refreshBoardOpen(); await f.traverse("back");
     assert.ok(document.getElementById("title-input").closest("[hidden]"));
     assert.equal(f.hasBoardRecovery(), true);

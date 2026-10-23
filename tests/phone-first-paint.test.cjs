@@ -24,10 +24,11 @@ function load(relative, mocks) {
 }
 
 async function warming({ mobile, enabled, pathname, saveData = false }) {
-  const effects = [], frames = [], idle = [], timers = [], listeners = new Map(), historyListeners = new Map(), imports = [];
+  const effects = [], frames = [], idle = [], timers = [], listeners = new Map(), historyListeners = new Map(), imports = [], navigationEvents = [];
   const previousWindow = global.window, previousDocument = global.document;
   global.window = { innerWidth: mobile ? 390 : 1440, location: { pathname }, history: { state: {} }, navigator: { connection: { saveData, effectiveType: '4g' } },
     addEventListener: (name, fn) => historyListeners.set(name, fn), removeEventListener: name => historyListeners.delete(name),
+    Event: global.Event, dispatchEvent: event => navigationEvents.push(event),
     requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, cancelAnimationFrame: () => {},
     requestIdleCallback: fn => { idle.push(fn); return idle.length; }, cancelIdleCallback: () => {},
     setTimeout: fn => { timers.push(fn); return timers.length; }, clearTimeout: () => {},
@@ -62,6 +63,9 @@ async function warming({ mobile, enabled, pathname, saveData = false }) {
     const children = { realContent: true };
     assert.equal(Component({ children, accountId: user.id }), children, 'warming never hides or replaces real content');
     for (const effect of effects) { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); }
+    assert.equal(navigationEvents.length, 1, 'route commits publish a location notification regardless of other flags');
+    assert.ok(navigationEvents[0] instanceof window.Event);
+    assert.equal(navigationEvents[0].type, 'cached-task-detail-navigation');
     while (frames.length) frames.shift()();
     while (idle.length) idle.shift()();
     while (timers.length) timers.shift()();
