@@ -86,13 +86,14 @@ ship_scripts_tests:
   runs_on: ubuntu-latest
   required: false
   pull_request_base: production
-  paths: [".claude/skills/ship/scripts/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml"]
+  paths: [".claude/skills/ship/scripts/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml"]
   node_major: 24
   commands:
     - bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
     - python3 .claude/skills/ship/scripts/premerge-evidence.test.py
     - python3 .claude/skills/ship/scripts/ci-why.test.py
     - bash .claude/skills/ship/scripts/user-unit-check.test.sh
+    - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
     - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
   fixtures: offline_with_temporary_home_and_no_secrets
 

@@ -126,8 +126,8 @@ type AgentManagementTransaction = {
   }
   webhookSubscription: {
     updateMany(args: {
-      where: { agentId: string }
-      data: { agentId: null }
+      where: { agentId: string; projectId?: { not: null } }
+      data: { agentId: null } | { active: false }
     }): Promise<WriteCount>
   }
   oAuthAuthorizationCode: {
@@ -384,6 +384,10 @@ export async function deleteOwnedAgent(
           await transaction.notification.updateMany({
             where: { fromAgentId: agent.id },
             data: { fromAgentId: null },
+          })
+          await transaction.webhookSubscription.updateMany({
+            where: { agentId: agent.id, projectId: { not: null } },
+            data: { active: false },
           })
           await transaction.webhookSubscription.updateMany({
             where: { agentId: agent.id },

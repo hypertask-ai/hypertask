@@ -32,6 +32,7 @@ function harness(enabled) {
   const model = { id: "unchanged-model" };
   const stubs = {
     "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
+    "@/lib/ai/taskWriterSkills": require("jiti")(__filename, { fsCache: false })(path.resolve(__dirname, "../src/lib/ai/taskWriterSkills.ts")),
     ai: {
       generateText: async (args) => { calls.push(args); return { output: { questions } }; },
       Output: { object: (value) => value },

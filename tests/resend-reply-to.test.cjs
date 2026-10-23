@@ -149,6 +149,13 @@ test("an immediate task notification gets a signed Reply-To address", async () =
   stubModule("src/utils/controllers/notifications/projectMute.ts", {
     isTaskProjectMuted: async () => false,
   });
+  stubModule("src/lib/access/canReadTaskNow.ts", {
+    canReadTaskNow: async (userId, taskId) => {
+      assert.equal(userId, 6);
+      assert.equal(taskId, 23720);
+      return true;
+    },
+  });
   stubModule("src/utils/controllers/notifications/emailTemplates.ts", {
     renderNotificationEmail: () => ({ subject: "Update", html: "<p>Body</p>" }),
   });

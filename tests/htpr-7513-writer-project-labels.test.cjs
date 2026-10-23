@@ -38,6 +38,7 @@ function moduleWithStubs(file, stubs) {
     require: (id) => {
       if (id in stubs) return stubs[id];
       if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
+      if (["@/lib/ai/taskWriterSkills", "./taskWriterSkills"].includes(id)) return load(path.join(root, "src/lib/ai/taskWriterSkills.ts"));
       if (id === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html };
       if (id === "@/lib/media/inlineAgentImages") return load(path.join(root, "src/lib/media/inlineAgentImages.ts"));
       if (id === "@/lib/ai/prompts/registry") return load(path.join(root, "src/lib/ai/prompts/registry.ts"));

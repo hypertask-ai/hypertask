@@ -193,7 +193,7 @@ test("task writer: flag off or non-Claude model keeps the exact old string", asy
 
 test("task questions use the cached helper and task summaries stay below the minimum", () => {
   const route = fs.readFileSync(path.join(root, "src/app/api/ai/task-questions/route.ts"), "utf8");
-  assert.match(route, /cachedInstructionsForUser\(viewer\.id, \{ modelId: systemModel\.model, fixed: writingQuestions \? WRITING_QUESTIONS_INSTRUCTIONS : newTicket \? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS \}\)/);
+  assert.match(route, /cachedInstructionsForUser\(viewer\.id, \{ modelId: systemModel\.model, fixed: skillContext \? SKILL_FOLLOWUP_INSTRUCTIONS : writingQuestions \? WRITING_QUESTIONS_INSTRUCTIONS : newTicket \? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS \}\)/);
   assert.ok(cache.estimatePromptTokens(registry.renderPrompt("task-questions-context-1")) >= cache.PROMPT_CACHE_MIN_TOKENS);
   assert.ok(cache.estimatePromptTokens(registry.renderPrompt("task-summaries-system-2")) < cache.PROMPT_CACHE_MIN_TOKENS);
 });

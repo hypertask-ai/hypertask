@@ -1,4 +1,5 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import { taskWriterSkillsSchema, MAX_SKILL_INPUT_LENGTH } from "@/lib/ai/taskWriterSkills";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
@@ -7,7 +8,7 @@ import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { HTPR_7534_WRITING_QUESTIONS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7534_WRITING_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -35,13 +36,22 @@ const MAX_COMMENTS = 30;
 const taskQuestionsRequestSchema = z.object({
   taskId: z.coerce.number().int().positive(),
   kind: z.enum(["next-move", "new-ticket"]).default("next-move"),
+  skillFollowup: z.object({
+    skills: taskWriterSkillsSchema,
+    originalInput: z.string().max(MAX_SKILL_INPUT_LENGTH),
+  }).optional(),
 });
 
 const TASK_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-context-1");
 const NEW_TICKET_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-new-ticket-1");
 const WRITING_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-writing-1");
+const SKILL_FOLLOWUP_INSTRUCTIONS = renderPrompt("task-questions-skill-followup-1");
 const taskQuestionsOutputSchema = z.object({
   questions: z.array(z.string()),
+});
+
+const skillFollowupOutputSchema = taskQuestionsOutputSchema.extend({
+  followup: z.string().min(1).max(12000),
 });
 
 type TaskComment = {
@@ -118,6 +128,26 @@ async function taskQuestions(request: NextRequest) {
     }
 
     const description = convertHtmlToText(task.description_?.content ?? "");
+    let skillContext: string | undefined;
+    const followupRequest = parsedBody.data.kind === "new-ticket" ? parsedBody.data.skillFollowup : undefined;
+    if (followupRequest && await isFeatureEnabled(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, viewer.id)) {
+      const { resolveSkills } = await import("@/app/api/ai/_lib/skills");
+      const resolved = await resolveSkills(followupRequest.skills.map(({ slug }) => `/${slug}`).join(" "), {
+        userId: viewer.id, projectId: task.projectId,
+      });
+      const matchesWriter = resolved.skills.length === followupRequest.skills.length && resolved.skills.every((skill, index) => {
+        const written = followupRequest.skills[index];
+        return skill.id === written.id && skill.slug === written.slug && skill.updatedAt.toISOString() === written.updatedAt;
+      });
+      if (!matchesWriter) return NextResponse.json({ questions: [] });
+      const cleaned = await resolveSkills(followupRequest.originalInput, { userId: viewer.id, projectId: task.projectId }, async () => resolved.skills);
+      skillContext = JSON.stringify({
+        skills: resolved.skills.map(({ slug, name, body }) => ({ slug, name, body })),
+        originalInput: cleaned.cleanedText,
+        ticket: { title: task.title, column: task.section, description },
+      });
+    }
+
     const comments = task.comments
       .map((comment): TaskComment | null => {
         const text = convertHtmlToText(
@@ -135,7 +165,7 @@ async function taskQuestions(request: NextRequest) {
       })
       .filter((comment): comment is TaskComment => comment !== null);
 
-    if (!description && comments.length === 0) {
+    if (!skillContext && !description && comments.length === 0) {
       return NextResponse.json({ questions: [] });
     }
 
@@ -240,12 +270,14 @@ async function taskQuestions(request: NextRequest) {
     const result = await generateText({
       experimental_download: downloadWithoutBrotli,
       model,
-      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: writingQuestions ? WRITING_QUESTIONS_INSTRUCTIONS : newTicket ? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS }),
-      prompt: newTicket
+      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: skillContext ? SKILL_FOLLOWUP_INSTRUCTIONS : writingQuestions ? WRITING_QUESTIONS_INSTRUCTIONS : newTicket ? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS }),
+      prompt: skillContext
+        ? renderPrompt("task-questions-skill-followup-prompt-1", (skillContext))
+        : newTicket
         ? renderPrompt("task-questions-new-ticket-prompt-1", (task.title), (task.section), (description || "(empty)"))
         : renderPrompt("task-questions-prompt-2", (viewerBlock), (task.title), (task.status), (task.section), (description || "(empty)"), (formattedComments)),
-      output: Output.object({ schema: taskQuestionsOutputSchema }),
-      maxOutputTokens: 500,
+      output: Output.object({ schema: skillContext ? skillFollowupOutputSchema : taskQuestionsOutputSchema }),
+      maxOutputTokens: skillContext ? 1800 : 500,
       maxRetries: 2,
       providerOptions: providerOptionsForAiModel(
         model,
@@ -258,7 +290,9 @@ async function taskQuestions(request: NextRequest) {
       .map((question) => question.trim())
       .filter(Boolean)
       .slice(0, newTicket ? 4 : 5);
-    return NextResponse.json({ questions });
+    const followup = skillContext && "followup" in result.output && typeof result.output.followup === "string"
+      ? result.output.followup.trim() : undefined;
+    return NextResponse.json({ questions, ...(followup ? { followup } : {}) });
   } catch (error) {
     if (NoOutputGeneratedError.isInstance(error) ||
       (NoObjectGeneratedError.isInstance(error) && !error.text?.trim())) {

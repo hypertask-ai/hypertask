@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRecoilValue } from "@/lib/state"
 import type { IProject } from "@/models/model"
-import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
+import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient"
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild"
 import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
@@ -12,7 +12,7 @@ import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG } from "@/lib/flags/keys"
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
@@ -114,7 +114,11 @@ export const WelcomeScreen = () => {
   const taskDetailDataReady = !isDetailPage || taskDetailNonEssentialReady;
   const oneQuestionsCallEnabled = useFlag(HTPR_7586_ONE_QUESTIONS_CALL_FLAG);
   const questionsTaskId = useRecoilValue(composeTaskQuestionsTaskIdAtom);
-  const hasPendingTicketQuestions = oneQuestionsCallEnabled && questionsTaskId === taskId;
+  const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
+  let pendingFollowup: typeof pendingFollowupState = null;
+  if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
+  const hasPendingTicketQuestions = pendingFollowup?.taskId === taskId || oneQuestionsCallEnabled && questionsTaskId === taskId;
   const taskQuestions = useQuery({
     queryKey: ["task-questions", taskId],
     queryFn: async (): Promise<{ questions: string[] }> => {
