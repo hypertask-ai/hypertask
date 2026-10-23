@@ -98,7 +98,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const [addingImages, setAddingImages] = useState(false);
   const pendingImages = useRef(0);
   const sending = useRef(false);
-  const sendAfterBoardsLoad = useRef(false);
+  const textHeldUntilBoardsLoad = useRef<string | null>(null);
   const mounted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const composer = useRef<HTMLDivElement>(null);
@@ -119,7 +119,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const { updateTaskInCache } = UpdateKanban();
   const queryClient = useQueryClient();
   const { fileItems, files, fileInputRef, handleDroppedFiles, handleAttachmentClick, removeFile } = useFileUpload();
-  const { data: boards = [], isFetching: loadingBoards } = useQuery<IProject[]>({
+  const { data: boards = [], isFetching: loadingBoards, isSuccess: boardsLoaded } = useQuery<IProject[]>({
     queryKey: ["projectsAllMinimal", user?.id],
     queryFn: () => globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
     enabled: (boardChipEnabled || boardFromTextEnabled) && enabled && active && Boolean(user?.id),
@@ -251,7 +251,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
 
   const send = async () => {
     if (queueEnterWhileBoardsLoad && waitingForBoards && enabled && !sending.current && !dictating && text.trim()) {
-      sendAfterBoardsLoad.current = true;
+      textHeldUntilBoardsLoad.current = text;
       return;
     }
     if (!enabled || sending.current || pendingImages.current > 0 || waitingForBoards || dictating || !text.trim()) return;
@@ -361,10 +361,11 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   }, [active, text, focusProxy, inputFocused]);
 
   useEffect(() => {
-    if (waitingForBoards || !sendAfterBoardsLoad.current) return;
-    sendAfterBoardsLoad.current = false;
-    if (active) void send();
-  }, [waitingForBoards, active]);
+    const heldText = textHeldUntilBoardsLoad.current;
+    if (heldText === null || (waitingForBoards && queueEnterWhileBoardsLoad && active && text === heldText) || addingImages) return;
+    textHeldUntilBoardsLoad.current = null;
+    if (queueEnterWhileBoardsLoad && active && boardFromTextEnabled && boardsLoaded && !dictating && text === heldText) void send();
+  }, [waitingForBoards, addingImages, active, queueEnterWhileBoardsLoad, boardFromTextEnabled, boardsLoaded, dictating, text]);
 
   const attachments = fileItems.length > 0 && (
     <Suspense fallback={null}>
@@ -403,7 +404,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               value={text}
               onChange={(event) => {
                 if (focusProxy) delete focusProxy.pendingEnter;
-                sendAfterBoardsLoad.current = false;
                 setText(event.target.value);
               }}
               rows={mobile ? 3 : 2}

@@ -75,6 +75,19 @@ test("typing after Enter cancels the queued send until Enter is pressed again", 
   });
 });
 
+test("switching the fix or board-from-text off while Enter is held cancels the send", async (t) => {
+  for (const key of [flag, boardFromTextFlag]) {
+    await withColdBoards(t, true, async ({ flags, rerender, type, press, requests, boardsArrive }) => {
+      await type("Improve search");
+      await press("Enter", { code: "Enter" });
+      flags[key] = false;
+      await rerender();
+      await boardsArrive();
+      assert.equal(requests.length, 0, key);
+    });
+  }
+});
+
 test("flag off keeps the old behaviour where Enter during the board load does nothing", async (t) => {
   await withColdBoards(t, false, async ({ type, press, requests, boardsArrive }) => {
     await type("Improve search");
