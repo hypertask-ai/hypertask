@@ -10,6 +10,6 @@ export default {
   description: "A board column whose card code is already loaded draws its real cards in its first draw, instead of grey placeholder cards that swap to real cards about 0.27 s later.",
   releaseRisk: {
     risk: "small",
-    reason: "The same card component renders the same cards; only the placeholder frames before them are skipped when the card code is already loaded. Off restores the placeholder first draw.",
+    reason: "The same card component renders the same cards; only the placeholder frames before them are skipped when the card code is already loaded. While flags are still loading on a first visit the column follows this default (Everyone); Off restores the placeholder first draw from the next column mount once flags are loaded.",
   },
 } as const satisfies FeatureFlagDefinition;
