@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { withAgentScopeRequest } from '@/lib/auth/agentScope'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
+import { HTPR_6865_SEARCH_LAYOUT_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -14,8 +14,7 @@ const handler: NextApiHandler = async (req, res) => {
   const operator = String(req.query.operator ?? '').toLowerCase()
   const value = String(req.query.value ?? '').replace(/^@/, '').trim().toLowerCase().slice(0, 100)
   const boardId = Number(req.query.boardId)
-  if (!['from', 'assignee', 'in', 'board', 'label'].includes(operator) &&
-    !(operator === 'commenter' && await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, session.userId))) {
+  if (!['from', 'assignee', 'in', 'board', 'label', 'commenter'].includes(operator)) {
     return res.status(400).json({ error: 'Unknown operator' })
   }
   const boards = await prisma.project.findMany({

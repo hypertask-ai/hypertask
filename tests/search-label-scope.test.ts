@@ -32,7 +32,6 @@ for (const [file, exports] of [
   ['src/lib/flags.ts', {
     HTPR_6865_SEARCH_LAYOUT_FLAG: layoutFlag,
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     isFeatureEnabled: async (key: string, userId: number) => { assert.equal(userId, 6); return state.flags[key] ?? false },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (userId: number) => ({ ownerId: userId }), projectContentAccessWhere: (userId: number) => ({ ownerId: userId }) }],

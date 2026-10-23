@@ -11,7 +11,6 @@ import { operatorSuggestions, searchCompletion, SEARCH_TIPS, searchFilterType } 
 
 const require = createRequire(import.meta.url)
 const root = path.resolve(__dirname, '..')
-const flag = keys.HTPR_6880_SEARCH_COMMENTER_FLAG
 const fuzzyFlag = keys.HTPR_6881_SEARCH_FUZZY_PERSON_FLAG
 let state: any
 const people: any[] = [
@@ -157,7 +156,7 @@ const documentHandler = jiti(path.join(root, 'src/pages/api/search/document.ts')
 const valuesHandler = jiti(path.join(root, 'src/pages/api/search/values.ts')).default as any
 const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts')) as any
 function reset(overrides: any = {}) {
-  state = { session: { userId: 42 }, flags: { [flag]: true, [fuzzyFlag]: true,
+  state = { session: { userId: 42 }, flags: { [fuzzyFlag]: true,
     [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
     indexComments: [], countQueries: [], anchorQueries: [], peopleQueries: [], taskQueries: [], commentQueries: [], detailQueries: [], flagCalls: [], deleted: [], indexCalls: 0, ...overrides }
 }
@@ -168,11 +167,11 @@ async function search(query: string, projectIds = [7]) {
   return res
 }
 async function rank(query: string, fuzzy = true) {
-  const parsed = await parseSearchWithChipNames(query, [7], fuzzy, [7], true)
+  const parsed = await parseSearchWithChipNames(query, [7], fuzzy, [7])
   return rankedSearchWhere(parsed, [7], 'Normal')
 }
 
-test('parser recognizes commenter only when enabled, including names, quotes and negation', () => {
+test('client parser follows layout availability for commenter names, quotes and negation', () => {
   const raw = 'needle commenter:"@Hicham Other" -commenter:3'
   assert.equal(JSON.stringify(parseSearchQuery(raw)), '{"text":"needle commenter:\\"@Hicham Other\\" -commenter:3","filters":{}}')
   assert.deepEqual(parseSearchQuery(raw, {}, true), { text: 'needle', filters: { commenter: [{ value: '@Hicham Other', negated: false }, { value: '3', negated: true }] } })
@@ -215,17 +214,17 @@ test('typed names reuse fuzzy flag, accents and emails; picked numeric IDs remai
   for (const chips of [false, true]) {
     for (const [value, fuzzy, ids] of [['hicham', true, [1, 2]], ['HÍCH', true, [1, 2]], ['two@example', true, [2]], ['hicham', false, undefined], ['1', true, undefined]] as const) {
       reset()
-      const parsed = await (chips ? parseSearchWithChipNames : parseSearchWithNames)(`commenter:${value}`, [7], fuzzy, [7], true)
+      const parsed = await (chips ? parseSearchWithChipNames : parseSearchWithNames)(`commenter:${value}`, [7], fuzzy, [7])
       assert.deepEqual(parsed.filters.commenter[0].userIds, ids)
       const where = await searchFilterWhere(parsed, [7], 'Normal')
       assert.deepEqual(tasks.filter((row) => matches(row, where)).map((row) => row.id), ids?.includes(2) ? ids.length === 1 ? [103] : [101, 102, 103] : [101, 102])
     }
   }
   reset()
-  const parsed = await parseSearchWithNames('commenter:@HÍCHAM Other', [7], true, [7], true)
+  const parsed = await parseSearchWithNames('commenter:@HÍCHAM Other', [7], true, [7])
   assert.equal(parsed.text, '')
   assert.equal(parsed.filters.commenter[0].value, '@HÍCHAM Other')
-  const privatePerson = await parseSearchWithNames('commenter:private@example.test', [7], true, [7], true)
+  const privatePerson = await parseSearchWithNames('commenter:private@example.test', [7], true, [7])
   assert.deepEqual(privatePerson.filters.commenter[0].userIds, [])
 })
 
@@ -237,29 +236,20 @@ test('newest matching comment supplies snippets and date, not the newest unrelat
   const row = res.body.processedData.All[1]
   assert.equal(row.commentText, comments[1].commentText)
   assert.equal(row.updatedAt, '2026-10-05T00:00:00.000Z')
-  assert.ok(state.flagCalls.includes(flag))
   assert.equal(state.indexCalls, 0)
 })
 
-test('permanent highlights preserve matching snippets and author metadata with commenter independently toggled', async () => {
-  for (const commenter of [false, true]) {
-    reset()
-    state.flags[flag] = commenter
-    const res = await search('needle commenter:1')
-    if (!commenter) {
-      assert.equal(res.body.legacyQuery, 'needle commenter:1')
-      assert.equal(state.commentQueries.length, 0)
-      continue
-    }
-    assert.deepEqual(res.body.processedData.All.map((row: any) => row.taskId), [101])
-    const row = res.body.processedData.All[0]
-    assert.equal(row.commentId, 2)
-    assert.equal(row.updatedAt, '2026-10-05T00:00:00.000Z')
-    assert.equal(row.commentText, comments[1].commentText)
-    assert.deepEqual(row.searchMatch, { people: [], labels: [], commentAuthor: 'Hicham' })
-    assert.deepEqual(state.detailQueries[0].select.creator, { select: { displayName: true, email: true } })
-    assert.equal(state.indexCalls, 0)
-  }
+test('permanent highlights preserve matching commenter snippets and author metadata', async () => {
+  reset()
+  const res = await search('needle commenter:1')
+  assert.deepEqual(res.body.processedData.All.map((row: any) => row.taskId), [101])
+  const row = res.body.processedData.All[0]
+  assert.equal(row.commentId, 2)
+  assert.equal(row.updatedAt, '2026-10-05T00:00:00.000Z')
+  assert.equal(row.commentText, comments[1].commentText)
+  assert.deepEqual(row.searchMatch, { people: [], labels: [], commentAuthor: 'Hicham' })
+  assert.deepEqual(state.detailQueries[0].select.creator, { select: { displayName: true, email: true } })
+  assert.equal(state.indexCalls, 0)
 })
 
 test('comment author pill falls back to email and highlight prerequisites do not disable commenter filtering', async () => {
@@ -296,7 +286,7 @@ test('text and commenter match the same comment, never the title, description or
 
 test('negation excludes all comments by a person regardless of free text; activities do not exclude', async () => {
   reset()
-  const parsed = await parseSearchWithNames('needle -commenter:1', [7], true, [7], true)
+  const parsed = await parseSearchWithNames('needle -commenter:1', [7], true, [7])
   const where = await searchFilterWhere(parsed, [7], 'Normal')
   assert.equal(where.AND[0].NOT.comments.some.commentText, undefined)
   assert.deepEqual(tasks.filter((row) => matches(row, where)).map((row) => row.id), [103, 104, 105])
@@ -314,7 +304,7 @@ test('deleted comments disappear, including stale index hits, while activities a
   assert.equal(state.commentQueries.length, 0)
 })
 
-test('values uses the same scoped people/email picker and rejects commenter when its flag is off', async () => {
+test('values uses the same scoped people/email picker for commenter', async () => {
   reset()
   const lookup = async (operator: string) => {
     const res = response()
@@ -328,23 +318,6 @@ test('values uses the same scoped people/email picker and rejects commenter when
   assert.deepEqual(commenter.body.candidates.map((row: any) => row.id), [1])
   assert.equal(commenter.body.candidates[0].email, 'one@example.test')
   assert.ok(state.peopleQueries.every((args: any) => !JSON.stringify(args.where).includes('999')))
-  state.flags[flag] = false
-  state.peopleQueries = []
-  assert.equal((await lookup('commenter')).code, 400)
-  assert.equal(state.peopleQueries.length, 0)
-})
-
-test('API flag-off output is byte-identical to legacy search and performs no commenter lookups', async () => {
-  reset()
-  state.flags[flag] = false
-  const res = await search('commenter:1')
-  assert.equal(JSON.stringify(res.body), '{"status":200,"legacyQuery":"commenter:1"}')
-  assert.equal(state.commentQueries.length, 0)
-  assert.equal(state.peopleQueries.length, 0)
-  for (const chips of [false, true]) {
-    const parsed = await (chips ? parseSearchWithChipNames : parseSearchWithNames)('commenter:1 from:3', [7], true, [7], false)
-    assert.equal(JSON.stringify(parsed), '{"text":"commenter:1","filters":{"from":[{"value":"3","negated":false}]}}')
-  }
 })
 
 test('MCP shares authorization, parser, comment snippets and newest-comment pagination', async () => {
@@ -360,13 +333,12 @@ test('MCP shares authorization, parser, comment snippets and newest-comment pagi
   assert.equal(first.tasks[0].id, 102)
   const second = await (await request('commenter:1', '&limit=1&cursor=102')).json()
   assert.equal(second.tasks[0].id, 101)
-  assert.ok(state.flagCalls.includes(flag))
   const denied = await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=commenter:1&board_id=999'))
   assert.equal(denied.status, 403)
 })
 
 
-test('API and MCP honor both person and commenter flags independently', async () => {
+test('API and MCP retain the fuzzy-person flag for permanent commenter search', async () => {
   for (const fuzzy of [false, true]) {
     for (const surface of ['API', 'MCP']) {
       reset()
@@ -375,17 +347,9 @@ test('API and MCP honor both person and commenter flags independently', async ()
         ? (await search('commenter:hicham')).body.processedData.All.map((row: any) => row.taskId)
         : (await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=commenter:hicham&board_id=7'))).json()).tasks.map((row: any) => row.id)
       assert.deepEqual(ids, fuzzy ? [103, 102, 101] : [102, 101])
-      assert.ok(state.flagCalls.includes(flag))
       assert.ok(state.flagCalls.includes(fuzzyFlag))
     }
   }
-  reset()
-  state.flags[flag] = false
-  const res = await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=commenter:1&board_id=7'))
-  assert.equal(res.status, 200)
-  assert.equal(JSON.stringify(await res.json()), '{"success":true,"tasks":[],"total":0,"boardId":7,"nextCursor":null}')
-  assert.equal(state.commentQueries.length, 0)
-  assert.equal(state.peopleQueries.length, 0)
 })
 
 test('commenter values still require session authentication', async () => {
@@ -396,35 +360,26 @@ test('commenter values still require session authentication', async () => {
   assert.equal(state.peopleQueries.length, 0)
 })
 
-test('review flag-off preserves ordinary indexed comment metadata and production timestamps', async () => {
-  for (const enabled of [false, true]) {
-    reset()
-    state.flags[flag] = enabled
-    const hit = { id: '2', taskId: 101, commentText: comments[1].commentText, creatorName: 'Hicham', createdAt: '2026-10-05T00:00:00.000Z' }
-    state.indexComments = [hit]
-    const parsed = await parseSearchWithNames('needle from:3', [7], false, [7], enabled)
-    const ranked = await rankedSearchWhere(parsed, [7], 'Normal', 50, {}, null, false, enabled)
-    if (!enabled) assert.equal(JSON.stringify(ranked.commentById.get(101)), JSON.stringify(hit))
-    const api = await search('needle from:3')
-    const row = api.body.processedData.All[0]
-    assert.equal(row.updatedAt, enabled ? hit.createdAt : tasks[0].updatedAt.toISOString())
-    assert.equal(row.commentId, 2)
-    assert.equal(row.commentText, hit.commentText)
-    const mcp = await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=needle%20from:3&board_id=7'))).json()
-    const legacyItem = {
-      id: 101, ticketNumber: 'TEST-1', title: tasks[0].title, description: tasks[0].description,
-      boardId: 7, boardTitle: 'Visible', projectId: 7, section: 'Todo', createdAt: tasks[0].createdAt.toISOString(),
-      uniqueIndex: 1, url: 'https://app.hypertask.ai/detail/project-7/1',
-      link: { url: 'https://app.hypertask.ai/detail/project-7/1', format: 'https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex}', example: 'https://app.hypertask.ai/detail/project-7/1' },
-    }
-    // Disable presentation additions to compare the legacy serialized item independently.
-    reset()
-    state.flags[flag] = enabled
-    state.indexComments = [hit]
-    const raw = await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=needle%20from:3&board_id=7'))).json()
-    assert.deepStrictEqual(raw.tasks[0], ({ ...legacyItem, ...(enabled ? { commentId: 2, commentText: hit.commentText, commentCreatedAt: hit.createdAt } : {}) }))
-    assert.equal(mcp.tasks[0].commentCreatedAt, enabled ? hit.createdAt : undefined)
-  }
+test('ordinary indexed comments retain snippets and use their comment timestamps in API and MCP', async () => {
+  reset()
+  const hit = { id: '2', taskId: 101, commentText: comments[1].commentText, creatorName: 'Hicham', createdAt: '2026-10-05T00:00:00.000Z' }
+  state.indexComments = [hit]
+  const parsed = await parseSearchWithNames('needle from:3', [7], false, [7])
+  const ranked = await rankedSearchWhere(parsed, [7], 'Normal', 50, {}, null, false)
+  assert.deepEqual(ranked.commentById.get(101), { ...hit, createdAt: new Date(hit.createdAt) })
+  const api = await search('needle from:3')
+  const row = api.body.processedData.All[0]
+  assert.equal(row.updatedAt, hit.createdAt)
+  assert.equal(row.commentId, 2)
+  assert.equal(row.commentText, hit.commentText)
+  const mcp = await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=needle%20from:3&board_id=7'))).json()
+  assert.deepStrictEqual(mcp.tasks[0], {
+    id: 101, ticketNumber: 'TEST-1', title: tasks[0].title, description: tasks[0].description,
+    boardId: 7, boardTitle: 'Visible', projectId: 7, section: 'Todo', createdAt: tasks[0].createdAt.toISOString(),
+    uniqueIndex: 1, url: 'https://app.hypertask.ai/detail/project-7/1',
+    link: { url: 'https://app.hypertask.ai/detail/project-7/1', format: 'https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex}', example: 'https://app.hypertask.ai/detail/project-7/1' },
+    commentId: 2, commentText: hit.commentText, commentCreatedAt: hit.createdAt,
+  })
 })
 
 test('review comment-only authors appear only in bounded accessible commenter resolver and picker pools', async () => {
@@ -439,11 +394,11 @@ test('review comment-only authors appear only in bounded accessible commenter re
   try {
     for (const parser of [parseSearchWithNames, parseSearchWithChipNames]) {
       reset()
-      const parsed = await parser('commenter:comment from:comment assignee:comment', [7], true, [7], true)
+      const parsed = await parser('commenter:comment from:comment assignee:comment', [7], true, [7])
       assert.deepEqual(parsed.filters.commenter[0].userIds, [40])
       assert.deepEqual(parsed.filters.from[0].userIds, [])
       assert.deepEqual(parsed.filters.assignee[0].userIds, [])
-      const full = await parser('commenter:@Comment Only', [7], false, [7], true)
+      const full = await parser('commenter:@Comment Only', [7], false, [7])
       assert.equal(full.filters.commenter[0].value, '@Comment Only')
       assert.equal(full.text, '')
       // Resolver must match before limiting, so it never caps the people pool (review on PR 977).
@@ -458,10 +413,10 @@ test('review comment-only authors appear only in bounded accessible commenter re
       const resolved = response()
       await valuesHandler({ method: 'GET', headers: {}, query: { operator: 'commenter', resolve: 'Comment Only trailing text', boardId: '7' } }, resolved)
       assert.equal(resolved.body.resolved, 'Comment Only')
-      assert.deepEqual((await parser('commenter:comment@example', [7], true, [7], true)).filters.commenter[0].userIds, [40])
-      assert.deepEqual((await parser('commenter:comment', [7, 8], true, [7], true)).filters.commenter[0].userIds, [40])
-      assert.deepEqual((await parser('commenter:comment', [7, 8], true, [8], true)).filters.commenter[0].userIds, [44])
-      const scoped = await parser('commenter:comment', [7], true, [], true)
+      assert.deepEqual((await parser('commenter:comment@example', [7], true, [7])).filters.commenter[0].userIds, [40])
+      assert.deepEqual((await parser('commenter:comment', [7, 8], true, [7])).filters.commenter[0].userIds, [40])
+      assert.deepEqual((await parser('commenter:comment', [7, 8], true, [8])).filters.commenter[0].userIds, [44])
+      const scoped = await parser('commenter:comment', [7], true, [])
       assert.deepEqual(scoped.filters.commenter[0].userIds, [])
     }
   } finally { people.splice(-added.length) }
@@ -512,15 +467,14 @@ test('review paging uses bounded comment DB pages and separate full totals for c
   assert.ok(state.taskQueries.filter((args: any) => args.take !== undefined).every((args: any) => args.take === 1))
 })
 
-test('review flag-off ordinary comment output retains permanent highlights and production timestamps', async () => {
+test('ordinary comment output retains permanent highlights and comment timestamps', async () => {
   reset()
-  state.flags[flag] = false
   const hit = { id: '2', taskId: 101, commentText: comments[1].commentText, creatorName: 'Hicham', createdAt: '2026-10-05T00:00:00.000Z' }
   state.indexComments = [hit]
   const row = {
     taskId: 101, projectId: 7, ticketNumber: 'TEST-1', taskTitle: tasks[0].title,
     descriptionText: tasks[0].description, projectTitle: 'Visible', status: 'Normal',
-    updatedAt: tasks[0].updatedAt.toISOString(), uniqueIndex: 1, highlight: {},
+    updatedAt: hit.createdAt, uniqueIndex: 1, highlight: {},
     searchMatch: { people: [], labels: [], commentAuthor: 'Hicham' }, commentId: 2, commentText: hit.commentText,
   }
   const expected = { processedData: { All: [row], Visible: [row] }, tabs: ['All', 'Visible'], contextProjectId: null, status: 200 }

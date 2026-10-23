@@ -6,7 +6,6 @@ const React = require('react')
 const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
-const commenterFlag = 'htpr-6880-search-commenter'
 const layoutFlag = 'htpr-6865-search-layout'
 
 async function withSearch(t, config, check) {
@@ -412,37 +411,34 @@ test('permanent label scope: independent scopes, counts, readable AI and history
   })
 })
 
-for (const commenterEnabled of [false, true]) {
-  test(`commenter ${commenterEnabled}: independent chips, picker and history with permanent label scope`, async (t) => {
-    const query = 'board:7 commenter:77 first'
-    await withSearch(t, { query, flags: { [commenterFlag]: commenterEnabled } }, async ({ complete, type, tick, options, lookups, press, requests, state }) => {
-      await complete()
-      assert.equal(document.querySelector('[aria-label^="Remove board:"] span').textContent, 'board:inne')
-      const chip = document.querySelector('[aria-label^="Remove commenter:"]')
-      if (commenterEnabled) assert.match(chip.textContent, /commenter:@Malcolm Stern/)
-      else assert.equal(chip, null)
-      await type('commenter:mal')
-      await tick(180)
-      assert.equal(lookups.some((params) => params.get('operator') === 'commenter'), commenterEnabled)
-      assert.equal(options().some((row) => row.textContent.includes('malstern@aol.com')), commenterEnabled)
-      await type('second')
-      await press('Escape')
-      await press('Enter')
-      assert.equal(requests.at(-1).body.searchQuery, `board:7 ${commenterEnabled ? 'commenter:77 ' : ''}second`)
-      await complete()
-      await press('Escape')
-      assert.equal(state().inputValue, query)
-      assert.equal(requests.at(-1).body.searchQuery, query)
-      await complete()
-      assert.equal(document.querySelector('[aria-label^="Remove commenter:"]') !== null, commenterEnabled)
-      await press('Escape')
-      assert.equal(state().inputValue, '')
-      assert.deepEqual(headings(), ['Recent searches', 'Tips'])
-      assert.equal(options().some((row) => row.textContent.startsWith('commenter:@Hicham')), commenterEnabled)
-      assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '[]')
-    })
+test('permanent commenter and label scope: independent chips, picker and history', async (t) => {
+  const query = 'board:7 commenter:77 first'
+  await withSearch(t, { query }, async ({ complete, type, tick, options, lookups, press, requests, state }) => {
+    await complete()
+    assert.equal(document.querySelector('[aria-label^="Remove board:"] span').textContent, 'board:inne')
+    const chip = document.querySelector('[aria-label^="Remove commenter:"]')
+    assert.match(chip.textContent, /commenter:@Malcolm Stern/)
+    await type('commenter:mal')
+    await tick(180)
+    assert.equal(lookups.some((params) => params.get('operator') === 'commenter'), true)
+    assert.equal(options().some((row) => row.textContent.includes('malstern@aol.com')), true)
+    await type('second')
+    await press('Escape')
+    await press('Enter')
+    assert.equal(requests.at(-1).body.searchQuery, 'board:7 commenter:77 second')
+    await complete()
+    await press('Escape')
+    assert.equal(state().inputValue, query)
+    assert.equal(requests.at(-1).body.searchQuery, query)
+    await complete()
+    assert.equal(document.querySelector('[aria-label^="Remove commenter:"]') !== null, true)
+    await press('Escape')
+    assert.equal(state().inputValue, '')
+    assert.deepEqual(headings(), ['Recent searches', 'Tips'])
+    assert.equal(options().some((row) => row.textContent.startsWith('commenter:@Hicham')), true)
+    assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '[]')
   })
-}
+})
 
 for (const disabled of [layoutFlag]) {
   test(`${disabled} off preserves browser-back Escape, extra hash and dismissible empty suggestions`, async (t) => {

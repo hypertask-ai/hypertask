@@ -12,7 +12,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -61,7 +61,6 @@ const SearchComp = ({
     : _searchTerm;
   const layoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const rowsFitPane = useFlag(HTPR_7618_SEARCH_ROWS_FIT_PANE_FLAG);
-  const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -117,7 +116,7 @@ const SearchComp = ({
     }
   }, [showCommands.show, HypertasksCommands]);
   const matchSnippets = layoutEnabled
-    ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
+    ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, layoutEnabled))
     : undefined;
   const showAskAiRow =
     !layoutEnabled && inputValue.trim().length >= 2 && typedTasks.length === 0;
@@ -233,7 +232,7 @@ const SearchComp = ({
                               <TaskListRow
                                 task={item}
                                 highlight={item.highlight}
-                                titleParts={highlightedTitle(item.taskTitle ?? '', inputValue, commenterFlagEnabled && layoutEnabled)}
+                                titleParts={highlightedTitle(item.taskTitle ?? '', inputValue, layoutEnabled)}
                                 index={index}
                                 handleLinkClick={handleLinkClick}
                                 handleMouseEnter={handleMouseEnter}

@@ -1,6 +1,6 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7558_SLASH_SEARCH_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7558-slash-search-focus";
 import { isServerSearchFor, type ServerStartedSearch } from "@/lib/search/serverStartedSearch";
@@ -38,7 +38,6 @@ export function useSearch(
   serverStartedSearch?: Promise<ServerStartedSearch | null>,
   searchOnce = false
 ) {
-  const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const { data: searchCache } = useGetSearchCache();
   const { data: allProjects, refetch: refetchProjects } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -199,7 +198,7 @@ export function useSearch(
     }));
     setTasksPlayList(tasksPlayList);
     const url = searchConfig.urls.taskDetail(task.projectId, task.uniqueIndex);
-    if (commenterFlagEnabled && searchLayoutEnabled && task.commentId &&
+    if (searchLayoutEnabled && task.commentId &&
       parseSearchQuery(inputValue, {}, true).filters.commenter?.some((filter) => !filter.negated)) {
       router.push(`${url}?commentId=comment-${task.commentId}`);
     } else {

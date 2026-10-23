@@ -37,7 +37,6 @@ const stubs = new Map([
     {
       HTPR_6865_SEARCH_LAYOUT_FLAG: "htpr-6865-search-layout",
       HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: "htpr-6881-search-fuzzy-person",
-      HTPR_6880_SEARCH_COMMENTER_FLAG: "htpr-6880-search-commenter",
       isFeatureEnabled: async (key) => false,
     },
   ],

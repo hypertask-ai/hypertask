@@ -73,7 +73,6 @@ const mocks = new Map([
   ['src/lib/mcp/auth.ts', { validateMcpAuth: async () => ({ user: { id: 42 }, agentId: null }), checkMcpRateLimit: async () => null }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: flag,
-    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
     isFeatureEnabled: async (key, userId) => {
       state.flagCalls.push([key, userId])
