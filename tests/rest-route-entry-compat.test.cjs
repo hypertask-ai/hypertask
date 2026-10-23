@@ -107,7 +107,8 @@ async function run(operation, mode = 'OFF', options = {}) {
     },
     '@/utils/controllers/users/fetch_preferences': { fetchUserPreferenceController: fn('preferencesGet', { res: { playGifs: true }, status: 200 }), invalidateUserPreferenceCache: fn('preferencesInvalidate', undefined) },
     '@/lib/aiModelPreferences': {}, '@/lib/aiModelOptions': {},
-    '@/utils/helperFunctions/sanitizeRichHtml': {}, '@/lib/dictationProvider': {}, '@/lib/configs/allTasks.config': {}, '@/models/Calendar/model': {},
+    '@/utils/helperFunctions/sanitizeRichHtml': {}, '@/lib/dictationProvider': {}, '@/lib/configs/allTasks.config': {}, '@/lib/configs/boardSortMode.config': {},
+    '@/lib/flags/definitions/htpr-7649-sidebar-view-saved': {}, '@/models/Calendar/model': {},
     '@/lib/storage/uploadTaskAttachmentToS3': {
       resolveOwnAiChatAttachmentKey: () => null, getHypertasksObjectSize: fn('objectSize', 5),
       uploadAiChatAttachmentToS3: fn('upload', 'own-file'), deleteTaskAttachmentFromS3: fn('storageDelete', true),
@@ -1713,7 +1714,8 @@ const baseline = {
               "inboxAdvanceOnSend": true,
               "emojiFrequency": true,
               "calendarViews": true,
-              "allTasksDateRange": true
+              "allTasksDateRange": true,
+              "boardSortMode": true
             }
           }
         ]
@@ -1773,7 +1775,8 @@ const baseline = {
               "inboxAdvanceOnSend": true,
               "emojiFrequency": true,
               "calendarViews": true,
-              "allTasksDateRange": true
+              "allTasksDateRange": true,
+              "boardSortMode": true
             }
           }
         ]
