@@ -179,7 +179,7 @@ def main():
         print('no failed jobs')
         return 0
     for finding in findings:
-        print(f'{finding["job"]} ({finding["conclusion"]}) — {finding["url"]}')
+        print(f'{finding["job"]} ({finding["conclusion"]}) {finding["url"]}')
         step = finding['failed_step']
         if step:
             print(f'Failed step {step["number"]}: {step["name"]}')
