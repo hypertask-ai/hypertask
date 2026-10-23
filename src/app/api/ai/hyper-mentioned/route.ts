@@ -46,6 +46,7 @@ import {
   createHyperAiTools,
   HYPER_AI_TOOL_COUNT,
 } from "@/app/api/ai/_lib/hyperAiTools";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -443,6 +444,8 @@ async function hyperMention(request: NextRequest) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
+    const allowanceMessage = warnIfAllowanceRefused(error, "ai/hyper-mentioned");
+    if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import { errorMessage } from "@/app/api/ai/_lib/editorAi";
+import { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } from "@/lib/aiAllowancePolicy";
 import {
   AiFeatureDisabledError,
   ProjectAccessError,
@@ -97,6 +98,11 @@ export async function POST(request: NextRequest) {
         { success: false, error: error.message },
         { status: 403 }
       );
+    }
+    const message = errorMessage(error);
+    if (message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE) {
+      console.warn("[mcp/ai/task-writer] refused: included AI allowance used up");
+      return NextResponse.json({ success: false, error: message }, { status: 429 });
     }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",

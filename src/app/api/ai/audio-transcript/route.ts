@@ -28,6 +28,7 @@ import {
   MAX_DICTATION_AUDIO_BYTES,
   transcribeAudioFile,
 } from "@/lib/services/dictation/transcriptionProviders";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -197,6 +198,8 @@ export async function POST(request: NextRequest) {
     if (error instanceof DictationAudioTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
     }
+    const allowanceMessage = warnIfAllowanceRefused(error, "ai/audio-transcript");
+    if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,
