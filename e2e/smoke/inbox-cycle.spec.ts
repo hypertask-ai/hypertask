@@ -34,8 +34,19 @@ async function sendComment(page: Page, text: string) {
     if (!(await editor.innerText()).includes(text)) await page.keyboard.insertText(text)
     return editor.innerText()
   }, { message: 'the comment text is in the current ticket comment box' }).toContain(text)
+  await page.waitForTimeout(1000)
   await page.keyboard.press('Control+Enter')
 }
+
+test.beforeEach(async ({ page }) => {
+  page.on('request', (request) => {
+    const { pathname } = new URL(request.url())
+    if (/\/api\/(notifications|comments?|tasks\/comment)/i.test(pathname) && request.method() !== 'GET') console.log(`[inbox-cycle request] ${request.method()} ${pathname} on ${new URL(page.url()).pathname}`)
+  })
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) console.log(`[inbox-cycle url] ${new URL(frame.url()).pathname}${new URL(frame.url()).search}`)
+  })
+})
 
 async function pressOutsideEditor(page: Page, key: string) {
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
