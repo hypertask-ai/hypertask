@@ -23,13 +23,17 @@ async function expectOpenInFlow(page: Page, item: Item, counter: RegExp) {
   await expect.poll(() => new URL(page.url()).pathname, { message: `${item.title} opens` }).toBe(item.detailPath)
   expect(new URL(page.url()).searchParams.get('inboxFlow'), `${item.title} keeps inboxFlow in the URL`).toBe('true')
   await expect(page.getByText(/^\d+ \/ \d+$/).first(), `${item.title} inbox counter`).toHaveText(counter)
+  await expect(page.getByText(item.title).first(), `${item.title} ticket content is shown`).toBeVisible()
 }
 
 async function sendComment(page: Page, text: string) {
   const editor = page.locator('[data-comment-editor] .ProseMirror, .ProseMirror[contenteditable="true"]').last()
   await expect(editor).toBeVisible()
-  await editor.click()
-  await page.keyboard.insertText(text)
+  await expect.poll(async () => {
+    await editor.click()
+    if (!(await editor.innerText()).includes(text)) await page.keyboard.insertText(text)
+    return editor.innerText()
+  }, { message: 'the comment text is in the current ticket comment box' }).toContain(text)
   await page.keyboard.press('Control+Enter')
 }
 
