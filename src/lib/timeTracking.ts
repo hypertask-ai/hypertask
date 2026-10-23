@@ -370,6 +370,7 @@ export async function listReport(
   const adminProjectIds = options.adminProjectIds ??
     (await administeredProjectIds(userId, {
       teamId: options.teamId,
+      agentId: options.agentId, teamScope: options.teamScope,
       boardIds: options.boardIds ?? (options.boardId ? [options.boardId] : undefined),
     }));
   const adminSet = new Set(adminProjectIds);
@@ -465,12 +466,12 @@ export async function listReport(
 
 export async function administeredProjectIds(
   userId: number,
-  scope: { teamId?: string; boardIds?: number[] } = {}
+  scope: { teamId?: string; boardIds?: number[]; agentId?: string | null; teamScope?: AgentTokenTeamScope | null } = {}
 ) {
   const projects = await prisma.project.findMany({
     where: {
       status: { in: ["Normal", "Archive"] },
-      ...getProjectWhere(userId),
+      ...getProjectWhere(userId, scope.agentId, scope.teamScope),
       ...(scope.boardIds?.length ? { id: { in: scope.boardIds } } : {}),
       ...(scope.teamId ? { teamId: scope.teamId } : {}),
       OR: [
@@ -550,16 +551,16 @@ export async function deleteEntry(
   return true;
 }
 
-export async function taskSummary(userId: number, taskId: number) {
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
-    select: {
-      project: { select: { status: true, timeTrackingEnabled: true } },
-    },
-  });
+export async function taskSummary(userId: number, taskId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
+  const select = { project: { select: { status: true, timeTrackingEnabled: true } } } as const;
+  const task = teamScope != null
+    ? await prisma.task.findFirst({ where: { id: taskId, project: getProjectWhere(userId, agentId, teamScope) }, select })
+    : await prisma.task.findUnique({ where: { id: taskId }, select });
+  if (teamScope != null && !task) throw new TimeTrackingDisabledError();
   const entries = await prisma.timeEntry.findMany({
     where: {
       taskId,
+      ...(teamScope != null ? { task: { project: getProjectWhere(userId, agentId, teamScope) } } : {}),
       ...(task?.project.status === "Normal" ? {} : { endedAt: null }),
     },
     orderBy: { startedAt: "asc" },

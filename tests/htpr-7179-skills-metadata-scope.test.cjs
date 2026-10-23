@@ -12,6 +12,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         { id: 1, userId: f.user.id, projectId: null, project: null, slug: 'personal', name: 'Personal', enabled: true, body: 'global-sentinel' },
         ...[f.projects[0], f.projects[3]].map(project => ({ id: project.id, userId: null, projectId: project.id, project, slug: 'project', name: project.name, enabled: true, body: `${project.name}-skill` })),
       ];
+      f.prisma.$queryRaw = async () => [];
       f.prisma.aI_Skill = f.model(skills, 'skill');
       f.prisma.aI_Custom_Instructions = f.model([f.projects[0], f.projects[3]].map(project => ({ id: project.id, projectId: project.id, project, customInstruction: `${project.name}-instructions` })), 'instructions');
       let imports = 0;
@@ -40,6 +41,19 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       }
       assert.equal((await route.GET(request('skills'))).status, actor === 'bound' ? 403 : 200);
       assert.equal((await item.GET(request('skills/1'), { params: Promise.resolve({ skill_id: '1' }) })).status, actor === 'bound' ? 403 : 200);
+      const beforePatch = f.writes.length;
+      const patched = await item.PATCH(request('skills/1', 'PATCH', { body: 'global-sentinel' }), { params: Promise.resolve({ skill_id: '1' }) });
+      assert.equal(patched.status, actor === 'bound' ? 403 : 200);
+      if (actor === 'bound') assert.equal(f.writes.length, beforePatch);
+      for (const projectId of [15, 25]) {
+        const beforeWrite = f.writes.length;
+        const created = await route.POST(request('skills', 'POST', { scope: 'project', project_id: projectId, name: 'Fixture', body: 'fixture' }));
+        const changed = await instruction.PUT(request(`projects/${projectId}/instructions`, 'PUT', { custom_instruction: 'fixture' }), { params: Promise.resolve({ projectId: String(projectId) }) });
+        const allowed = projectId === 15 || actor !== 'bound';
+        assert.equal(created.status, allowed ? 201 : 403);
+        assert.equal(changed.status, allowed ? 200 : 403);
+        if (!allowed) assert.equal(f.writes.length, beforeWrite);
+      }
       const before = f.writes.length;
       const globalCreate = await route.POST(request('skills', 'POST', { scope: 'user', name: 'Fixture', body: 'fixture' }));
       assert.equal(globalCreate.status, actor === 'bound' ? 403 : 201);
@@ -54,18 +68,27 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         if (actor === 'bound') await assert.rejects(resolver.resolveSkills('/personal Draft', principal), error => error.status === 403);
         else assert.match((await resolver.resolveSkills('/personal Draft', principal)).systemPromptAddition, /global-sentinel/);
       });
+      const beforeDelete = f.writes.length;
+      const deleted = await item.DELETE(request('skills/1', 'DELETE'), { params: Promise.resolve({ skill_id: '1' }) });
+      assert.equal(deleted.status, actor === 'bound' ? 403 : 200);
+      if (actor === 'bound') assert.equal(f.writes.length, beforeDelete);
     });
 
     test(`${mode} ${actor}: context inventories and requested-team presence do not expose B metadata`, async () => {
       const f = teamFixture(mode, actor);
       f.user.accountId = 'account';
+      f.agent.displayName = 'A-agent';
+      f.prisma.agent = f.model([f.agent, { ...f.agent, id: 'b-agent', displayName: 'B-agent', members: [{ project: f.projects[3] }] }, { ...f.agent, id: 'mixed-agent', members: [{ project: f.projects[0] }, { project: f.projects[3] }] }], 'agent');
       const teams = ['team-a', 'team-b'].map(id => ({ id, title: `${id}-sentinel`, googleAccountId: 'account' }));
       f.prisma.team = f.model(teams, 'team');
       f.prisma.member_Team = f.model(teams.map((team, id) => ({ id, userId: f.user.id, teamId: team.id, team, status: 'Accepted' })), 'team-member');
       const ctx = f.load('src/lib/mcp/operations/user/context/operation.ts');
       const context = await ctx.GET(request('user/context'));
       assert.equal(context.status, 200);
-      assert.equal((await context.text()).includes('team-b-sentinel'), actor !== 'bound');
+      const contextBody = await context.json();
+      assert.equal(JSON.stringify(contextBody).includes('team-b-sentinel'), actor !== 'bound');
+      assert.equal(contextBody.all_agents.some(agent => agent.id === 'b-agent'), actor !== 'bound');
+      assert.equal(contextBody.all_agents.some(agent => agent.id === 'mixed-agent'), actor !== 'bound');
       const calls = [];
       const presence = f.load('src/lib/mcp/operations/agents/presence/operation.ts', { '@/lib/mcp/agents/presence': { getTeamAgentPresence: async (id, principal) => { calls.push({ id, principal }); return [{ agent: { id: 'fixture' } }]; }, TeamAgentPresenceNotFoundError: class extends Error {} } });
       const a = await presence.GET(request('agents/presence?team_id=team-a'));

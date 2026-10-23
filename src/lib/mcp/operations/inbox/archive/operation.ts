@@ -1,3 +1,4 @@
+import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
         const candidateTaskIds = [...new Set(notifications.map((item) => item.taskId!))].sort((a, b) => a - b)
         for (const candidateTaskId of candidateTaskIds) {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REMINDER_LOCK_CLASS}::int, ${candidateTaskId}::int)`
+          await lockTaskTeamScope(tx, candidateTaskId, user.id, ctx.agentId, ctx.teamScope)
         }
         const lockedNotifications = await tx.notification.findMany({
           where: { id: { in: notificationIds }, userId: user.id, status: 'Normal', ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}) },
@@ -241,6 +243,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     if (error instanceof ReminderSelectionConflict) {
       return NextResponse.json({ success: false, error: error.message }, { status: 409 })
     }

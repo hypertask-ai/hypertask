@@ -92,6 +92,7 @@ const defaultDependencies: CardActionDependencies = {
       projectId,
       fromUserId: ctx.user.id,
       fromAgentId: ctx.agentId ?? null,
+      teamScope: ctx.teamScope,
     }
     const activeAfterWrite = await setTaskMovedToInboxState(recipient, active)
     return { active: activeAfterWrite }

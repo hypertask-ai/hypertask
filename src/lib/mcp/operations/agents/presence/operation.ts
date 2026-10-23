@@ -35,6 +35,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    if (ctx.teamScope != null && teamId !== ctx.teamScope.teamId) {
+      return NextResponse.json({ success: false, error: 'Team not found' }, { status: 404 })
+    }
+
     const dbUser = await prisma.user.findUnique({
       where: { id: ctx.user.id },
       select: {

@@ -222,10 +222,10 @@ export async function handlePatchAgentRequest(
       if (delegationError) return delegationError
       const result = await updateOwnedAgentBoards(
         prisma as unknown as AgentBoardUpdateDatabase,
-        getAccessibleAgentBoard,
+        (id, userId, db) => getAccessibleAgentBoard(id, userId, ctx.agentId, ctx.teamScope, db),
         ctx.user.id,
         input,
-        ctx.management?.teamId,
+        ctx.teamScope?.teamId ?? ctx.management?.teamId,
         ctx.agentId ?? undefined
       )
       if (ctx.agentId) {

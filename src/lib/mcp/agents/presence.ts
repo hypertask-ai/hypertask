@@ -39,6 +39,7 @@ export async function getTeamAgentPresence(
   teamId: string,
   caller?: { userId: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null },
 ): Promise<TeamAgentPresence[]> {
+  if (caller?.teamScope != null && caller.teamScope.teamId !== teamId) throw new TeamAgentPresenceNotFoundError(teamId)
   const team = await prisma.team.findUnique({
     where: { id: teamId },
     select: { id: true, googleAccountId: true },

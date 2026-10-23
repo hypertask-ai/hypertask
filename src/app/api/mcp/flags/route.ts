@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
-    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId } });
+    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } });
     const key = request.nextUrl.searchParams.get("key");
     if (key !== null) {
       const flag = flags.find((flag) => flag.key === key);

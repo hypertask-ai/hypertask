@@ -50,6 +50,7 @@ function teamFixture(mode, actor = 'bound') {
     '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
     '@/utils/controllers/turbopuffer/turbopufferHelper': { convertToPlain: s => s, upsertPageToTurbopuffer: async () => {}, deletePageFromTurbopuffer: async () => {} },
   });
+  f.mocks['@/lib/mcp/auth'].validateMcpAuth = async () => { await f.scope.prepareAgentScope(f.user.id, f.state.ctx.agentId); return f.state.ctx; };
   const services = f.load('src/lib/mcp/tasks/services.ts');
   f.mocks['@/lib/mcp/tasks/services'] = services;
   return { ...f, pages, comments, model, services };

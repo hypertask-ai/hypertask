@@ -163,6 +163,21 @@ async function joinAdoptedAgentMutationLease(
   return joined
 }
 
+export async function lockTaskTeamScope(
+  tx: Prisma.TransactionClient,
+  taskId: number,
+  userId: number,
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+): Promise<void> {
+  if (teamScope == null) return
+  await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`
+  if (!await tx.task.findFirst({
+    where: { id: taskId, project: taskWriteAccessWhere(userId, agentId, teamScope) },
+    select: { id: true },
+  })) throw new TaskTeamScopeError()
+}
+
 export async function assertAgentAssignmentChangeAllowed(
   tx: Prisma.TransactionClient,
   taskId: number,
