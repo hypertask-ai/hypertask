@@ -34,6 +34,7 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
     if (["./taskWriterSkills", "@/lib/ai/taskWriterSkills"].includes(id)) return metadata;
     if (id === "@/lib/flags/keys") return keys;
+    if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
     if (id === "@/lib/ai/prompts/registry") return registry;
     if (id.startsWith("@/") || id.startsWith(".")) throw new Error(`Unstubbed ${file}: ${id}`);
     return require(id);

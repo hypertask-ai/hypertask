@@ -171,7 +171,8 @@ test("every AI generation call passes the Brotli-free download", () => {
   for (const call of calls) {
     const [file, lineNumber] = call.split(":");
     const lines = fs.readFileSync(path.join(root, file), "utf8").split("\n");
-    assert.match(lines[Number(lineNumber)] ?? "", /experimental_download: downloadWithoutBrotli,/, call);
+    const firstOptions = lines.slice(Number(lineNumber), Number(lineNumber) + 2).join("\n");
+    assert.match(firstOptions, /experimental_download: downloadWithoutBrotli,/, call);
   }
 });
 
