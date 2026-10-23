@@ -19,7 +19,7 @@ const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title"
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" } };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardBack = true, boardColumns = true } = {}) {
+function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardColumns = true } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -77,7 +77,7 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     "next/navigation": { usePathname: () => nextPath, useRouter: () => ({ replace: url => routerCalls.push(url), refresh: () => routerCalls.push("refresh") }) },
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) }, "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : key === flags.HTPR_7003_BOARD_BACK_FLAG ? boardBack : true },
+    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : true },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -443,20 +443,20 @@ test("flagged detail misses reach native traversal instead of repairing the sour
   }
 });
 
-for (const boardBack of [true, false]) for (const stableChildren of [true, false]) {
-  test(`board Back never exposes the background ticket route (7003=${boardBack}, stable children=${stableChildren})`, async t => {
-    const f = fixture(t, { boardBack, stableChildren });
+for (const stableChildren of [true, false]) {
+  test(`board Back never exposes the background ticket route (stable children=${stableChildren})`, async t => {
+    const f = fixture(t, { stableChildren });
     await f.openFromBoard();
     await f.refreshBoardOpen();
     assert.equal(f.observed().title, child.title);
     await f.traverse("back");
     assert.equal(window.location.pathname, "/project");
-    assert.equal(f.observed().title, boardBack ? undefined : child.title);
-    assert.equal(f.checkpoints.at(-1).title, boardBack ? undefined : child.title);
+    assert.equal(f.observed().title, undefined);
+    assert.equal(f.checkpoints.at(-1).title, undefined);
     assert.equal(f.observed().loading, undefined);
     assert.equal(document.querySelector(".kanban-column-title"), null);
-    assert.deepEqual(f.routerCalls, boardBack ? ["/project"] : ["/project", "refresh"], "flagged board repair must not refresh and reset its scroll");
-    if (boardBack) assert.equal(f.nextTraversals(), 0, "do not replay the stale native tree");
+    assert.deepEqual(f.routerCalls, ["/project"], "board repair must not refresh and reset its scroll");
+    assert.equal(f.nextTraversals(), 0, "do not replay the stale native tree");
     await f.serverBoard();
     assert.equal(f.observed().title, undefined);
     assert.equal(document.querySelector(".kanban-column-title").closest("[hidden]"), null);
@@ -513,7 +513,7 @@ test("board Back never schedules the four-second stale-children reveal", async t
 });
 
 test("board protection hard-navigates after six seconds, never reveals stale children, and cancels on ready or departure", () => {
-  const body = source.match(/if \(!boardBack \|\| historyDestination\?\.pathname !== "\/project" \|\| !protectedSource\) return;\n([\s\S]*?)\n  \}, \[boardBack, historyDestination, protectedSource\]\);/)?.[1];
+  const body = source.match(/if \(historyDestination\?\.pathname !== "\/project" \|\| !protectedSource\) return;\n([\s\S]*?)\n  \}, \[historyDestination, protectedSource\]\);/)?.[1];
   assert.ok(body);
   const protect = new Function("window", "historyDestination", "protectedSource", "setHistoryDestination", "setBoardShell", body);
   for (const outcome of ["timeout", "ready", "forward", "different board"]) {

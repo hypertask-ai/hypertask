@@ -24,7 +24,7 @@ function load(file, mocks) {
   return exports;
 }
 
-test("real history Back replaces Next's stale source tree after detail RSC; Forward retains router traversal", async (t) => {
+test("real history Back hides the stale ticket without refresh; Forward restores cached detail", async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/project?id=7049#board" });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map((name) => [name, global[name]]));
@@ -32,6 +32,16 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
   window.scrollTo = () => {};
   window.requestAnimationFrame = () => 1;
   window.cancelAnimationFrame = () => {};
+  dom.window.HTMLElement.prototype.getClientRects = function () { return this.closest("[hidden]") ? [] : [{}]; };
+  let settleTraversal;
+  window.addEventListener("popstate", () => {
+    const done = settleTraversal;
+    settleTraversal = undefined;
+    if (done) setImmediate(done);
+  }, true);
+  const historyScript = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8").match(/id="ht-cached-task-history"\s+dangerouslySetInnerHTML=\{\{\s+__html: "([^"]+)"/)?.[1];
+  assert.ok(historyScript);
+  new Function("window", "CustomEvent", historyScript)(window, window.CustomEvent);
   const client = new QueryClient();
   const renderer = createRoot(document.getElementById("root"));
   t.after(async () => {
@@ -41,9 +51,10 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     dom.window.close();
   });
   let nextPath = "/project";
-  let serverChildren = React.createElement("ul", { id: "board" }, React.createElement("li", null, "Board row"));
+  let serverChildren = React.createElement("ul", { id: "kanban-page-container" }, React.createElement("li", null, "Board row"));
   const board = serverChildren;
-  const detail = React.createElement("article", { id: "server-detail" }, "Server detail");
+  const detail = React.createElement("article", { id: "server-detail", "data-task-detail-path": "/detail/project-7049/31" },
+    React.createElement("h1", { id: "title-input" }, "Server detail"));
   const replacements = [];
   const traversals = [];
   let refreshes = 0;
@@ -55,7 +66,6 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     },
     refresh: () => {
       refreshes++;
-      serverChildren = board;
       render();
     },
   };
@@ -68,8 +78,9 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: (key) => false },
-    "@/lib/flags/keys": {},
-    "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: () => React.createElement("article", { id: "cached-detail" }, "Cached detail") },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: ({ projectId, uniqueIndex }) => React.createElement("article", { id: "cached-detail", "data-task-detail-path": `/detail/project-${projectId}/${uniqueIndex}` },
+      React.createElement("h1", { id: "title-input" }, "Cached detail")) },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -107,21 +118,26 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
   });
   const traverse = (method) => React.act(async () => {
     await new Promise((resolve) => {
-      window.addEventListener("cached-task-detail-navigation", resolve, { once: true });
-      window.addEventListener("popstate", () => setImmediate(resolve), { once: true, capture: true });
+      settleTraversal = resolve;
       window.history[method]();
     });
   });
   await traverse("back");
   assert.deepEqual(replacements, ["/project?id=7049#board"]);
-  assert.equal(refreshes, 1, "replacing the URL alone reuses the poisoned source route payload");
+  assert.equal(refreshes, 0, "board repair must not refresh and reset its scroll");
   assert.deepEqual(traversals, [], "capture must prevent Next from traversing the stale tree");
-  assert.ok(document.querySelector("#board li"));
-  assert.equal(document.querySelector("#server-detail"), null);
+  assert.ok(document.querySelector("#server-detail").closest("[hidden]"), "the stale ticket stays hidden until the board arrives");
   assert.equal(document.querySelector("#cached-detail"), null);
+  await React.act(async () => { serverChildren = board; render(); });
+  assert.ok(document.querySelector("#kanban-page-container li"));
+  assert.equal(document.querySelector("#kanban-page-container").closest("[hidden]"), null);
+  assert.equal(document.querySelector("#server-detail"), null);
   await traverse("forward");
-  assert.deepEqual(traversals, ["/detail/project-7049/31"]);
-  assert.ok(document.querySelector("#server-detail"));
+  assert.deepEqual(traversals, [], "cached Forward must also prevent stale native traversal");
+  assert.ok(document.querySelector("#cached-detail"));
+  assert.equal(document.querySelector("#server-detail"), null);
+  assert.deepEqual(replacements, ["/project?id=7049#board"]);
+  assert.equal(refreshes, 0);
 });
 
 test("pending AI header is quiet on ticket routes; resolved titles and other routes are unchanged", () => {
