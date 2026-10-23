@@ -572,15 +572,10 @@ test("permanent cached refresh behavior is no longer registered as a flag", asyn
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7004-no-loading-flash"), false);
 });
 
-test("phone-first-load-js bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG: key } = flags;
-  assert.equal(key, "htpr-7008-phone-first-load-js");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("phone-first-load JavaScript behavior no longer has a registry flag", async () => {
+  assert.equal(flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG, undefined);
+  assert.ok(!definitions.some(entry => entry.key === "htpr-7008-phone-first-load-js"));
+  assert.ok(!(await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7008-phone-first-load-js"));
 });
 
 test("phone-first-paint bugfix defaults to Everyone for plain QA and respects OFF", async () => {
