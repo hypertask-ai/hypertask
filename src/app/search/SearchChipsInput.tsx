@@ -5,7 +5,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG, HTPR_7559_ENTER_RUNS_SEARCH_FLAG } from "@/lib/flags/keys";
 import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, LOGIC_OPERATORS, type Names, type SearchToken } from "@/lib/search/operators";
@@ -43,8 +43,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const layoutEnabled = layoutFlagEnabled && layoutRequested;
   const enterRunsSearchFlagEnabled = useFlag(HTPR_7559_ENTER_RUNS_SEARCH_FLAG);
   const enterRunsSearchEnabled = enterRunsSearchFlagEnabled && layoutEnabled && !mobileEnabled;
-  const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
-  const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
+  const labelScopeEnabled = layoutEnabled;
   const escLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const escFooterEnabled = useFlag(HTPR_7563_SEARCH_ESC_FOOTER_FLAG);
   const escFooterText = escFooterEnabled && escLeavesEnabled ? 'Esc to go back' : 'Esc to close';

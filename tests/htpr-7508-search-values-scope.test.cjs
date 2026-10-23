@@ -16,7 +16,7 @@ function lookupMatches(row, where = {}) {
   })
 }
 
-function harness({ actor = 'agent', enforce = true, grant = 'none', authenticated = true, labelScope = true, layout = true, commenter = true, bypassProducer = false } = {}) {
+function harness({ actor = 'agent', enforce = true, grant = 'none', authenticated = true, layout = true, commenter = true, bypassProducer = false } = {}) {
   const f = fixture()
   f.state.enforce = enforce
   if (actor !== 'agent') f.state.ctx.agentId = null
@@ -65,7 +65,6 @@ function harness({ actor = 'agent', enforce = true, grant = 'none', authenticate
     } },
     '@/lib/flags': { ...keys, isFeatureEnabled: async key => {
       if (key === keys.HTPR_6865_SEARCH_LAYOUT_FLAG) return layout
-      if (key === keys.HTPR_6878_SEARCH_LABEL_SCOPE_FLAG) return labelScope
       if (key === keys.HTPR_6880_SEARCH_COMMENTER_FLAG) return commenter
       throw new Error(`Unexpected route flag: ${key}`)
     } },
@@ -189,20 +188,18 @@ test('label selected-board scope intersects eligible boards and preserves all-bo
   assert.deepEqual(candidateIds(await h.request('label', { boards: '15,2128,999' })), ['label-2128'])
 })
 
-test('label legacy prefix branch and layout flag off retain all eligible boards', async () => {
-  for (const options of [{ labelScope: false }, { layout: false }]) {
-    const h = harness({ actor: 'owner', ...options })
-    const res = await h.request('label', { boards: '15,999' })
-    assert.deepEqual(candidateIds(res), expectedIds('label', ids))
-    assert.ok(res.body.candidates.every(item => item.count === undefined && item.byName === undefined))
-  }
+test('layout flag off retains all eligible boards without label counts', async () => {
+  const h = harness({ actor: 'owner', layout: false })
+  const res = await h.request('label', { boards: '15,999' })
+  assert.deepEqual(candidateIds(res), expectedIds('label', ids))
+  assert.ok(res.body.candidates.every(item => item.count === undefined && item.byName === undefined))
 })
 
 test('people and legacy labels retain prefix, contains, fuzzy and exact-resolution branches within scope', async () => {
   for (const actor of ['owner', 'member', 'guest']) {
     for (const operator of ['from', 'assignee', 'commenter', 'label']) {
       for (const value of operator === 'label' ? ['label', 'abel', 'lb'] : ['person', 'erson', 'ps']) {
-        const h = harness({ actor, labelScope: false })
+        const h = harness({ actor, layout: false })
         const name = operator === 'label' ? 'Label 2128' : 'Person 2128'
         const res = await h.request(operator, { value, resolve: `${name} trailing` })
         assert.equal(res.body.resolved, name)
@@ -212,7 +209,7 @@ test('people and legacy labels retain prefix, contains, fuzzy and exact-resoluti
     }
   }
   for (const operator of ['from', 'assignee', 'commenter', 'label']) {
-    const h = harness({ grant: 'accepted', labelScope: false })
+    const h = harness({ grant: 'accepted', layout: false })
     assert.deepEqual(candidateIds(await h.request(operator, { value: operator === 'label' ? 'lb' : 'ps' })), expectedIds(operator, [2128]))
   }
 })

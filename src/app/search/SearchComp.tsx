@@ -12,7 +12,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -62,7 +62,6 @@ const SearchComp = ({
   const layoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const rowsFitPane = useFlag(HTPR_7618_SEARCH_ROWS_FIT_PANE_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
-  const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -124,7 +123,7 @@ const SearchComp = ({
     !layoutEnabled && inputValue.trim().length >= 2 && typedTasks.length === 0;
 
   function openAskAi(readableQuery?: string) {
-    const query = labelScopeFlagEnabled && layoutEnabled && readableQuery !== undefined ? readableQuery : inputValue.trim();
+    const query = layoutEnabled && readableQuery !== undefined ? readableQuery : inputValue.trim();
     if (!query || (!layoutEnabled && query.length < 2)) return;
     if (askAiFullscreenEnabled && askAiFullscreenFlagEnabled) {
       const searchUrl = new URL(window.location.href);
@@ -162,7 +161,7 @@ const SearchComp = ({
             inputRef={tasksInputRef}
             recentSearches={searchCache.history}
             layoutEnabled={layoutEnabled}
-            availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
+            availableBoards={layoutEnabled ? availableSearchBoards : undefined}
             onAskAi={openAskAi}
             showSuggestions={isSearchDraft || (layoutEnabled && !inputValue.trim())}
           />
