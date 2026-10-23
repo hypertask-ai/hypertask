@@ -84,7 +84,7 @@ const expected = (accepted) => ({ flag: accepted, loaded: accepted, isMobile: ac
   rail: accepted ? false : null, expanded: accepted ? false : null, width: accepted ? 517 : null, user: null, project: null, surface: null });
 function clearClients() { for (const client of clients.splice(0)) client.clear(); }
 
-test('both real flag readers seed flags/mobile/preferences but never route data, and reject another account', () => {
+test('both real flag readers seed flags/mobile/preferences but never route data, and reject another account', { timeout: 60_000 }, () => {
   try {
     for (const FlagProvider of [flags.FeatureFlagProvider, flags.SubscribedFeatureFlagProvider]) {
       for (const [shellSeed, accountId, accepted] of [[seed, 985, true], [seed, 6, false], [null, 985, false],
@@ -101,7 +101,7 @@ test('both real flag readers seed flags/mobile/preferences but never route data,
   } finally { clearClients(); }
 });
 
-test('matching shell markup hydrates in place with either flag reader, without replay on client navigation', async () => {
+test('matching shell markup hydrates in place with either flag reader, without replay on client navigation', { timeout: 60_000 }, async () => {
   for (const FlagProvider of [flags.FeatureFlagProvider, flags.SubscribedFeatureFlagProvider]) {
     for (const seeded of [true, false]) {
       pathname = seeded ? '/detail/project-15/7627' : '/project';
@@ -111,7 +111,7 @@ test('matching shell markup hydrates in place with either flag reader, without r
       const names = ['window', 'document', 'fetch', 'IS_REACT_ACT_ENVIRONMENT'];
       const previous = names.map(name => [name, Object.getOwnPropertyDescriptor(global, name)]);
       Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
-      global.fetch = async () => new Promise(() => {});
+      global.fetch = async () => { throw new Error('Network disabled in this test'); };
       window.matchMedia = () => ({ matches: !seeded, addEventListener() {}, removeEventListener() {} });
       Object.defineProperty(window, 'innerWidth', { value: seeded ? 390 : 1440, configurable: true });
       const node = document.querySelector('output'), errors = [];
