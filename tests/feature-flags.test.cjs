@@ -577,15 +577,9 @@ test("board-back is no longer registered", async () => {
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7003-board-back"), false);
 });
 
-test("no-loading-flash bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7004_NO_LOADING_FLASH_FLAG: key } = flags;
-  assert.equal(key, "htpr-7004-no-loading-flash");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("permanent cached refresh behavior is no longer registered as a flag", async () => {
+  assert.equal(flags.HTPR_7004_NO_LOADING_FLASH_FLAG, undefined);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7004-no-loading-flash"), false);
 });
 
 test("phone-first-load-js bugfix defaults to Everyone for plain QA and respects OFF", async () => {
