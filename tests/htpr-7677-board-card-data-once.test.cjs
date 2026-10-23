@@ -147,7 +147,7 @@ test("a card from another board on this board still reads its own board's timers
 test("the shared drafts reach each card as its own Draft mark", () => {
   flagOn = true;
   const DraftMark = ({ task }) => {
-    const shared = useBoardCardData(task.projectId, true);
+    const shared = useBoardCardData(task.projectId);
     return React.createElement("b", null, shared?.draftTaskIds.has(task.id) ? `draft-${task.id}` : `clean-${task.id}`);
   };
   const html = renderToString(
@@ -160,12 +160,12 @@ test("the flag is read once when the board opens, so cards never switch readers 
   const provider = read("src/components/PageComponents/Kanban/KanbanTaskComponents/BoardCardData.tsx");
   assert.match(provider, /const \[shared\] = useState\(enabled\);/);
   const homepage = read("src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx");
-  assert.match(homepage, /<BoardCardDataProvider project=\{_currentProject\} enabled=\{boardCardDataOnce\}>/);
+  assert.match(homepage, /return boardCardDataOnce \? \(\n    <BoardCardDataProvider project=\{_currentProject\} enabled>\{board\}<\/BoardCardDataProvider>\n  \) : \(\n    <BoardCardDataProvider project=\{_currentProject\} enabled=\{false\}>\{board\}<\/BoardCardDataProvider>/);
 });
 
 test("the card takes its Draft mark from the board when it can and keeps its own drafts read otherwise", () => {
   const task = read("src/components/PageComponents/Kanban/KanbanTaskComponents/task.tsx");
-  assert.match(task, /const boardCardData = useBoardCardData\(props\.task\.projectId, boardCardDataOnce\);/);
+  assert.match(task, /return boardCardDataOnce && boardCardData \? \(/);
   assert.match(task, /hasDraft=\{boardCardData\.draftTaskIds\.has\(props\.task\.id\)\}/);
   assert.match(task, /<TaskContentWithOwnDrafts \{\.\.\.contentProps\} \/>/);
   assert.equal(task.match(/useGetUserDrafts\(/g).length, 1, "only the fallback reads drafts per card");

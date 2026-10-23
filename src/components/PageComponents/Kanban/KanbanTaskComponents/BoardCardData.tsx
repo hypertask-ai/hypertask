@@ -37,7 +37,7 @@ export function BoardCardDataProvider({ project, enabled, children }: { project:
   return <BoardCardDataContext.Provider value={value}>{children}</BoardCardDataContext.Provider>;
 }
 
-export function useBoardCardData(projectId: number, enabled: boolean): BoardCardData | null {
+export function useBoardCardData(projectId: number): BoardCardData | null {
   const shared = useContext(BoardCardDataContext);
-  return enabled && shared?.projectId === projectId ? shared : null;
+  return shared?.projectId === projectId ? shared : null;
 }

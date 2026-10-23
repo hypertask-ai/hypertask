@@ -45,8 +45,8 @@ type TaskTimeOnCard = {
 
 const TaskTagsRow:React.FC<ITaskTopRow> = (props) => {
       const boardCardDataOnce = useFlag(HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG)
-      const boardCardData = useBoardCardData(props.task.projectId, boardCardDataOnce)
-      if (!boardCardData) return <TaskTagsRowWithOwnTimers {...props} />
+      const boardCardData = useBoardCardData(props.task.projectId)
+      if (!boardCardDataOnce || !boardCardData) return <TaskTagsRowWithOwnTimers {...props} />
       return (
         <TaskTagsRowContent
           {...props}

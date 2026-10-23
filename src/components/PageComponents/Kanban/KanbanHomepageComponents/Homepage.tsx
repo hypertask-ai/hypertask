@@ -874,8 +874,7 @@ const HomePage = ({
             ));
 
 
-  return (
-    <BoardCardDataProvider project={_currentProject} enabled={boardCardDataOnce}>
+  const board = (
     <KanbanBulkSelectionProvider
       items={bulkSelectionItems}
       onArchiveTask={archiveTaskForBulk}
@@ -951,7 +950,11 @@ const HomePage = ({
       {showDeleteTaskModal && tasksToDelete && <ConfirmTaskDelete confirmDelete={deleteTaskHandler} content={`Clicking confirm will delete this task${tasksToDelete?.length>1?' and its associated sub-tasks':''}! Task can be recovered within 30 days.`} loading={loading}/>}
       </>
     </KanbanBulkSelectionProvider>
-    </BoardCardDataProvider>
+  );
+  return boardCardDataOnce ? (
+    <BoardCardDataProvider project={_currentProject} enabled>{board}</BoardCardDataProvider>
+  ) : (
+    <BoardCardDataProvider project={_currentProject} enabled={false}>{board}</BoardCardDataProvider>
   );
 };
 
