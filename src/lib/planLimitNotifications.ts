@@ -25,7 +25,7 @@ export async function notifyPlanLimitOwner({
     const markerId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20)}`;
     const message = encodeAgentMessage(markerId, `Could not create the next ticket for "${title}": ${error.message}`);
     const notifiedOwner = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${digest}))`;
       const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { ownerId: true } });
       const existing = await tx.notification.findFirst({
         where: {

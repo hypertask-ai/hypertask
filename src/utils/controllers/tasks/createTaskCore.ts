@@ -149,7 +149,12 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         }
     }
 
-    const taskCreatedActor = { userId, agentId: agentId ?? null, actingUserId: options.actingUserId, actingAgentId: options.actingAgentId };
+    const taskCreatedActor = {
+        userId,
+        agentId: agentId ?? null,
+        ...(options.actingUserId !== undefined ? { actingUserId: options.actingUserId } : {}),
+        ...(options.actingAgentId !== undefined ? { actingAgentId: options.actingAgentId } : {}),
+    };
     const createdTask = await writeTask(prisma, taskCreatedActor, async (tx) => {
         const created = await tx.task.create({
             data: taskData,
