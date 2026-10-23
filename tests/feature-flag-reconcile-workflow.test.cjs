@@ -71,7 +71,7 @@ test("reconciliation fails closed when mktemp cannot create private scratch", (t
 const singlePullRequest = workflow.split("  reconcile-open-pull-requests:")[0];
 const waitingDescription = "feature-flag-gate is waiting for the run on the newer production commit";
 
-function runWorkflow(t, { job = reconciliation, drift = false, missingHead = false, gateScript = 'console.log("ok");\n' } = {}) {
+function runWorkflow(t, { job = reconciliation, drift = false, missingHead = false, apiFailure, gateScript = 'console.log("ok");\n' } = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
   const origin = path.join(fixture, "origin.git");
@@ -100,9 +100,12 @@ function runWorkflow(t, { job = reconciliation, drift = false, missingHead = fal
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
     FIXTURE_PR: path.join(fixture, "pull.json"),
     FIXTURE_POSTS: path.join(fixture, "posts.jsonl"),
+    FIXTURE_API_FAILURE: JSON.stringify(apiFailure || null),
+    FIXTURE_API_CALLS: path.join(fixture, "api-calls.jsonl"),
   });
   fs.writeFileSync(env.GITHUB_STEP_SUMMARY, "");
   fs.writeFileSync(env.FIXTURE_POSTS, "");
+  fs.writeFileSync(env.FIXTURE_API_CALLS, "");
 
   function git(cwd, ...args) {
     const result = spawnSync("git", args, { cwd, env, encoding: "utf8" });
@@ -116,6 +119,9 @@ function runWorkflow(t, { job = reconciliation, drift = false, missingHead = fal
   const parser = path.join(scripts, "feature-flag-parser");
   fs.mkdirSync(parser, { recursive: true });
   fs.writeFileSync(path.join(scripts, "feature-flag-gate.mjs"), gateScript);
+  for (const file of ["github-api-retry.sh", "github-rate-limit.mjs"]) {
+    fs.copyFileSync(path.join(__dirname, "../.github/scripts", file), path.join(scripts, file));
+  }
   for (const file of ["package.json", "package-lock.json"]) {
     fs.copyFileSync(path.join(__dirname, "../.github/scripts/feature-flag-parser", file), path.join(parser, file));
   }
@@ -156,6 +162,19 @@ const pull = JSON.parse(fs.readFileSync(process.env.FIXTURE_PR, "utf8"));
 const repo = "repos/" + process.env.REPO;
 const endpoint = args.find((arg) => arg.startsWith("repos/"));
 assert.equal(args[0], "api");
+const failure = JSON.parse(process.env.FIXTURE_API_FAILURE);
+const previous = fs.readFileSync(process.env.FIXTURE_API_CALLS, "utf8").trim().split("\\n").filter(Boolean).map(JSON.parse);
+fs.appendFileSync(process.env.FIXTURE_API_CALLS, JSON.stringify({ endpoint, args }) + "\\n");
+if (failure && (!failure.endpoint || endpoint.includes(failure.endpoint)) &&
+    (!failure.method || args.includes(failure.method)) &&
+    (!failure.once || !previous.some((call) => call.endpoint === endpoint))) {
+  console.log("HTTP/2.0 " + failure.status + " Forbidden\\n" +
+    (failure.rate ? "X-Ratelimit-Remaining: 0\\nX-Ratelimit-Reset: " + Math.floor(Date.now() / 1000 + failure.reset) + "\\n" : "") +
+    "\\n" + JSON.stringify({ message: failure.rate ? "API rate limit exceeded" : "Forbidden" }));
+  console.error("gh: HTTP " + failure.status);
+  process.exit(1);
+}
+console.log("HTTP/2.0 200 OK\\nContent-Type: application/json\\n");
 if (args.includes("POST")) {
   assert.equal(args[args.indexOf("-X") + 1], "POST");
   assert.equal(endpoint, repo + "/statuses/" + pull.head.sha);
@@ -196,7 +215,8 @@ exit 1
   const output = result.stdout + result.stderr;
   const posts = fs.readFileSync(env.FIXTURE_POSTS, "utf8").trim().split("\n").filter(Boolean)
     .map((line) => JSON.parse(line).payload);
-  return { result, output, posts };
+  const calls = fs.readFileSync(env.FIXTURE_API_CALLS, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
+  return { result, output, posts, calls };
 }
 
 test("reconcile drift: production moved mid-run posts pending and exits 0", (t) => {
@@ -245,4 +265,66 @@ test("drift guard: an unexpected gate exit code is an error, never pending", (t)
     assert.equal(posts.at(-1).state, "error");
     assert.ok(posts.every((post) => post.description !== waitingDescription));
   }
+});
+
+for (const job of [reconciliation, singlePullRequest]) {
+  const name = job === reconciliation ? 'reconcile' : 'per-PR';
+  test(`${name}: long rate limit skips the pass with exit 0 and no error statuses`, (t) => {
+    const { result, output, posts, calls } = runWorkflow(t, {
+      job, apiFailure: { status: 403, rate: true, reset: 3600 },
+    });
+    assert.equal(result.status, 0, output);
+    assert.match(output, /::warning::skipped: GitHub rate limited until .*next push or pull request event reconciles again/);
+    assert.doesNotMatch(output, /::error::|infrastructure failure/);
+    assert.deepEqual(posts, []);
+    assert.equal(calls.length, 1, 'exhaustion stops the whole shell, including pending publication');
+  });
+
+  test(`${name}: short reset now allowed then publishes the ordinary verdict`, (t) => {
+    const { result, output, posts } = runWorkflow(t, {
+      job, apiFailure: { status: 429, rate: true, reset: 0, once: true },
+    });
+    assert.equal(result.status, 0, output);
+    assert.match(output, /rate limited; waiting 1s until reset/);
+    assert.equal(posts.at(-1).state, 'success');
+    assert.ok(posts.every((post) => post.state !== 'error'));
+  });
+
+  for (const status of [403, 500]) {
+    test(`${name}: ordinary HTTP ${status} still refused`, (t) => {
+      const { result, output } = runWorkflow(t, { job, apiFailure: { status } });
+      assert.equal(result.status, 2, output);
+      assert.match(output, /::error::/);
+      assert.doesNotMatch(output, /skipped:|waiting .*until reset/);
+    });
+  }
+}
+
+for (const endpoint of ['/commits/', '/pulls/42', '/statuses/']) {
+  test(`reconcile: rate limit at ${endpoint} exits the parent shell without publishing an error`, (t) => {
+    const { result, output, posts } = runWorkflow(t, {
+      apiFailure: { endpoint, status: 403, rate: true, reset: 3600 },
+    });
+    assert.equal(result.status, 0, output);
+    assert.match(output, /::warning::skipped: GitHub rate limited/);
+    assert.ok(posts.every((post) => post.state !== 'error'));
+    assert.doesNotMatch(output, /::error::|infrastructure failure/);
+  });
+}
+
+test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
+  assert.doesNotMatch(workflow, /\bgh api\b|\$\(gh_api\b/);
+  assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
+  assert.match(workflow, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
+  assert.doesNotMatch(singlePullRequest, /cancel-in-progress: true/);
+});
+
+test('a genuine evaluation error is not hidden by rate limiting its error-status post', (t) => {
+  const { result, output, posts } = runWorkflow(t, {
+    gateScript: 'process.exit(2);\n',
+    apiFailure: { endpoint: '/statuses/', status: 403, rate: true, reset: 3600 },
+  });
+  assert.equal(result.status, 2, output);
+  assert.match(output, /::warning::skipped: GitHub rate limited/);
+  assert.deepEqual(posts, []);
 });
