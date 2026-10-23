@@ -3,16 +3,30 @@ import { ticketGroupsSchema } from "@/lib/ai/chatStream/ticketGroups";
 import type { ChatTicketGroupReferences } from "@/models/model";
 import type { ToolExecution } from "@/lib/ai/chatStream/types";
 
-const retrievalTools = new Set(["hypertask_search_tasks", "hypertask_list_tasks", "hypertask_get_tasks"]);
+const retrievalTools = new Set([
+  "hypertask_search_tasks", "hypertask_list_tasks", "hypertask_get_tasks", "hypertask_my_tasks", "hypertask_next_tasks",
+]);
 
-export const TICKET_ROWS_PROMPT = "For ticket questions, answer with one short sentence, then call hypertask_show_ticket_rows instead of writing an HTML list or table of tickets. Retrieve tickets first with search, list or get in this turn, and copy their task_id values exactly. Use short group labels such as Done or New only when useful. The rows already include ticket links, status, assignees and priority.";
+type RetrievedTask = { task_id?: number; id?: number };
+type RetrievalResult = { success?: boolean; tasks?: RetrievedTask[]; boards?: { tasks?: RetrievedTask[] }[] } | null;
+
+function retrievedTasks(result: RetrievalResult): RetrievedTask[] {
+  if (result?.success !== true) return [];
+  const boards = Array.isArray(result.boards) ? result.boards : [];
+  return [
+    ...(Array.isArray(result.tasks) ? result.tasks : []),
+    ...boards.flatMap((board) => Array.isArray(board?.tasks) ? board.tasks : []),
+  ];
+}
+
+export const TICKET_ROWS_PROMPT = "For ticket questions, answer with one short sentence, then call hypertask_show_ticket_rows instead of writing an HTML list or table of tickets. Retrieve tickets first with search, list, get, my tasks (include_tasks true) or next tasks in this turn, and copy their task_id values exactly. Use short group labels such as Done or New only when useful. The rows already include ticket links, status, assignees and priority.";
 
 export function createShowTicketRowsTool(
   executions: ToolExecution[],
   setGroups: (groups: ChatTicketGroupReferences) => void,
 ) {
   return tool({
-    description: "Display up to 50 retrieved tickets in up to four compact groups. Call after successful search/list/get in this turn; use task_id, never a ticket number or uniqueIndex. Replaces any previous display selection this turn.",
+    description: "Display up to 50 retrieved tickets in up to four compact groups. Call after successful search/list/get/my tasks/next tasks in this turn; use task_id, never a ticket number or uniqueIndex. Replaces any previous display selection this turn.",
     inputSchema: ticketGroupsSchema,
     execute: async (input) => {
       const parsed = ticketGroupsSchema.safeParse(input);
@@ -20,15 +34,13 @@ export function createShowTicketRowsTool(
       const allowed = new Set<number>();
       for (const execution of executions) {
         if (!retrievalTools.has(execution.name)) continue;
-        const result = execution.result as { success?: boolean; tasks?: { task_id?: number; id?: number }[] } | null;
-        if (result?.success !== true || !Array.isArray(result.tasks)) continue;
-        for (const task of result.tasks) {
+        for (const task of retrievedTasks(execution.result as RetrievalResult)) {
           const id = task.task_id ?? task.id;
           if (typeof id === "number" && Number.isSafeInteger(id) && id > 0) allowed.add(id);
         }
       }
       if (parsed.data.groups.some((group) => group.taskIds.some((id) => !allowed.has(id)))) {
-        return { success: false, error: "Only task IDs returned by successful search/list/get tools in this turn may be displayed. Retrieve the tickets first." };
+        return { success: false, error: "Only task IDs returned by successful search/list/get/my tasks/next tasks tools in this turn may be displayed. Retrieve the tickets first." };
       }
       const seen = new Set<number>();
       const groups = parsed.data.groups.map((group) => ({

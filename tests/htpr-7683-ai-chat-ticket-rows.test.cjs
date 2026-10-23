@@ -86,6 +86,16 @@ test("successful search/list/get IDs deduplicate globally while preserving group
   assert.deepEqual(d.selected(), { version: 1, groups: [{ label: "Done", taskIds: [2, 1] }, { label: "New", taskIds: [3] }] });
 });
 
+test("my tasks board groups and next tasks feed the display, an empty summary does not", async () => {
+  const d = display([
+    { name: "hypertask_my_tasks", result: { success: true, total: 2, boards: [{ project_id: 15, tasks: [{ task_id: 11 }] }, { project_id: 16, tasks: [{ task_id: 12 }] }] } },
+    { name: "hypertask_next_tasks", result: { success: true, tasks: [{ id: 13 }] } },
+  ]);
+  assert.equal((await d.tool.execute({ groups: [{ taskIds: [11, 12, 13] }] })).displayed, 3);
+  const summaryOnly = display([{ name: "hypertask_my_tasks", result: { success: true, total: 2, boards: [{ project_id: 15 }] } }]);
+  assert.equal((await summaryOnly.tool.execute({ groups: [{ taskIds: [11] }] })).success, false);
+});
+
 test("schema and execution enforce four groups, fifty IDs total, short labels and positive IDs", async () => {
   const d = display([{ name: "hypertask_list_tasks", result: { success: true, tasks: Array.from({ length: 50 }, (_, i) => ({ id: i + 1 })) } }]);
   const allowed = { groups: [{ taskIds: Array.from({ length: 50 }, (_, i) => i + 1) }] };
