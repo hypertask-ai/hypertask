@@ -343,6 +343,9 @@ check_deployed() {
         if jq -e --arg sha "$sha" 'any(.[]; .head_sha == $sha and .conclusion == "failure")' <<<"$runs" >/dev/null; then
           fail "failed workflow run for merge $sha; no-release deployment requires no failures"
         fi
+        if jq -e --arg sha "$sha" 'any(.[]; .head_sha == $sha and .status != "completed")' <<<"$runs" >/dev/null; then
+          fail "workflow run for merge $sha is still running; wait until every run finishes"
+        fi
         run_url=$(jq -r --arg sha "$sha" --arg base "$BASE" '[.[] | select(.head_sha == $sha
           and (.event == "push" or .event == "workflow_dispatch") and .head_branch == $base
           and .conclusion == "success")] | first | .html_url // empty' <<<"$runs") \
@@ -605,9 +608,9 @@ guard() {
   local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
-  local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-}
-  local SHIP_CHECKOUT=$checkout SHIP_WORKER=$worker
-  export SHIP_CHECKOUT SHIP_WORKER
+  local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-} deploy=${SHIP_DEPLOY:-}
+  local SHIP_CHECKOUT=$checkout SHIP_WORKER=$worker SHIP_DEPLOY=$deploy
+  export SHIP_CHECKOUT SHIP_WORKER SHIP_DEPLOY
   local merge='gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
   local done="vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*--section[[:space:]=]+[\"']?Done"
   input=$(cat)
@@ -618,7 +621,7 @@ guard() {
   # Reset to process defaults so segment overrides cannot leak into later commands.
   while IFS= read -r seg; do
     REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
-    SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker
+    SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker; SHIP_DEPLOY=$deploy
     explicit=false; [ "${SHIP_REPO+x}" != x ] || explicit=true
     [[ $seg =~ ^[[:space:]]* ]]; rest=${seg:${#BASH_REMATCH[0]}}
     while [[ $rest =~ $assignment ]]; do
@@ -633,7 +636,7 @@ guard() {
       case $setting in
         SHIP_REPO) REPO=$unquoted; explicit=true ;;
         SHIP_BASE) BASE=$unquoted ;;
-        SHIP_CHECKOUT|SHIP_WORKER) printf -v "$setting" '%s' "$unquoted" ;;
+        SHIP_CHECKOUT|SHIP_WORKER|SHIP_DEPLOY) printf -v "$setting" '%s' "$unquoted" ;;
       esac
     done
     # A cd earlier in the command means the hook cwd no longer names the merge repo.

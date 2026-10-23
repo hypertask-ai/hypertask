@@ -763,7 +763,7 @@ case "$1:$2" in
 esac
 MOCK
   chmod +x "$E/no-release-bin/gh"
-  green=$(jq -cn --arg sha "$sha" --arg url "$run_url" '{workflow_runs:[{id:123,head_sha:$sha,event:"push",head_branch:"main",conclusion:"success",html_url:$url}]}')
+  green=$(jq -cn --arg sha "$sha" --arg url "$run_url" '{workflow_runs:[{id:123,head_sha:$sha,event:"push",head_branch:"main",status:"completed",conclusion:"success",html_url:$url}]}')
   ND() {
     local want=$1 expected=$2 label=$3 out got; shift 3
     out=$(env PATH="$E/no-release-bin:$PATH" SHIP_REPO=hypertask-ai/cli-node SHIP_BASE=main SHIP_DEPLOY=release SHIP_WORKER= MERGE_SHA="$sha" RUNS_FIXTURE="$green" "$@" ./ship-check deployed HTPR-7628); got=$?
@@ -787,6 +787,9 @@ MOCK
   done
   runs=$(jq '.workflow_runs += [.workflow_runs[0] | .id = 124 | .conclusion = "failure"]' <<<"$green")
   ND 1 'FAIL: failed workflow run' 'success cannot hide a failure' RUNS_FIXTURE="$runs"
+  for running in in_progress queued; do
+    ND 1 'FAIL: workflow run for merge' "success cannot hide a $running workflow" RUNS_FIXTURE="$(jq --arg status "$running" '.workflow_runs += [.workflow_runs[0] | .id = 125 | .status = $status | .conclusion = null]' <<<"$green")"
+  done
   ND 1 'FAIL: failed workflow run' 'failure on another branch/event still blocks' RUNS_FIXTURE="$(jq '.workflow_runs[1] |= (.head_branch = "feature" | .event = "pull_request")' <<<"$runs")"
   ND 1 'FAIL: failed workflow run' 'failure on a later page still blocks' RUNS_FIXTURE="$(printf '%s\n%s' "$green" "$(jq '{workflow_runs:[.workflow_runs[1]]}' <<<"$runs")")"
   ND 0 'deployed ok (no release:' 'unrelated sha failure does not block' RUNS_FIXTURE="$(jq '.workflow_runs[1].head_sha = "other"' <<<"$runs")"
