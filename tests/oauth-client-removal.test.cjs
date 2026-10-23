@@ -344,3 +344,92 @@ test("Settings uses the approved Remove dialog and updates the list locally", ()
   assert.match(removeHandler, /toast\.success\("Client removed"\)/);
   assert.doesNotMatch(removeHandler, /fetchConnections\(/);
 });
+
+async function withClientLifecycle(check) {
+  const { load } = require('./task-route-loader.cjs');
+  const jwt = require('jsonwebtoken');
+  const previous = { JWT_SECRET: process.env.JWT_SECRET, JWT_ISSUER: process.env.JWT_ISSUER };
+  process.env.JWT_SECRET = 'fixture-client-lifecycle-signing-key';
+  process.env.JWT_ISSUER = 'fixture-client-lifecycle';
+  try {
+    const h = loadRoute();
+    const user = { id: 6, email: 'fixture@example.test', mcpTokensRevokedAt: null };
+    const store = {
+      user: { findUnique: async () => user },
+      oAuthClient: { findUnique: async () =>
+        h.calls.committed.some(([kind]) => kind === 'client') ? null : { client_id: 'owned-client' } },
+      revokedToken: { findFirst: async ({ where }) =>
+        h.calls.committed.find(([kind, args]) => kind === 'revokedToken' && where.jti.in.includes(args.where.jti))?.[1].create ?? null },
+    };
+    const mocks = {
+      '@/lib/prisma': { default: store },
+      '@/utils/controllers/logs/createLog': { default: async () => {} },
+      '@/lib/flags': {},
+      '@/lib/mcp/managementKeyTeamScope': {},
+    };
+    const verifier = load('src/lib/mcp/auth/verifyJwt.ts', mocks);
+    const errors = load('src/lib/mcp/auth/mcpAuthErrors.ts', {
+      ...mocks,
+      './verifyJwt': verifier,
+      './session': {},
+      '@/lib/mcp/managementPermissions': {},
+    });
+    const { handleMcpTokenRefresh } = load('src/lib/mcp/token/refresh.ts', {
+      ...mocks, '@/lib/mcp/auth': { ...verifier, ...errors },
+    });
+    const issued = [];
+    const claimed = [];
+    const refreshed = [];
+    const token = jwt.sign({ userId: user.id, client_id: 'owned-client', jti: 'selected-client-access-token' },
+      process.env.JWT_SECRET, { issuer: process.env.JWT_ISSUER, audience: 'http://localhost:3001', expiresIn: '1h' });
+    const accountToken = jwt.sign({ userId: user.id, jti: 'fixture-account-jti' },
+      process.env.JWT_SECRET, { issuer: process.env.JWT_ISSUER, audience: 'mcp-api', expiresIn: '1h' });
+    const replacementToken = jwt.sign({ userId: user.id, jti: 'fixture-account-replacement-jti' },
+      process.env.JWT_SECRET, { issuer: process.env.JWT_ISSUER, audience: 'mcp-api', expiresIn: '1h' });
+    const refresh = (presented) => handleMcpTokenRefresh(new NextRequest('https://app.hypertask.ai/api/mcp/token/refresh', {
+      method: 'POST', headers: { Authorization: `Bearer ${presented}` },
+    }), {
+      validateAuth: () => verifier.validateJwtToken(presented),
+      verifyToken: verifier.verifyMcpJwtToken,
+      findAgent: async () => null,
+      createToken: (...args) => { issued.push(args); return replacementToken; },
+      claimRotation: async (...args) => { claimed.push(args); return true; },
+      createAuditLog: async (...args) => { refreshed.push(args); },
+    });
+    await check({ ...h, verifier, token, accountToken, replacementToken, refresh, issued, claimed, refreshed });
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+test('removed OAuth clients have no account-token refresh result', async () => {
+  await withClientLifecycle(async ({ DELETE, verifier, token, refresh, issued, claimed, refreshed }) => {
+    assert.ok(await verifier.validateJwtToken(token));
+    const before = await refresh(token);
+    assert.equal(before.status, 401);
+    assert.equal((await before.json()).reason, 'invalid_token');
+    assert.equal((await remove(DELETE)).status, 200);
+    assert.equal(await verifier.validateJwtToken(token), null);
+    const after = await refresh(token);
+    assert.equal(after.status, 401);
+    assert.equal((await after.json()).reason, 'invalid_token');
+    assert.deepEqual(issued, []);
+    assert.deepEqual(claimed, []);
+    assert.deepEqual(refreshed, []);
+  });
+});
+
+test('registered OAuth clients keep MCP access and account tokens keep refresh', async () => {
+  await withClientLifecycle(async ({ verifier, token, accountToken, replacementToken, refresh, issued, claimed, refreshed }) => {
+    assert.equal((await verifier.validateJwtToken(token)).user.id, 6);
+    const response = await refresh(accountToken);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).token, replacementToken);
+    assert.deepEqual(issued, [[6, 'fixture@example.test', '30d']]);
+    assert.equal(claimed.length, 1);
+    assert.equal(refreshed.length, 1);
+  });
+});
