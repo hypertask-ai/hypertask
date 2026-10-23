@@ -141,6 +141,10 @@ function writerPreparation(options = {}) {
     "@/lib/prisma": { default: { project: { findFirst: async () => ({ id: 15, title: "Board", section: [], labels: [] }) }, section: { findMany: async () => [] }, taskTemplate: { findMany: async () => [] } } },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
     "@/utils/controllers/turbopuffer/turbopufferHelper": { searchTasks: async () => [] },
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/app/api/ai/_lib/editorAi": { ...prompts, createTaskWriterPromptParts: (input) => { parts.push(input); return prompts.createTaskWriterPromptParts(input); }, createTaskWriterUserContent: (input) => input, retrieveTaskWriterContext: async (input) => { retrieval.push(input.prompt); return ""; }, selectTaskWriterModel: async () => ({ modelId: "fixture", model: {}, settings: {} }), createDocumentAttachmentSummary: () => "", extractImgSrcs: () => new Set() },
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "", createTaskWriterSystemPromptTemplate: () => "Writer rules" },

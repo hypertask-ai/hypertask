@@ -18,7 +18,7 @@ function matches(row, where) {
 }
 
 function harness({ projectId = 101, taskId = 1001, subscriptionProjectId = 101 } = {}) {
-  const agent = { id: "agent-1", userId: 201, revokedAt: null };
+  const agent = { id: "agent-1", userId: 201, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null };
   const project = {
     id: 101, ownerId: agent.userId, status: "Normal",
     members: [{ id: 1, projectId: 101, agentId: agent.id, userId: agent.userId, status: "Accepted" }],
@@ -36,6 +36,9 @@ function harness({ projectId = 101, taskId = 1001, subscriptionProjectId = 101 }
     postResult: { ok: true, statusCode: 200, error: null },
   };
   const db = {
+    agent: {
+      findUnique: async ({ where }) => matches(agent, where) ? { ...agent } : null,
+    },
     project: {
       findFirst: async ({ where }) => {
         calls.access.push(where);
@@ -81,7 +84,10 @@ function harness({ projectId = 101, taskId = 1001, subscriptionProjectId = 101 }
         const row = deliveries.find((candidate) => matches(candidate, where));
         return row ? { ...row, subscription: { ...subscription, agent: { ...agent } } } : null;
       },
-      findFirst: async ({ where }) => deliveries.find((row) => matches(row, where)) ?? null,
+      findFirst: async ({ where }) => {
+        const row = deliveries.find((candidate) => matches(candidate, where));
+        return row ? { ...row, subscription: { ...subscription } } : null;
+      },
       update: async ({ where, data }) => {
         const row = deliveries.find((candidate) => matches(candidate, where));
         assert.ok(row);
