@@ -7,7 +7,7 @@ const { spawnSync } = require("node:child_process");
 const yaml = require("js-yaml");
 const { compareNodeVersions, workflowNodeVersions } = require("../.github/scripts/check-node-version.cjs");
 
-const workflows = [{ file: "ci.yml", content: "jobs:\n  test:\n    steps:\n      - uses: actions/setup-node@sha\n        with:\n          node-version: 24\n" }];
+const workflows = [{ file: "ci.yml", content: "jobs:\n  test:\n    steps:\n      - uses: actions/setup-node@sha\n        with:\n          node-version: 24\n          check-latest: true\n" }];
 
 test("matching package and workflow majors pass", () => {
   for (const engine of ["24", "24.x", "24.1.2", "^24.1.2", "~24.1.2"]) {
@@ -20,7 +20,7 @@ test("the incident's package downgrade is rejected", () => {
 });
 
 test("every workflow is checked, including quoted and inline node versions", () => {
-  const inputs = [...workflows, { file: "second.yaml", content: 'jobs: {test: {steps: [{with: {node-version: "22.x"}}, {with: {node-version: 20}}]}}' }];
+  const inputs = [...workflows, { file: "second.yaml", content: 'jobs: {test: {steps: [{with: {node-version: "22.x", check-latest: true}}, {with: {node-version: 20, check-latest: true}}]}}' }];
   const issues = compareNodeVersions("24.x", "24.x", inputs);
   assert.equal(issues.length, 2);
   assert.match(issues[0], /second.yaml.*22.x/);
@@ -28,7 +28,7 @@ test("every workflow is checked, including quoted and inline node versions", () 
 });
 
 test("job outputs named node-version are not Node settings", () => {
-  const content = 'jobs: {read: {outputs: {node-version: "${{ steps.vercel.outputs.node-version }}"}}, test: {steps: [{with: {node-version: 24}}]}}';
+  const content = 'jobs: {read: {outputs: {node-version: "${{ steps.vercel.outputs.node-version }}"}}, test: {steps: [{with: {node-version: 24, check-latest: true}}]}}';
   assert.deepEqual(compareNodeVersions("24.x", "24.x", [{ file: "guard.yml", content }]), []);
 });
 
@@ -64,6 +64,18 @@ test("YAML aliases are checked without looping on recursive aliases", () => {
   const versions = workflowNodeVersions('defaults: &node {node-version: "22.x"}\njobs: {test: {steps: [{with: *node}]}}\nloop: &loop {self: *loop}');
   assert.equal(versions.length, 1);
   assert.equal(versions[0].value, "22.x");
+});
+
+test("a Node pin without check-latest: true is refused, so CI cannot run an unpatched cached runtime", () => {
+  for (const extra of ["", ", check-latest: false", ', check-latest: "true"']) {
+    const content = `jobs: {test: {steps: [{with: {node-version: 24${extra}}}]}}`;
+    assert.match(compareNodeVersions("24.x", "24.x", [{ file: "stale.yml", content }]).join("\n"), /stale.yml.*check-latest: true/);
+  }
+});
+
+test("a Node pin with check-latest: true is still allowed", () => {
+  const content = "jobs: {test: {steps: [{with: {node-version: 24, check-latest: true}}]}}";
+  assert.deepEqual(compareNodeVersions("24.x", "24.x", [{ file: "fresh.yml", content }]), []);
 });
 
 test("node-version-file cannot silently bypass comparison", () => {

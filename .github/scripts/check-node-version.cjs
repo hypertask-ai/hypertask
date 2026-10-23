@@ -16,7 +16,7 @@ function workflowNodeVersions(content) {
     for (const [index, step] of (config.steps ?? []).entries()) {
       for (const [key, value] of Object.entries(step.with ?? {})) {
         if (key === "node-version" || key === "node-version-file") {
-          versions.push({ key, value, location: `workflow.jobs.${job}.steps.${index}.with.${key}` });
+          versions.push({ key, value, checkLatest: step.with["check-latest"], location: `workflow.jobs.${job}.steps.${index}.with.${key}` });
         }
       }
     }
@@ -39,7 +39,10 @@ function compareNodeVersions(liveVersion, engine, workflows) {
     for (const entry of workflowNodeVersions(content)) {
       const label = `${file} ${entry.location}`;
       if (entry.key === "node-version-file") issues.push(`${label}: use an explicit node-version so its major can be compared with Vercel`);
-      else compare(entry.value, label);
+      else {
+        compare(entry.value, label);
+        if (entry.checkLatest !== true) issues.push(`${label}: add check-latest: true so CI always runs the newest patched Node ${expected}.x, not the runner's cached copy`);
+      }
     }
   }
   return issues;

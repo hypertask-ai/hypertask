@@ -473,6 +473,7 @@ jobs:
         continue-on-error: true
         with:
           node-version: 24
+          check-latest: true
           cache: npm
 
       - name: Install dependencies and generate Prisma client
@@ -961,6 +962,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
+          check-latest: true
       - name: Freeze merging and revert the confirmed failed release
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

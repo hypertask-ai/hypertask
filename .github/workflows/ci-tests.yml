@@ -115,6 +115,7 @@ jobs:
         if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         with:
           node-version: 24
+          check-latest: true
 
 
       - name: Resolve dependency cache version
@@ -415,6 +416,7 @@ jobs:
         if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         with:
           node-version: 24
+          check-latest: true
           cache: npm
       # YPER4-252: a layout lock baseline or ratchet only changes with the ticket where Valentin
       # approved it, named in approvedIn and in a "Layout change approved: <URL>" PR body line.
@@ -583,6 +585,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
+          check-latest: true
 
       - name: Warn about failed production tests
         shell: bash
@@ -627,6 +630,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
+          check-latest: true
 
       - name: Verify production CLI parity inventory
         run: |

@@ -30,6 +30,11 @@ updates:
       time: "05:00"
       timezone: Europe/Berlin
     target-branch: production
+    # YPER4-596: worms like keyv/cacheable (August 2026) are pulled within days of
+    # release; waiting 7 days means a bad version is yanked before it is proposed.
+    # Security updates ignore cooldown, so urgent fixes still arrive at once.
+    cooldown:
+      default-days: 7
     # One grouped small PR plus headroom for two individual majors. Higher
     # just queues PRs against a CI host with bounded concurrency.
     open-pull-requests-limit: 3
