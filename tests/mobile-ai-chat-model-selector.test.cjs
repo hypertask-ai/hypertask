@@ -238,8 +238,8 @@ test("mobile model gauge offers Haiku 5.5 plus the four approved choices and pre
     await act(async () => reactRoot.render(renderPicker(lunaHigh)));
     await act(async () => trigger.click());
     const freeRows = [...container.querySelectorAll('[role="menuitemradio"]')];
-    assert.equal(freeRows[2].disabled, false);
-    await act(async () => freeRows[2].click());
+    assert.equal(freeRows[3].disabled, false);
+    await act(async () => freeRows[3].click());
     assert.equal(chosen, null, "a locked premium row must not select a model");
     assert.equal(pushedRoutes.length, 1, "a locked premium row opens plan settings");
   } finally {
