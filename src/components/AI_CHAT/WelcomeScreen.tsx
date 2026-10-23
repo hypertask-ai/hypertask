@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRecoilValue } from "@/lib/state"
 import type { IProject } from "@/models/model"
-import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
+import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient"
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild"
 import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
@@ -114,7 +114,8 @@ export const WelcomeScreen = () => {
   const taskDetailDataReady = !isDetailPage || taskDetailNonEssentialReady;
   const oneQuestionsCallEnabled = useFlag(HTPR_7586_ONE_QUESTIONS_CALL_FLAG);
   const questionsTaskId = useRecoilValue(composeTaskQuestionsTaskIdAtom);
-  const hasPendingTicketQuestions = oneQuestionsCallEnabled && questionsTaskId === taskId;
+  const pendingFollowup = useRecoilValue(composeTaskSkillFollowupAtom);
+  const hasPendingTicketQuestions = pendingFollowup?.taskId === taskId || oneQuestionsCallEnabled && questionsTaskId === taskId;
   const taskQuestions = useQuery({
     queryKey: ["task-questions", taskId],
     queryFn: async (): Promise<{ questions: string[] }> => {

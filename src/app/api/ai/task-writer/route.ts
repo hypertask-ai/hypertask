@@ -70,9 +70,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, skills, composeSkillsEnabled } =
       await prepareTaskWriterRun(body, userId);
+    let skillsHeader: string | undefined;
+    if (composeSkillsEnabled && skills.length) {
+      const { HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, isFeatureEnabled } = await import("@/lib/flags");
+      if (await isFeatureEnabled(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, userId)) {
+        const { encodeTaskWriterSkills } = await import("@/lib/ai/taskWriterSkills");
+        skillsHeader = encodeTaskWriterSkills(skills.map(({ id, slug, name, updatedAt }) => ({
+          id, slug, name, updatedAt: updatedAt.toISOString(),
+        })));
+      }
+    }
     const typeHeaders: Record<string, string> = {
+      ...(skillsHeader ? { "X-Task-Writer-Skills": skillsHeader } : {}),
       ...(ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {}),
       ...(boardLabelIds ? { "X-Task-Writer-Labels": "enabled" } : {}),
     };
@@ -98,7 +109,7 @@ export async function POST(request: NextRequest) {
         if (!dueDateContext) return { ...task, description, ...fieldValues };
         const dueDate = validateTaskWriterDueDate(modelDueDate, dueDateContext.today);
         return { ...task, description, ...fieldValues, ...(dueDate ? { dueDate } : {}) };
-      }) }, dueDateContext || ticketTypeEnabled || boardLabelIds
+      }) }, dueDateContext || ticketTypeEnabled || boardLabelIds || skillsHeader
         ? { headers: { ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders } }
         : undefined);
     }
@@ -221,7 +232,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const headers = dueDateContext || ticketTypeEnabled || boardLabelIds
+    const headers = dueDateContext || ticketTypeEnabled || boardLabelIds || skillsHeader
       ? { ...SSE_HEADERS, ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders }
       : SSE_HEADERS;
     return new Response(stream, { headers });

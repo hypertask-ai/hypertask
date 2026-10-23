@@ -4,7 +4,7 @@ import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import { useQuery } from "@tanstack/react-query";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { composeTaskQuestionsTaskIdAtom, inViewObjectAtom } from "@/store";
+import { composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, inViewObjectAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG } from "@/lib/flags/keys";
 
@@ -36,7 +36,10 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const onlyViewedTicket = useFlag(HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG);
   const viewedTaskId = useRecoilValue(inViewObjectAtom)?.taskId;
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
-  const showTicketQuestions = ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&
+  const pendingFollowup = useRecoilValue(composeTaskSkillFollowupAtom);
+  const waitingForSkillFollowup = Boolean(pendingFollowup) &&
+    pendingFollowup?.taskId === (viewedTaskId ?? newTicketId);
+  const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&
     lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
   const ticketQuestions = useQuery({
     queryKey: ["task-questions", "new-ticket", newTicketId],
@@ -103,7 +106,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
           editMessage={editMessage}
         />
       ))}
-      {showTicketQuestions && ticketQuestions.isLoading && (
+      {(waitingForSkillFollowup || (showTicketQuestions && ticketQuestions.isLoading)) && (
         <div className="flex justify-start px-2 py-1">
           <TypingIndicator />
         </div>

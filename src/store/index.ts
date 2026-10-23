@@ -80,8 +80,13 @@ export const fcmAtom = atom<IFcmHookData>({
     effects_UNSTABLE: [persistAtom],
 });
 
-export const composeTaskChatIntroAtom = atom<{ taskId: number; content: string } | null>({
+export const composeTaskChatIntroAtom = atom<{ taskId: number; content: string; skillFollowup?: boolean } | null>({
     key: "composeTaskChatIntro",
+    default: null,
+});
+
+export const composeTaskSkillFollowupAtom = atom<{ taskId: number } | null>({
+    key: "composeTaskSkillFollowup",
     default: null,
 });
 
