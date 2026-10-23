@@ -6,6 +6,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import prisma from "@/lib/prisma";
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { PriorityConstants } from "@/lib/constants/constants";
 import {
   getCurrentUserFromCookies,
@@ -363,7 +364,7 @@ export async function POST(request: NextRequest) {
         source: "ai",
       };
     } catch (error) {
-      if (request.signal.aborted) throw error;
+      if (isPlanLimitReachedError(error) || request.signal.aborted) throw error;
       await reportError({
         message: error instanceof Error ? error.message : "AI request failed",
         stack: error instanceof Error ? error.stack : undefined,
@@ -393,6 +394,10 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json(responseBody);
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error);
+      return NextResponse.json(refusal.body, { status: refusal.status });
+    }
     if (error instanceof IdempotencyInProgressError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

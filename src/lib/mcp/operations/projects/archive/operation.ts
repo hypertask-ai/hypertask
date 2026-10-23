@@ -6,6 +6,8 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
+import { isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits'
+import { updateProjectStatus } from '@/utils/controllers/projects/boardQuota'
 import {
   HTPR_6470_PROJECT_DELETE_FLAG,
   isFeatureEnabled,
@@ -82,14 +84,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const updated = await prisma.project.update({
-      where: { id: project.id },
-      data: { status },
-      select: { id: true, name: true, title: true, status: true },
+    const updated = await updateProjectStatus(project.id, status, {
+      actorUserId: ctx.user.id,
+      agentId: ctx.agentId,
+      entryPoint: 'mcp.projects.archive',
     })
 
     return NextResponse.json({ success: true, project: updated })
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error)
+      return NextResponse.json(refusal.body, { status: refusal.status })
+    }
     console.error('[MCP Archive Board] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
