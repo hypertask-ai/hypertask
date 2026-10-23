@@ -14,13 +14,13 @@ function fake(flags, counts = [4, 12]) {
       fetchImpl: async (url, init) => {
         calls.push({ url, ...init, body: init.body ? JSON.parse(init.body) : undefined });
         assert.ok(init.signal);
-        if (url.includes("posthog.com")) {
+        if (new URL(url).hostname === "eu.posthog.com") {
           assert.equal(init.headers.Authorization, "Bearer posthog-key");
           assert.equal(init.body && JSON.parse(init.body).query.kind, "HogQLQuery");
           return Response.json({ results: [counts] });
         }
         assert.equal(init.headers.Authorization, "Bearer agent-token");
-        return Response.json(init.method === "PATCH" ? { flag: { mode: "OFF" } } : { flags });
+        return Response.json(init.method === "PATCH" ? { flag: { mode: "OFF" }, notified: true } : { flags });
       },
     },
   };
@@ -36,7 +36,7 @@ test("a spike switches every flag in the release window Off with own ticket link
   const flags = [flag(), flag("htpr-456-other")];
   const { calls, options } = fake(flags);
   assert.deepEqual(await runReleaseWatch(options), flags.map(row => row.key));
-  const queries = calls.filter(call => call.url.includes("posthog.com"));
+  const queries = calls.filter(call => new URL(call.url).hostname === "eu.posthog.com");
   assert.equal(queries.length, 1);
   const patches = calls.filter(call => call.method === "PATCH");
   assert.deepEqual(patches.map(call => call.body), flags.map((row, index) => ({ key: row.key, mode: "OFF", reason: `https://app.hypertask.ai/detail/project-15/${index ? 456 : 123}`, watch: { before: 4, after: 12, windowMinutes: 40, releasedAt: row.releasedAt } })));
@@ -86,7 +86,7 @@ test("before and after windows have equal duration, only production exceptions c
 test("separate releases are queried separately; 30 and 60 minute boundaries are watched", async () => {
   const { calls, options } = fake([flag(undefined, 30), flag("htpr-456-other", 60)]);
   assert.equal((await runReleaseWatch(options)).length, 2);
-  assert.equal(calls.filter(call => call.url.includes("posthog.com")).length, 2);
+  assert.equal(calls.filter(call => new URL(call.url).hostname === "eu.posthog.com").length, 2);
 });
 
 test("server and script use the same spike rule and boundaries", () => {
@@ -120,8 +120,60 @@ for (const stats of [{ results: [] }, { results: [[4, 12]], hasMore: true }, { r
   test(`missing or truncated statistics fail closed: ${JSON.stringify(stats)}`, async () => {
     const { calls, options } = fake([flag()]);
     const fetchImpl = options.fetchImpl;
-    options.fetchImpl = (url, init) => url.includes("posthog.com") ? Response.json(stats) : fetchImpl(url, init);
+    options.fetchImpl = (url, init) => new URL(url).hostname === "eu.posthog.com" ? Response.json(stats) : fetchImpl(url, init);
     await assert.rejects(runReleaseWatch(options), /counts are missing or truncated/);
     assert.equal(calls.some(call => call.method === "PATCH"), false);
   });
 }
+
+for (const failure of ["HTTP", "API rejection", "network", "notification"]) {
+  test(`${failure} failure is logged and remaining flags and release groups are still attempted`, async (t) => {
+    const flags = [flag(), flag("htpr-456-other"), flag("htpr-789-later", 50)];
+    const { calls, options } = fake(flags);
+    const fetchImpl = options.fetchImpl;
+    const failures = [];
+    const successes = [];
+    t.mock.method(console, "error", message => failures.push(message));
+    t.mock.method(console, "log", message => successes.push(message));
+    options.fetchImpl = async (url, init) => {
+      const response = await fetchImpl(url, init);
+      if (init.method !== "PATCH" || JSON.parse(init.body).key !== flags[0].key) return response;
+      if (failure === "HTTP") return new Response("unavailable", { status: 503 });
+      if (failure === "API rejection") return Response.json({ success: false });
+      if (failure === "network") throw new Error("network unavailable");
+      return Response.json({ flag: { key: flags[0].key, mode: "OFF" }, notified: false });
+    };
+    await assert.rejects(runReleaseWatch(options), error => {
+      assert.ok(error instanceof AggregateError);
+      assert.match(error.message, /failed for 1 flag/);
+      assert.equal(error.errors.length, 1);
+      assert.match(error.errors[0].message, /htpr-123-feature/);
+      return true;
+    });
+    assert.deepEqual(calls.filter(call => call.method === "PATCH").map(call => call.body.key), flags.map(row => row.key));
+    assert.equal(failures.length, 1);
+    assert.match(failures[0], /htpr-123-feature/);
+    if (failure === "notification") assert.match(failures[0], /Switched Off but ticket notification failed; manual follow-up required/);
+    assert.equal(successes.length, 2);
+    assert.match(successes[0], /htpr-456-other: switched Off/);
+    assert.match(successes[1], /htpr-789-later: switched Off/);
+  });
+}
+
+test("multiple failed PATCHes are all collected after every flag is attempted", async (t) => {
+  const flags = [flag(), flag("htpr-456-other")];
+  const { calls, options } = fake(flags);
+  const fetchImpl = options.fetchImpl;
+  t.mock.method(console, "error", () => {});
+  options.fetchImpl = async (url, init) => {
+    const response = await fetchImpl(url, init);
+    return init.method === "PATCH" ? new Response("unavailable", { status: 503 }) : response;
+  };
+  await assert.rejects(runReleaseWatch(options), error => {
+    assert.ok(error instanceof AggregateError);
+    assert.equal(error.errors.length, flags.length);
+    assert.deepEqual(error.errors.map(error => error.message.split(":")[0]), flags.map(row => row.key));
+    return true;
+  });
+  assert.equal(calls.filter(call => call.method === "PATCH").length, flags.length);
+});

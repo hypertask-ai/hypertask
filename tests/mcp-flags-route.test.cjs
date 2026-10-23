@@ -32,6 +32,9 @@ let comments;
 let commentFails;
 let ticketWritable;
 let ticketQueries;
+let errorReports;
+let reportingFails;
+const originalWatchAgentId = process.env.FLAG_RELEASE_WATCH_AGENT_ID;
 class FeatureFlagInputError extends Error {}
 class FeatureFlagApprovalError extends Error {}
 const key = "htpr-3533-google-calendar";
@@ -147,6 +150,10 @@ stubModule("src/utils/controllers/comments/createCommentService.ts", { createCom
   comments.push(input);
   return { id: 1 };
 } });
+stubModule("src/lib/errors/reportError.ts", { reportError: async (report) => {
+  errorReports.push(report);
+  if (reportingFails) throw new Error("reporting unavailable");
+} });
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const { GET, PATCH } = jiti(path.join(root, "src/app/api/mcp/flags/route.ts"));
 function request(method = "GET", body, query = "", contentType = "application/json") {
@@ -161,6 +168,8 @@ async function result(response) {
   return { status: response.status, body: await response.json() };
 }
 test.beforeEach(() => {
+  process.env.FLAG_RELEASE_WATCH_AGENT_ID = "runner-3";
+  errorReports = []; reportingFails = false;
   ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3", agentRole: "write" };
   storedFlag = { mode: "EVERYONE", releasedAt: new Date(Date.now() - 40 * 60_000) };
   defaultMode = "OWNER_AND_QA"; comments = []; commentFails = false; ticketWritable = true; ticketQueries = [];
@@ -172,6 +181,11 @@ test.beforeEach(() => {
     commentText: `Question: Switch ${key} to Off?`, text: null, editedAt: null,
     reactions: [{ userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() }],
   };
+});
+
+test.afterEach(() => {
+  if (originalWatchAgentId === undefined) delete process.env.FLAG_RELEASE_WATCH_AGENT_ID;
+  else process.env.FLAG_RELEASE_WATCH_AGENT_ID = originalWatchAgentId;
 });
 
 for (const method of ["GET", "PATCH"]) {
@@ -447,6 +461,9 @@ test("release watch switches a recent Everyone flag Off and comments as the scop
   const response = await result(await PATCH(request("PATCH", watchBody())));
   assert.equal(response.status, 200);
   assert.equal(response.body.previousMode, "EVERYONE");
+  assert.equal(response.body.flag.mode, "OFF");
+  assert.equal(response.body.notified, true);
+  assert.equal(errorReports.length, 0);
   assert.equal(approvalQueries.length, 0);
   assert.equal(writes.length, 1);
   assert.match(writes[0][2].reason, /^release watch: errors 4 -> 11 in 40 min; https:\/\/app.hypertask.ai\/detail\/project-15\/3533$/);
@@ -458,12 +475,48 @@ test("release watch switches a recent Everyone flag Off and comments as the scop
   assert.equal(broadcasts, 1);
 });
 
-for (const stored of [false, true]) test(`release watch accepts a recent default-Everyone release with ${stored ? "a timestamp-less row" : "no stored row"}`, async () => {
-  storedFlag = stored ? { mode: "EVERYONE", releasedAt: null } : null;
-  defaultMode = "EVERYONE"; previousMode = null;
-  assert.equal((await result(await PATCH(request("PATCH", watchBody())))).status, 200);
-  assert.equal(comments.length, 1);
-});
+for (const [name, invalidate] of [
+  ["another owner-owned agent", () => { process.env.FLAG_RELEASE_WATCH_AGENT_ID = "dedicated-watch-agent"; }],
+  ["unset watch identity", () => { delete process.env.FLAG_RELEASE_WATCH_AGENT_ID; }],
+  ["empty watch identity", () => { process.env.FLAG_RELEASE_WATCH_AGENT_ID = ""; }],
+  ["no stored Everyone row", () => { storedFlag = null; }],
+  ["null stored Everyone release time", () => { storedFlag.releasedAt = null; }],
+  ["stale stored Everyone release", () => { storedFlag.releasedAt = new Date(Date.now() - 71 * 60_000); }],
+]) {
+  test(`release watch refuses ${name} even with caller-supplied fresh time and spike`, async () => {
+    const body = watchBody();
+    defaultMode = "EVERYONE";
+    invalidate();
+    assert.ok((await result(await PATCH(request("PATCH", body)))).status >= 400);
+    assert.equal(writes.length, 0);
+    assert.equal(comments.length, 0);
+  });
+
+  test(`release watch still allows dedicated identity with matching stored fresh Everyone release (control for ${name})`, async () => {
+    defaultMode = "EVERYONE";
+    const response = await result(await PATCH(request("PATCH", watchBody())));
+    assert.equal(response.status, 200);
+    assert.equal(response.body.flag.mode, "OFF");
+    assert.equal(response.body.notified, true);
+    assert.equal(writes.length, 1);
+    assert.equal(comments.length, 1);
+    assert.equal(approvalQueries.length, 0);
+  });
+}
+
+for (const watchAgentId of [undefined, "another-watch-agent"]) {
+  test(`normal thumbs-up approval remains allowed with watch identity ${watchAgentId}`, async () => {
+    if (watchAgentId === undefined) delete process.env.FLAG_RELEASE_WATCH_AGENT_ID;
+    else process.env.FLAG_RELEASE_WATCH_AGENT_ID = watchAgentId;
+    const body = { ...watchBody(), reason };
+    const response = await result(await PATCH(request("PATCH", body)));
+    assert.equal(response.status, 200);
+    assert.equal(response.body.flag.mode, "OFF");
+    assert.equal(approvalQueries.length, 1);
+    assert.equal(writes.length, 1);
+    assert.equal(comments.length, 0);
+  });
+}
 
 for (const [name, change] of [
   ["under ten errors", body => { body.watch.after = 9; }],
@@ -520,11 +573,23 @@ test("missing watch still requires Valentin's original thumbs up", async () => {
   assert.equal(comments.length, 0);
 });
 
-test("a failed watch comment surfaces failure after Off has been audited and broadcast", async (t) => {
-  t.mock.method(console, "error", () => {});
-  commentFails = true;
-  assert.equal((await result(await PATCH(request("PATCH", watchBody())))).status, 500);
-  assert.equal(writes.length, 1);
-  assert.equal(broadcasts, 1);
-  assert.equal(comments.length, 0);
-});
+for (const reporterFails of [false, true]) {
+  test(`failed watch comment returns successful Off with notified:false even when reporting ${reporterFails ? "fails" : "succeeds"}`, async (t) => {
+    t.mock.method(console, "error", () => {});
+    commentFails = true;
+    reportingFails = reporterFails;
+    const response = await result(await PATCH(request("PATCH", watchBody())));
+    assert.equal(response.status, 200);
+    assert.equal(response.body.flag.mode, "OFF");
+    assert.equal(response.body.notified, false);
+    assert.equal(writes.length, 1);
+    assert.equal(broadcasts, 1);
+    assert.equal(comments.length, 0);
+    assert.equal(errorReports.length, 1);
+    assert.equal(errorReports[0].message, `Release watch switched ${key} Off but failed to notify Valentin`);
+    assert.equal(errorReports[0].source, "server");
+    assert.equal(errorReports[0].url, watchBody().reason);
+    assert.match(errorReports[0].stack, /comment unavailable/);
+    assert.deepEqual(errorReports[0].extra, { flagKey: key, agentId: "runner-3" });
+  });
+}

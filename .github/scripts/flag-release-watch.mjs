@@ -57,6 +57,7 @@ export async function runReleaseWatch({ fetchImpl = fetch, token = process.env.H
   if (!Array.isArray(flags)) throw new Error("Release watch flag list is missing");
   const groups = releaseGroups(flags, typeof additions === "function" ? additions() : additions, now);
   const switched = [];
+  const failures = [];
   for (const [release, keys] of groups) {
     const stats = await json(fetchImpl, "https://eu.posthog.com/api/projects/236160/query/", {
       method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -68,13 +69,21 @@ export async function runReleaseWatch({ fetchImpl = fetch, token = process.env.H
     if (!isReleaseWatchSpike(before, after)) continue;
     for (const key of keys) {
       const ticket = /^htpr-([1-9]\d*)-/.exec(key)[1];
-      await json(fetchImpl, `${APP}/api/mcp/flags`, {
-        method: "PATCH", headers,
-        body: JSON.stringify({ key, mode: "OFF", reason: `${APP}/detail/project-15/${ticket}`, watch: { before, after, windowMinutes: Math.floor((now - release) / 60_000), releasedAt: new Date(release).toISOString() } }),
-      });
-      switched.push(key);
+      try {
+        const result = await json(fetchImpl, `${APP}/api/mcp/flags`, {
+          method: "PATCH", headers,
+          body: JSON.stringify({ key, mode: "OFF", reason: `${APP}/detail/project-15/${ticket}`, watch: { before, after, windowMinutes: Math.floor((now - release) / 60_000), releasedAt: new Date(release).toISOString() } }),
+        });
+        if (result.notified === false) throw new Error("Switched Off but ticket notification failed; manual follow-up required");
+        switched.push(key);
+        console.log(`[release-watch] ${key}: switched Off and notified Valentin`);
+      } catch (error) {
+        console.error(`[release-watch] ${key}: ${error.message}`);
+        failures.push(new Error(`${key}: ${error.message}`, { cause: error }));
+      }
     }
   }
+  if (failures.length) throw new AggregateError(failures, `Release watch failed for ${failures.length} flag(s)`);
   return switched;
 }
 

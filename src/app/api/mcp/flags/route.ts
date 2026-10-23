@@ -23,6 +23,7 @@ import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
+import { reportError } from "@/lib/errors/reportError";
 
 const APPROVAL_REQUIRED_MESSAGE = "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?";
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
@@ -110,7 +111,8 @@ export async function PATCH(request: NextRequest) {
     const watch = body.watch;
     const releaseTime = typeof watch?.releasedAt === "string" ? Date.parse(watch.releasedAt) : NaN;
     const releaseAge = Date.now() - releaseTime;
-    const watchRequested = body.mode === "OFF" && ticket
+    const watchAgentId = process.env.FLAG_RELEASE_WATCH_AGENT_ID;
+    const watchRequested = watchAgentId && ctx.agentId === watchAgentId && body.mode === "OFF" && ticket
       && body.reason === `https://app.hypertask.ai/detail/project-15/${ticket[1]}`
       && watch && Number.isSafeInteger(watch.windowMinutes)
       && Number(watch.windowMinutes) >= RELEASE_WATCH.minimumMinutes
@@ -144,11 +146,9 @@ export async function PATCH(request: NextRequest) {
     const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, actor, async (tx) => {
       if (watchRequested) {
         const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true, releasedAt: true } });
-        const age = Date.now() - releaseTime;
-        const matchesRelease = stored?.releasedAt ? stored.releasedAt.getTime() === releaseTime
-          : defaultFeatureFlagMode(body.key as string) === "EVERYONE";
-        if ((stored?.mode ?? defaultFeatureFlagMode(body.key as string)) === "EVERYONE"
-          && matchesRelease && age >= RELEASE_WATCH.minimumMinutes * 60_000
+        const age = stored?.releasedAt ? Date.now() - stored.releasedAt.getTime() : NaN;
+        if (stored?.mode === "EVERYONE" && stored.releasedAt?.getTime() === releaseTime
+          && age >= RELEASE_WATCH.minimumMinutes * 60_000
           && age <= RELEASE_WATCH.maximumMinutes * 60_000) {
           watched = true;
           actor.reason = `release watch: errors ${watch!.before} -> ${watch!.after} in ${watch!.windowMinutes} min; ${body.reason}`;
@@ -193,19 +193,31 @@ export async function PATCH(request: NextRequest) {
     await broadcastFeatureFlagsChange().catch((error) =>
       console.warn("[feature-flags] realtime broadcast failed", error),
     );
+    let notified = false;
     if (watched && watchTask) {
-      const currentUser = await prisma.user.findUniqueOrThrow({
-        where: { id: ctx.user.id }, select: { id: true, email: true, displayName: true, photoURL: true },
-      });
-      await createCommentService({
-        text: `<p><strong>Switched ${body.key} Off: production errors jumped after it went live.</strong></p>`
-          + `<p>Errors: ${watch!.before} before / ${watch!.after} after, each over ${watch!.windowMinutes} minutes.</p>`
-          + `<p>Next: fix the cause, then ask Valentin to switch it back on. <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span></p>`,
-        creatorId: ctx.user.id, agentId: ctx.agentId as string, teamScope: ctx.teamScope,
-        taskId: watchTask.id, ownerId: watchTask.userId, currentUser,
-      });
+      try {
+        const currentUser = await prisma.user.findUniqueOrThrow({
+          where: { id: ctx.user.id }, select: { id: true, email: true, displayName: true, photoURL: true },
+        });
+        await createCommentService({
+          text: `<p><strong>Switched ${body.key} Off: production errors jumped after it went live.</strong></p>`
+            + `<p>Errors: ${watch!.before} before / ${watch!.after} after, each over ${watch!.windowMinutes} minutes.</p>`
+            + `<p>Next: fix the cause, then ask Valentin to switch it back on. <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span></p>`,
+          creatorId: ctx.user.id, agentId: ctx.agentId as string, teamScope: ctx.teamScope,
+          taskId: watchTask.id, ownerId: watchTask.userId, currentUser,
+        });
+        notified = true;
+      } catch (error) {
+        await reportError({
+          message: `Release watch switched ${body.key} Off but failed to notify Valentin`,
+          source: "server",
+          url: body.reason as string,
+          stack: error instanceof Error ? error.stack : undefined,
+          extra: { flagKey: body.key, agentId: ctx.agentId as string },
+        }).catch((reportingError) => console.error("[feature-flags] release watch notification reporting failed", reportingError));
+      }
     }
-    return noStore({ flag, previousMode });
+    return noStore({ flag, previousMode, ...(watched ? { notified } : {}) });
   } catch (error) {
     if (error instanceof FeatureFlagApprovalError) {
       return noStore({ error: error.message }, 403);
