@@ -234,8 +234,8 @@ test("a refreshed notification id replaces the cached id when removing from a di
   assert.deepEqual(flow.toasts, []);
 });
 
-test("a second removal cannot toggle the frozen notification back into inbox", async (t) => {
-  const flow = makeFlow(t, hydratedTask, hydratedTask);
+for (const flags of [new Set(), new Set(["htpr-7659-archive-every-send"])]) test(`a second removal cannot toggle the frozen notification back into inbox (HTPR-7659 flag ${flags.size ? "on" : "off"})`, async (t) => {
+  const flow = makeFlow(t, hydratedTask, hydratedTask, [task], { flags });
   flow.useArchive().navigateToNextTask(true, false);
   await Promise.all(flow.pending);
   assert.equal(flow.context.currentTask._count.notifications, 0);
@@ -245,15 +245,16 @@ test("a second removal cannot toggle the frozen notification back into inbox", a
   assert.deepEqual(flow.client.getQueryData(flow.key).notifications, []);
 });
 
-const sendsInARow = [1, 2, 3].map((n) => {
+const sendsInARow = () => [1, 2, 3].map((n) => {
   const sent = { ...task, id: 900 + n, uniqueIndex: 7000 + n, title: `Inbox message ${n}` };
   return { sent, row: { ...notification, id: 800 + n, taskId: sent.id, task: sent } };
 });
 
 function sendThreeInARow(t, flags) {
-  const playlist = sendsInARow.map(({ sent }) => sent);
-  const flow = makeFlow(t, playlist[0], playlist[0], playlist, { flags, extraRows: sendsInARow.map(({ row }) => row) });
-  for (const { sent } of sendsInARow) {
+  const sends = sendsInARow();
+  const playlist = sends.map(({ sent }) => sent);
+  const flow = makeFlow(t, playlist[0], playlist[0], playlist, { flags, extraRows: sends.map(({ row }) => row) });
+  for (const { sent } of sends) {
     flow.context.currentTask = { ...sent, _count: { notifications: 0 } };
     flow.context.currentItemInTasksPlaylist = sent;
     flow.useArchive().navigateToNextTask(true, true, undefined, undefined, "true");
@@ -289,7 +290,8 @@ test("HTPR-7659: the comment writer treats a message still in the inbox list as 
   assert.match(definition, /defaultMode: "EVERYONE"/);
   const editorState = fs.readFileSync(path.join(root, "src/components/RTE/useTaskDetailEditorState.tsx"), "utf8");
   assert.match(editorState, /archiveEverySend &&\s*isInboxFlow &&\s*!!inboxMessageForTask\(/);
-  assert.equal(navigation.inboxMessageForTask([sendsInARow[1].row], sendsInARow[1].sent, 6), sendsInARow[1].row);
-  assert.equal(navigation.inboxMessageForTask([{ ...sendsInARow[1].row, status: "Archive" }], sendsInARow[1].sent, 6), undefined);
-  assert.equal(navigation.inboxMessageForTask([sendsInARow[1].row], sendsInARow[1].sent, 7), undefined);
+  const [, { row, sent }] = sendsInARow();
+  assert.equal(navigation.inboxMessageForTask([row], sent, 6), row);
+  assert.equal(navigation.inboxMessageForTask([{ ...row, status: "Archive" }], sent, 6), undefined);
+  assert.equal(navigation.inboxMessageForTask([row], sent, 7), undefined);
 });

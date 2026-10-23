@@ -57,7 +57,7 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
         queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser.id))?.notifications,
         currentTask,
         currentUser.id,
-      ) ?? (archiveEverySend ? currentTask?.notifications?.[0] : undefined)
+      ) ?? (archiveEverySend && currentTask?._count?.notifications ? currentTask?.notifications?.[0] : undefined)
     : currentTask?.notifications&&currentTask?.notifications[0]
   const missingInboxTarget = activeInboxFlow && indexOf === -1 && tasksPlayList
     ? nextRemainingInboxTask(tasksPlayList, currentItemInTasksPlaylist)
@@ -66,9 +66,9 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
 
   if (archiveNotification && currentTask){
 
-    const stillInInbox = archiveEverySend
-      ? inInbox || currentTask._count?.notifications
-      : earlyInboxMembership ? inInbox : currentTask._count?.notifications
+    const stillInInbox = earlyInboxMembership
+      ? inInbox || (archiveEverySend && currentTask._count?.notifications)
+      : currentTask._count?.notifications
     if (!stillInInbox){
       console.log("🚀 ~ navigateToNextTask ~ currentTask:", currentTask)
       if (force==="forceNavigate") moveIdxDown()
