@@ -38,7 +38,7 @@ test("a failed card import leaves the module unknown and still rejects for the r
   assert.equal(remembered.loaded(), null);
 });
 
-test("every card import, including the startup preload and the lazy card, goes through the remembered loader", () => {
+test("the startup preload, the column preload and the client-only lazy card all go through the remembered loader", () => {
   assert.match(section, /const taskModule = rememberLoadedModule\(\(\) => import\("\.\.\/KanbanTaskComponents\/task"\)\);/);
   assert.match(section, /const loadTask = taskModule\.load;/);
   assert.match(section, /const Task = dynamic\(loadTask, \{/);
