@@ -47,6 +47,7 @@ function fakeRedis() {
     values,
     exists: async (key) => (values.has(key) ? 1 : 0),
     get: async (key) => values.get(key) ?? null,
+    del: async (key) => (values.delete(key) ? 1 : 0),
     set: async (key, value, ...options) => {
       if (options.includes("NX") && values.has(key)) return null;
       values.set(key, String(value));

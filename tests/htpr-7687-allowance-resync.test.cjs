@@ -269,3 +269,22 @@ test("with the flag off a refusal never asks the gateway", async () => {
   assert.equal(gateway.reportCalls, 0);
   assert.equal(await committed(), CAP_MICRO_USD);
 });
+
+test("refused: an expired reservation swept into the counter is journaled, so a lagging gateway cannot erase it", async () => {
+  await freshTeam(3_000_000);
+  await client.zadd(reservationsKey, 1, "expired-call|2000000");
+  gateway.teamSpendUsd = 3;
+  await assert.rejects(answer(), /used its included AI allowance/);
+  assert.equal(await committed(), 5_000_000);
+});
+
+test("refused: switching the flag off and on restarts the journal, so spend made while off is kept", async () => {
+  await freshTeam(CAP_MICRO_USD - 1_300_000);
+  resyncFlagOn = false;
+  await answer(26_000);
+  assert.equal(await client.get(`${prefix}:recent-settled-since`), null);
+  resyncFlagOn = true;
+  gateway.teamSpendUsd = (CAP_MICRO_USD - 1_300_000) / 1_000_000;
+  await assert.rejects(answer(20_000), /used its included AI allowance/);
+  assert.ok(await committed() >= CAP_MICRO_USD);
+});

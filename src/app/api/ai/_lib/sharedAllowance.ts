@@ -447,10 +447,12 @@ local expired = redis.call("ZRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
 for _, member in ipairs(expired) do
   local amount = string.match(member, "|(%d+)$")
   if amount then committed = committed + tonumber(amount) end
+  if KEYS[4] then redis.call("ZADD", KEYS[4], ARGV[1], member) end
 end
 if #expired > 0 then
   redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
   redis.call("SET", KEYS[1], committed)
+  if KEYS[4] then redis.call("EXPIRE", KEYS[4], ARGV[6]) end
 end
 local active = redis.call("ZRANGE", KEYS[2], 0, -1)
 local reserved = 0
@@ -694,12 +696,16 @@ async function reserveSharedAllowance(args: {
   const id = randomUUID();
   const member = `${id}|${amountMicroUsd}`;
   const expiresAt = Date.now() + RESERVATION_TTL_MS;
+  const recentSettledKey = `${lanePrefix}:recent-settled`;
+  const journalStartedKey = `${recentSettledKey}-since`;
+  if (!followsRealSpend) await redis.del(journalStartedKey);
   const reserve = () => redis.eval(
     RESERVE_SCRIPT,
-    3,
+    followsRealSpend ? 4 : 3,
     committedKey,
     reservationsKey,
     legacyPendingKey,
+    ...(followsRealSpend ? [recentSettledKey] : []),
     String(Date.now()),
     String(amountMicroUsd),
     String(
@@ -720,11 +726,11 @@ async function reserveSharedAllowance(args: {
     (await resyncToGatewaySpend({
       committedKey,
       gatewayApiKey: args.gatewayApiKey,
-      journalStartedKey: `${lanePrefix}:recent-settled-since`,
+      journalStartedKey,
       lane: args.lane,
       lockKey: `${lanePrefix}:gateway-resync-lock`,
       month,
-      recentSettledKey: `${lanePrefix}:recent-settled`,
+      recentSettledKey,
       redis,
       teamId: args.teamId,
     }))
@@ -741,7 +747,7 @@ async function reserveSharedAllowance(args: {
     id: member,
     inputOnlyMicroUsd: inputOnly,
     pricing,
-    recentSettledKey: followsRealSpend ? `${lanePrefix}:recent-settled` : null,
+    recentSettledKey: followsRealSpend ? recentSettledKey : null,
     reservationsKey,
     ttlSeconds: month.ttlSeconds,
   };
