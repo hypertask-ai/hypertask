@@ -140,6 +140,10 @@ export const AI_Chat_Sidebar = ({
 
   useEffect(() => {
     if (!generalChatPending || resolvingGeneralChat.current) return;
+    if (pastChatsFirst && aiSessionRef.current) {
+      chat.selectSession(aiSessionRef.current);
+      return;
+    }
     resolvingGeneralChat.current = true;
     void chat.startNewSession().catch((error) => {
       setRosterError(error instanceof Error ? error.message : "Could not open AI chat");

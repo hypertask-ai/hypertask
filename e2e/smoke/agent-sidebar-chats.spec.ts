@@ -83,7 +83,10 @@ async function settledBox(locator: ReturnType<Page['locator']>) {
 async function choose(page: Page, name: string) {
   const list = page.getByTestId('agent-sidebar-conversations')
   if (!await list.isVisible()) await page.getByRole('button', { name: 'Switch conversation', exact: true }).click()
-  await list.locator('li').filter({ hasText: name }).click()
+  const row = list.locator('li').filter({ hasText: name })
+  const more = list.getByRole('option', { name: /^Show \d+ more$/ })
+  if (!await row.first().isVisible() && await more.isVisible()) await more.click()
+  await row.first().click()
   await expect(list).toBeHidden()
 }
 
