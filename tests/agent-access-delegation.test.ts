@@ -1,6 +1,7 @@
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx tests/agent-access-delegation.test.ts
 import assert from 'node:assert/strict'
+import type { McpAuthContext } from '../src/lib/mcp/auth/types'
 
 async function json(response: Response | null) {
   assert.ok(response, 'expected a rejection response')
@@ -33,15 +34,16 @@ async function demo() {
     permissions: role ? { role } : {},
   })
 
-  const ctx = {
+  const ctx: McpAuthContext = {
+    teamScope: null,
     user: { id: 6, email: 'owner@example.com' },
     agentId: 'ceo',
-  } as any
+  }
 
   try {
     // Humans and management keys are untouched by this check.
     assert.equal(
-      await checkAgentBoardDelegation({ ...ctx, agentId: undefined }, 'x'),
+      await checkAgentBoardDelegation({ ...ctx, agentId: null }, 'x'),
       null
     )
 

@@ -76,9 +76,8 @@ export async function PUT(
     await assertProjectAccess(ctx.user.id, projectId, ctx.agentId, ctx.teamScope);
 
     const input = updateSchema.parse(await request.json());
-    let modelOption;
+    const modelOption = getAiModelOptionById(input.model_selected);
     if (input.model_selected !== undefined) {
-      modelOption = getAiModelOptionById(input.model_selected);
       if (!modelOption) {
         return NextResponse.json(
           {
