@@ -4,7 +4,7 @@
 
 `https://app.hypertask.ai/detail/project-<id>` for a board (real selector:
 `.kanban-column-title`, `src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx`,
-per `e2e/smoke/prod.spec.ts`), `/all-tasks` for the board list (`#users-list`),
+per `e2e/smoke/prod.spec.ts`), `/all-tasks` for the task list (`#users-list`),
 or the board/table/calendar view switcher inside a board. Switching boards
 from the sidebar is the `switch-boards` journey.
 
@@ -37,7 +37,7 @@ of the bugs above only showed up after a refresh or a second board switch.
 
 ## First agent connection
 
-https://app.hypertask.ai/detail/project-15/7026 adds a compact Connect your agent card above the columns or table on the user's earliest active owned board (the seeded MyBoard, including after rename). It is behind `htpr-7026-agent-connect-check`, default Owner + QA. Users with any previous CLI or MCP connection, or a server-persisted dismissal, do not see it.
+https://app.hypertask.ai/detail/project-15/7026 adds a compact Connect your agent card above the columns or table on the user's earliest active owned board (the seeded MyBoard, including after rename). It requires `htpr-7026-agent-connect-check` to be true (default Owner + QA) and `htpr-7078-remove-connect-block` to be false. The removal flag defaults to Everyone and suppresses this inline card. Read effective flags before running the card checks; if removed, record the inline path as unreachable rather than enabling it or failing for a missing card. Users with any previous CLI or MCP connection, or a server-persisted dismissal, do not see it.
 
 On a disposable new-user fixture, confirm Claude Code, Cursor, Codex appear first. Select a tool and use the shared onboarding CLI or MCP instructions. While the card is in view, the status checks every four seconds; hidden tabs and offscreen cards stop polling. The first connection shows the actual recorded client or the onboarding choice, plus Ask your agent to pick up the top task. Dismiss and reload, then check another device: the card stays hidden. A connection also hides it on the next visit without needing dismissal. Confirm flag-off users cannot read first-run card state or save a dismissal.
 

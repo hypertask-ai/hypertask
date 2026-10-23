@@ -2,7 +2,7 @@
 
 ## How a customer reaches it
 
-The "Guard agent board scope" step inside the required `ci-tests` check of every pull request and production push. It scans agent route files for direct `prisma.project/task/comment` reads that skip the shared agent scope helpers, against the reviewed exceptions and the debt list in `.github/scripts/agent-scope/`. This is infrastructure, with no app UI or account writes.
+The "Guard agent board scope" step inside the required `ci-tests` check runs on production pushes and non-draft pull requests that need a build. Docs-only PRs skip the scanner; draft PRs skip the job. It inventories App Router APIs, Pages APIs and MCP operations, then scans agent-capable entry files for direct `prisma.project/task/comment` reads, updates and deletes that skip the shared agent scope helpers, against the reviewed exceptions and the debt list in `.github/scripts/agent-scope/`. This is infrastructure, with no app UI or account writes.
 
 ## How to drive it
 
