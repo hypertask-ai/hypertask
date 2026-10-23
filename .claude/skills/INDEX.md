@@ -27,6 +27,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | interrogate | Before coding, only for `valentin-review`: money, login and access, security, data that cannot be undone; never for ordinary `ai-review` | .claude/skills/interrogate/SKILL.md |
 | blast-radius | Before the PR for anything outside the usual lane | .claude/skills/blast-radius/SKILL.md |
 | simplify-before-pr | Before the PR | .claude/skills/simplify-before-pr/SKILL.md |
+| principle-test-behavior-not-implementation | Before the PR, inside simplify-before-pr: every new or changed test must fail if its imports returned `undefined` (pstack by Lauren Tan, MIT) | .claude/skills/principle-test-behavior-not-implementation/SKILL.md |
 | no-comments | Before the PR, inside simplify-before-pr: Comment Sicko (`.claude/agents/comment-sicko.md`) on the PR diff kills comments, lint and TypeScript suppressions and workaround code, also outside `src/` (pstack by Lauren Tan, MIT) | .claude/skills/no-comments/SKILL.md |
 | design-compliance | Before the PR (UI) | .claude/skills/design-compliance/SKILL.md |
 | update-docs | Before the PR (user-visible change) | .claude/skills/update-docs/SKILL.md |
