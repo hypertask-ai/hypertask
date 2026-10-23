@@ -19,7 +19,7 @@ Once per /ship run, after the `Clean up` step of its last ticket, or when asked 
 
 Claude Code: `~/.claude/projects/<slug>/$CLAUDE_CODE_SESSION_ID.jsonl`, where `<slug>` is the session's start directory with every character other than a letter or digit replaced by `-` (for `~/projects/hypertask`: `-home-valentin-projects-hypertask`). Subagent transcripts sit in `<slug>/$CLAUDE_CODE_SESSION_ID/subagents/`. Codex: the newest `~/.codex/sessions/**/rollout-*.jsonl` whose first line names this thread id.
 
-Never glob other projects or other sessions; they hold unrelated private work. If the file is missing, write a tight digest of the session (tickets, mistakes, corrections, friction) and pass that instead.
+Never glob other projects or other sessions; they hold unrelated private work. Long runner transcripts reach hundreds of MB, so tell each reviewer to extract only user and assistant text and tool commands into its own temp file first (`jq -r 'select(.type=="user" or .type=="assistant") | .message.content | if type=="string" then . else (.[]? | .text // .input.command // empty) end' <file>`), skip tool results and images, grep bounded slices, and weigh the part after the last compaction summary most. If the file is missing, write a tight digest of the session (tickets, mistakes, corrections, friction) and pass that instead.
 
 ### 2. Run three reviewers in parallel
 
