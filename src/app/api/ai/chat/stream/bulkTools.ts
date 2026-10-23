@@ -38,6 +38,10 @@ function bulkOperationSubject(subject: BulkOperationSubject) {
   return { key, sortKey: key };
 }
 
+export function bulkOperationSubjectKeys(subjects: BulkOperationSubject[]) {
+  return subjects.map((subject) => bulkOperationSubject(subject).key);
+}
+
 export function buildBulkOperationKey(
   intent: string,
   subjects: BulkOperationSubject[],

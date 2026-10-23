@@ -2,7 +2,7 @@ import { getUpdateTaskSchema } from "./updateTaskSchema";
 import { createTaskUpdater } from "./updateOneTask";
 import { tool } from "ai";
 
-import { resolveBulkTaskTargets, updateTasksNeedConfirmation, buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
+import { resolveBulkTaskTargets, updateTasksNeedConfirmation, buildBulkOperationKey, bulkOperationSubjectKeys } from "@/app/api/ai/chat/stream/bulkTools";
 import prisma from "@/lib/prisma";
 
 import { buildMcpTaskUrl } from "@/lib/mcp/boards/links";
@@ -19,7 +19,7 @@ export function createUpdateTaskTool(context: ToolContext) {
   return {
     hypertask_update_task: tool({
       description:
-        "Update one or many tasks' titles, descriptions, priorities, estimates, due dates, labels, parents, or statuses (Normal/Archive/Deleted), or move them within their own boards. Use task_ids or ticket_numbers to update up to 50 tasks in one call instead of looping. Provide whichever task identifier you know; extra identifiers are tolerated.",
+        "Update one or many tasks' titles, descriptions, priorities, estimates, due dates, labels, parents, or statuses (Normal/Archive/Deleted), or move them within their own boards. Use task_ids or ticket_numbers to update up to 50 tasks in one call instead of looping. Provide whichever task identifier you know; extra identifiers are tolerated. Bulk changes need one user confirmation: call this tool without confirmed for every batch of the scope first, so the preview covers all of them, then ask the user once. After their yes, call it with confirmed: true for each batch; a yes covers only the tasks that were previewed.",
       inputSchema: getUpdateTaskSchema(context.inlineAgentImagesEnabled),
       execute: withToolErrors(async (rawInput) => {
         sendStatus("hypertask_update_task");
@@ -113,19 +113,16 @@ export function createUpdateTaskTool(context: ToolContext) {
               ),
             ]);
           }
-          const operationKey = buildBulkOperationKey(
-            "update-tasks",
-            operationTargets.map(({ identifier, resolution }) => ({
-              identifier,
-              resolvedTaskId: resolution.task?.id ?? null,
-            })),
-            operationChanges
-          );
+          const operationSubjects = operationTargets.map(({ identifier, resolution }) => ({
+            identifier,
+            resolvedTaskId: resolution.task?.id ?? null,
+          }));
           if (
             await requireCrossMessageConfirmation({
               userId: user.id,
               sessionId: confirmationSessionId,
-              operationKey,
+              operationKey: buildBulkOperationKey("update-tasks", [], operationChanges),
+              subjectKeys: bulkOperationSubjectKeys(operationSubjects),
               confirmed: input.confirmed,
               previewsIssuedThisRequest: bulkPreviewsIssued,
             }) === "preview"
@@ -158,7 +155,7 @@ export function createUpdateTaskTool(context: ToolContext) {
               message:
                 `This would change ${targets.length} tasks` +
                 (destructive ? ` (status: ${input.status})` : "") +
-                ". Nothing has been changed yet. End your turn now: list the affected tasks for the user and ask them to confirm. Only after they say yes, in a new message, call this tool again with confirmed: true.",
+                ". Nothing has been changed yet. If the user asked for more tasks than this call covers, call this tool now without confirmed for the remaining batches too. Then end your turn: tell the user the full scope and ask them to confirm once. Only after they say yes, in a new message, call this tool again with confirmed: true for each batch; the yes covers every previewed task with this same change.",
             });
           }
         }

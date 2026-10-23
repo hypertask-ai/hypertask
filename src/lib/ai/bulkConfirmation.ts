@@ -12,12 +12,16 @@ type BulkConfirmationRedis = {
     expiryMode: "EX",
     ttlSeconds: number
   ): Promise<unknown>;
+  sadd(key: string, ...members: string[]): Promise<unknown>;
+  srem(key: string, ...members: string[]): Promise<number>;
+  expire(key: string, ttlSeconds: number): Promise<unknown>;
 };
 
 type RequireCrossMessageConfirmationInput = {
   userId: number;
   sessionId: string;
   operationKey: string;
+  subjectKeys?: string[];
   confirmed?: boolean;
   previewsIssuedThisRequest: Set<string>;
   getRedisClient?: () => Promise<BulkConfirmationRedis>;
@@ -34,10 +38,35 @@ async function recordPreview(
   return "preview" as const;
 }
 
+async function requireScopedConfirmation(
+  redis: BulkConfirmationRedis,
+  scopeKey: string,
+  operationKey: string,
+  subjectKeys: string[],
+  confirmed: boolean | undefined,
+  previewsIssuedThisRequest: Set<string>
+): Promise<"preview" | "proceed"> {
+  const subjects = [...new Set(subjectKeys)];
+  const preview = async () => {
+    previewsIssuedThisRequest.add(operationKey);
+    if (subjects.length > 0) await redis.sadd(scopeKey, ...subjects);
+    await redis.expire(scopeKey, PREVIEW_TOKEN_TTL_SECONDS);
+    return "preview" as const;
+  };
+
+  if (!confirmed || previewsIssuedThisRequest.has(operationKey) || subjects.length === 0) {
+    return await preview();
+  }
+  const consumed = await redis.srem(scopeKey, ...subjects);
+  if (consumed === subjects.length) return "proceed";
+  return await preview();
+}
+
 export async function requireCrossMessageConfirmation({
   userId,
   sessionId,
   operationKey,
+  subjectKeys,
   confirmed,
   previewsIssuedThisRequest,
   getRedisClient = getRedis,
@@ -47,6 +76,16 @@ export async function requireCrossMessageConfirmation({
 
   try {
     const redis = await getRedisClient();
+    if (subjectKeys) {
+      return await requireScopedConfirmation(
+        redis,
+        `ai_bulk_scope:${userId}:${sessionId}:${operationHash}`,
+        operationKey,
+        subjectKeys,
+        confirmed,
+        previewsIssuedThisRequest
+      );
+    }
     if (previewsIssuedThisRequest.has(operationKey)) {
       return await recordPreview(
         redis,
