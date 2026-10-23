@@ -40,7 +40,8 @@ async function send(text) {
   if (phone && !(await editor.isVisible())) await page.locator('#comment-input-input').click();
   await editor.click();
   await page.keyboard.insertText(text);
-  await page.keyboard.press('Control+Enter');
+  if (phone) await page.getByRole('button', { name: 'Send comment' }).tap();
+  else await page.keyboard.press('Control+Enter');
 }
 
 try {
