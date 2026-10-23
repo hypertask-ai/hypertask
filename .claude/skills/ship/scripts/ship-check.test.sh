@@ -736,6 +736,88 @@ T fail "run folder outside the ticket rejected"
 
 fi
 
+# Offline no-release deployment checks run in CI's --premerge-only mode too.
+no_release_tests() {
+  local sha=e7b957efbd6cf4e82dde9dcd73cf87407c44417e
+  local run_url=https://github.com/hypertask-ai/cli-node/actions/runs/123 green runs change comparison
+  mkdir -p "$E/no-release-bin" "$E/HTPR-7628"
+  echo 127 > "$E/HTPR-7628/pr"
+  cat > "$E/no-release-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) printf '{"number":127,"title":"HTPR-7628 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"%s"}\n' "$MERGE_SHA" "$SHIP_BASE" ;;
+  release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
+  release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
+  api:*/compare/*)
+    [ "${COMPARE_ERROR:-0}" = 0 ] || exit 1
+    if [ -n "${RELEASE_TAG:-}" ]; then
+      [[ $2 == "repos/$SHIP_REPO/compare/$MERGE_SHA...$RELEASE_TAG" ]] || exit 1
+    else
+      [[ $2 == "repos/$SHIP_REPO/compare/$SHIP_BASE...$MERGE_SHA" ]] || exit 1
+    fi
+    echo "${COMPARE_FIXTURE:-behind}" ;;
+  api:*/actions/runs\?*)
+    [[ $2 == "repos/$SHIP_REPO/actions/runs?head_sha=$MERGE_SHA&per_page=100" && ${3:-} == --paginate ]] || exit 1
+    [ "${RUN_ERROR:-0}" = 0 ] || exit 1; printf '%s\n' "$RUNS_FIXTURE" ;;
+  *) exit 1 ;;
+esac
+MOCK
+  chmod +x "$E/no-release-bin/gh"
+  green=$(jq -cn --arg sha "$sha" --arg url "$run_url" '{workflow_runs:[{id:123,head_sha:$sha,event:"push",head_branch:"main",conclusion:"success",html_url:$url}]}')
+  ND() {
+    local want=$1 expected=$2 label=$3 out got; shift 3
+    out=$(env PATH="$E/no-release-bin:$PATH" SHIP_REPO=hypertask-ai/cli-node SHIP_BASE=main SHIP_DEPLOY=release SHIP_WORKER= MERGE_SHA="$sha" RUNS_FIXTURE="$green" "$@" ./ship-check deployed HTPR-7628); got=$?
+    [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$label: $out" || bad "$label: want $want $expected got $got $out"
+  }
+  for comparison in identical behind; do
+    ND 0 "deployed ok (no release: merged ${sha:0:9} on main, green run $run_url)" 'cli-node green base push evidence' COMPARE_FIXTURE="$comparison"
+  done
+  ND 0 'deployed ok (no release:' 'manual dispatch on base' RUNS_FIXTURE="$(jq '.workflow_runs[0].event = "workflow_dispatch"' <<<"$green")"
+  ND 1 'FAIL: no successful push or workflow_dispatch run' 'missing run' RUNS_FIXTURE='{"workflow_runs":[]}'
+  ND 1 'FAIL: failed workflow run' 'only failed run' RUNS_FIXTURE="$(jq '.workflow_runs[0].conclusion = "failure"' <<<"$green")"
+  for change in \
+    '.head_branch = "feature"' \
+    '.event = "pull_request"' \
+    '.event = "schedule"' \
+    '.head_sha = "other"' \
+    '.conclusion = null' \
+    '.conclusion = "cancelled"' \
+    'del(.html_url)'; do
+    ND 1 'FAIL: no successful push or workflow_dispatch run' "wrong or incomplete run: $change" RUNS_FIXTURE="$(jq ".workflow_runs[0] |= ($change)" <<<"$green")"
+  done
+  runs=$(jq '.workflow_runs += [.workflow_runs[0] | .id = 124 | .conclusion = "failure"]' <<<"$green")
+  ND 1 'FAIL: failed workflow run' 'success cannot hide a failure' RUNS_FIXTURE="$runs"
+  ND 1 'FAIL: failed workflow run' 'failure on another branch/event still blocks' RUNS_FIXTURE="$(jq '.workflow_runs[1] |= (.head_branch = "feature" | .event = "pull_request")' <<<"$runs")"
+  ND 1 'FAIL: failed workflow run' 'failure on a later page still blocks' RUNS_FIXTURE="$(printf '%s\n%s' "$green" "$(jq '{workflow_runs:[.workflow_runs[1]]}' <<<"$runs")")"
+  ND 0 'deployed ok (no release:' 'unrelated sha failure does not block' RUNS_FIXTURE="$(jq '.workflow_runs[1].head_sha = "other"' <<<"$runs")"
+  ND 0 'deployed ok (no release:' 'explicit opt-in on another repo' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none
+  ND 0 "deployed ok (no release: merged ${sha:0:9} on develop, green run $run_url)" 'configured base, not hardcoded main' SHIP_BASE=develop RUNS_FIXTURE="$(jq '.workflow_runs[0].head_branch = "develop"' <<<"$green")"
+  ND 1 'FAIL: failed workflow run' 'opt-in cannot hide failure' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none RUNS_FIXTURE="$runs"
+  ND 1 'FAIL: no successful push or workflow_dispatch run' 'opt-in still needs green run' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none RUNS_FIXTURE='{"workflow_runs":[]}'
+  ND 1 'FAIL: no release found' 'releasing repo still refused without a release' SHIP_REPO=hypertask-ai/cli
+  ND 1 'FAIL: no release found' 'unknown repo still refused without opt-in' SHIP_REPO=hypertask-ai/other
+  ND 1 'FAIL: no release found' 'only exact none opts in' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=None
+  for comparison in ahead identical; do
+    ND 0 'deployed ok (release v1)' 'releasing repo still allowed with containing release' SHIP_REPO=hypertask-ai/cli RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison" RUN_ERROR=1
+    ND 0 'deployed ok (release v1)' 'cli-node uses real containing release' RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison" RUN_ERROR=1
+    ND 0 'deployed ok (release v1)' 'opt-in uses real containing release' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison" RUN_ERROR=1
+  done
+  ND 1 'FAIL: latest release' 'cli-node cannot bypass non-containing release' RELEASE_TAG=v1 COMPARE_FIXTURE=behind
+  ND 1 'FAIL: latest release' 'opt-in cannot bypass non-containing release' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none RELEASE_TAG=v1 COMPARE_FIXTURE=diverged
+  ND 1 'FAIL: no release found' 'failed release view cannot bypass existing release' RELEASES_FIXTURE='[{"tagName":"v1"}]'
+  ND 1 'FAIL: no release found' 'malformed release list fails closed' RELEASES_FIXTURE='{}'
+  ND 1 'FAIL: could not read releases' 'release list error fails closed' RELEASE_ERROR=1
+  for comparison in ahead diverged; do
+    ND 1 "FAIL: merge $sha is not on main" 'merge must be on base' COMPARE_FIXTURE="$comparison"
+  done
+  ND 1 'FAIL: could not compare merge' 'compare error fails closed' COMPARE_ERROR=1
+  ND 1 'FAIL: could not read workflow runs' 'run API error fails closed' RUN_ERROR=1
+  ND 1 'FAIL: could not read workflow runs' 'invalid run JSON fails closed' RUNS_FIXTURE='invalid'
+  ND 1 'FAIL: could not read workflow runs' 'missing run array fails closed' RUNS_FIXTURE='{}'
+  unset -f ND
+}
+no_release_tests
+
 # Premerge status boundaries, without browser evidence or live flag reads.
 mkdir -p "$E/flag-bin" "$E/YPER4-999" "$PREMERGE_STATUS_STATE"
 cat > "$E/flag-bin/gh" <<'MOCK'
