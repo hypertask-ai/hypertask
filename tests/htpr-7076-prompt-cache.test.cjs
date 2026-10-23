@@ -61,6 +61,7 @@ test("cost: unchanged without cache tokens, 0.1x for reads and 1.25x for writes"
 function tracingHarness() {
   const rows = [], pending = [], pricingCalls = [];
   const stubs = {
+    "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("Unexpected network request"); } },
     "@vercel/functions": { waitUntil: (promise) => pending.push(promise) },
     "./aiUsage": { logAiUsage: async (row) => { rows.push(row); } },
     "@/lib/ai/prompts/registry": registry,

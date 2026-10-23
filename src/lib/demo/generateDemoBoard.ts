@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { createGateway, generateText, Output } from "ai";
 import { z } from "zod";
 
@@ -92,6 +93,7 @@ export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
   const claude = await backgroundClaudeModelEnabled(null);
   const model = createGateway({ apiKey })(claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL);
   const { output } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model,
     output: Output.object({ schema: BoardSchema }),
     maxOutputTokens: 4096,

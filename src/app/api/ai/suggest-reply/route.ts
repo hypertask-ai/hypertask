@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
@@ -141,6 +142,7 @@ async function generateSuggestion(task: NonNullable<ReplyContext>, userId: numbe
     userId,
   });
   const { text } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model: selected.model,
     providerOptions: selected.providerOptions,
     ...selected.settings,
