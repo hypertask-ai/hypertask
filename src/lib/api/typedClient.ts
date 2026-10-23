@@ -408,7 +408,7 @@ export async function setNotificationSeen(query: notificationWrites.Notification
 
 export async function toggleNotificationArchive(query: notificationWrites.NotificationArchiveQuery, headers: Record<string, string>) {
   const route = notificationArchiveRoute;
-  const response = await fetch(`${route.path()}?id=${query.id}&taskId=${query.taskId}&userId=${query.userId}&type=${query.type}${query.tutorial ? "&tutorial=1" : ""}`, {
+  const response = await fetch(`${route.path()}?id=${query.id}&taskId=${query.taskId}&userId=${query.userId}&type=${query.type}${query.tutorial ? "&tutorial=1" : ""}${query.intent ? "&intent=archive" : ""}`, {
     method: route.method,
     headers: { ...headers, "X-Hypertask-Client": "htpr-6925" },
   });

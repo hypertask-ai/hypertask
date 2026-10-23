@@ -288,8 +288,9 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       userId: currentUser.id,
       type: notification.type,
       ...(tutorialArchive ? { tutorial: 1 } : {}),
+      intent: "archive",
     }, realtimeEchoHeaders()) : await fetch(
-      `/api/notifications/markAsDone?id=${notification.id}&taskId=${notification.taskId}&userId=${currentUser.id}&type=${notification.type}${tutorialArchive ? "&tutorial=1" : ""}`,
+      `/api/notifications/markAsDone?id=${notification.id}&taskId=${notification.taskId}&userId=${currentUser.id}&type=${notification.type}${tutorialArchive ? "&tutorial=1" : ""}&intent=archive`,
       {
         method: "GET",
         headers: realtimeEchoHeaders(),
