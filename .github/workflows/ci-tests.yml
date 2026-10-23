@@ -114,7 +114,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         with:
-          node-version: 24
+          node-version: ^24.22.1
           check-latest: true
 
 
@@ -415,7 +415,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         with:
-          node-version: 24
+          node-version: ^24.22.1
           check-latest: true
           cache: npm
       # YPER4-252: a layout lock baseline or ratchet only changes with the ticket where Valentin
@@ -584,7 +584,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24
+          node-version: ^24.22.1
           check-latest: true
 
       - name: Warn about failed production tests
@@ -629,7 +629,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24
+          node-version: ^24.22.1
           check-latest: true
 
       - name: Verify production CLI parity inventory

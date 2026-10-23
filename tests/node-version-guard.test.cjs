@@ -37,7 +37,22 @@ test("the guard compares the repository workflows without mistaking its own outp
     file,
     content: fs.readFileSync(path.join(".github/workflows", file), "utf8"),
   }));
-  assert.deepEqual(compareNodeVersions("24.x", "24.x", inputs), []);
+  const { minimum } = JSON.parse(fs.readFileSync("src/lib/runtime/nodeSecurityFloor.json", "utf8"));
+  assert.deepEqual(compareNodeVersions("24.x", "24.x", inputs, minimum), []);
+});
+
+test("YPER4-614: a pin whose lowest version is below the security floor is refused, because a failed manifest lookup falls back to the runner cache", () => {
+  for (const pin of ["24", "24.x", "\"24\"", "^24.21.0", "~24.22.0", "24.21.9"]) {
+    const content = `jobs: {test: {steps: [{with: {node-version: ${pin}, check-latest: true}}]}}`;
+    assert.match(compareNodeVersions("24.x", "24.x", [{ file: "old.yml", content }], "24.22.1").join("\n"), /old.yml.*pin \^24\.22\.1 so a failed version lookup cannot fall back/, pin);
+  }
+});
+
+test("YPER4-614: pins at or above the security floor are still allowed", () => {
+  for (const pin of ["^24.22.1", "\"^24.22.1\"", "^24.23.0", "24.22.1", "~24.22.4"]) {
+    const content = `jobs: {test: {steps: [{with: {node-version: ${pin}, check-latest: true}}]}}`;
+    assert.deepEqual(compareNodeVersions("24.x", "24.x", [{ file: "new.yml", content }], "24.22.1"), [], pin);
+  }
 });
 
 test("comments and unrelated numeric inputs do not count", () => {

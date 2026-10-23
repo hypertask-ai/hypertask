@@ -472,7 +472,7 @@ jobs:
         if: steps.provisioned.outputs.ok == 'true' && steps.setup-checkout.outcome == 'success'
         continue-on-error: true
         with:
-          node-version: 24
+          node-version: ^24.22.1
           check-latest: true
           cache: npm
 
@@ -961,7 +961,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24
+          node-version: ^24.22.1
           check-latest: true
       - name: Freeze merging and revert the confirmed failed release
         env:

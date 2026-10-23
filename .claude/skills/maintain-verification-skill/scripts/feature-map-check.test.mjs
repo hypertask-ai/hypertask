@@ -348,7 +348,7 @@ test('GitHub workflow and policy keep the tiny check free, pinned, scoped and no
   for (const scope of ['.claude/skills/maintain-verification-skill/**', '.claude/skills/verify-qa/reference/feature-map/**', '.github/workflows/feature-map-weekly.yml']) assert.ok(workflow.includes(`- '${scope}'`));
   assert.match(workflow, /permissions:\n  contents: read\n/);
   assert.match(workflow, /runs-on: ubuntu-latest\n    timeout-minutes: 5/);
-  assert.match(workflow, /node-version: 24\n          check-latest: true/);
+  assert.match(workflow, /node-version: \^24\.\d+\.\d+\n          check-latest: true/);
   assert.match(workflow, /persist-credentials: false/);
   assert.doesNotMatch(workflow, /secrets\.|npm |hax |vcc |self-hosted/);
   const actions = [...workflow.matchAll(/uses: ([^@\s]+)@([a-f0-9]{40})/g)];
