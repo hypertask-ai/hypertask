@@ -142,10 +142,12 @@ test("still refused: a yes for 128 Done tasks does not archive Todo tasks", asyn
   const redis = new MemorySetRedis();
   await previewAll(redis, doneTaskIds, [50, 50, 28]);
 
-  const yes = new Set();
-  assert.equal(await updateCall(redis, todoTaskIds, { confirmed: true, request: yes }), "preview");
+  assert.equal(await updateCall(redis, todoTaskIds, { confirmed: true, request: new Set() }), "preview");
+
+  const mixedRedis = new MemorySetRedis();
+  await previewAll(mixedRedis, doneTaskIds, [50, 50, 28]);
   assert.equal(
-    await updateCall(redis, [...doneTaskIds.slice(0, 10), todoTaskIds[0]], { confirmed: true, request: new Set() }),
+    await updateCall(mixedRedis, [...doneTaskIds.slice(0, 10), todoTaskIds[0]], { confirmed: true, request: new Set() }),
     "preview"
   );
 });
