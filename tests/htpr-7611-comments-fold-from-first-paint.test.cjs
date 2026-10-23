@@ -73,7 +73,7 @@ test("still allowed: new comments and a #comment link still open on first paint"
 
 test("the ticket hook reads the folded setting through the helper", () => {
   const source = read(globalStatesFile);
-  assert.match(source, /const foldFromFirstPaint = useFlag\(HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG\);/);
+  assert.match(source, /const foldFromFirstPaint = foldFlagOn \|\| !foldFlagLoaded;/);
   assert.match(source, /serverStacked: stack\?\.stack,/);
   assert.match(source, /preferencesLoaded: userPreferencesLoadedAt > 0,/);
   assert.match(source, /stackData: commentsStacked,/);
@@ -86,6 +86,14 @@ test("the first seen pass uses the same setting without adding a dependency that
   const updateSeen = source.slice(source.indexOf("const updateSeen = useCallback"), source.indexOf("const updateStackFromSidebar"));
   const deps = updateSeen.slice(updateSeen.lastIndexOf("}, ["));
   assert.doesNotMatch(deps, /stackData|commentsStacked/);
+});
+
+test("ticket pages have no flag snapshot, so both hooks treat the fix as on until flags load and as Off only once loaded", () => {
+  for (const file of [globalStatesFile, commentsHookFile]) {
+    const source = read(file);
+    assert.match(source, /import \{ useFlag, useFlagLoaded \} from "@\/hooks\/useFlag";/, file);
+    assert.match(source, /const foldFlagOn = useFlag\(HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG\);\n  const foldFlagLoaded = useFlagLoaded\(HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG\);\n  const foldFromFirstPaint = foldFlagOn \|\| !foldFlagLoaded;/, file);
+  }
 });
 
 test("flag ships as a bugfix on Everyone", () => {
