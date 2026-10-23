@@ -27,7 +27,7 @@ async function expectOpenInFlow(page: Page, item: Item, counter: RegExp) {
 }
 
 async function sendComment(page: Page, text: string) {
-  const editor = page.locator('[data-comment-editor] .ProseMirror, .ProseMirror[contenteditable="true"]').last()
+  const editor = page.getByTestId('comment-composer').locator('.ProseMirror[contenteditable="true"]')
   await expect(editor).toBeVisible()
   await expect.poll(async () => {
     await editor.click()

@@ -36,7 +36,7 @@ const inFlow = () => new URL(page.url()).searchParams.get('inboxFlow') === 'true
 const waitForMove = (from) => page.waitForURL((url) => url.pathname !== from, { timeout: 15_000 }).then(() => true, () => false);
 const blurAndPress = async (key) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press(key); };
 async function send(text) {
-  const editor = page.locator('[data-comment-editor] .ProseMirror, .ProseMirror[contenteditable="true"]').last();
+  const editor = page.getByTestId('comment-composer').locator('.ProseMirror[contenteditable="true"]');
   await editor.click();
   await page.keyboard.insertText(text);
   await page.keyboard.press('Control+Enter');
