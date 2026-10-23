@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { Agent, request as undiciRequest } from 'undici'
 import prisma from '@/lib/prisma'
+import { openWebhookSigningKey } from '@/lib/webhooks/signingKeyStore'
 import { signWebhookBody } from './sign'
 import { resolveSafeAddresses } from './ssrfGuard'
 import type { WebhookDelivery } from './events'
@@ -25,6 +26,17 @@ export async function postSignedWebhook(input: {
   body: string
 }): Promise<SignedWebhookResult> {
   const startedAt = Date.now()
+  let secret: string
+  try {
+    secret = openWebhookSigningKey(input.secret)
+  } catch {
+    return {
+      ok: false,
+      statusCode: null,
+      error: 'Webhook signing key is unavailable',
+      durationMs: Date.now() - startedAt,
+    }
+  }
   const safe = await resolveSafeAddresses(input.url)
   if (!safe.ok) {
     return {
@@ -36,7 +48,7 @@ export async function postSignedWebhook(input: {
   }
   const pinned = safe.addresses[0]
   const timestamp = Math.floor(Date.now() / 1000).toString()
-  const signature = signWebhookBody(input.secret, `${timestamp}.${input.body}`)
+  const signature = signWebhookBody(secret, `${timestamp}.${input.body}`)
 
   const agent = new Agent({
     connect: {
