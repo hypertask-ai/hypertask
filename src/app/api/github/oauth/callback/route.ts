@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   const principal = await getGithubConnectPrincipal(request);
   if (principal.status !== "allowed") return refusePrincipal(principal);
 
-  const config = getGithubAppConfig();
+  const config = await getGithubAppConfig();
   if (!config) return finishAttempt(request, null, { error: "not_configured" });
 
   const params = request.nextUrl.searchParams;

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   const projectId = await readProjectId(request);
   if (projectId === null) return noStore({ error: "A board projectId is required" }, 400);
 
-  const config = getGithubAppConfig();
+  const config = await getGithubAppConfig();
   if (!config) return noStore({ error: "GitHub is not configured" }, 503);
 
   const admin = await findBoardGithubAdmin(principal.userId, projectId);
