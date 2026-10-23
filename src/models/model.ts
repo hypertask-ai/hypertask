@@ -732,6 +732,7 @@ export interface QueryParams {
 }
 
 export interface IFCMReqBody {
+  taskId: number;
   devices: any[];
   to?: string;
   type: string;

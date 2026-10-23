@@ -199,6 +199,7 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
         notificationBody:`${(reaction.comment.text ?? "").replace(/<[^>]+>/g, '')}`,
         devices,
         payload:"",
+        taskId:reaction.taskId,
         taskTitle:reaction.comment.taskTitle,
         afterAppDomain}
 

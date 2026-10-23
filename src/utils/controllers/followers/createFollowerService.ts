@@ -161,6 +161,7 @@ export async function createFollowerService(params: {
         notificationBody: newFollower.task.title,
         devices: devices,
         payload: newFollower,
+        taskId,
         taskTitle: newFollower.task.title,
         afterAppDomain: `detail/project-${newFollower.task.projectId}/${newFollower.task.uniqueIndex}`,
       };
