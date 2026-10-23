@@ -67,12 +67,28 @@ function removalFixture({ mode = 'EVERYONE', before: original, after, call = 'us
   };
 }
 
+const removedFlags = async (fixture) => (await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources);
+const withNewComponent = (fixture) => ({ ...fixture, files: [...fixture.files, added] });
+
+async function assertRemovalProven(fixture) {
+  assert.deepEqual(await removedFlags(fixture), ['htpr-1-panel']);
+  assert.match((await decision(fixture)).description, /^Flag removal only/);
+}
+
+async function assertRemovalUnproven(fixture) {
+  assert.deepEqual(await removedFlags(fixture), []);
+  assert.match((await decision(fixture)).description, /^No new component file/);
+  const withComponent = withNewComponent(fixture);
+  assert.equal((await decision(withComponent)).state, 'failure');
+  assert.equal((await decision({ ...withComponent, comments: [wireframe(), yes()] })).state, 'success');
+}
+
 test('EVERYONE flag removal keeps the existing flag-on JSX and needs no wireframe', async () => {
   assert.deepEqual(await decision(removalFixture()), {
     state: 'success', description: 'Flag removal only: htpr-1-panel already on for everyone', details: [],
   });
   const server = removalFixture({ call: 'await isFeatureEnabled(HTPR_1_PANEL_FLAG, userId)', module: '@/lib/flags' });
-  assert.equal((await decision(server)).state, 'success');
+  await assertRemovalProven(server);
 });
 
 for (const [context, open, close] of [
@@ -85,7 +101,7 @@ for (const [context, open, close] of [
 ]) {
   test(`flag-like wrapper in ${context} cannot exempt a literal-text rewrite`, async () => {
     const clean = removalFixture();
-    assert.equal((await decision(clean)).state, 'success');
+    await assertRemovalProven(clean);
     const before = clean.sources['src/components/Panel.tsx']
       .replace('    <main>', `    ${open}`)
       .replace('    </main>', `    ${close}\n    </main>`);
@@ -93,9 +109,7 @@ for (const [context, open, close] of [
       .replace(/^  const panelEnabled = .*\n/m, '')
       .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
         '      <button>Existing action</button>\n');
-    const refused = removalFixture({ before, after });
-    assert.equal((await decision(refused)).state, 'failure');
-    assert.equal((await decision({ ...refused, comments: [wireframe(), yes()] })).state, 'success');
+    await assertRemovalUnproven(removalFixture({ before, after }));
   });
 }
 
@@ -106,8 +120,8 @@ test('the built-in scanner exempts real removals with no TypeScript available', 
     const withoutTypescript = await import(`${pathToFileURL(path.join(root, '.github/scripts/ux-signoff-gate.mjs'))}?no-typescript`);
     const fixture = removalFixture();
     assert.deepEqual(withoutTypescript.flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), ['htpr-1-panel']);
-    assert.equal(withoutTypescript.evaluate(input(removalFixture())).state, 'success');
-    assert.equal(withoutTypescript.evaluate(input({ ...removalFixture(), comments: [wireframe(), yes()] })).state, 'success');
+    assert.match(withoutTypescript.evaluate(input(removalFixture())).description, /^Flag removal only/);
+    assert.match(withoutTypescript.evaluate(input({ ...removalFixture(), comments: [wireframe(), yes()] })).description, /^Flag removal only/);
   } finally {
     if (original === undefined) delete process.env.FEATURE_FLAG_TYPESCRIPT_PATH;
     else process.env.FEATURE_FLAG_TYPESCRIPT_PATH = original;
@@ -123,7 +137,7 @@ test('the scanner keeps quoted JSX text, ordinary strings, comments and expressi
     .replace(/^  const panelEnabled = .*\n/m, '')
     .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
       '      <button>Existing action</button>\n');
-  assert.equal((await decision(removalFixture({ before, after }))).state, 'success');
+  await assertRemovalProven(removalFixture({ before, after }));
 });
 
 for (const [context, rewrite] of [
@@ -141,7 +155,7 @@ for (const [context, rewrite] of [
       .replace(/^  const panelEnabled = .*\n/m, '')
       .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
         '      <button>Existing action</button>\n');
-    assert.equal((await decision(removalFixture({ before, after }))).state, 'failure');
+    await assertRemovalUnproven(removalFixture({ before, after }));
   });
 }
 
@@ -153,11 +167,11 @@ test('a canonical wrapper can also be a plain expression statement, not an objec
     .replace(/^  const panelEnabled = .*\n/m, '')
     .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
       '      <button>Existing action</button>\n');
-  assert.equal((await decision(removalFixture({ before, after }))).state, 'success');
-  assert.equal((await decision(removalFixture({
+  await assertRemovalProven(removalFixture({ before, after }));
+  await assertRemovalUnproven(removalFixture({
     before: before.replace('      {panelEnabled', '  const value = (\n      {panelEnabled').replace('      )}\n', '      )}\n  );\n'),
     after: after.replace('      <button>', '  const value = (\n      <button>').replace('</button>\n', '</button>\n  );\n'),
-  }))).state, 'failure');
+  }));
 });
 
 test('a wrapper in a JavaScript comment is not a plain expression statement', async () => {
@@ -171,17 +185,16 @@ test('a wrapper in a JavaScript comment is not a plain expression statement', as
       .replace(/^  const panelEnabled = .*\n/m, '')
       .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
         '      <button>Existing action</button>\n');
-    assert.equal((await decision(removalFixture({ before, after }))).state, 'failure');
+    await assertRemovalUnproven(removalFixture({ before, after }));
   }
 });
 
 for (const mode of ['OWNER_ONLY', 'OWNER_AND_QA', 'OFF', undefined]) {
-  test(`removal of a ${mode ?? 'missing'} production mode still needs the wireframe yes`, async () => {
-    assert.equal((await decision(removalFixture())).state, 'success');
+  test(`removal of a ${mode ?? 'missing'} production mode is not proven; a new component still needs the wireframe yes`, async () => {
+    await assertRemovalProven(removalFixture());
     const refused = removalFixture({ mode });
     if (mode === undefined) delete refused.productionModes.modes['htpr-1-panel'];
-    assert.equal((await decision(refused)).state, 'failure');
-    assert.equal((await decision({ ...refused, comments: [wireframe(), yes()] })).state, 'success');
+    await assertRemovalUnproven(refused);
   });
 }
 
@@ -197,11 +210,10 @@ for (const change of [
   (fixture) => { fixture.files.push({ filename: 'src/lib/unrelated.ts', status: 'modified' }); },
 ]) {
   test(`unproven removal fails closed: ${change.toString()}`, async () => {
-    assert.equal((await decision(removalFixture())).state, 'success');
+    await assertRemovalProven(removalFixture());
     const refused = removalFixture();
     change(refused);
-    assert.equal((await decision(refused)).state, 'failure');
-    assert.equal((await decision({ ...refused, comments: [wireframe(), yes()] })).state, 'success');
+    await assertRemovalUnproven(refused);
   });
 }
 
@@ -221,9 +233,9 @@ test('complete context hunks prove the same removal; truncated or misplaced hunk
     '+      <button>Existing action</button>',
     '     </main>',
   ].join('\n') };
-  assert.equal((await decision(fixture)).state, 'success');
+  await assertRemovalProven(fixture);
   const badPatch = fixture.files[1].patch.replace('@@ -6,5 +3,3 @@', '@@ -6,4 +3,3 @@');
-  assert.equal((await decision({ ...fixture, files: [fixture.files[0], { ...fixture.files[1], patch: badPatch }] })).state, 'failure');
+  await assertRemovalUnproven({ ...fixture, files: [fixture.files[0], { ...fixture.files[1], patch: badPatch }] });
 });
 
 for (const change of [
@@ -234,7 +246,7 @@ for (const change of [
 ]) {
   test(`ambiguous or non-flag-on branch keeps sign-off: ${change.toString()}`, async () => {
     const clean = removalFixture();
-    assert.equal((await decision(clean)).state, 'success');
+    await assertRemovalProven(clean);
     const filename = 'src/components/Panel.tsx';
     const before = change(clean.sources[filename]);
     const oldLines = before.slice(0, -1).split('\n');
@@ -242,8 +254,7 @@ for (const change of [
     clean.sources[filename] = before;
     clean.files[1] = { ...clean.files[1], deletions: oldLines.length,
       patch: [`@@ -1,${oldLines.length} +1,${newRows.length} @@`, ...oldLines.map((line) => `-${line}`), ...newRows].join('\n') };
-    assert.equal((await decision(clean)).state, 'failure');
-    assert.equal((await decision({ ...clean, comments: [wireframe(), yes()] })).state, 'success');
+    await assertRemovalUnproven(clean);
   });
 }
 
@@ -252,27 +263,26 @@ test('a canonical ternary retains the flag-on branch, never the null/off branch'
   const filename = 'src/components/Panel.tsx';
   fixture.sources[filename] = fixture.sources[filename].replace('{panelEnabled && (', '{panelEnabled ? (').replace('      )}', '      ) : null}');
   fixture.files[1].patch = fixture.files[1].patch.replace('-      {panelEnabled && (', '-      {panelEnabled ? (').replace('-      )}', '-      ) : null}');
-  assert.equal((await decision(fixture)).state, 'success');
+  await assertRemovalProven(fixture);
   const after = fixture.files[1].patch.replace('+      <button>Existing action</button>', '+      null');
-  assert.equal((await decision({ ...fixture, files: [fixture.files[0], { ...fixture.files[1], patch: after }] })).state, 'failure');
+  await assertRemovalUnproven({ ...fixture, files: [fixture.files[0], { ...fixture.files[1], patch: after }] });
 });
 
-test('flag cleanup mixed with new JSX or a new user-facing string is not removal-only', async () => {
+test('flag cleanup mixed with new JSX, a new user-facing string or a new component file is not removal-only', async () => {
   const clean = removalFixture();
-  assert.equal((await decision(clean)).state, 'success');
+  await assertRemovalProven(clean);
   for (const addition of ['      <aside>New visible element</aside>\n', '      New user-facing copy\n']) {
     const after = 'export default async function Panel() {\n  return (\n    <main>\n      <button>Existing action</button>\n' + addition + '    </main>\n  );\n}\n';
-    const mixed = removalFixture({ after });
-    assert.equal((await decision(mixed)).state, 'failure');
-    assert.equal((await decision({ ...mixed, comments: [wireframe(), yes()] })).state, 'success');
+    await assertRemovalUnproven(removalFixture({ after }));
   }
-  const mixed = { ...clean, files: [...clean.files, added] };
+  const mixed = withNewComponent(clean);
+  assert.deepEqual(await removedFlags(mixed), []);
   assert.equal((await decision(mixed)).state, 'failure');
   assert.equal((await decision({ ...mixed, comments: [wireframe(), yes({ text: 'yes\nNew elements: ExamplePanel' })] })).state, 'success');
 });
 
 test('new visible UI without a flag removal still needs the wireframe yes', async () => {
-  assert.equal((await decision(removalFixture())).state, 'success');
+  await assertRemovalProven(removalFixture());
   const newUi = { files: [added], productionModes: { modes: { 'htpr-1-panel': 'EVERYONE' } } };
   assert.equal((await decision(newUi)).state, 'failure');
   assert.equal((await decision({ ...newUi, comments: [wireframe(), yes({ text: 'yes\nNew elements: ExamplePanel' })] })).state, 'success');
@@ -355,7 +365,9 @@ test('a Question thumbs up is still refused from an agent, before or at its last
   const noNewElements = htpr7518();
   noNewElements.files = [modified];
   noNewElements.comments[0].text = unnamed.comments[0].text;
-  assert.equal((await decision(noNewElements)).state, 'failure');
+  const reused = await decision(noNewElements);
+  assert.equal(reused.state, 'success');
+  assert.match(reused.description, /No new component file/);
 });
 
 test('a Question thumbs up approves only an affirmative Question tied to the current wireframe', async () => {
@@ -496,7 +508,7 @@ test('"agreed" is a yes word; HTPR-7263’s "Agreed but ... new ticket" still ne
 });
 
 test('claude.ai artifact wireframes accept only Valentin’s own human agreement', async () => {
-  const artifact = wireframe({ text: 'https://claude.ai/artifact/YVeR2xUWw7KcWFNH8YtEbf', agent: { displayName: 'Runner 8' } });
+  const artifact = wireframe({ text: '<p>https://claude.ai/artifact/YVeR2xUWw7KcWFNH8YtEbf</p><p>New elements: ExamplePanel</p>', agent: { displayName: 'Runner 8' } });
   assert.equal((await decision({ comments: [artifact, yes({ text: 'Agree to ux though' })] })).state, 'success');
   for (const marker of ['agent', 'agent_display_name', 'agentId', 'isAgent']) {
     assert.equal((await decision({ comments: [artifact, yes({ text: 'Agree to ux though', [marker]: 'Runner 8' })] })).state, 'failure');
@@ -546,10 +558,11 @@ test('new elements need normalized names in approved wireframes or approving hum
   assert.equal((await decision({ files: [added], comments: [wireframe({ text: approved.text }), yes({ text: 'maybe ExamplePanel' })] })).state, 'failure');
 });
 
-test('copied components need names; renamed components, CSS and app files need only wireframes', async () => {
+test('copied components need names; renamed components, CSS and app files need no names and no wireframe', async () => {
   assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [{ ...added, status: 'copied' }] })).state, 'failure');
   for (const file of [{ ...added, status: 'renamed' }, { ...added, filename: 'src/components/Panel.css' }, { ...added, filename: 'src/app/inbox/page.tsx' }]) {
     assert.equal((await decision({ files: [file], comments: [wireframe(), yes()] })).state, 'success');
+    assert.match((await decision({ files: [file] })).description, /No new component file/);
   }
   const result = await decision({ files: Array.from({ length: 8 }, (_, i) => ({ ...added, filename: `src/components/VeryLongComponentName${i}.jsx` })) });
   assert.equal(result.state, 'failure');
@@ -615,7 +628,7 @@ const commentsFetch = async (url) => new URL(String(url)).pathname === '/api/mcp
 
 test('PR 1771 reads the API parent of HTPR-7549 and accepts Valentin’s artifact agreement on HTPR-7511', async () => {
   const { run } = await gate;
-  const fixture = apiFixture({ prs: [pr(1771, { title: 'HTPR-7549 [FEATURE] UI' })] });
+  const fixture = apiFixture({ prs: [pr(1771, { title: 'HTPR-7549 [FEATURE] UI' })], files: [modified, added] });
   const requests = [];
   const output = [];
   const fetchImpl = async (url, options) => {
@@ -626,7 +639,7 @@ test('PR 1771 reads the API parent of HTPR-7549 and accepts Valentin’s artifac
     if (parsed.pathname === '/api/mcp/tasks') return ticketResponse(url, 'HTPR-7511');
     assert.equal(parsed.pathname, '/api/mcp/comments');
     return response({ comments: parsed.searchParams.get('ticket_number') === 'HTPR-7511'
-      ? [wireframe({ text: 'https://claude.ai/artifact/YVeR2xUWw7KcWFNH8YtEbf', agent: { displayName: 'Runner 8' } }), yes({ text: 'Agree to ux though' })] : [] });
+      ? [wireframe({ text: '<p>https://claude.ai/artifact/YVeR2xUWw7KcWFNH8YtEbf</p><p>New elements: ExamplePanel</p>', agent: { displayName: 'Runner 8' } }), yes({ text: 'Agree to ux though' })] : [] });
   };
   assert.equal(await run(['--pr', '1771'], { env, github: fixture.github, fetchImpl, log: (line) => output.push(JSON.parse(line)) }), 0);
   assert.equal(output[0].state, 'success');
@@ -640,7 +653,7 @@ test('PR 1771 reads the API parent of HTPR-7549 and accepts Valentin’s artifac
 
 test('approved child needs no parent read, and missing or inaccessible parent metadata fails closed', async () => {
   const { run } = await gate;
-  const fixture = () => apiFixture({ prs: [pr(1, { title })] });
+  const fixture = () => apiFixture({ prs: [pr(1, { title })], files: [modified, added] });
   assert.equal(await run(['--pr', '1'], { env, github: fixture().github, fetchImpl: async (url) => {
     assert.equal(new URL(String(url)).pathname, '/api/mcp/comments');
     return response({ comments: [wireframe(), yes()] });
@@ -661,7 +674,7 @@ test('approved child needs no parent read, and missing or inaccessible parent me
 test('parent comments are paginated and shared between PRs without reading grandparents', async () => {
   const { run } = await gate;
   const prs = [pr(1, { title }), pr(2, { title: 'HTPR-7073 [FEATURE] UI' })];
-  const fixture = apiFixture({ prs });
+  const fixture = apiFixture({ prs, files: [modified, added] });
   const requests = [];
   const fetchImpl = async (url) => {
     const parsed = new URL(String(url));
@@ -827,8 +840,8 @@ test('reconcile error reasons allow only safe GitHub messages and missing head S
 
 test('read-only CLI prints success or failure and never posts statuses', async () => {
   const { run } = await gate;
-  for (const [title, expected] of [['HTPR-1 [BUGFIX] Repair', 0], ['HTPR-1 [FEATURE] UI', 1]]) {
-    const fixture = apiFixture({ prs: [pr(1, { title })] });
+  for (const [title, files, expected] of [['HTPR-1 [BUGFIX] Repair', [modified], 0], ['HTPR-1 [FEATURE] UI', [modified, added], 1]]) {
+    const fixture = apiFixture({ prs: [pr(1, { title })], files });
     const output = [];
     assert.equal(await run(['--pr', '1'], { env, github: fixture.github, fetchImpl: commentsFetch, log: (line) => output.push(JSON.parse(line)) }), expected);
     assert.equal(output[0].state, expected ? 'failure' : 'success');
@@ -877,12 +890,12 @@ test('missing secret only affects gated PRs and metadata errors leave heads unto
   const fixture = apiFixture({ prs: [pr(1), pr(2)], prError: 1 });
   assert.equal(await run(['--reconcile'], { env, github: fixture.github, fetchImpl: commentsFetch, log: () => {} }), 2);
   assert.deepEqual(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['success']);
-  const missing = apiFixture({ prs: [pr(1, { title })] });
+  const missing = apiFixture({ prs: [pr(1, { title })], files: [modified, added] });
   assert.equal(await run(['--reconcile', '--pr', '1'], { env: { ...env, MCP_TOKEN: '' }, github: missing.github, fetchImpl: () => assert.fail('must not fetch'), log: () => {} }), 2);
   const posted = missing.calls.find((call) => call.method === 'POST');
   assert.equal(posted.body.state, 'error');
   assert.match(posted.body.description, /HYPERTASK_MCP_TOKEN.*configure/);
-  const readFailure = apiFixture({ prs: [pr(1, { title })] });
+  const readFailure = apiFixture({ prs: [pr(1, { title })], files: [modified, added] });
   assert.equal(await run(['--reconcile'], { env, github: readFailure.github, fetchImpl: async () => response({}, 503), log: () => {} }), 0);
   assert.deepEqual(readFailure.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['pending']);
 });
@@ -900,8 +913,10 @@ test('incomplete files, status publication errors and changed PR metadata do not
   const { run } = await gate;
   const incomplete = apiFixture({ prs: [pr(1, { changed_files: 2 })] });
   assert.equal(await run(['--reconcile'], { env, github: incomplete.github, fetchImpl: commentsFetch, log: () => {} }), 2);
-  const race = apiFixture({ currentPr: pr(1, { title: 'HTPR-1 [FEATURE] UI' }) });
-  assert.equal(await run(['--reconcile'], { env, github: race.github, fetchImpl: commentsFetch, log: () => {} }), 0);
+  const race = apiFixture({ files: [modified, added], currentPr: pr(1, { title: 'HTPR-1 [FEATURE] UI' }) });
+  const namedByYesOnly = async (url) => new URL(String(url)).pathname === '/api/mcp/tasks'
+    ? ticketResponse(url) : response({ comments: [yes({ text: 'yes\nNew elements: ExamplePanel' })] });
+  assert.equal(await run(['--reconcile'], { env, github: race.github, fetchImpl: namedByYesOnly, log: () => {} }), 0);
   assert.equal(race.calls.find((call) => call.method === 'POST').body.state, 'failure');
   const failed = apiFixture();
   assert.equal(await run(['--reconcile'], { env, github: (endpoint, options) => {
@@ -949,7 +964,7 @@ test('item 1: all agent attribution markers reject comments and reactions', asyn
 
 test('item 2: latest wireframe and newest subsequent human verdict decide', async () => {
   const old = wireframe({ reactions: [{ userId: 6, emoji: '👍' }] });
-  const latest = wireframe({ id: 3, text: 'https://hypertask.app/wireframes/replacement', createdAt: '2026-10-10T12:02:00Z' });
+  const latest = wireframe({ id: 3, text: 'https://hypertask.app/wireframes/replacement\nNew elements: ExamplePanel', createdAt: '2026-10-10T12:02:00Z' });
   assert.equal((await decision({ comments: [latest, yes(), old] })).state, 'failure');
   const approved = { ...latest, reactions: [{ userId: 6, emoji: '✅' }] };
   assert.equal((await decision({ comments: [old, approved] })).state, 'success');
@@ -988,6 +1003,7 @@ test('item 4: exemptions precede ticket reads and secret checks', async () => {
     ['HTPR-1 [BUGFIX] Repair', [modified]],
     ['HTPR-1 [BUGFIX] Remove screen', [{ ...modified, status: 'removed' }]],
     ['YPER4-254 [INFRA] Refactor', [modified]],
+    [title, [modified]],
   ]) {
     for (const MCP_TOKEN of ['', env.MCP_TOKEN]) {
       const fixture = apiFixture({ prs: [pr(1, { title: prTitle })], files });
@@ -1038,7 +1054,7 @@ test('item 7: reconciliation caches, caps reads including pages and stops after 
   const { run } = await gate;
   const prs = Array.from({ length: 124 }, (_, i) => pr(i + 1, { title: `HTPR-${Math.max(1, i)} [FEATURE] UI` }));
   const execute = async (fetchImpl) => {
-    const fixture = apiFixture({ prs });
+    const fixture = apiFixture({ prs, files: [modified, added] });
     const logs = [];
     assert.equal(await run(['--reconcile'], { env, github: fixture.github, fetchImpl, log: (line) => logs.push(JSON.parse(line)) }), 0);
     return { posts: fixture.calls.filter((call) => call.method === 'POST'), logs };
@@ -1063,7 +1079,7 @@ test('item 7: reconciliation caches, caps reads including pages and stops after 
   assert.equal(paged.posts.length, 124);
   assert.deepEqual([...new Set(paged.posts.map((post) => post.body.state))], ["pending"]);
   assert.equal(paged.logs.filter((line) => line.state === 'deferred').length, 124);
-  const mixed = apiFixture({ prs: [pr(1, { title }), pr(2, { title: 'HTPR-2 [FEATURE] UI' }), pr(3)] });
+  const mixed = apiFixture({ prs: [pr(1, { title }), pr(2, { title: 'HTPR-2 [FEATURE] UI' }), pr(3, { user: { login: 'dependabot[bot]' } })], files: [modified, added] });
   reads = 0;
   assert.equal(await run(['--reconcile'], { env, github: mixed.github, fetchImpl: async () => { reads++; return response({}, 429); }, log: () => {} }), 0);
   assert.equal(reads, 1);
@@ -1146,7 +1162,7 @@ test('status cursor: every PR is read within ceil(reads / budget) sweeps and sta
       }
       const page = Number(new URL(`https://fixture/${endpoint}`).searchParams.get('page'));
       if (/\/pulls\?/.test(endpoint)) return prs.slice((page - 1) * 100, page * 100);
-      if (/\/files\?/.test(endpoint)) return [modified];
+      if (/\/files\?/.test(endpoint)) return [modified, added];
       if (/\/statuses\?/.test(endpoint)) return page === 1 ? (store.get(endpoint.split('/')[4]) ?? []) : [];
       return prs.find((item) => item.number === Number(endpoint.split('/').at(-1)));
     };
@@ -1176,11 +1192,11 @@ test('status cursor: every PR is read within ceil(reads / budget) sweeps and sta
 test('a Hypertask outage turns an earlier green to pending; budget exhaustion keeps it', async () => {
   const { run } = await gate;
   const green = [{ context: 'ux-signoff', state: 'success', description: 'Wireframe and new elements have UX signoff', updated_at: new Date().toISOString() }];
-  const outage = apiFixture({ prs: [pr(1, { title: 'HTPR-2 [FEATURE] UI' })], statuses: green });
+  const outage = apiFixture({ prs: [pr(1, { title: 'HTPR-2 [FEATURE] UI' })], files: [modified, added], statuses: green });
   await run(['--reconcile'], { env, github: outage.github, fetchImpl: async () => response({}, 503), log: () => {} });
   assert.deepEqual(outage.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['pending']);
   const prs = Array.from({ length: 121 }, (_, i) => pr(i + 1, { title: `HTPR-${i + 1} [FEATURE] UI`, head: { sha: (i + 1).toString(16).padStart(40, '0') } }));
-  const busy = apiFixture({ prs, statuses: green });
+  const busy = apiFixture({ prs, files: [modified, added], statuses: green });
   await run(['--reconcile'], { env, github: busy.github, fetchImpl: commentsFetch, log: () => {} });
   assert.equal(busy.calls.filter((call) => call.method === 'POST').length, 60);
 });
