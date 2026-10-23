@@ -602,6 +602,7 @@ async function sendAfterIntro(session, question) {
     "@/lib/aiChat/streamRefusal": {},
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
     "@/lib/aiChat/transportRetry": {},
+    "@/lib/aiModelOptions": { chatModelRequestFields: load("src/lib/aiModelOptions.ts").chatModelRequestFields },
   });
   const ref = () => ({ current: null });
   const noop = () => {};
