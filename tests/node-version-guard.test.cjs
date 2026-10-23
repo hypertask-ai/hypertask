@@ -101,7 +101,9 @@ test("CLI reads real package/workflow files and returns a failing exit on mismat
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "node-version-guard-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, ".github/workflows"), { recursive: true });
-  fs.writeFileSync(path.join(root, ".github/workflows/ci.yml"), workflows[0].content);
+  fs.writeFileSync(path.join(root, ".github/workflows/ci.yml"), workflows[0].content.replace("node-version: 24", "node-version: ^24.22.1"));
+  fs.mkdirSync(path.join(root, "src/lib/runtime"), { recursive: true });
+  fs.writeFileSync(path.join(root, "src/lib/runtime/nodeSecurityFloor.json"), JSON.stringify({ minimum: "24.22.1" }));
   const liveFile = path.join(root, "live-version");
   fs.writeFileSync(liveFile, "24.x\n");
   const script = path.resolve(".github/scripts/check-node-version.cjs");
@@ -115,6 +117,12 @@ test("CLI reads real package/workflow files and returns a failing exit on mismat
   assert.doesNotMatch(result.stdout, /guard passed/);
   fs.writeFileSync(liveFile, "");
   assert.equal(run().status, 1);
+  fs.writeFileSync(liveFile, "24.x\n");
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ engines: { node: "24.x" } }));
+  fs.writeFileSync(path.join(root, ".github/workflows/ci.yml"), workflows[0].content);
+  const stale = run();
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /pin \^24\.22\.1 so a failed version lookup cannot fall back/);
 });
 
 test("the API request alone receives the Vercel secret and missing settings fail closed", () => {
