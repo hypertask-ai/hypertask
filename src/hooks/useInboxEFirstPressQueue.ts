@@ -1,14 +1,10 @@
 import { useEffect } from "react";
 import type { QueryClient } from "@tanstack/react-query";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from "@/lib/flags/keys";
 import { REACT_QUERY_KEYS } from "@/lib/constants/constants";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 
 export function useInboxEFirstPressQueue(queryClient: QueryClient) {
-  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   useEffect(() => {
-    if (!inboxEFirstPress) return;
     let keyboard: { path: string; ready: boolean; handleKeyDown?: (event: KeyboardEvent) => void } | undefined;
     let pending: { path: string; event: KeyboardEvent } | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -75,5 +71,5 @@ export function useInboxEFirstPressQueue(queryClient: QueryClient) {
       window.removeEventListener("cached-task-detail-navigation", onNavigation);
       document.removeEventListener("keydown", onKey, true);
     };
-  }, [inboxEFirstPress, queryClient]);
+  }, [queryClient]);
 }

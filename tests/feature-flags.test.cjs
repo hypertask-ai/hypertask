@@ -396,20 +396,12 @@ test("Ctrl+J view context is permanent and its flag is gone", async () => {
   assert.equal(Object.hasOwn(snapshot.modes, "htpr-6999-ctrl-j-view-context"), false);
 });
 
-test("Inbox E first press defaults to Everyone as a bugfix and respects OFF", async () => {
-  const key = flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG;
-  assert.equal(key, "htpr-7002-inbox-e-first-press");
-  assert.equal(definitions.find((definition) => definition.key === key).kind, "bugfix");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("Inbox E first press is permanent and no longer registered", async () => {
+  assert.equal(flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, undefined);
+  assert.equal(definitions.some(definition => definition.key === "htpr-7002-inbox-e-first-press"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7002-inbox-e-first-press"), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
-  assert.equal(snapshot.modes[key], "EVERYONE");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-7002-inbox-e-first-press"), false);
 });
 
 test("phone board cold-start bugfix defaults to Everyone and respects OFF", async () => {

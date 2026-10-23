@@ -201,25 +201,27 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
   return { client, key, context, requests, pending, broadcasts, toasts, navigations, reconciliations, rows, useArchive };
 }
 
-test("removing the top inbox notification uses hydrated membership, not the incomplete cached task", async (t) => {
-  // inboxTaskSelect only carries a comment count; cached open keeps this parse frozen.
-  const flow = makeFlow(t, { ...task, _count: { comments: 3 } }, hydratedTask);
-  const outcome = flow.useArchive().navigateToNextTask(true, true);
-  assert.deepEqual(flow.toasts, [], "a visible remove action must not claim the task is absent from inbox");
-  assert.equal(outcome, "navigated");
-  assert.equal(flow.requests.length, 1);
-  const url = new URL(flow.requests[0], "https://app.hypertask.ai");
-  assert.equal(url.searchParams.get("id"), notification.id);
-  assert.equal(url.searchParams.get("taskId"), String(task.id));
-  assert.deepEqual(flow.client.getQueryData(flow.key).notifications, [], "returning to inbox must not repaint the removed item or its siblings");
-  await Promise.all(flow.pending);
-  assert.deepEqual(flow.rows.map((row) => row.status), ["Archive", "Archive", "Normal"]);
-  assert.deepEqual(flow.client.getQueryData(flow.key).notifications, []);
-  assert.equal(flow.context.currentTask._count.notifications, 0);
-  assert.deepEqual(flow.navigations, [["Back"]]);
-  assert.deepEqual(flow.reconciliations, [{ queryKey: flow.key, exact: true }]);
-  assert.equal(flow.broadcasts[0][0], 6);
-});
+for (const hydrated of [false, true]) {
+  test(`removing the top inbox notification uses ${hydrated ? "hydrated" : "cached"} membership`, async (t) => {
+    const cachedTask = { ...task, _count: { comments: 3 } };
+    const flow = makeFlow(t, cachedTask, hydrated ? hydratedTask : cachedTask);
+    const outcome = flow.useArchive().navigateToNextTask(true, true);
+    assert.deepEqual(flow.toasts, [], "a visible remove action must not claim the task is absent from inbox");
+    assert.equal(outcome, "navigated");
+    assert.equal(flow.requests.length, 1);
+    const url = new URL(flow.requests[0], "https://app.hypertask.ai");
+    assert.equal(url.searchParams.get("id"), notification.id);
+    assert.equal(url.searchParams.get("taskId"), String(task.id));
+    assert.deepEqual(flow.client.getQueryData(flow.key).notifications, [], "returning to inbox must not repaint the removed item or its siblings");
+    await Promise.all(flow.pending);
+    assert.deepEqual(flow.rows.map((row) => row.status), ["Archive", "Archive", "Normal"]);
+    assert.deepEqual(flow.client.getQueryData(flow.key).notifications, []);
+    assert.equal(flow.context.currentTask._count.notifications, 0);
+    assert.deepEqual(flow.navigations, [["Back"]]);
+    assert.deepEqual(flow.reconciliations, [{ queryKey: flow.key, exact: true }]);
+    assert.equal(flow.broadcasts[0][0], 6);
+  });
+}
 
 test("a refreshed notification id replaces the cached id when removing from a directly opened task", async (t) => {
   const staleTask = { ...hydratedTask, notifications: [{ ...notification, id: "999" }] };

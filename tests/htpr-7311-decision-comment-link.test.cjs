@@ -227,7 +227,7 @@ function createNextHarness(enabled, playlist, flow = "true", missingCurrent = fa
   const environment = {
     ...archiveNavigation, withDecisionCommentAnchor,
     tasksPlayList: playlist, currentItemInTasksPlaylist: { projectId: 15, uniqueIndex: missingCurrent ? 999 : 7311 },
-    currentTask: { id: 1, projectId: 15 }, inboxEFirstPress: false, decisionCommentLinkEnabled: enabled,
+    currentTask: { id: 1, projectId: 15 }, decisionCommentLinkEnabled: enabled,
     searchParams: new URLSearchParams(flow ? `inboxFlow=${flow}` : ""),
     moveIdxDown: () => {}, moveIdxUp: () => {}, onGoback: () => calls.push("back"),
     navigate: (mode, href) => calls.push(href),
