@@ -34,7 +34,7 @@ function setup(failure) {
     '@prisma/client': { Prisma: {} },
     '@/lib/prisma': { default: prisma },
     '@/lib/flags': { isFeatureEnabled: async () => false },
-    '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}) },
+    '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}), intersectProjectTeamScope: (where, scope) => { assert.equal(scope == null, true); return where } },
     '@/utils/controllers/projects/findPrefixAliasTasks': {},
     '@/lib/mcp/auth': auth,
     '@/lib/mcp/routeWrapper': {

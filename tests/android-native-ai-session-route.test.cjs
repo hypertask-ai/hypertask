@@ -86,7 +86,7 @@ function itemRequest(method, body) {
 
 function fixture(overrides = {}) {
   const calls = { list: [], messages: [], create: [], rename: [], remove: [], project: [] }
-  const context = { user: { id: 6 }, agentId: null }
+  const context = { user: { id: 6 }, agentId: null, teamScope: null }
   const session = { id: SESSION_ID, title: 'Synced chat', messages: [] }
   const dependencies = {
     checkRateLimit: async () => null,
@@ -132,7 +132,7 @@ test('lists a bounded account-scoped session snapshot', async () => {
   assert.equal(response.status, 200)
   assert.equal(body.total, 1)
   assert.equal(body.sessions[0].id, SESSION_ID)
-  assert.deepEqual(calls.list, [[{ user: { id: 6 }, agentId: null }, 25, 5]])
+  assert.deepEqual(calls.list, [[{ user: { id: 6 }, agentId: null, teamScope: null }, 25, 5]])
   assert.equal((await collection.GET(collectionRequest('GET', undefined, '?limit=101'))).status, 400)
 })
 
@@ -145,7 +145,7 @@ test('paginates one authorized session message history', async () => {
   assert.equal(response.status, 200)
   assert.equal(body.message_total, 0)
   assert.equal(body.message_limit, 40)
-  assert.deepEqual(calls.messages, [[{ user: { id: 6 }, agentId: null }, SESSION_ID, 40, 80]])
+  assert.deepEqual(calls.messages, [[{ user: { id: 6 }, agentId: null, teamScope: null }, SESSION_ID, 40, 80]])
   assert.deepEqual(calls.list, [])
 })
 
@@ -186,7 +186,7 @@ test('reads session history without requiring a database transaction', async () 
   const { dependencies, restore } = loadProductionDependencies(prisma)
 
   try {
-    const context = { user: { id: 6 }, agentId: null }
+    const context = { user: { id: 6 }, agentId: null, teamScope: null }
     const listed = await dependencies.list(context, 25, 5)
     const history = await dependencies.messages(context, SESSION_ID, 40, 80)
 
@@ -226,9 +226,9 @@ test('creates a deterministic session only after validating board access', async
     title: 'Offline draft',
   }))
   assert.equal(response.status, 200)
-  assert.deepEqual(calls.project, [[6, null, 2467]])
+  assert.deepEqual(calls.project, [[6, null, 2467, { user: { id: 6 }, agentId: null, teamScope: null }]])
   assert.deepEqual(calls.create, [{
-    context: { user: { id: 6 }, agentId: null },
+    context: { user: { id: 6 }, agentId: null, teamScope: null },
     userId: 6,
     agentId: null,
     id: SESSION_ID,
@@ -250,7 +250,7 @@ test('rejects valid JSON values that are not request objects', async () => {
 })
 
 test('persists the caller agent identity for an unscoped managed-agent session', async () => {
-  const agentContext = { user: { id: 6 }, agentId: 'agent-android' }
+  const agentContext = { user: { id: 6 }, agentId: 'agent-android', teamScope: null }
   const { collection, calls } = fixture({ validateAuth: async () => agentContext })
   const response = await collection.POST(collectionRequest('POST', { id: SESSION_ID }))
 
@@ -269,7 +269,7 @@ test('renames only the authenticated account session', async () => {
   const { item, props, calls } = fixture()
   const response = await item.PATCH(itemRequest('PATCH', { title: '  Release plan  ' }), props)
   assert.equal(response.status, 200)
-  assert.deepEqual(calls.rename, [[{ user: { id: 6 }, agentId: null }, SESSION_ID, 'Release plan']])
+  assert.deepEqual(calls.rename, [[{ user: { id: 6 }, agentId: null, teamScope: null }, SESSION_ID, 'Release plan']])
 })
 
 test('delete is retry-safe and account-scoped', async () => {
@@ -278,5 +278,5 @@ test('delete is retry-safe and account-scoped', async () => {
   const body = await response.json()
   assert.equal(response.status, 200)
   assert.equal(body.deleted, true)
-  assert.deepEqual(calls.remove, [[{ user: { id: 6 }, agentId: null }, SESSION_ID]])
+  assert.deepEqual(calls.remove, [[{ user: { id: 6 }, agentId: null, teamScope: null }, SESSION_ID]])
 })

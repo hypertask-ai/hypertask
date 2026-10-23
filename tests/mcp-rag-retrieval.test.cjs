@@ -69,7 +69,7 @@ test("chat and MCP import the shared board-knowledge retrieval", () => {
   assert.match(serviceSource, /agentId: ctx\.agentId/);
   assert.match(
     sharedSource,
-    /getProjectWhere\(principal\.userId, principal\.agentId\)/,
+    /getProjectWhere\(principal\.userId, principal\.agentId, principal\.teamScope\)/,
   );
 });
 

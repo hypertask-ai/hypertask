@@ -179,7 +179,7 @@ test("every MCP board-discovery payload uses the narrow listing scope", () => {
     const source = fs.readFileSync(path.join(root, relativePath), "utf8");
     assert.match(
       source,
-      /getProjectListingWhere\([^)]*ctx\.agentId\)/,
+      /getProjectListingWhere\([^)]*ctx\.agentId, ctx\.teamScope\)/,
       `${relativePath} must not enumerate the connecting human's full board scope`,
     );
   }

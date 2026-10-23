@@ -25,7 +25,7 @@ function setup(failure) {
     '@prisma/client': { Prisma: {}, DecisionRequestStatus: {} },
     '@/lib/prisma': { default: prisma },
     '@/lib/flags': { isFeatureEnabled: async () => false },
-    '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}) },
+    '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}), intersectProjectTeamScope: (where, scope) => { assert.equal(scope == null, true); return where } },
     '@/utils/controllers/projects/findPrefixAliasTasks': {},
     '@/lib/mcp/auth': auth,
     '@/lib/mcp/routeWrapper': {
@@ -65,6 +65,7 @@ function setup(failure) {
     '@/utils/controllers/pages/pageService': {},
     '@/lib/mcp/idempotency/idempotencyStore': {
       normalizeIdempotencyKey: () => null,
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
     },
     '@/lib/mcp/tasks/updateTaskSelector': {

@@ -96,7 +96,7 @@ test("hypertask_board_config checks access before every direct write", () => {
   }
   assert.match(
     accessSource,
-    /\.\.\.getProjectWhere\(userId\)/,
+    /\.\.\.getProjectWhere\(userId, agentId, teamScope\)/,
     "chat must use the same owner-or-member project predicate as MCP",
   );
   assert.match(

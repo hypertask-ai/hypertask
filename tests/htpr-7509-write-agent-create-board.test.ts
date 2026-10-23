@@ -56,6 +56,7 @@ const stubs = {
   },
   'src/lib/mcp/boards/createBoardFromManifest.ts': { createBoardFromManifest: () => assert.fail('use injected creator') },
   'src/lib/mcp/idempotency/idempotencyStore.ts': {
+    IdempotencyAccessError: class extends Error {},
     IdempotencyInProgressError: class extends Error {},
     normalizeIdempotencyKey: () => null,
     withIdempotency: async (_operation: string, _userId: number, _key: null, _input: unknown, run: () => Promise<unknown>) => run(),

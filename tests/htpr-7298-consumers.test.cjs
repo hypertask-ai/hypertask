@@ -125,6 +125,7 @@ function harness({ boards = [1, 2], task = hiddenTask, agentId = 'credential-age
     '@/lib/mcp/idempotency/idempotencyStore': {
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_operation, _userId, _key, _body, fn) => fn(),
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class IdempotencyInProgressError extends Error {},
     },
     '@/lib/prisma': { default: {
