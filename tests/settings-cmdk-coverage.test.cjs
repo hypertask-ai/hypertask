@@ -304,12 +304,13 @@ for (const { keys, flag, dependency = flag, file, uiFlag } of gatedCommands) {
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),
     };
     const setup = [];
-    if (dependency !== flag) {
+    for (const { dependency: derivedDependency } of gatedCommands.filter((item) => item.dependency && item.dependency !== item.flag)) {
+      const start = setup.length;
       walk(source(menuFile), (node) => {
-        if (ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => item.name.getText() === dependency)) setup.push(node.getText());
-        if (ts.isIfStatement(node) && ts.isExpressionStatement(node.thenStatement) && ts.isBinaryExpression(node.thenStatement.expression) && node.thenStatement.expression.left.getText() === dependency) setup.push(node.getText());
+        if (ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => item.name.getText() === derivedDependency)) setup.push(node.getText());
+        if (ts.isIfStatement(node) && ts.isExpressionStatement(node.thenStatement) && ts.isBinaryExpression(node.thenStatement.expression) && node.thenStatement.expression.left.getText() === derivedDependency) setup.push(node.getText());
       });
-      assert.equal(setup.length, 2, `${dependency}: missing derived command gate setup`);
+      assert.equal(setup.length - start, 2, `${derivedDependency}: missing derived command gate setup`);
     }
     const js = ts.transpileModule(`${setup.join("\n")} const filter = ${predicate.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
     const evaluate = () => new Function(...Object.keys(bindings), `${js}; return filter;`)(...Object.values(bindings));
