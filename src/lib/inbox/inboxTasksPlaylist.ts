@@ -1,4 +1,6 @@
 import type { INotification, ITasksPlaylist } from "@/models/model";
+import type { FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
+import { groupInboxItemsByDate } from "./inboxDateGroups";
 
 type PlaylistTask = { projectId: number; uniqueIndex: number };
 
@@ -12,9 +14,17 @@ type InboxStructuredData = {
 export const buildInboxTasksPlaylist = (
   notifications: INotification[],
   decisionCommentLinks: boolean,
+  visibleOrder?: { oldestFirst: boolean; snapshot?: FirstScreenSnapshot | null },
 ): ITasksPlaylist[] => {
   const uniqueMap = new Map<string, ITasksPlaylist>();
-  for (const notification of notifications) {
+  const orderedNotifications = visibleOrder
+    ? Object.values(groupInboxItemsByDate(
+        notifications.map((notification) => ({ notification, date: new Date(notification.createdAt || 0) })),
+        visibleOrder.oldestFirst,
+        visibleOrder.snapshot,
+      )).flatMap(({ items }) => items.map(({ notification }) => notification))
+    : notifications;
+  for (const notification of orderedNotifications) {
     if (notification.type === "Invited") continue;
     const key = `${notification.projectId}-${notification.task?.uniqueIndex}`;
     if (!uniqueMap.has(key)) {
