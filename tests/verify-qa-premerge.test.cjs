@@ -110,7 +110,7 @@ test('tagged runner passes selected IDs, PR base and opt-in to Playwright and ev
       assert.equal(options.env.HT_QA_EXPECTED_PLAN, 'Free')
       assert.equal(options.cwd, process.cwd())
       fs.writeFileSync(options.env.PLAYWRIGHT_JSON_OUTPUT_NAME, JSON.stringify({ suites: [{ specs: statuses.map((status, i) => ({
-        tags: [`@id:${['open-task', 'edit-description'][i]}`],
+        tags: [`id:${['open-task', 'edit-description'][i]}`],
         tests: [{ results: [{ status }] }],
       })) }] }))
       return { status: exit }

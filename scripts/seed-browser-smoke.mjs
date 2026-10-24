@@ -241,6 +241,16 @@ async function seedSessionFixtures(flags) {
     ].join("\n\n"),
   });
 
+  if (process.argv.includes("--qa-journeys")) {
+    await createBoard({
+      ownerId: user.id,
+      teamId: team.id,
+      googleAccountId: googleAccount.id,
+      title: "QA runner board",
+      suffix: "qa",
+    });
+  }
+
   const sessionUser = await prisma.user.findUnique({
     where: { id: user.id },
     select: {

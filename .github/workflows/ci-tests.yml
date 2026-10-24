@@ -486,7 +486,7 @@ jobs:
           MCP_CLI_API_CONTRACT: '1'
         run: |
           npx prisma migrate deploy
-          node scripts/seed-browser-smoke.mjs
+          node scripts/seed-browser-smoke.mjs --qa-journeys
       - name: Download checksum-verified pinned native CLI
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         env:

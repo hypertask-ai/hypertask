@@ -392,7 +392,7 @@ export async function runTaggedJourneys({ base, journey, outDir }, execute = spa
   }
   collect(report)
   const steps = journey.map((id) => {
-    const spec = specs.find((entry) => entry.tags?.includes(`@id:${id}`))
+    const spec = specs.find((entry) => entry.tags?.includes(`id:${id}`))
     const tests = spec?.tests || []
     const statuses = tests.flatMap((entry) => (entry.results || []).map((result) => result.status))
     const pass = statuses.length > 0 && statuses.every((status) => status === 'passed')
