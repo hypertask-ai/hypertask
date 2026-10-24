@@ -35,6 +35,7 @@ function smoke() {
   const loaded = { exports: {} };
   new Function("require", "module", "exports", `${js}\nexports.open = open; exports.choose = choose; exports.setFixture = value => { fixture = value; };`)(name => {
     if (name === "@playwright/test") return { test: register, expect };
+    if (name === "node:fs") return { ...require("node:fs"), readFileSync: (file, encoding) => file.endsWith("agent-sidebar-fixture.json") ? JSON.stringify(fixture) : require("node:fs").readFileSync(file, encoding) };
     if (name.startsWith("node:")) return require(name);
     if (name === "./lib/realtime") return { withRealtime: value => value };
     if (name === "./lib/layout-lock-scroll") return {};
@@ -135,8 +136,9 @@ test("open waits for browser flags and lane history", async () => {
   assert.deepEqual(view.selectors, ['[data-command-key="session:saved-id"]']);
 });
 
-test("browser contexts use lane storage states", async () => {
-  const { use } = smoke();
+test("browser contexts use lane storage states before beforeAll has loaded the fixture", async () => {
+  const { use, setFixture } = smoke();
+  setFixture(undefined);
   assert.equal(typeof use.storageState, "function");
   for (const lane of ["Desktop", "Mobile"]) {
     let state;

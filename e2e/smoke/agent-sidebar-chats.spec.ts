@@ -8,8 +8,9 @@ import { waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 const FLAG = 'htpr-7518-agent-sidebar-chats'
 const PAST_CHATS_FLAG = 'htpr-7688-past-chats-first'
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
+const readFixture = (): Fixture => JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'agent-sidebar-fixture.json'), 'utf8'))
 test.use({ storageState: async ({}, applyState, info) => {
-  await applyState(fixture.storageStates[info.project.name])
+  await applyState(readFixture().storageStates[info.project.name])
 } })
 test.describe.configure({ mode: 'serial' })
 test.skip(!process.env.BROWSER_SMOKE_PR, 'Writes only to GitHub disposable loopback fixtures')
@@ -21,7 +22,7 @@ let fixture: Fixture
 
 test.beforeAll(() => {
   expect(['127.0.0.1', 'localhost']).toContain(new URL(process.env.BASE_URL!).hostname)
-  fixture = JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'agent-sidebar-fixture.json'), 'utf8'))
+  fixture = readFixture()
 })
 
 test.beforeEach(async ({ page }) => {
