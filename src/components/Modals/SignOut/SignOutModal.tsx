@@ -8,6 +8,8 @@ import {
   ModalHeaderComp,
 } from "@/components/Common/CommonModalComponents";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
 import {
   getActiveAccountId,
   getCurrentAccount,
@@ -27,6 +29,7 @@ const accountLabel = (account: SwitchAccount | null | undefined) =>
   account?.email ?? account?.name ?? "this account";
 
 const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
+  const projectEntryEnabled = useFlag(HTPR_7799_PROJECT_ENTRY_FLAG);
   const { handleHardReset } = useSignout();
   const [accounts, setAccounts] = useState<SwitchAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +111,9 @@ const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
         ) : (
           <>
             <p className="text-dense font-medium">
-              {`Sign out ${accountLabel(currentAccount)}?`}
+              {projectEntryEnabled
+                ? "Sign out of every account on this browser?"
+                : `Sign out ${accountLabel(currentAccount)}?`}
             </p>
             {error && (
               <p className="mt-3 text-dense font-medium text-red-400" role="alert">
