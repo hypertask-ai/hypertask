@@ -18,6 +18,7 @@ function ticketFor(finding) {
 async function fileFindings(report, { fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN } = {}) {
   if (!token) throw new Error("HYPERTASK_MCP_TOKEN is missing");
   if (!report.sourcesUsed?.length || !Array.isArray(report.findings)) throw new Error("No usable model discovery report");
+  console.log(`model-diff sources: ${report.sourcesUsed.join(", ")}`);
   async function api(route, body, idempotencyKey) {
     const response = await fetchImpl(`${APP}/api/mcp/tasks/${route}`, {
       method: body ? "POST" : "GET", signal: AbortSignal.timeout(30_000),
