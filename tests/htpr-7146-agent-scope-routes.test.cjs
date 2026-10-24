@@ -397,8 +397,7 @@ test('related search GET and POST rehydrate only accessible boards after Turbopu
 
 test('MCP timer running/report and team presence forward the authenticated agent to real services', async () => {
   const f = await bearerFixture();
-  const startedAt = new Date("2026-01-01T00:00:00.000Z");
-  const entries = f.tasks.map(task => ({ id: task.id, taskId: task.id, userId: f.user.id, task, user: f.user, startedAt, endedAt: null, pausedAt: null }));
+  const entries = f.tasks.map(task => ({ id: task.id, taskId: task.id, userId: f.user.id, task, user: f.user, startedAt: new Date(), endedAt: null, pausedAt: null }));
   f.prisma.timeEntry = { findMany: async args => entries.filter(row => matches(row, args.where)) };
   f.prisma.taskSession = { findMany: async args => f.tasks.map(task => ({ task, agentId: `other-${task.projectId}`, agent: { id: `other-${task.projectId}` }, lastSeenAt: new Date() })).filter(row => matches(row, args.where)) };
   f.prisma.taskLease = { findMany: async () => [] };
