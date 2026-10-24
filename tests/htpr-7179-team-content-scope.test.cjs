@@ -234,6 +234,8 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
     const f = teamFixture(mode);
     const operationContext = f.load('src/lib/mcp/operationContext.ts');
     const taskRoute = f.load('src/lib/mcp/operations/tasks/operation.ts');
+    const auth = await f.mocks['@/lib/mcp/auth'].validateMcpAuth();
+    assert.deepEqual(auth.teamScope, teamScope);
     const { createDirectOperationClient } = f.load('src/lib/mcp/directOperationClient.ts', {
       './auth': f.mocks['@/lib/mcp/auth'],
       './operationContext': operationContext,
@@ -244,8 +246,6 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         return taskRoute.GET(request);
       } },
     });
-    const auth = f.mocks['@/lib/mcp/auth'].validateMcpAuth();
-    assert.deepEqual(auth.teamScope, teamScope);
     const client = createDirectOperationClient('fixture', auth);
     const allowed = await client.makeRequest('/mcp/tasks?task_id=150');
     assert.equal(allowed.tasks[0].title, 'A1-sentinel');

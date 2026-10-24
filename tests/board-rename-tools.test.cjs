@@ -24,6 +24,8 @@ function mcpTool(h) {
   });
   const requests = [];
   const { executeWithService } = loadTs("src/lib/mcp-server/utils/executeWithService.ts", {
+    "next/server": { NextRequest: Request },
+    "@/lib/mcp/auth": { validateMcpAuth: async () => ({ user: { id: 6 }, agentId: null }) },
     "@/lib/mcp/directOperationClient": { createDirectOperationClient: (token, auth) => {
       assert.equal(token, "test-token");
       assert.deepEqual(auth, { user: { id: 6 }, agentId: null });
