@@ -26,7 +26,7 @@ test("BYOK test requests use one-token provider calls without exposing keys in U
     openai: ["https://api.openai.com/v1/chat/completions", "gpt-6-luna"],
     claude: ["https://api.anthropic.com/v1/messages", "claude-haiku-4.5"],
     google: ["https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-3.5-flash-lite"],
-    deepseek: ["https://api.deepseek.com/chat/completions", "deepseek-v4.1-flash"],
+    deepseek: ["https://api.deepseek.com/chat/completions", "deepseek-flash"],
     moonshot: ["https://api.moonshot.ai/v1/chat/completions", "kimi-k2.5"],
     zhipu: ["https://api.z.ai/api/paas/v4/chat/completions", "glm-5.3-flash"],
     alibaba: ["https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen3.7-plus"],
@@ -53,6 +53,16 @@ test("BYOK test requests use one-token provider calls without exposing keys in U
   );
   assert.equal(custom.url.includes(secret), false);
   assert.equal(JSON.parse(custom.init.body).model, "llama-4-70b");
+});
+
+test("DeepSeek model options keep gateway and direct API model IDs separate", () => {
+  const { getAiModelOptionById } = loadTs("src/lib/aiModelOptions.ts");
+  const flash = getAiModelOptionById("deepseek-v4.1-flash");
+  const pro = getAiModelOptionById("deepseek-v4-pro");
+
+  assert.equal(flash.model, "deepseek/deepseek-v4.1-flash");
+  assert.equal(flash.directModel, "deepseek-flash");
+  assert.equal(pro.directModel, undefined);
 });
 
 test("BYOK test response classification separates auth and credit failures", () => {
@@ -114,4 +124,14 @@ test("custom endpoint metadata shares one versioned secret payload", () => {
     () => normalizeCustomEndpointBaseUrl("http://127.0.0.1:3000/v1"),
     /public HTTP\(S\) host/,
   );
+});
+
+test("direct DeepSeek BYOK chat sends DeepSeek's own Flash model ID", () => {
+  const { getAiModelOptionById } = loadTs("src/lib/aiModelOptions.ts");
+  const { resolveAiModel } = loadTs("src/app/api/ai/_lib/modelProvider.ts");
+  const option = getAiModelOptionById("deepseek-v4.1-flash");
+  const model = resolveAiModel("gateway", option.model, "sk-direct-deepseek-test", option);
+
+  assert.equal(model.modelId, "deepseek-flash");
+  assert.match(model.provider, /^openai/);
 });
