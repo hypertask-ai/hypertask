@@ -68,6 +68,7 @@ async function withHistory(config, check) {
       '@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context': { useAiChatContext: () => history },
       '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
       '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
+      '@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch': { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: 'htpr-7763-ctrl-tab-session-switch' },
       '@/lib/state': { useRecoilValue: () => user, useRecoilState: (atom) => React.useState(atom === 'width' ? 280 : atom === 'scope' ? null : []) },
       '@/store': { fullScreenChatRailWidthAtom: 'width', fullScreenChatScopeAtom: 'scope' },
       '@/utils/aiChat/sortBoardsByRecent': { sortBoardsByRecent: (teams) => teams },

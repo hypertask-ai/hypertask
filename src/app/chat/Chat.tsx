@@ -6,6 +6,7 @@ import { WelcomeScreen } from "@/components/AI_CHAT/WelcomeScreen";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG } from "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch";
 import { useAiChatContext, type ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   buildFullScreenChatPath,
@@ -327,6 +328,7 @@ function ChatRailFilterRow({
 
 export default function Chat({ initialSessionId }: ChatProps) {
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -451,12 +453,43 @@ export default function Chat({ initialSessionId }: ChatProps) {
     railSessions,
     fullScreenChatScope,
   ]);
-  const displayedSessionGroups = [
+  const displayedSessionGroups = useMemo(() => [
     ...(pinnedSessions.length > 0
       ? [{ title: "Pinned" as const, sessions: pinnedSessions }]
       : []),
     ...sessionGroups,
-  ];
+  ], [pinnedSessions, sessionGroups]);
+
+  useEffect(() => {
+    if (!ctrlTabSessionSwitchEnabled) return;
+
+    const handleSessionKeydown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        window.innerWidth < 768 ||
+        event.key !== "Tab" ||
+        !event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) return;
+
+      event.preventDefault();
+      const visibleSessions = displayedSessionGroups.flatMap((group) => group.sessions);
+      const currentIndex = visibleSessions.findIndex(
+        (session) => session.id === currentSession?.id
+      );
+      if (currentIndex < 0) return;
+      const nextSession = visibleSessions[currentIndex + (event.shiftKey ? -1 : 1)];
+      if (!nextSession) return;
+
+      selectSession(nextSession.id);
+      router.replace(buildFullScreenChatPath(returnPath, nextSession.id));
+      setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
+    };
+
+    document.addEventListener("keydown", handleSessionKeydown);
+    return () => document.removeEventListener("keydown", handleSessionKeydown);
+  }, [ctrlTabSessionSwitchEnabled, currentSession?.id, displayedSessionGroups, editor, returnPath, router, selectSession]);
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
