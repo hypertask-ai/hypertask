@@ -1,4 +1,6 @@
 'use client'
+import Unauthorized from "../unauthorized/page";
+import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
@@ -977,6 +979,7 @@ const  LandingPage= ({
   authenticated: boolean,
 }) =>{
   const connectOverlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
+  const projectEntryEnabled = useFlag(HTPR_7799_PROJECT_ENTRY_FLAG);
   const {
   queryClient, router, releaseSecondaryStartup, secondaryStartupEnabled, isMblForChat,
   searchParams, slugs, pilotParameter, currentView, requestedSurface,
@@ -1157,10 +1160,16 @@ const boardRender =
       : null)
 
 return (
-    <BoardDocumentBoundary fallback={<></>}>
+    <BoardDocumentBoundary fallback={projectEntryEnabled ? (
+      <div className="flex min-h-[50vh] items-center justify-center text-sm text-secondary" role="status">
+        Loading board…
+      </div>
+    ) : <></>}>
       <FirstScreenMobileChrome currentUser={user} />
 
-      {data &&
+      {projectEntryEnabled && (projectsError || projectLookupFailed || currentBoardAccessStatus === "denied" || (!dataFetching && fetchedData && !data)) ? (
+        <Unauthorized />
+      ) : data &&
       Array.isArray(data.updatedProjects) &&
       data.updatedProjects.length === 0 ? (
         <NoBoardsEmptyState user={user} />
@@ -1197,6 +1206,10 @@ return (
             Loading board…
           </div>
         )
+      ) : projectEntryEnabled ? (
+        <div className="flex min-h-[50vh] items-center justify-center text-sm text-secondary" role="status">
+          Loading board…
+        </div>
       ) : null}
     </BoardDocumentBoundary>
 )

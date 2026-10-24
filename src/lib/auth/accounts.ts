@@ -140,8 +140,13 @@ export const signOutCurrentAccount = async (
 
 export const signOutAllAccounts = async (): Promise<boolean> => {
   try {
-    const response = await authClient.signOut();
-    return !response?.error && response?.data?.success !== false;
+    const response = await fetch("/api/auth/force-signout", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) return false;
+    authClient.$store.notify("$sessionSignal");
+    return true;
   } catch {
     return false;
   }

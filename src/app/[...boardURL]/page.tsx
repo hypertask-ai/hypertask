@@ -7,6 +7,8 @@ import { cookies } from "next/headers";
 import LandingPage from "./LandingPage";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import prisma from "@/lib/prisma";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import getFirst from "@/utils/controllers/projects/getFirst";
 import NoBoardsEmptyState from "./NoBoardsEmptyState";
 import Unauthorized from "../unauthorized/page";
@@ -18,6 +20,8 @@ import {
   resolveBoardRouteTitleRequest,
 } from "@/lib/boardRouteTitle";
 import { getProjectForValidation } from "@/lib/boardRouteMetadata";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
 import {
   buildCanonicalBoardUrl,
   resolveBoardRoutePath,
@@ -72,6 +76,7 @@ export default async function Page(
     redirect(buildCanonicalBoardUrl(pathResolution.projectId, searchParams));
   }
 
+  const missingProjectId = !searchParams?.id || searchParams.id === "undefined" || searchParams.id === "null";
   const firstScreen = await getServerBoardDocument();
   if (firstScreen) {
     return <LandingPage key="board" slugs={String(firstScreen.data.projectId)} user={firstScreen.data.user} authenticated />;
@@ -89,6 +94,22 @@ export default async function Page(
 
   let previousBoardString = cookieStore.get("previousBoard");
   let slugs = searchParams?.id;
+
+  if (missingProjectId && await isFeatureEnabled(HTPR_7799_PROJECT_ENTRY_FLAG, userObj.id)) {
+    const rememberedId = previousBoardString?.value.split("|&|")[0].match(/^project-([1-9]\d*)$/)?.[1];
+    const where = { status: "Normal" as const, ...getProjectWhere(userObj.id) };
+    let board;
+    try {
+      board = rememberedId && Number.isSafeInteger(Number(rememberedId))
+        ? await prisma.project.findFirst({ where: { ...where, id: Number(rememberedId) }, select: { id: true } })
+        : null;
+      board ??= await prisma.project.findFirst({ where, orderBy: { id: "asc" }, select: { id: true } });
+    } catch {
+      return <Unauthorized />;
+    }
+    if (!board) return <NoBoardsEmptyState user={userObj} />;
+    redirect(buildCanonicalBoardUrl(String(board.id), searchParams));
+  }
 
   if (!slugs || slugs === "undefined" || slugs === "null" || slugs === "") {
     console.log("❌ Invalid or missing project ID in URL, resolving valid slug...");

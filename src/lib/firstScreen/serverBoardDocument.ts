@@ -3,6 +3,7 @@ import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
+import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
 import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { featureFlagsForUser } from "@/lib/flags";
@@ -28,6 +29,7 @@ export async function readBoardDocument(route: string, displayCookie: string | u
       flags[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] !== true) return null;
   const cookieStore = await cookies();
   let projectId = Number(url.searchParams.get("id"));
+  if (flags[HTPR_7799_PROJECT_ENTRY_FLAG] && (!Number.isSafeInteger(projectId) || projectId <= 0)) return null;
   if (!Number.isSafeInteger(projectId) || projectId <= 0) {
     projectId = Number(cookieStore.get("previousBoard")?.value.split("|&|")[0].replace("project-", ""));
   }
