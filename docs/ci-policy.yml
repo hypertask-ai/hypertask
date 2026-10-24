@@ -1,5 +1,5 @@
 version: 8
-last_updated: 2026-10-23
+last_updated: 2026-10-24
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -28,9 +28,9 @@ topology:
   repository_default_branch: production
   production_target: "Vercel project hypertasks-prod"
   # Non-gating housekeeping workflows (pr-size, gitleaks, vercel-deploy-log,
-  # app-smoke-request, parity-contract-trusted, preview-smoke) also run on
-  # ubuntu-latest; their implementation lives in .github/workflows/ and is not
-  # duplicated here.
+  # app-smoke-request, parity-contract-trusted, preview-smoke,
+  # bugfix-regression) also run on ubuntu-latest; their implementation lives
+  # in .github/workflows/ and is not duplicated here.
 
 review_first_gate:
   # Owner decision 2026-08-26 made CI wait for the full-ci label. Retired
@@ -329,6 +329,18 @@ schema_drift_monitor:
   shadow: disposable_postgres_service
   failure_action: failed_workflow_with_named_schema_differences
   repair_automatically: false
+
+bugfix_regression:
+  context: bugfix-regression
+  workflow: .github/workflows/bugfix-regression.yml
+  runs_on: ubuntu-latest
+  required: false
+  blocks_merge: false
+  report_only: true
+  pull_request_base: production
+  bugfix_signal: "pr-title shape with the [BUGFIX] tag"
+  escape_hatch: "label no-regression-test plus a written reason in the pull request body"
+  command: node .github/scripts/bugfix-regression-check.mjs
 
 agent_rules:
   - "Read docs/ci.md before changing workflows, runner labels, rulesets, or deployment checks."

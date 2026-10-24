@@ -1,6 +1,6 @@
 # CI contract
 
-_Last updated: 2026-10-22._
+_Last updated: 2026-10-24._
 
 **Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), uses a provider-neutral AI review gate, and deploys production directly from the `production` branch.** The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
 
@@ -160,6 +160,28 @@ ships documentation repairs through `/ship` and executes only the listed live
 recipes with `verify-qa`. See the
 [maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
 installation, state, load holds, limits and offline tests.
+
+## Bugfix regression report (YPER4-670)
+
+The non-required `bugfix-regression` job in
+[bugfix-regression.yml](../.github/workflows/bugfix-regression.yml) runs on pull
+requests to `production`. A bug fix is a pull request whose title matches the
+existing `pr-title` shape with the `[BUGFIX]` tag (`HTPR`, `HYFA`, or `YPER4`).
+That is the kind-of-work signal `pr-title` already enforces. `kind: "bugfix"`
+on a feature flag classifies that flag, and saved-data, security, and crash
+fixes ship with no flag, so the job follows the pull request title.
+
+For those pull requests the job runs each added or changed `tests/**/*.test.cjs`
+or `tests/**/*.test.ts` file, the same files `scripts/run-tests.mjs` runs. The
+new test must fail on the merge base and pass on the pull request head. A test
+that passes on the base is reported by file name because it does not reproduce
+the bug. A bug fix that changes no such test is reported too. The
+`no-regression-test` label exempts a pull request only when the body also gives
+a reason, using `No new automated test applies because:` or
+`no-regression-test:`.
+
+The job is report-only. It is not in the required-check ruleset, and a flag,
+skip, or script error exits 0. It does not block a merge.
 
 ## Docs-only CI lane (YPER4-548)
 

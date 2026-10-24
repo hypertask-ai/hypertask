@@ -1,0 +1,66 @@
+name: Bugfix regression report
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled]
+    branches: [production]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bugfix-regression-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bugfix-regression:
+    name: bugfix-regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Decide whether this pull request is a bug fix
+        id: decide
+        run: node .github/scripts/bugfix-regression-check.mjs --decide
+
+      - name: Fetch the merge base
+        if: steps.decide.outputs.run == 'true'
+        run: |
+          set -uo pipefail
+          git fetch --no-tags --unshallow origin || echo "bugfix-regression error could not unshallow the checkout"
+          git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}" || echo "bugfix-regression error could not fetch the base branch"
+
+      - name: Look for a changed test
+        id: tests
+        if: steps.decide.outputs.run == 'true'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node .github/scripts/bugfix-regression-check.mjs --diff-only
+
+      - name: Install dependencies
+        id: install
+        if: steps.tests.outputs.tests == 'true'
+        run: |
+          if npm ci --prefer-offline --no-audit --no-fund; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "bugfix-regression error npm ci failed, so the changed tests were not run"
+          fi
+
+      - name: Run changed tests on the merge base and the pull request head
+        if: steps.install.outputs.ok == 'true'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.tests.outputs.base }}
+        run: node .github/scripts/bugfix-regression-check.mjs
