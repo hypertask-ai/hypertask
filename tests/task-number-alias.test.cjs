@@ -237,7 +237,7 @@ test("CLI get returns the current ticket number for an old reference scoped to i
   const f = fixture();
   const response = await f.get({ ticket_number: "HTPR-6641", project_id: "15" });
   assert.equal(response.status, 200);
-  assert.deepEqual(response.body.tasks, [{ id: 44769, projectId: 20, ticketNumber: "NEW-6814" }]);
+  assert.deepEqual(response.body.tasks, [{ id: 44769, projectId: 20, ticketNumber: "NEW-6814", skill_context: await require("./helpers/mcp-skill-context.cjs").getMcpSkillContext() }]);
   const byIndex = await f.get({ unique_index: "6641", project_id: "15" });
   assert.deepEqual(byIndex.body.tasks, response.body.tasks);
 });

@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       },
       orderBy: [{ name: "asc" }, { id: "asc" }],
     });
-    return NextResponse.json({ success: true, skills, total: skills.length });
+    return NextResponse.json({ success: true, skills: skills.map(skill => ({ ...skill, status: skill.enabled ? "enabled" : "disabled" })), total: skills.length });
   } catch (error) {
     return skillErrorResponse(error, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
   }

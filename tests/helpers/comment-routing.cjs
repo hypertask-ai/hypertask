@@ -6,6 +6,7 @@ function setup(options = {}) {
   const ctx = { user, agentId: options.human ? null : 'agent-1', teamScope: null }
   const cache = new Map()
   const stubs = {
+    ...(options.skillContext ? { '@/lib/mcp/skills/context': options.skillContext } : {}),
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     '@/lib/mcp/routeWrapper': {
       wrapMcpRoute: (handler) => handler,

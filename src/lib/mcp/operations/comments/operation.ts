@@ -1,3 +1,4 @@
+import { getMcpSkillContext } from '@/lib/mcp/skills/context'
 import { isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
@@ -85,6 +86,7 @@ export interface CommentItem {
 }
 
 export interface ListCommentsResponse {
+  skill_context: Awaited<ReturnType<typeof getMcpSkillContext>>
   success: boolean
   comments: CommentItem[]
   total: number
@@ -418,6 +420,7 @@ export async function GET(request: NextRequest) {
 
     const response: ListCommentsResponse = {
       success: true,
+      skill_context: await getMcpSkillContext(ctx, task.projectId, comments.filter(comment => comment.activity == null).map(comment => comment.text)),
       comments: (listQuery?.fields.length
         // @ts-expect-error CommentItem has no string index signature
         ? projectRows(commentList as Array<Record<string, unknown>>, listQuery.fields)
@@ -899,12 +902,14 @@ export async function POST(request: NextRequest) {
       ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)
       : null
     const routedTo = agentLogEntry ? 'log' as const : 'comments' as const
+    const skillContext = await getMcpSkillContext(ctx, task.projectId, [text])
 
     if (dryRun) {
       return NextResponse.json(
         {
           success: true,
           dry_run: true,
+          skill_context: skillContext,
           valid: true,
           would: {
             routedTo,
@@ -1039,7 +1044,7 @@ export async function POST(request: NextRequest) {
       ctx.teamScope
     )
 
-    return NextResponse.json(mcpResponse, { status: 201 })
+    return NextResponse.json({ ...mcpResponse, skill_context: skillContext }, { status: 201 })
   } catch (error) {
     if (isPlanLimitReachedError(error)) {
       const response = planLimitResponse(error);

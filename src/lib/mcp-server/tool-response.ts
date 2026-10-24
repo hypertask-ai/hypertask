@@ -170,7 +170,7 @@ function conciseValue(value: unknown): unknown {
       status: row.section ?? row.status ?? null,
       assignee: row.assignees ?? row.assignee ?? (row.assigneeCount !== undefined ? { count: row.assigneeCount } : []),
       due: row.dueDate ?? row.due_date ?? null,
-      ...Object.fromEntries(['children', 'sub_tasks', 'relationType', 'direction'].filter((key) => key in row).map((key) => [key, conciseValue(row[key])])),
+      ...Object.fromEntries(['children', 'sub_tasks', 'relationType', 'direction', 'skill_context'].filter((key) => key in row).map((key) => [key, conciseValue(row[key])])),
     }
   }
   const result: Record<string, unknown> = {}
