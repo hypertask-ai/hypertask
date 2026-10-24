@@ -7,6 +7,7 @@ import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { archiveShortcutNudgeAtom, currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
+import { HTPR_5906_NO_PHONE_NUDGES_FLAG } from "@/lib/flags/definitions/htpr-5906-no-phone-nudges";
 import { useShortcutTipsSetting } from "@/hooks/useShortcutTipsSetting";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -21,6 +22,7 @@ export default function ShortcutArchiveNudge() {
   const pathname = usePathname();
   const isMobile = useContext(MobileViewContext);
   const flagEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
+  const noPhoneNudges = useFlag(HTPR_5906_NO_PHONE_NUDGES_FLAG) && isMobile;
   const currentUser = useRecoilValue(currentUserAtom);
   const { tipsEnabled, turnOffAllTips } = useShortcutTipsSetting();
   const [nudge, setNudge] = useRecoilState(archiveShortcutNudgeAtom);
@@ -29,7 +31,7 @@ export default function ShortcutArchiveNudge() {
 
   useEffect(() => {
     setNudge((current) => {
-      if (accountId === null || !flagEnabled || !tipsEnabled) {
+      if (accountId === null || !flagEnabled || !tipsEnabled || noPhoneNudges) {
         return clearArchiveShortcutNudge(current, accountId);
       }
       if (current.accountId !== accountId) {
@@ -48,6 +50,7 @@ export default function ShortcutArchiveNudge() {
     flagEnabled,
     nudge.accountId,
     nudge.stage,
+    noPhoneNudges,
     onTaskPage,
     setNudge,
     tipsEnabled,
@@ -72,6 +75,7 @@ export default function ShortcutArchiveNudge() {
     accountId === null ||
     !flagEnabled ||
     !tipsEnabled ||
+    noPhoneNudges ||
     !onTaskPage ||
     nudge.accountId !== accountId ||
     nudge.stage !== "showing"
