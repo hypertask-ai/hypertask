@@ -5,6 +5,7 @@
   "modes": {
     "htpr-3533-google-calendar": "OWNER_AND_QA",
     "htpr-4857-add-to-slack": "OWNER_AND_QA",
+    "htpr-5906-no-phone-nudges": "EVERYONE",
     "htpr-5906-shortcut-nudges": "OWNER_AND_QA",
     "htpr-5908-local-writing-assistance": "OWNER_AND_QA",
     "htpr-6002-shared-agent-chat": "EVERYONE",

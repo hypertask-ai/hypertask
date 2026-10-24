@@ -9,7 +9,7 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const modulePath = (relativePath) => path.join(root, relativePath);
 
-test("the archive shortcut nudge appears on a mobile task page", async () => {
+test("the archive shortcut nudge stays hidden on a mobile task page", async () => {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', {
     url: "https://app.hypertask.ai/detail/project-15/5906",
   });
@@ -93,11 +93,9 @@ test("the archive shortcut nudge appears on a mobile task page", async () => {
       await new Promise((resolve) => setImmediate(resolve));
     });
 
-    assert.match(document.body.textContent, /Tip: press E to archive/);
-    assert.match(
-      document.querySelector('[aria-label="Dismiss shortcut tip"]').className,
-      /min-h-\[44px\]/,
-    );
+    assert.equal(document.body.textContent, "");
+    assert.equal(document.querySelector('[aria-label="Keyboard shortcut tip"]'), null);
+    assert.equal(document.querySelector('[aria-label="Dismiss shortcut tip"]'), null);
   } finally {
     if (reactRoot) {
       await React.act(async () => reactRoot.unmount());
