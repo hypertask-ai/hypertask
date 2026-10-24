@@ -4,6 +4,7 @@ export const HTPR_7692_ALLOWANCE_DRIFT_CHECK_FLAG = "htpr-7692-allowance-drift-c
 
 export default {
   key: HTPR_7692_ALLOWANCE_DRIFT_CHECK_FLAG,
+  kind: "bugfix",
   defaultMode: "EVERYONE",
   shippedOn: "2026-10-23",
   description:
