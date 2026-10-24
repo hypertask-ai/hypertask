@@ -49,6 +49,10 @@ type Target = Pick<ModelCanaryRow, "optionId" | "label" | "model" | "capability"
 };
 export type ModelCanaryCounts = Record<"checked" | Outcome, number>;
 
+function modelCanaryKey(optionId: string, lane: string): `${string}|${string}` {
+  return `${optionId}|${lane}`;
+}
+
 export function modelCanaryInventory(): Target[] {
   return [
     ...aiModelOptions.filter((option) => isAiModelOptionVisible(option, true)).map((option) => {
@@ -136,7 +140,7 @@ export async function readModelCanaryStatus() {
   const redis = await getRedis();
   const [checkedAt, stored] = await Promise.all([redis.get(`${ROOT}:checkedAt`), redis.hvals(LATEST)]);
   const models = stored.map((value) => JSON.parse(value) as ModelCanaryRow).map((row) => ({ ...row, id: row.optionId, status: row.outcome, lastCheckedAt: row.checkedAt }));
-  models.sort((a, b) => `${a.optionId}|${a.lane}`.localeCompare(`${b.optionId}|${b.lane}`));
+  models.sort((a, b) => modelCanaryKey(a.optionId, a.lane).localeCompare(modelCanaryKey(b.optionId, b.lane)));
   return { checkedAt, models };
 }
 
@@ -183,13 +187,13 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
     ]);
     const previous = new Map((await redis.hvals(LATEST)).map((value) => {
       const row = JSON.parse(value) as ModelCanaryRow;
-      return [`${row.optionId}|${row.lane}`, row] as const;
+      return [modelCanaryKey(row.optionId, row.lane), row] as const;
     }));
     const cursor = await redis.get(`${ROOT}:pending`);
     const pending: string[] = cursor ? JSON.parse(cursor) : [];
     work.sort((a, b) => {
-      const left = pending.indexOf(`${a.target.optionId}|${a.lane}`);
-      const right = pending.indexOf(`${b.target.optionId}|${b.lane}`);
+      const left = pending.indexOf(modelCanaryKey(a.target.optionId, a.lane));
+      const right = pending.indexOf(modelCanaryKey(b.target.optionId, b.lane));
       return (left < 0 ? Infinity : left) - (right < 0 ? Infinity : right);
     });
     let next = 0;
@@ -202,7 +206,7 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
       while (next < work.length) {
         signal.throwIfAborted();
         const { target, lane } = work[next++];
-        const field = `${target.optionId}|${lane}`;
+        const field = modelCanaryKey(target.optionId, lane);
         const prior = previous.get(field);
         const checkedAt = new Date().toISOString();
         const row: ModelCanaryRow = {
