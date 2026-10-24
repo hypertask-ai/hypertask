@@ -38,7 +38,7 @@ lastline() { grep '|literal|' "$TMUX_LOG" | tail -1; }
 PORT=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
 UP=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
 echo "$RANDOM-infra-key" > "$T/keys/infra-manager"; chmod 600 "$T/keys/infra-manager"
-RUNNER_WEBHOOK_PORT=$PORT RUNNER_WEBHOOK_FALLBACK_PORT=$UP python3 ./runner-webhook 2>/dev/null & PIDS="$PIDS $!"
+RUNNER_WEBHOOK_AGENT_STREAK_MAX=2 RUNNER_WEBHOOK_PORT=$PORT RUNNER_WEBHOOK_FALLBACK_PORT=$UP python3 ./runner-webhook 2>/dev/null & PIDS="$PIDS $!"
 for _ in $(seq 50); do curl -fs "http://127.0.0.1:$PORT/runner-webhook/healthz" >/dev/null 2>&1 && break; sleep 0.1; done
 post() { # runner|ht-product-lead|infra-manager event deliveryId body [badsig]
   local ts=${TS:-$(date +%s)} sig name=runner-$1 key; case "$1" in ht-product-lead|infra-manager|speed-runner) name=$1;; esac
@@ -108,6 +108,57 @@ mn=$(comment '<p>@runner look</p>' 600 | jq -c '.event="comment.mention"'); : > 
 post 3 comment.mention d-8 "$mn" >/dev/null; wait_sent 1 && ok "mention delivered" || bad "mention not delivered"
 : > "$TMUX_LOG"; eq "unhandled event is 200 and ignored" "$(post 3 task.updated d-9 "$(comment x 700 | jq -c '.event="task.updated"')")" "200"
 sleep 0.4; eq "nothing sent for task.updated" "$(sent)" "0"
+
+agent_mention() { comment '<p><span data-type="mention" data-label="agent-a">Runner 3</span> please look</p>' "$1" '"agent-b"' | jq -c '.event="comment.mention" | .ticketNumber="YPER4-666"'; }
+: > "$TMUX_LOG"
+am=$(agent_mention 66601)
+eq "agent mention accepted" "$(post 3 comment.mention d-am1 "$am")" "200"
+eq "agent mention delivered" "$(sent)" "1"
+case "$(lastline)" in *'mentioned you in a comment on'*'https://app.hypertask.ai/detail/project-4060/666:'*'please look'*) ok "agent mention carries ticket and text";; *) bad "agent mention: $(lastline)";; esac
+eq "delivered agent mention increments persistent streak" "$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-3.agent-streak.json")" "1"
+post 3 comment.mention d-am1 "$am" >/dev/null
+post 3 comment.mention d-am1-replay "$am" >/dev/null
+eq "delivery and comment replays do not deliver or consume streak" "$(sent)|$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-3.agent-streak.json")" "1|1"
+post 3 comment.mention d-am-self "$(agent_mention 66602 | jq -c '.actor.agentId="a"')" >/dev/null
+eq "self mention ignored" "$(sent)" "1"
+post 3 comment.mention d-am-other "$(agent_mention 66603 | jq -c '.commentHtml="<p><span data-type=\"mention\" data-label=\"agent-other\">Other</span></p>"')" >/dev/null
+post 3 comment.mention d-am-missing "$(agent_mention 66604 | jq -c '.commentHtml="<p>No mention</p>"')" >/dev/null
+post 3 comment.mention d-am-no-target "$(agent_mention 66605 | jq -c 'del(.agentId)')" >/dev/null
+post 3 comment.mention d-am-text "$(agent_mention 66606 | jq -c '.commentHtml="<p>data-label=\"agent-a\" is not a mention</p>"')" >/dev/null
+eq "other missing and plain-text agent mentions ignored" "$(sent)" "1"
+for event in comment.created task.assigned task.updated chat.message comment.reaction; do
+  post 3 "$event" "d-am-ignore-$event" "$(agent_mention 66607 | jq -c --arg event "$event" '.event=$event | .emoji="👍" | .chat={sessionId:"agent-chat",messageId:"agent-message",text:"ignored"}')" >/dev/null
+done
+eq "all other agent events remain ignored" "$(sent)|$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-3.agent-streak.json")" "1|1"
+post 3 comment.mention d-am2 "$(agent_mention 66608)" >/dev/null
+eq "configured budget allows two agent mentions" "$(sent)" "2"
+post 3 comment.mention d-am-cap "$(agent_mention 66609)" >/dev/null
+eq "first over-budget mention delivers one loop notice" "$(sent)" "3"
+case "$(lastline)" in *'Possible agent loop suspected on YPER4-666 https://app.hypertask.ai/detail/project-4060/666.'*) ok "loop notice includes ticket number and URL";; *) bad "loop notice: $(lastline)";; esac
+post 3 comment.mention d-am-cap-replay "$(agent_mention 66609)" >/dev/null
+post 3 comment.mention d-am-stopped "$(agent_mention 66610)" >/dev/null
+post 3 comment.mention d-am-stopped2 "$(agent_mention 66611)" >/dev/null
+eq "loop notice is sent once and later agent mentions stop" "$(sent)|$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-3.agent-streak.json")" "3|3"
+post 3 comment.mention d-am-ticket "$(agent_mention 66612 | jq -c '.ticketNumber="YPER4-667" | .taskId=10')" >/dev/null
+eq "another ticket has an independent budget" "$(sent)" "4"
+post ht-product-lead comment.mention d-am-slot "$(agent_mention 66613)" >/dev/null
+eq "another slot has an independent budget" "$(sent)|$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-infra-manager.agent-streak.json")" "5|1"
+post 3 task.updated d-am-unrelated-human "$(comment 'other ticket' 66614 | jq -c '.event="task.updated"')" >/dev/null
+post 3 comment.mention d-am-still-stopped "$(agent_mention 66615)" >/dev/null
+eq "human event on another ticket does not reset the guard" "$(sent)" "5"
+post 3 task.updated d-am-reset "$(agent_mention 66616 | jq -c '.event="task.updated" | del(.actor.agentId)')" >/dev/null
+eq "unhandled human event resets only its ticket streak to zero" "$(jq -r '[.["https://app.hypertask.ai/detail/project-4060/666"], .["https://app.hypertask.ai/detail/project-4060/667"]] | @csv' "$T/inbox/runner-3.agent-streak.json")" "0,1"
+post 3 comment.mention d-am-resumed "$(agent_mention 66617)" >/dev/null
+eq "agent mention resumes after a human event" "$(sent)" "6"
+post 3 comment.mention d-am-resumed2 "$(agent_mention 66618)" >/dev/null
+post 3 comment.mention d-am-cap2 "$(agent_mention 66619)" >/dev/null
+eq "new streak can produce one new notice" "$(sent)" "8"
+post 3 comment.mention d-am-human "$(agent_mention 66620 | jq -c 'del(.actor.agentId) | .commentHtml="<p>human mention without an agent tag</p>"')" >/dev/null
+eq "human mention bypasses the cap and resets the streak" "$(sent)|$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-3.agent-streak.json")" "9|0"
+case "$(lastline)" in *'mentioned you in a comment on'*'human mention without an agent tag'*) ok "human mention format remains unchanged";; *) bad "human mention: $(lastline)";; esac
+post 3 comment.mention d-am-human2 "$(agent_mention 66621 | jq -c 'del(.actor.agentId)')" >/dev/null
+post 3 comment.mention d-am-after-human "$(agent_mention 66622)" >/dev/null
+eq "human mentions never consume the agent budget" "$(sent)|$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-3.agent-streak.json")" "11|1"
 
 # ---- comment.reaction (HTPR-7095) ----
 rx() { jq -nc --arg e "$1" --argjson u "${2:-6}" --argjson agent "${3:-null}" --arg at "${4:-2026-10-10T21:00:00Z}" \
@@ -268,12 +319,28 @@ eq "oversized proxied body is refused" "$(head -c 5000000 /dev/zero | curl -s -o
 # A failed delivery is not acknowledged and not marked seen, so Hypertask retries it.
 cp ./runner-deliver "$T/deliver-ok"; printf '#!/bin/sh\nexit 1\n' > "$T/deliver-fail"; chmod +x "$T/deliver-fail"
 FP=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
-RUNNER_DELIVER=$T/deliver-fail RUNNER_WEBHOOK_PORT=$FP RUNNER_WEBHOOK_FALLBACK_PORT=$UP python3 ./runner-webhook 2>/dev/null & PIDS="$PIDS $!"
+RUNNER_WEBHOOK_AGENT_STREAK_MAX=2 RUNNER_DELIVER=$T/deliver-fail RUNNER_WEBHOOK_PORT=$FP RUNNER_WEBHOOK_FALLBACK_PORT=$UP python3 ./runner-webhook 2>/dev/null & PIDS="$PIDS $!"
 for _ in $(seq 50); do curl -fs "http://127.0.0.1:$FP/runner-webhook/healthz" >/dev/null 2>&1 && break; sleep 0.1; done
 PORT_SAVE=$PORT; PORT=$FP
 eq "failed delivery answers 503 so it is retried" "$(post 3 comment.created d-f1 "$(comment retry 991)")" "503"
 eq "and is still not marked seen" "$(grep -c 'comment:991' "$T/inbox/runner-3.seen" 2>/dev/null || true)" "0"
+eq "failed agent mention answers 503" "$(post 3 comment.mention d-am-fail "$(agent_mention 66630)")" "503"
+eq "failed agent delivery does not consume streak or mark seen" "$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-3.agent-streak.json")|$(grep -c '^comment:66630$' "$T/inbox/runner-3.seen" || true)" "1|0"
 PORT=$PORT_SAVE
+session runner "RUNNER 3" "$RUNPID"; : > "$TMUX_LOG"
+post 3 comment.mention d-am-fail "$(agent_mention 66630)" >/dev/null
+eq "failed agent mention is delivered on retry" "$(sent)" "1"
+PORT=$FP
+eq "failed loop notice answers 503" "$(post 3 comment.mention d-am-persist "$(agent_mention 66631)")" "503"
+eq "failed loop notice does not mark notified or seen" "$(jq -r '.["https://app.hypertask.ai/detail/project-4060/666"]' "$T/inbox/runner-3.agent-streak.json")|$(grep -c '^comment:66631$' "$T/inbox/runner-3.seen" || true)" "2|0"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$HERE/runner-deliver" > "$T/deliver-fail"
+eq "loop notice retries successfully in another receiver process" "$(post 3 comment.mention d-am-persist "$(agent_mention 66631)")" "200"
+eq "agent streak persists across receiver processes" "$(sent)" "2"
+case "$(lastline)" in *'Possible agent loop suspected on YPER4-666 '*) ok "persisted cap delivers a notice";; *) bad "persisted streak: $(lastline)";; esac
+PORT=$PORT_SAVE
+post 3 comment.mention d-am-cross-process "$(agent_mention 66632)" >/dev/null
+eq "persisted loop notice suppresses delivery in the original process" "$(sent)" "2"
+printf '#!/bin/sh\nexit 1\n' > "$T/deliver-fail"
 # Two writers to one pane never interleave: text+Enter pairs stay together.
 cat > "$T/slowtmux" <<'EOF'
 #!/usr/bin/env bash
