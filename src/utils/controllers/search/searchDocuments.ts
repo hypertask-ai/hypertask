@@ -1,6 +1,7 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6881_SEARCH_FUZZY_PERSON_FLAG } from "@/lib/flags";
 import { HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
+import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from "@/lib/flags/keys";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
 import { parseSearchWithChipNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
@@ -52,7 +53,8 @@ export async function searchDocuments(
   if (Object.keys(parsed.filters).length) {
     const { where, rankedIds, descriptionById, commentById, partial, commentMode } = await rankedSearchWhere(
       parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,
-      50, {}, undefined, false,
+      50, {}, undefined, false, undefined,
+      Boolean(parsed.filters.assignee?.length) && await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, userId),
     );
     const matchSelect = {
       userId: true, user: { select: { displayName: true, email: true } },

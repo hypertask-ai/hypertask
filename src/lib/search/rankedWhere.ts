@@ -14,8 +14,9 @@ export async function rankedSearchWhere(
   cursorId?: number | null,
   scanAll = false,
   taskOrderBy?: Prisma.TaskOrderByWithRelationInput[],
+  personAssignmentFilter = false,
 ) {
-  const where = await searchFilterWhere(parsed, projectIds, status)
+  const where = await searchFilterWhere(parsed, projectIds, status, personAssignmentFilter)
   const { allowTasks, allowComments, commentOnly, phraseScope } = resultKinds(parsed)
   const phrases = parsed.filters.phrase ?? []
   const rankedIds: number[] = []
