@@ -73,7 +73,7 @@ test("filter Assignees saved JSON strips callbacks but preserves human uid and a
   assert.deepEqual(sectionIds(filters.getFilteredSections(project.sections, project)), ["c", "h"]);
 });
 
-test("filter saved default applies without a personal project-view row", { todo: "HTPR-7776 default filters require a personal project-view row" }, () => {
+test("filter saved default applies without a personal project-view row", () => {
   const { project } = fixture();
   project.project_view.user_project_views = [];
   project.project_view.default_view = { board_filters: { matchFilters: "ALL", addedFilters: [{ type: "Priority", searchPayload: [{ priority_index: 1 }] }] } };
