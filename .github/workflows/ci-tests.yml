@@ -348,9 +348,10 @@ jobs:
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(needs.ci-prepare.outputs.shard_indexes || '["0"]') }}
-    # Artifact upload needs actions: write. The test step clears the token.
+    # Same read-only token as ci-prepare. That job already uploads artifacts
+    # without actions: write, and a write token would reach PR-controlled tests
+    # through the Docker login that follows.
     permissions:
-      actions: write
       contents: read
       packages: read
     env:
