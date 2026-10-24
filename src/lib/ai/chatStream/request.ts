@@ -55,6 +55,7 @@ export const chatRequestSchema = z.object({
   provider: z.string().optional().nullable(),
   modelFromDefault: z.boolean().optional(),
   aiFeature: z.enum(["aiChat", "askAi"]).optional().default("aiChat"),
+  surface: z.enum(["sidebar", "fullscreen", "desktop", "mcp", "cli"]).optional(),
   teamId: z.string().optional().nullable(),
   context_list: z.array(z.unknown()).nullable().optional(),
   default_context: defaultContextSchema.nullable().optional(),

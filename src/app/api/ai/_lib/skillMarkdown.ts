@@ -32,7 +32,12 @@ export function parseSkillMarkdown(
   }
 
   const fields = parseFlatFrontmatter(frontmatter);
-  const name = fields.name?.trim() || fallbackName?.trim() || "";
+  const derivedName =
+    body.match(/^#{1,6}[ \t]+(\S.*)$/m)?.[1] ||
+    body.split("\n").find((line) => line.trim()) ||
+    "";
+  const name =
+    fields.name?.trim() || fallbackName?.trim() || derivedName.trim().slice(0, 80);
   const slug = slugifySkill(name);
   const trimmedBody = body.trim();
 

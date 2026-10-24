@@ -60,7 +60,7 @@ test("DeepSeek model options keep gateway and direct API model IDs separate", ()
   const flash = getAiModelOptionById("deepseek-v4.1-flash");
   const pro = getAiModelOptionById("deepseek-v4-pro");
 
-  assert.equal(flash.model, "deepseek/deepseek-v4.1-flash");
+  assert.equal(flash.model, "deepseek/deepseek-v4.1-flash-1017");
   assert.equal(flash.directModel, "deepseek-flash");
   assert.equal(pro.directModel, undefined);
 });
