@@ -46,6 +46,12 @@ function unreadSince(
   });
 }
 
+function sentContextIds(context: Prisma.JsonValue | null) {
+  if (!context || typeof context !== "object" || Array.isArray(context)) return {};
+  const { scope, project_id, task_id } = context as Prisma.JsonObject;
+  return { context: { scope, project_id, task_id } };
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -176,6 +182,7 @@ export async function GET(
         role: isAgentChatSystemMessage(message) ? "system" : message.role,
         content: message.content,
         createdAt: message.createdAt,
+        ...sentContextIds(message.context),
       })).map((message, index) => ({
         ...message,
         proposal: serializeChatTicketProposal(
