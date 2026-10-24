@@ -28,10 +28,6 @@ jobs:
       statuses: ${{ steps.evaluate.outputs.statuses }}
       evaluation_failed: ${{ steps.evaluate.outputs.evaluation_failed }}
     steps:
-      - name: Record job start time
-        run: |
-          echo "JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$GITHUB_ENV"
-
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: production
@@ -83,9 +79,8 @@ jobs:
 
           queue_status() {
             jq -c --argjson pr_number "$PR_NUMBER" --arg head_sha "$head_sha" \
-              --arg job_started_at "$JOB_STARTED_AT" --arg fingerprint "$fingerprint" \
-              '{pr_number: $pr_number, head_sha: $head_sha, job_started_at: $job_started_at,
-                fingerprint: $fingerprint, deduplicate: false, payload: .}' "$1" >>"$queued_statuses"
+              --arg fingerprint "$fingerprint" \
+              '{pr_number: $pr_number, head_sha: $head_sha, fingerprint: $fingerprint, payload: .}' "$1" >>"$queued_statuses"
           }
 
           publish_error_status() {
@@ -261,7 +256,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
-      group: feature-flag-gate-publish-${{ github.event.pull_request.head.sha }}
+      group: feature-flag-gate-publish
       cancel-in-progress: false
     permissions:
       contents: read
@@ -298,10 +293,6 @@ jobs:
       statuses: ${{ steps.evaluate.outputs.statuses }}
       evaluation_failed: ${{ steps.evaluate.outputs.evaluation_failed }}
     steps:
-      - name: Record job start time
-        run: |
-          echo "JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$GITHUB_ENV"
-
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: production
@@ -353,9 +344,8 @@ jobs:
               pr_number=$(jq -sr --arg sha "$1" 'map(select(.head.sha == $sha))[0].number' "$rows") || return 1
             fi
             jq -c --argjson pr_number "$pr_number" --arg head_sha "$1" \
-              --arg job_started_at "$JOB_STARTED_AT" --arg fingerprint "$fingerprint" \
-              '{pr_number: $pr_number, head_sha: $head_sha, job_started_at: $job_started_at,
-                fingerprint: $fingerprint, deduplicate: true, payload: .}' "$2" >>"$queued_statuses"
+              --arg fingerprint "$fingerprint" \
+              '{pr_number: $pr_number, head_sha: $head_sha, fingerprint: $fingerprint, payload: .}' "$2" >>"$queued_statuses"
           }
 
           publish_reconciliation_error() {
@@ -551,7 +541,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
-      group: feature-flag-gate-publish-reconcile
+      group: feature-flag-gate-publish
       cancel-in-progress: false
     permissions:
       contents: read

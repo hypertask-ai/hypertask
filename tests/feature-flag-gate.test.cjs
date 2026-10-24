@@ -1205,7 +1205,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.doesNotMatch(workflow, /pull-requests: write/);
 });
 
-test("trusted publishers use isolated queues and final-only membership-aware fingerprints without locks", () => {
+test("trusted publishers serialize final-only membership-aware verdicts and allow error recovery without locks", () => {
   const workflow = fs.readFileSync(path.join(root, ".github/workflows/feature-flag-gate.yml"), "utf8");
   const publisher = fs.readFileSync(path.join(root, ".github/scripts/feature-flag-gate-publish.sh"), "utf8");
   const job = (name) => workflow.split(`  ${name}:\n`)[1].split(/\n  [a-z][a-z-]*:\n/)[0];
@@ -1216,7 +1216,8 @@ test("trusted publishers use isolated queues and final-only membership-aware fin
   assert.match(job("reconcile-open-pull-requests"), /group: feature-flag-gate-production\s+cancel-in-progress: false/);
   for (const name of ["feature-flag-gate", "reconcile-open-pull-requests"]) {
     const evaluation = job(name);
-    assert.match(evaluation, /JOB_STARTED_AT=\$\(date -u/);
+    assert.doesNotMatch(evaluation, /JOB_STARTED_AT|job_started_at|deduplicate:|Record job start time/);
+    assert.match(evaluation, /\{pr_number: \$pr_number, head_sha: \$head_sha, fingerprint: \$fingerprint, payload: \.\}/);
     assert.match(evaluation, /steps\.evaluate\.outputs\.statuses/);
     assert.match(evaluation, /group_by\(\[\.pr_number, \.head_sha\]\) \| map\(last\)/);
     assert.match(evaluation, /elif node \.github\/scripts\/feature-flag-gate\.mjs/);
@@ -1227,10 +1228,7 @@ test("trusted publishers use isolated queues and final-only membership-aware fin
   }
   for (const name of ["publish-pull-request", "publish-reconciliation"]) {
     const publication = job(name);
-    const group = name === "publish-reconciliation"
-      ? /group: feature-flag-gate-publish-reconcile\s+cancel-in-progress: false/
-      : /group: feature-flag-gate-publish-\$\{\{ github\.event\.pull_request\.head\.sha \}\}\s+cancel-in-progress: false/;
-    assert.match(publication, group);
+    assert.match(publication, /group: feature-flag-gate-publish\s+cancel-in-progress: false/);
     assert.match(publication, /if: always\(\) && needs\./);
     assert.doesNotMatch(publication, /git fetch|npm ci|feature-flag-gate\.mjs|publish_status_if_current|gh_api -X POST/);
     assert.match(publication, /permissions:\s+contents: read\s+pull-requests: read\s+statuses: write\s+steps:/);
@@ -1240,7 +1238,11 @@ test("trusted publishers use isolated queues and final-only membership-aware fin
   }
   assert.equal((workflow.match(/bash \.github\/scripts\/feature-flag-gate-publish\.sh/g) || []).length, 2);
   assert.match(publisher, /\.payload\.state == "success" or \.payload\.state == "failure" or \.payload\.state == "error"/);
-  assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure" or \$current\.state == "error"\) and/);
+  assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\$state != "error" and/);
+  assert.doesNotMatch(publisher, /\$current\.state == "error"/);
+  assert.match(publisher, /if \[ -z "\$evaluated_fingerprint" \] && \[ "\$state" = "error" \]; then\s+fingerprint=""\s+else/);
+  assert.match(publisher, /--arg target_url "\$RUN_URL\$\{fingerprint:\+#\$fingerprint\}"/);
+  assert.ok(publisher.indexOf('.head.sha == $sha') < publisher.indexOf('if [ -z "$evaluated_fingerprint" ]'));
   assert.doesNotMatch(publisher, /job_started_at|created_at|deduplicate|state[=:]\s*["']?pending/);
   assert.match(publisher, /flatten \| map\(select\(\.context == "feature-flag-gate"\)\)\[0\]/);
   assert.match(publisher, /\(\$current\.target_url \/\/ "" \| split\("#"\)\[1:\] \| join\("#"\)\) == \$fingerprint/);

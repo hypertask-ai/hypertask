@@ -102,7 +102,7 @@ function runWorkflow(t, {
   gateScript = 'console.log("ok");\n', statuses = () => ({}), sharedHead = false,
   refreshedPull = (pull) => pull, freshSharedHead = false, forkHead = false,
   statusesBeforePublish, pullBeforePublish, prepareStatuses = (records) => records,
-  sharedHeadBeforePublish, labels = [],
+  sharedHeadBeforePublish, labels = [], parserInstallFailure = false,
 } = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -128,7 +128,7 @@ function runWorkflow(t, {
     RUNNER_TEMP: fixture,
     REPO: "fixture/repository",
     RUN_URL: "https://example.invalid/actions/runs/1",
-    JOB_STARTED_AT: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    FIXTURE_PARSER_FAILURE: String(parserInstallFailure),
     PR_NUMBER: "42",
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
     GITHUB_OUTPUT: path.join(fixture, "outputs"),
@@ -246,6 +246,7 @@ if (args.includes("POST")) {
 }
 `, { mode: 0o755 });
   fs.writeFileSync(path.join(bin, "npm"), `#!/bin/sh
+if [ "$FIXTURE_PARSER_FAILURE" = "true" ]; then exit 1; fi
 while [ "$#" -gt 0 ]; do
   if [ "$1" = "--prefix" ]; then
     mkdir -p "$2/node_modules/typescript/lib"
@@ -349,7 +350,7 @@ for (const change of ["base", "title", "head", "error", "pending", "missing fing
     assert.equal(records[0].payload.state, "success");
     assert.equal(records[0].payload.description, "ok");
     assert.equal(new URL(records[0].payload.target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
-    if (change === "error" || change === "red older than 30 minutes") {
+    if (change === "red older than 30 minutes") {
       assert.deepEqual(posts, []);
       assert.match(output, /final feature-flag-gate status has the same fingerprint/);
     } else {
@@ -548,7 +549,7 @@ for (const endpoint of ['/commits/', '/pulls/42', '/statuses/']) {
   });
 }
 
-test('publishers share trusted final-only code with isolated queues and minimal permissions', () => {
+test('publishers serialize trusted final-only code with error recovery and minimal permissions', () => {
   assert.doesNotMatch(workflow, /\bgh api\b|\$\(gh_api\b/);
   assert.doesNotMatch(workflow, /mark-pull-request-pending|state[=:]\s*["']?pending|contents: write|actions: read/);
   assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
@@ -556,16 +557,15 @@ test('publishers share trusted final-only code with isolated queues and minimal 
   assert.match(reconciliation, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
   for (const evaluation of [singlePullRequest, reconciliation]) {
     assert.doesNotMatch(evaluation, /group: feature-flag-gate-publish|statuses: write|gh_api -X POST/);
+    assert.doesNotMatch(evaluation, /JOB_STARTED_AT|job_started_at|deduplicate:|Record job start time/);
+    assert.match(evaluation, /\{pr_number: \$pr_number, head_sha: \$head_sha, fingerprint: \$fingerprint, payload: \.\}/);
     assert.match(evaluation, /elif node \.github\/scripts\/feature-flag-gate\.mjs/);
     assert.match(evaluation, /steps\.evaluate\.outputs\.statuses/);
     assert.match(evaluation, /\.heads=\$evaluated_head_pr_count/);
     assert.match(evaluation, /evaluated_head_pr_count=\$fresh_head_pr_count/);
   }
   for (const publisher of [perPrPublisher, reconcilePublisher]) {
-    const group = publisher === reconcilePublisher
-      ? /group: feature-flag-gate-publish-reconcile\s*cancel-in-progress: false/
-      : /group: feature-flag-gate-publish-\$\{\{ github\.event\.pull_request\.head\.sha \}\}\s*cancel-in-progress: false/;
-    assert.match(publisher, group);
+    assert.match(publisher, /group: feature-flag-gate-publish\s+cancel-in-progress: false/);
     assert.match(publisher, /permissions:\s+contents: read\s+pull-requests: read\s+statuses: write\s+steps:/);
     assert.doesNotMatch(publisher, /npm ci|git fetch|feature-flag-gate\.mjs|publish_status_if_current|gh_api -X POST/);
     assert.match(publisher, /if: always\(\) && needs\./);
@@ -577,7 +577,11 @@ test('publishers share trusted final-only code with isolated queues and minimal 
   assert.doesNotMatch(publisherScript + workflow, /feature-flag-publish-guard|GUARD_OWNER|\/git\/refs/);
   assert.equal((publisherScript.match(/gh_api -X POST/g) || []).length, 1);
   assert.match(publisherScript, /\.payload\.state == "success" or \.payload\.state == "failure" or \.payload\.state == "error"/);
-  assert.match(publisherScript, /\$current\.state == "success" or \$current\.state == "failure" or \$current\.state == "error"/);
+  assert.match(publisherScript, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\$state != "error" and/);
+  assert.doesNotMatch(publisherScript, /\$current\.state == "error"/);
+  assert.match(publisherScript, /if \[ -z "\$evaluated_fingerprint" \] && \[ "\$state" = "error" \]; then\s+fingerprint=""\s+else/);
+  assert.match(publisherScript, /--arg target_url "\$RUN_URL\$\{fingerprint:\+#\$fingerprint\}"/);
+  assert.ok(publisherScript.indexOf('.head.sha == $sha') < publisherScript.indexOf('if [ -z "$evaluated_fingerprint" ]'));
   assert.doesNotMatch(publisherScript, /job_started_at|created_at|deduplicate|state[=:]\s*["']?pending/);
   assert.match(publisherScript, /\(\$current\.target_url \/\/ "" \| split\("#"\)\[1:\] \| join\("#"\)\) == \$fingerprint/);
   assert.match(publisherScript, /fingerprint="ffg=\$base_sha\.\$\(printf '%s\\n%s' "\$title" "\$labels" \| sha256sum \| cut -c1-16\)\.heads=\$head_pr_count"/);
@@ -590,7 +594,7 @@ test('publishers share trusted final-only code with isolated queues and minimal 
 
 for (const job of [singlePullRequest, reconciliation]) {
   const name = job === singlePullRequest ? "per-PR" : "reconcile";
-  for (const state of ["error", "success", "failure"]) {
+  for (const state of ["success", "failure"]) {
     test(`${name}: newer final with the same fingerprint protects against a queued ${state}`, (t) => {
       const { result, output, posts } = runWorkflow(t, {
         job,
@@ -650,7 +654,7 @@ for (const job of [singlePullRequest, reconciliation]) {
     });
   }
 
-  for (const state of ["success", "failure", "error"]) {
+  for (const state of ["success", "failure"]) {
     test(`${name}: a final ${state} with the same fingerprint deduplicates regardless of age or description`, (t) => {
       const { result, output, posts } = runWorkflow(t, {
         job,
@@ -663,6 +667,85 @@ for (const job of [singlePullRequest, reconciliation]) {
       assert.match(output, /final feature-flag-gate status has the same fingerprint/);
     });
   }
+
+  for (const state of ["success", "failure", "error"]) {
+    test(`${name}: an existing error with the same fingerprint can recover to ${state}`, (t) => {
+      const { result, output, posts } = runWorkflow(t, {
+        job,
+        prepareStatuses: (records) => records.map((record) => ({ ...record, payload: { ...record.payload, state } })),
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state: "error" })] }),
+      });
+      assert.equal(result.status, 0, output);
+      assert.deepEqual(posts.map((post) => post.state), [state]);
+    });
+  }
+
+  for (const state of ["success", "failure"]) {
+    test(`${name}: a prepared error replaces an existing ${state} with the same fingerprint`, (t) => {
+      const { result, output, posts } = runWorkflow(t, {
+        job, gateScript: 'process.exit(2);\n',
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state })] }),
+      });
+      assert.equal(result.status, 2, output);
+      assert.deepEqual(posts.map((post) => post.state), ["error"]);
+    });
+  }
+
+  test(`${name}: an early evaluation error without a fingerprint replaces the current head's success`, (t) => {
+    const { result, output, posts, records, calls } = runWorkflow(t, {
+      job, parserInstallFailure: true,
+      statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull)] }),
+    });
+    assert.equal(result.status, 2, output);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].fingerprint, "");
+    assert.deepEqual(Object.keys(records[0]).sort(), ["fingerprint", "head_sha", "payload", "pr_number"]);
+    assert.deepEqual(posts.map((post) => post.state), ["error"]);
+    assert.match(posts[0].description, /could not install its parser/);
+    assert.equal(posts[0].target_url, "https://example.invalid/actions/runs/1");
+    assert.ok(calls.at(-2).endpoint.includes("/commits/"));
+    assert.ok(calls.at(-1).args.includes("POST"));
+  });
+
+  test(`${name}: an early error can publish even if current fingerprint metadata is incomplete`, (t) => {
+    const { result, output, posts } = runWorkflow(t, {
+      job, parserInstallFailure: true,
+      statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull)] }),
+      pullBeforePublish: (pull) => ({ ...pull, title: null, base: { ...pull.base, sha: null } }),
+    });
+    assert.equal(result.status, 2, output);
+    assert.deepEqual(posts.map((post) => post.state), ["error"]);
+  });
+
+  for (const change of ["head", "base branch", "closed"]) {
+    test(`${name}: an early error is skipped when the pull request's ${change} changes`, (t) => {
+      const { result, output, posts } = runWorkflow(t, {
+        job, parserInstallFailure: true,
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull)] }),
+        pullBeforePublish: (pull) => {
+          const current = structuredClone(pull);
+          if (change === "head") current.head.sha = "b".repeat(40);
+          if (change === "base branch") current.base.ref = "another-branch";
+          if (change === "closed") current.state = "closed";
+          return current;
+        },
+      });
+      assert.equal(result.status, 2, output);
+      assert.deepEqual(posts, []);
+      assert.match(output, /pull request head or base moved before status publication/);
+    });
+  }
+
+  test(`${name}: a prepared error with a non-empty obsolete fingerprint cannot replace success`, (t) => {
+    const { result, output, posts } = runWorkflow(t, {
+      job, gateScript: 'process.exit(2);\n',
+      statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull)] }),
+      pullBeforePublish: (pull) => ({ ...pull, title: pull.title + " changed while queued" }),
+    });
+    assert.equal(result.status, 2, output);
+    assert.deepEqual(posts, []);
+    assert.match(output, /evaluation inputs changed before status publication/);
+  });
 
   test(`${name}: newest pending context does not let an older matching final suppress publication`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
@@ -726,6 +809,23 @@ for (const order of [["success", "pending"], ["pending", "success"]]) {
     assert.deepEqual(posts.map((post) => post.state), ["success"]);
     assert.equal(posts[0].context, "feature-flag-gate");
     assert.match(output, /prepared status is not a final feature-flag-gate verdict/);
+  });
+}
+
+for (const order of [["success", "failure"], ["failure", "success"]]) {
+  test(`shared-head rejection survives serialized publications: ${order.join(" then ")}`, (t) => {
+    const { result, output, posts } = runWorkflow(t, {
+      job: singlePullRequest, sharedHead: true,
+      prepareStatuses: (records, pull) => order.map((state) => ({
+        ...records[0],
+        fingerprint: new URL(featureFlagStatus(pull, {}, state === "success" ? 1 : 2).target_url).hash.slice(1),
+        payload: { ...records[0].payload, state },
+      })),
+    });
+    assert.equal(result.status, 1, output);
+    assert.deepEqual(posts.map((post) => post.state), ["failure"]);
+    assert.match(posts[0].target_url, /\.heads=2$/);
+    assert.match(output, /evaluation inputs changed before status publication/);
   });
 }
 
