@@ -25,6 +25,9 @@ import {
   interceptMessageLinkClick,
 } from "@/utils/helperFunctions/messageHtmlLinks";
 import { TypingIndicator } from "./TypingIndicator";
+import { extractSettingCards } from "@/lib/ai/settings/catalog";
+
+const AiSettingChangeCard = dynamic(() => import("./AiSettingChangeCard").then((module) => module.AiSettingChangeCard), { ssr: false });
 
 const AttachmentsCarousel = dynamic(
   () => import("@/components/Common/AttachmentsView/AttachmentsCarousel"),
@@ -275,15 +278,16 @@ const SubMessage = ({ message }: { message: IChatMessage }) => {
     if (isMbl && showAiChatInterface) togglePopover();
   };
 
+  const settingCards = useMemo(() => message.role === "assistant" ? extractSettingCards(message.content) : { html: message.content, ids: [] }, [message.content, message.role]);
   const messageHtmlWithTableScroll = useMemo(
     () => {
       const content =
         message.role === "assistant"
-          ? normalizeAssistantHtml(message.content)
-          : message.content;
+          ? normalizeAssistantHtml(settingCards.html)
+          : settingCards.html;
       return wrapTablesInMessageHtml(sanitizeAiHtml(content));
     },
-    [message.content, message.role]
+    [settingCards.html, message.role]
   );
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -310,6 +314,7 @@ const SubMessage = ({ message }: { message: IChatMessage }) => {
           className={`content-html ${contentClass}`}
           dangerouslySetInnerHTML={{ __html: messageHtmlWithTableScroll }}
         />
+        {settingCards.ids.map((id) => <AiSettingChangeCard key={id} id={id} />)}
         {message.role === "assistant" && !message.isDelivered && (
           <AssistantStreamingStatus
             agentStatus={agentStatus}

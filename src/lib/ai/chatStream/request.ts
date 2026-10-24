@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { settingsScopeSchema } from "@/lib/ai/settings/catalog";
 import { SORTING_MODES } from "@/models/Views/model";
 import { SseEvent } from "@/lib/ai/chatStream/types";
 
@@ -58,6 +59,7 @@ export const chatRequestSchema = z.object({
   teamId: z.string().optional().nullable(),
   context_list: z.array(z.unknown()).nullable().optional(),
   default_context: defaultContextSchema.nullable().optional(),
+  settings_context: settingsScopeSchema.optional(),
   user_context: z.record(z.string(), z.unknown()).nullable().optional(),
   chat_history: z
     .array(

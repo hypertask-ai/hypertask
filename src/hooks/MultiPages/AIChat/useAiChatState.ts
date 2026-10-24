@@ -13,6 +13,7 @@ import { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandle
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 
@@ -43,6 +44,8 @@ export function useAiChatState() {
   const fullScreenChatScope = useRecoilValue(fullScreenChatScopeAtom);
   const [dockedChatScope, setDockedChatScope] = useDockedChatScope();
   const pathname = usePathname();
+  const settingsEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
+  const isSettingsPage = settingsEnabled && (pathname === "/settings" || pathname?.startsWith("/settings/"));
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
@@ -72,6 +75,7 @@ export function useAiChatState() {
   }, []);
   const surface = !pathname
     ? "unknown"
+    : isSettingsPage ? "settings"
     : pathname.startsWith("/my-tasks")
       ? "my_tasks"
       : pathname.startsWith("/inbox")

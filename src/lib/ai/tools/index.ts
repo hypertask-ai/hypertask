@@ -90,6 +90,7 @@ import { createRagRetrievalTool } from "./ragRetrieval";
 import { createWebSearchTool } from "./webSearch";
 import { createSearchHelpDocsTool } from "./searchHelpDocs";
 import { createToolContext } from "./context";
+import { createSettingsTool } from "./settings";
 
 export function buildTools(
   user: AuthedUser,
@@ -102,9 +103,13 @@ export function buildTools(
   chatTaskWriterEnabled = false,
   abortSignal?: AbortSignal,
   inlineAgentImagesEnabled = false,
-  teamScope?: AgentTokenTeamScope | null
+  teamScope?: AgentTokenTeamScope | null,
+  settingsEnabled = false
 ): ToolSet {
   const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal, inlineAgentImagesEnabled, teamScope);
+  if (settingsEnabled && body.settings_context && !actingAgentId) {
+    return trackToolSetExecutions(createSettingsTool(context), recordToolExecution, recordToolStart);
+  }
   const tools: ToolSet = {
     hypertask_list_agents: createListAgentsTool(context).hypertask_list_agents,
     hypertask_agent_webhook: createAgentWebhookTool(context).hypertask_agent_webhook,

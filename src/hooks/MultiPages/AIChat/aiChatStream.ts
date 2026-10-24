@@ -1,4 +1,5 @@
 import { IChatMessage, IChatSession } from "@/models/model";
+import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import { TASK_EVENT } from "@/lib/realtime/shared";
 import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
@@ -65,6 +66,11 @@ export async function consumeAiChatStream(context: Context) {
                 const parsed = JSON.parse(jsonData);
 
                 switch (currentEventType) {
+                  case "settings":
+                    if (typeof parsed.path === "string" && settingsScopeFromPath(parsed.path)) {
+                      window.dispatchEvent(new CustomEvent("hypertask:open-settings", { detail: { path: parsed.path } }));
+                    }
+                    break;
                   case "status":
                     console.log(`🔥 Received status: ${parsed.content}`);
                     setAgentStatus(parsed.content);

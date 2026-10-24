@@ -1,5 +1,6 @@
 import React, { useContext, useLayoutEffect, useRef, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG } from "@/lib/flags/keys";
 import { usePathname } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
@@ -34,6 +35,7 @@ export default function AIChatClosedLayout({
   const isMobile = useContext(MobileViewContext);
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const chatOverlaysTicket = useFlag(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG);
+  const settingsChatEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
   const overlayDetailPage = chatOverlaysTicket && isDetailPage;
   const [sidebarOverlays, setSidebarOverlays] = useState(false);
   const previousIsMobile = useRef(isMobile);
@@ -65,7 +67,7 @@ export default function AIChatClosedLayout({
   );
 
   if (
-    pathname?.startsWith("/settings") ||
+    (pathname?.startsWith("/settings") && !settingsChatEnabled) ||
     pathname?.startsWith("/agents/chat")
   ) {
     return <>{children}</>;

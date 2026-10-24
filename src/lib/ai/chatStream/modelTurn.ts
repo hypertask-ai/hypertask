@@ -1,6 +1,8 @@
 
 
 import { renderPrompt } from "@/lib/ai/prompts/registry";
+import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
+import { settingsPages, type SettingProposalCard } from "@/lib/ai/settings/catalog";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
@@ -42,8 +44,11 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
     : null;
   const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
+  const settingsEnabled = !actingAgent && !!resolvedBody.settings_context && await isFeatureEnabled(HTPR_7622_AI_SETTINGS_FLAG, dbUser.id);
+  const settingsScope = settingsEnabled ? resolvedBody.settings_context : undefined;
   const instructions = [
     AGENT_SYSTEM_PROMPT,
+    settingsScope ? `The person is in Settings, section ${settingsScope.section}: ${settingsPages[settingsScope.section]}. Use hypertask_settings to read current values before proposing one change. You can propose theme, notification category/channel and board roles only on their open page. Every change requires the app's Apply/Cancel card; never apply through any other action or claim it is done. The app renders the real card; do not fabricate buttons or review links. For unsupported changes, explain the location and use open. The page catalog covers nearby settings, but other pages' values and actions require navigating there first. This Settings scope overrides unrelated board/task instructions.` : null,
     inlineAgentImagesEnabled ? renderPrompt("inline-agent-images") : null,
     skillResolution.systemPromptAddition,
     agentPromptAddition,
@@ -100,7 +105,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     await isFeatureEnabled(HTPR_7363_CHAT_TASK_WRITER_FLAG, dbUser.id),
     state.providerAbort.signal,
     inlineAgentImagesEnabled,
-    actingAgent ? actingAgent.teamScope : null
+    actingAgent ? actingAgent.teamScope : null,
+    settingsEnabled
   );
   if (
     heartbeatExecutionId &&
@@ -125,6 +131,14 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions });
   if (!reply) return;
   const { chunks } = reply;
+  if (settingsEnabled) {
+    const result = toolExecutions.find((execution) => execution.name === "hypertask_settings" && (execution.result as { proposal?: SettingProposalCard })?.proposal)?.result as { proposal: SettingProposalCard } | undefined;
+    if (result?.proposal) {
+      const card = `<p><a href="/settings/ai-change/${result.proposal.id}">Review setting change</a></p>`;
+      chunks.push(card);
+      state.send("content", { content: card });
+    }
+  }
 
   state.turnDeadline?.clear();
 

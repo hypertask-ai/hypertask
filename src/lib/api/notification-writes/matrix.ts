@@ -1,27 +1,9 @@
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
 import { notificationWriteJson } from "./response";
-import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import {
-  getShowImportantSplit,
-  getSplitsNoImportant,
-  withSplitsNoImportant,
-} from "@/lib/inboxSplitSettings";
-
-const notificationCategories = [
-  "mentions",
-  "comments",
-  "assignments",
-  "moves",
-  "dueDates",
-] as const;
-
-type NotificationCategory = (typeof notificationCategories)[number];
-type NotificationMatrix = Partial<
-  Record<NotificationCategory, { email: boolean; push: boolean }>
->;
+import { notificationCategories, updateNotificationMatrix, type NotificationMatrix } from "@/utils/controllers/notifications/updateNotificationMatrix";
 
 const categorySet = new Set<string>(notificationCategories);
 
@@ -94,23 +76,8 @@ const postRoute = taskWriteRoute({
       return notificationWriteJson({ message: "User settings not found" }, 404);
     }
 
-    const updated = await prisma.userSetting.update({
-      where: { userId: session.userId },
-      data: {
-        notificationMatrix: {
-          ...withSplitsNoImportant(
-            matrix,
-            getSplitsNoImportant(current.notificationMatrix)
-          ),
-          ...(getShowImportantSplit(current.notificationMatrix)
-            ? { showImportantSplit: true }
-            : {}),
-        } as Prisma.InputJsonObject,
-      },
-      select: { notificationMatrix: true },
-    });
-
-    return notificationWriteJson({ matrix: updated.notificationMatrix }, 200);
+    const updated = await updateNotificationMatrix(session.userId, { matrix });
+    return notificationWriteJson({ matrix: updated }, 200);
   },
 });
 

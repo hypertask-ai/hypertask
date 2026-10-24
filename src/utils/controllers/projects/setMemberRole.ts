@@ -7,6 +7,7 @@ const setMemberRole = async (
   projectId: number,
   targetUserId: number,
   role: MemberRole,
+  expectedRole?: MemberRole,
 ) => {
   try {
     if (!actingUserId || !projectId || !targetUserId || !role) {
@@ -71,6 +72,24 @@ const setMemberRole = async (
         status: 400,
         json: { message: "Member not found" },
       });
+    }
+
+    if (expectedRole !== undefined) {
+      const changed = await prisma.member.updateMany({
+        where: {
+          id: member.id,
+          userId: targetUserId,
+          status: "Accepted",
+          agentId: null,
+          role: expectedRole,
+          project: { ownerId: actingUserId, status: { not: "Deleted" } },
+        },
+        data: { role },
+      });
+      if (changed.count !== 1) {
+        return { status: 409, json: { message: "Role or board access changed since the preview. Ask for a fresh proposal." } };
+      }
+      return { status: 200, json: { ...member, role } };
     }
 
     const updatedMember = await prisma.member.update({
