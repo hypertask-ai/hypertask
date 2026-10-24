@@ -146,7 +146,9 @@ const Commands = (props: Props) => {
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
-  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  let blockerCommentEnabled = false;
+  if (blockerCommentFlag) blockerCommentEnabled = true;
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);

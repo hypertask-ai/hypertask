@@ -96,7 +96,9 @@ const useTaskDetailGlobalStates = (
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
-  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  let blockerCommentEnabled = false;
+  if (blockerCommentFlag) blockerCommentEnabled = true;
   const { editTicketWithAi } = useCommentToAiChat();
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);

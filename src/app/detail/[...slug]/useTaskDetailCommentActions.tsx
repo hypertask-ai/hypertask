@@ -12,7 +12,9 @@ import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-772
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function useTaskDetailCommentActions(getContext: () => TaskDetailContext) {
-  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  let blockerCommentEnabled = false;
+  if (blockerCommentFlag) blockerCommentEnabled = true;
   const { currentId, comments, editCommentHandler, handlePinComment, currentTask, toggleCreateTaskGlobally, refocusAndOpenTaskWriter, queryClient, _parsedTask, defaultCommentFocus, scrollVirtualize, _setActiveItem, setInViewObject, showAssignModal, setCurrentTask, updateTaskInCache, currentProject, setShowAssignModal, setShowTaskDeleteModal, setShowLinksModal, showMoveModal, navigate, setShowMoveModal } = getContext();
 
 
