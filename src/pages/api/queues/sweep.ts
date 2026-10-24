@@ -15,6 +15,7 @@ import {
 import type { IReminder } from "@/models/model";
 import { sweepAutoArchives } from "@/utils/controllers/tasks/sweepAutoArchive";
 import { sweepStaleNudges } from "@/utils/controllers/tasks/sweepStaleNudges";
+import { sweepValentinWaitingOn } from "@/utils/controllers/tasks/sweepValentinWaitingOn";
 import { sweepCycleRollovers } from "@/lib/cycleService";
 import { getRedis } from "@/lib/redis";
 import { HTPR_7042_NEON_WORK_AVOIDANCE_FLAG, isFeatureEnabled, withFeatureFlagSnapshot } from "@/lib/flags";
@@ -37,6 +38,7 @@ interface SweepSummary {
   chatExpiries: number;
   autoArchives: number;
   staleNudges: number;
+  waitingOn: number;
   cycleRollovers: number;
   agentWebhooks: number;
   agentTaskCreated: number;
@@ -206,6 +208,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     chatExpiries: 0,
     autoArchives: 0,
     staleNudges: 0,
+    waitingOn: 0,
     cycleRollovers: 0,
     agentWebhooks: 0,
     agentTaskCreated: 0,
@@ -249,6 +252,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       summary.staleNudges = await sweepStaleNudges();
     } catch (error) {
       console.log("🚀 ~ sweep ~ staleNudges error:", error);
+    }
+
+    try {
+      summary.waitingOn = await sweepValentinWaitingOn();
+    } catch (error) {
+      console.log("[sweep] waiting-on sync failed:", error);
     }
 
     try {

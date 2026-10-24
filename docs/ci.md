@@ -104,6 +104,27 @@ The `premerge-evidence.timer` reconciles all open production PRs every two minut
 
 Light gate jobs without a root repository install must install their own non-builtin dependencies. `tests/light-gate-dependencies.test.cjs` parses workflow jobs and follows relative script imports (including parity and the offline workflow tests); the Node version guard runs it with only its pinned `js-yaml` and TypeScript parser installs, independently of app CI's scope selection. The visual runner installs full dependencies itself; private scheduled speed measurements are not a PR gate. A missing-install negative control covers both feature-flag jobs and a new light gate. The feature-flag registry requires an explicit `FEATURE_FLAG_TYPESCRIPT_PATH`: an unset or unloadable parser prints one diagnostic and exits 2 (infrastructure error), never 0 (pass) or 1 (policy refusal). Auto-merge refuses an error; the feature-flag workflow publishes an error status. Local tests explicitly resolve the repo's TypeScript, and the repo-local flag generator and snapshot runner set that path before importing the registry.
 
+## Daily AI model watch
+
+[AI model watch](../.github/workflows/ai-model-watch.yml) runs at 05:43 UTC daily,
+with production-only manual dispatch, on public-repo `ubuntu-latest` (free hosted
+compute). It is non-required, uses Node 24 built-ins with no app install, and
+runs `tests/model-diff.test.cjs` before discovery. `scripts/model-diff --json`
+compares the app catalog with the Vercel AI Gateway and authenticated OpenAI /
+Anthropic lists. Gateway failures warn and fall back; unknown pricing never
+authorizes unconditional automatic shipping. No usable sources fails the watch.
+
+The existing CI `HYPERTASK_MCP_TOKEN` files board-15 tickets through the MCP
+search/create endpoints; optional `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` enable
+provider fallback. Stable exact-title searches, serialized runs, a stable
+idempotency key and fail-closed search validation prevent duplicate filings.
+Premium discoveries over $5/M input tokens wait for
+[HTPR-7746](https://app.hypertask.ai/detail/project-15/7746). The Action changes
+no app models and grants only `contents: read`; runners follow the indexed
+[update-ai-models skill](../.claude/skills/update-ai-models/SKILL.md) to ship an
+existing-class OpenAI/Anthropic bump or ask Valentin about a new class/provider.
+The saved discovery fixture is synthetic, not current upstream/pricing proof.
+
 ## Ship script regressions
 
 The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing the script/unit paths in `docs/ci-policy.yml`, including `.claude/skills/ship/scripts/**`, `.claude/skills/verify-qa/scripts/**`, `scripts/premerge-local.sh` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.

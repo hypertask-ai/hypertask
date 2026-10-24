@@ -4,6 +4,8 @@ import {
   type TAiModelKey,
 } from "@/lib/aiModelOptions";
 import {
+  BASETEN_BYOK_PROVIDER,
+  BASETEN_MODEL_SLUGS,
   getAiProviderByByokKey,
   type TByokProviderKey,
 } from "@/lib/aiProviders";
@@ -89,6 +91,14 @@ export function buildByokTestRequest(
       customEndpointChatCompletionsUrl(customEndpoint.baseUrl),
       apiKey,
       { id: customEndpoint.modelId, label: customEndpoint.modelId }
+    );
+  }
+
+  if (provider === "baseten") {
+    return jsonRequest(
+      `${BASETEN_BYOK_PROVIDER.openAiCompatibleBaseUrl}/chat/completions`,
+      apiKey,
+      { id: BASETEN_MODEL_SLUGS["deepseek-v4.1-flash"], label: "DeepSeek V4.1 Flash" },
     );
   }
 

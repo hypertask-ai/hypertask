@@ -1,7 +1,7 @@
 
 
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
@@ -42,10 +42,14 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
     : null;
   const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
+  const bulkScopeConfirmationEnabled = await isFeatureEnabled(HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, dbUser.id);
   const instructions = [
     AGENT_SYSTEM_PROMPT,
     resolvedBody.surface && await isFeatureEnabled(HTPR_7760_CHAT_SURFACE_FLAG, dbUser.id)
       ? chatSurfacePrompt(resolvedBody.surface)
+      : null,
+    bulkScopeConfirmationEnabled
+      ? "For bulk task updates, assignments, unassignments and comments: preview EVERY batch with confirmed: false before asking the user once for the full list. A confirmation_required response ends execution, but not collection of the remaining previews in that turn. After the user approves in a later message, call each previewed batch directly with confirmed: true; do not issue a fresh preview or ask again for unchanged tasks and changes. Repartitioning the same previewed list into internal batches does not require another yes. If tasks or changes differ, preview the changed scope and ask again."
       : null,
     inlineAgentImagesEnabled ? renderPrompt("inline-agent-images") : null,
     skillResolution.systemPromptAddition,
@@ -103,7 +107,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     await isFeatureEnabled(HTPR_7363_CHAT_TASK_WRITER_FLAG, dbUser.id),
     state.providerAbort.signal,
     inlineAgentImagesEnabled,
-    actingAgent ? actingAgent.teamScope : null
+    actingAgent ? actingAgent.teamScope : null,
+    bulkScopeConfirmationEnabled
   );
   if (
     heartbeatExecutionId &&

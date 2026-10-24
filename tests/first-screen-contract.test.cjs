@@ -108,7 +108,7 @@ test("inbox respects locale sorting, empty data and synthetic rows", () => {
 });
 
 test("timezone grouping matches the existing renderer including DST, weeks and month boundaries", () => {
-  const source = fs.readFileSync(path.join(root, "src/components/notifications/inboxSplit/index.tsx"), "utf8");
+  const source = fs.readFileSync(path.join(root, "src/lib/inbox/inboxDateGroups.ts"), "utf8");
   const body = source.slice(source.indexOf("const getDateGroup ="), source.indexOf("const getDateGroupLabel ="))
     .replace("(date: Date): string", "(date)").replace("const now = new Date();", "const now = new Date(clock);");
   const originalTZ = process.env.TZ;

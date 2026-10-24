@@ -33,7 +33,7 @@ export function useAiChat() {
   setIsSidebarMode, showMentionList, inViewObject, dockedChatScope, setDockedChatScope,
   pathname, isDetailPage, isFullScreenChat, surface, spansAllBoards,
   chatMounted, setChatMounted, minimized, setMinimized, isTyping,
-  setIsTyping, queuedMessages, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
+  setIsTyping, queuedMessages, persistentQueue, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
   setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption,
   streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, currentStreamingSession,
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
@@ -58,7 +58,7 @@ export function useAiChat() {
   const sessionContext = {
     agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
     createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
-    deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
+    deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, taskId, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
     setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
@@ -82,7 +82,7 @@ export function useAiChat() {
   handleSendMessage,
   } = createAiChatSend({
     sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession,
-    isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
+    isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
     scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
