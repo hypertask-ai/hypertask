@@ -142,6 +142,40 @@ async function choose(page: Page, name: string, error?: string) {
     : page.locator('[data-ai-chat-composer-root]:not([inert]) #ai-chat-tiptap-editor .ProseMirror:visible')).toBeVisible()
 }
 
+test('phone conversation list leaves the composer clear and typing taps never switch chats', async ({ page }, info) => {
+  test.skip(info.project.name !== 'Mobile', 'Phone composer clearance')
+  await page.setViewportSize({ width: 390, height: 664 })
+  await open(page, info.project.name)
+  const sidebar = page.getByTestId('ai-sidebar')
+  const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
+  const list = page.getByTestId('agent-sidebar-conversations')
+  const [external, , native] = fixture.lanes[info.project.name]
+  for (const name of ['AI chat', external.name, native.name]) {
+    await choose(page, name)
+    const selectedTitle = await title.textContent()
+    const composer = sidebar.locator('[data-ai-chat-composer-root]:not([inert]):visible')
+    const editor = composer.locator('[contenteditable="true"]')
+    await expect(editor).toBeVisible()
+    await title.click()
+    await expect(list).toBeVisible()
+    const menu = (await list.boundingBox())!
+    const boundary = (await composer.boundingBox())!
+    expect(menu.y + menu.height).toBeLessThanOrEqual(boundary.y - 12)
+    expect(await list.evaluate(node => node.scrollHeight > node.clientHeight), 'phone list scrolls above the composer').toBe(true)
+    const box = (await editor.boundingBox())!
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    expect(await editor.evaluate((node, point) => {
+      const target = document.elementFromPoint(point.x, point.y)
+      return node.contains(target) && !target?.closest('#agent-sidebar-conversations')
+    }, point), 'composer center hits the editor, never a conversation row').toBe(true)
+    await page.touchscreen.tap(point.x, point.y)
+    await expect(list).toBeHidden()
+    await expect(editor).toBeFocused()
+    await expect(title).toHaveText(selectedTitle!)
+    await expect(sidebar).toBeVisible()
+  }
+})
+
 test('past chats are listed newest first above agents and reopen', async ({ page }, info) => {
   await open(page, info.project.name)
   const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
