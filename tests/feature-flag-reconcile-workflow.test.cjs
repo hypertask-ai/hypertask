@@ -69,7 +69,8 @@ test("reconciliation fails closed when mktemp cannot create private scratch", (t
   assert.match(result.stdout, /::error::Cannot create private feature-flag reconciliation scratch space\./);
 });
 
-const singlePullRequest = workflow.split("  reconcile-open-pull-requests:")[0];
+const trustedWorkflow = fs.readFileSync(path.join(__dirname, "../.github/workflows/pr-guards-trusted.yml"), "utf8");
+const singlePullRequest = trustedWorkflow.split("        id: flags\n")[1].split("      - name: Reconcile every open production pull request")[0];
 const waitingDescription = "feature-flag-gate is waiting for the run on the newer production commit";
 
 function featureFlagStatus(pull, overrides = {}) {
@@ -497,7 +498,7 @@ for (const endpoint of ['/commits/', '/pulls/42', '/statuses/']) {
 
 test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
   assert.doesNotMatch(workflow, /\bgh api\b|\$\(gh_api\b/);
-  assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
+  assert.equal(((workflow + singlePullRequest).match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
   assert.match(workflow, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
   assert.doesNotMatch(singlePullRequest, /cancel-in-progress: true/);
 });

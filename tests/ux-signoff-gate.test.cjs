@@ -1704,7 +1704,11 @@ test('incomplete files, status publication errors and changed PR metadata do not
 test('workflow uses trusted pinned production code, correct events, permissions and secret', () => {
   const workflow = readFileSync(path.join(root, '.github/workflows/ux-signoff-gate.yml'), 'utf8');
   const trusted = readFileSync(path.join(root, '.github/workflows/feature-flag-gate.yml'), 'utf8');
-  assert.match(workflow, /pull_request_target:\s*types: \[opened, synchronize, reopened, edited, ready_for_review\]\s*branches: \[production\]/);
+  assert.doesNotMatch(workflow, /pull_request_target:/);
+  const pr = readFileSync(path.join(root, '.github/workflows/pr-guards-trusted.yml'), 'utf8');
+  assert.match(pr, /pull_request_target:/);
+  assert.match(pr, /cancel-in-progress: true/);
+  assert.match(pr, /run: node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile/);
   assert.match(workflow, /cron: ['"]\*\/10 \* \* \* \*['"]/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /permissions:\s*contents: read\s*pull-requests: read\s*statuses: write/);

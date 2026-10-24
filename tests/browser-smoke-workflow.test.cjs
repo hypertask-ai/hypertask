@@ -185,7 +185,7 @@ test("MCP CLI API contract stays fatal inside the required browser-smoke job", a
   assert.notEqual(smoke["continue-on-error"], true);
   const step = smoke.steps.find(s => s.id === "smoke");
   assert.notEqual(step["continue-on-error"], true);
-  assert.equal(step.if, "github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'");
+  assert.equal(step.if, "github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'");
   assert.match(step.run, /^set -euo pipefail$/m);
   const lines = step.run.split("\n").filter(line => line.includes("scripts/mcp-cli-api-contract.mjs"));
   assert.equal(lines.length, 1, "the contract runs exactly once in the browser-smoke step");

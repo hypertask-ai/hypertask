@@ -11,7 +11,7 @@ const validateScript = workflow.jobs.validate.steps.find((step) => step.id === "
 const SHA = "6a2159078fb845751b1e00d045020a740bdba2c4";
 
 function pr({ number = 1517, state = "open", draft = false, base = "production", sha = SHA } = {}) {
-  return { number, state, draft, base: { ref: base }, head: { sha, repo: { full_name: "hypertask-ai/hypertask" } } };
+  return { number, state, draft, base: { ref: base, sha: "a".repeat(40) }, head: { sha, repo: { full_name: "hypertask-ai/hypertask" } } };
 }
 
 function runValidate({ requestPr = "", commitPulls = [], pullByNumber = {} }) {
@@ -104,6 +104,6 @@ test("still refused: a draft pull request, a non-production base, or two open pu
 
 test("the smoke and report jobs are skipped for a superseded request", () => {
   assert.equal(workflow.jobs.validate.outputs.superseded, "${{ steps.request.outputs.superseded }}");
-  assert.equal(workflow.jobs["app-smoke"].if, "needs.validate.outputs.superseded != 'true'");
+  assert.equal(workflow.jobs["app-smoke"].if, "needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'");
   assert.match(workflow.jobs.report.if, /needs\.validate\.outputs\.superseded != 'true'$/);
 });

@@ -6,9 +6,6 @@ name: UX Signoff Gate
 # Run trusted production code only, and reread reactions every ten minutes.
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
-    branches: [production]
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:

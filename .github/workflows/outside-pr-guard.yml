@@ -3,8 +3,6 @@
 name: Outside PR guard
 
 on:
-  pull_request_target:
-    types: [opened, reopened]
   workflow_dispatch:
     inputs:
       pr_number:

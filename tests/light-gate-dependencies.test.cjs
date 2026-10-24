@@ -133,12 +133,14 @@ test("light gate jobs install every transitive non-builtin dependency themselves
 });
 
 test("negative control: removing either feature-flag job's parser install is caught", () => {
-  const content = read(".github/workflows/feature-flag-gate.yml");
-  const withoutInstall = content.replace(/npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/g, "true");
-  assert.notEqual(withoutInstall, content);
-  const result = checkWorkflow("feature-flag-gate.yml", withoutInstall);
-  assert.equal(result.checked, 2);
-  assert.equal(result.issues.filter((issue) => /loads typescript without its own install/.test(issue)).length, 2);
+  for (const file of ["feature-flag-gate.yml", "pr-guards-trusted.yml"]) {
+    const content = read(`.github/workflows/${file}`);
+    const withoutInstall = content.replace(/npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/g, "true");
+    assert.notEqual(withoutInstall, content);
+    const result = checkWorkflow(file, withoutInstall);
+    const count = file === "pr-guards-trusted.yml" ? 2 : 1;
+    assert.equal(result.issues.filter((issue) => /loads typescript without its own install/.test(issue)).length, count);
+  }
   const freshWorkflow = `jobs:\n  gate:\n    steps:\n      - run: node .github/scripts/feature-flag-gate.mjs\n`;
   assert.match(checkWorkflow("new-light-gate.yml", freshWorkflow).issues.join("\n"), /loads typescript without its own install/);
 });

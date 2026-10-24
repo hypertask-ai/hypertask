@@ -1,0 +1,149 @@
+name: PR Guards
+
+on:
+  pull_request:
+  workflow_run:
+    workflows: [PR Guards]
+    types: [completed]
+
+permissions:
+  contents: read
+  statuses: write
+  actions: read
+
+concurrency:
+  group: pr-guards-${{ github.event.pull_request.number || format('{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
+  cancel-in-progress: true
+
+jobs:
+  pr-guards:
+    # Dependabot/fork PR tokens are read-only. Only their completed scan needs a
+    # trusted status-only pass; a completion of that pass cannot recurse.
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event.workflow_run.event == 'pull_request' &&
+       (github.event.workflow_run.actor.login == 'dependabot[bot]' ||
+        github.event.workflow_run.head_repository.full_name != github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Mark original guard contexts pending
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' && github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            for (const name of ["secret-scan", "next-public-secrets"]) {
+              await github.rest.repos.createCommitStatus({
+                ...context.repo, sha: context.payload.pull_request.head.sha,
+                context: name, state: 'pending', description: `${name} is evaluating this pull request`,
+              });
+            }
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pick the commits to scan
+        id: scan-range
+        if: always() && github.event_name == 'pull_request'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ -n "$PR_BASE_SHA" ]; then
+            # A pull request scans only the commits it adds.
+            base="$PR_BASE_SHA"; head="$PR_HEAD_SHA"
+          else
+            # A push scans only the commits it adds. A new branch (or an unknown previous tip
+            # after a force push) scans everything not already on the default branch; on the
+            # default branch itself that means its whole history (empty base).
+            head="$PUSH_HEAD_SHA"
+            base=$(git rev-parse "origin/$DEFAULT_BRANCH")
+            [ "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH" ] && base=""
+            if [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ] \
+              && git cat-file -e "$PUSH_BEFORE_SHA^{commit}" 2>/dev/null; then
+              base="$PUSH_BEFORE_SHA"
+            fi
+          fi
+          echo "Scanning ${base:-the whole history}..$head"
+          echo "SCAN_BASE=$base" >> "$GITHUB_ENV"
+          echo "SCAN_HEAD=$head" >> "$GITHUB_ENV"
+      - name: Run gitleaks
+        id: gitleaks
+        if: always() && github.event_name == 'pull_request' && steps.scan-range.outcome == 'success'
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz gitleaks
+          ./gitleaks detect --no-banner --source . --redact --log-opts "${SCAN_BASE:+$SCAN_BASE..}$SCAN_HEAD"
+      - name: Run trufflehog
+        id: trufflehog
+        if: always() && github.event_name == 'pull_request' && steps.scan-range.outcome == 'success'
+        run: |
+          curl -sSfL https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.0/trufflehog_3.97.0_linux_amd64.tar.gz | tar -xz trufflehog
+          # --json keeps values out of the plain log; only the key type and place are printed.
+          set +e
+          ./trufflehog git "file://$PWD" --branch "$SCAN_HEAD" ${SCAN_BASE:+--since-commit "$SCAN_BASE"} \
+            --fail --no-update --json > found.json 2> trufflehog.err
+          code=$?
+          set -e
+          grep -o '"DetectorName":"[^"]*"\|"file":"[^"]*"\|"commit":"[^"]*"' found.json || true
+          grep -o '"chunks":[0-9]*\|"bytes":[0-9]*\|"verified_secrets":[0-9]*\|"unverified_secrets":[0-9]*' trufflehog.err | tr '\n' ' ' || true
+          rm -f found.json
+          if [ "$code" = 183 ]; then
+            echo "::error::trufflehog found a key. Remove it, and roll it if it was ever real."
+            exit 1
+          fi
+          if [ "$code" != 0 ]; then tail -5 trufflehog.err; exit "$code"; fi
+      - name: Fail on NEXT_PUBLIC_ secret-named vars
+        id: public-secrets
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          if grep -rnE 'NEXT_PUBLIC_[A-Z0-9_]*(SECRET|PASSWORD|PRIVATE|_PW\b|UPLOAD_KEY)' src --include='*.ts' --include='*.tsx' --include='*.js'; then
+            echo "::error::A NEXT_PUBLIC_ env var with a secret-looking name is referenced in source. NEXT_PUBLIC_ vars are inlined into the public browser bundle. Move the check server-side and drop the NEXT_PUBLIC_ prefix."
+            exit 1
+          fi
+          echo "OK: no NEXT_PUBLIC_ secrets referenced in source"
+      - name: Publish original guard contexts
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          RESULTS: ${{ toJSON(steps) }}
+        with:
+          script: |
+            let results = JSON.parse(process.env.RESULTS);
+            let sha = context.payload.pull_request?.head.sha;
+            const run = context.payload.workflow_run;
+            // Never check out the completed workflow's branch or download its artifacts.
+            // Read GitHub's step conclusions only, with fixed context names.
+            if (run) {
+              sha = run.head_sha;
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+              });
+              const job = jobs.find(job => job.name === 'pr-guards');
+              const outcome = name => job?.steps?.find(step => step.name === name)?.conclusion;
+              results = {
+                gitleaks: { outcome: outcome('Run gitleaks') },
+                trufflehog: { outcome: outcome('Run trufflehog') },
+                'public-secrets': { outcome: outcome('Fail on NEXT_PUBLIC_ secret-named vars') },
+              };
+            }
+            const canPublish = Boolean(run) || (context.actor !== 'dependabot[bot]' && context.payload.pull_request.user.login !== 'dependabot[bot]' &&
+              context.payload.pull_request.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`);
+            const guards = [["secret-scan", "gitleaks"], ["next-public-secrets", "public-secrets"]];
+            let failed = false;
+            for (const [name, id] of guards) {
+              const passed = results[id]?.outcome === 'success' &&
+                (name !== 'secret-scan' || results.trufflehog?.outcome === 'success');
+              failed ||= !passed;
+              if (!canPublish) continue;
+              await github.rest.repos.createCommitStatus({
+                ...context.repo, sha,
+                context: name, state: passed ? 'success' : 'failure',
+                description: passed ? `${name} passed` : `${name} failed or did not run`,
+                target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              });
+            }
+            if (failed) core.setFailed('One or more guards failed.');

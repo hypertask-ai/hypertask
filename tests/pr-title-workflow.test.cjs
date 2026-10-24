@@ -22,9 +22,9 @@ const TAGS = [
 
 async function runTitleCheck(title) {
   const workflow = yaml.load(
-    await readFile(".github/workflows/pr-size.yml", "utf8"),
+    await readFile(".github/workflows/pr-guards-trusted.yml", "utf8"),
   );
-  const script = workflow.jobs["pr-title"].steps[0].with.script;
+  const script = workflow.jobs["pr-guards-trusted"].steps.find(step => step.id === "title").with.script;
   const failures = [];
 
   await new AsyncFunction("github", "context", "core", script)(
