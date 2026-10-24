@@ -1038,7 +1038,7 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   // Classify one real definition only in this module fixture, not in the production registry.
   fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6950-tooltip-top-layer" ? { ...definition, kind: "bugfix" } : definition))};`);
   fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
-    .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
+    .replaceAll('"@/lib/flags/definitions"', '"./definitions.ts"'));
   const bugfixFlags = jiti(fixture);
   const key = "htpr-6950-tooltip-top-layer";
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
@@ -1072,7 +1072,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
     const fixture = path.join(dir, `flags-${mode}.ts`);
     fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === key ? { ...definition, kind: "bugfix", defaultMode: mode } : definition))};`);
     fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
-      .replaceAll("@/lib/flags/definitions", `./definitions-${mode}.ts`));
+      .replaceAll('"@/lib/flags/definitions"', `"./definitions-${mode}.ts"`));
     const fixtureFlags = jiti(fixture);
     assert.equal(fixtureFlags.defaultFeatureFlagMode(key), mode);
     assert.equal((await fixtureFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, mode);

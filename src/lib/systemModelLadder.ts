@@ -27,7 +27,7 @@ export const SYSTEM_MODEL_LADDERS = {
     { provider: "google", model: "google/gemini-3.5-flash-lite" },
     { provider: "openai", model: "openai/gpt-6-luna" },
     { provider: "anthropic", model: "anthropic/claude-haiku-4.5" },
-    { provider: "deepseek", model: "deepseek/deepseek-v4.1-flash" },
+    { provider: "deepseek", model: "deepseek/deepseek-v4.1-flash-1017" },
     { provider: "moonshot", model: "moonshotai/kimi-k2.5" },
     { provider: "alibaba", model: "alibaba/qwen3.7-plus" },
     { provider: "zhipu", model: "zai/glm-5.3-flash" },
@@ -36,7 +36,8 @@ export const SYSTEM_MODEL_LADDERS = {
 
 const RETIRED_SYSTEM_MODEL_SLUGS: Record<string, string> = {
   "openai/gpt-5.4-mini": "openai/gpt-6-luna",
-  "deepseek/deepseek-v4-flash": "deepseek/deepseek-v4.1-flash",
+  "deepseek/deepseek-v4-flash": "deepseek/deepseek-v4.1-flash-1017",
+  "deepseek/deepseek-v4.1-flash": "deepseek/deepseek-v4.1-flash-1017",
   "zai/glm-5.2": "zai/glm-5.3-flash",
 };
 

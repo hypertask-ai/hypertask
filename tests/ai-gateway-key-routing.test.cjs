@@ -1010,6 +1010,7 @@ test("model and effort dimensions resolve every supported provider configuration
     ["claude-opus-5-5", "light", claudeThinking("disabled", "low")],
     ["claude-opus-5-5", "high", claudeThinking("adaptive", "high")],
     ["deepseek-v4.1-flash", undefined, undefined],
+    ["deepseek-v4.1-flash-fast", undefined, undefined],
     ["deepseek-v4-pro", undefined, undefined],
     ["kimi-k2.5", undefined, undefined],
     ["kimi-k3", undefined, undefined],
@@ -1329,7 +1330,7 @@ test("disabled provider selections fall back and gateway-only models keep full s
     userId: 1000,
   });
   assert.equal(gatewayOnly.provider, "gateway");
-  assert.equal(gatewayOnly.modelId, "deepseek/deepseek-v4.1-flash");
+  assert.equal(gatewayOnly.modelId, "deepseek/deepseek-v4.1-flash-1017");
   assert.equal(gatewayOnly.model.config.provider, "gateway");
 
 });

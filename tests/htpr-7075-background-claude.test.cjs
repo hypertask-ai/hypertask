@@ -81,7 +81,7 @@ test("an explicit non-Claude team pick for a system feature is still honoured", 
   const settings = { featureModels: { summaries: "deepseek/deepseek-v4.1-flash" }, providers: { deepseek: true } };
   assert.deepEqual(
     ladder.resolveSystemModel("summaries", settings, true, on),
-    { provider: "deepseek", model: "deepseek/deepseek-v4.1-flash" },
+    { provider: "deepseek", model: "deepseek/deepseek-v4.1-flash-1017" },
   );
 });
 

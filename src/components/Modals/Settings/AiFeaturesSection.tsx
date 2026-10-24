@@ -3,6 +3,8 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
@@ -309,11 +311,15 @@ function DictationProviderDropdown({
 }
 
 const AiFeaturesSection = () => {
+  const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
+  const flagModelOptions = deepseekFlashFastEnabled
+    ? aiModelOptions
+    : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
-    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
+    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true))
+    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();

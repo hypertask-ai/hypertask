@@ -236,7 +236,7 @@ test("GDPR safe mode hides China-hosted feature overrides", () => {
     false,
   );
   assert.equal(
-    isAiFeatureModelEnabled("summaries", "deepseek/deepseek-v4.1-flash", {
+    isAiFeatureModelEnabled("summaries", "deepseek/deepseek-v4.1-flash-1017", {
       gdprSafeMode: true,
       providers: { deepseek: true },
     }),
@@ -279,7 +279,8 @@ test("feature override is ignored when its provider is disabled", () => {
 test("saved overrides naming retired fast-ladder slugs upgrade to their successors", () => {
   for (const [old, next, provider] of [
     ["openai/gpt-5.4-mini", "openai/gpt-6-luna", "openai"],
-    ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash", "deepseek"],
+    ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash-1017", "deepseek"],
+    ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4.1-flash-1017", "deepseek"],
     ["zai/glm-5.2", "zai/glm-5.3-flash", "zhipu"],
   ]) {
     assert.deepEqual(
