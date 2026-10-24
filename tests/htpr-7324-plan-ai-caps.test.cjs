@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const { once } = require("node:events");
+process.env.FEATURE_FLAG_TYPESCRIPT_PATH = require.resolve("typescript");
 const root = path.resolve(__dirname, "..");
 const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true, fsCache: false });
 const stub = (file, exports) => {
