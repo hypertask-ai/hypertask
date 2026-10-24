@@ -34,7 +34,10 @@ const db = {
   project: { findMany: async ({ select }) => select.title
     ? [{ title: 'Visible board' }] : state.boards.map((id) => ({ id })) },
   label: { findMany: async ({ where }) => { state.labelQueries++; return [{ id: 'bug', value: 'bug' }, { id: 'needs design', value: 'needs design' }].filter(({ value }) => !where.value || value.startsWith(where.value.startsWith.toLowerCase())) } },
-  user: { findMany: async () => [{ id: 6, displayName: 'Kamil Grzegorzewicz', email: 'kamil@example.com' }] },
+  user: { findMany: async () => [
+    { id: 6, displayName: 'Kamil Grzegorzewicz', email: 'kamil@example.com' },
+    { id: 4, displayName: null, email: 'kamila@example.com' },
+  ] },
   section: { findMany: async ({ where }) => (state.sections ?? [{ projectId: 7, section_title: 'Done', isDone: true }])
     .filter((section) => where.deleted !== false || !section.deleted) },
   task: { findMany: async ({ where, select, take }) => {
