@@ -26,9 +26,9 @@ function loadModule(relativePath, stubs) {
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false },
   }).outputText;
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   vm.runInNewContext(code, {
-    module, exports: module.exports,
+    module: loadedModule, exports: loadedModule.exports,
     require: (id) => {
       assert.ok(Object.hasOwn(stubs, id), `Unexpected dependency: ${id}`);
       return stubs[id];
@@ -36,7 +36,7 @@ function loadModule(relativePath, stubs) {
     Headers, AbortController, setTimeout, clearTimeout, Date, console,
     process: { env: { AI_GATEWAY_API_KEY: "vck_fake-shared" } },
   }, { filename });
-  return module.exports;
+  return loadedModule.exports;
 }
 
 function routingHarness({ enabled = true, plan = "Pro", saved = true, keyEnabled = true, gdpr = false, providerEnabled = true, nativeKey, gatewayKey, legacyGateway, accessible = true, agentKey } = {}) {

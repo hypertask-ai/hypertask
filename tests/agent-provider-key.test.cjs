@@ -382,19 +382,19 @@ test("agent provider-key rejects Baseten without storing or returning the suppli
   };
   const filename = path.join(root, "src/app/api/agents/[agentId]/provider-key/route.ts");
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false } }).outputText;
-  const module = { exports: {} };
-  vm.runInNewContext(code, { module, exports: module.exports, require: (id) => {
+  const loadedModule = { exports: {} };
+  vm.runInNewContext(code, { module: loadedModule, exports: loadedModule.exports, require: (id) => {
     assert.ok(Object.hasOwn(stubs, id), `Unexpected dependency: ${id}`);
     return stubs[id];
   }, console }, { filename });
   const request = (provider) => ({ cookies: { get: () => undefined }, headers: {}, json: async () => ({ provider, apiKey: "fake-agent-secret" }) });
   const params = { params: Promise.resolve({ agentId: "fixture-agent" }) };
-  const rejected = await module.exports.PUT(request("baseten"), params);
+  const rejected = await loadedModule.exports.PUT(request("baseten"), params);
   assert.equal(rejected.status, 400);
   assert.equal(rejected.body.error, "Unsupported provider");
   assert.equal(writes.length, 0);
   assert.ok(!JSON.stringify(rejected).includes("fake-agent-secret"));
-  const allowed = await module.exports.PUT(request("openrouter"), params);
+  const allowed = await loadedModule.exports.PUT(request("openrouter"), params);
   assert.equal(allowed.status, 200);
   assert.equal(allowed.body.success, true);
   assert.equal(writes.length, 1);
