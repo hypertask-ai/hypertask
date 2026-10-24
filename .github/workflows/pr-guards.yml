@@ -2,9 +2,6 @@ name: PR Guards
 
 on:
   pull_request:
-  workflow_run:
-    workflows: [PR Guards]
-    types: [completed]
 
 permissions:
   contents: read
