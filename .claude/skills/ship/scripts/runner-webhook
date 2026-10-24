@@ -248,29 +248,36 @@ def handle(n, p, delivery_id):
                 mentions = AgentMentions()
                 mentions.feed(p.get("commentHtml") or "")
                 agent_mention = p["agentId"] in mentions.agent_ids
+            key = dedupe_key(p)
             with AgentStreak(f"runner-{n}.agent-streak.json") as streak:
                 streaks = streak.load()
                 ticket = ticket_url(p)
-                if not actor_agent and ticket and ticket in streaks:
-                    streaks[ticket] = 0
-                    streak.save(streaks)
-                if p.get("event") in EVENTS and (not actor_agent or agent_mention):
-                    key = dedupe_key(p)
-                    with Seen(f"runner-{n}.seen") as seen_k:
-                        if not (key and seen_k.has(key)):
+                with Seen(f"runner-{n}.seen") as seen_k:
+                    if not (key and seen_k.has(key)):
+                        if not actor_agent and ticket and ticket in streaks:
+                            streaks[ticket] = 0
+                            streak.save(streaks)
+                        if p.get("event") in EVENTS and (not actor_agent or agent_mention):
                             message = build_message(n, p)
+                            target = n
+                            event_id = key or (f"delivery:{delivery_id}" if delivery_id else None)
                             count = streaks.get(ticket, 0)
                             if agent_mention and count >= AGENT_STREAK_MAX:
                                 message = None
-                                if count == AGENT_STREAK_MAX:
+                                slot = f"runner-{n}" if n.isdigit() else n
+                                event_id = f"loop:{ticket}:{slot}"
+                                if count == AGENT_STREAK_MAX and not seen_k.has(event_id):
+                                    target = "ht-product-lead"
                                     message = (f"Board event for {label(n)}: Possible agent loop suspected on "
                                                f"{p.get('ticketNumber')} {ticket}. Agent mentions are paused until a human event on this ticket.")
-                            ok = deliver(n, message, key or (f"delivery:{delivery_id}" if delivery_id else None)) if message else True
+                            ok = deliver(target, message, event_id) if message else True
                             if ok and message:
-                                log(f"runner {n}: {p.get('event')} delivered")
+                                log(f"runner {target}: {p.get('event')} delivered")
                                 if agent_mention:
                                     streaks[ticket] = count + 1
                                     streak.save(streaks)
+                                    if count >= AGENT_STREAK_MAX:
+                                        seen_k.add(event_id)
                             if ok and key:
                                 seen_k.add(key)
             if ok and delivery_id:
