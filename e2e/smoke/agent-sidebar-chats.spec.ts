@@ -176,6 +176,56 @@ test('phone conversation list leaves the composer clear and typing taps never sw
   }
 })
 
+test('conversation rows contain two-line titles without overlap on desktop and phone', async ({ page }, info) => {
+  await page.setViewportSize(info.project.name === 'Desktop' ? { width: 1440, height: 900 } : { width: 390, height: 844 })
+  await open(page, info.project.name)
+  const longChat = fixture.personalChats.find(chat => chat.lane === info.project.name && !/\s/.test(chat.title) && chat.title.length > 150)
+  expect(longChat, 'fixture includes a long unbroken conversation title').toBeDefined()
+  const list = page.getByTestId('agent-sidebar-conversations')
+  await page.getByRole('button', { name: 'Switch conversation', exact: true }).click()
+  await expect(list).toBeVisible()
+  const longRow = list.locator(`[data-command-key="session:${longChat!.id}"]`)
+  await expect(longRow).toHaveText(longChat!.title)
+  await longRow.scrollIntoViewIfNeeded()
+  await page.evaluate(() => document.fonts.ready)
+  const boxes = await list.locator('li').evaluateAll(rows => rows.map(row => {
+    const title = row.querySelector<HTMLElement>(':scope > span.line-clamp-2')!
+    const rowBox = row.getBoundingClientRect()
+    const titleBox = title.getBoundingClientRect()
+    const style = getComputedStyle(title)
+    return {
+      key: row.getAttribute('data-command-key'), top: rowBox.top, bottom: rowBox.bottom,
+      left: rowBox.left, right: rowBox.right, height: rowBox.height,
+      titleTop: titleBox.top, titleBottom: titleBox.bottom, titleLeft: titleBox.left, titleRight: titleBox.right,
+      titleHeight: titleBox.height, lineHeight: parseFloat(style.lineHeight),
+      clamp: style.webkitLineClamp, overflow: style.overflow, overflowWrap: style.overflowWrap,
+      scrollHeight: row.scrollHeight, clientHeight: row.clientHeight,
+      titleScrollWidth: title.scrollWidth, titleClientWidth: title.clientWidth,
+    }
+  }))
+  expect(boxes.length).toBeGreaterThan(1)
+  for (const [index, box] of boxes.entries()) {
+    if (index > 0) expect(box.top, `${box.key} does not overlap the previous row`).toBeGreaterThanOrEqual(boxes[index - 1].bottom)
+    expect(box.titleTop).toBeGreaterThanOrEqual(box.top)
+    expect(box.titleBottom).toBeLessThanOrEqual(box.bottom)
+    expect(box.titleLeft).toBeGreaterThanOrEqual(box.left)
+    expect(box.titleRight).toBeLessThanOrEqual(box.right)
+    expect(box.titleHeight).toBeLessThanOrEqual(2 * box.lineHeight + 1)
+    expect(box.clamp).toBe('2')
+    expect(box.overflow).toBe('hidden')
+    expect(box.overflowWrap).toBe('anywhere')
+    expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight + 1)
+    expect(box.titleScrollWidth).toBeLessThanOrEqual(box.titleClientWidth + 1)
+    if (info.project.name === 'Mobile') expect(box.height).toBeGreaterThanOrEqual(52)
+  }
+  const longBox = boxes.find(box => box.key === `session:${longChat!.id}`)!
+  expect(longBox.titleHeight).toBeGreaterThan(longBox.lineHeight + 1)
+  if (info.project.name === 'Desktop') expect(longBox.height).toBeGreaterThan(36)
+  await longRow.click()
+  await expect(list).toBeHidden()
+  await expect(page.getByTestId('ai-sidebar').getByText(longChat!.message, { exact: true })).toBeVisible()
+})
+
 test('past chats are listed newest first above agents and reopen', async ({ page }, info) => {
   await open(page, info.project.name)
   const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
