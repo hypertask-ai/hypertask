@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
   allowanceDriftTtl,
+  billedCostEnabled,
+  effectiveAccountingSource,
+  resolveBilledFunding,
   gatewaySpendBreakdownMicroUsd,
   gatewayHourlySpend,
   SYSTEM_AI_ALLOWANCE_MULTIPLIER,
@@ -90,7 +93,15 @@ export async function checkActiveTeamAllowanceDrift(): Promise<AllowanceDriftCou
             throw new Error("Invalid allowance observation context");
           }
           const counterPrefix = `ai-allowance:${period.key}:${teamId}`;
+          const billedKey = `ai-allowance-billed:v1:month:${period.key}:${teamId}`;
+          const actor = await redis.get(`${billedKey}:actor`);
+          const billed = actor !== null && await billedCostEnabled(Number(actor));
+          const billedFunding = billed ? await resolveBilledFunding({ teamId }) : null;
           const snapshot = async () => {
+            if (billed) {
+              const source = await effectiveAccountingSource({ teamId, kind: "month", period: period.key, funding: billedFunding, refresh: false });
+              if (source.mode === "billed") return [source.visible!, source.system!, 0];
+            }
             const result = await redis.eval(SNAPSHOT_SCRIPT, 3, `${counterPrefix}:committed`, `${counterPrefix}:system:committed`, `${counterPrefix}:legacy-pending`);
             if (!Array.isArray(result) || result.length !== 3) throw new Error("Unavailable allowance snapshot");
             const values = result.map(Number);

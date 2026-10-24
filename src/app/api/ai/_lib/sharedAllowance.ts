@@ -6,6 +6,7 @@ import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7079_FAILED_AI_ALLOWANCE_FLAG } from "@/lib/flags/definitions/htpr-7079-failed-ai-allowance";
 import { HTPR_7692_ALLOWANCE_DRIFT_CHECK_FLAG } from "@/lib/flags/definitions/htpr-7692-allowance-drift-check";
+import { HTPR_7692_BILLED_COST_FLAG } from "@/lib/flags/definitions/htpr-7692-billed-cost";
 import { HTPR_7687_ALLOWANCE_RESYNC_FLAG } from "@/lib/flags/definitions/htpr-7687-allowance-resync";
 import { isHaiku55Model } from "@/lib/aiModelOptions";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
@@ -143,9 +144,24 @@ export async function teamAllowanceSnapshot(
   teamId: string,
   allowanceUsd: number,
   policy?: TeamAllowancePolicy,
+  context?: { userId: number; gatewayApiKey?: string; fundingSource?: AllowanceDriftContext["fundingSource"]; billed?: boolean },
 ): Promise<{ allowanceUsd: number; usedUsd: number } | null> {
   try {
     const redis = await getRedis();
+    const billed = context?.billed ?? await billedCostEnabled(context?.userId ?? null);
+    if (billed) {
+      const source = await effectiveAccountingSource({ teamId, kind: "month", period: aiAllowancePeriod().key,
+        funding: await resolveBilledFunding({ teamId, ...context }) });
+      if (source.mode === "billed") return { allowanceUsd: policy?.mode === "plan" ? policy.monthlyUsd : allowanceUsd,
+        usedUsd: (policy?.mode === "plan" ? source.total! : source.visible!) / MICRO_USD_PER_USD };
+      if (policy?.mode !== "plan") {
+        const prefix = `ai-allowance:${aiAllowancePeriod().key}:${teamId}`;
+        const total = await redis.eval(`
+return tonumber(redis.call("GET", KEYS[1]) or "0") + tonumber(redis.call("GET", KEYS[2]) or "0")
+`, 2, `${prefix}:committed`, `${prefix}:legacy-pending`);
+        return { allowanceUsd, usedUsd: Number(total) / MICRO_USD_PER_USD };
+      }
+    }
     if (policy?.mode === "plan") {
       const prefix = `ai-allowance:${aiAllowancePeriod().key}:${teamId}`;
       const total = await redis.eval(`
@@ -226,6 +242,7 @@ type AllowanceReservation = {
   reservationsKey: string;
   ttlSeconds: number;
   scopes?: PlanAllowanceReservation;
+  billedCall?: BilledCall;
 };
 
 type GatewayUsage = {
@@ -580,6 +597,165 @@ export async function gatewayHourlySpend(
   return [...hours].map(([hour, totalUsd]) => ({ hour, totalUsd }));
 }
 
+export const BILLED_ALLOWANCE_SCOPE_INDEX = "ai-allowance-billed:v1:scopes";
+
+export type BilledFunding = { apiKey: string; provenance: string };
+export type EffectiveAccountingSource = {
+  mode: "billed" | "v1";
+  key: string;
+  funding?: string;
+  visible?: number;
+  system?: number;
+  total?: number;
+};
+
+type BilledCall = { teamId: string; userId: number | null; reservationId: string };
+type HoldReleaseReason = "finish" | "stop" | "error" | "eof" | "expiry" | "disconnect-end";
+
+export async function billedCostEnabled(userId: number | null): Promise<boolean> {
+  try {
+    return await isFeatureEnabled(HTPR_7692_BILLED_COST_FLAG, userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
+export function billedAllowancePeriod(kind: "month" | "day", period: string, now = Date.now()) {
+  const [year, month, day] = period.split("-").map(Number);
+  const end = kind === "month" ? Date.UTC(year, month, 1) : Date.UTC(year, month - 1, day + 1);
+  return {
+    startDate: kind === "month" ? `${period}-01` : period,
+    endDate: new Date(Math.min(now, end - 1)).toISOString().slice(0, 10),
+    endsAt: end,
+    expiresAt: end + 8 * 86_400_000,
+    ttlSeconds: Math.max(1, Math.ceil((end + 8 * 86_400_000 - now) / 1000)),
+  };
+}
+
+export async function resolveBilledFunding(args: {
+  teamId?: string;
+  gatewayApiKey?: string;
+  fundingSource?: AllowanceDriftContext["fundingSource"];
+}): Promise<BilledFunding | null> {
+  if (!args.teamId || args.fundingSource === "demo") {
+    const apiKey = process.env.DEMO_AI_GATEWAY_API_KEY?.trim();
+    return apiKey ? { apiKey, provenance: "demo" } : null;
+  }
+  try {
+    const { getTeamGatewayFunding } = await import("@/app/api/ai/_lib/byokKeys");
+    const funding = await getTeamGatewayFunding({ trustedTeamId: args.teamId }, { includeProvenance: true });
+    if (!funding || funding.source === "customer" ||
+      (args.gatewayApiKey !== undefined && args.gatewayApiKey !== funding.apiKey) ||
+      (args.fundingSource !== undefined && args.fundingSource !== funding.source)) return null;
+    if (funding.source === "managed" && (!funding.managedKeyId || !funding.managedKeyUpdatedAt)) return null;
+    return { apiKey: funding.apiKey, provenance: funding.source === "managed"
+      ? JSON.stringify([funding.source, funding.managedKeyId, funding.managedKeyUpdatedAt]) : funding.source };
+  } catch {
+    return null;
+  }
+}
+
+async function alertBilledFallback(key: string, reason: string, ttlSeconds: number) {
+  try {
+    const redis = await getRedis();
+    const category = reason === "funding-changed" ? reason : "unavailable";
+    if (!await redis.set(`${key}:alert:${category}`, "1", "EX", ttlSeconds, "NX")) return;
+    const { reportError } = await import("@/lib/errors/reportError");
+    await reportError({ source: "server", minimumOccurrences: 1,
+      fingerprintKey: `${key}:${reason}`, message: `AI billed allowance uses estimate accounting; scope ${key}; reason ${reason}`,
+      extra: { route: "/api/ai", stage: "billed-fallback" } });
+  } catch {}
+}
+
+const REFRESH_BILLED_SCRIPT = `
+if redis.call("GET", KEYS[2]) ~= ARGV[1] then return 0 end
+if (redis.call("HGET", KEYS[1], "revision") or "0") ~= ARGV[2] then return 0 end
+local funding = redis.call("HGET", KEYS[1], "funding")
+if redis.call("HGET", KEYS[1], "unusable") == "1" then return -1 end
+if funding and funding ~= ARGV[3] then
+  redis.call("HSET", KEYS[1], "unusable", "1")
+  return -1
+end
+redis.call("HSET", KEYS[1], "visible", ARGV[4], "system", ARGV[5], "total", ARGV[6], "fetchedAt", ARGV[7], "revision", tonumber(ARGV[2]) + 1, "funding", ARGV[3])
+redis.call("EXPIRE", KEYS[1], ARGV[8])
+return 1
+`;
+
+export async function effectiveAccountingSource(args: {
+  teamId: string;
+  kind: "month" | "day";
+  period: string;
+  funding: BilledFunding | null;
+  refresh?: boolean;
+}): Promise<EffectiveAccountingSource> {
+  const key = `ai-allowance-billed:v1:${args.kind}:${args.period}:${args.teamId}`;
+  const fallback: EffectiveAccountingSource = { mode: "v1", key };
+  const period = billedAllowancePeriod(args.kind, args.period);
+  try {
+    const redis = await getRedis();
+    let saved = await redis.hgetall(key);
+    const usable = () => args.funding && saved.funding === args.funding.provenance && saved.unusable !== "1" &&
+      [saved.visible, saved.system, saved.total, saved.fetchedAt, saved.revision].every((value) =>
+        value !== undefined && Number.isSafeInteger(Number(value)) && Number(value) >= 0);
+    if (!args.funding || saved.unusable === "1") {
+      await alertBilledFallback(key, saved.unusable === "1" ? "funding-changed" : "funding-unavailable", period.ttlSeconds);
+      return fallback;
+    }
+    if (args.refresh !== false && period.expiresAt > Date.now() &&
+      (!usable() || Date.now() - Number(saved.fetchedAt) >= 60_000)) {
+      const token = randomUUID();
+      const lease = `${key}:lease`;
+      if (await redis.set(lease, token, "EX", 5, "NX")) {
+        let outcome = "failed";
+        try {
+          saved = await redis.hgetall(key);
+          if (saved.unusable === "1" || (saved.funding && saved.funding !== args.funding.provenance)) {
+            await redis.eval(REFRESH_BILLED_SCRIPT, 2, key, lease, token, saved.revision ?? "0",
+              args.funding.provenance, "0", "0", "0", String(Date.now()), String(period.ttlSeconds));
+            outcome = "funding-changed";
+          } else {
+            const signal = AbortSignal.timeout(3_000);
+            const spend = args.teamId === "demo"
+              ? await demoGatewaySpendMicroUsd(args.funding.apiKey, period, signal)
+              : await gatewaySpendBreakdownMicroUsd(args.funding.apiKey, args.teamId, period.startDate, period.endDate, signal);
+            const values = typeof spend === "number" ? { visibleMicroUsd: spend, systemMicroUsd: 0, totalMicroUsd: spend } : spend;
+            if (![values.visibleMicroUsd, values.systemMicroUsd, values.totalMicroUsd].every((value) => Number.isSafeInteger(value) && value >= 0)) {
+              throw new Error("Invalid billed allowance totals");
+            }
+            const changed = await redis.eval(REFRESH_BILLED_SCRIPT, 2, key, lease, token, saved.revision ?? "0", args.funding.provenance,
+              String(values.visibleMicroUsd), String(values.systemMicroUsd), String(values.totalMicroUsd), String(Date.now()), String(billedAllowancePeriod(args.kind, args.period).ttlSeconds));
+            outcome = Number(changed) === 1 ? "refreshed" : Number(changed) === -1 ? "funding-changed" : "superseded";
+          }
+        } catch {
+          if (!usable()) await alertBilledFallback(key, "report-failed", period.ttlSeconds);
+        } finally {
+          await redis.eval(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end
+return 0
+`, 1, lease, token);
+          saved = await redis.hgetall(key);
+          console.info(JSON.stringify({ event: "ai-allowance-billed-refresh", teamId: args.teamId, scope: key, mode: usable() ? "billed" : "v1", billed: Number(saved.total ?? 0), outcome }));
+        }
+      } else {
+        saved = await redis.hgetall(key);
+      }
+    }
+    if (!usable()) {
+      await alertBilledFallback(key, saved.funding && saved.funding !== args.funding.provenance ? "funding-changed" : "snapshot-unavailable", period.ttlSeconds);
+      return fallback;
+    }
+    return { mode: "billed", key, funding: args.funding.provenance,
+      visible: Number(saved.visible), system: Number(saved.system), total: Number(saved.total) };
+  } catch {
+    await alertBilledFallback(key, "redis-unavailable", period.ttlSeconds);
+    return fallback;
+  }
+}
+
+function logBilledRelease(call: BilledCall, reason: HoldReleaseReason) {
+  console.info(JSON.stringify({ event: "ai-allowance-billed-release", ...call, reason }));
+}
+
 const INITIALIZE_SPLIT_SCRIPT = `
 local initialized = redis.call("SET", KEYS[3], ARGV[5], "EX", ARGV[6], "NX")
 if not initialized then return 0 end
@@ -613,6 +789,7 @@ return fromPending + fromVisible
 `;
 
 const EXPIRE_RESERVATION_SCRIPT = `
+local expiredBilled = {}
 local function reservationHeldAmount(member, reservationsKey)
   local amount = tonumber(string.match(member, "|(%d+)$") or "0")
   local encoded = string.match(member, "^[^|]+|(.+)|%d+$")
@@ -627,8 +804,10 @@ local function expireReservation(member, committedKey, reservationsKey, ttlSecon
   local encoded = string.match(member, "^[^|]+|(.+)|%d+$")
   local originalScopes = encoded and cjson.decode(encoded) or {{committedKey, reservationsKey, ttlSeconds}}
   local amount = tonumber(string.match(member, "|(%d+)$") or "0")
+  local released = false
   for _, original in ipairs(originalScopes) do
     if redis.call("ZREM", original[2], member) == 1 then
+      released = true
       redis.call("INCRBY", original[1], tonumber(original[4]) or amount)
       redis.call("EXPIRE", original[1], original[3])
       local lanePrefix = string.match(original[1], "^(ai%-allowance:%d%d%d%d%-%d%d:.+):committed$")
@@ -641,6 +820,7 @@ local function expireReservation(member, committedKey, reservationsKey, ttlSecon
       end
     end
   end
+  if released and originalScopes[1][5] then table.insert(expiredBilled, originalScopes[1][5]) end
 end
 `;
 
@@ -661,12 +841,14 @@ local requested = tonumber(ARGV[2])
 local cap = tonumber(ARGV[3])
 local pending = ARGV[7] == "1" and tonumber(redis.call("GET", KEYS[3]) or "0") or 0
 if committed + reserved + pending + requested > cap then
+  if #expiredBilled > 0 then return {0, committed + pending, reserved, cjson.encode(expiredBilled)} end
   if ARGV[8] == "1" then return {0, committed + pending, reserved} end
   return 0
 end
 redis.call("ZADD", KEYS[2], ARGV[4], ARGV[5])
 redis.call("EXPIRE", KEYS[1], ARGV[6])
 redis.call("EXPIRE", KEYS[2], ARGV[6])
+if #expiredBilled > 0 then return {1, committed + pending, reserved, cjson.encode(expiredBilled)} end
 return 1
 `;
 
@@ -766,6 +948,7 @@ async function reconcileLegacySplit(args: {
   systemCommittedKey: string;
   teamId: string;
   visibleCommittedKey: string;
+  signal?: AbortSignal;
 }) {
   if ((await args.redis.exists(args.completedKey)) === 1) return;
   const initializedAt = Number(await args.redis.get(args.initializedKey));
@@ -789,6 +972,7 @@ async function reconcileLegacySplit(args: {
       args.teamId,
       args.month.startDate,
       args.month.endDate,
+      args.signal,
     );
     await args.redis.eval(
       RECONCILE_LEGACY_SCRIPT,
@@ -806,7 +990,7 @@ async function reconcileLegacySplit(args: {
   }
 }
 
-async function initializeTeamMonth(args: { teamId: string; gatewayApiKey: string }, now = new Date()) {
+async function initializeTeamMonth(args: { teamId: string; gatewayApiKey: string }, now = new Date(), tolerateReportFailure = false) {
   const month = aiAllowancePeriod(now);
   const keyPrefix = `ai-allowance:${month.key}:${args.teamId}`;
   const visibleCommittedKey = `${keyPrefix}:committed`;
@@ -821,49 +1005,54 @@ async function initializeTeamMonth(args: { teamId: string; gatewayApiKey: string
   const redis = await getRedis();
 
   let initialized = false;
-  if ((await redis.exists(splitInitializedKey)) === 0) {
-    const observedSpend = await gatewaySpendBreakdownMicroUsd(
-      args.gatewayApiKey,
-      args.teamId,
-      month.startDate,
-      month.endDate,
-    );
-    initialized =
-      Number(
-        await redis.eval(
-          INITIALIZE_SPLIT_SCRIPT,
-          5,
-          visibleCommittedKey,
-          systemCommittedKey,
-          splitInitializedKey,
-          legacyPendingKey,
-          legacySystemObservedKey,
-          String(observedSpend.totalMicroUsd),
-          String(observedSpend.visibleMicroUsd),
-          String(observedSpend.systemMicroUsd),
-          String(observedSpend.legacySystemMicroUsd),
-          String(Date.now()),
-          String(month.ttlSeconds),
-        ),
-      ) === 1;
-  }
+  try {
+    if ((await redis.exists(splitInitializedKey)) === 0) {
+      const observedSpend = await gatewaySpendBreakdownMicroUsd(
+        args.gatewayApiKey,
+        args.teamId,
+        month.startDate,
+        month.endDate,
+        tolerateReportFailure ? AbortSignal.timeout(3_000) : undefined,
+      );
+      initialized =
+        Number(
+          await redis.eval(
+            INITIALIZE_SPLIT_SCRIPT,
+            5,
+            visibleCommittedKey,
+            systemCommittedKey,
+            splitInitializedKey,
+            legacyPendingKey,
+            legacySystemObservedKey,
+            String(observedSpend.totalMicroUsd),
+            String(observedSpend.visibleMicroUsd),
+            String(observedSpend.systemMicroUsd),
+            String(observedSpend.legacySystemMicroUsd),
+            String(Date.now()),
+            String(month.ttlSeconds),
+          ),
+        ) === 1;
+    }
 
-  if (!initialized) {
-    await reconcileLegacySplit({
-      completedKey: legacyReconcileCompleteKey,
-      gatewayApiKey: args.gatewayApiKey,
-      initializedKey: splitInitializedKey,
-      legacySystemObservedKey,
-      lockKey: legacyReconcileLockKey,
-      month,
-      pendingKey: legacyPendingKey,
-      redis,
-      systemCommittedKey,
-      teamId: args.teamId,
-      visibleCommittedKey,
-    });
+    if (!initialized) {
+      await reconcileLegacySplit({
+        completedKey: legacyReconcileCompleteKey,
+        gatewayApiKey: args.gatewayApiKey,
+        initializedKey: splitInitializedKey,
+        legacySystemObservedKey,
+        lockKey: legacyReconcileLockKey,
+        month,
+        pendingKey: legacyPendingKey,
+        redis,
+        systemCommittedKey,
+        teamId: args.teamId,
+        visibleCommittedKey,
+        signal: tolerateReportFailure ? AbortSignal.timeout(3_000) : undefined,
+      });
+    }
+  } catch (error) {
+    if (!tolerateReportFailure) throw error;
   }
-
   return { redis, month, visibleCommittedKey, visibleReservationsKey, systemCommittedKey, systemReservationsKey, legacyPendingKey };
 }
 
@@ -877,26 +1066,52 @@ async function boundDailyOutputTokens(args: {
   teamId: string;
   lane: AllowanceLane;
   observe: boolean;
+  billed: boolean;
+  call: BilledCall;
 }): Promise<number> {
-  const { month, redis } = await initializeTeamMonth(args);
+  const period = aiAllowancePeriod();
+  const source = args.billed ? await effectiveAccountingSource({ teamId: args.teamId, kind: "day", period: period.endDate,
+    funding: await resolveBilledFunding(args) }) : null;
+  const { month, redis } = await initializeTeamMonth(args, new Date(), source?.mode === "billed");
   const prefix = `ai-allowance:day:${month.endDate}:${args.teamId}`;
-  await seedAllowanceScope(prefix, 2 * 86_400, async () =>
-    (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId, month.endDate, month.endDate)).totalMicroUsd);
+  try {
+    await seedAllowanceScope(prefix, 2 * 86_400, async () =>
+      (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId, month.endDate, month.endDate, args.billed ? AbortSignal.timeout(3_000) : undefined)).totalMicroUsd);
+  } catch (error) {
+    if (source?.mode !== "billed") throw error;
+  }
+  if (args.billed && aiAllowancePeriod().endDate !== period.endDate) return boundDailyOutputTokens(args);
   const dailySnapshot = await redis.eval(`
 ${EXPIRE_RESERVATION_SCRIPT}
+${args.billed ? `for _, member in ipairs(redis.call("ZRANGEBYSCORE", KEYS[2], "-inf", ${Date.now()})) do
+  expireReservation(member, KEYS[1], KEYS[2], ${2 * 86_400}, ${Date.now()})
+end` : ""}
 local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
+local mode = "v1"
+${source?.mode === "billed" ? `if redis.call("HGET", KEYS[3], "funding") == ARGV[3] and redis.call("HGET", KEYS[3], "unusable") ~= "1" then
+  committed = tonumber(redis.call("HGET", KEYS[3], "total") or committed)
+  mode = "billed"
+end` : ""}
 local remaining = tonumber(ARGV[1]) - committed
 for _, member in ipairs(redis.call("ZRANGE", KEYS[2], 0, -1)) do
   remaining = remaining - reservationHeldAmount(member, KEYS[2])
 end
-if ARGV[2] == "1" then return {remaining, committed, tonumber(ARGV[1]) - committed - remaining} end
-return remaining
-`, 2, `${prefix}:committed`, `${prefix}:reservations`, String(usdToMicroUsd(args.dailyUsd)), ...(args.observe ? ["1"] : []));
+${args.billed ? `return {remaining, committed, tonumber(ARGV[1]) - committed - remaining, mode, #expiredBilled == 0 and "[]" or cjson.encode(expiredBilled)}` : `if ARGV[2] == "1" then return {remaining, committed, tonumber(ARGV[1]) - committed - remaining} end
+return remaining`}
+`, source?.mode === "billed" ? 3 : 2, `${prefix}:committed`, `${prefix}:reservations`, ...(source?.mode === "billed" ? [source.key] : []),
+    String(usdToMicroUsd(args.dailyUsd)), ...(source?.mode === "billed" ? ["1", source.funding!] : args.observe ? ["1"] : []));
+  if (args.billed && Array.isArray(dailySnapshot)) {
+    for (const call of JSON.parse(String(dailySnapshot[4])) as BilledCall[]) logBilledRelease(call, "expiry");
+  }
+  if (args.billed && aiAllowancePeriod().endDate !== period.endDate) return boundDailyOutputTokens(args);
   const remaining = Number(Array.isArray(dailySnapshot) ? dailySnapshot[0] : dailySnapshot);
   let upper = Math.max(1, Math.floor(Math.min(args.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS)));
   let lower = Math.min(MIN_DAILY_OUTPUT_TOKENS, upper);
   const estimate = (maxOutputTokens: number) => estimateReservationMicroUsd({ ...args, maxOutputTokens });
   if (estimate(MIN_DAILY_OUTPUT_TOKENS) > remaining) {
+    if (args.billed) console.info(JSON.stringify({ event: "ai-allowance-billed-decision", ...args.call,
+      decision: "refuse", scope: source!.key, mode: Array.isArray(dailySnapshot) ? dailySnapshot[3] : source!.mode, billed: Number(Array.isArray(dailySnapshot) ? dailySnapshot[1] : 0),
+      holds: Number(Array.isArray(dailySnapshot) ? dailySnapshot[2] : 0), requested: estimate(MIN_DAILY_OUTPUT_TOKENS), cap: usdToMicroUsd(args.dailyUsd) }));
     if (args.observe && Array.isArray(dailySnapshot)) await recordAllowanceRefusal({
       teamId: args.teamId, reason: "day", lane: args.lane, cap: usdToMicroUsd(args.dailyUsd),
       committed: Number(dailySnapshot[1]), liveHolds: Number(dailySnapshot[2]),
@@ -928,11 +1143,16 @@ async function reserveSharedAllowance(args: {
 }): Promise<AllowanceReservation> {
   const policy = await args.resolvePolicy?.(args.teamId);
   const observe = await observeAllowanceAttempt({ ...args, policy: policy ?? { mode: "legacy", monthlyUsd: args.allowanceUsd } });
-  const legacy = policy?.mode === "plan" ? null : await initializeTeamMonth(args);
+  const billed = await billedCostEnabled(args.userId);
+  const call: BilledCall = { teamId: args.teamId, userId: args.userId, reservationId: randomUUID() };
+  const selectedMonth = aiAllowancePeriod();
+  const source = billed && policy?.mode !== "plan" ? await effectiveAccountingSource({ teamId: args.teamId, kind: "month",
+    period: selectedMonth.key, funding: await resolveBilledFunding(args) }) : null;
+  const legacy = policy?.mode === "plan" ? null : await initializeTeamMonth(args, new Date(), source?.mode === "billed");
   const pricing = await modelPricing(args.modelSlug);
   let maxOutputTokens = args.maxOutputTokens;
   if (policy?.mode === "plan" && policy.dailyUsd !== null && args.languageModelParams) {
-    maxOutputTokens = await boundDailyOutputTokens({ ...args, dailyUsd: policy.dailyUsd, pricing, observe });
+    maxOutputTokens = await boundDailyOutputTokens({ ...args, dailyUsd: policy.dailyUsd, pricing, observe, billed, call });
     args.languageModelParams.maxOutputTokens = maxOutputTokens;
   }
   const amountMicroUsd = estimateReservationMicroUsd({
@@ -946,47 +1166,64 @@ async function reserveSharedAllowance(args: {
   if (policy?.mode === "plan") {
     const scopes = await reservePlanAllowance({
       teamId: args.teamId, policy, gatewayApiKey: args.gatewayApiKey, fundingSource: args.fundingSource,
-      amountUsd: amountMicroUsd / MICRO_USD_PER_USD, amountMicroUsd, lane: args.lane, userId: args.userId, observe,
+      amountUsd: amountMicroUsd / MICRO_USD_PER_USD, amountMicroUsd, lane: args.lane, userId: args.userId, observe, billed, billedCall: billed ? call : undefined,
     });
     const scope = scopes.scopes[0];
-    return { amountMicroUsd, committedKey: scope.committedKey, id: scopes.id, inputOnlyMicroUsd: inputOnly, pricing, recentSettledKey: scope.committedKey.replace(/:committed$/, ":recent-settled"), reservationsKey: scope.reservationsKey, ttlSeconds: scope.ttlSeconds, scopes };
+    return { amountMicroUsd, committedKey: scope.committedKey, id: scopes.id, inputOnlyMicroUsd: inputOnly, pricing, recentSettledKey: scope.committedKey.replace(/:committed$/, ":recent-settled"), reservationsKey: scope.reservationsKey, ttlSeconds: scope.ttlSeconds, scopes, ...(scopes.billedCall ? { billedCall: scopes.billedCall } : {}) };
   }
   const { redis, month, visibleCommittedKey, visibleReservationsKey, systemCommittedKey, systemReservationsKey, legacyPendingKey } = legacy!;
   const committedKey = args.lane === "system" ? systemCommittedKey : visibleCommittedKey;
   const reservationsKey = args.lane === "system" ? systemReservationsKey : visibleReservationsKey;
-  const id = randomUUID();
-  const member = `${id}|${amountMicroUsd}`;
+  const id = billed ? call.reservationId : randomUUID();
+  const member = billed
+    ? `${id}|${JSON.stringify([[committedKey, reservationsKey, month.ttlSeconds, amountMicroUsd, call]])}|${amountMicroUsd}`
+    : `${id}|${amountMicroUsd}`;
   const expiresAt = Date.now() + RESERVATION_TTL_MS;
   const lanePrefix = committedKey.replace(/:committed$/, "");
   const followsRealSpend = await allowanceFollowsRealSpend(args.userId);
   const recentSettledKey = `${lanePrefix}:recent-settled`;
   const journalStartedKey = `${recentSettledKey}-since`;
-  const reserve = () => redis.eval(
-    RESERVE_SCRIPT,
-    4,
-    committedKey,
-    reservationsKey,
-    legacyPendingKey,
-    recentSettledKey,
-    String(Date.now()),
-    String(amountMicroUsd),
-    String(
-      usdToMicroUsd(
-        args.allowanceUsd *
-          (args.lane === "system" ? SYSTEM_AI_ALLOWANCE_MULTIPLIER : 1),
+  const reserve = async () => {
+    const decision = await redis.eval(
+      RESERVE_SCRIPT,
+      4,
+      committedKey,
+      reservationsKey,
+      legacyPendingKey,
+      recentSettledKey,
+      String(Date.now()),
+      String(amountMicroUsd),
+      String(
+        usdToMicroUsd(
+          args.allowanceUsd *
+            (args.lane === "system" ? SYSTEM_AI_ALLOWANCE_MULTIPLIER : 1),
+        ),
       ),
-    ),
-    String(expiresAt),
-    member,
-    String(month.ttlSeconds),
-    args.lane === "visible" ? "1" : "0",
-    ...(observe ? ["1"] : []),
-  );
-  let decision = await reserve();
+      String(expiresAt),
+      member,
+      String(month.ttlSeconds),
+      args.lane === "visible" ? "1" : "0",
+      ...(observe ? ["1"] : []),
+    );
+    if (Array.isArray(decision) && decision[3]) {
+      for (const call of JSON.parse(String(decision[3])) as BilledCall[]) logBilledRelease(call, "expiry");
+    }
+    return decision;
+  };
+  if (billed && aiAllowancePeriod().endDate !== selectedMonth.endDate) return reserveSharedAllowance(args);
+  const billedScopes: AllowanceScope[] = billed ? [{ reason: "month", cap: usdToMicroUsd(args.allowanceUsd * (args.lane === "system" ? SYSTEM_AI_ALLOWANCE_MULTIPLIER : 1)),
+    pairs: [{ committedKey, reservationsKey }], pendingKey: args.lane === "visible" ? legacyPendingKey : undefined,
+    writeIndex: 1, ttlSeconds: month.ttlSeconds, source: source!, field: args.lane, endsAt: billedAllowancePeriod("month", month.key).endsAt, billedTtlSeconds: billedAllowancePeriod("month", month.key).ttlSeconds }] : [];
+  const reserveOn = () => reserveBilledScopes({ keys: [committedKey, reservationsKey, legacyPendingKey],
+    encoded: billedScopes.map((scope) => ({ ...scope, pairs: [[1, 2]], pending: scope.pendingKey ? 3 : undefined })),
+    amount: amountMicroUsd, id: member, call, month: month.key, day: month.endDate });
+  let billedDecision = billed ? await reserveOn() : null;
+  let decision = billedDecision?.decision ?? await reserve();
   let accepted = Number(Array.isArray(decision) ? decision[0] : decision) === 1;
   if (
     !accepted &&
     followsRealSpend &&
+    (!billed || source?.mode === "v1") &&
     (await resyncToGatewaySpend({
       committedKey,
       gatewayApiKey: args.gatewayApiKey,
@@ -1000,9 +1237,13 @@ async function reserveSharedAllowance(args: {
       teamId: args.teamId,
     }))
   ) {
-    decision = await reserve();
+    billedDecision = billed ? await reserveOn() : null;
+    decision = billedDecision?.decision ?? await reserve();
     accepted = Number(Array.isArray(decision) ? decision[0] : decision) === 1;
   }
+  if (billedDecision) for (const detail of billedDecision.details) console.info(JSON.stringify({
+    event: "ai-allowance-billed-decision", ...call, decision: accepted ? "allow" : "refuse", ...detail,
+  }));
   if (!accepted) {
     if (observe && Array.isArray(decision)) await recordAllowanceRefusal({
       teamId: args.teamId, reason: "month", lane: args.lane,
@@ -1022,20 +1263,22 @@ async function reserveSharedAllowance(args: {
     recentSettledKey,
     reservationsKey,
     ttlSeconds: month.ttlSeconds,
+    ...(billed ? { billedCall: call } : {}),
   };
 }
 
 async function commitReservation(
   reservation: AllowanceReservation,
   settledMicroUsd: number,
+  reason: HoldReleaseReason = "finish",
 ) {
   if (reservation.scopes) {
-    await settlePlanAllowance(reservation.scopes, settledMicroUsd / MICRO_USD_PER_USD);
+    await settlePlanAllowance(reservation.scopes, settledMicroUsd / MICRO_USD_PER_USD, reason);
     return;
   }
   const redis = await getRedis();
   const now = Date.now();
-  await redis.eval(
+  const removed = await redis.eval(
     SETTLE_AND_REMEMBER_SCRIPT,
     4,
     reservation.committedKey,
@@ -1048,12 +1291,14 @@ async function commitReservation(
     String(now),
     String(now - GATEWAY_REPORT_DELAY_WINDOW_MS),
   );
+  if (Number(removed) > 0 && reservation.billedCall) logBilledRelease(reservation.billedCall, reason);
 }
 
 async function settleReservation(
   reservation: AllowanceReservation,
   usage?: GatewayUsage,
   beforeOutput = false,
+  reason: HoldReleaseReason = "finish",
 ) {
   await commitReservation(
     reservation,
@@ -1063,23 +1308,25 @@ async function settleReservation(
       reservation.amountMicroUsd,
       beforeOutput ? reservation.inputOnlyMicroUsd : null,
     ),
+    reason,
   );
 }
 
 async function releaseUnavailableReservation(reservation: AllowanceReservation) {
-  await commitReservation(reservation, 0);
+  await commitReservation(reservation, 0, "error");
 }
 
 async function settleAfterInference(
   reservation: AllowanceReservation,
   usage?: GatewayUsage,
   beforeOutput = false,
+  reason: HoldReleaseReason = "finish",
 ) {
   try {
-    await settleReservation(reservation, usage, beforeOutput);
+    await settleReservation(reservation, usage, beforeOutput, reason);
   } catch {
     try {
-      await settleReservation(reservation);
+      await settleReservation(reservation, undefined, false, reason);
     } catch {
     }
   }
@@ -1137,25 +1384,41 @@ export function createSharedAllowanceMiddleware(args: {
         if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, false, false, isHaiku55Model(args.modelSlug))) {
           await releaseUnavailableReservation(reservation);
         } else {
-          await settleAfterInference(reservation, undefined, true);
+          await settleAfterInference(reservation, undefined, true, "error");
         }
         throw error;
       }
     },
     wrapStream: async ({ doStream, params }) => {
       const reservation = await beforeCall(params);
-      const releaseIfUnavailable = async (error: unknown, hasOutput: boolean) => {
-        if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, hasOutput, false, isHaiku55Model(args.modelSlug))) {
-          await releaseUnavailableReservation(reservation);
-        } else {
-          await settleAfterInference(reservation, undefined, !hasOutput);
-        }
+      let settled = false;
+      let hasOutput = false;
+      let terminal: Promise<void> | undefined;
+      const cleanup = () => params.abortSignal?.removeEventListener("abort", onAbort);
+      const release = (reason: HoldReleaseReason, usage?: GatewayUsage, beforeOutput = false) => {
+        if (settled) return terminal;
+        settled = true;
+        cleanup();
+        terminal = settleAfterInference(reservation, usage, beforeOutput, reason);
+        return terminal;
       };
+      const onAbort = () => { void release("stop", undefined, !hasOutput); };
+      const releaseIfUnavailable = async (error: unknown, output: boolean) => {
+        if (settled) return terminal;
+        settled = true;
+        cleanup();
+        terminal = previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, output, false, isHaiku55Model(args.modelSlug))
+          ? releaseUnavailableReservation(reservation)
+          : settleAfterInference(reservation, undefined, !output, "error");
+        return terminal;
+      };
+      if (reservation.billedCall) {
+        params.abortSignal?.addEventListener("abort", onAbort, { once: true });
+        if (params.abortSignal?.aborted) onAbort();
+      }
       try {
         const result = await doStream();
         const reader = result.stream.getReader();
-        let settled = false;
-        let hasOutput = false;
         return {
           ...result,
           stream: new ReadableStream({
@@ -1163,40 +1426,30 @@ export function createSharedAllowanceMiddleware(args: {
               try {
                 const item = await reader.read();
                 if (item.done) {
-                  if (!settled) {
-                    settled = true;
-                    await settleAfterInference(reservation, undefined, !hasOutput);
-                  }
+                  await release("eof", undefined, !hasOutput);
                   controller.close();
                   return;
                 }
                 const chunk = item.value;
                 if (chunk.type === "finish") {
-                  settled = true;
-                  await settleAfterInference(reservation, chunk.usage);
+                  await release("finish", chunk.usage);
                 } else if (chunk.type === "error" && !settled) {
-                  settled = true;
                   await releaseIfUnavailable(chunk.error, hasOutput);
                 } else if (chunk.type !== "stream-start" && chunk.type !== "response-metadata") {
                   hasOutput = true;
                 }
                 controller.enqueue(chunk);
               } catch (error) {
-                if (!settled) {
-                  settled = true;
-                  await releaseIfUnavailable(error, hasOutput);
-                }
+                await releaseIfUnavailable(error, hasOutput);
                 controller.error(error);
               }
             },
             async cancel(reason) {
+              if (reservation.billedCall) await release("stop", undefined, !hasOutput);
               try {
                 await reader.cancel(reason);
               } finally {
-                if (!settled) {
-                  settled = true;
-                  await settleAfterInference(reservation, undefined, !hasOutput);
-                }
+                await release("stop", undefined, !hasOutput);
               }
             },
           }),
@@ -1251,7 +1504,7 @@ export function createImageAllowanceMiddleware(args: {
         );
         return result;
       } catch (error) {
-        await settleAfterInference(reservation);
+        await settleAfterInference(reservation, undefined, false, params.abortSignal?.aborted ? "stop" : "error");
         throw error;
       }
     },
@@ -1265,11 +1518,16 @@ type AllowanceScope = {
   pendingKey?: string;
   writeIndex: number;
   ttlSeconds: number;
+  source?: EffectiveAccountingSource;
+  field?: "visible" | "system" | "total";
+  endsAt?: number;
+  billedTtlSeconds?: number;
 };
 
 export type PlanAllowanceReservation = {
   id: string;
   scopes: Array<{ committedKey: string; reservationsKey: string; ttlSeconds: number }>;
+  billedCall?: BilledCall;
 };
 
 const RESERVE_SCOPES_SCRIPT = `
@@ -1292,6 +1550,7 @@ for index, scope in ipairs(scopes) do
   end
   if scope.pending then total = total + tonumber(redis.call("GET", KEYS[scope.pending]) or "0") end
   if total + held + amount > scope.cap then
+    if #expiredBilled > 0 then return {-index, total, held, cjson.encode(expiredBilled)} end
     if ARGV[6] == "1" then return {-index, total, held} end
     return -index
   end
@@ -1302,8 +1561,74 @@ for _, scope in ipairs(scopes) do
   redis.call("EXPIRE", KEYS[pair[1]], scope.ttlSeconds)
   redis.call("EXPIRE", KEYS[pair[2]], scope.ttlSeconds)
 end
+if #expiredBilled > 0 then return {1, 0, 0, cjson.encode(expiredBilled)} end
 return 1
 `;
+
+const RESERVE_BILLED_SCOPES_SCRIPT = `
+${EXPIRE_RESERVATION_SCRIPT}
+local scopes = cjson.decode(ARGV[1])
+local now = tonumber(ARGV[2])
+local amount = tonumber(ARGV[3])
+local details = {}
+local refused = 0
+for index, scope in ipairs(scopes) do
+  local total = 0
+  local held = 0
+  for _, pair in ipairs(scope.pairs) do
+    for _, member in ipairs(redis.call("ZRANGEBYSCORE", KEYS[pair[2]], "-inf", now)) do
+      expireReservation(member, KEYS[pair[1]], KEYS[pair[2]], scope.ttlSeconds, now)
+    end
+    total = total + tonumber(redis.call("GET", KEYS[pair[1]]) or "0")
+    for _, member in ipairs(redis.call("ZRANGE", KEYS[pair[2]], 0, -1)) do
+      held = held + reservationHeldAmount(member, KEYS[pair[2]])
+    end
+  end
+  if scope.pending then total = total + tonumber(redis.call("GET", KEYS[scope.pending]) or "0") end
+  local mode = "v1"
+  if scope.source.mode == "billed" and redis.call("HGET", scope.source.key, "funding") == scope.source.funding and redis.call("HGET", scope.source.key, "unusable") ~= "1" then
+    local billed = redis.call("HGET", scope.source.key, scope.field)
+    if billed then total = tonumber(billed); mode = "billed" end
+  end
+  table.insert(details, {scope = scope.source.key, mode = mode, billed = total, holds = held, requested = amount, cap = scope.cap})
+  if now < scope.endsAt and total + held + amount > scope.cap and refused == 0 then refused = -index end
+end
+if refused == 0 then
+  for _, scope in ipairs(scopes) do
+    local pair = scope.pairs[scope.writeIndex]
+    redis.call("ZADD", KEYS[pair[2]], ARGV[4], ARGV[5])
+    redis.call("EXPIRE", KEYS[pair[1]], scope.ttlSeconds)
+    redis.call("EXPIRE", KEYS[pair[2]], scope.ttlSeconds)
+  end
+end
+for _, scope in ipairs(scopes) do
+  redis.call("SET", scope.source.key .. ":actor", ARGV[8], "EX", scope.billedTtlSeconds)
+  if scope.reason == "demo" then redis.call("ZADD", ARGV[6], now, ARGV[9]) end
+end
+redis.call("ZADD", ARGV[6], now, ARGV[7])
+return {refused == 0 and 1 or refused, cjson.encode(details), #expiredBilled == 0 and "[]" or cjson.encode(expiredBilled)}
+`;
+
+async function reserveBilledScopes(args: {
+  keys: string[];
+  encoded: unknown[];
+  amount: number;
+  id: string;
+  call: BilledCall;
+  month: string;
+  day: string;
+}) {
+  const redis = await getRedis();
+  const result = await redis.eval(RESERVE_BILLED_SCOPES_SCRIPT, args.keys.length, ...args.keys,
+    JSON.stringify(args.encoded), String(Date.now()), String(args.amount), String(Date.now() + RESERVATION_TTL_MS), args.id,
+    BILLED_ALLOWANCE_SCOPE_INDEX, `${args.call.teamId}|${args.month}|${args.day}`, String(args.call.userId ?? 0), `demo|${args.month}|${args.day}`);
+  if (!Array.isArray(result)) throw new Error("Invalid billed allowance reservation response");
+  const accepted = Number(result[0]);
+  const details = JSON.parse(String(result[1])) as Array<{ scope: string; mode: string; billed: number; holds: number; requested: number; cap: number }>;
+  for (const call of JSON.parse(String(result[2])) as BilledCall[]) logBilledRelease(call, "expiry");
+  const refused = details[-accepted - 1];
+  return { decision: accepted === 1 ? [1] : [accepted, refused.billed, refused.holds], details };
+}
 
 const SETTLE_SCOPES_SCRIPT = `
 local scopes = cjson.decode(ARGV[1])
@@ -1344,10 +1669,10 @@ async function seedAllowanceScope(
   await redis.eval(SEED_SCOPE_SCRIPT, 2, `${prefix}:committed`, `${prefix}:seeded`, String(spend), String(ttlSeconds));
 }
 
-async function demoGatewaySpendMicroUsd(gatewayApiKey: string, month: ReturnType<typeof aiAllowancePeriod>) {
+async function demoGatewaySpendMicroUsd(gatewayApiKey: string, month: { startDate: string; endDate: string }, signal?: AbortSignal) {
   const params = new URLSearchParams({ start_date: month.startDate, end_date: month.endDate, group_by: "day" });
   const response = await fetch(`${GATEWAY_BASE_URL}/report?${params}`, {
-    cache: "no-store", headers: { Authorization: `Bearer ${gatewayApiKey}` },
+    signal, cache: "no-store", headers: { Authorization: `Bearer ${gatewayApiKey}` },
   });
   if (!response.ok) throw Object.assign(new Error("AI Gateway demo allowance report failed"), { status: response.status });
   const payload = await response.json() as { results?: Array<{ total_cost?: unknown }> };
@@ -1371,6 +1696,8 @@ export async function reservePlanAllowance(args: {
   lane?: AllowanceLane;
   userId?: number | null;
   observe?: boolean;
+  billed?: boolean;
+  billedCall?: BilledCall;
 }): Promise<PlanAllowanceReservation> {
   if (args.policy.mode !== "plan" || !Number.isFinite(args.amountUsd) || args.amountUsd < 0 ||
     (args.amountMicroUsd !== undefined && (!Number.isSafeInteger(args.amountMicroUsd) || args.amountMicroUsd < 0))) {
@@ -1379,27 +1706,52 @@ export async function reservePlanAllowance(args: {
   if (!args.teamId && !args.policy.demoGlobal) throw new Error("AI allowance reservation requires an owning team or demo scope");
   const fundingSource = args.fundingSource ?? (!args.teamId && args.policy.demoGlobal ? "demo" : "unknown");
   const observe = args.observe ?? await observeAllowanceAttempt({ ...args, fundingSource });
+  const billed = args.billed ?? await billedCostEnabled(args.userId ?? null);
   const now = new Date();
   const month = aiAllowancePeriod(now);
   const scopes: AllowanceScope[] = [];
+  const funding = billed && args.teamId ? await resolveBilledFunding(args) : null;
+  const monthSource = billed && args.teamId ? await effectiveAccountingSource({ teamId: args.teamId, kind: "month", period: month.key, funding }) : null;
+  const daySource = billed && args.teamId && args.policy.dailyUsd !== null ? await effectiveAccountingSource({ teamId: args.teamId, kind: "day", period: month.endDate, funding }) : null;
+  const demoSource = billed && args.policy.demoGlobal ? await effectiveAccountingSource({ teamId: "demo", kind: "month", period: month.key,
+    funding: await resolveBilledFunding({ fundingSource: "demo" }) }) : null;
   const pair = (prefix: string) => ({ committedKey: `${prefix}:committed`, reservationsKey: `${prefix}:reservations` });
   if (args.teamId) {
-    const initialized = await initializeTeamMonth({ teamId: args.teamId, gatewayApiKey: args.gatewayApiKey }, now);
+    const initialized = await initializeTeamMonth({ teamId: args.teamId, gatewayApiKey: args.gatewayApiKey }, now, monthSource?.mode === "billed");
     scopes.push({ reason: "month", cap: usdToMicroUsd(args.policy.monthlyUsd),
       pairs: [pair(`ai-allowance:${month.key}:${args.teamId}`), pair(`ai-allowance:${month.key}:${args.teamId}:system`)],
       pendingKey: initialized.legacyPendingKey, writeIndex: args.lane === "system" ? 2 : 1, ttlSeconds: month.ttlSeconds });
     if (args.policy.dailyUsd !== null) {
       const prefix = `ai-allowance:day:${month.endDate}:${args.teamId}`;
-      await seedAllowanceScope(prefix, 2 * 86_400, async () =>
-        (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId!, month.endDate, month.endDate)).totalMicroUsd);
+      try {
+        await seedAllowanceScope(prefix, 2 * 86_400, async () =>
+          (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId!, month.endDate, month.endDate, billed ? AbortSignal.timeout(3_000) : undefined)).totalMicroUsd);
+      } catch (error) {
+        if (daySource?.mode !== "billed") throw error;
+      }
       scopes.push({ reason: "day", cap: usdToMicroUsd(args.policy.dailyUsd), pairs: [pair(prefix)], writeIndex: 1, ttlSeconds: 2 * 86_400 });
     }
   }
   if (args.policy.demoGlobal) {
     const prefix = `ai-allowance:demo:${month.key}`;
     const demoKey = process.env.DEMO_AI_GATEWAY_API_KEY?.trim();
-    if (demoKey) await seedAllowanceScope(prefix, month.ttlSeconds, () => demoGatewaySpendMicroUsd(demoKey, month));
+    try {
+      if (demoKey) await seedAllowanceScope(prefix, month.ttlSeconds, () => demoGatewaySpendMicroUsd(demoKey, month, billed ? AbortSignal.timeout(3_000) : undefined));
+    } catch (error) {
+      if (demoSource?.mode !== "billed") throw error;
+    }
     scopes.push({ reason: "demo", cap: usdToMicroUsd(DEMO_GLOBAL_AI_ALLOWANCE_USD), pairs: [pair(prefix)], writeIndex: 1, ttlSeconds: month.ttlSeconds });
+  }
+  if (billed) {
+    for (const scope of scopes) {
+      const kind = scope.reason === "day" ? "day" : "month";
+      const period = kind === "day" ? month.endDate : month.key;
+      scope.source = (scope.reason === "demo" ? demoSource : scope.reason === "day" ? daySource : monthSource)!;
+      scope.field = "total";
+      scope.endsAt = billedAllowancePeriod(kind, period).endsAt;
+      scope.billedTtlSeconds = billedAllowancePeriod(kind, period).ttlSeconds;
+    }
+    if (aiAllowancePeriod().endDate !== month.endDate) return reservePlanAllowance({ ...args, billed });
   }
   const keys: string[] = [];
   const encoded = scopes.map((scope) => ({ ...scope,
@@ -1408,14 +1760,22 @@ export async function reservePlanAllowance(args: {
   }));
   const amount = args.amountMicroUsd ?? usdToMicroUsd(args.amountUsd);
   const originalScopes = scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds }));
-  const id = `${randomUUID()}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds]))}|${amount}`;
+  const call: BilledCall | undefined = billed ? args.billedCall ?? { teamId: args.teamId ?? "demo", userId: args.userId ?? null, reservationId: randomUUID() } : undefined;
+  const id = `${call?.reservationId ?? randomUUID()}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds, ...(call ? [amount, call] : [])]))}|${amount}`;
   const redis = await getRedis();
   const followsRealSpend = await allowanceFollowsRealSpend(args.userId ?? null);
-  const reserve = () => redis.eval(RESERVE_SCOPES_SCRIPT, keys.length, ...keys,
-    JSON.stringify(encoded), String(Date.now()), String(amount), String(Date.now() + RESERVATION_TTL_MS), id, ...(observe ? ["1"] : []));
-  let decision = await reserve();
+  const reserve = async () => {
+    const decision = await redis.eval(RESERVE_SCOPES_SCRIPT, keys.length, ...keys,
+      JSON.stringify(encoded), String(Date.now()), String(amount), String(Date.now() + RESERVATION_TTL_MS), id, ...(observe ? ["1"] : []));
+    if (Array.isArray(decision) && decision[3]) {
+      for (const call of JSON.parse(String(decision[3])) as BilledCall[]) logBilledRelease(call, "expiry");
+    }
+    return decision;
+  };
+  let billedDecision = call ? await reserveBilledScopes({ keys, encoded, amount, id, call, month: month.key, day: month.endDate }) : null;
+  let decision = billedDecision?.decision ?? await reserve();
   let accepted = Number(Array.isArray(decision) ? decision[0] : decision);
-  if (accepted !== 1 && scopes[-accepted - 1]?.reason === "month" && args.teamId && followsRealSpend) {
+  if (accepted !== 1 && scopes[-accepted - 1]?.reason === "month" && args.teamId && followsRealSpend && (!billed || scopes[-accepted - 1].source?.mode === "v1")) {
     const scope = scopes[-accepted - 1];
     let resynced = false;
     for (const [index, { committedKey }] of scope.pairs.entries()) {
@@ -1429,10 +1789,14 @@ export async function reservePlanAllowance(args: {
       resynced = changed || resynced;
     }
     if (resynced) {
-      decision = await reserve();
+      billedDecision = call ? await reserveBilledScopes({ keys, encoded, amount, id, call, month: month.key, day: month.endDate }) : null;
+      decision = billedDecision?.decision ?? await reserve();
       accepted = Number(Array.isArray(decision) ? decision[0] : decision);
     }
   }
+  if (billedDecision) for (const detail of billedDecision.details) console.info(JSON.stringify({
+    event: "ai-allowance-billed-decision", ...call, decision: accepted === 1 ? "allow" : "refuse", ...detail,
+  }));
   if (accepted !== 1) {
     const refused = scopes[-accepted - 1];
     if (!refused) throw new Error("Invalid AI allowance reservation response");
@@ -1443,15 +1807,16 @@ export async function reservePlanAllowance(args: {
     }, month.key);
     throw new SharedAiAllowanceExceededError(month.key, refused.reason);
   }
-  return { id, scopes: originalScopes };
+  return { id, scopes: originalScopes, ...(call ? { billedCall: call } : {}) };
 }
 
-export async function settlePlanAllowance(reservation: PlanAllowanceReservation, actualUsd: number): Promise<void> {
+export async function settlePlanAllowance(reservation: PlanAllowanceReservation, actualUsd: number, reason: HoldReleaseReason = "finish"): Promise<void> {
   if (!Number.isFinite(actualUsd) || actualUsd < 0) throw new Error("Invalid settled AI allowance cost");
   const keys: string[] = [];
   const scopes = reservation.scopes.map((scope) => [keys.push(scope.committedKey), keys.push(scope.reservationsKey), scope.ttlSeconds]);
   const redis = await getRedis();
   const now = Date.now();
-  await redis.eval(SETTLE_SCOPES_SCRIPT, keys.length, ...keys, JSON.stringify(scopes), reservation.id, String(usdToMicroUsd(actualUsd)),
+  const removed = await redis.eval(SETTLE_SCOPES_SCRIPT, keys.length, ...keys, JSON.stringify(scopes), reservation.id, String(usdToMicroUsd(actualUsd)),
     String(now), String(now - GATEWAY_REPORT_DELAY_WINDOW_MS));
+  if (Number(removed) > 0 && reservation.billedCall) logBilledRelease(reservation.billedCall, reason);
 }
