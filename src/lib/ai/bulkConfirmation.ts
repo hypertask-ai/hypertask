@@ -29,6 +29,7 @@ type RequireCrossMessageConfirmationInput = {
   operationKey: string;
   subjectKeys?: string[];
   confirmed?: boolean;
+  reuseUnchangedPreview?: boolean;
   previewsIssuedThisRequest: Set<string>;
   getRedisClient?: () => Promise<BulkConfirmationRedis>;
 };
@@ -50,11 +51,12 @@ async function requireScopedConfirmation(
   operationKey: string,
   subjectKeys: string[],
   confirmed: boolean | undefined,
-  previewsIssuedThisRequest: Set<string>
+  previewsIssuedThisRequest: Set<string>,
+  reuseUnchangedPreview: boolean
 ): Promise<"preview" | "proceed"> {
   const subjects = [...new Set(subjectKeys)];
   const preview = async () => {
-    previewsIssuedThisRequest.add(operationKey);
+    if (!reuseUnchangedPreview) previewsIssuedThisRequest.add(operationKey);
     if (subjects.length > 0) {
       const results = await redis
         .multi()
@@ -66,6 +68,7 @@ async function requireScopedConfirmation(
         await redis.del(scopeKey);
         throw new Error("bulk confirmation scope was not stored with its expiry");
       }
+      if (Number(results[0][1]) > 0) previewsIssuedThisRequest.add(operationKey);
     }
     return "preview" as const;
   };
@@ -84,6 +87,7 @@ export async function requireCrossMessageConfirmation({
   operationKey,
   subjectKeys,
   confirmed,
+  reuseUnchangedPreview = false,
   previewsIssuedThisRequest,
   getRedisClient = getRedis,
 }: RequireCrossMessageConfirmationInput): Promise<"preview" | "proceed"> {
@@ -99,7 +103,8 @@ export async function requireCrossMessageConfirmation({
         operationKey,
         subjectKeys,
         confirmed,
-        previewsIssuedThisRequest
+        previewsIssuedThisRequest,
+        reuseUnchangedPreview
       );
     }
     if (previewsIssuedThisRequest.has(operationKey)) {
