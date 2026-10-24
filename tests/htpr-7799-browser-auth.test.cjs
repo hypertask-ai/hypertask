@@ -170,13 +170,25 @@ for (const enabled of [false, true]) {
         await React.act(async () => view.render(React.createElement(load("src/components/Modals/SignOut/SignOutModal.tsx").default, { closeHandler: () => {} })));
         const buttons = Array.from(view.container.querySelectorAll("button"));
         const signOutButtons = buttons.filter(button => button.textContent.startsWith("Sign out"));
-        assert.equal(signOutButtons.length, 1);
-        assert.equal(signOutButtons[0].textContent, enabled ? "Sign out of all accounts" : "Sign out Account 182");
-        assert.ok(view.container.textContent.includes(enabled ? "Sign out of every account on this browser?" : "Sign out Account 182?"));
-        assert.equal(view.container.textContent.includes("You’ll switch to"), false);
-        await React.act(async () => signOutButtons[0].click());
+        assert.deepEqual(signOutButtons.map(button => button.textContent), enabled
+          ? ["Sign out of all accounts"]
+          : [...(otherAccount ? ["Sign out of all accounts"] : []), "Sign out Account 182"]);
+        const confirmation = enabled
+          ? "Sign out of every account on this browser?"
+          : otherAccount
+            ? "Sign out Account 182? You’ll switch to Account 6."
+            : "Sign out Account 182?";
+        assert.equal(view.container.querySelector("p").textContent, confirmation);
+        await React.act(async () => signOutButtons.at(-1).click());
         assert.equal(signouts, enabled || !otherAccount ? 1 : 0);
         assert.deepEqual(switches, !enabled && otherAccount ? ["fixture"] : []);
+        if (!enabled && otherAccount) {
+          await React.act(async () => view.render(React.createElement(load("src/components/Modals/SignOut/SignOutModal.tsx").default, { key: "secondary", closeHandler: () => {} })));
+          const secondary = Array.from(view.container.querySelectorAll("button")).find(button => button.textContent === "Sign out of all accounts");
+          await React.act(async () => secondary.click());
+          assert.equal(signouts, 1);
+          assert.deepEqual(switches, ["fixture"]);
+        }
       } finally { view.close(); }
     });
   }

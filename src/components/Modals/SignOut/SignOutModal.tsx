@@ -152,7 +152,9 @@ const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
             <p className="text-dense font-medium">
               {projectEntryEnabled
                 ? "Sign out of every account on this browser?"
-                : `Sign out ${accountLabel(currentAccount)}?`}
+                : nextAccount
+                  ? `Sign out ${accountLabel(currentAccount)}? You’ll switch to ${accountLabel(nextAccount)}.`
+                  : `Sign out ${accountLabel(currentAccount)}?`}
             </p>
             {error && (
               <p className="mt-3 text-dense font-medium text-red-400" role="alert">
@@ -168,6 +170,16 @@ const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
               >
                 Cancel
               </button>
+              {!projectEntryEnabled && nextAccount && (
+                <button
+                  className={buttonClassName}
+                  disabled={submitting}
+                  onClick={() => void handleAllSignOut()}
+                  type="button"
+                >
+                  Sign out of all accounts
+                </button>
+              )}
               <button
                 className={`${buttonClassName} bg-active-modal-element text-white-black`}
                 disabled={submitting}
