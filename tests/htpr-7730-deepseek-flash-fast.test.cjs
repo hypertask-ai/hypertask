@@ -145,17 +145,19 @@ test("Fast credentials preserve customer gateway keys and replace direct keys wi
   const lookup = { trustedTeamId: "fixture-team", agentId: "fixture-agent", userId: 985 };
   const flags = [{ provider: "deepseek", enabled: true, ciphertext: "sk-request-deepseek" }];
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), gatewayKey);
-  assert.deepEqual(keyLookups, ["gateway"]);
+  assert.deepEqual(keyLookups, ["deepseek", "gateway"]);
   keyLookups.length = 0;
   deepseekKey = "vck_deepseek_slot";
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, lookup), deepseekKey);
   assert.deepEqual(keyLookups, ["deepseek"]);
+  assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), deepseekKey);
   agentKey = "vck_agent_deepseek";
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), agentKey);
   agentKey = "sk-agent-deepseek";
+  assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), deepseekKey);
+  deepseekKey = "sk-direct-deepseek";
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), gatewayKey);
   agentKey = null;
-  deepseekKey = "sk-direct-deepseek";
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, lookup), gatewayKey);
   deepseekKey = null;
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, lookup), gatewayKey);
@@ -211,6 +213,7 @@ test("Settings model responses and writes honor the authenticated user's flag", 
   } });
   stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 985 }) });
   stubModule("src/lib/prisma.ts", { default: { user: { findUnique: async () => ({ id: 985, accountId: 42 }) } } });
+  stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
   stubModule("src/app/api/ai/_lib/planGate.ts", { haiku55ModelEnabled: async () => true });
   stubModule("src/app/api/ai/_lib/byokKeys.ts", {
     resolveTeamCustomEndpoint: async () => undefined,
@@ -234,6 +237,11 @@ test("Settings model responses and writes honor the authenticated user's flag", 
   const hidden = await request("GET");
   assert.equal(hidden.aiChat.model, null);
   assert.equal(hidden.aiChat.effectiveModel, "claude-haiku-5-5");
+  settings.providers.anthropic = false;
+  const filtered = await request("GET");
+  const catalog = loadTs("src/lib/aiModelOptions.ts");
+  assert.notEqual(catalog.getAiModelDefinition(catalog.getAiModelOptionById(filtered.aiChat.effectiveModel).modelKey).provider, "anthropic");
+  delete settings.providers.anthropic;
   enabled = true;
   const shown = await request("GET");
   assert.equal(shown.aiChat.model, optionId);
@@ -244,5 +252,5 @@ test("Settings model responses and writes honor the authenticated user's flag", 
   assert.equal(fallback.aiChat.effectiveModel, "claude-haiku-5-5");
   enabled = true;
   assert.equal((await request("POST")).aiChat.model, optionId);
-  assert.deepEqual(checks, Array.from({ length: 4 }, () => [flagKey, 985]));
+  assert.deepEqual(checks, Array.from({ length: 5 }, () => [flagKey, 985]));
 });

@@ -441,7 +441,9 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   if (option.modelKey === "deepseek-v4.1-flash-fast") {
     if (!(await isByokProviderAllowedForLookup("deepseek", lookup))) return undefined;
     const key = await getByokOrTeamGatewayApiKey("deepseek", flags, lookup);
-    return isVercelAiGatewayKey(key) ? key : getTeamGatewayApiKey(lookup);
+    if (isVercelAiGatewayKey(key)) return key;
+    const teamKey = await resolveTeamByokApiKey("deepseek", lookup);
+    return isVercelAiGatewayKey(teamKey) ? teamKey : getTeamGatewayApiKey(lookup);
   }
 
   const definition = getAiModelDefinition(option.modelKey);

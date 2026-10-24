@@ -120,7 +120,7 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.doesNotMatch(source, /HTPR_7010_HAIKU_5_5_FLAG/);
-    assert.match(source, /isAiModelOptionVisible\(option, false\)/);
+    assert.match(source, /isAiModelOptionVisible\(option, false(?:, true)?\)/);
     const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let visibilityExpression;
     function visit(node) {
@@ -136,10 +136,10 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
         const visible = vm.runInNewContext(visibilityExpression, {
           haiku55Enabled,
           haikuDefaultEnabled,
-          aiModelOptions: catalog.aiModelOptions,
+          flagModelOptions: catalog.aiModelOptions,
           isAiModelOptionVisible: catalog.isAiModelOptionVisible,
         });
-        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled)));
+        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true)));
       }
     }
   }

@@ -1,5 +1,6 @@
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
   AI_FEATURES,
@@ -62,12 +63,12 @@ function effectiveModel(
     null,
     { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, true, context.haikuDefaultEnabled, context) } : {}) },
   );
-  return option ? resolveAiModelOption(
+  return option ? filterModelOptionForTeam(resolveAiModelOption(
     [option.id],
     getDefaultAiModelOptionForPlan(context.plan, context.hasByok, haiku55Enabled, context.haikuDefaultEnabled, context),
     haiku55Enabled,
     deepseekFlashFastEnabled,
-  ).id : null;
+  ), settings, haiku55Enabled).id : null;
 }
 
 function featureRow(
