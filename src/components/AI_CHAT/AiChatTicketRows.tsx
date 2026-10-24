@@ -26,7 +26,7 @@ export default function AiChatTicketRows({ groups, onNavigate }: { groups: ChatT
                     event.preventDefault();
                     onNavigate(task.url);
                   }} className="grid grid-cols-[78px_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 rounded-sm px-1 py-2 text-dense !no-underline hover:bg-hover-active focus-visible:bg-active-elementBg">
-                    <TableTicketCell ticket={task.ticketNumber || `#${task.uniqueIndex}`} className="overflow-hidden text-ellipsis text-[11px]" />
+                    <TableTicketCell ticket={task.ticketNumber || `#${task.uniqueIndex}`} className="overflow-hidden text-ellipsis text-micro" />
                     <span className="col-span-2 min-w-0"><TableTitleCell task={task} compact /></span>
                     <span className="flex min-w-0 items-center">{renderAssigneeAvatars(task)}</span>
                     <TableStatusCell section={task.section} />
