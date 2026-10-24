@@ -83,9 +83,12 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = useTaskContext();
   const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
-  const ticketChatSessionsReminder = ticketChatReminder ? (
-    secondaryPanelsReady !== false && currentTask ? <TicketChatSessionsReminder taskId={currentTask.id} /> : null
-  ) : null;
+  let ticketChatSessionsReminder: React.ReactNode = null;
+  if (ticketChatReminder) {
+    ticketChatSessionsReminder = secondaryPanelsReady !== false && currentTask
+      ? <TicketChatSessionsReminder taskId={currentTask.id} />
+      : null;
+  }
   const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
 
   const {
@@ -196,12 +199,12 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = ticketChatReminder ? (
+            contentToRender = (
               <>
                 <div id="bottom-description" className="h-0" />
                 {ticketChatSessionsReminder}
               </>
-            ) : <div id="bottom-description" className="h-0" />;
+            );
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments
