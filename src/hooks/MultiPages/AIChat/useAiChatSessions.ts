@@ -7,13 +7,16 @@ import { useFileUpload } from "@/components/Common/AttachmentsUpload/FileUploadH
 import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
 
-type Context = { agentSidebarChatsEnabled: boolean } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
+type Context = { agentSidebarChatsEnabled: boolean } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
 
 export function useAiChatSessions(context: Context) {
+  const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const {
   sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
-  createSession, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
+  createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
   deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
   currentAiOption, pathname, currentUser, taskId, sessionsRef,
   dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
@@ -44,12 +47,17 @@ export function useAiChatSessions(context: Context) {
       resolvedBoardSessionRef.current = { projectId, session: createdSession };
       previousProjectIdRef.current = projectId;
     }
+    if (newSessionFocusEnabled && isFullScreenChat && createdSession) {
+      editor?.commands.focus("end");
+    }
     return createdSession;
   }, [
     clearMessageQueue,
     createSession,
     currentProject?.id,
+    editor,
     isFullScreenChat,
+    newSessionFocusEnabled,
     setDockedChatScope,
   ]);
 
