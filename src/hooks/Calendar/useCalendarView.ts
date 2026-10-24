@@ -1,5 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/definitions/htpr-7725-saved-view-assignee";
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { buildCalendarTaskFilterSets, type CalendarTaskFilterSets } from "./calendarTaskFilters";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSetRecoilState, useRecoilValue, useRecoilState } from "@/lib/state";

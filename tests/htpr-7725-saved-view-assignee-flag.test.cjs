@@ -28,6 +28,7 @@ test("saved-view callers and tab counts explicitly opt into legacy matching only
     "src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx",
   ]) {
     const caller = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
+    assert.match(caller, /import \{ HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG \} from ['"]@\/lib\/flags\/keys['"]/, filename);
     assert.match(caller, /assigneeFixEnabled = useFlag\(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG\)/, filename);
     assert.match(caller, /legacyAgentAssigneeMatch: !assigneeFixEnabled/, filename);
     assert.doesNotMatch(caller, /humanAssigneesOnly/, filename);
@@ -39,6 +40,7 @@ test("saved-view callers and tab counts explicitly opt into legacy matching only
 
 test("calendar human assignee matching separates agent rows under the same client flag", () => {
   const caller = fs.readFileSync(path.join(__dirname, "..", "src/hooks/Calendar/useCalendarView.ts"), "utf8");
+  assert.match(caller, /import \{ HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG \} from ['"]@\/lib\/flags\/keys['"]/);
   assert.match(caller, /assigneeFixEnabled = useFlag\(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG\)/);
   assert.match(caller, /\(!assigneeFixEnabled \|\| assignee\.agentId == null\) && assignees\.has\(assignee\.userId\)/);
 });

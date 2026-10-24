@@ -15,7 +15,7 @@ import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/definitions/htpr-7725-saved-view-assignee";
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import type { SectionCompProps } from "./LandingPageSection";
 
 type Context = Pick<SectionCompProps, "_allProjects" | "_boardLayout" | "_projectIndex" | "_currentUser" | "_readinessProjectId" | "_readinessRouteEntryId" | "_authenticated" | "_localDatabasePilotEnabled" | "_readinessSource">;

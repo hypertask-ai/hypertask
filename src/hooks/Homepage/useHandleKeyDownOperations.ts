@@ -29,7 +29,7 @@ import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builti
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/definitions/htpr-7725-saved-view-assignee'
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {

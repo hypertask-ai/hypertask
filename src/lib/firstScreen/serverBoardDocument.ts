@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/definitions/htpr-7725-saved-view-assignee";
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { featureFlagsForUser } from "@/lib/flags";
 import getBoardTasks from "@/utils/controllers/projects/getBoardTasks";
 import getFirst from "@/utils/controllers/projects/getFirst";
