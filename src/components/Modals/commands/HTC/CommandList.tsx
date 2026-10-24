@@ -6,6 +6,8 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
 import { getCurrentUserFromCookies } from "@/utils/getCurrentUser";
 import { MobileCommandIcon } from "./MobileCommandIcon";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7708_CHAT_LIST_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7708-chat-list-rows";
 
 
 
@@ -14,6 +16,7 @@ const CommandList: React.FC<CommandListProps> = ({ onClickHandler, commandLists,
 
 
     const currentUser = getCurrentUserFromCookies()
+    const chatListRows = useFlag(HTPR_7708_CHAT_LIST_ROWS_FLAG) && inline;
 
     return (
         <>
@@ -31,8 +34,8 @@ const CommandList: React.FC<CommandListProps> = ({ onClickHandler, commandLists,
                             onMouseLeave={handleMouseLeave}
                             onMouseEnter={() => handleMouseEnter(command, index, groupIndex)}
                             className={isMobile
-                                ? `flex min-h-[52px] cursor-pointer items-center gap-3 border-b border-light-black-border-1 px-4 text-content transition-colors duration-75 ${selectedCommand===command?"bg-active-modal-element":""}`
-                                : `h-[36px] cursor-pointer transition-all gap-3 duration-75 mx-1.5 rounded-sm px-3 text-dense ${selectedCommand===command?"bg-active-modal-element":""}`}
+                                ? `flex min-h-[52px] cursor-pointer items-center gap-3 border-b border-light-black-border-1 px-4 text-content transition-colors duration-75 ${chatListRows ? "h-auto py-2" : ""} ${selectedCommand===command?"bg-active-modal-element":""}`
+                                : `${chatListRows ? "h-auto min-h-[36px] py-2" : "h-[36px]"} cursor-pointer transition-all gap-3 duration-75 mx-1.5 rounded-sm px-3 text-dense ${selectedCommand===command?"bg-active-modal-element":""}`}
                             id={inline ? `agent-sidebar-command-${command.key}` : `command-${groupIndex}-${index}`}
                             onClick={() => onClickHandler(command)}
                             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
@@ -43,6 +46,7 @@ const CommandList: React.FC<CommandListProps> = ({ onClickHandler, commandLists,
                                 keyboardCommands={command.keyboard}
                                 isNew={command.isNew}
                                 isMobile={isMobile}
+                                clampName={chatListRows}
                             />
                         </li>
                     );
@@ -59,11 +63,12 @@ type THTC_Command = {
     keyboardCommands: (string | null)[] | undefined
     isNew?: boolean;
     isMobile?: boolean;
+    clampName?: boolean;
 }
-const HTC_Command: React.FC<THTC_Command> = ({ name, keyboardCommands, isNew, isMobile = false }) => {
+const HTC_Command: React.FC<THTC_Command> = ({ name, keyboardCommands, isNew, isMobile = false, clampName = false }) => {
     return (
         <>
-            <span className="flex flex-grow items-center" >
+            <span className={clampName ? "min-w-0 flex-1 line-clamp-2 [overflow-wrap:anywhere]" : "flex flex-grow items-center"} >
                 {name}
                 {isNew && (
                     <span className="ml-2 rounded-sm bg-hypertasks-purple px-[5px] py-[2px] text-micro font-medium leading-none text-white">

@@ -95,7 +95,7 @@ await seedSessionFixtures({});`,
   assert.equal(sidebar.projectId, boards[0].id);
   assert.deepEqual(Object.keys(sidebar.lanes), ["Desktop", "Mobile"]);
   assert.deepEqual(sidebar.personalChats.map(chat => chat.title), ["Desktop", "Mobile"].flatMap(lane =>
-    ["planning", "decisions", "next steps"].map(name => `Smoke ${lane} chat: ${name}`)));
+    [`Smoke ${lane} chat: planning`, `Smoke${lane}${"1792812226726848138aiChatOpenNewTickets".repeat(6)}`, `Smoke ${lane} chat: next steps`]));
   assert.deepEqual(sidebar.personalChats.map(chat => chat.updatedAt), ["Desktop", "Mobile"].flatMap(() =>
     ["2026-10-22T10:00:00.000Z", "2026-10-22T11:00:00.000Z", "2026-10-22T12:00:00.000Z"]));
   assert.equal(new Set(sidebar.personalChats.map(chat => chat.id)).size, 6);

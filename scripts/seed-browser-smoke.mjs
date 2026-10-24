@@ -321,7 +321,7 @@ async function seedSessionFixtures(flags) {
         : cookie.name === "nookies_user" ? encodeURIComponent(JSON.stringify({ ...sessionUser, ...sidebarUser, UserSettingId: sidebarUser.UserSetting.id })) : cookie.value,
     })) }), { flag: "wx", mode: 0o600 });
     for (const [index, name] of ["planning", "decisions", "next steps"].entries()) {
-      const title = `Smoke ${lane} chat: ${name}`;
+      const title = index === 1 ? `Smoke${lane}${"1792812226726848138aiChatOpenNewTickets".repeat(6)}` : `Smoke ${lane} chat: ${name}`;
       const updatedAt = new Date(`2026-10-22T1${index}:00:00.000Z`);
       const message = `${title} saved conversation`;
       const session = await prisma.chatSession.create({ data: {
