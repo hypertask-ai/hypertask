@@ -86,7 +86,7 @@ export async function POST(
         return NextResponse.json({ success: false, error: "Invalid chat context" }, { status: 400 });
       }
       const context = parsed.data;
-      let contextAccess = projectContentAccessWhere(userId);
+      let recipientContextAccess: Prisma.ProjectWhereInput = {};
       if (context.project_id) {
         const notFound = { success: false, error: context.scope === "ticket" ? "Ticket not found" : "Board not found" };
         if (!session.agent) return NextResponse.json(notFound, { status: 404 });
@@ -96,7 +96,7 @@ export async function POST(
         } catch {
           return NextResponse.json(notFound, { status: 404 });
         }
-        contextAccess = { AND: [contextAccess, projectContentAccessWhere(session.agent.userId, agentId, teamScope)] };
+        recipientContextAccess = projectContentAccessWhere(session.agent.userId, agentId, teamScope);
       }
       let selected: Prisma.JsonObject = { scope: "all" };
       if (context.scope === "ticket") {
@@ -104,14 +104,21 @@ export async function POST(
           return NextResponse.json({ success: false, error: "Ticket context requires a ticket and board" }, { status: 400 });
         }
         const task = await prisma.task.findFirst({
-          where: { id: context.task_id, projectId: context.project_id, project: contextAccess },
+          where: {
+            id: context.task_id,
+            projectId: context.project_id,
+            project: { AND: [projectContentAccessWhere(userId), recipientContextAccess] },
+          },
           select: { id: true, projectId: true, ticketNumber: true, title: true },
         });
         if (!task) return NextResponse.json({ success: false, error: "Ticket not found" }, { status: 404 });
         selected = { scope: "ticket", task_id: task.id, project_id: task.projectId, ticket_number: task.ticketNumber, title: task.title };
       } else if (context.project_id) {
         const board = await prisma.project.findFirst({
-          where: { id: context.project_id, ...contextAccess },
+          where: {
+            id: context.project_id,
+            AND: [projectContentAccessWhere(userId), recipientContextAccess],
+          },
           select: { id: true, title: true },
         });
         if (!board) return NextResponse.json({ success: false, error: "Board not found" }, { status: 404 });
