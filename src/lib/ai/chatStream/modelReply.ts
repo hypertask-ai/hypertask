@@ -13,7 +13,7 @@ import { failHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { hasVisibleCompletion, buildEmptyCompletionSummary } from "@/app/api/ai/chat/stream/bulkTools";
-import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacingErrorDetails, reportEmptyCompletion } from "@/lib/ai/chatStream/errors";
+import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacingErrorDetails, reportEmptyCompletion, normalizeProviderAuthError } from "@/lib/ai/chatStream/errors";
 
 import { ToolExecution } from "@/lib/ai/chatStream/types";
 import { MAX_TOOL_STEPS } from "@/lib/ai/tools/constants";
@@ -99,6 +99,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           fallbackError = error;
           return;
         }
+        error = await normalizeProviderAuthError(error, dbUser.id);
         state.recordTurnOutcome(state.cancelled ? "cancelled" : "failed", error);
         if (state.errorSent) return;
         state.errorSent = true;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { reportError } from "@/lib/errors/reportError";
 import { SseEvent } from "@/lib/ai/chatStream/types";
 import { SSE_HEADERS } from "@/lib/ai/tools/constants";
+import { HTPR_7754_DEEPSEEK_AUTH_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-7754-deepseek-auth-refusal";
 
 export function sseFrame(event: SseEvent, data: Record<string, unknown>) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -66,11 +67,44 @@ export function includedAllowanceError(error: unknown) {
   return null;
 }
 
+export async function normalizeProviderAuthError(error: unknown, userId: number) {
+  let current: unknown = error;
+  const visited = new Set<unknown>();
+  for (let depth = 0; depth < 8 && current && !visited.has(current); depth += 1) {
+    visited.add(current);
+    if (typeof current !== "object") break;
+    const record = current as {
+      url?: unknown;
+      statusCode?: unknown;
+      cause?: unknown;
+      lastError?: unknown;
+    };
+    if (
+      record.url === "https://api.deepseek.com/chat/completions" &&
+      record.statusCode === 401
+    ) {
+      const enabled = await import("@/lib/flags")
+        .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7754_DEEPSEEK_AUTH_REFUSAL_FLAG, userId))
+        .catch(() => false);
+      if (!enabled) return error;
+      const refusal = new Error("DeepSeek rejected your AI key. Update it in Settings > AI keys, then try again.");
+      refusal.name = "AiProviderAuthenticationError";
+      return refusal;
+    }
+    current = record.cause ?? record.lastError;
+  }
+  return error;
+}
+
 export function userFacingErrorMessage(error: unknown, stage: string) {
   const allowanceError = includedAllowanceError(error);
   if (allowanceError) {
     console.info(`[ai/chat/stream] ${stage} refused: included AI allowance used up`);
     return allowanceError.message;
+  }
+  if (error instanceof Error && error.name === "AiProviderAuthenticationError") {
+    console.warn(`[ai/chat/stream] ${stage} refused: DeepSeek AI key rejected`);
+    return error.message;
   }
   console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
   return "Sorry, something went wrong while generating a response. Please try again.";
@@ -137,7 +171,8 @@ export async function reportHandledChatError(
   if (
     error instanceof Error &&
     (error.name === "AiPlanAccessError" ||
-      error.name === "AiGatewayKeyRequiredError")
+      error.name === "AiGatewayKeyRequiredError" ||
+      error.name === "AiProviderAuthenticationError")
   ) {
     return;
   }
