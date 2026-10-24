@@ -204,6 +204,26 @@ const nextConfig = {
     ];
   },
   webpack(config, { dev, isServer, nextRuntime }) {
+    const fontTarget = require.resolve("next/font/google/target.css");
+    let plexPreloadExportAdded = false;
+    const addPlexPreloadExport = rules => {
+      for (const rule of rules) {
+        if (!rule || typeof rule !== "object") continue;
+        if (rule.test === fontTarget && Array.isArray(rule.use)) {
+          const index = rule.use.findIndex(entry => entry.loader === "next-font-loader");
+          if (index < 0) throw new Error("Plex preload requires Next's font loader");
+          rule.use.splice(index, 0, { loader: require.resolve("./scripts/plex-preload-loader.cjs") });
+          plexPreloadExportAdded = true;
+        }
+        if (rule.oneOf) addPlexPreloadExport(rule.oneOf);
+        if (rule.rules) addPlexPreloadExport(rule.rules);
+      }
+    };
+    if (config.module?.rules) {
+      addPlexPreloadExport(config.module.rules);
+      if (!plexPreloadExportAdded) throw new Error("Plex preload requires Next's Google font CSS rule");
+    }
+
     if (!dev && !isServer) {
       config.devtool = "hidden-nosources-source-map";
     }

@@ -12,7 +12,7 @@ import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 
@@ -55,11 +55,13 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
   let usageProjectId: number | null = null;
   let actingAgent: Awaited<ReturnType<typeof loadActingAgent>> = null;
   let teamProviderSettings: unknown;
+  let trustedChatSessionId: string | null = null;
   if (body.session_id) {
     const chatAgent = await prisma.chatSession.findFirst({
       where: { id: body.session_id, userId: dbUser.id },
       select: { agent: { select: { runtimeType: true } } },
     });
+    if (chatAgent) trustedChatSessionId = body.session_id;
     if (chatAgent?.agent?.runtimeType === "EXTERNAL") {
       return NextResponse.json(
         { error: "External agents are chatted with from Agent Chat" },
@@ -215,7 +217,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         requestDefaultModelOption,
       haiku55Enabled,
       );
-      byokApiKey = await getSelectionApiKey(selection);
+      byokApiKey = await resolveAiFallbackCredential(
+        () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
+      );
     }
 
     if (selection.provider === "openrouter") {
@@ -237,7 +241,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           requestDefaultModelOption,
       haiku55Enabled,
         );
-        byokApiKey = await getSelectionApiKey(selection);
+        byokApiKey = await resolveAiFallbackCredential(
+          () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
+        );
       }
     }
 
@@ -279,5 +285,5 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     await reportHandledChatError(error, "select-model");
     return createSseErrorResponse(errorMessage(error));
   }
-  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings };
+  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, trustedChatSessionId };
 }

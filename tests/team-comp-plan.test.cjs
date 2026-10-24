@@ -10,6 +10,7 @@ let entryId = 0;
 const stubbedModulePaths = [
   "src/app/api/ai/_lib/byokKeys.ts",
   "src/app/api/ai/_lib/planGate.ts",
+  "src/app/api/ai/_lib/planAllowancePolicy.ts",
   "src/lib/crypto/byokCipher.ts",
   "src/lib/prisma.ts",
   "src/utils/controllers/projects/getAllIncludes.ts",
@@ -56,6 +57,7 @@ function stubPrisma(teamRow, byokLookups = []) {
   for (const relativePath of stubbedModulePaths) {
     delete require.cache[path.join(root, relativePath)];
   }
+  stubModule("src/app/api/ai/_lib/planAllowancePolicy.ts", { teamPlanAllowanceEnabled: async () => false });
   stubModule("src/lib/prisma.ts", {
     default: {
       project: { findFirst: async () => ({ teamId: teamRow.id }) },

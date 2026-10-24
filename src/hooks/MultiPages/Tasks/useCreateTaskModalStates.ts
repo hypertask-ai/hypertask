@@ -1,3 +1,6 @@
+import { PlanLimitRefusal, planLimitRefusalMessage } from "@/lib/planLimitsClient";
+import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
+import toast from "react-hot-toast";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
@@ -17,13 +20,16 @@ import { purgeLegacyCreateTaskDrafts } from "@/lib/createTaskDraftCleanup";
 import {
   currentProjectAtom,
   newTaskCreatedAtom,
+  aiChatNewTicketPathAtom,
   showCreateTaskModalAtom,
   uploadingStateCreateTaskModalAtom,
 } from "@/store";
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useRecoilState } from "@/lib/state";
+import { useRecoilState, useSetRecoilState } from "@/lib/state";
 import useAddDeleteTaskInBoards from "../useAddDeleteTaskInBoards";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import axios from "axios";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -77,6 +83,8 @@ interface IProccessed {
 }
 
 const useCreateTaskModalGlobalStates = () => {
+  let showPlanLimitToast = false;
+  if (useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG)) showPlanLimitToast = true;
   const [initializeDefaults, setInitializeDefaults] = useState(true);
   const [showAssignModal, setShowAssignModal] = useState<boolean>(false);
   const [showConfirmationModal, setShowConfirmationModal] =
@@ -262,6 +270,9 @@ const useCreateTaskModalGlobalStates = () => {
   ]);
   const { createTaskGlobally } = useAddDeleteTaskInBoards();
   const router = useRouter();
+  const setNewTicketPath = useSetRecoilState(aiChatNewTicketPathAtom);
+  let rememberNewTicketForChat: (path: string) => void = () => {};
+  if (useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG)) rememberNewTicketForChat = setNewTicketPath;
   const sectionDefaultsRequestRef = useRef<AbortController | null>(null);
 
   const toggleRecording = (val: boolean) => setIsRecording(val);
@@ -612,10 +623,17 @@ const useCreateTaskModalGlobalStates = () => {
         traceScope,
       );
 
-      if (res?.error) return;
+      if (res?.error) {
+        if (showPlanLimitToast) {
+          const message = planLimitRefusalMessage(res.ErrorMessage);
+          if (message) throw new PlanLimitRefusal(message);
+        }
+        return;
+      }
       return res?.resposne?.newTask;
     },
     [
+      showPlanLimitToast,
       formValues.currentProject,
       currentUser?.id,
       formValues.title,
@@ -711,6 +729,7 @@ const useCreateTaskModalGlobalStates = () => {
     setNewTaskCreated(task);
     setCreateTaskFromComment(undefined);
     const taskUrl = `/detail/project-${formValuesAtSave.currentProject?.id}/${task.uniqueIndex}`;
+    rememberNewTicketForChat(taskUrl);
     router.prefetch(taskUrl);
     processFollowers(result, task, formValuesAtSave.assignees);
     if (result.agentMentions && result.agentMentions.length > 0) {
@@ -735,6 +754,7 @@ const useCreateTaskModalGlobalStates = () => {
     formValues.title,
     improveWritingModel,
     improveWritingSource,
+    rememberNewTicketForChat,
   ]);
 
   const processFollowers = (

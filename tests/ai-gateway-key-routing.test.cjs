@@ -21,6 +21,7 @@ const stubbedModulePaths = [
   "src/app/api/ai/_lib/editorAi.ts",
   "src/app/api/ai/_lib/modelProvider.ts",
   "src/app/api/ai/_lib/planGate.ts",
+  "src/app/api/ai/_lib/planAllowancePolicy.ts",
   "src/app/api/ai/_lib/providerGate.ts",
   "src/lib/crypto/byokCipher.ts",
   "src/lib/net/fetchWithoutBrotli.ts",
@@ -46,6 +47,7 @@ function stubModule(relativePath, exports) {
 }
 
 function stubPlan(plan = "Pro") {
+  stubModule("src/app/api/ai/_lib/planAllowancePolicy.ts", { teamPlanAllowanceEnabled: async () => false });
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
@@ -507,6 +509,7 @@ test("premium team inference fails closed when the team has no dedicated key", a
 
 test("Free and BYOK teams use the shared included-allowance gateway key", async () => {
   resetModules();
+  stubModule("src/app/api/ai/_lib/planAllowancePolicy.ts", { teamPlanAllowanceEnabled: async () => false });
   const sharedGatewayKey = "vck_shared_free_allowance";
   const teamId = "team_free_allowance";
   let plan = "Free";
@@ -1588,6 +1591,7 @@ test("editor models retry unavailable Luna once before output, but not after out
   const usageContexts = [];
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
   stubModule("src/app/api/ai/_lib/byokKeys.ts", {
+    resolveAiFallbackCredential: async (load) => load(),
     getByokOrTeamGatewayApiKeyForModelOption: async () => "vck_test",
   });
   stubModule("src/app/api/ai/_lib/providerGate.ts", {

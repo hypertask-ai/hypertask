@@ -1,3 +1,5 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import { TaskAttachmentLinkError } from "@/lib/storage/linkTaskAttachment";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { updateCommentService } from "@/utils/controllers/comments/updateCommentService";
@@ -79,6 +81,13 @@ const handler: NextApiHandler = async (
 
       return res.status(200).json(toUpdate);
     } catch (error) {
+      if (isPlanLimitReachedError(error)) {
+        const response = planLimitResponse(error);
+        return res.status(response.status).json(response.body);
+      }
+      if (error instanceof TaskAttachmentLinkError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       console.error("Error:", error);
       if (error instanceof Error && error.message === "Comment not found or not owned by user") {
         return res.status(404).json({ message: "Comment not found" });

@@ -72,6 +72,7 @@ const EMPTY_PARAGRAPH = '<p><br class="ProseMirror-trailingBreak"></p>';
 
 export function toEditorHtml(raw: string): string {
   let html = linkifyHtml(normalizeRichHtmlForRender(raw))
+    .replace(/[ \t\r\n\f]+$/, "")
     .replace(/<(\/?)b>/g, "<$1strong>")
     .replace(/<(\/?)i>/g, "<$1em>")
     .replace(/<ol>/g, '<ol class="numbered-list">')

@@ -20,6 +20,7 @@ function mcpTool(h) {
     "../../utils/correlation": {},
     "../../validations/project.validation": schemas,
     "../../utils/task-link": {},
+    "@/lib/planLimits": { isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 402, body: {} }) },
   });
   const requests = [];
   const { executeWithService } = loadTs("src/lib/mcp-server/utils/executeWithService.ts", {

@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { modelCostUsd, modelPricing, sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
+import { cappedDemoModel, demoCapsEnabled } from "@/lib/demo/demoAllowance";
+import { consumeDemoWindow } from "@/lib/demo/slidingWindow";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { createGateway, streamText, type ModelMessage } from "ai";
@@ -186,7 +190,29 @@ export async function POST(request: NextRequest) {
   const guest = await resolveGuestSession(
     request.cookies.get(SESSION_COOKIE)?.value,
   ).catch(() => null);
-  if (guest?.teamId) {
+  let capsEnabled: boolean;
+  try {
+    capsEnabled = await demoCapsEnabled();
+    if (capsEnabled) {
+      if (!guest?.teamId) return sseErrorResponse("Please start the demo again to keep chatting.", 401);
+      const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        request.headers.get("x-real-ip")?.trim() || "unknown";
+      const key = `demo:chat:ip:${createHash("sha256").update(ip).digest("hex")}`;
+      if (!(await consumeDemoWindow(key, 20)).allowed) {
+        return sseErrorResponse("Too many demo messages from your network. Try again in a few minutes.");
+      }
+    }
+  } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/demo/chat/stream",
+      source: "handled",
+      extra: { stage: "allowance" },
+    });
+    return sseErrorResponse("Demo chat is unavailable. Please try again later.", 503);
+  }
+  if (!capsEnabled && guest?.teamId) {
     const spent = await prisma.aiUsage
       .aggregate({ where: { teamId: guest.teamId }, _sum: { totalTokens: true } })
       .catch(() => null);
@@ -196,7 +222,8 @@ export async function POST(request: NextRequest) {
   }
 
   const encoder = new TextEncoder();
-  const model = createGateway({ apiKey })(gatewayModel);
+  const rawModel = createGateway({ apiKey })(gatewayModel);
+  const model = capsEnabled ? cappedDemoModel(rawModel, gatewayModel, apiKey, guest!.teamId!) : rawModel;
   const firstTurn = history.length === 0;
 
   const stream = new ReadableStream<Uint8Array>({
@@ -215,7 +242,14 @@ export async function POST(request: NextRequest) {
       };
       const fail = (error: unknown) => {
         if (finished) return;
-        send("error", { content: errorMessage(error) });
+        if (capsEnabled && sharedAiAllowanceErrorMessage(error)) {
+          send("error", {
+            content: "You've used up the free demo AI. Sign up to keep chatting — it's free.",
+            code: "guest_budget_exhausted",
+          });
+        } else {
+          send("error", { content: errorMessage(error) });
+        }
         finish("error");
       };
 
@@ -228,7 +262,7 @@ export async function POST(request: NextRequest) {
           temperature: 0.3,
           maxOutputTokens: 600,
           maxRetries: 1,
-          providerOptions: { gateway: { tags: ["demo-chat"] } },
+          providerOptions: { gateway: { tags: ["demo-chat", ...(capsEnabled ? [`team:${guest!.teamId}`] : [])] } },
           onFinish: async ({ usage }) => {
             if (!guest) return;
             const inputTokens = usage.inputTokens ?? 0;
@@ -239,6 +273,8 @@ export async function POST(request: NextRequest) {
               provider: "gateway",
               model: gatewayModel,
               feature: "demo-chat",
+              ...(capsEnabled ? { costUsd: modelCostUsd(await modelPricing(gatewayModel), inputTokens, outputTokens,
+                usage.inputTokenDetails?.cacheReadTokens, usage.inputTokenDetails?.cacheWriteTokens) } : {}),
               inputTokens,
               outputTokens,
               totalTokens: usage.totalTokens ?? inputTokens + outputTokens,

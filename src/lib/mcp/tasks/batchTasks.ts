@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { NextRequest, NextResponse } from 'next/server'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -267,6 +268,7 @@ async function handleBatchUpdateItem(
 
     return {
       ...body,
+      ...(execution.response.status === 402 ? { status: 402 } : {}),
       task_id: taskId,
       success: false,
       error:
@@ -275,6 +277,10 @@ async function handleBatchUpdateItem(
           : 'Task update failed',
     } as BatchUpdateError
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error);
+      return { ...refusal.body, task_id: taskId, status: refusal.status };
+    }
     console.error(`[MCP Batch Tasks] Failed to update task ${taskId}:`, error)
     return {
       task_id: taskId,
@@ -340,6 +346,11 @@ async function handleBatchUpdate(
   })
   await Promise.all(workers)
 
+  const refusal = results.find(isPlanLimitReachedError)
+  if (isPlanLimitReachedError(refusal)) {
+    const response = planLimitResponse(refusal)
+    return NextResponse.json({ ...response.body, results }, { status: response.status })
+  }
   return NextResponse.json({ success: true, results })
 }
 

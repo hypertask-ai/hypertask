@@ -21,6 +21,8 @@ import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG } from '@/lib/flags/keys'
 import {
   hasPrWhere,
   normalizeTaskStatus,
@@ -278,6 +280,9 @@ export async function GET(request: NextRequest) {
       }
 
       if (orConditions.length > 0) {
+        const includeAiSummary = !ctx.agentId && !ctx.management &&
+          await isFeatureEnabled(HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, user.id).catch(() => false)
+
         const where: any = {
           OR: orConditions,
           project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope)
@@ -285,6 +290,13 @@ export async function GET(request: NextRequest) {
 
         const include = {
           ...taskMcpGetInclude(user.id, ctx.agentId, ctx.teamScope),
+          ...(includeAiSummary ? {
+            Task_Summary: {
+              take: 1,
+              orderBy: { createdAt: 'desc' as const },
+              select: { content: true, updatedAt: true, createdAt: true },
+            },
+          } : {}),
           savedContent: {
             where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' as const },
             select: { id: true, type: true },
@@ -324,16 +336,29 @@ export async function GET(request: NextRequest) {
           )
         }
 
+        const mapTask = (task: (typeof tasks)[number]) => {
+          const mapped = mapTaskToMcpGetResponse(task, user.id, ctx.agentId, ctx.teamScope)
+          if (!includeAiSummary) return mapped
+          const summary = (task as { Task_Summary?: { content: string; updatedAt: Date | null; createdAt: Date }[] }).Task_Summary?.[0]
+          return {
+            ...mapped,
+            ai_summary: summary ? {
+              content: summary.content,
+              updated_at: (summary.updatedAt ?? summary.createdAt).toISOString(),
+            } : null,
+          }
+        }
+
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: mapTaskToMcpGetResponse(tasks[0], user.id, ctx.agentId, ctx.teamScope)
+            task: mapTask(tasks[0])
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id, ctx.agentId, ctx.teamScope))
+          tasks: tasks.map(mapTask)
         })
       }
     }

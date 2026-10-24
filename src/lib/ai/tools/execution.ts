@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { type ToolSet } from "ai";
 import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
@@ -38,6 +39,11 @@ export function trackToolSetExecutions(
         recordToolExecution({ name, result });
         return result;
       } catch (error) {
+        if (isPlanLimitReachedError(error)) {
+          const result = planLimitResponse(error).body;
+          recordToolExecution({ name, result });
+          return result;
+        }
         recordToolExecution({
           name,
           result: { success: false, error: errorMessage(error) },
@@ -77,6 +83,7 @@ export function withToolErrors<T extends (...args: any[]) => Promise<any>>(fn: T
     try {
       return await fn(...args);
     } catch (error) {
+      if (isPlanLimitReachedError(error)) return planLimitResponse(error).body;
       return { success: false, error: errorMessage(error) };
     }
   }) as T;

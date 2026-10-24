@@ -94,6 +94,7 @@ function loadService(storedComment) {
     delete require.cache[modulePath(relativePath)];
   }
 
+  stubModule("src/lib/storage/verifyTaskAttachmentLinks.ts", { verifyTaskAttachmentLinks: async () => new Map() });
   stubModule("src/lib/prisma.ts", { default: prisma });
   stubModule("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {
     upsertCommentToTurbopuffer: () => {},

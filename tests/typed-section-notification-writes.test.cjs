@@ -167,7 +167,7 @@ for (const flag of [false, undefined, true]) {
     });
     const row = { ...notification, id: "20", taskId: null };
     assert.equal(await fn(row, 0, "Notification"), true);
-    assert.deepEqual(calls[0], flag ? ["typed", { id: "20", taskId: null, userId: 985, type: notification.type, tutorial: 1 }, { "X-Socket-Id": "123.456" }] : ["legacy", "/api/notifications/markAsDone?id=20&taskId=null&userId=985&type=TaskMovedToInbox&tutorial=1", { method: "GET", headers: { "X-Socket-Id": "123.456" } }]);
+    assert.deepEqual(calls[0], flag ? ["typed", { id: "20", taskId: null, userId: 985, type: notification.type, tutorial: 1, intent: "archive" }, { "X-Socket-Id": "123.456" }] : ["legacy", "/api/notifications/markAsDone?id=20&taskId=null&userId=985&type=TaskMovedToInbox&tutorial=1&intent=archive", { method: "GET", headers: { "X-Socket-Id": "123.456" } }]);
     calls.length = 0; assert.equal(await fn({ ...row, taskId: 12 }, 0, "Task"), true);
     assert.equal(calls.length, 2);
     assert.deepEqual(calls[1], ["legacy", "/api/tasks/single", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ newTask: { id: 12, status: "Archive" } }) }]);

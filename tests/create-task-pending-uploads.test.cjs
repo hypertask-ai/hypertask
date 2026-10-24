@@ -32,6 +32,7 @@ function mount() {
     promise: (promise, handlers) => promise.then(handlers.success, handlers.error),
   });
   const context = {
+    PlanLimitRefusal: class PlanLimitRefusal extends Error {},
     isRecording: false, uploadInProgress: false, canSave: undefined,
     createSubmissionRef: { current: false },
     pendingAttachmentUploadsRef: { current: new Map() }, createTaskAttachmentsRef: { current: [] },

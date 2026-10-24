@@ -115,7 +115,7 @@ const useSections = ({
     return () => sectionElement?.removeEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
   }, []);
 
-  const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
+  const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean | "plan-limit"> => {
     const itemToCreate = {
       title: taskTitle,
       description: "",
@@ -131,7 +131,7 @@ const useSections = ({
       section: title,
     });
 
-    if (!created) return false;
+    if (created !== true) return created;
 
     if (!createAnother) {
       setPosition(null);

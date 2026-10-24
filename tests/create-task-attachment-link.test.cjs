@@ -92,6 +92,7 @@ function loadLinker({
     root,
     "src/lib/storage/uploadTaskAttachmentToS3.ts",
   )];
+  stubModule("src/lib/planLimits.ts", { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {}, assertTicketRoom: async () => {} });
   stubModule("src/lib/prisma.ts", { default: prisma });
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
     taskWriteAccessWhere: (userId) => ({ writer: userId }),

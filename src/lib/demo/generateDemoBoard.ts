@@ -2,6 +2,7 @@ import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { createGateway, generateText, Output } from "ai";
 import { z } from "zod";
 
+import { cappedDemoModel, demoCapsEnabled } from "./demoAllowance";
 import { backgroundClaudeModelEnabled } from "@/app/api/ai/_lib/planGate";
 
 const DEMO_MODEL = "openai/gpt-6-luna";
@@ -84,27 +85,40 @@ function ensureMinimumDueDates(board: DemoBoard): DemoBoard {
   return board;
 }
 
-export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
+export async function generateDemoBoard(purpose: string, teamId?: string): Promise<DemoBoard> {
   const apiKey = process.env.DEMO_AI_GATEWAY_API_KEY?.trim();
   if (!apiKey) {
     throw new DemoBoardGenerationUnavailableError();
   }
 
   const claude = await backgroundClaudeModelEnabled(null);
-  const model = createGateway({ apiKey })(claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL);
-  const { output } = await generateText({
-    experimental_download: downloadWithoutBrotli,
-    model,
-    output: Output.object({ schema: BoardSchema }),
-    maxOutputTokens: 4096,
-    maxRetries: 2,
-    providerOptions: {
-      ...(claude ? {} : { openai: { reasoningEffort: "low" } }),
-      gateway: { tags: ["demo-board"] },
-    },
-    system: SYSTEM,
-    prompt: `Board purpose: ${purpose}`,
-  });
+  let capsEnabled: boolean;
+  try {
+    capsEnabled = await demoCapsEnabled();
+  } catch {
+    throw new DemoBoardGenerationUnavailableError();
+  }
+  const modelSlug = claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL;
+  const rawModel = createGateway({ apiKey })(modelSlug);
+  const model = capsEnabled ? cappedDemoModel(rawModel, modelSlug, apiKey, teamId) : rawModel;
+  try {
+    const { output } = await generateText({
+      experimental_download: downloadWithoutBrotli,
+      model,
+      output: Output.object({ schema: BoardSchema }),
+      maxOutputTokens: 4096,
+      maxRetries: 2,
+      providerOptions: {
+        ...(claude ? {} : { openai: { reasoningEffort: "low" } }),
+        gateway: { tags: ["demo-board", ...(capsEnabled && teamId ? [`team:${teamId}`] : [])] },
+      },
+      system: SYSTEM,
+      prompt: `Board purpose: ${purpose}`,
+    });
 
-  return ensureMinimumDueDates(output);
+    return ensureMinimumDueDates(output);
+  } catch (error) {
+    if (capsEnabled) throw new DemoBoardGenerationUnavailableError();
+    throw error;
+  }
 }

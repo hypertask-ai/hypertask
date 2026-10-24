@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import type { IApiClient } from '../../types/index';
 import { logger } from '../../utils/logger';
 import { generateCorrelationId } from '../../utils/correlation';
@@ -332,6 +333,11 @@ export class ProjectService {
         correlationId
       );
     } catch (error) {
+      const body = (error as { httpResponse?: unknown })?.httpResponse ?? error;
+      if (isPlanLimitReachedError(body)) {
+        const refusal = planLimitResponse(body);
+        return { ...refusal.body, status: refusal.status };
+      }
       logger.failure('Failed to manage project administration', error, {
         correlationId,
       });

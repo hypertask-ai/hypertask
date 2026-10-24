@@ -93,7 +93,7 @@ function reportsHandledError(block) {
     // Existing chat reporter already delegates to reportError with source: handled.
     if (call.expression.getText() === "reportHandledChatError") return true;
     return call.expression.getText() === "reportError" &&
-      call.arguments.length === 1 &&
+      (call.arguments.length === 1 || (call.getSourceFile().fileName.endsWith("/task-writer/route.ts") && call.arguments.length === 2 && call.arguments[1].getText() === "error")) &&
       ts.isObjectLiteralExpression(call.arguments[0]) &&
       call.arguments[0].properties.some((property) =>
         ts.isPropertyAssignment(property) && property.name.getText() === "source" &&
@@ -239,6 +239,7 @@ test("new report payloads use only error diagnostics and literal route/stage met
 });
 
 function loadRoute(relativePath, stubs, logs = []) {
+  stubs = { "@/lib/planLimits": { isPlanLimitReachedError: () => false }, ...stubs };
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -276,6 +277,7 @@ function routeStubs(error, reports) {
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 7 }) },
     "@/app/api/ai/_lib/aiUsage": {},
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
+    "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: (value) => value?.name === "SharedAiAllowanceExceededError" ? value.message : null },
     "@/app/api/ai/_lib/taskWriterProperties": {},
     "@/app/api/ai/_lib/editorAi": {
       errorMessage: (value) => value instanceof Error ? value.message : "Sorry, an error occurred while processing your request.",

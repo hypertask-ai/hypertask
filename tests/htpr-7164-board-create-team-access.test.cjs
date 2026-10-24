@@ -33,6 +33,7 @@ function controller(user = { id: 6, accountId: "acct-own" }) {
     $transaction: async callback => callback(prisma),
   };
   const create = load("src/utils/controllers/projects/create.ts", {
+    "@/lib/planLimits": { assertBoardRoom: async () => {}, isPlanLimitReachedError: () => false },
     "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
     "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board_created:1", processAnalyticsIntentSoon: () => {} },
     "@/lib/prisma": { default: prisma },

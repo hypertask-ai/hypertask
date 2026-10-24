@@ -1,6 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
-import { getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
 import { getAiModelOptionById, isHaiku55Model, resolveHaikuModelId } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
@@ -10,7 +10,7 @@ import { type ModelMessage, type ToolSet, streamText, stepCountIs, generateText 
 
 import { failHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
 
-import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { hasVisibleCompletion, buildEmptyCompletionSummary } from "@/app/api/ai/chat/stream/bulkTools";
 import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacingErrorDetails, reportEmptyCompletion } from "@/lib/ai/chatStream/errors";
@@ -152,12 +152,13 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     );
     if (previous.model === state.selected.resolvedModelId) continue;
     const fallbackProvider = previous.model === "gpt-6-luna" ? "openai" : state.selected.provider;
-    const fallbackCredential = previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(streamCredential)
-      ? await getByokOrTeamGatewayApiKeyForModelOption(
-          getAiModelOptionById(previous.model)!, state.body.byokProviderFlags,
-          { trustedTeamId: gatewayTags.teamId, projectId: usageProjectId, userId: dbUser.id, agentId: actingAgent?.id },
-        )
-      : streamCredential;
+    const fallbackLookup = { trustedTeamId: gatewayTags.teamId, projectId: usageProjectId, userId: dbUser.id, agentId: actingAgent?.id };
+    const fallbackCredential = await resolveAiFallbackCredential(async () =>
+      previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(streamCredential)
+        ? getByokOrTeamGatewayApiKeyForModelOption(
+            getAiModelOptionById(previous.model)!, state.body.byokProviderFlags, fallbackLookup,
+          )
+        : streamCredential, fallbackError);
     const fallback = selectModel(
       fallbackProvider,
       previous.model,
@@ -166,6 +167,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         : streamModelOption ? { ...streamModelOption, directModel: undefined } : undefined,
       gatewayTags,
     );
+    inheritAiModelUsage(fallback.model, state.selected.model);
     state.selected = {
       ...state.selected,
       ...fallback,

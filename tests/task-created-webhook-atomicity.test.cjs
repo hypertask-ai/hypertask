@@ -4,6 +4,8 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
+const policyPath = path.join(root, "src/lib/planLimits.ts");
+require.cache[policyPath] = { id: policyPath, filename: policyPath, loaded: true, exports: { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {}, assertTicketRoom: async () => {} } };
 const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") }, interopDefault: true,
 });

@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -57,7 +58,11 @@ export const POST = taskWriteRoute({
           return NextResponse.json(response.json, { status: response.status });
         }
       }
-    } catch {
+    } catch (error) {
+      if (isPlanLimitReachedError(error)) {
+        const refusal = planLimitResponse(error);
+        return NextResponse.json(refusal.body, { status: refusal.status });
+      }
       return NextResponse.json({ message: "Internal server error" }, { status: 500 });
     }
   },

@@ -13,9 +13,30 @@ export function firstMeaningfulStackFrame(stack?: string) {
   return lines.find((line) => /^at\s|@\S+:\d+/i.test(line)) ?? lines[1] ?? "";
 }
 
+const SECRET_PATTERNS = [
+  /\b(?:bearer|basic)\s+[\w.~+/=-]{8,}/gi,
+  /\b(?:sk|pk|rk|vck|xai|gsk|key|api|tok|token)[-_][\w-]{12,}/gi,
+  /\b(?:api[-_]?key|token|secret|password|authorization)(["']?\s*[:=]\s*["']?)[^\s"',;&]{6,}/gi,
+  /\b[A-Za-z0-9_-]{32,}\b/g,
+];
+
+export function redactSecrets(text: string): string {
+  return SECRET_PATTERNS.reduce(
+    (redacted, pattern) =>
+      redacted.replace(pattern, (match, separator?: string) =>
+        typeof separator === "string" && match.includes(separator)
+          ? `${match.slice(0, match.indexOf(separator) + separator.length)}[redacted]`
+          : "[redacted]",
+      ),
+    text,
+  );
+}
+
 export function errorFingerprint(message: string, stack?: string) {
+  const redactedMessage = redactSecrets(message);
+  const redactedFrame = redactSecrets(firstMeaningfulStackFrame(stack));
   return createHash("sha256")
-    .update(`${message}\n${firstMeaningfulStackFrame(stack)}`)
+    .update(`${redactedMessage}\n${redactedFrame}`)
     .digest("hex");
 }
 

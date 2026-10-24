@@ -11,7 +11,7 @@ import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, typ
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
@@ -743,7 +743,9 @@ export async function selectTaskWriterModel(args: {
       requestDefaultModelOption,
       haiku55Enabled,
     );
-    byokApiKey = await getSelectionApiKey(selection);
+    byokApiKey = await resolveAiFallbackCredential(
+      () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
+    );
   }
 
   if (selection.provider === "openrouter") {
@@ -765,7 +767,9 @@ export async function selectTaskWriterModel(args: {
         requestDefaultModelOption,
         haiku55Enabled,
       );
-      byokApiKey = await getSelectionApiKey(selection);
+      byokApiKey = await resolveAiFallbackCredential(
+        () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
+      );
     }
   }
 
@@ -836,11 +840,12 @@ export async function selectTaskWriterModel(args: {
     console.warn(
       `[ai-model-fallback] ${selected.modelId} -> ${previous.model}: ${previous.status}`,
     );
-    const fallbackCredential = previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(byokApiKey)
-      ? await getByokOrTeamGatewayApiKeyForModelOption(
-          getAiModelOptionById(previous.model)!, args.byokProviderFlags, keyLookup,
-        )
-      : byokApiKey;
+    const fallbackCredential = await resolveAiFallbackCredential(async () =>
+      previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(byokApiKey)
+        ? getByokOrTeamGatewayApiKeyForModelOption(
+            getAiModelOptionById(previous.model)!, args.byokProviderFlags, keyLookup,
+          )
+        : byokApiKey, error);
     const fallback = selectEditorModel(
       previous.model === "gpt-6-luna" ? "openai" : selection.provider,
       previous.model,

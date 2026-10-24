@@ -77,6 +77,9 @@ function loadRoute() {
 
       isFeatureEnabled: async () => false,
     },
+    "@/lib/flags/keys": {
+      HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer",
+    },
     "@/lib/mcp/listQuery": {
       hasPrWhere: () => null,
       normalizeTaskStatus: (status) => status,

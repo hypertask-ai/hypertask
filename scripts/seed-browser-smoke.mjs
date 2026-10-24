@@ -53,7 +53,7 @@ const { SESSION_TTL_SECONDS, signSession } = jiti(
 
 const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
 
-async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, longThread = false }) {
+async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, longThread = false, descriptionHtml = "<p>This seeded ticket must open from its board card.</p>" }) {
   const sectionTitles = ["To do", "Done"];
   const project = await prisma.project.create({
     data: {
@@ -91,7 +91,7 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, lo
       ...(visual ? { createdAt: new Date(VISUAL_NOW), sectionChangedAt: new Date(VISUAL_NOW) } : {}),
       description: "",
       description_: {
-        create: { content: "<p>This seeded ticket must open from its board card.</p>", creatorId: ownerId },
+        create: { content: descriptionHtml, creatorId: ownerId },
       },
       projectId: project.id,
       userId: ownerId,
@@ -226,6 +226,20 @@ async function seedSessionFixtures(flags) {
     suffix: "thread",
     longThread: true,
   });
+  const agentDescriptionBoard = await createBoard({
+    ownerId: user.id,
+    teamId: team.id,
+    googleAccountId: googleAccount.id,
+    title: "Browser smoke agent description board",
+    suffix: "agentdesc",
+    descriptionHtml: [
+      "<p>**Bug: the description jumps while the ticket opens.**</p>",
+      "<p>What happened:\n1. Opened a ticket.\n2. Every line had blank space below it.\n3. Then the text moved into place.</p>",
+      "<p>Expected: the text shows at its final spacing from the first frame.</p>",
+      "<ul>\n<li>First point</li>\n<li>Second point</li>\n</ul>",
+      "<p>Last paragraph   with  extra   spaces.</p>\n",
+    ].join("\n\n"),
+  });
 
   const sessionUser = await prisma.user.findUnique({
     where: { id: user.id },
@@ -287,27 +301,45 @@ async function seedSessionFixtures(flags) {
   });
   const { createMcpToken, agentTokenCredentialFields } = jiti(path.join(root, "src/lib/mcp/auth/verifyJwt.ts"));
   const personalChats = [];
-  for (const [index, title] of ["Smoke chat: planning", "Smoke chat: decisions", "Smoke chat: next steps"].entries()) {
-    const updatedAt = new Date(`2026-10-22T1${index}:00:00.000Z`);
-    const message = `${title} saved conversation`;
-    const session = await prisma.chatSession.create({ data: {
-      userId: user.id, agentId: null, taskId: null, projectId: board.id, title, updatedAt,
-    } });
-    await prisma.chatMessage.createMany({ data: [{ sessionId: session.id, role: "assistant", content: message, isDelivered: true }] });
-    personalChats.push({ id: session.id, title, updatedAt: updatedAt.toISOString(), message });
-  }
   const sidebarLanes = {};
+  const storageStates = {};
   for (const lane of ["Desktop", "Mobile"]) {
+    const sidebarUser = await prisma.user.create({ data: {
+      uid: `sidebar-${lane}-${runKey}`, email: `sidebar-${lane}-${runKey}@example.invalid`,
+      displayName: `Sidebar ${lane}`, accountId: googleAccount.id,
+      UserSetting: { create: { notification: false, onboardingTourStatus: true, onboardingTutorialStatus: true } },
+    }, include: { UserSetting: true } });
+    await prisma.user.update({ where: { id: sidebarUser.id }, data: { UserSettingId: sidebarUser.UserSetting.id } });
+    await prisma.member_Team.create({ data: {
+      userId: sidebarUser.id, teamId: team.id, googleAccountId: googleAccount.id, status: "Accepted", acceptedAt: new Date(),
+    } });
+    await prisma.member.create({ data: { projectId: board.id, userId: sidebarUser.id, status: "Accepted" } });
+    storageStates[lane] = path.join(path.dirname(stateFile), `agent-sidebar-${lane}-state.json`);
+    await writeFile(storageStates[lane], JSON.stringify({ ...state, cookies: state.cookies.map(cookie => ({
+      ...cookie,
+      value: cookie.name === "ht_session" ? signSession({ id: sidebarUser.id, email: sidebarUser.email })
+        : cookie.name === "nookies_user" ? encodeURIComponent(JSON.stringify({ ...sessionUser, ...sidebarUser, UserSettingId: sidebarUser.UserSetting.id })) : cookie.value,
+    })) }), { flag: "wx", mode: 0o600 });
+    for (const [index, name] of ["planning", "decisions", "next steps"].entries()) {
+      const title = index === 1 ? `Smoke${lane}${"1792812226726848138aiChatOpenNewTickets".repeat(6)}` : `Smoke ${lane} chat: ${name}`;
+      const updatedAt = new Date(`2026-10-22T1${index}:00:00.000Z`);
+      const message = `${title} saved conversation`;
+      const session = await prisma.chatSession.create({ data: {
+        userId: sidebarUser.id, agentId: null, taskId: null, projectId: board.id, title, updatedAt,
+      } });
+      await prisma.chatMessage.createMany({ data: [{ sessionId: session.id, role: "assistant", content: message, isDelivered: true }] });
+      personalChats.push({ lane, id: session.id, title, updatedAt: updatedAt.toISOString(), message });
+    }
     const agents = [];
     for (const [suffix, runtimeType] of [["A", "EXTERNAL"], ["B", "EXTERNAL"], ["Native", "NATIVE"]]) {
       const agent = await prisma.agent.create({ data: {
-        userId: user.id, displayName: `Sidebar ${lane} ${suffix}`, runtimeType,
+        userId: sidebarUser.id, displayName: `Sidebar ${lane} ${suffix}`, runtimeType,
         photoURL: null, visibility: "PRIVATE", prompt: runtimeType === "NATIVE" ? "Answer this user's board questions." : null,
       } });
-      await prisma.member.create({ data: { projectId: board.id, userId: user.id, agentId: agent.id, status: "Accepted" } });
-      const token = createMcpToken(user.id, user.email, "1h", agent.id);
+      await prisma.member.create({ data: { projectId: board.id, userId: sidebarUser.id, agentId: agent.id, status: "Accepted" } });
+      const token = createMcpToken(sidebarUser.id, sidebarUser.email, "1h", agent.id);
       await prisma.agent.update({ where: { id: agent.id }, data: agentTokenCredentialFields(token) });
-      const session = await prisma.chatSession.create({ data: { userId: user.id, agentId: agent.id, teamId: team.id, title: agent.displayName } });
+      const session = await prisma.chatSession.create({ data: { userId: sidebarUser.id, agentId: agent.id, teamId: team.id, title: agent.displayName } });
       await prisma.chatMessage.createMany({ data: Array.from({ length: 30 }, (_, index) => ({
         sessionId: session.id, content: `${agent.displayName} history ${index + 1}`, role: "assistant", authorAgentId: agent.id, isDelivered: true,
       })) });
@@ -315,7 +347,7 @@ async function seedSessionFixtures(flags) {
     }
     sidebarLanes[lane] = agents;
   }
-  await writeFile(path.join(path.dirname(stateFile), "agent-sidebar-fixture.json"), JSON.stringify({ projectId: board.id, lanes: sidebarLanes, personalChats }), { flag: "wx", mode: 0o600 });
+  await writeFile(path.join(path.dirname(stateFile), "agent-sidebar-fixture.json"), JSON.stringify({ projectId: board.id, lanes: sidebarLanes, personalChats, storageStates }), { flag: "wx", mode: 0o600 });
   let contract;
   if (contractEnabled) {
     const callers = {};
@@ -387,6 +419,7 @@ async function seedSessionFixtures(flags) {
     description: "This seeded ticket must open from its board card.",
     detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
     longThreadDetailPath: `/detail/project-${threadBoard.id}/${threadBoard.task.uniqueIndex}`,
+    agentDescriptionDetailPath: `/detail/project-${agentDescriptionBoard.id}/${agentDescriptionBoard.task.uniqueIndex}`,
     flags,
     ...((localPremerge || contractEnabled || visual) ? { searchRows: [board, demoBoard, ...(contract?.boards ?? [])].map(project => ({
       id: String(project.task.id),

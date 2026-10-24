@@ -62,7 +62,7 @@ export function formatTemporalContext(timezone = "UTC") {
   );
 }
 
-export function formatChatHistory(chatHistory: ChatRequest["chat_history"]) {
+export function formatChatHistory(chatHistory: ChatRequest["chat_history"], includeTimeContext = true) {
   if (!chatHistory?.length) return "No previous conversation.";
   const messages = chatHistory
     .slice(-15)
@@ -80,9 +80,11 @@ export function formatChatHistory(chatHistory: ChatRequest["chat_history"]) {
   const earlier = messages.slice(0, Math.max(0, messages.length - 10));
   const parts: string[] = [];
 
-  parts.push("=== CURRENT TIME CONTEXT ===");
-  parts.push(`[Current Time: ${new Date().toISOString()}]`);
-  parts.push("");
+  if (includeTimeContext) {
+    parts.push("=== CURRENT TIME CONTEXT ===");
+    parts.push(`[Current Time: ${new Date().toISOString()}]`);
+    parts.push("");
+  }
 
   if (immediate.length) {
     parts.push("=== IMMEDIATE CONVERSATIONAL CONTEXT ===");
@@ -164,8 +166,38 @@ export function createDocumentContext(body: ChatRequest) {
 export function createUserPrompt(
   body: ChatRequest,
   authedUser: AuthedUser,
-  currentTaskContext: string
+  currentTaskContext: string,
+  promptCachingEnabled = false
 ) {
+  if (promptCachingEnabled) {
+    return `
+                IMPORTANT: Analyze the history and provide a complete, context-aware HTML body response.
+                IMPORTANT: Follow the tool selection hierarchy strictly.
+                IMPORTANT: User context is provided already. If you want to know more about the user's boards, then use the list_boards tool.
+                IMPORTANT: Take into account the documents and images provided by the user.
+                ${body.default_context?.scope === "ticket"
+      ? "SCOPE: Current ticket only. Use only the current ticket title, description and comments as ticket context. Do not search or load other tickets or board-wide context. This explicit scope overrides the default task_id navigation guidance."
+      : ""
+    }
+                user_context: ${stringifyForPrompt({
+      id: authedUser.id,
+      email: authedUser.email,
+      displayName: authedUser.displayName,
+    })}
+                CHAT HISTORY: ${formatChatHistory(body.chat_history, false)}
+                default_context: ${stringifyForPrompt(body.default_context)}
+                context_list: ${stringifyForPrompt(body.context_list)}
+                ${currentTaskContext
+      ? `\n                CURRENT TICKET CONTEXT (the ticket the user is viewing — read this before answering questions about "this ticket"; do NOT search for it):\n${currentTaskContext}\n`
+      : ""
+    }
+                document_context: ${createDocumentContext(body)}
+                User query: ${body.message}
+                ${formatTemporalContext()}
+                === CURRENT TIME CONTEXT ===
+                [Current Time: ${new Date().toISOString()}]
+            `;
+  }
   return `
                 ${formatTemporalContext()}
                 ${currentTaskContext
@@ -234,9 +266,10 @@ export function filePartFromAttachment(
 export function createUserContent(
   body: ChatRequest,
   authedUser: AuthedUser,
-  currentTaskContext: string
+  currentTaskContext: string,
+  promptCachingEnabled = false
 ): UserContent {
-  const prompt = createUserPrompt(body, authedUser, currentTaskContext);
+  const prompt = createUserPrompt(body, authedUser, currentTaskContext, promptCachingEnabled);
   const fileParts = [
     ...(body.images64 ?? []),
     ...(body.pdfs64 ?? []),

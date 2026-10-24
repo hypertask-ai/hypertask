@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute } from "./route";
@@ -38,6 +39,10 @@ export const POST = taskWriteRoute({
 
       return NextResponse.json(result.task, { status: 200 });
     } catch (error) {
+      if (isPlanLimitReachedError(error)) {
+        const refusal = planLimitResponse(error);
+        return NextResponse.json(refusal.body, { status: refusal.status });
+      }
       console.error("Error moving task:", error);
       return NextResponse.json({ message: "Internal server error" }, { status: 500 });
     }

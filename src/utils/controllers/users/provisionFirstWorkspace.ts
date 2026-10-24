@@ -3,7 +3,7 @@ import { Status } from "@prisma/client";
 import { HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { adoptGuestBoards } from "@/utils/controllers/demo/adoptGuestBoards";
-import { CompleteOnboardingFirstStep } from "@/utils/controllers/users/completeOnboardingStep";
+import { CompleteOnboardingFirstStepProvisioning } from "@/utils/controllers/users/completeOnboardingStep";
 
 export async function provisionFirstWorkspace(
   user: IUser,
@@ -12,7 +12,7 @@ export async function provisionFirstWorkspace(
   boardTitle: string,
   companySize: string,
   companyRole: string,
-  options: Parameters<typeof CompleteOnboardingFirstStep>[5] & {
+  options: Parameters<typeof CompleteOnboardingFirstStepProvisioning>[5] & {
     keepDemoBoard?: boolean;
     onlyIfEmpty?: boolean;
   } = {},
@@ -40,5 +40,5 @@ export async function provisionFirstWorkspace(
     if (ownedBoards > 0 || memberships > 0) return null;
   }
 
-  return CompleteOnboardingFirstStep(user, teamTitle, boardTitle, companySize, companyRole, onboardingOptions);
+  return CompleteOnboardingFirstStepProvisioning(user, teamTitle, boardTitle, companySize, companyRole, onboardingOptions);
 }

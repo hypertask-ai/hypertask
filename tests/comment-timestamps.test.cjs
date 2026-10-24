@@ -23,6 +23,8 @@ function load(relativePath, modules = {}) {
   new Function('module', 'exports', 'require', 'Date', javascript)(loadedModule, loadedModule.exports, (name) => {
     if (name === './agentChatterRouting') return load('src/lib/mcp/operations/comments/agentChatterRouting.ts')
     if (name in modules) return modules[name]
+    if (name === "@/lib/planLimits") return { isPlanLimitReachedError: () => false }
+    if (name === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() }
     if (name === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html }
     throw new Error(`Unexpected import: ${name}`)
   }, FixedDate)

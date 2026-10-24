@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
@@ -97,6 +98,10 @@ export const PUT = taskWriteRoute({
       }
       return NextResponse.json(response.json, { status: response.status });
     } catch (error) {
+      if (isPlanLimitReachedError(error)) {
+        const refusal = planLimitResponse(error);
+        return NextResponse.json(refusal.body, { status: refusal.status });
+      }
       console.log(error);
       return NextResponse.json({ message: "Internal server error" }, { status: 500 });
     }

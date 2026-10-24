@@ -48,6 +48,9 @@ async function post({ enabled = true, validate = true, output = "", error } = {}
       SSE_HEADERS: {}, filterOneImagePass: (text) => ({ emit: text, leftover: "" }),
     },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
+    "@/app/api/ai/_lib/sharedAllowance": {
+      sharedAiAllowanceErrorMessage: (error) => error?.name === "SharedAiAllowanceExceededError" ? error.message : null,
+    },
     "@/app/api/ai/_lib/taskWriterProperties": properties,
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/app/api/ai/_lib/taskWriterRun": {

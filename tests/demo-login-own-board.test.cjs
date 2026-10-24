@@ -79,6 +79,8 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
   const incomingCookies = new Map([['ht_session', 'guest-session'], ...(previousBoard ? [['previousBoard', previousBoard]] : [])])
   const cookies = new Map(incomingCookies)
   const aliases = {
+    '@/lib/mcp/boards/createBoardFromManifest': {},
+    '@/lib/planLimits': { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false },
     '@/lib/prisma': prisma,
     '@/lib/auth/getSessionUser': {},
     '@/lib/agentRuns/model': {},

@@ -15,6 +15,8 @@ const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
   aliases = withStubs({
+    '@/lib/planLimits': { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false },
+    '@/lib/mcp/boards/createBoardFromManifest': {},
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
   }, aliases)
 
@@ -131,12 +133,12 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     '@/lib/subscription': { stripe: { customers: { retrieve: async () => ({ id: 'customer-test' }) } } },
     '../projects/create': { createProjectViewAndCreateDefault: async () => {} },
     '@/lib/configs/general.config': { generalConfig: { hyperAiId: 1 } },
-    '../projects/createProjectWithStableName': { createProjectWithStableName: async (data) => {
+    '../projects/createProjectWithStableName': { createProvisionedProjectWithStableName: async (data) => {
       const project = { id: 200, status: 'Normal', ...data }
       projects.push(project)
       return project
     } },
-    '../tasks/createTaskCore': { createTaskCore: async (data) => {
+    '../tasks/createTaskCore': { createProvisionedTaskCore: async (data) => {
       const task = { id: 600 + tasks.length, ...data }
       tasks.push(task)
       return { task }
@@ -152,10 +154,10 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
   const onboarding = loadTs('src/utils/controllers/users/completeOnboardingStep.ts', aliases)
   aliases['@/utils/controllers/users/completeOnboardingStep'] = {
-    CompleteOnboardingFirstStep: async (...args) => {
+    CompleteOnboardingFirstStepProvisioning: async (...args) => {
       calls.provision.push(args)
       if (failProvision) throw new Error('test provisioning failure')
-      return onboarding.CompleteOnboardingFirstStep(...args)
+      return onboarding.CompleteOnboardingFirstStepProvisioning(...args)
     },
   }
   aliases['@/utils/controllers/demo/adoptGuestBoards'] = loadTs('src/utils/controllers/demo/adoptGuestBoards.ts', aliases)
