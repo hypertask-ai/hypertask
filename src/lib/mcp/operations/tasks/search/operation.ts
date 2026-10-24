@@ -299,7 +299,8 @@ export async function GET(request: NextRequest) {
     if (parsed) {
       const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
         { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true,
-        sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined)
+        sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined,
+        Boolean(parsed.filters.assignee?.length) && await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id))
       commentById = filtered.commentById
       const rankedResults = Boolean(parsed.text || filtered.commentMode)
       operatorPartial = parsed.text ? filtered.partial : false

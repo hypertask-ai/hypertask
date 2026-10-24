@@ -15,7 +15,9 @@ const assignments = [
 const rows = assignments.map((assignees, index) => ({
   id: index + 1, uniqueIndex: index + 1, projectId: 15, project: { title: "Board" },
   title: "Assignment", description: "", status: "Normal", section: "Todo",
-  assignees, subTasks: [], taskLabels: [], _count: { taskLabels: 0, comments: 0 },
+  assignees: assignees.map((assignment) => ({
+    ...assignment, user: { displayName: assignment.userId === 6 ? "Person" : "Other", email: assignment.userId === 6 ? user.email : "other@example.test" },
+  })), subTasks: [], taskLabels: [], _count: { taskLabels: 0, comments: 0 },
   createdAt: new Date("2026-10-24T00:00:00Z"),
 }));
 rows.push({ ...rows[1], id: 99, projectId: 99 });
@@ -24,16 +26,18 @@ function matches(row, where) {
   return Object.entries(where).every(([key, value]) => {
     if (key === "OR") return value.some((part) => matches(row, part));
     if (key === "AND") return value.every((part) => matches(row, part));
+    if (key === "NOT") return !matches(row, value);
     if (value === null || typeof value !== "object") return row[key] === value;
     if ("some" in value) return row[key].some((item) => matches(item, value.some));
     if ("none" in value) return !row[key].some((item) => matches(item, value.none));
     if ("in" in value) return value.in.includes(row[key]);
+    if ("equals" in value) return String(row[key]).toLowerCase() === value.equals.toLowerCase();
     if ("contains" in value) return String(row[key] ?? "").toLowerCase().includes(value.contains.toLowerCase());
     return matches(row[key], value);
   });
 }
 
-function fixture(surface, enabled, { legacy = false, ranked = false } = {}) {
+function fixture(surface, enabled, { legacy = false, ranked = false, operatorFilter } = {}) {
   const queries = [];
   const flagReads = [];
   class NextResponse {
@@ -71,7 +75,7 @@ function fixture(surface, enabled, { legacy = false, ranked = false } = {}) {
         return enabled;
       },
     },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}), projectContentAccessWhere: () => ({}) },
     "@/lib/mcp/agents": { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => undefined },
     "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}) },
     "@/lib/mcp/tasks/mappers": {
@@ -88,8 +92,17 @@ function fixture(surface, enabled, { legacy = false, ranked = false } = {}) {
     },
     "@/app/api/ai/chat/stream/bulkTools": { buildSearchTotalMetadata: (total) => ({ total }) },
     "@/utils/controllers/search/document": { turbopufferSearchTaskIds: async () => ranked ? [1, 2, 3, 4, 5, 99] : [] },
-    "@/lib/search/serverOperators": { parseSearchWithChipNames: async (query) => ({ text: query, filters: {} }) },
-    "@/lib/search/rankedWhere": {},
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {
+      searchPreviewText: (text) => text,
+      searchTasks: async () => rows.map(({ id }) => ({ id })),
+      searchComments: async () => [],
+    },
+    "@/lib/search/serverOperators": {
+      parseSearchWithChipNames: async (query) => operatorFilter
+        ? { text: ranked ? "Assignment" : "", filters: { assignee: [operatorFilter] } }
+        : { text: query, filters: {} },
+    },
+    ...(operatorFilter ? {} : { "@/lib/search/rankedWhere": {} }),
     ...(legacy ? { "@/lib/mcp/readListQuery": { readListQuery: () => ({ listQuery: null }) } } : {}),
   };
   const files = {
@@ -97,11 +110,18 @@ function fixture(surface, enabled, { legacy = false, ranked = false } = {}) {
     "MCP search": "src/lib/mcp/operations/tasks/search/operation.ts",
     "AI list": "src/lib/ai/tools/listTasks.ts",
     "AI search": "src/lib/ai/tools/searchTasks.ts",
+    "App search": "src/utils/controllers/search/searchDocuments.ts",
   };
   const implementation = load(files[surface], mocks);
   return {
     queries, flagReads,
     async run(params) {
+      if (surface === "App search") {
+        const result = await implementation.searchDocuments(user.id, `assignee:${operatorFilter.value}`, [15], "Normal");
+        assert.equal(result.status, 200);
+        const tasks = result.json.processedData.All.map(({ taskId }) => ({ id: taskId }));
+        return { tasks, total: tasks.length };
+      }
       if (surface.startsWith("MCP")) {
         const response = await implementation.GET({ nextUrl: { searchParams: new URLSearchParams({ q: "Assignment", ...params }) } });
         assert.equal(response.status, 200);
@@ -160,4 +180,41 @@ for (const surface of ["MCP list", "MCP search", "AI list", "AI search"]) {
     assert.deepEqual(result.tasks.map(({ id }) => id), [1, 2, 3, 4, 5]);
     assert.deepEqual(f.flagReads, []);
   });
+}
+
+for (const surface of ["MCP search", "App search"]) {
+  for (const filter of [
+    { value: "6" },
+    { value: "Person", userIds: [6] },
+    { value: "Person" },
+    { value: user.email },
+  ]) {
+    for (const enabled of [true, false]) {
+      for (const ranked of [true, false]) {
+        test(`${surface} assignee:${filter.value}, resolved=${Boolean(filter.userIds)}, flag=${enabled}, ranked=${ranked}: agent-only now refused; direct and mixed still allowed`, async () => {
+          const f = fixture(surface, enabled, { ranked, operatorFilter: { ...filter, negated: false } });
+          const result = await f.run({});
+          const expected = [...(enabled ? [] : [1]), 2, 3];
+          assert.deepEqual(result.tasks.map(({ id }) => id), expected);
+          assert.equal(result.total, expected.length);
+          assert.deepEqual(f.flagReads, [{ key: flag, userId: user.id }]);
+          for (const where of f.queries) {
+            const clause = where.AND.find((part) => part.OR)?.OR[0].assignees.some;
+            if (clause) {
+              assert.equal(Object.hasOwn(clause, "agentId"), enabled);
+              if (enabled) assert.equal(clause.agentId, null);
+            }
+          }
+        });
+        test(`${surface} -assignee:${filter.value}, resolved=${Boolean(filter.userIds)}, flag=${enabled}, ranked=${ranked}: human assignments excluded; agent-only retained with flag`, async () => {
+          const f = fixture(surface, enabled, { ranked, operatorFilter: { ...filter, negated: true } });
+          const result = await f.run({});
+          const expected = [...(enabled ? [1] : []), 4, 5];
+          assert.deepEqual(result.tasks.map(({ id }) => id), expected);
+          assert.equal(result.total, expected.length);
+          assert.deepEqual(f.flagReads, [{ key: flag, userId: user.id }]);
+        });
+      }
+    }
+  }
 }
