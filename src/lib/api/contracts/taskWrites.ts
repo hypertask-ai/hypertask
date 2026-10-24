@@ -15,7 +15,11 @@ export const moveTaskBodySchema = z.object({
 });
 export const dueDateBodySchema = z.object({ taskId: id, dueDate: dateInput });
 export const startDateBodySchema = z.object({ taskId: id, startDate: dateInput });
-export const waitingOnBodySchema = z.object({ taskId: id, userId: id.nullable() });
+export const waitingOnBodySchema = z.object({
+  taskId: id,
+  userId: id.nullable().optional(),
+  blockerCommentId: id.nullable().optional(),
+}).refine((input) => input.userId !== undefined || input.blockerCommentId !== undefined, { message: "Provide userId or blockerCommentId" });
 export const priorityBodySchema = z.object({ taskId: id, priority_index: z.number().int(), Priority_Value: z.string() });
 export const estimateBodySchema = z.object({ taskId: id, estimate_index: z.number().int(), estimate_value: z.string() });
 export const assigneeBodySchema = z.object({
@@ -37,6 +41,7 @@ export const moveTaskResponseSchema = taskPropertyResponseSchema.extend({
 });
 export const waitingOnResponseSchema = z.looseObject({
   id,
+  blockerCommentId: id.nullable().optional(),
   waitingOnUserId: id.nullable(),
   waitingOnSetById: id.nullable(),
   waitingOnSetAt: z.string().nullable(),

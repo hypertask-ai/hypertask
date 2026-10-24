@@ -62,6 +62,7 @@ function sample(schema) {
     if (fields.revoke_all) input.revoke_all = true
     if (fields.task_identifier) input.task_identifier = 'HTPR-1234'
     if (fields.task) input.task = 'HTPR-1234'
+    if (fields.userId && fields.blockerCommentId) input.userId = sample(fields.userId)
     if (fields.minutes) input.minutes = 25
     if (fields.filename && fields.content_type) { input.content_type = 'text/plain'; input.data = 'Rml4dHVyZQ==' }
     return input

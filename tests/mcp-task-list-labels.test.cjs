@@ -341,3 +341,15 @@ test("task get returns linked pull requests in selected order", () => {
     /pullRequests:\s*{\s*orderBy:\s*{\s*createdAt:\s*['"]asc['"] as const\s*}/,
   );
 });
+
+test("task detail reads expose the single blocker comment after replacement and clearing", () => {
+  const { mapTaskToMcpGetResponse, mapTaskToDetail } = loadMappers();
+  const task = {
+    id: 42, uniqueIndex: 7724, projectId: 15, title: "Blocked", section: "In Progress", status: "Normal",
+    project: { title: "Board" }, createdAt: new Date("2026-10-24T12:00:00Z"), _count: { comments: 2 },
+  };
+  for (const blockerCommentId of [101, 102, null]) {
+    assert.equal(mapTaskToMcpGetResponse({ ...task, blockerCommentId }, 7).blockerCommentId, blockerCommentId);
+    assert.equal(mapTaskToDetail({ ...task, blockerCommentId }, 7).blockerCommentId, blockerCommentId);
+  }
+});
