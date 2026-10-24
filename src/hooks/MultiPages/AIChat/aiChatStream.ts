@@ -6,6 +6,7 @@ import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
 type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "navigateToTask"> & {
+  isCurrentStream?: () => boolean;
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
   assistantMessageId: string;
@@ -14,7 +15,7 @@ type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQu
 
 export async function consumeAiChatStream(context: Context) {
   const {
-  response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
+  isCurrentStream, response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
   updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, navigateToTask,
   } = context;
 
@@ -32,6 +33,10 @@ export async function consumeAiChatStream(context: Context) {
 
       while (!done) {
         const { value, done: doneReading } = await reader.read();
+        if (isCurrentStream && !isCurrentStream()) {
+          await reader.cancel();
+          return;
+        }
         done = doneReading;
         if (value) {
           buffer += decoder.decode(value, { stream: true });

@@ -17,7 +17,7 @@ import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sess
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
   Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
-  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean; persistentQueue?: SessionMessageQueue; navigateToTask?: (projectId: number, uniqueIndex: number) => void };
+  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean; persistentQueue?: SessionMessageQueue; stopClosesStream?: boolean; navigateToTask?: (projectId: number, uniqueIndex: number) => void };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
   const {
@@ -29,7 +29,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   pathname, currentUser, billing, isDemo, streamingSessionRef,
   streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
   setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
-  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, navigateToTask,
+  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, stopClosesStream, navigateToTask,
   } = context;
 
 
@@ -90,7 +90,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     }
 
     if (!content.trim()) return false;
+    let streamId = crypto.randomUUID();
     sendInFlightRef.current = true;
+    if (stopClosesStream) streamingRequestRef.current = streamId;
+    const ownsSend = () => !stopClosesStream || streamingRequestRef.current === streamId;
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
     const streamTaskId =
@@ -184,7 +187,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }));
     }
 
-    const streamId = crypto.randomUUID();
     let chatSurface = isFullScreenChat ? "fullscreen" : "sidebar";
     if (typeof navigator !== "undefined" && /\bHypertaskApp\b/.test(navigator.userAgent)) chatSurface = "desktop";
     const payload = {
@@ -263,6 +265,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             body: JSON.stringify(payload),
           });
 
+          if (!ownsSend()) {
+            await response.body?.cancel();
+            return false;
+          }
           if (!response.ok || !response.body) {
             if (!response.ok) {
               refusalMessage =
@@ -299,6 +305,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             assistantPlaceholderAdded = true;
           }
           await consumeAiChatStream({
+            isCurrentStream: ownsSend,
             response: { body: response.body }, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
             updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, navigateToTask,
           });
@@ -317,11 +324,13 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             setTimeout(resolve, CHAT_TRANSPORT_RETRY_DELAYS_MS[attempt]),
           );
           if (streamingRequestRef.current !== payload.stream_id) throw attemptError;
-          payload.stream_id = crypto.randomUUID();
-          streamingRequestRef.current = payload.stream_id;
+          streamId = crypto.randomUUID();
+          payload.stream_id = streamId;
+          streamingRequestRef.current = streamId;
         }
       }
     } catch (error) {
+      if (!ownsSend()) return false;
       setAgentStatus(undefined);
       console.error("Error generating AI response:", error);
       if (queuedMessage && !queueAccepted) return false;
@@ -344,20 +353,24 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         appendMessageToSessionCache(session.id, errorMessage);
       }
       } finally {
-        setAgentStatus(undefined);
-        setIsTyping(false);
-        streamingSessionRef.current = null;
-        streamingAssistantMessageRef.current = null;
-        streamingRequestRef.current = null;
-        setCurrentStreamingSession(null);
-        console.log("Message has been completed");
+        if (ownsSend()) {
+          setAgentStatus(undefined);
+          setIsTyping(false);
+          streamingSessionRef.current = null;
+          streamingAssistantMessageRef.current = null;
+          setCurrentStreamingSession(null);
+          console.log("Message has been completed");
+        }
       }
     } finally {
-      sendInFlightRef.current = false;
-      searchHandoff?.onSettled();
-      queueMicrotask(() => {
-        drainQueuedMessage(completedSessionId);
-      });
+      if (ownsSend()) {
+        streamingRequestRef.current = null;
+        sendInFlightRef.current = false;
+        searchHandoff?.onSettled();
+        queueMicrotask(() => {
+          drainQueuedMessage(completedSessionId);
+        });
+      }
     }
     return !queuedMessage || queueAccepted;
   };
