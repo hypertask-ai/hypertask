@@ -23,9 +23,10 @@ export function createSettingsTool(context: ToolContext) {
         context.sendStatus("hypertask_settings");
         if (input.action === "open") {
           if (!input.section) return { success: false, error: "Choose a settings section from the catalog." };
-          const path = `/settings/${input.section}`;
+          const section: keyof typeof settingsPages = input.section;
+          const path = `/settings/${section}`;
           context.send("settings", { path });
-          return { success: true, path, settings: settingsPages[input.section], message: "Opened the setting's page. No setting was changed. The next message uses the newly open page." };
+          return { success: true, path, settings: settingsPages[section], message: "Opened the setting's page. No setting was changed. The next message uses the newly open page." };
         }
         if (input.action === "read") {
           return { success: true, section: scope.section, catalog: settingsPages, current: await readSettingsPage(context.user.id, scope) };

@@ -13,7 +13,7 @@ function harness() {
       { id: 102, userId: 17, role: "Admin", status: "Accepted", agentId: null, user: { displayName: "Ada", email: "ada@example.com" } },
     ],
     settings: new Map([[6, { notificationPreference: "all", notification: true, notificationMatrix: { comments: { email: true, push: true }, moves: { email: false, push: true }, splitsNoImportant: ["project:15"], showImportantSplit: true } }], [42, { notificationPreference: "direct", notification: true, notificationMatrix: {} }]]),
-    records: new Map(), writes: 0, beforeRoleWrite: null,
+    records: new Map(), writes: 0, beforeRoleWrite: null, failProposalSave: null,
   };
   const db = {
     chatSession: { findFirst: async ({ where }) => where.id === ({ 6: sessionId, 42: memberSessionId, 17: adminSessionId, 99: outsiderSessionId })[where.userId] ? { id: where.id } : null },
@@ -46,6 +46,13 @@ function harness() {
     get: async (key) => state.records.get(key) ?? null,
     set: async (key, value, _ex, _ttl, mode) => {
       if (mode === "NX" && state.records.has(key)) return null;
+      if (mode !== "NX" && state.failProposalSave) {
+        const proposal = JSON.parse(value);
+        if (state.failProposalSave === (proposal.applying ? "applying" : proposal.status)) {
+          state.failProposalSave = null;
+          throw new Error("Redis proposal SET failed");
+        }
+      }
       state.records.set(key, value); return "OK";
     },
     eval: async (_script, _keys, key, token) => { if (state.records.get(key) === token) state.records.delete(key); return 1; },
@@ -113,6 +120,54 @@ test("still allowed: the owner previews without mutation, applies once and undoe
   await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), /already been handled/);
   const undone = await h.proposals.actOnSettingProposal(6, card.id, "undo", boardScope);
   assert.deepEqual([undone.proposal.status, h.state.members[0].role, h.state.writes], ["undone", "Member", 2]);
+});
+
+for (const kind of ["board-role", "notification"]) {
+  test(`${kind}: retry recovers a committed change after Redis status SET fails, then Undo restores the before value`, async () => {
+    const h = harness();
+    const scope = kind === "board-role" ? boardScope : { section: "notifications" };
+    const change = kind === "board-role" ? roleChange : { kind, category: "comments", channel: "email", value: false };
+    const value = () => kind === "board-role" ? h.state.members[0].role : h.state.settings.get(6).notificationMatrix.comments.email;
+    const card = await h.proposals.createSettingProposal(6, sessionId, scope, change);
+    const key = `ai-setting:6:${card.id}`;
+    h.state.failProposalSave = "applied";
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", scope), /Redis proposal SET failed/);
+    assert.equal(value(), card.after);
+    assert.equal(h.state.writes, 1);
+    const interrupted = JSON.parse(h.state.records.get(key));
+    assert.deepEqual([interrupted.status, interrupted.applying, interrupted.before], ["pending", true, card.before]);
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "cancel"), /no longer pending/);
+    const retried = await h.proposals.actOnSettingProposal(6, card.id, "apply", scope);
+    assert.deepEqual([retried.proposal.status, value(), h.state.writes], ["applied", card.after, 1]);
+    assert.equal(JSON.parse(h.state.records.get(key)).applying, undefined);
+    const undone = await h.proposals.actOnSettingProposal(6, card.id, "undo", scope);
+    assert.deepEqual([undone.proposal.status, value(), h.state.writes], ["undone", card.before, 2]);
+  });
+}
+
+test("Undo directly reconciles a committed role change after Redis status SET fails, rechecking owner rights", async () => {
+  const h = harness();
+  const card = await h.proposals.createSettingProposal(6, sessionId, boardScope, roleChange);
+  h.state.failProposalSave = "applied";
+  await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), /Redis proposal SET failed/);
+  h.state.ownerId = 17;
+  await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", boardScope), /access denied/);
+  assert.deepEqual([h.state.members[0].role, h.state.writes], ["Admin", 1]);
+  h.state.ownerId = 6;
+  const undone = await h.proposals.actOnSettingProposal(6, card.id, "undo", boardScope);
+  assert.deepEqual([undone.proposal.status, h.state.members[0].role, h.state.writes], ["undone", "Member", 2]);
+});
+
+test("a failed applying marker SET prevents mutation and permits a later Apply", async () => {
+  const h = harness();
+  const card = await h.proposals.createSettingProposal(6, sessionId, boardScope, roleChange);
+  h.state.failProposalSave = "applying";
+  await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), /Redis proposal SET failed/);
+  assert.deepEqual([h.state.members[0].role, h.state.writes], ["Member", 0]);
+  const pending = JSON.parse(h.state.records.get(`ai-setting:6:${card.id}`));
+  assert.deepEqual([pending.status, pending.applying], ["pending", undefined]);
+  const applied = await h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope);
+  assert.deepEqual([applied.proposal.status, h.state.members[0].role, h.state.writes], ["applied", "Admin", 1]);
 });
 
 test("now refused: revoked owner rights are rechecked on Apply and on Undo", async () => {
