@@ -29,6 +29,6 @@ Use `~/.config/ht-qa/state-{free,byok,pro}.json`. Select each account's own priv
 
 Save a checklist before testing, account ids and expected tiers (never credentials), before/after Billing, Plans, Stripe checkout and portal screenshots, a short checkout video, endpoint status/host observations, cancellation result, and unchanged plan after reload. Include a phone screenshot and a desktop screenshot. Record unreachable paths with their exact reason. Never call a Stripe URL alone a successful checkout: the hosted page must render.
 
-## Cleanup and safety
+## Cleanup
 
 Never enter card details, submit a payment, cancel a subscription, change a plan, edit billing data, or alter portal settings. Cancel only the uncompleted checkout via its back link. Before opening Plans, record whether the owned QA team already has a Stripe customer. If missing, Plans calls `POST /api/stripe/ensure-customer`, which creates a Stripe customer and saves the team linkage. Record any new linkage; do not delete the customer or clear billing data as cleanup. No task fixtures are required; all account writes stay within the test account's own team and QA runner board. Never use another person's account or a shared board. Any changed money path requires stopping and Supervisor Review, not Done.
