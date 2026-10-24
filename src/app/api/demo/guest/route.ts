@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { demoCapsEnabled } from "@/lib/demo/demoAllowance";
+import { consumeDemoWindow } from "@/lib/demo/slidingWindow";
 import { prepareAgentScope, withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
@@ -284,8 +287,22 @@ async function guest(request: NextRequest) {
     );
   }
 
+  let capsEnabled: boolean;
+  let rateLimit: { allowed: boolean; retryAfter: number };
+  try {
+    capsEnabled = await demoCapsEnabled();
+    rateLimit = existingGuest
+      ? capsEnabled
+        ? await consumeDemoWindow(`demo:guest:regenerate:${existingGuest.owner.userId}`, RATE_LIMIT_MAX_REGENERATIONS)
+        : consumeBoardRegeneration(existingGuest.owner.userId)
+      : capsEnabled
+        ? await consumeDemoWindow(`demo:guest:ip:${createHash("sha256").update(requestIp(request)).digest("hex")}`, RATE_LIMIT_MAX_GUESTS)
+        : consumeGuestCreation(requestIp(request));
+  } catch {
+    return NextResponse.json({ error: "demo generation unavailable" }, { status: 503 });
+  }
+
   if (existingGuest) {
-    const rateLimit = consumeBoardRegeneration(existingGuest.owner.userId);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: "too many new demo boards" },
@@ -318,7 +335,6 @@ async function guest(request: NextRequest) {
     }
   }
 
-  const rateLimit = consumeGuestCreation(requestIp(request));
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: "too many demo boards" },

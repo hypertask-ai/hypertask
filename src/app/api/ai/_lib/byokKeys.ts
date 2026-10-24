@@ -200,6 +200,17 @@ function managedFunding(apiKey: string): TeamGatewayFunding {
   return { apiKey, source: "managed" };
 }
 
+export async function resolveAiFallbackCredential(
+  loadCredential: () => Promise<AiModelCredential | undefined>,
+  originalError: unknown,
+): Promise<AiModelCredential | undefined> {
+  try {
+    return await loadCredential();
+  } catch {
+    throw originalError;
+  }
+}
+
 export async function resolveTeamByokApiKey(
   provider: TByokProviderKey,
   lookup?: ByokLookupContext,
@@ -541,7 +552,9 @@ export function resolveAutomaticAiModel(
           });
           if (!team || !resolveTeamProviderEnabled(team.aiProviderSettings, "openai")) throw error;
           const option = getAiModelOptionById("gpt-6-luna")!;
-          const fallbackCredential = await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, context.lookup);
+          const fallbackCredential = await resolveAiFallbackCredential(
+            () => getByokOrTeamGatewayApiKeyForModelOption(option, undefined, context.lookup), error,
+          );
           const fallback = resolveAiModel("openai", option.model, fallbackCredential, option);
           inheritAiModelUsage(fallback, wrapped);
           configureAiModelUsage(fallback, { provider: aiUsageProviderForCredential("openai", fallbackCredential, option) });

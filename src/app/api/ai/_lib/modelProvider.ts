@@ -133,6 +133,10 @@ function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
     providerId: "gateway",
     middleware: createSharedAllowanceMiddleware({
       allowanceUsd,
+      resolvePolicy: async (teamId) => {
+        const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
+        return resolveTeamAllowancePolicy(teamId, fundingSource);
+      },
       gatewayApiKey,
       modelSlug,
     }),
@@ -151,6 +155,10 @@ function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
         model,
         providerId: "gateway",
         middleware: createImageAllowanceMiddleware({
+          resolvePolicy: async (teamId) => {
+            const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
+            return resolveTeamAllowancePolicy(teamId, fundingSource);
+          },
           allowanceUsd:
             fundingSource === "shared"
               ? FREE_TEAM_AI_ALLOWANCE_USD

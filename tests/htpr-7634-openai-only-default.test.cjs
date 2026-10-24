@@ -595,6 +595,7 @@ test("conversation titles never apply the OpenAI-only default, so a supplied gat
     "@/app/api/ai/_lib/byokKeys": {
       getAiDefaultModelContext: async () => ({ haiku55Enabled: true, plan: "Pro", hasByok: false, byok: undefined, openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: true, hasClaudeRoute: false }),
       getByokOrTeamGatewayApiKeyForProvider: async () => undefined,
+      resolveAiFallbackCredential: async (loadCredential) => loadCredential(),
       resolveAutomaticAiModel: (provider, model, input) => { resolved.push({ provider, model, input }); return { provider, model }; },
     },
     "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), aiUsageProviderForCredential: () => "fixture", configureAiModelUsage: () => {}, isAiGatewayEnabled: () => true, providerOptionsForAiModel: () => ({}) },

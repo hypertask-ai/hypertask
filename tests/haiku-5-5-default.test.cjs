@@ -243,6 +243,7 @@ test("server BYOK eligibility preserves Free-plan BYOK restrictions and skips un
         for (const keyEnabled of [false, true]) {
           const lookedUp = [];
           const api = stubbedModule("src/app/api/ai/_lib/byokKeys.ts", {
+            "./planAllowancePolicy": { teamPlanAllowanceEnabled: async () => false },
             "@/lib/prisma": {
               teamByokApiKey: { findUnique: async ({ where }) => {
                 const requested = where.teamId_provider.provider;
@@ -350,6 +351,7 @@ test("server title default sites retain Free Luna and route paid or compatible B
           "@/app/api/ai/_lib/byokKeys": {
             getAiDefaultModelContext: async () => ({ haiku55Enabled, plan, hasByok: plan !== "Free" && Boolean(provider), byok: haiku55Enabled && plan !== "Free" && provider ? { provider, credential: "fixture-byok" } : undefined }),
             getByokOrTeamGatewayApiKeyForProvider: async () => "fixture-team",
+            resolveAiFallbackCredential: async (load) => load(),
             resolveAutomaticAiModel: (source, model, credential) => { requests.push({ source, model, credential }); return {}; },
           },
           "@/app/api/ai/_lib/modelProvider": {

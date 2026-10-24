@@ -35,8 +35,8 @@ async function isRealErrorEnabled(userId: number) {
 
 async function isAllowanceLimitMessage(message: string) {
   if (!message.includes("AI allowance")) return false;
-  const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
-  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
+  const { DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE, SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
+  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE || message === DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE;
 }
 
 async function logTaskWriterFailure(label: string, error: unknown) {

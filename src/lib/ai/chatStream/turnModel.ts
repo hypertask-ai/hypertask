@@ -12,7 +12,7 @@ import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 
@@ -215,7 +215,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         requestDefaultModelOption,
       haiku55Enabled,
       );
-      byokApiKey = await getSelectionApiKey(selection);
+      byokApiKey = await resolveAiFallbackCredential(
+        () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
+      );
     }
 
     if (selection.provider === "openrouter") {
@@ -237,7 +239,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           requestDefaultModelOption,
       haiku55Enabled,
         );
-        byokApiKey = await getSelectionApiKey(selection);
+        byokApiKey = await resolveAiFallbackCredential(
+          () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
+        );
       }
     }
 

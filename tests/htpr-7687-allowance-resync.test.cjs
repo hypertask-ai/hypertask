@@ -31,7 +31,7 @@ const jiti = require("jiti")(path.join(root, "tests/htpr-7687-allowance-resync.c
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
 });
-const { createSharedAllowanceMiddleware } = jiti(
+const { createSharedAllowanceMiddleware, reservePlanAllowance, settlePlanAllowance, SharedAiAllowanceExceededError } = jiti(
   path.join(root, "src/app/api/ai/_lib/sharedAllowance.ts"),
 );
 const { aiAllowancePeriod } = jiti(path.join(root, "src/lib/aiAllowancePolicy.ts"));
@@ -54,7 +54,8 @@ function installFetch() {
       gateway.reportCalls += 1;
       if (gateway.reportFails) return new Response("down", { status: 503 });
       return new Response(JSON.stringify({
-        results: [{ tag: `team:${TEAM}`, total_cost: gateway.teamSpendUsd }],
+        results: [{ tag: `team:${TEAM}`, total_cost: gateway.teamSpendUsd },
+          ...(gateway.systemSpendUsd ? [{ tag: "included-with-hypertask", total_cost: gateway.systemSpendUsd }] : [])],
       }));
     }
     throw new Error(`Unexpected fetch ${value}`);
@@ -298,6 +299,105 @@ test("refused: spend settled while the flag is off is journaled too, so a laggin
   gateway.teamSpendUsd = (CAP_MICRO_USD - 1_300_000) / 1_000_000;
   await assert.rejects(answer(20_000), /used its included AI allowance/);
   assert.ok(await committed() >= CAP_MICRO_USD);
+});
+
+for (const lane of ["visible", "system"]) {
+  test(`plan ${lane} month refusal resyncs both lanes and preserves the system journal`, async () => {
+    await freshTeam(100000);
+    const systemPrefix = `${prefix}:system`;
+    const systemSince = String(Date.now() - JOURNAL_OLD_ENOUGH_MS);
+    await client.set(`${systemPrefix}:committed`, String(CAP_MICRO_USD));
+    await client.set(`${systemPrefix}:recent-settled-since`, systemSince);
+    await client.zadd(`${systemPrefix}:recent-settled`, Date.now(), "recent-system|200000");
+    await client.set(`${prefix}:legacy-pending`, "100000");
+    gateway.teamSpendUsd = 0.7;
+    gateway.systemSpendUsd = 0.3;
+    const policy = { mode: "plan", monthlyUsd: CAP_USD, dailyUsd: null, demoGlobal: false };
+    const reservation = await reservePlanAllowance({ teamId: TEAM, policy, gatewayApiKey: "vck_test", amountUsd: 0.2, lane });
+    assert.equal(gateway.reportCalls, 2, "both month lanes get their matching gateway spend");
+    assert.equal(await committed(), 300000, "visible spend deducts legacy pending once");
+    assert.equal(await client.get(`${systemPrefix}:committed`), "500000", "recent system settlement stays protected");
+    assert.deepEqual(await client.zrange(`${systemPrefix}:recent-settled`, 0, -1), ["recent-system|200000"]);
+    assert.equal(await client.get(`${systemPrefix}:recent-settled-since`), systemSince);
+    assert.equal(await client.get(`${prefix}:gateway-resync-lock`), "1");
+    assert.equal(await client.get(`${systemPrefix}:gateway-resync-lock`), "1");
+    assert.equal(reservation.scopes[0].committedKey, lane === "system" ? `${systemPrefix}:committed` : committedKey);
+    assert.deepEqual(await client.zrange(reservation.scopes[0].reservationsKey, 0, -1), [reservation.id]);
+    await assert.rejects(reservePlanAllowance({ teamId: TEAM, policy, gatewayApiKey: "vck_test", amountUsd: 4.2, lane }),
+      (error) => error instanceof SharedAiAllowanceExceededError && error.reason === "month");
+    assert.equal(gateway.reportCalls, 2, "each lane's lock throttles further resyncs");
+    await settlePlanAllowance(reservation, 0.01);
+    const journal = await client.zrange(reservation.scopes[0].committedKey.replace(/:committed$/, ":recent-settled"), 0, -1);
+    assert.ok(journal.includes(`${reservation.id}|10000`), "journal member ends in actual settled cost");
+  });
+}
+
+test("plan month retries when only the system lane can resync", async () => {
+  await freshTeam(0);
+  await client.set(`${prefix}:gateway-resync-lock`, "1", "EX", 60);
+  await client.set(`${prefix}:system:committed`, String(CAP_MICRO_USD));
+  await client.set(`${prefix}:system:recent-settled-since`, String(Date.now() - JOURNAL_OLD_ENOUGH_MS));
+  gateway.teamSpendUsd = 0.5;
+  gateway.systemSpendUsd = 0.5;
+  const reservation = await reservePlanAllowance({ teamId: TEAM,
+    policy: { mode: "plan", monthlyUsd: CAP_USD, dailyUsd: null, demoGlobal: false },
+    gatewayApiKey: "vck_test", amountUsd: 0.2 });
+  assert.equal(gateway.reportCalls, 1);
+  assert.equal(await client.get(`${prefix}:system:committed`), "500000");
+  assert.deepEqual(await client.zrange(reservationsKey, 0, -1), [reservation.id]);
+});
+
+test("plan month refusal does not retry when neither resync changes a counter", async (t) => {
+  await freshTeam(CAP_MICRO_USD);
+  gateway.teamSpendUsd = CAP_USD;
+  let attempts = 0;
+  const originalEval = client.eval;
+  client.eval = function (script, ...args) {
+    if (script.includes("local scopes =")) attempts++;
+    return originalEval.call(this, script, ...args);
+  };
+  t.after(() => { client.eval = originalEval; });
+  await assert.rejects(reservePlanAllowance({ teamId: TEAM,
+    policy: { mode: "plan", monthlyUsd: CAP_USD, dailyUsd: null, demoGlobal: false },
+    gatewayApiKey: "vck_test", amountUsd: 0.01 }),
+    (error) => error instanceof SharedAiAllowanceExceededError && error.reason === "month");
+  assert.equal(gateway.reportCalls, 2);
+  assert.equal(attempts, 1);
+  assert.equal(await committed(), CAP_MICRO_USD);
+});
+
+test("plan day refusal never resyncs or calls the gateway", async () => {
+  await freshTeam(0);
+  const dayPrefix = `ai-allowance:day:${aiAllowancePeriod().endDate}:${TEAM}`;
+  await client.set(`${dayPrefix}:seeded`, "1");
+  await client.set(`${dayPrefix}:committed`, "250000");
+  await assert.rejects(reservePlanAllowance({ teamId: TEAM,
+    policy: { mode: "plan", monthlyUsd: CAP_USD, dailyUsd: 0.25, demoGlobal: false },
+    gatewayApiKey: "vck_test", amountUsd: 0.01 }),
+    (error) => error instanceof SharedAiAllowanceExceededError && error.reason === "day");
+  assert.equal(gateway.reportCalls, 0);
+  assert.equal(await client.get(`${dayPrefix}:committed`), "250000");
+  assert.equal(await client.exists(`${prefix}:gateway-resync-lock`), 0);
+  assert.equal(await client.exists(`${prefix}:system:gateway-resync-lock`), 0);
+  assert.equal(await client.zcard(reservationsKey), 0);
+  assert.equal(await client.zcard(`${dayPrefix}:reservations`), 0);
+});
+
+test("plan demo refusal never resyncs or calls the gateway", async () => {
+  await freshTeam(0);
+  const demoPrefix = `ai-allowance:demo:${aiAllowancePeriod().key}`;
+  await client.set(`${demoPrefix}:seeded`, "1");
+  await client.set(`${demoPrefix}:committed`, "15000000");
+  await assert.rejects(reservePlanAllowance({ teamId: TEAM,
+    policy: { mode: "plan", monthlyUsd: CAP_USD, dailyUsd: null, demoGlobal: true },
+    gatewayApiKey: "vck_test", amountUsd: 0.01 }),
+    (error) => error instanceof SharedAiAllowanceExceededError && error.reason === "demo");
+  assert.equal(gateway.reportCalls, 0);
+  assert.equal(await client.get(`${demoPrefix}:committed`), "15000000");
+  assert.equal(await client.exists(`${prefix}:gateway-resync-lock`), 0);
+  assert.equal(await client.exists(`${prefix}:system:gateway-resync-lock`), 0);
+  assert.equal(await client.zcard(reservationsKey), 0);
+  assert.equal(await client.zcard(`${demoPrefix}:reservations`), 0);
 });
 
 test("the flag is read for the user who makes the call, so Owner + QA reaches Valentin and QA", async () => {
