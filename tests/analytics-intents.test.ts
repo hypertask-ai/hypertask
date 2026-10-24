@@ -15,7 +15,7 @@ function harness() {
   h.mocks["@/lib/telemetry/savedWork"] = {
     ...h.load("src/lib/telemetry/savedWork.ts"), processAnalyticsIntentSoon: (key: string) => { kicks.push(key); },
   };
-  h.mocks["@/lib/mcp/webhooks/outbox"] = { persistBoardWebhookEvent: async () => [] };
+  h.mocks["@/lib/mcp/webhooks/outbox"] = { persistBoardWebhookEvent: async () => [], publishBoardWebhookDeliveries: async () => {} };
   const phases: string[] = [];
   const insert = h.prisma.analyticsIntent.createMany;
   let failInsert = false;
