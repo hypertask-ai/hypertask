@@ -455,6 +455,7 @@ test("native switching snapshots the latest draft and attachments after open, tr
     react: { ...react, default: react },
     "@/hooks/useFlag": { useFlag: () => sidebarFlag },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
+    "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },
