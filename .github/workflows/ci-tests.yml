@@ -387,7 +387,7 @@ jobs:
         run: npx prisma generate
 
       - name: Download test shard lists
-        uses: actions/download-artifact@7a0c4c269abb142cd0f7adaa5bb6378ca1972986 # v4
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           name: ci-test-shards
           path: ci-test-shards
@@ -465,14 +465,14 @@ jobs:
 
       - name: Download planned shard lists
         if: always() && needs.ci-prepare.outputs.run_tests == 'true'
-        uses: actions/download-artifact@7a0c4c269abb142cd0f7adaa5bb6378ca1972986 # v4
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           name: ci-test-shards
           path: ci-test-shards
 
       - name: Download shard results
         if: always() && needs.ci-prepare.outputs.run_tests == 'true'
-        uses: actions/download-artifact@7a0c4c269abb142cd0f7adaa5bb6378ca1972986 # v4
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           pattern: ci-test-shard-*
           path: ci-shard-results
