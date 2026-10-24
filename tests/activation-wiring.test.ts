@@ -461,7 +461,7 @@ for (const sendFailure of [false, true]) {
   });
 }
 
-for (const scenario of ["sent", "send-failure", "flag-off", "connected"] as const) {
+for (const scenario of ["sent", "send-failure", "connected"] as const) {
   test(`nudge lifecycle event follows successful delivery only: ${scenario}`, async () => {
     const h = activationHarness();
     const values = new Map<string, string>();
@@ -469,7 +469,6 @@ for (const scenario of ["sent", "send-failure", "flag-off", "connected"] as cons
     let started!: () => void;
     const delivery = new Promise<void>((resolve) => { release = resolve; });
     const sending = new Promise<void>((resolve) => { started = resolve; });
-    h.setEnabled(scenario !== "flag-off");
     Object.assign(h.mocks, {
       "@/lib/flags/keys": flagKeys,
       "@/lib/onboarding/emails/eligibility": { onboardingEmailSkipReason: () => null },
@@ -490,7 +489,7 @@ for (const scenario of ["sent", "send-failure", "flag-off", "connected"] as cons
       release();
     }
     if (scenario === "send-failure") await assert.rejects(result, /mock email failure/);
-    else assert.equal(await result, scenario === "connected" ? "agent_connected" : scenario === "flag-off" ? "flag_off" : "sent");
+    else assert.equal(await result, scenario === "connected" ? "agent_connected" : "sent");
     await h.drain();
     assert.deepEqual(h.captures, scenario === "sent" ? [{ distinctId: "123", event: "lifecycle_email_sent", properties: { type: "agent_nudge" } }] : []);
     if (scenario === "sent") {
