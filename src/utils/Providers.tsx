@@ -6,6 +6,7 @@ import { adoptBoardDocument, excludeBoardDocumentRestore } from "@/lib/firstScre
 import { getInboxDocument, type InboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { adoptInboxDocument, excludeInboxDocumentRestore } from "@/lib/firstScreen/inboxAdoption";
 import { getTicketShellSeed, type TicketShellSeed } from "@/lib/firstScreen/ticketShell";
+import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
 import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
@@ -135,6 +136,7 @@ export default function Provider({
   authenticatedUserId,
   firstScreen,
   shellSeed,
+  flagSeed,
   flagProvider: FlagProvider = FeatureFlagProvider,
 }: {
   children: ReactNode;
@@ -143,6 +145,7 @@ export default function Provider({
   authenticatedUserId: number | null;
   firstScreen?: BoardDocument | InboxDocument | null;
   shellSeed?: TicketShellSeed | null;
+  flagSeed?: FirstScreenFlags | null;
   flagProvider?: typeof FeatureFlagProvider;
 }) {
   const pathname = usePathname();
@@ -214,7 +217,7 @@ export default function Provider({
                       {publicShare ? (
                         <PublicShell><ThemeListener />{children}</PublicShell>
                       ) : (
-                        <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags ?? shell?.flags}>
+                        <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags ?? shell?.flags ?? flagSeed ?? undefined}>
                           <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
                           <MobileViewFlagBridge />

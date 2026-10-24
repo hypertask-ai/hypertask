@@ -310,7 +310,7 @@ test('integration retains the old import/readiness path, offscreen policy and gl
   assert.match(global, /<CachedTaskDetailNavigation accountId={authenticatedUserId}>/);
   assert.match(source('src/app/inbox/page.tsx'), /getServerInboxDocument/);
   assert.doesNotMatch(source('src/app/inbox/page.tsx'), /FirstScreenSurfaceProvider|initialFlags=|initialValues=/, 'inbox shares the existing root, never a state island');
-  assert.match(source('src/utils/Providers.tsx'), /initialFlags=\{snapshot\?\.flags \?\? shell\?\.flags\}/);
+  assert.match(source('src/utils/Providers.tsx'), /initialFlags=\{snapshot\?\.flags \?\? shell\?\.flags \?\? flagSeed \?\? undefined\}/);
   assert.match(source('src/app/[...boardURL]/page.tsx'), /if \(firstScreen\)/);
 });
 

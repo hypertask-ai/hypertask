@@ -2,7 +2,7 @@ import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/ht
 import "@/styles/globals.scss";
 import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import Provider from "@/utils/Providers";
 import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useFlag";
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
@@ -31,6 +31,9 @@ import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/clien
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
 import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
 import { getServerTicketShell } from "@/lib/firstScreen/serverTicketShell";
+import { getFirstVisitFlagSeed } from "@/lib/firstScreen/serverFlags";
+import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
+import { HTPR_7718_FIRST_VISIT_FLAG_SEED_FLAG } from "@/lib/flags/definitions/htpr-7718-first-visit-flag-seed";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import { buildTicketSidebarBootScript, TICKET_SIDEBAR_BOOT_CSS } from "@/lib/ticketSidebarBoot";
 import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
@@ -76,6 +79,15 @@ export default async function RootLayout(
   const ticketShellEnabled = await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession?.id ?? -1);
   const shellSeed = ticketShellEnabled ? await getServerTicketShell() : null;
   const firstScreen = boardDocument ?? inboxDocument;
+  let flagSeed: FirstScreenFlags | null = null;
+  if (analyticsSession && !firstScreen && !shellSeed) {
+    try {
+      const requestHeaders = await headers();
+      if (requestHeaders.get("rsc") !== "1" && await isFeatureEnabled(HTPR_7718_FIRST_VISIT_FLAG_SEED_FLAG, analyticsSession.id)) {
+        flagSeed = await getFirstVisitFlagSeed(analyticsSession.id);
+      }
+    } catch {}
+  }
   const deferUnusedBoardFonts = boardDocument &&
     (boardDocument.display as BoardDisplay).isMobile &&
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
@@ -204,6 +216,7 @@ export default async function RootLayout(
           authenticatedUserId={analyticsSession?.id ?? null}
           firstScreen={firstScreen}
           shellSeed={shellSeed}
+          flagSeed={flagSeed}
           flagProvider={flagReaderSubscribe ? SubscribedFeatureFlagProvider : FeatureFlagProvider}
         >
           {children}
