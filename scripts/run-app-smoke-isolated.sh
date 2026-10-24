@@ -208,7 +208,7 @@ if [ "$use_trusted_dependencies" = false ]; then
     -e HOME=/tmp \
     -w /app \
     "$runtime_image" bash -euo pipefail -c '
-      timeout --signal=KILL 2m env DATABASE_URL=postgresql://core_smoke:core_smoke@database:5432/hypertask_smoke ./node_modules/.bin/prisma generate
+      timeout --signal=KILL 2m env DATABASE_URL=postgresql://core_smoke:core_smoke@database:5432/hypertask_smoke ./node_modules/.bin/prisma generate # trufflehog:ignore
     '
 fi
 
@@ -238,6 +238,33 @@ trusted_runtime=(
   -w /trusted
 )
 
+database_client_mounts=()
+if [ "$dependencies_mount" != "$trusted_root/node_modules" ]; then
+  mkdir -p "$scratch/candidate-client"
+  docker run --rm --name "${generate}-client" \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --read-only \
+    --pids-limit 64 \
+    --memory 256m \
+    --tmpfs /tmp:rw,nosuid,nodev,size=64m \
+    -v "$dependencies_mount:/dependencies:ro" \
+    -v "$scratch/candidate-client:/out" \
+    "$runtime_image" bash -euo pipefail -c '
+      for generated_client in .prisma @prisma; do
+        [ -d "/dependencies/$generated_client" ]
+        cp -a "/dependencies/$generated_client" /out/
+      done
+    ' || {
+    echo "Generated Prisma client missing from the candidate dependencies." >&2
+    exit 1
+  }
+  database_client_mounts=(
+    -v "$scratch/candidate-client/.prisma:/trusted/node_modules/.prisma:ro"
+    -v "$scratch/candidate-client/@prisma:/trusted/node_modules/@prisma:ro"
+  )
+fi
+
 postgres_admin_password=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 docker run -d --name "$database" --network "$network" \
   --pids-limit 256 \
@@ -264,7 +291,7 @@ docker exec "$database" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "CREATE DATABASE hypertask_smoke OWNER core_smoke"
 
 common_env=(
-  -e DATABASE_URL=postgresql://core_smoke:core_smoke@"$database":5432/hypertask_smoke
+  -e DATABASE_URL=postgresql://core_smoke:core_smoke@"$database":5432/hypertask_smoke # trufflehog:ignore
   -e SESSION_SECRET=core-actions-"$run_key"
   -e NEXT_TELEMETRY_DISABLED=1
   -e GITHUB_ACTIONS="${GITHUB_ACTIONS:-false}"
@@ -278,6 +305,7 @@ docker run --rm --name "$prepare" --network "$network" "${runtime[@]}" "${common
   "$runtime_image" timeout --signal=KILL 2m ./node_modules/.bin/prisma migrate deploy
 
 docker run --rm --name "$seed" --network "$network" "${trusted_runtime[@]}" "${common_env[@]}" \
+  "${database_client_mounts[@]}" \
   -e CORE_SMOKE_APP_ROOT=/trusted \
   -e CORE_SMOKE_ENV_FILE=/state/smoke.env \
   -v "$state:/state" \
