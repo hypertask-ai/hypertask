@@ -15,6 +15,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
+import { useAiChatDraft } from "./useAiChatDraft";
+import { HTPR_7770_AI_CHAT_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-7770-ai-chat-drafts";
 
 export function useAiChatState() {
 
@@ -199,6 +201,8 @@ export function useAiChatState() {
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
   } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
+  const keepDrafts = useFlag(HTPR_7770_AI_CHAT_DRAFTS_FLAG);
+  useAiChatDraft(editor, currentUser?.id, activeSession ?? currentSession?.id, keepDrafts);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const chatHistoryReadyRef = useRef(chatHistoryReady);
@@ -259,6 +263,6 @@ export function useAiChatState() {
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
-  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
+  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, keepDrafts,
   };
 }

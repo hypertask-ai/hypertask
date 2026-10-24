@@ -2,6 +2,7 @@
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
+import { HTPR_7770_AI_CHAT_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-7770-ai-chat-drafts";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import AgentChatClient from "@/app/agents/chat/AgentChatClient";
 import type { TAgent } from "@/app/agents/AgentsRegister";
@@ -35,6 +36,9 @@ export const AI_Chat_Sidebar = ({
   const { showWelcomeScreen, minimized } = chat;
   const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
+  const keepDrafts = useFlag(HTPR_7770_AI_CHAT_DRAFTS_FLAG);
+  const keepDraftsRef = useRef(keepDrafts);
+  keepDraftsRef.current = keepDrafts;
   const project = useRecoilValue(currentProjectAtom);
   const currentUser = useRecoilValue(currentUserAtom);
   const projectId = project?.id;
@@ -124,14 +128,14 @@ export const AI_Chat_Sidebar = ({
     if (next.kind === "external-agent") {
       if (leaving.kind === "native-agent") {
         const stored = drafts.current.get("ai");
-        latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
+        if (!keepDraftsRef.current) latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
         latest.resetFiles(stored?.files ?? []);
       }
       setVisited((previous) => previous.some((agent) => agent.id === next.agent.id) ? previous : [...previous, next.agent]);
     } else {
       const stored = drafts.current.get(next.kind === "native-agent" ? next.agent.id : "ai") ??
         (next.kind === "native-agent" ? { html: readDraft(currentUser.id, next.agent.id), files: [] } : undefined);
-      latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
+      if (!keepDraftsRef.current) latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
       latest.resetFiles(stored?.files ?? []);
     }
   };
@@ -172,7 +176,7 @@ export const AI_Chat_Sidebar = ({
         if (selected.kind === "native-agent") writeDraft(currentUser.id, selected.agent.id, latest.editor?.getText() ?? "");
         if (aiSessionRef.current) latest.selectSession(aiSessionRef.current);
         const stored = drafts.current.get("ai");
-        latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
+        if (!keepDraftsRef.current) latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
         latest.resetFiles(stored?.files ?? []);
       }
       setNativeSidebarChat(null);

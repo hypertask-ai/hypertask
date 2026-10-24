@@ -16,7 +16,7 @@ import type { useAiChatAttachments } from "./useAiChatAttachments";
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
   Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
-  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean };
+  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean; keepDrafts?: boolean };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
   const {
@@ -28,7 +28,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   pathname, currentUser, billing, isDemo, streamingSessionRef,
   streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
   setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
-  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry,
+  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, keepDrafts,
   } = context;
 
 
@@ -71,6 +71,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
     if (!content.trim()) return false;
     sendInFlightRef.current = true;
+    const composerDocument = keepDrafts ? editor?.state.doc : undefined;
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
     const streamTaskId =
@@ -111,7 +112,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
 
-    if (!preserveComposer) editor?.commands.clearContent();
+    if (!preserveComposer && (!keepDrafts || (
+      retryContent === undefined &&
+      editor?.state.doc === composerDocument
+    ))) editor?.commands.clearContent();
 
     setIsTyping(true);
 
