@@ -4,6 +4,8 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { type KeyboardEvent, useContext, useState } from "react";
 import { CircleCheck } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7749_HEADER_ICON_SIZE_FLAG } from "@/lib/flags/definitions/htpr-7749-header-icon-size";
 import { TOUCH_HALO } from "@/lib/configs/general.config";
 import {
   getTaskArchiveAction,
@@ -18,6 +20,7 @@ const MarkTaskAsDone = (
         markAsDone: () => Promise<void>
     }
 )=>{
+    const headerIconSizeEnabled = useFlag(HTPR_7749_HEADER_ICON_SIZE_FLAG);
     const _mbl = useContext(MobileViewContext);
     const isApple = useDeviceContext()
     const{currentTask}=useTaskContext()
@@ -47,9 +50,9 @@ const MarkTaskAsDone = (
     const archiveIcon = (
       <CircleCheck
         aria-hidden="true"
-        size={20}
+        size={headerIconSizeEnabled ? 16 : 20}
         strokeWidth={1.75}
-        className={`keep-stroke task-option-icon ${
+        className={`${headerIconSizeEnabled ? "" : "keep-stroke "}task-option-icon ${
           isArchived
             ? "task-archived-indicator text-[var(--color-archived-state)]"
             : "text-[#696b6e] group-hover:text-[var(--color-archived-state)]"

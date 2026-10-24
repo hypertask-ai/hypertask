@@ -7,6 +7,8 @@ import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7749_HEADER_ICON_SIZE_FLAG } from "@/lib/flags/definitions/htpr-7749-header-icon-size";
 
 const HTCButton = ({
   isKanban = false,
@@ -15,6 +17,7 @@ const HTCButton = ({
   isKanban?: boolean;
   htcButtonCallback?: () => void;
 }) => {
+  const headerIconSizeEnabled = useFlag(HTPR_7749_HEADER_ICON_SIZE_FLAG) && !isKanban;
   const [_, setShowCommands] = useRecoilState(showCommandsAtom);
   const isMobile = useContext(MobileViewContext);
   const { effectiveTheme } = useDarkMode();
@@ -28,7 +31,12 @@ const HTCButton = ({
           setShowCommands({ show: true, mode: CommandMode.Command })
         }
       >
-        <Image src={"/HTCLogoGrayMbl.png"} width={18} height={14} alt="" />
+        <Image
+          src={"/HTCLogoGrayMbl.png"}
+          width={headerIconSizeEnabled ? 16 : 18}
+          height={headerIconSizeEnabled ? 16 : 14}
+          alt=""
+        />
       </div>
     );
   else
