@@ -55,6 +55,37 @@ const route = taskWriteRoute({
   allowNullBody: true,
   allowMissingBodyAgentId: true,
   operation: async (body, session) => {
+    if (body?.action === "verify-task-attachments") {
+      const taskId = Number(body?.taskId);
+      const sources = body?.sources;
+      if (
+        !Number.isSafeInteger(taskId) || taskId <= 0 ||
+        !Array.isArray(sources) ||
+        sources.some((source) => typeof source !== "string")
+      ) {
+        return NextResponse.json({ error: "Invalid attachment verification request" }, { status: 400 });
+      }
+      try {
+        const [{ default: prisma }, { verifyTaskAttachmentLinks }] = await Promise.all([
+          import("@/lib/prisma"),
+          import("@/lib/storage/verifyTaskAttachmentLinks"),
+        ]);
+        await verifyTaskAttachmentLinks(prisma, sources, { taskId, verifyExisting: true }, {
+          actorUserId: session.userId, agentId: session.agentId, entryPoint: "tasks.uploadFinalize.verify",
+        });
+        return NextResponse.json({ success: true }, { status: 200 });
+      } catch (error) {
+        if (isPlanLimitReachedError(error)) {
+          const response = planLimitResponse(error);
+          return NextResponse.json(response.body, { status: response.status });
+        }
+        if (error instanceof TaskAttachmentLinkError) {
+          return NextResponse.json({ error: error.message }, { status: error.status });
+        }
+        throw error;
+      }
+    }
+
     if (body?.action === "link-task-attachment") {
       const taskId = Number(body?.taskId);
       const receipt = verifyTaskAttachmentLinkReceipt(body?.receipt);

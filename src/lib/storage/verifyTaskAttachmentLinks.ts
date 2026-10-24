@@ -8,10 +8,7 @@ import {
 } from "@/lib/planLimits";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getHypertasksS3Client, HYPERTASKS_S3_BUCKET, parseHypertasksStorageKeyFromUrl } from "@/lib/storage/hypertasksS3";
-import {
-  getHypertasksObjectSize,
-  TASK_ATTACHMENT_PREFIX,
-} from "@/lib/storage/uploadTaskAttachmentToS3";
+import { getHypertasksObjectSize } from "@/lib/storage/uploadTaskAttachmentToS3";
 import {
   discardUnlinkedTaskAttachment,
   lockAttachmentReceipt,
@@ -21,14 +18,14 @@ import {
 export async function verifyTaskAttachmentLinks(
   db: Pick<Prisma.TransactionClient, "task" | "comment" | "attachment" | "$queryRaw">,
   sources: string[],
-  target: { taskId?: number; commentId?: number; projectId?: number; newlyUploadedSources?: readonly string[] },
+  target: { taskId?: number; commentId?: number; projectId?: number; newlyUploadedSources?: readonly string[]; verifyExisting?: boolean },
   ctx: PlanLimitContext,
 ): Promise<Map<string, number>> {
   const sizes = new Map<string, number>();
   if (sources.length === 0 || !await isPlanLimitsEnabled(ctx.actorUserId)) return sizes;
   const objects = sources.flatMap((source) => {
     const key = parseHypertasksStorageKeyFromUrl(source);
-    return key?.startsWith(`${TASK_ATTACHMENT_PREFIX}/`) && !key.includes("..")
+    return key && !key.includes("..")
       ? [{ source, key }]
       : [];
   });
@@ -81,7 +78,7 @@ export async function verifyTaskAttachmentLinks(
         { fileSource: { contains: `/${key}?` } },
       ],
     };
-    if (taskId !== undefined && await db.attachment.findFirst({
+    if (!target.verifyExisting && taskId !== undefined && await db.attachment.findFirst({
       where: {
         ...sourceWhere,
         taskId,
