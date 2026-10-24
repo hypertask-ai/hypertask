@@ -21,7 +21,7 @@ type TaskSessionSummary = {
   updatedAt: string;
 };
 
-export const taskSessionQueryOptions = (taskId: number | undefined, userId?: number) => ({
+export const taskSessionQueryOptions = (taskId: number | null | undefined, userId?: number) => ({
   queryKey: ["task-sessions", taskId, userId],
   queryFn: async (): Promise<TaskSessionSummary[]> => {
     const response = await fetch(
