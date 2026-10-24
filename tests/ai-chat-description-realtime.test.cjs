@@ -95,6 +95,7 @@ function fixture(overrides = {}) {
     user: { id: USER_ID },
     actingAgentId: null,
     bulkPreviewsIssued: new Set(),
+    context: { bulkScopeConfirmationEnabled: false },
     body: {},
     inlineAgentImagesForUser: async (html) => html,
     sendStatus() {},

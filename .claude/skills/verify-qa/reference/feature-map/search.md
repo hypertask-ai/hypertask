@@ -3,8 +3,8 @@
 Ticket: https://app.hypertask.ai/detail/project-15/6688
 Autocomplete is always available; its rollout switch has been removed. No new endpoint or permission is added: entity values use the existing access-scoped `/api/search/values` route; statuses, dates and `has:` values are local suggestions for already supported server filters.
 
-Commenter search is on for everyone (no feature flag): with search layout on, pick `commenter:@Hicham` for an exact person or type a name/email using the fuzzy-person flag; results show that person’s newest matching comment and open at it, text matches only their comments, and `-commenter:` excludes their tickets without exposing inaccessible boards.
-Flag `htpr-6881-search-fuzzy-person` (Owner + QA): typed `from:`/`assignee:` names or emails match every case/accent-insensitive substring in accessible requested boards; numeric chips stay exact and negation excludes all matches.
+Commenter search is on for everyone (no feature flag): with search layout on, pick `commenter:@Hicham` for an exact person or type a name/email using permanent fuzzy-person matching; results show that person’s newest matching comment and open at it, text matches only their comments, and `-commenter:` excludes their tickets without exposing inaccessible boards.
+Fuzzy-person search is permanent for everyone: typed `from:`/`assignee:` names or emails match every case/accent-insensitive substring in accessible requested boards; numeric chips stay exact and negation excludes all matches.
 
 ## Reach it
 

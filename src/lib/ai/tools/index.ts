@@ -102,9 +102,10 @@ export function buildTools(
   chatTaskWriterEnabled = false,
   abortSignal?: AbortSignal,
   inlineAgentImagesEnabled = false,
-  teamScope?: AgentTokenTeamScope | null
+  teamScope?: AgentTokenTeamScope | null,
+  bulkScopeConfirmationEnabled = false
 ): ToolSet {
-  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal, inlineAgentImagesEnabled, teamScope);
+  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal, inlineAgentImagesEnabled, teamScope, bulkScopeConfirmationEnabled);
   const tools: ToolSet = {
     hypertask_list_agents: createListAgentsTool(context).hypertask_list_agents,
     hypertask_agent_webhook: createAgentWebhookTool(context).hypertask_agent_webhook,

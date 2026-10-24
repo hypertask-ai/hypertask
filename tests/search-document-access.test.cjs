@@ -35,7 +35,6 @@ const stubs = new Map([
   [
     "src/lib/flags.ts",
     {
-      HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: "htpr-6881-search-fuzzy-person",
       isFeatureEnabled: async (key) => false,
     },
   ],

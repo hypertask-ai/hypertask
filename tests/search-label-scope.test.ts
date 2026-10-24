@@ -28,7 +28,6 @@ for (const [file, exports] of [
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
   ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request: any, run: () => any) => run() }],
   ['src/lib/flags.ts', {
-    HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
     isFeatureEnabled: async (key: string, userId: number) => { assert.equal(userId, 6); return state.flags[key] ?? false },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (userId: number) => ({ ownerId: userId }), projectContentAccessWhere: (userId: number) => ({ ownerId: userId }) }],

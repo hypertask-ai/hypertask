@@ -112,6 +112,7 @@ export function createUpdateTaskTool(context: ToolContext) {
         const needsConfirmation =
           bulkPreviewsIssued.has(operationKey) ||
           input.confirmed === false ||
+          (context.bulkScopeConfirmationEnabled && input.confirmed === true) ||
           updateTasksNeedConfirmation({
             targetCount: targets.length,
             update: input,
@@ -128,6 +129,7 @@ export function createUpdateTaskTool(context: ToolContext) {
               operationKey,
               subjectKeys: bulkOperationSubjectKeys(operationSubjects),
               confirmed: input.confirmed,
+              scopePreviewsThisRequest: context.bulkScopePreviews,
               previewsIssuedThisRequest: bulkPreviewsIssued,
             }) === "preview"
           ) {

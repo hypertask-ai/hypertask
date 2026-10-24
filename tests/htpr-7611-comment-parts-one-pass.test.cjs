@@ -42,6 +42,7 @@ function renderComment(flagOn) {
     "lucide-react": { Reply: () => null },
     "@/hooks/useFlag": { useFlag: (key) => flagOn && key === flagKey },
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
     "@/lib/taskDetailEditTarget": compile(read("src/lib/taskDetailEditTarget.ts"), {}),
     "@/lib/htc/isCommentCreatedByUser": { isCommentCreatedByUser: () => false },
     "@/components/Common/AttachmentsView": { __esModule: true, default: () => null },

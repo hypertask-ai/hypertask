@@ -1,6 +1,6 @@
 import { createSingleTaskAssigneeMutation } from "./taskAssigneeMutation";
 import type { AuthedUser } from "@/lib/ai/chatStream/types";
-import { type ToolTaskIdentifierInput, resolveBulkTaskTargets, resolveUserIds, buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
+import { type ToolTaskIdentifierInput, resolveBulkTaskTargets, resolveUserIds, buildBulkOperationKey, bulkOperationSubjectKeys } from "@/app/api/ai/chat/stream/bulkTools";
 import { getProjectMembers } from "@/utils/controllers/projects/getProjectMembers";
 import { requireCrossMessageConfirmation } from "@/lib/ai/bulkConfirmation";
 import prisma from "@/lib/prisma";
@@ -58,7 +58,7 @@ export function createTaskAssigneeMutation(context: TaskAssigneeContext) {
       return pending;
     };
 
-    if (targets.length >= 4) {
+    if (targets.length >= 4 || context.bulkScopeConfirmationEnabled) {
       const assigneeChanges = new Set<string>();
       const assigneeReferences = [
         ...(input.user_ids ?? []),
@@ -107,20 +107,23 @@ export function createTaskAssigneeMutation(context: TaskAssigneeContext) {
           );
         }
       }
+      const operationSubjects = operationTargets.map(({ identifier, resolution }) => ({
+        identifier,
+        resolvedTaskId: resolution.task?.id ?? null,
+      }));
       const operationKey = buildBulkOperationKey(
         `task-assignees:${intent}`,
-        operationTargets.map(({ identifier, resolution }) => ({
-          identifier,
-          resolvedTaskId: resolution.task?.id ?? null,
-        })),
+        context.bulkScopeConfirmationEnabled ? [] : operationSubjects,
         [...assigneeChanges]
       );
+      const needsConfirmation = targets.length >= 4 || input.confirmed !== undefined || bulkPreviewsIssued.has(operationKey);
       if (
-        await requireCrossMessageConfirmation({
+        needsConfirmation && await requireCrossMessageConfirmation({
           userId: user.id,
           sessionId: confirmationSessionId,
           operationKey,
           confirmed: input.confirmed,
+          ...(context.bulkScopeConfirmationEnabled ? { subjectKeys: bulkOperationSubjectKeys(operationSubjects), scopePreviewsThisRequest: context.bulkScopePreviews } : {}),
           previewsIssuedThisRequest: bulkPreviewsIssued,
         }) === "preview"
       ) {
@@ -148,7 +151,9 @@ export function createTaskAssigneeMutation(context: TaskAssigneeContext) {
           affected,
           message:
             `This would ${intent} assignees ${intent === "assign" ? "to" : "from"} ${targets.length} tasks. Nothing has been changed yet. ` +
-            "End your turn now: list the affected tasks for the user and ask them to confirm. Only after they say yes, in a new message, call this tool again with confirmed: true.",
+            (context.bulkScopeConfirmationEnabled
+              ? "Preview any remaining batches now with confirmed: false, then list the full scope and ask once. After the user says yes in a new message, execute every previewed batch with confirmed: true."
+              : "End your turn now: list the affected tasks for the user and ask them to confirm. Only after they say yes, in a new message, call this tool again with confirmed: true."),
         });
       }
     }
@@ -218,6 +223,8 @@ export type TaskAssigneeContext = {
   requestingUserId: number;
   confirmationSessionId: string;
   bulkPreviewsIssued: Set<string>;
+  bulkScopeConfirmationEnabled?: boolean;
+  bulkScopePreviews?: Map<string, { pending: number; changed: boolean }>;
 };
 export type TaskAssigneeTarget = {
   identifier: ToolTaskIdentifierInput;

@@ -2,7 +2,7 @@ import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { tool } from "ai";
 import { inlineAgentImageFields } from "./schemas";
 import { z } from "zod";
-import { resolveBulkTaskTargets, buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
+import { resolveBulkTaskTargets, buildBulkOperationKey, bulkOperationSubjectKeys } from "@/app/api/ai/chat/stream/bulkTools";
 import { requireCrossMessageConfirmation } from "@/lib/ai/bulkConfirmation";
 import prisma from "@/lib/prisma";
 import { buildMcpTaskUrl } from "@/lib/mcp/boards/links";
@@ -89,25 +89,28 @@ export function createAddCommentTool(context: ToolContext) {
           seenTaskIds.add(taskId);
           return true;
         });
-        if (targets.length >= 4) {
+        if (targets.length >= 4 || context.bulkScopeConfirmationEnabled) {
+          const operationSubjects = operationTargets.map(({ identifier, resolution }) => ({
+            identifier,
+            resolvedTaskId: resolution.task?.id ?? null,
+          }));
           const operationKey = buildBulkOperationKey(
             "comment-on-tasks",
-            operationTargets.map(({ identifier, resolution }) => ({
-              identifier,
-              resolvedTaskId: resolution.task?.id ?? null,
-            })),
+            context.bulkScopeConfirmationEnabled ? [] : operationSubjects,
             [
               ["text", input.text.trim()],
               ...(input.image_urls !== undefined ? [["image_urls", input.image_urls]] : []),
               ...(input.inline_images !== undefined ? [["inline_images", input.inline_images]] : []),
             ]
           );
+          const needsConfirmation = targets.length >= 4 || input.confirmed !== undefined || bulkPreviewsIssued.has(operationKey);
           if (
-            await requireCrossMessageConfirmation({
+            needsConfirmation && await requireCrossMessageConfirmation({
               userId: user.id,
               sessionId: confirmationSessionId,
               operationKey,
               confirmed: input.confirmed,
+              ...(context.bulkScopeConfirmationEnabled ? { subjectKeys: bulkOperationSubjectKeys(operationSubjects), scopePreviewsThisRequest: context.bulkScopePreviews } : {}),
               previewsIssuedThisRequest: bulkPreviewsIssued,
             }) === "preview"
           ) {
@@ -137,7 +140,9 @@ export function createAddCommentTool(context: ToolContext) {
               ...(input.inline_images !== undefined ? { inline_images: input.inline_images } : {}),
               message:
                 `This would comment on ${targets.length} tasks. Nothing has been changed yet. ` +
-                "End your turn now: list the affected tasks for the user and ask them to confirm. Only after they say yes, in a new message, call this tool again with confirmed: true.",
+                (context.bulkScopeConfirmationEnabled
+                  ? "Preview any remaining batches now with confirmed: false, then list the full scope and ask once. After the user says yes in a new message, execute every previewed batch with confirmed: true."
+                  : "End your turn now: list the affected tasks for the user and ask them to confirm. Only after they say yes, in a new message, call this tool again with confirmed: true."),
             });
           }
         }
