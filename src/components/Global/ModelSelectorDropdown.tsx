@@ -1,3 +1,5 @@
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { useAiDefaultModelContext, useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
@@ -96,7 +98,9 @@ const AIModelDropDownList = ({
   haikuDefaultEnabled: boolean;
 }) => {
   const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
-  const modelFlagsLoaded = haikuDefaultLoaded;
+  const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
+  const modelFlagsLoaded = haikuDefaultLoaded &&
+    (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded);
   const quickModelIds = haiku55Enabled
     ? ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS]
     : MOBILE_AI_CHAT_QUICK_MODEL_IDS;
@@ -798,11 +802,12 @@ type AIModelDropDownButtonProps = Omit<
 >;
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
+  const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
-    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
+    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true, deepseekFlashFastEnabled))
+    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false, deepseekFlashFastEnabled));
   return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} />;
 };
 

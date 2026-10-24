@@ -17,6 +17,7 @@ export type TAiModelKey =
   | "claude-sonnet-5-5"
   | "claude-opus-5-5"
   | "deepseek-v4.1-flash"
+  | "deepseek-v4.1-flash-fast"
   | "deepseek-v4-pro"
   | "kimi-k2.5"
   | "kimi-k3"
@@ -45,6 +46,7 @@ export type TAiModelOptionId =
   | "claude-opus-5-5-instant"
   | "claude-opus-5-5-thinking"
   | "deepseek-v4.1-flash"
+  | "deepseek-v4.1-flash-fast"
   | "deepseek-v4-pro"
   | "kimi-k2.5"
   | "kimi-k3"
@@ -149,6 +151,13 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     label: "DeepSeek V4.1 Flash",
     provider: "deepseek",
     priceTier: 1,
+  },
+  {
+    key: "deepseek-v4.1-flash-fast",
+    modelClass: "deepseek-flash-fast",
+    label: "DeepSeek V4.1 Flash Fast",
+    provider: "deepseek",
+    priceTier: 2,
   },
   {
     key: "deepseek-v4-pro",
@@ -447,6 +456,15 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "deepseek-v4.1-flash",
   },
   {
+    id: "deepseek-v4.1-flash-fast",
+    source: "gateway",
+    title: "DeepSeek V4.1 Flash Fast",
+    model: "deepseek/deepseek-v4.1-flash-1017-fast",
+    desc: "Fast cheap general model",
+    reasoning: "instant",
+    modelKey: "deepseek-v4.1-flash-fast",
+  },
+  {
     id: "deepseek-v4-pro",
     source: "gateway",
     title: "DeepSeek V4 Pro",
@@ -592,9 +610,11 @@ export function resolveAiModelOption(
   savedOptionIds: readonly (string | null | undefined)[],
   planDefault: TAiModelOption,
   haiku55Enabled = false,
+  deepseekFlashFastEnabled = true,
 ): TAiModelOption {
   for (const id of savedOptionIds) {
     const option = getAiModelOptionById(id, haiku55Enabled);
+    if (option?.modelKey === "deepseek-v4.1-flash-fast" && !deepseekFlashFastEnabled) return planDefault;
     if (option) return option;
   }
   return planDefault;
@@ -813,7 +833,9 @@ export function isHaiku55Model(modelId: string): boolean {
 export function isAiModelOptionVisible(
   option: TAiModelOption,
   haiku55Enabled: boolean,
+  deepseekFlashFastEnabled = false,
 ): boolean {
+  if (option.modelKey === "deepseek-v4.1-flash-fast" && !deepseekFlashFastEnabled) return false;
   return haiku55Enabled
     ? option.modelKey !== "claude-haiku-4.5"
     : option.modelKey !== "claude-haiku-5-5";

@@ -1,3 +1,4 @@
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
@@ -27,7 +28,7 @@ import { assertUserCanManageTeamByok } from "@/utils/controllers/teams/assertTea
 import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiSettingsForViewer";
 import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import { getAiDefaultModelContext, resolveTeamCustomEndpoint } from "@/app/api/ai/_lib/byokKeys";
-import { getDefaultAiModelOptionForPlan, type AiDefaultModelContext, getAiModelOptionById } from "@/lib/aiModelOptions";
+import { getDefaultAiModelOptionForPlan, type AiDefaultModelContext, getAiModelOptionById, resolveAiModelOption } from "@/lib/aiModelOptions";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -37,6 +38,7 @@ function effectiveModel(
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
   context: AiDefaultModelContext = {},
+  deepseekFlashFastEnabled = false,
 ): string | null {
   const enabledSettings = updateAiFeatureToggleSettings(
     settings,
@@ -54,14 +56,18 @@ function effectiveModel(
   if (kind === "image") {
     return resolveImageModel(enabledSettings)?.key ?? null;
   }
-  return (
-    resolveUserFacingModelOption(
-      feature as UserFacingModelFeature,
-      enabledSettings,
-      null,
-      { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, true, context.haikuDefaultEnabled, context) } : {}) },
-    )?.id ?? null
+  const option = resolveUserFacingModelOption(
+    feature as UserFacingModelFeature,
+    enabledSettings,
+    null,
+    { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, true, context.haikuDefaultEnabled, context) } : {}) },
   );
+  return option ? resolveAiModelOption(
+    [option.id],
+    getDefaultAiModelOptionForPlan(context.plan, context.hasByok, haiku55Enabled, context.haikuDefaultEnabled, context),
+    haiku55Enabled,
+    deepseekFlashFastEnabled,
+  ).id : null;
 }
 
 function featureRow(
@@ -70,12 +76,16 @@ function featureRow(
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
   context: AiDefaultModelContext = {},
+  deepseekFlashFastEnabled = false,
 ) {
   const kind = AI_FEATURES[feature].modelKind;
-  const override =
+  const savedOverride =
     kind === "none"
       ? null
       : getAiFeatureModelOverride(feature as ModelAiFeature, settings, haiku55Enabled);
+
+  const override = !deepseekFlashFastEnabled && getAiModelOptionById(savedOverride)?.modelKey === "deepseek-v4.1-flash-fast"
+    ? null : savedOverride;
 
   return {
     enabled: isAiFeatureEnabled(feature, settings),
@@ -97,6 +107,7 @@ function featureRow(
       customEndpointConfigured,
       haiku55Enabled,
       context,
+      deepseekFlashFastEnabled,
     ),
     ...(feature === "dictation"
       ? { provider: resolveDictationProvider(settings) }
@@ -109,11 +120,12 @@ function featureModelsResponse(
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
   context: AiDefaultModelContext = {},
+  deepseekFlashFastEnabled = false,
 ) {
   return Object.fromEntries(
     (Object.keys(AI_FEATURES) as AiFeature[]).map((feature) => [
       feature,
-      featureRow(feature, settings, customEndpointConfigured, haiku55Enabled, context),
+      featureRow(feature, settings, customEndpointConfigured, haiku55Enabled, context, deepseekFlashFastEnabled),
     ]),
   );
 }
@@ -132,6 +144,9 @@ const handler: NextApiHandler = async (
   });
   if (!row) return res.status(401).json({ message: "Unauthorized" });
   const user = { id: row.id, accountId: row.accountId ?? undefined };
+  const deepseekFlashFastEnabled = await import("@/lib/flags")
+    .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, user.id))
+    .catch(() => false);
   const haiku55Enabled = await haiku55ModelEnabled(user.id);
 
   if (req.method === "GET") {
@@ -154,7 +169,7 @@ const handler: NextApiHandler = async (
     const defaultContext = await getAiDefaultModelContext({ trustedTeamId: teamId, userId: user.id }, haiku55Enabled);
     return res
       .status(200)
-      .json(featureModelsResponse(lookup.settings, customEndpointConfigured, haiku55Enabled, defaultContext));
+      .json(featureModelsResponse(lookup.settings, customEndpointConfigured, haiku55Enabled, defaultContext, deepseekFlashFastEnabled));
   }
 
   if (req.method === "POST") {
@@ -222,10 +237,13 @@ const handler: NextApiHandler = async (
           return res.status(400).json({ message: "model required" });
         }
 
-        const normalizedModel =
+        const selectedModel =
           typeof requestedModel === "string"
             ? requestedModel.trim()
             : requestedModel;
+        const normalizedModel = !deepseekFlashFastEnabled && typeof selectedModel === "string" &&
+          getAiModelOptionById(selectedModel)?.modelKey === "deepseek-v4.1-flash-fast"
+          ? null : selectedModel;
         if (
           normalizedModel !== null &&
           normalizedModel !== "" &&
@@ -263,7 +281,7 @@ const handler: NextApiHandler = async (
     const defaultContext = await getAiDefaultModelContext({ trustedTeamId: normalizedTeamId, userId: user.id }, haiku55Enabled);
     return res
       .status(200)
-      .json(featureModelsResponse(nextSettings, customEndpointConfigured, haiku55Enabled, defaultContext));
+      .json(featureModelsResponse(nextSettings, customEndpointConfigured, haiku55Enabled, defaultContext, deepseekFlashFastEnabled));
   }
 
   res.setHeader("Allow", "GET, POST");
