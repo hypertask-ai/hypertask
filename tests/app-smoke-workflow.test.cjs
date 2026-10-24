@@ -107,10 +107,19 @@ test("app smoke validates the head before isolated build and route checks", asyn
     group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
     "cancel-in-progress": true,
   });
-  assert.deepEqual(parsedWorkflow.jobs["app-smoke"].concurrency, {
-    group: "${{ format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}",
+  assert.equal(parsedWorkflow.jobs["app-smoke"].concurrency, undefined);
+  assert.deepEqual(parsedWorkflow.on.push.branches, ["production"]);
+  assert.deepEqual(yaml.load(request).concurrency, {
+    group: "app-smoke-request-${{ github.event.pull_request.number }}",
     "cancel-in-progress": true,
   });
+  const validationSteps = parsedWorkflow.jobs.validate.steps;
+  const recheck = validationSteps.find((step) => step.id === "current-request");
+  assert.ok(validationSteps.indexOf(recheck) > validationSteps.findIndex((step) => step.id === "scope"));
+  assert.match(recheck.with.script, /if \(!await currentHead\(\)\) return;/);
+  assert.match(recheck.with.script, /requestNumber < request\.run_number/);
+  assert.match(recheck.with.script, /requestNumber === request\.run_number && run\.run_number < context\.runNumber/);
+  assert.ok(recheck.with.script.lastIndexOf("if (!await currentHead()) return;") < recheck.with.script.indexOf("await github.rest.actions.cancelWorkflowRun("));
   assert.equal(parsedWorkflow.jobs.validate.concurrency, undefined);
   assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(
@@ -119,7 +128,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.equal(
     parsedWorkflow.jobs.report.if,
-    "always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
+    "always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
   );
   assert.match(
     workflow,

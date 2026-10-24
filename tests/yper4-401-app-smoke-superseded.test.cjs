@@ -103,21 +103,170 @@ test("still refused: a draft pull request, a non-production base, or two open pu
 });
 
 test("the smoke and report jobs are skipped for a superseded request", () => {
-  assert.equal(workflow.jobs.validate.outputs.superseded, "${{ steps.request.outputs.superseded }}");
+  assert.equal(workflow.jobs.validate.outputs.superseded, "${{ steps.request.outputs.superseded == 'true' || steps.current-request.outputs.superseded == 'true' }}");
   assert.equal(workflow.jobs["app-smoke"].if, "needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'");
   assert.match(workflow.jobs.report.if, /needs\.validate\.outputs\.superseded != 'true'$/);
 });
 
-test("old request reruns validate outside the current build's branch cancellation group", () => {
+test("outer cancellation retains production cache and per-run isolation without an unordered branch group", () => {
   assert.deepEqual(workflow.concurrency, {
     group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
     "cancel-in-progress": true,
   });
   assert.equal(workflow.jobs["app-smoke"].needs, "validate");
-  assert.deepEqual(workflow.jobs["app-smoke"].concurrency, {
-    group: "${{ format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}",
-    "cancel-in-progress": true,
-  });
+  assert.equal(workflow.jobs["app-smoke"].concurrency, undefined);
   assert.equal(workflow.jobs.validate.concurrency, undefined);
   assert.equal(workflow.jobs.report.concurrency, undefined);
+});
+
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const cancellationStep = workflow.jobs.validate.steps.find((step) => step.id === "current-request");
+const REPOSITORY = "hypertask-ai/hypertask";
+const BRANCH = "yper4-663-ci-queue";
+
+function smokeRun({ id = 500, runNumber = id, requestNumber = 100, repository = REPOSITORY, branch = BRANCH, status = "in_progress" } = {}) {
+  return { id, run_number: runNumber, status, display_title: `App Smoke request ${requestNumber} for ${repository}:${branch}` };
+}
+
+async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId, pulls = [pr()], runs = [], cancelError } = {}) {
+  const calls = [];
+  const cancelled = [];
+  const outputs = {};
+  const previous = { PR: process.env.PR, HEAD_SHA: process.env.HEAD_SHA };
+  process.env.PR = "1517";
+  process.env.HEAD_SHA = SHA;
+  let reads = 0;
+  try {
+    await new AsyncFunction("github", "context", "core", cancellationStep.with.script)(
+      {
+        rest: {
+          pulls: { get: async (params) => {
+            assert.equal(params.pull_number, 1517);
+            calls.push("head");
+            return { data: pulls[Math.min(reads++, pulls.length - 1)] };
+          } },
+          actions: {
+            listWorkflowRuns() {},
+            cancelWorkflowRun: async ({ run_id }) => {
+              calls.push(`cancel:${run_id}`);
+              cancelled.push(run_id);
+              if (cancelError) throw Object.assign(new Error("cancellation failed"), { status: cancelError });
+            },
+          },
+        },
+        paginate: async (_, params) => {
+          calls.push(`list:${params.status}`);
+          assert.equal(params.workflow_id, "app-smoke.yml");
+          assert.equal(params.event, "workflow_run");
+          assert.equal(params.per_page, 100);
+          return runs.filter(run => run.status === params.status);
+        },
+      },
+      {
+        repo: { owner: "hypertask-ai", repo: "hypertask" }, runId, runNumber,
+        payload: { workflow_run: { run_number: requestNumber, head_repository: { full_name: REPOSITORY }, head_branch: BRANCH } },
+      },
+      { setOutput: (name, value) => { outputs[name] = value; }, info() {} },
+    );
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+  return { calls, cancelled, outputs };
+}
+
+test("the post-scope request recheck runs before any order-aware cancellation", () => {
+  const steps = workflow.jobs.validate.steps;
+  assert.ok(steps.indexOf(cancellationStep) > steps.findIndex(step => step.id === "scope"));
+  assert.equal(cancellationStep.if, "steps.request.outputs.superseded != 'true'");
+  assert.equal(cancellationStep.env.PR, "${{ steps.request.outputs.pr }}");
+  assert.equal(cancellationStep.env.HEAD_SHA, "${{ steps.request.outputs.head-sha }}");
+  assert.equal(workflow.jobs.validate.permissions.actions, "write");
+  assert.equal(workflow.jobs["app-smoke"].permissions.actions, undefined);
+  assert.match(workflow["run-name"], /format\('App Smoke request \{0\} for \{1\}:\{2\}', github\.event\.workflow_run\.run_number, github\.event\.workflow_run\.head_repository\.full_name, github\.event\.workflow_run\.head_branch\)/);
+});
+
+test("validation that stalls in checkout or scope cannot cancel the newest smoke", async () => {
+  const validated = runValidate({ requestPr: "1517", pullByNumber: { 1517: pr() } });
+  assert.equal(validated.status, 0);
+  assert.equal(validated.outputs["head-sha"], SHA);
+  for (const moved of [pr({ sha: "f".repeat(40) }), pr({ state: "closed" })]) {
+    const result = await cancelOlder({ pulls: [moved], runs: [smokeRun({ requestNumber: 300 })] });
+    assert.deepEqual(result.calls, ["head"]);
+    assert.deepEqual(result.cancelled, []);
+    assert.equal(result.outputs.superseded, "true");
+  }
+});
+
+test("request order, not completion order, determines which same-branch smokes can be cancelled", async () => {
+  const result = await cancelOlder({ runs: [
+    smokeRun({ id: 900, requestNumber: 100 }),
+    smokeRun({ id: 400, requestNumber: 300 }),
+    smokeRun({ id: 599, requestNumber: 200, status: "queued" }),
+    smokeRun({ id: 600, requestNumber: 200 }),
+    smokeRun({ id: 601, requestNumber: 200 }),
+    smokeRun({ id: 450, branch: "other-branch" }),
+    smokeRun({ id: 451, repository: "fork/hypertask" }),
+    smokeRun({ id: 452, status: "completed" }),
+    { id: 453, status: "in_progress", display_title: "App Smoke production cache" },
+    { id: 454, status: "in_progress", display_title: "App Smoke request 1 for malformed" },
+  ] });
+  assert.deepEqual(result.cancelled.sort((a, b) => a - b), [599, 900]);
+  assert.equal(result.outputs.superseded, undefined);
+  assert.equal(result.calls[0], "head");
+  for (const id of result.cancelled) {
+    assert.equal(result.calls[result.calls.indexOf(`cancel:${id}`) - 1], "head");
+  }
+});
+
+test("old request reruns never cancel a newer request even with a stale head API response", async () => {
+  const result = await cancelOlder({ requestNumber: 100, runId: 900, runs: [
+    smokeRun({ id: 600, requestNumber: 200 }),
+    smokeRun({ id: 950, requestNumber: 300 }),
+  ] });
+  assert.deepEqual(result.cancelled, []);
+});
+
+test("a push during run discovery stops cancellation and marks the request superseded", async () => {
+  const result = await cancelOlder({ pulls: [pr(), pr({ sha: "f".repeat(40) })], runs: [smokeRun()] });
+  assert.deepEqual(result.cancelled, []);
+  assert.equal(result.outputs.superseded, "true");
+});
+
+test("a head change during cancellation cannot cancel a newer build or publish failure", async () => {
+  const result = await cancelOlder({ pulls: [pr(), pr(), pr({ sha: "f".repeat(40) })], runs: [
+    smokeRun({ id: 500 }), smokeRun({ id: 501 }), smokeRun({ id: 400, requestNumber: 300 }),
+  ] });
+  assert.deepEqual(result.cancelled, [500]);
+  assert.equal(result.outputs.superseded, "true");
+  assert.match(workflow.jobs.report.if, /needs\.validate\.outputs\.superseded != 'true'/);
+});
+
+test("the final head read catches a push even when no older smoke needed cancellation", async () => {
+  const result = await cancelOlder({ pulls: [pr(), pr({ sha: "f".repeat(40) })] });
+  assert.deepEqual(result.cancelled, []);
+  assert.equal(result.outputs.superseded, "true");
+});
+
+test("completed cancellation races are harmless but real cancellation errors fail closed", async () => {
+  const finished = await cancelOlder({ runs: [smokeRun()], cancelError: 409 });
+  assert.deepEqual(finished.cancelled, [500]);
+  assert.equal(finished.outputs.superseded, undefined);
+  await assert.rejects(cancelOlder({ runs: [smokeRun()], cancelError: 403 }), /cancellation failed/);
+});
+
+test("same-request duplicates use workflow sequence numbers rather than run IDs", async () => {
+  const result = await cancelOlder({ runId: 600, runNumber: 600, runs: [
+    smokeRun({ id: 999, runNumber: 599, requestNumber: 200 }),
+    smokeRun({ id: 100, runNumber: 601, requestNumber: 200 }),
+  ] });
+  assert.deepEqual(result.cancelled, [999]);
+});
+
+test("all active run states are eligible for ordered cancellation", async () => {
+  const statuses = ["queued", "in_progress", "waiting", "pending", "requested"];
+  const result = await cancelOlder({ runs: statuses.map((status, index) => smokeRun({ id: 500 + index, status })) });
+  assert.deepEqual(result.cancelled, [500, 501, 502, 503, 504]);
 });

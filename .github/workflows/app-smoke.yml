@@ -1,4 +1,5 @@
 name: App Smoke
+run-name: ${{ github.event_name == 'workflow_run' && format('App Smoke request {0} for {1}:{2}', github.event.workflow_run.run_number, github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) || 'App Smoke production cache' }}
 
 # This file runs from production. Pull-request code cannot change its checks,
 # permissions, or the dependency cache created by production pushes.
@@ -67,6 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
+      actions: write
       contents: read
       pull-requests: read
       statuses: write
@@ -74,7 +76,7 @@ jobs:
       head-repository: ${{ steps.request.outputs.head-repository }}
       head-sha: ${{ steps.request.outputs.head-sha }}
       pr: ${{ steps.request.outputs.pr }}
-      superseded: ${{ steps.request.outputs.superseded }}
+      superseded: ${{ steps.request.outputs.superseded == 'true' || steps.current-request.outputs.superseded == 'true' }}
       docs-only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
     steps:
       - name: Validate the exact pull-request revision
@@ -158,14 +160,54 @@ jobs:
             echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Recheck the head and cancel only older requests
+        id: current-request
+        if: steps.request.outputs.superseded != 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          PR: ${{ steps.request.outputs.pr }}
+          HEAD_SHA: ${{ steps.request.outputs.head-sha }}
+        with:
+          script: |
+            const request = context.payload.workflow_run;
+            const currentHead = async () => {
+              const { data: pr } = await github.rest.pulls.get({
+                ...context.repo, pull_number: Number(process.env.PR),
+              });
+              if (pr.state === 'open' && pr.head.sha === process.env.HEAD_SHA) return true;
+              core.setOutput('superseded', 'true');
+              core.info('The pull request was closed or pushed again; its newest head has its own request.');
+              return false;
+            };
+            if (!await currentHead()) return;
+            const runs = (await Promise.all(['queued', 'in_progress', 'waiting', 'pending', 'requested'].map(status =>
+              github.paginate(github.rest.actions.listWorkflowRuns, {
+                ...context.repo, workflow_id: 'app-smoke.yml', event: 'workflow_run', status, per_page: 100,
+              }),
+            ))).flat();
+            for (const run of runs) {
+              if (run.id === context.runId || run.status === 'completed') continue;
+              const match = /^App Smoke request ([0-9]+) for /.exec(run.display_title);
+              if (!match) continue;
+              const requestNumber = Number(match[1]);
+              const title = `App Smoke request ${requestNumber} for ${request.head_repository.full_name}:${request.head_branch}`;
+              if (run.display_title !== title) continue;
+              if (!(requestNumber < request.run_number || (requestNumber === request.run_number && run.run_number < context.runNumber))) continue;
+              if (!await currentHead()) return;
+              try {
+                await github.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: run.id });
+              } catch (error) {
+                if (error.status !== 409) throw error;
+                core.info(`App Smoke run ${run.id} already finished cancelling or completed.`);
+              }
+            }
+            await currentHead();
+
   app-smoke:
     name: run app-smoke
     needs: validate
     runs-on: ubuntu-latest
     if: needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'
-    concurrency:
-      group: ${{ format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
-      cancel-in-progress: true
     timeout-minutes: 15
     permissions:
       contents: read
@@ -226,13 +268,14 @@ jobs:
 
   report:
     name: report app-smoke result
-    if: always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'
+    if: always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'
     needs: [validate, app-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     permissions:
       actions: write
       contents: read
+      pull-requests: read
       statuses: write
     steps:
       - name: Publish the required status on the tested revision
@@ -247,6 +290,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$SMOKE_RESULT" = "cancelled" ]; then
+            echo "::notice::Cancelled app-smoke work does not publish a failing required status."
+            exit 0
+          fi
+          if [ -n "$PR" ]; then
+            pr_json=$(gh api "repos/$REPO/pulls/$PR")
+            if ! jq -e --arg sha "$HEAD_SHA" '.state == "open" and .head.sha == $sha' <<<"$pr_json" >/dev/null; then
+              echo "::notice::The pull request was closed or pushed again; no stale app-smoke status will be published."
+              exit 0
+            fi
+          fi
           state=failure
           description='App smoke failed'
           if [ "$VALIDATION_RESULT" = "success" ] && [ "$SMOKE_RESULT" = "success" ]; then

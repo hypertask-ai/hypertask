@@ -227,6 +227,10 @@ test('CI policy budgets the reduced folding and keeps UX out of required context
   for (const guard of [budget.pull_request_guards, budget.trusted_pull_request_guards, ...budget.serialized_reconciliation_guards]) {
     assert.equal(guard.contexts, undefined);
   }
+  assert.deepEqual(policy.required_checks.contexts, [
+    'app-smoke', 'browser-smoke', 'ci-tests', 'ai-review', 'claude-review',
+    'feature-flag-gate', 'pr-title', 'next-public-secrets', 'secret-scan', 'premerge-evidence',
+  ]);
   assert.ok(!policy.required_checks.contexts.includes('ux-signoff'));
 });
 
@@ -247,10 +251,12 @@ test('heavy scope skips docs/skills/unit tests but never src, CI, dependencies, 
     group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
     'cancel-in-progress': true,
   });
-  assert.deepEqual(smoke.jobs['app-smoke'].concurrency, {
-    group: "${{ format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}",
-    'cancel-in-progress': true,
-  });
+  assert.equal(smoke.jobs['app-smoke'].concurrency, undefined);
+  assert.equal(smoke.jobs.validate.permissions.actions, 'write');
+  const cancellation = smoke.jobs.validate.steps.find(step => step.id === 'current-request');
+  assert.match(cancellation.with.script, /requestNumber < request\.run_number/);
+  assert.match(cancellation.with.script, /if \(!await currentHead\(\)\) return;/);
+  assert.match(smoke.jobs.report.if, /!cancelled\(\)/);
   const browser = workflow('ci-tests').jobs['browser-smoke'];
   assert.equal(browser.outputs.docs_only, "${{ steps.scope.outputs.heavy_needed == 'false' }}");
   assert.match(browser.steps.find(step => step.id === 'smoke').if, /heavy_needed == 'true'/);
