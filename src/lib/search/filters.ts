@@ -84,17 +84,17 @@ export function commenterWhere(filters: SearchFilter[], text = '', phrases: Sear
   }
 }
 
-function filterWhere(operator: SearchFilterKey, { value, userIds }: SearchFilter, done: Prisma.TaskWhereInput[], text = ''): Prisma.TaskWhereInput {
+function filterWhere(operator: SearchFilterKey, { value, userIds }: SearchFilter, done: Prisma.TaskWhereInput[], text = '', personAssignmentFilter = false): Prisma.TaskWhereInput {
   const name = identity(value)
   const id = numeric(name)
   if (id === null && userIds !== undefined) {
     if (operator === 'from') return { userId: { in: userIds } }
-    if (operator === 'assignee') return { assignees: { some: { userId: { in: userIds } } } }
+    if (operator === 'assignee') return { assignees: { some: { userId: { in: userIds }, ...(personAssignmentFilter ? { agentId: null } : {}) } } }
   }
   switch (operator) {
     case 'commenter': return { comments: { some: commenterWhere([{ value, negated: false, userIds }], text) } }
     case 'from': return id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } }
-    case 'assignee': return { assignees: { some: id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } } } }
+    case 'assignee': return { assignees: { some: { ...(id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } }), ...(personAssignmentFilter ? { agentId: null } : {}) } } }
     case 'in':
     case 'board': return id !== null ? { projectId: id } : { project: { title: exact(name) } }
     case 'label': return { taskLabels: { some: { label: { OR: [{ id: name }, { value: exact(name) }] } } } }
@@ -126,6 +126,7 @@ export async function searchFilterWhere(
   parsed: ParsedSearch,
   projectIds: number[],
   defaultStatus: 'Normal' | 'Archive' | null,
+  personAssignmentFilter = false,
 ): Promise<Prisma.TaskWhereInput> {
   const doneSections = parsed.filters.is?.some(({ value }) => ['done', 'open'].includes(value.toLowerCase()))
     ? await prisma.section.findMany({
@@ -144,9 +145,9 @@ export async function searchFilterWhere(
     const included = values.filter(({ negated }) => !negated)
     if (key === 'phrase' && kinds.phraseScope === 'comment') continue
     if (key === 'phrase') groups.push(...included.map((filter) => containsPhrase(filter.value, kinds.phraseScope)))
-    else if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done, parsed.text)) })
+    else if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done, parsed.text, personAssignmentFilter)) })
     for (const filter of values.filter(({ negated }) => negated)) {
-      groups.push({ NOT: key === 'phrase' ? containsPhrase(filter.value, kinds.phraseScope) : filterWhere(key, filter, done) })
+      groups.push({ NOT: key === 'phrase' ? containsPhrase(filter.value, kinds.phraseScope) : filterWhere(key, filter, done, '', personAssignmentFilter) })
     }
   }
   return {

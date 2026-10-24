@@ -32,9 +32,11 @@ test("approved examples are discovered, with one finding per model class and old
 
 test("picker membership assertion rejects a missing gateway model (positive and negative controls)", () => {
   assertPickerModelsListed(fixture);
-  const missing = structuredClone(fixture);
-  missing.gateway.data = missing.gateway.data.filter((model) => model.id !== "openai/gpt-6-luna");
-  assert.throws(() => assertPickerModelsListed(missing), /Every picker model/);
+  for (const id of ["openai/gpt-6-luna", "deepseek/deepseek-v4.1-flash-1017", "deepseek/deepseek-v4.1-flash-1017-fast"]) {
+    const missing = structuredClone(fixture);
+    missing.gateway.data = missing.gateway.data.filter((model) => model.id !== id);
+    assert.throws(() => assertPickerModelsListed(missing), /Every picker model/, id);
+  }
 });
 
 test("gateway failure falls back to authenticated provider lists without claiming other providers are stale", async () => {

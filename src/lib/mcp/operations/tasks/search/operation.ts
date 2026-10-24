@@ -1,3 +1,4 @@
+import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from '@/lib/flags/keys'
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -235,6 +236,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (assignedTo) {
+      const assigneeFixEnabled = await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id)
       if (listQuery) {
         const assignee = parseAssigneeFilter(assignedTo)
         if (!assignee.ok) {
@@ -244,21 +246,21 @@ export async function GET(request: NextRequest) {
           )
         }
         if (assignee.kind === 'me') {
-          where.assignees = { some: { userId: user.id } }
+          where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
         } else if (assignee.kind === 'unassigned') {
           where.assignees = { none: {} }
         } else {
           // @ts-expect-error kind is ids after me/unassigned
-          where.assignees = { some: { userId: { in: assignee.userIds } } }
+          where.assignees = { some: { userId: { in: assignee.userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
         }
       } else if (assignedTo === 'me') {
-        where.assignees = { some: { userId: user.id } }
+        where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
       } else if (assignedTo === 'unassigned') {
         where.assignees = { none: {} }
       } else {
         const userId = parseInt(assignedTo)
         if (!isNaN(userId)) {
-          where.assignees = { some: { userId } }
+          where.assignees = { some: { userId, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
         }
       }
     }
@@ -297,7 +299,8 @@ export async function GET(request: NextRequest) {
     if (parsed) {
       const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
         { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true,
-        sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined)
+        sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined,
+        Boolean(parsed.filters.assignee?.length) && await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id))
       commentById = filtered.commentById
       const rankedResults = Boolean(parsed.text || filtered.commentMode)
       operatorPartial = parsed.text ? filtered.partial : false
