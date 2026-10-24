@@ -8,7 +8,7 @@ const { createHash } = require("node:crypto");
 
 const workflow = fs.readFileSync(path.join(__dirname, "../.github/workflows/feature-flag-gate.yml"), "utf8");
 const reconciliation = workflow.split("  reconcile-open-pull-requests:")[1];
-const startup = reconciliation.match(/        run: \|\n([\s\S]*?)          pages=/)[1]
+const startup = reconciliation.match(/        run: \|\n(          set -uo pipefail[\s\S]*?)          pages=/)[1]
   .replace(/^          /gm, "");
 
 function runStartup(t, runnerTemp) {
@@ -111,6 +111,7 @@ function runWorkflow(t, {
     RUNNER_TEMP: fixture,
     REPO: "fixture/repository",
     RUN_URL: "https://example.invalid/actions/runs/1",
+    JOB_STARTED_AT: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
     PR_NUMBER: "42",
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
     FIXTURE_PR: path.join(fixture, "pull.json"),
@@ -231,7 +232,7 @@ done
 exit 1
 `, { mode: 0o755 });
 
-  const script = job.match(/        run: \|\n([\s\S]*)/)[1].replace(/^          /gm, "");
+  const script = job.match(/        run: \|\n(          set -uo pipefail[\s\S]*)/)[1].replace(/^          /gm, "");
   const result = spawnSync("bash", ["-e", "-c", script], {
     cwd: checkout,
     env,
@@ -500,6 +501,27 @@ test('all feature-flag API calls use the wrapper in the main shell and concurren
   assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
   assert.match(workflow, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
   assert.doesNotMatch(singlePullRequest, /cancel-in-progress: true/);
+});
+
+test('initial and drift pending publications use newest-wins guards in both jobs', () => {
+  const perPrPublisher = singlePullRequest.split('          publish_status_if_current() {')[1]
+    .split('          publish_error_status() {')[0];
+  const reconcilePublisher = reconciliation.split('          publish_status_if_changed() {')[1]
+    .split('          publish_reconciliation_error() {')[0];
+  for (const publisher of [perPrPublisher, reconcilePublisher]) {
+    assert.match(publisher, /GH_API_NO_WAIT=1 gh_api "repos\/\$REPO\/commits\/\$head_sha\/statuses\?per_page=100"/);
+    assert.match(publisher, /--arg job_started_at "\$JOB_STARTED_AT"/);
+    assert.match(publisher, /map\(select\(\.context == "feature-flag-gate"\)\)\[0\] as \$current \|/);
+    assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\(\$current\.created_at \/\/ ""\) > \$job_started_at/);
+    assert.match(publisher, /newer final feature-flag-gate status exists"\s+return 0/);
+    assert.ok(publisher.indexOf('--arg job_started_at') < publisher.indexOf('gh_api -X POST'));
+  }
+  assert.match(singlePullRequest, /if ! publish_status_if_current "\$pending_payload"; then/);
+  assert.match(singlePullRequest, /elif \[ "\$result" -eq 3 \]; then\s+state=pending[\s\S]*?if ! publish_status_if_current "\$payload"; then/);
+  assert.match(reconciliation, /elif \[ "\$result" -eq 3 \]; then\s+state=pending[\s\S]*?if ! publish_status_if_changed "\$head_sha" "\$payload" "\$statuses_file"; then/);
+  assert.match(reconcilePublisher, /if \[ "\$state" = "pending" \]; then\s+statuses_file="\$gate_tmp\/pending-latest-statuses\.json"[\s\S]*?gh_api[^\n]*>"\$statuses_file" \|\| return 1/);
+  assert.match(perPrPublisher, /gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER"[^\n]*\|\| return 1/);
+  assert.match(perPrPublisher, /'\.head\.sha' "\$gate_tmp\/status-pr\.json"\)" != "\$head_sha"[\s\S]*?return 0/);
 });
 
 test('a genuine evaluation error is not hidden by rate limiting its error-status post', (t) => {
