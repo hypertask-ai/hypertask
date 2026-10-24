@@ -55,6 +55,7 @@ class CacheTests(unittest.TestCase):
         patch.object(m.os, "getloadavg", side_effect=lambda: (self.load, 1, 1)).start()
         patch.object(m.time, "time", side_effect=lambda: self.now).start()
         patch.object(m.time, "sleep").start()
+        patch.object(m, "session_metrics", return_value=None).start()
         self.addCleanup(patch.stopall)
 
     def command(self, *args):
@@ -130,6 +131,19 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(set(self.cache()), {"schema", "runs", "entries"})
         self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-1", "15:HTPR-2", "4060:YPER4-1"})
 
+    def test_waiting_ticket_comments_are_fetched_and_cached_for_maintenance(self):
+        self.boards[15][0]["section"] = "Valentin Review"
+        self.boards[4060][0]["section"] = "UX Sign-off"
+        self.run_dispatch()
+        self.assertEqual(set(self.fetched()), set(self.comments))
+        self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-1", "15:HTPR-2", "4060:YPER4-1"})
+        self.run_dispatch()
+        self.assertEqual(self.fetched(), [])
+        self.assertEqual(self.summary[2], "3")
+        self.boards[4060][0]["updatedAt"] = "v2"
+        self.run_dispatch()
+        self.assertEqual(self.fetched(), ["YPER4-1"])
+
     def test_count_change_refreshes_only_one(self):
         self.run_dispatch()
         self.boards[15][1]["commentCount"] = 1
@@ -161,16 +175,37 @@ class CacheTests(unittest.TestCase):
         self.run_dispatch()
         self.assertEqual(self.fetched(), [])
 
-    def test_high_load_zero_reads_or_writes_even_cold(self):
+    def test_high_load_zero_board_reads_or_writes_without_runner_metrics(self):
         self.load = 12.01
         with patch.object(Path, "read_text", side_effect=AssertionError("cache read at high load")), \
                 patch.object(m.os, "replace", side_effect=AssertionError("write at high load")):
             self.run_dispatch()
         self.assertEqual(self.calls, [])
-        self.snap.assert_not_called()
+        self.snap.assert_called_once()
         self.assertEqual(list(self.state.iterdir()), [])
         self.assertEqual(self.summary, ("0", "0", "0", "false", "true", "0"))
         self.assertIn("Load 12.01 > 12: dispatch skipped", self.stderr.getvalue())
+
+    def test_alarm_runs_before_board_reads_and_despite_high_load(self):
+        self.rows = [dict(runner="RUNNER 8", pane="%8", state="busy")]
+        metrics = dict(session="sid", context=160_000, activity=self.now - 10,
+                       usage_at=self.now - 10, cleared=0, started=self.now - 30)
+        with patch.object(m, "session_metrics", return_value=metrics):
+            self.load = 13
+            self.run_dispatch()
+            self.assertEqual(self.calls, [])
+            self.assertFalse(self.cache_path.exists())
+            inbox = self.state / "runner-inbox/infra-manager.events.jsonl"
+            self.assertEqual(len(inbox.read_text().splitlines()), 1)
+            self.assertIn("alarm RUNNER 8", self.stderr.getvalue())
+            self.now += m.ALARM_EVERY
+            self.load = 1
+            self.replies[("tasks", 15, None)] = RuntimeError("board unavailable")
+            with self.assertRaisesRegex(RuntimeError, "board unavailable"):
+                self.run_dispatch()
+            self.assertEqual(len(inbox.read_text().splitlines()), 2)
+            self.assertFalse(self.cache_path.exists())
+            self.assertFalse(any("send-keys" in c for c in self.calls))
 
     def test_high_load_does_not_advance_warm_cache(self):
         self.run_dispatch()

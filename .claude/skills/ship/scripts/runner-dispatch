@@ -2,9 +2,11 @@
 """Plan runner work read-only by default; --go enables local claims and dispatch."""
 import argparse
 import fcntl
+import html
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -18,12 +20,17 @@ CLAIMS = STATE / "runner-queue/claims"
 LOOP = STATE / "runner-loop"
 OWNER = "HT Product Lead"
 ACTIVE = {"In Progress", "AI Review", "QA"}
+MAINTENANCE = ACTIVE | {"Valentin Review", "UX Sign-off"}
 COLUMNS = ((15, "Bugs"), (15, "Todo"), (4060, "Backlog"))
 ELIGIBLE = {f"RUNNER {n}" for n in range(1, 8)}
 SPEED = "SPEED RUNNER"
 SPEED_STATES = {"done", "idle", "waiting_valentin"}
 PENDING_DELIVERY_TTL = 900
 FAILED_DELIVERY_TTL = 3600
+CLEAR_CONTEXT = 80_000
+ALARM_CONTEXT = 150_000
+ALARM_EVERY = 6 * 3600
+SESSION_TAIL = 2 * 1024 * 1024
 RESEARCH_EVERY = 6 * 3600
 RESEARCH_PROMPT = ("/speed-analyst No free [SPEED] ticket is on the board. Read .claude/skills/speed-analyst/GOALS.md, "
                    "run the daily read, then either file and ship the biggest measured slow spot toward the next milestone "
@@ -90,7 +97,7 @@ def read_boards(reads=None):
 def read_comments(boards, cache=None, *, full_refresh=False, reads=None):
     comments, entries, seen = {}, {}, set()
     for project, tasks in boards.items():
-        wanted = ACTIVE | {column for board, column in COLUMNS if board == project}
+        wanted = MAINTENANCE | {column for board, column in COLUMNS if board == project}
         for task in tasks:
             ticket = task["ticketNumber"]
             key = f"{project}:{ticket}"
@@ -132,12 +139,12 @@ def claims(comments):
             if "Claimed." in (comment.get("text") or comment.get("commentText") or "")]
 
 
-def held_tickets(boards, comments):
+def held_tickets(boards, comments, sections=ACTIVE):
     held = {}
     for tasks in boards.values():
         for task in tasks:
             ticket = task["ticketNumber"]
-            if task["section"] not in ACTIVE:
+            if task["section"] not in sections:
                 continue
             claimed = claims(comments[ticket])
             if claimed:
@@ -182,12 +189,11 @@ def read_last(loop):
         return {}
 
 
-def write_last(loop, last):
-    loop.mkdir(parents=True, exist_ok=True)
-    path = loop / "last-dispatch.json"
-    temporary = loop / f"last-dispatch.json.tmp.{os.getpid()}"
+def write_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}.tmp.{os.getpid()}")
     try:
-        temporary.write_text(json.dumps(last) + "\n")
+        temporary.write_text(json.dumps(data) + "\n")
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -227,14 +233,238 @@ def cleanup_claims(boards, claim_dir, now):
             print(f"runner-dispatch: released claim {path.stem}", file=sys.stderr)
 
 
+def timestamp(value):
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except (AttributeError, TypeError, ValueError):
+        return 0
+
+
+def session_metrics(row, home=None):
+    """Bound IO even for long-running sessions; missing tail evidence forbids clearing."""
+    home = home or Path.home()
+    sessions = []
+    for path in (home / ".claude/sessions").glob("*.json"):
+        try:
+            data = json.loads(path.read_text())
+            if (data.get("tmux", "").rsplit(".", 1)[-1] == row["pane"]
+                    and data.get("name", "").split(" | ", 1)[0] == row["runner"]):
+                sessions.append(data)
+        except (OSError, ValueError, AttributeError):
+            continue
+    if len(sessions) != 1:
+        return None
+    session = sessions[0]
+    try:
+        sid, cwd, started = session["sessionId"], session["cwd"], session["startedAt"]
+        if type(started) not in (int, float) or not 0 < started < float("inf"):
+            return None
+        unknown = {"session": sid, "context": None, "activity": 0,
+                   "usage_at": 0, "cleared": 0, "started": started / 1000}
+        if not re.fullmatch(r"[a-zA-Z0-9-]+", sid):
+            return None
+        project = re.sub(r"[^a-zA-Z0-9-]", "-", cwd)
+        path = home / ".claude/projects" / project / f"{sid}.jsonl"
+        try:
+            with path.open("rb") as stream:
+                stream.seek(0, 2)
+                start = max(0, stream.tell() - SESSION_TAIL)
+                stream.seek(start)
+                if start:
+                    stream.readline()  # Discard a possibly partial JSON record.
+                lines = stream.read(SESSION_TAIL).decode("utf-8").splitlines()
+        except (OSError, UnicodeError):
+            return unknown
+        context, activity, cleared, usage_at = None, 0, 0, 0
+        comment_tools = set()
+        for line in lines:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                return unknown
+            if event.get("isSidechain") or event.get("sessionId", sid) != sid:
+                continue
+            at = timestamp(event.get("timestamp"))
+            if event.get("subtype") == "compact_boundary":
+                context, usage_at = None, 0
+            message = event.get("message") or {}
+            content = message.get("content") or []
+            if isinstance(content, str):
+                if "<command-name>/clear</command-name>" in content:
+                    cleared = at
+                    context, usage_at, activity = None, 0, 0
+                continue
+            usage = message.get("usage")
+            if event.get("type") == "assistant" and isinstance(usage, dict):
+                fields = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+                if all(type(usage.get(k, 0)) is int and usage.get(k, 0) >= 0 for k in fields):
+                    context = sum(usage.get(k, 0) for k in fields)
+                    usage_at = at
+            for block in content:
+                if block.get("type") == "tool_use":
+                    # Only a standalone comment write is exempt, never a shell batch that
+                    # might also change files. This lets a runner checkpoint several tickets.
+                    name = block.get("name", "")
+                    text = (block.get("input") or {}).get("command", "")
+                    try:
+                        words = shlex.split(text)
+                        # Preserve quotes and tokenize bare characters so even --text="..."
+                        # keeps quoted newlines/operators distinct from shell syntax.
+                        shell = shlex.shlex(text, posix=False)
+                        shell.wordchars, shell.whitespace, shell.commenters = "", " \t\r", ""
+                        operators = any(token in ";&|<>()`\\\n"
+                                        or (token.startswith('"') and re.search(r"`|\$\(", token))
+                                        for token in shell)
+                    except ValueError:
+                        words = []
+                    comment = (name == "Bash" and len(words) >= 4
+                               and words[:3] in (["vcc", "comment", "add"],
+                                                ["hypertask", "comment", "add"])
+                               and not operators)
+                    if comment:
+                        comment_tools.add(block.get("id"))
+                    else:
+                        activity = max(activity, at)
+                elif block.get("type") == "tool_result" and block.get("tool_use_id") not in comment_tools:
+                    activity = max(activity, at)
+        return {"session": sid, "context": context, "activity": activity,
+                "usage_at": usage_at, "cleared": cleared,
+                "started": started / 1000}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def current_checkpoint(ticket, runner, comments, since):
+    # Explicit fields are a conservative proxy for recoverable state, not a claim or ledger mtime.
+    candidates = [c for c in comments.get(ticket, []) if c.get("type") != "activity"
+                  and (c.get("agent") or {}).get("displayName", "").casefold() == runner.casefold()]
+    if not candidates:
+        return False
+    comment = max(candidates, key=lambda c: max(timestamp(c.get("createdAt")), timestamp(c.get("editedAt"))))
+    at = max(timestamp(comment.get("createdAt")), timestamp(comment.get("editedAt")))
+    if at <= since:
+        return False
+    text = comment.get("text") or comment.get("commentText") or ""
+    text = re.sub(r"</(?:p|li|div|ul|ol)>|<br\s*/?>", "\n", text, flags=re.I)
+    text = html.unescape(re.sub(r"<[^>]*>", "", text))
+    fields = {}
+    for key in ("next", "helpers", "branch/pr", "outputs"):
+        match = re.search(r"(?:^|\n)[ \t]*" + re.escape(key) + r"[ \t]*:[ \t]*([^\n]+)", text, re.I)
+        if match:
+            fields[key] = match[1].strip()
+    return (len(fields) == 4 and all(fields.values())
+            and (fields["helpers"].casefold() == "none"
+                 or bool(re.search(r"(?:^|\s)/[\w./-]+|\b[A-Z][A-Z0-9]*-\d+\b", fields["outputs"]))))
+
+
+def queue_clear_alarm(state, runner, text, now):
+    # Reuse runner-deliver's exact inbox, lock, dedupe and hook-consumed event schema.
+    inbox = state / "runner-inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    ident = f"runner-clear:{runner}:{int(now // ALARM_EVERY)}"
+    path = inbox / "infra-manager.events.jsonl"
+    with (inbox / "infra-manager.events.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        raw = path.read_text() if path.exists() else ""
+        for line in raw.splitlines():
+            event = json.loads(line)
+            if (event.get("id", "").startswith(f"runner-clear:{runner}:")
+                    and type(event.get("ts")) in (int, float) and now - event["ts"] < ALARM_EVERY):
+                return False
+        temporary = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+        try:
+            event = {"id": ident, "ts": now, "text": text, "delivered": False}
+            temporary.write_text(raw + json.dumps(event, separators=(",", ":")) + "\n")
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return True
+
+
+def maintain_runner(row, holding, comments, now, *, loop, state, allow_clear=True):
+    if not (re.fullmatch(r"RUNNER [1-9][0-9]*", row["runner"]) or row["runner"] == SPEED):
+        return False
+    metrics = session_metrics(row)
+    if metrics is None:
+        return False
+    path = loop / "runner-clear.json"
+    try:
+        records = json.loads(path.read_text())
+        if not isinstance(records, dict):
+            raise ValueError("invalid clear state")
+    except FileNotFoundError:
+        records = {}
+    except ValueError:
+        # A lost throttle must not become an alarm storm or an unsafe clear.
+        print("runner-dispatch: malformed runner-clear.json; maintenance skipped", file=sys.stderr)
+        return False
+    before = json.dumps(records)
+    runner = row["runner"]
+    record = records.setdefault(runner, {})
+    if not isinstance(record, dict) or any(type(v) not in (int, float) or not 0 <= v < float("inf")
+                                          for v in record.values()):
+        print(f"runner-dispatch: malformed clear record {runner}; maintenance skipped", file=sys.stderr)
+        return False
+    # Session start is a conservative baseline, not a fabricated successful clear.
+    record.setdefault("first_seen", min(now, metrics["started"]))
+    record["last_clear"] = max(record.get("last_clear", 0), metrics["cleared"])
+    last_clear = record["last_clear"]
+    context = metrics["context"]
+    age = now - (last_clear or record["first_seen"])
+    reasons = []
+    if age >= ALARM_EVERY:
+        reasons.append("no_clear_6h")
+    if context is not None and context > ALARM_CONTEXT:
+        reasons.append("context_150k")
+    if reasons and now - record.get("last_alarm", 0) >= ALARM_EVERY:
+        text = f"alarm {runner} reason={'+'.join(reasons)} context={context} last_clear={last_clear or 'never'}"
+        queued = queue_clear_alarm(state, runner, text, now)
+        record["last_alarm"] = now
+        if queued:
+            print(text, file=sys.stderr)
+    if json.dumps(records) != before:
+        write_json(path, records)
+    if not allow_clear:
+        return False
+    trigger = "context_80k" if context is not None and context > CLEAR_CONTEXT else row["state"]
+    if (row["state"] not in {"idle", "waiting_bg", "done", "waiting_valentin"}
+            or row.get("input_box") not in {"empty", "dim"} or row.get("spinner")
+            or context is None or context <= CLEAR_CONTEXT
+            or not metrics["activity"] or metrics["usage_at"] <= last_clear
+            or now - last_clear < 600
+            or not all(current_checkpoint(t, runner, comments, max(metrics["activity"], last_clear))
+                       for t in holding)):
+        return False
+    # Recheck the real typed-text guard immediately before sending, not just the tick snapshot.
+    fresh = [r for r in snapshots() if r["pane"] == row["pane"] and r["runner"] == runner]
+    if (len(fresh) != 1 or fresh[0]["state"] != row["state"]
+            or fresh[0].get("input_box") not in {"empty", "dim"}
+            or fresh[0].get("spinner") or os.getloadavg()[0] > 12):
+        return False
+    # Tool activity must also be unchanged since checkpoint evaluation.
+    if session_metrics(row) != metrics:
+        return False
+    resume = "resume: read your held tickets' latest comments: " + (", ".join(holding) or "none")
+    command("tmux", "send-keys", "-t", row["pane"], "-l", "/clear")
+    command("tmux", "send-keys", "-t", row["pane"], "Enter")
+    record["last_clear"] = now
+    write_json(path, records)
+    print(f"cleared {runner} reason={trigger} context={context} held={','.join(holding) or 'none'}", file=sys.stderr)
+    time.sleep(3)
+    fresh = [r for r in snapshots() if r["pane"] == row["pane"] and r["runner"] == runner]
+    if (len(fresh) != 1 or fresh[0]["state"] not in {"idle", "waiting_bg", "done", "waiting_valentin"}
+            or fresh[0].get("input_box") not in {"empty", "dim"} or fresh[0].get("spinner")):
+        print(f"runner-dispatch: {runner} resume withheld: pane no longer safe", file=sys.stderr)
+        return True
+    send(row["pane"], resume)
+    return True
+
+
 def send(pane, text, claim_path=None):
     started = False
     try:
-        command("tmux", "send-keys", "-t", pane, "-l", "/clear")
-        started = True
-        command("tmux", "send-keys", "-t", pane, "Enter")
-        time.sleep(3)
         command("tmux", "send-keys", "-t", pane, "-l", text)
+        started = True
         time.sleep(1)
         command("tmux", "send-keys", "-t", pane, "Enter")
         if claim_path is not None:
@@ -267,6 +497,7 @@ def send(pane, text, claim_path=None):
 
 def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, loop=LOOP, state=STATE):
     held = held_tickets(boards, comments)
+    maintenance_held = held_tickets(boards, comments, MAINTENANCE)
     last = read_last(loop)
     tasks = {task["ticketNumber"]: task for board in boards.values() for task in board}
     if go and load <= 12:
@@ -280,6 +511,10 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
         holding = held.get(runner.casefold(), [])
         result = dict(row, held=holding, ticket=None, action="planned")
         output.append(result)
+        if go and load <= 12 and maintain_runner(row, maintenance_held.get(runner.casefold(), []),
+                                               comments, now, loop=loop, state=state):
+            result["action"] = "cleared"
+            continue
         blocking = holding if row["state"] != "done" else []
         if runner == SPEED:
             if (load > 12 or row["state"] not in SPEED_STATES
@@ -315,7 +550,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 result["action"] = "sent"
             result["ticket"] = ticket
             if go and result["action"] == "sent":
-                write_last(loop, last)
+                write_json(loop / "last-dispatch.json", last)
                 with (loop / "dispatch.log").open("a", encoding="utf-8") as stream:
                     stream.write(json.dumps({"at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
                                              "runner": runner, "pane": pane, "ticket": result["ticket"],
@@ -348,7 +583,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 at = time.time()
                 send(pane, f"/ship {ticket}", claim_dir / f"{ticket}.json")
                 last[pane] = at
-                write_last(loop, last)
+                write_json(loop / "last-dispatch.json", last)
                 with (state / "fresh-session-trial.log").open("a", encoding="utf-8") as stream:
                     stream.write(f"{datetime.fromtimestamp(at).strftime('%H:%M')} {runner} before={before} {ticket} auto\n")
                 with (loop / "dispatch.log").open("a", encoding="utf-8") as stream:
@@ -367,6 +602,9 @@ def run(go, *, cache_path, claim_dir=CLAIMS, loop=LOOP, state=STATE):
     try:
         load = os.getloadavg()[0]
         if load > 12:
+            if go:
+                for row in snapshots():
+                    maintain_runner(row, [], {}, time.time(), loop=loop, state=state, allow_clear=False)
             skipped = True
             print(f"Load {load:.2f} > 12: dispatch skipped", file=sys.stderr)
             return
@@ -381,6 +619,9 @@ def run(go, *, cache_path, claim_dir=CLAIMS, loop=LOOP, state=STATE):
             full_refresh = True
         full_refresh = full_refresh or (go and (cache["runs"] + 1) % 12 == 0)
         rows = snapshots()
+        if go:
+            for row in rows:
+                maintain_runner(row, [], {}, time.time(), loop=loop, state=state, allow_clear=False)
         boards = read_boards(reads)
         comments = read_comments(boards, cache["entries"], full_refresh=full_refresh, reads=reads)
         for row in dispatch(rows, boards, comments, load, time.time(), go=go,
