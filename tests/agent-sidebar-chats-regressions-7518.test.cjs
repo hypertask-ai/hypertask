@@ -97,6 +97,8 @@ test("embedded selection clears the old lock but an old completion cannot unlock
 });
 
 const sessionsHook = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
   react: hooks,
   "@/lib/agents/chatViewerState": viewer,
   "@/lib/constants": { default: {} },

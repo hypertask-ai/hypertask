@@ -10,6 +10,8 @@ const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
   "./aiChatStream": { consumeAiChatStream: async () => {} },
 });
 const { useAiChatSessions } = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
   react: { useCallback: (callback) => callback, useRef: (current) => ({ current }), useEffect() {} },
   "@/lib/constants": { default: {} },
   "@/lib/contexts/deviceContext": { useDeviceContext: () => false },

@@ -46,6 +46,7 @@ async function withHistory(config, check) {
   let resolver, history;
   const mapChanges = [];
   const useAiChatSessions = config.boardMap ? load('src/hooks/MultiPages/AIChat/useAiChatSessions.ts', {
+    '@/lib/flags/definitions/htpr-7762-chat-new-session-focus': { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: 'htpr-7762-chat-new-session-focus' },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/constants': { default: {} }, '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
     '@/components/Common/AttachmentsUpload/FileUploadHandler': { useFileUpload: () => ({}) },
