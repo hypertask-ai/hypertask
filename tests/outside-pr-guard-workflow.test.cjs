@@ -120,8 +120,9 @@ function apiError(status) {
 
 test("workflow has safe triggers, permissions, concurrency and a pinned metadata-only job", async () => {
   const workflow = await loadWorkflow();
-  assert.deepEqual(Object.keys(workflow.on), ["pull_request_target"]);
+  assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request_target", "workflow_run"]);
   assert.ok(workflow.on.pull_request_target.types.includes("synchronize"));
+  assert.deepEqual(workflow.on.workflow_run, { workflows: ["PR Guards"], types: ["completed"] });
   const dispatch = yaml.load(await readFile(dispatchPath, "utf8"));
   assert.deepEqual(Object.keys(dispatch.on), ["workflow_dispatch"]);
   const inputs = dispatch.on.workflow_dispatch.inputs;
