@@ -131,6 +131,29 @@ test("each provider gets its own option shape for every feature effort", () => {
       }
     }
   }
+  const cleared = reasoning.applyReasoningToParams(
+    { providerOptions: { deepseek: { thinking: { type: "enabled" }, reasoningEffort: "high", userId: "fixture" } } },
+    { reasoningFeature: "summaries" },
+    "deepseek/deepseek-v4.1-flash-1017",
+  );
+  assert.equal(cleared.providerOptions.deepseek.thinking, undefined);
+  assert.equal(cleared.providerOptions.deepseek.reasoningEffort, undefined);
+  assert.equal(cleared.providerOptions.deepseek.userId, "fixture");
+  assert.equal(cleared.modelId, undefined);
+  const stronger = reasoning.applyReasoningToParams(
+    { providerOptions: { anthropic: { thinking: { type: "adaptive" }, effort: "xhigh", cacheControl: { type: "ephemeral" } } } },
+    { reasoningFeature: "chat" },
+    "claude-haiku-5-5",
+  );
+  assert.equal(stronger.providerOptions.anthropic.effort, "xhigh");
+  assert.equal(stronger.providerOptions.anthropic.thinking.type, "adaptive");
+  const explicitNone = reasoning.applyReasoningToParams(
+    { providerOptions: { anthropic: { thinking: { type: "adaptive" }, effort: "max" } } },
+    { reasoningFeature: "chat", reasoningEffort: "none" },
+    "claude-haiku-5-5",
+  );
+  assert.equal(explicitNone.providerOptions.anthropic.thinking.type, "disabled");
+  assert.equal(explicitNone.providerOptions.anthropic.effort, undefined);
   const kept = reasoning.translateReasoning({ feature: "chat-title", provider: "anthropic", explicit: "high" });
   assert.equal(kept.providerOptions.anthropic.effort, "high");
   assert.equal(kept.providerOptions.anthropic.thinking.type, "adaptive");

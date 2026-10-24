@@ -71,6 +71,7 @@ export type ReasoningTranslation = {
   providerOptions?: Record<string, Record<string, unknown>>;
   modelId?: string;
   note?: string;
+  clearThinking?: boolean;
 };
 
 export async function aiThinkingOptInEnabled(userId: number | null | undefined): Promise<boolean> {
@@ -95,11 +96,10 @@ export function translateReasoning(args: {
   provider: ReasoningProvider;
   modelId?: string;
   explicit?: ReasoningEffort | null;
-  modelOptInHigh?: boolean;
 }): ReasoningTranslation {
   const level = args.explicit === "none" || args.explicit === "low" || args.explicit === "medium" || args.explicit === "high"
     ? args.explicit
-    : args.modelOptInHigh ? "high" : effortForFeature(args.feature, null);
+    : effortForFeature(args.feature, null);
   if (PROVIDERS_WITHOUT_KNOB.has(args.provider)) return { level };
   if (args.provider === "anthropic") {
     if (level === "none") {
@@ -133,7 +133,7 @@ function deepseekModelId(modelId?: string): string | undefined {
 function deepseekTranslation(level: ReasoningEffort, modelId?: string): ReasoningTranslation {
   const kept = deepseekModelId(modelId);
   if (level === "none") {
-    return { level, modelId: kept, note: DEEPSEEK_NONE_UNCHANGED_NOTE };
+    return { level, modelId: kept, note: DEEPSEEK_NONE_UNCHANGED_NOTE, clearThinking: true };
   }
   if (level === "medium") {
     return {
@@ -201,18 +201,23 @@ export function applyReasoningToParams<T extends ReasoningParams>(
 ): T {
   const feature = input.reasoningFeature ?? input.feature ?? "";
   const explicit = input.reasoningEffort ?? null;
-  const optedHigh = explicit ? false : modelOptedIntoHigh(params.providerOptions);
+  const mapped = explicit ?? effortForFeature(feature, null);
   let next = params;
   for (const provider of vendorsForModel(modelId, input.provider)) {
-    const translated = translateReasoning({
-      feature,
-      provider,
-      modelId,
-      explicit,
-      modelOptInHigh: optedHigh,
-    });
-    if (!translated.providerOptions) continue;
+    if (mapped !== "none" && !explicit && providerKeepsStrongerEffort(params.providerOptions, provider)) continue;
+    const translated = translateReasoning({ feature, provider, modelId, explicit });
     const providerOptions = { ...(next.providerOptions ?? {}) };
+    if (translated.clearThinking && provider === "deepseek") {
+      const current = providerOptions.deepseek;
+      if (current) {
+        const { thinking: _thinking, reasoningEffort: _reasoningEffort, ...rest } = current;
+        if (Object.keys(rest).length === 0) delete providerOptions.deepseek;
+        else providerOptions.deepseek = rest;
+      }
+      next = { ...next, providerOptions };
+      continue;
+    }
+    if (!translated.providerOptions) continue;
     for (const [key, value] of Object.entries(translated.providerOptions)) {
       const current = { ...(providerOptions[key] ?? {}) };
       const merged = { ...current, ...value };
@@ -222,4 +227,23 @@ export function applyReasoningToParams<T extends ReasoningParams>(
     next = { ...next, providerOptions };
   }
   return next;
+}
+
+function providerKeepsStrongerEffort(
+  providerOptions: ReasoningParams["providerOptions"],
+  provider: ReasoningProvider,
+): boolean {
+  if (!providerOptions) return false;
+  if (provider === "anthropic") return typeof providerOptions.anthropic?.effort === "string" && HIGH_EFFORT.has(providerOptions.anthropic.effort);
+  if (provider === "openai") return typeof providerOptions.openai?.reasoningEffort === "string" && HIGH_EFFORT.has(providerOptions.openai.reasoningEffort);
+  if (provider === "google") {
+    const level = (providerOptions.google?.thinkingConfig as { thinkingLevel?: unknown } | undefined)?.thinkingLevel;
+    return level === "high";
+  }
+  if (provider === "deepseek") return typeof providerOptions.deepseek?.reasoningEffort === "string" && HIGH_EFFORT.has(providerOptions.deepseek.reasoningEffort);
+  if (provider === "openrouter") {
+    const effort = (providerOptions.openrouter?.reasoning as { effort?: unknown } | undefined)?.effort;
+    return typeof effort === "string" && HIGH_EFFORT.has(effort);
+  }
+  return false;
 }

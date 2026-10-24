@@ -5,9 +5,9 @@ export const HTPR_7854_AI_THINKING_OPT_IN_FLAG = "htpr-7854-ai-thinking-opt-in";
 export default {
   key: HTPR_7854_AI_THINKING_OPT_IN_FLAG,
   kind: "improvement",
-  defaultMode: "OFF",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-10-24",
-  description: "Sends each AI feature the reasoning effort from one map. Off keeps today's adaptive medium default.",
+  description: "Sends each AI feature the reasoning effort from one map. Owner and QA see it first. Off keeps today's adaptive medium default.",
   releaseRisk: {
     risk: "small",
     highRisk: "money",
