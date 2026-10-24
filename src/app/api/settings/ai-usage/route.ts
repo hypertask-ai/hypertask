@@ -18,11 +18,13 @@ import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { teamAiAllowanceUsd } from "@/lib/aiAllowancePolicy";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_8008_GATEWAY_KEY_ERRORS_FLAG } from "@/lib/flags/definitions/htpr-8008-gateway-key-errors";
+import { HTPR_7743_AI_USAGE_AUTH_FLAG } from "@/lib/flags/definitions/htpr-7743-ai-usage-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
+let gatewayReportAuthWarningLogged = false;
 
 type PercentageRow = { label: string; pct: number };
 
@@ -381,6 +383,31 @@ export async function GET(request: Request) {
         gatewayGet(`/report?${modelReportParams.toString()}`, funding.apiKey),
         gatewayGet(`/report?${tagReportParams.toString()}`, funding.apiKey),
       ]);
+    const reportAuthFailed = [dailyReportResponse, modelReportResponse, tagReportResponse]
+      .some((response) => response.status === 401 || response.status === 403);
+    if (
+      reportAuthFailed &&
+      await isFeatureEnabled(HTPR_7743_AI_USAGE_AUTH_FLAG, user.id).catch(() => false)
+    ) {
+      if (!gatewayReportAuthWarningLogged) {
+        gatewayReportAuthWarningLogged = true;
+        console.warn("AI Gateway usage reporting configuration needs attention: report authorization was refused.");
+      }
+      const breakdown = await breakdownPromise;
+      return NextResponse.json({
+        configured: true,
+        fundingSource: funding.source,
+        period: { endDate, startDate },
+        allowance: null,
+        includedWithHypertask: null,
+        models: [],
+        features: breakdown?.features ?? [],
+        boards: breakdown?.boards ?? [],
+        tasks: breakdown?.tasks ?? [],
+        agents: breakdown?.agents ?? [],
+        usageMessage: "AI usage totals are unavailable because the AI service could not authorize usage reporting. Your AI settings may need attention.",
+      } satisfies AiUsageResponse);
+    }
     if (
       !dailyReportResponse.ok ||
       !modelReportResponse.ok ||
