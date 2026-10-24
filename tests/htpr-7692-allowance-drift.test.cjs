@@ -280,23 +280,6 @@ test("teamless demo final refusals retain evidence without inventing an active t
 
 
 
-test("image middleware carries shared funding into reservation and refusal context", async () => {
-  funding = { ...funding, source: "shared" };
-  await fresh();
-  let generated = 0;
-  const middleware = allowance.createImageAllowanceMiddleware({
-    allowanceUsd: 5, gatewayApiKey: funding.apiKey, fundingSource: funding.source, modelSlug: "test/model",
-    resolvePolicy: async () => ({ mode: "plan", monthlyUsd: 5, dailyUsd: null, demoGlobal: false }),
-  });
-  await assert.rejects(middleware.wrapGenerate({
-    params: { prompt: "test", n: 1, providerOptions: { gateway: { tags: [`team:${TEAM}`] } } },
-    model: {}, doGenerate: async () => { generated++; return {}; },
-  }), (error) => error.reason === "month");
-  assert.equal(generated, 0);
-  assert.equal(JSON.parse(await redis.get(`${OBS}:context`)).fundingSource, "shared");
-  assert.equal((await refusalEvents())[0].fundingSource, "shared");
-});
-
 
 
 

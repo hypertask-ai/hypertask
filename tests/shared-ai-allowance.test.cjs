@@ -969,83 +969,6 @@ test("settlement failures retain the reservation against the cap", async () => {
   }
 });
 
-test("platform-funded image calls reserve from the same team allowance", async () => {
-  const redis = fakeRedis();
-  useRedis(redis);
-  const previousFetch = global.fetch;
-  global.fetch = async (url) => {
-    const value = String(url);
-    if (value.endsWith("/models")) {
-      return new Response(
-        JSON.stringify({
-          data: [
-            {
-              id: "test/expensive",
-              pricing: { input: "0", output: "0.00005" },
-            },
-          ],
-        }),
-      );
-    }
-    if (value.includes("/report?")) {
-      return new Response(JSON.stringify({ results: [] }));
-    }
-    throw new Error(`Unexpected fetch ${value}`);
-  };
-
-  try {
-    const { createImageAllowanceMiddleware } = loadTs(
-      "src/app/api/ai/_lib/sharedAllowance.ts",
-    );
-    const middleware = createImageAllowanceMiddleware({
-      allowanceUsd: 2,
-      gatewayApiKey: "vck_managed",
-      modelSlug: "test/expensive",
-    });
-    const params = {
-      n: 1,
-      prompt: "draw a task board",
-      providerOptions: {
-        gateway: { tags: ["generate-image", "team:image-team"] },
-      },
-    };
-    let finishFirst;
-    const first = middleware.wrapGenerate({
-      params,
-      model: {},
-      doGenerate: () =>
-        new Promise((resolve) => {
-          finishFirst = () =>
-            resolve({
-              images: ["image"],
-              response: {
-                timestamp: new Date(),
-                modelId: "test/expensive",
-                headers: undefined,
-              },
-              usage: undefined,
-              warnings: [],
-            });
-        }),
-    });
-    await new Promise((resolve) => setImmediate(resolve));
-    await assert.rejects(
-      middleware.wrapGenerate({
-        params,
-        model: {},
-        doGenerate: async () => {
-          throw new Error("must not start inference");
-        },
-      }),
-      /used its included AI allowance/,
-    );
-    finishFirst();
-    await first;
-  } finally {
-    global.fetch = previousFetch;
-  }
-});
-
 test("gateway catalog slugs remap xai Grok to spacexai", () => {
   const { gatewayCatalogModelSlug } = loadTs(
     "src/app/api/ai/_lib/sharedAllowance.ts",
@@ -1068,10 +991,6 @@ test("gateway inference uses the spacexai Grok catalog slug", () => {
   assert.match(
     source,
     /createGateway\(\{ apiKey: gatewayApiKey \}\)\(\s*gatewayCatalogModelSlug\(modelSlug\)/,
-  );
-  assert.match(
-    source,
-    /\.imageModel\(\s*gatewayCatalogModelSlug\(modelSlug\)/,
   );
   console.log("grok inference uses catalog slug verification passed");
 });

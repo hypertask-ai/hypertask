@@ -707,13 +707,7 @@ for (const backend of ["fake", "real Redis"]) {
       assert.equal(releases().at(-1).userId, 0);
     });
 
-    test("image and legacy lane admission use the same billed authority and trusted actor", async () => {
-      const image = allowance.createImageAllowanceMiddleware({ allowanceUsd: 1, gatewayApiKey: funding.apiKey,
-        fundingSource: funding.source, modelSlug: "test/model" });
-      await image.wrapGenerate({ params: { prompt: [], n: 1, providerOptions: params().providerOptions }, model: {}, doGenerate: async () => ({}) });
-      assert.equal(decisions().at(-1).billed, 100_000); assert.equal(decisions().at(-1).requested, 800_000);
-      assert.equal(releases().at(-1).reason, "finish");
-      assert.equal(await redis.get(`${PREFIX}:committed`), "1700000");
+    test("legacy lane admission uses the same billed authority and trusted actor", async () => {
       now += 60_001; spend = 9_400_000; systemSpend = 9_300_000;
       const small = { ...params(), maxOutputTokens: 256 };
       await middleware().wrapGenerate({ params: small, model: {}, doGenerate: async () => ({ usage: { inputTokens: { total: 0 }, outputTokens: { total: 0 } } }) });

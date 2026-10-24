@@ -830,13 +830,6 @@ const settings: CommandGroup = {
       keywords: "settings board generation on off team",
     },
     {
-      key: "settingsAiFeaturesImageGeneration",
-      name: "Settings: Image generation",
-      commandMode: CommandMode.Setting,
-      payload: "ai-features",
-      keywords: "settings image generation on off team",
-    },
-    {
       key: "settingsAiFeaturesHyperai",
       name: "Settings: @HyperAI",
       commandMode: CommandMode.Setting,

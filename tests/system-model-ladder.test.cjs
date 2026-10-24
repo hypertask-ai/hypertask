@@ -34,7 +34,6 @@ test("feature inventory contains the complete AI feature matrix", () => {
     "improveWriting",
     "askAi",
     "boardGeneration",
-    "imageGeneration",
     "hyperAi",
     "summaries",
     "questionSuggestions",

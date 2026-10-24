@@ -201,14 +201,6 @@ export type THyperMention =
     }
   | undefined;
 
-export type TImageMention =
-  | {
-      userId: number;
-      currentTaskId?: number;
-      modelKey: string;
-    }
-  | undefined;
-
 export interface modifiedHtml {
   html: string;
   urls?: IUrl[];
@@ -216,7 +208,6 @@ export interface modifiedHtml {
   PostFollowerBody: TPostFollowerBody[];
   agentMentions?: TAgentMentionId[];
   hyperMention?: THyperMention;
-  imageMention?: TImageMention;
 }
 export interface HtmlModificationResult {
   modifiedHtml: string;

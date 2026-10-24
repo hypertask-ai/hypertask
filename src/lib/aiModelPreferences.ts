@@ -4,7 +4,6 @@ export const AI_MODEL_PREFERENCE_SURFACES = [
   "writeWithAi",
   "improveWriting",
   "askAi",
-  "imageGeneration",
 ] as const;
 
 export type TAiModelPreferenceSurface =

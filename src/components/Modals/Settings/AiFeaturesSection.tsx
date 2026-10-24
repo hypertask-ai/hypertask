@@ -15,7 +15,6 @@ import toast from "react-hot-toast";
 import { useTeamAiProviders } from "@/hooks/useTeamAiProviders";
 import { useTeamCustomEndpoint } from "@/hooks/useTeamCustomEndpoint";
 import {
-  aiImageModelDefinitions,
   aiModelDefinitions,
   aiModelOptions,
   getDefaultAiModelOptionForPlan,
@@ -27,7 +26,6 @@ import {
 import {
   AI_FEATURES,
   getSystemModelsForFeature,
-  resolveImageModel,
   resolveSystemModel,
   resolveUserFacingModelOption,
   type AiFeature,
@@ -84,7 +82,6 @@ const FEATURE_SECTIONS: FeatureSection[] = [
       { feature: "improveWriting", description: "Editor improvements and AI slash commands" },
       { feature: "askAi", description: "Answers questions from search" },
       { feature: "boardGeneration", description: "Creates a starter board during onboarding" },
-      { feature: "imageGeneration", description: "Generates images from task mentions" },
       { feature: "hyperAi", description: "Replies when people mention @HyperAI" },
     ],
   },
@@ -112,8 +109,6 @@ const modelDefinition = (model: string, haiku55Enabled = false) => {
 
 const modelLabel = (model: string, haiku55Enabled = false) =>
   getAiModelOptionById(model, haiku55Enabled)?.title ??
-  aiImageModelDefinitions.find((definition) => definition.key === model)
-    ?.label ??
   modelDefinition(model, haiku55Enabled)?.label ??
   model.split("/").pop() ??
   model;
@@ -394,16 +389,6 @@ const AiFeaturesSection = () => {
           priceTier: modelDefinition(model.model, haiku55Enabled)?.priceTier,
         }));
     }
-    if (kind === "image") {
-      return aiImageModelDefinitions
-        .filter((definition) => enabledProviders.has(definition.provider))
-        .map((definition) => ({
-          value: definition.key,
-          label: definition.label,
-          provider: definition.provider,
-          priceTier: 3,
-        }));
-    }
     return visibleModelOptions.flatMap((option) => {
       const definition = getAiModelDefinition(option.modelKey);
       if (
@@ -434,12 +419,6 @@ const AiFeaturesSection = () => {
       return (
         resolveSystemModel(feature as SystemFeature, providerSettings, haiku55Enabled, defaultContext)?.model ??
         getSystemModelsForFeature(feature as SystemFeature, haiku55Enabled, defaultContext)[0].model
-      );
-    }
-    if (kind === "image") {
-      return (
-        resolveImageModel(providerSettings)?.key ??
-        aiImageModelDefinitions[0].key
       );
     }
     return (
@@ -588,8 +567,7 @@ const AiFeaturesSection = () => {
                     : null;
                   const hasModel = AI_FEATURES[feature].modelKind !== "none";
                   const userInitiated =
-                    AI_FEATURES[feature].modelKind === "catalog" ||
-                    AI_FEATURES[feature].modelKind === "image";
+                    AI_FEATURES[feature].modelKind === "catalog";
 
                   return (
                     <div

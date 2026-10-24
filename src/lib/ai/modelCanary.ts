@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { streamText } from "ai";
 import { selectModel } from "@/lib/ai/chatStream/models";
-import { aiImageModelDefinitions, aiModelOptions, getAiModelDefinition, isAiModelOptionVisible, type TAiModelOption } from "@/lib/aiModelOptions";
+import { aiModelOptions, getAiModelDefinition, isAiModelOptionVisible, type TAiModelOption } from "@/lib/aiModelOptions";
 import { getAiProviderInfo, resolveTeamProviderEnabled, type TByokProviderKey } from "@/lib/aiProviders";
 import { resolveTeamByokApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
@@ -34,7 +34,7 @@ export type ModelCanaryRow = {
   label: string;
   model: string;
   lane: string;
-  capability: "chat" | "image";
+  capability: "chat";
   outcome: Outcome;
   stage: Stage | null;
   statusCode: number | null;
@@ -64,9 +64,6 @@ export function modelCanaryInventory(): Target[] {
         provider: definition && definition.provider !== "custom" ? getAiProviderInfo(definition.provider)?.byokKey : undefined,
       };
     }),
-    ...aiImageModelDefinitions.map((definition) => ({
-      optionId: definition.key, label: definition.label, model: definition.gatewayModel, capability: "image" as const,
-    })),
   ];
 }
 
@@ -255,9 +252,9 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
           lastPassAt: prior?.lastPassAt ?? null,
           dailyFailDates: (prior?.dailyFailDates ?? []).filter((date) => date >= new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10)),
         };
-        if (target.capability === "image" || target.option?.source === "custom") {
+        if (target.option?.source === "custom") {
           row.outcome = "skipped";
-          row.safeError = target.capability === "image" ? "Image generation is not probed" : "skipped_no_test_key";
+          row.safeError = "skipped_no_test_key";
         } else if (Date.now() < deadline - PROBE_MS && await redis.get(LOCK) === token) {
           const controller = new AbortController();
           let timer: ReturnType<typeof setTimeout> | undefined;

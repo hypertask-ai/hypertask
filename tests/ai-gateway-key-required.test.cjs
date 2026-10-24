@@ -36,17 +36,10 @@ test("gateway tags stay on chat calls without Grok fallbacks", () => {
 test("missing team gateway key is an expected access error", () => {
   delete process.env.AI_GATEWAY_API_KEY;
   delete process.env.AI_GATEWAY_ENABLED;
-  const { resolveAiModel, resolveGatewayImageModel, resolveGatewayModel } =
-    loadModelProvider();
+  const { resolveAiModel, resolveGatewayModel } = loadModelProvider();
 
   assert.throws(
     () => resolveGatewayModel("google/gemini-3.5-flash-lite"),
-    (error) =>
-      error?.name === "AiGatewayKeyRequiredError" &&
-      /dedicated team AI Gateway key/.test(error.message),
-  );
-  assert.throws(
-    () => resolveGatewayImageModel("openai/gpt-image-1"),
     (error) =>
       error?.name === "AiGatewayKeyRequiredError" &&
       /dedicated team AI Gateway key/.test(error.message),

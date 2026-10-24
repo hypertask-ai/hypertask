@@ -1155,58 +1155,6 @@ test("openai and claude require gateway or direct byok keys", () => {
   );
 });
 
-test("gateway text and image models require the explicit team key", async () => {
-  resetModules();
-  const teamGatewayKey = "vck_team_image_key";
-  const platformGatewayKey = "vck_platform_gateway_key";
-  process.env.AI_GATEWAY_API_KEY = platformGatewayKey;
-
-  const { resolveGatewayImageModel, resolveGatewayModel } = loadTs(
-    "src/app/api/ai/_lib/modelProvider.ts",
-  );
-
-  assert.throws(
-    () => resolveGatewayModel("google/gemini-3-pro-image"),
-    /dedicated team AI Gateway key/,
-  );
-  assert.throws(
-    () => resolveGatewayImageModel("openai/gpt-image-1"),
-    /dedicated team AI Gateway key/,
-  );
-
-  const languageImageModel = resolveGatewayModel(
-    "google/gemini-3-pro-image",
-    teamGatewayKey,
-  );
-  const nativeImageModel = resolveGatewayImageModel(
-    "openai/gpt-image-1",
-    teamGatewayKey,
-  );
-  for (const model of [languageImageModel, nativeImageModel]) {
-    const headers = await model.config.headers();
-    assert.equal(headers.authorization, `Bearer ${teamGatewayKey}`);
-    assert.notEqual(headers.authorization, `Bearer ${platformGatewayKey}`);
-  }
-
-  const imageRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/generate-image/route.ts"),
-    "utf8",
-  );
-  assert.match(
-    imageRoute,
-    /getTeamGatewayApiKey\(\{[\s\S]*?trustedTeamId: teamContext\.teamId,[\s\S]*?\}\)/,
-  );
-  assert.match(imageRoute, /resolveGatewayModel\(modelId, gatewayApiKey\)/);
-  assert.match(
-    imageRoute,
-    /resolveGatewayImageModel\(modelId, gatewayApiKey\)/,
-  );
-  assert.match(
-    imageRoute,
-    /sharedAiAllowanceErrorMessage\(error\)[\s\S]*?status: 429/,
-  );
-});
-
 test("provider defaults and explicit team settings resolve consistently", () => {
   const {
     enabledProvidersForTeam,
@@ -1282,22 +1230,13 @@ test("provider defaults and explicit team settings resolve consistently", () => 
 });
 
 test("AI model mention labels resolve to a base model option", () => {
-  const { resolveAiImageModelMention, resolveAiModelMention } = loadTs(
+  const { resolveAiModelMention } = loadTs(
     "src/lib/aiModelOptions.ts",
   );
 
   const resolved = resolveAiModelMention("Opus 5.5");
   assert.equal(resolved.definition.key, "claude-opus-5-5");
   assert.equal(resolved.modelOption.id, "claude-opus-5-5-instant");
-
-  assert.equal(
-    resolveAiImageModelMention("Nano Banana").gatewayModel,
-    "google/gemini-3-pro-image",
-  );
-  assert.equal(
-    resolveAiImageModelMention("GPT Image").gatewayModel,
-    "openai/gpt-image-1",
-  );
 });
 
 test("disabled provider selections fall back and gateway-only models keep full slugs", async () => {

@@ -10,14 +10,11 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
   createGateway,
-  wrapImageModel,
   wrapLanguageModel,
-  type ImageModel,
   type LanguageModel,
   type LanguageModelMiddleware,
 } from "ai";
 import {
-  createImageAllowanceMiddleware,
   createSharedAllowanceMiddleware,
   gatewayCatalogModelSlug,
   modelPricing,
@@ -77,7 +74,6 @@ export type AiGatewayFeature =
   | "editor"
   | "task-writer"
   | "hyper-mentioned"
-  | "generate-image"
   | "custom-instructions"
   | "smart-label"
   | "onboarding-board"
@@ -155,32 +151,6 @@ function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
   });
   allowanceFundedModels.set(funded, allowanceUsd);
   return funded;
-}
-
-function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
-  const model = createGateway({ apiKey: gatewayApiKey }).imageModel(
-    gatewayCatalogModelSlug(modelSlug),
-  );
-  const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
-  return fundingSource !== "customer"
-    ? wrapImageModel({
-        model,
-        providerId: "gateway",
-        middleware: createImageAllowanceMiddleware({
-          fundingSource,
-          resolvePolicy: async (teamId) => {
-            const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
-            return resolveTeamAllowancePolicy(teamId, fundingSource);
-          },
-          allowanceUsd:
-            fundingSource === "shared"
-              ? FREE_TEAM_AI_ALLOWANCE_USD
-              : PAID_TEAM_AI_ALLOWANCE_USD,
-          gatewayApiKey,
-          modelSlug,
-        }),
-      })
-    : model;
 }
 
 export function isAiGatewayEnabled() {
@@ -730,24 +700,8 @@ function resolveUntracedGatewayModel(
   );
 }
 
-export function resolveGatewayImageModel(
-  modelSlug: string,
-  gatewayApiKey?: string,
-): ImageModel {
-  const teamKey = isVercelAiGatewayKey(gatewayApiKey)
-    ? gatewayApiKey?.trim()
-    : undefined;
-  if (teamKey) {
-    return gatewayImageModel(modelSlug, teamKey);
-  }
-
-  throw new AiGatewayKeyRequiredError(
-    `A dedicated team AI Gateway key is required to run "${modelSlug}".`,
-  );
-}
-
 export function gatewayProviderOptionsForModel(
-  model: LanguageModel | ImageModel,
+  model: LanguageModel,
   feature: AiGatewayFeature,
   tags?: AiGatewayTags,
 ): GatewayTaggedProviderOptions | undefined {

@@ -84,17 +84,6 @@ export type TAiModelDefinition = {
   premium?: boolean;
 };
 
-export type TAiImageModelKey = "nano-banana" | "gpt-image";
-
-export type TAiImageModelDefinition = {
-  key: TAiImageModelKey;
-  label: string;
-  gatewayModel: string;
-  provider: TAiProviderKey;
-  generation: "language" | "image";
-  premium: true;
-};
-
 export const aiModelDefinitions: TAiModelDefinition[] = [
   {
     key: "gpt-6-luna",
@@ -222,25 +211,6 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     modelClass: "custom",
     label: "Custom endpoint",
     provider: "custom",
-  },
-];
-
-export const aiImageModelDefinitions: TAiImageModelDefinition[] = [
-  {
-    key: "nano-banana",
-    label: "Nano Banana",
-    gatewayModel: "google/gemini-3-pro-image",
-    provider: "google",
-    generation: "language",
-    premium: true,
-  },
-  {
-    key: "gpt-image",
-    label: "GPT Image",
-    gatewayModel: "openai/gpt-image-1",
-    provider: "openai",
-    generation: "image",
-    premium: true,
   },
 ];
 
@@ -787,19 +757,6 @@ export function resolveAiModelMention(value: string | null | undefined, haiku55E
 
   const modelOption = getAiModelOptionById(getNearestAiModelOption(definition.key)?.id, haiku55Enabled);
   return modelOption ? { definition: getAiModelDefinition(modelOption.modelKey)!, modelOption } : undefined;
-}
-
-export function resolveAiImageModelMention(
-  value: string | null | undefined
-) {
-  const normalized = value?.trim().replace(/^@/, "").toLowerCase();
-  if (!normalized) return undefined;
-
-  return aiImageModelDefinitions.find(
-    (model) =>
-      model.label.toLowerCase() === normalized ||
-      model.key.toLowerCase() === normalized
-  );
 }
 
 export function getAiModelEfforts(

@@ -1,10 +1,7 @@
 import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
-import {
-  aiImageModelDefinitions,
-  aiModelDefinitions,
-} from "@/lib/aiModelOptions";
+import { aiModelDefinitions } from "@/lib/aiModelOptions";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "../search/document";
 import {
@@ -57,7 +54,7 @@ const taskSearchByParam = async (
     const modelMentionArray =
       param === "all" || !normalizedModelQuery
         ? []
-        : [...aiModelDefinitions, ...aiImageModelDefinitions]
+        : aiModelDefinitions
             .filter((model) =>
               [model.label, model.key].some((value) =>
                 normalizeModelMentionSearch(value).includes(
