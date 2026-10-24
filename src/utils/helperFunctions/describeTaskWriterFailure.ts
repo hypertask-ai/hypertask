@@ -3,7 +3,7 @@ export function describeTaskWriterStreamFailure(text: string): string | null {
     try {
       const error = JSON.parse(match[1]);
       if (error.code === "empty-task-writer-draft" || error.code === "task-writer-stream-error" || error.code === "PLAN_LIMIT_REACHED") {
-        if (typeof error.message === "string" && error.message.trim()) return error.message;
+        if (error.code === "PLAN_LIMIT_REACHED" && typeof error.message === "string" && error.message.trim()) return error.message;
         if (typeof error.content === "string") return error.content;
       }
     } catch {
@@ -20,7 +20,7 @@ export async function describeTaskWriterFailure(
   }
   try {
     const body = await response.json();
-    if (typeof body?.message === "string" && body.message.trim()) return body.message;
+    if (body?.code === "PLAN_LIMIT_REACHED" && typeof body.message === "string" && body.message.trim()) return body.message;
     if (typeof body?.error === "string" && body.error.trim()) return body.error;
   } catch {
   }

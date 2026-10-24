@@ -13,7 +13,7 @@ function loadTs(relativePath) {
   return jiti(path.join(root, relativePath));
 }
 
-const { describeTaskWriterFailure } = loadTs(
+const { describeTaskWriterFailure, describeTaskWriterStreamFailure } = loadTs(
   "src/utils/helperFunctions/describeTaskWriterFailure.ts"
 );
 
@@ -56,4 +56,12 @@ test("an empty JSON error field does not produce a blank message", async () => {
     })
   );
   assert.match(msg, /502/);
+});
+
+test("only plan-limit refusals prefer message over the legacy error or stream content", async () => {
+  for (const code of [undefined, "task-writer-stream-error", "PLAN_LIMIT_REACHED"]) {
+    const body = { code, error: "Legacy error", content: "Legacy stream content", message: "Plan refusal" };
+    assert.equal(await describeTaskWriterFailure(Response.json(body, { status: 402 })), code === "PLAN_LIMIT_REACHED" ? "Plan refusal" : "Legacy error");
+    if (code) assert.equal(describeTaskWriterStreamFailure(`event: error\ndata: ${JSON.stringify(body)}\n\n`), code === "PLAN_LIMIT_REACHED" ? "Plan refusal" : "Legacy stream content");
+  }
 });

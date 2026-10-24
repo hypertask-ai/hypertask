@@ -37,7 +37,7 @@ async function withWriter(config, check) {
       creates.push(body);
       if (config.onCreate) await config.onCreate(body);
       if (config.createThrows) throw new Error('Create failed');
-      if (config.createFails) return { error: true };
+      if (config.createFails) return { error: true, ErrorMessage: config.createFailure };
       if (config.missingTask) return { error: false, resposne: {} };
       return { resposne: { newTask: { id: 91, uniqueIndex: 44, projectId: body.projectId, sectionId: body.sectionId, ticketNumber: 'QASA-44' } } };
     } });
@@ -618,8 +618,32 @@ test('an error-only stream never claims that the model is writing', async () => 
   });
 });
 
+test('only structured plan-limit save errors replace the legacy create failure message', async () => {
+  for (const planLimit of [false, true]) {
+    const refusal = { message: 'Server write refused', ...(planLimit ? { code: 'PLAN_LIMIT_REACHED' } : {}) };
+    await withWriter({ createFails: true, createFailure: { response: { data: refusal } } }, async ({ createComposedTask, project }) => {
+      await assert.rejects(createComposedTask({ text: 'My note', files: [], project, userId: 985 }), error => {
+        assert.equal(error.message, planLimit ? refusal.message : 'Couldn’t create the task. Your note is still here. Try again.');
+        assert.equal(error.code, planLimit ? 'PLAN_LIMIT_REACHED' : undefined);
+        return true;
+      });
+    });
+  }
+});
+
+test('a structured Free plan refusal keeps the note unsaved instead of using the writer fallback', async () => {
+  for (const explainWriterFailure of [false, true]) {
+    const response = Response.json({ code: 'PLAN_LIMIT_REACHED', message: 'Free plan ticket limit reached' }, { status: 402 });
+    await withWriter({ response }, async ({ createComposedTask, project, creates }) => {
+      await assert.rejects(createComposedTask({ text: 'My note', files: [], project, userId: 985, explainWriterFailure }), error =>
+        error.code === 'PLAN_LIMIT_REACHED' && error.status === 402 && error.message === 'Free plan ticket limit reached');
+      assert.deepEqual(creates, []);
+    });
+  }
+});
+
 test('HTPR-7085 failed writer shows the server reason when asked, the generic line otherwise, and still saves the note', async () => {
-  const failing = { ok: false, status: 402, json: async () => ({ error: 'Monthly AI allowance used up' }), text: async () => '' };
+  const failing = { ok: false, status: 402, clone: () => new Response(JSON.stringify({ error: 'Monthly AI allowance used up' })), json: async () => ({ error: 'Monthly AI allowance used up' }), text: async () => '' };
   const sse = 'event: error\ndata: {"code":"task-writer-stream-error","content":"Provider is down"}\n\n';
   const cases = [
     [{ response: failing }, true, 'Monthly AI allowance used up'],

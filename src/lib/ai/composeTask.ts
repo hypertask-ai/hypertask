@@ -129,7 +129,10 @@ export async function createComposedTask({
     });
     if (!response.ok) {
       if (response.status === 402) {
-        throw Object.assign(new Error(await describeTaskWriterFailure(response)), { status: 402 });
+        const refusal = await response.clone().json().catch(() => null);
+        if (refusal?.code === "PLAN_LIMIT_REACHED") {
+          throw Object.assign(new Error(toErrorMessage(refusal, "Could not create this ticket")), { status: 402, code: refusal.code });
+        }
       }
       if (explainWriterFailure) writerFailureReason = await describeTaskWriterFailure(response);
       throw new Error("Task writer unavailable");
@@ -223,7 +226,7 @@ export async function createComposedTask({
     title = drafts[0].title;
     description = drafts[0].description;
   } catch (error) {
-    if ((error as { status?: number })?.status === 402) throw error;
+    if ((error as { code?: string })?.code === "PLAN_LIMIT_REACHED") throw error;
     writerFailed = true;
     drafts = [];
   }
@@ -279,10 +282,10 @@ export async function createComposedTask({
       if (created?.error || !task?.id) {
         const failure = created?.ErrorMessage;
         const body = (failure as { response?: { data?: unknown } } | undefined)?.response?.data ?? failure;
-        throw Object.assign(
-          new Error(toErrorMessage(body, "Couldn’t create the task. Your note is still here. Try again.")),
-          body && typeof body === "object" ? body : {},
-        );
+        if ((body as { code?: string } | undefined)?.code === "PLAN_LIMIT_REACHED") {
+          throw Object.assign(new Error(toErrorMessage(body, "Could not create this ticket")), body);
+        }
+        throw new Error("Couldn’t create the task. Your note is still here. Try again.");
       }
       tasks.push(task);
       bindCreateTaskUploads(task.id, files);
