@@ -180,6 +180,7 @@ function modelTurn(enabled, { persisted = true, failed = false, stateless = fals
     "@/app/api/ai/chat/stream/persistAssistantMessage": { persistAssistantMessage: async (args) => { events.push(["persist", args]); return persisted; } },
     "@/utils/controllers/comments/linkifyTicketRefs": { linkifyTicketRefs: async (v) => v },
     "@/lib/ai/chatStream/prompt": { AGENT_SYSTEM_PROMPT: "original prompt" },
+    "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, aiPromptCachingEnabled: async () => false },
     "@/lib/ai/chatStream/content": { createUserContent: () => "question" },
     "@/lib/ai/tools/metadata": { writeToolNames: new Set() },
     "@/lib/ai/chatStream/title": {},
@@ -195,7 +196,7 @@ function modelTurn(enabled, { persisted = true, failed = false, stateless = fals
     "./chatNames": { nameChatFromFirstMessage: async () => null },
   });
   return { events, captured, run: () => runModelTurn({
-    body: stateless ? {} : { session_id: "s", assistant_message_id: "m" }, dbUser: { id: 985 }, userMessagePersisted: true,
+    body: stateless ? {} : { session_id: "s", assistant_message_id: "m" }, dbUser: { id: 985 }, selected: { model: "test-model" }, userMessagePersisted: true,
     gatewayTags: {}, streamLease: {}, providerAbort: new AbortController(), generationFinishedWithError: failed,
     finish: (status, payload) => { events.push(["done", status, payload]); }, send() {},
   }, {}, {}) };
