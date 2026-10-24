@@ -15,6 +15,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | ship | Start of every session (`/ship <ticket>`): the map of steps, the proof checklist, the merge and Done block | .claude/skills/ship/SKILL.md |
 | maintain-verification-skill | Weekly source-only timer and GitHub feature-map check; runner-owned live QA (pstack by Lauren Tan, MIT) | .claude/skills/maintain-verification-skill/SKILL.md |
 | scriptify | Weekly routine discovery, deterministic scripts and runner handoff | .claude/skills/scriptify/SKILL.md |
+| update-ai-models | Model-watch tickets or catalog refresh: automatic existing-class OpenAI/Anthropic updates, new-class approval and premium holds | .claude/skills/update-ai-models/SKILL.md |
 | setup-runner | `/setup-runner [number]` in a fresh session: set up its runner login and identity, then follow /ship without a ticket | .claude/skills/setup-runner/SKILL.md |
 | clean-up | After Done (from /ship), or by hand with `/clean-up`: removes this session's own finished worktrees and branches | .claude/skills/clean-up/SKILL.md |
 | reflect | Last /ship step, once after the last ticket's Clean up: three reviewers and a synthesizer turn this session's lessons into proposed repo skill edits for HT Product Lead to approve (pstack by Lauren Tan, MIT) | .claude/skills/reflect/SKILL.md |
