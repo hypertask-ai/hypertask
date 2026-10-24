@@ -1,5 +1,5 @@
 version: 8
-last_updated: 2026-10-23
+last_updated: 2026-10-24
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -113,6 +113,18 @@ feature_map_weekly:
     - node .claude/skills/maintain-verification-skill/scripts/feature-map-check.mjs
   fixtures: offline_with_temporary_home_and_no_secrets
   app_driving: false
+
+premerge_verify_qa:
+  ticket: https://app.hypertask.ai/detail/project-4060/673
+  context: browser-smoke
+  required: false
+  report_only: true
+  blocks_merge: false
+  script: .github/scripts/verify-qa-premerge.mjs
+  artifact: verify-qa-premerge
+  default_journey: inbox-cycle
+  default_feature_map: .claude/skills/verify-qa/reference/feature-map/inbox.md
+  app_smoke_build_reuse: deferred
 
 ai_model_watch:
   workflow: .github/workflows/ai-model-watch.yml

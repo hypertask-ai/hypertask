@@ -7,7 +7,9 @@ import {
   ModalRowElementContainer,
 } from "@/components/Common/CommonModalComponents";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
-import { format } from "date-fns";
+import { endOfDay, format } from "date-fns";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7774_INCLUSIVE_CALENDAR_RANGE_FLAG } from "@/lib/flags/keys";
 import { useCallback, useState } from "react";
 import { ModalBody } from "reactstrap";
 import formatDateDifference from "@/utils/generateTime";
@@ -46,6 +48,7 @@ interface IClosePayload {
 
 const UpdatedAtRangeFilterModal: React.FC<Props> = ({ closeHandler, mode }) => {
   const [selectedScreen, setSelectedScreen] = useState<TScreens>("Sugar");
+  const inclusiveCalendarRange = useFlag(HTPR_7774_INCLUSIVE_CALENDAR_RANGE_FLAG);
 
   const callbackToSwitchScreen = (screen: TScreens) =>
     setSelectedScreen(screen);
@@ -78,9 +81,10 @@ const UpdatedAtRangeFilterModal: React.FC<Props> = ({ closeHandler, mode }) => {
           return;
         }
 
+        const toDate = payload.to && (inclusiveCalendarRange ? endOfDay(payload.to) : payload.to);
         handleClose({
           fromDate: payload.from?.toISOString() ?? null,
-          toDate: payload.to?.toISOString() ?? null,
+          toDate: toDate?.toISOString() ?? null,
           condition: null,
           selectedDate: payload.from?.toISOString() ?? null,
           dynamicRange: null,
@@ -130,7 +134,7 @@ const UpdatedAtRangeFilterModal: React.FC<Props> = ({ closeHandler, mode }) => {
         }
       }
     },
-    [selectedScreen, handleClose]
+    [selectedScreen, handleClose, inclusiveCalendarRange]
   );
 
   const getModeForScreens = useCallback(() => {
