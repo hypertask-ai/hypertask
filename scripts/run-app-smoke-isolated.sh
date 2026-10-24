@@ -256,7 +256,8 @@ if [ "$dependencies_mount" != "$trusted_root/node_modules" ]; then
     "$runtime_image" bash -euo pipefail -c '
       for generated_client in .prisma @prisma; do
         [ -d "/dependencies/$generated_client" ]
-        cp -a "/dependencies/$generated_client" /out/
+        cp -a --no-preserve=ownership "/dependencies/$generated_client" /out/
+        chmod -R a+rwX "/out/$generated_client"
       done
     ' || {
     echo "Generated Prisma client missing from the candidate dependencies." >&2

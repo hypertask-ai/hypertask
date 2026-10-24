@@ -301,6 +301,14 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.match(
     isolated,
+    /cp -a --no-preserve=ownership "\/dependencies\/\$generated_client" \/out\//,
+  );
+  assert.match(
+    isolated,
+    /for generated_client in \.prisma @prisma; do[\s\S]*?chmod -R a\+rwX "\/out\/\$generated_client"/,
+  );
+  assert.match(
+    isolated,
     /Generated Prisma client missing from the candidate dependencies\./,
   );
   assert.match(seed, /writeFile\(/);
