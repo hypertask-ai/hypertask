@@ -10,6 +10,7 @@ import { FEATURE_FLAG_QA_USER_ID } from "@/lib/auth/ownerOrQaIds";
 import { redactSecrets } from "@/lib/errors/errorFingerprint";
 import { redactErrorText } from "@/lib/telemetry/errorSanitization";
 import { reportError } from "@/lib/errors/reportError";
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 
@@ -103,6 +104,7 @@ export async function probeModelCanary(option: TAiModelOption, lane: string, cre
     }
     let text = "";
     const result = streamText({
+      experimental_download: downloadWithoutBrotli,
       model: selected.model,
       ...selected.settings,
       maxOutputTokens: 2048,

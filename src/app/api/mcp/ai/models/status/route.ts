@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readModelCanaryStatus } from "@/lib/ai/modelCanary";
+import { reportError } from "@/lib/errors/reportError";
 import { wrapMcpRoute, validateMcpRouteAuth, checkMcpRouteRateLimit } from "@/lib/mcp/routeWrapper";
 
 export const runtime = "nodejs";
@@ -17,7 +18,14 @@ export const GET = wrapMcpRoute(async (request: NextRequest) => {
       return NextResponse.json({ success: false, error: "Invalid or missing authentication token." }, { status: 401, headers });
     }
     return NextResponse.json({ success: true, ...await readModelCanaryStatus() }, { headers });
-  } catch {
+  } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/models/status",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     return NextResponse.json({ success: false, error: "Model status is unavailable" }, { status: 503, headers });
   }
 });
