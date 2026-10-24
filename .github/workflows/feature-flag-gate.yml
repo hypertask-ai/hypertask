@@ -26,8 +26,13 @@ jobs:
       pull-requests: read
     outputs:
       statuses: ${{ steps.evaluate.outputs.statuses }}
+      heads: ${{ steps.evaluate.outputs.heads }}
       evaluation_failed: ${{ steps.evaluate.outputs.evaluation_failed }}
     steps:
+      - name: Record evaluation start time
+        id: started
+        run: echo "evaluated_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >>"$GITHUB_OUTPUT"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: production
@@ -44,6 +49,7 @@ jobs:
       - name: Evaluate the current pull-request head with trusted code
         id: evaluate
         env:
+          EVALUATED_AT: ${{ steps.started.outputs.evaluated_at }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -60,6 +66,7 @@ jobs:
           finish_evaluation() {
             local exit_code=$?
             printf 'statuses=%s\n' "$(jq -sc 'group_by([.pr_number, .head_sha]) | map(last)' "$queued_statuses")" >>"$GITHUB_OUTPUT"
+            printf 'heads=%s\n' "$(jq -sc 'map(.head_sha) | unique' "$queued_statuses")" >>"$GITHUB_OUTPUT"
             printf 'evaluation_failed=%s\n' "$(( exit_code == 2 ? 2 : 0 ))" >>"$GITHUB_OUTPUT"
             rm -rf "$gate_tmp"
             return "$exit_code"
@@ -79,8 +86,8 @@ jobs:
 
           queue_status() {
             jq -c --argjson pr_number "$PR_NUMBER" --arg head_sha "$head_sha" \
-              --arg fingerprint "$fingerprint" \
-              '{pr_number: $pr_number, head_sha: $head_sha, fingerprint: $fingerprint, payload: .}' "$1" >>"$queued_statuses"
+              --arg fingerprint "$fingerprint" --arg evaluated_at "$EVALUATED_AT" \
+              '{pr_number: $pr_number, head_sha: $head_sha, fingerprint: $fingerprint, evaluated_at: $evaluated_at, payload: .}' "$1" >>"$queued_statuses"
           }
 
           publish_error_status() {
@@ -255,8 +262,12 @@ jobs:
     name: publish-feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        head_sha: ${{ fromJSON(needs.feature-flag-gate.outputs.heads) }}
     concurrency:
-      group: feature-flag-gate-publish
+      group: feature-flag-gate-publish-${{ matrix.head_sha }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -273,6 +284,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PUBLISH_HEAD_SHA: ${{ matrix.head_sha }}
           PREPARED_STATUSES: ${{ needs.feature-flag-gate.outputs.statuses }}
           EVALUATION_FAILED: ${{ needs.feature-flag-gate.outputs.evaluation_failed }}
         run: |
@@ -291,8 +303,13 @@ jobs:
       pull-requests: read
     outputs:
       statuses: ${{ steps.evaluate.outputs.statuses }}
+      heads: ${{ steps.evaluate.outputs.heads }}
       evaluation_failed: ${{ steps.evaluate.outputs.evaluation_failed }}
     steps:
+      - name: Record evaluation start time
+        id: started
+        run: echo "evaluated_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >>"$GITHUB_OUTPUT"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: production
@@ -309,6 +326,7 @@ jobs:
       - name: Reconcile every open production pull request
         id: evaluate
         env:
+          EVALUATED_AT: ${{ steps.started.outputs.evaluated_at }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -323,6 +341,7 @@ jobs:
           finish_evaluation() {
             local exit_code=$?
             printf 'statuses=%s\n' "$(jq -sc 'group_by([.pr_number, .head_sha]) | map(last)' "$queued_statuses")" >>"$GITHUB_OUTPUT"
+            printf 'heads=%s\n' "$(jq -sc 'map(.head_sha) | unique' "$queued_statuses")" >>"$GITHUB_OUTPUT"
             printf 'evaluation_failed=%s\n' "$(( exit_code == 2 ? 2 : 0 ))" >>"$GITHUB_OUTPUT"
             rm -rf "$gate_tmp"
             return "$exit_code"
@@ -344,8 +363,8 @@ jobs:
               pr_number=$(jq -sr --arg sha "$1" 'map(select(.head.sha == $sha))[0].number' "$rows") || return 1
             fi
             jq -c --argjson pr_number "$pr_number" --arg head_sha "$1" \
-              --arg fingerprint "$fingerprint" \
-              '{pr_number: $pr_number, head_sha: $head_sha, fingerprint: $fingerprint, payload: .}' "$2" >>"$queued_statuses"
+              --arg fingerprint "$fingerprint" --arg evaluated_at "$EVALUATED_AT" \
+              '{pr_number: $pr_number, head_sha: $head_sha, fingerprint: $fingerprint, evaluated_at: $evaluated_at, payload: .}' "$2" >>"$queued_statuses"
           }
 
           publish_reconciliation_error() {
@@ -540,8 +559,12 @@ jobs:
     name: publish-reconciled-feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        head_sha: ${{ fromJSON(needs.reconcile-open-pull-requests.outputs.heads) }}
     concurrency:
-      group: feature-flag-gate-publish
+      group: feature-flag-gate-publish-${{ matrix.head_sha }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -558,6 +581,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PUBLISH_HEAD_SHA: ${{ matrix.head_sha }}
           PREPARED_STATUSES: ${{ needs.reconcile-open-pull-requests.outputs.statuses }}
           EVALUATION_FAILED: ${{ needs.reconcile-open-pull-requests.outputs.evaluation_failed }}
         run: |

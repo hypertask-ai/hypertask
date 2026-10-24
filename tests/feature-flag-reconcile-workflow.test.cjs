@@ -92,6 +92,7 @@ function featureFlagStatus(pull, overrides = {}, headCount = 1) {
   const titleHash = createHash("sha256").update(`${pull.title}\n${labels}`).digest("hex").slice(0, 16);
   return {
     context: "feature-flag-gate", state: "success", description: "ok", updated_at: new Date().toISOString(),
+    created_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
     target_url: `https://example.invalid/actions/runs/previous#ffg=${pull.base.sha}.${titleHash}.heads=${headCount}`,
     ...overrides,
   };
@@ -128,6 +129,7 @@ function runWorkflow(t, {
     RUNNER_TEMP: fixture,
     REPO: "fixture/repository",
     RUN_URL: "https://example.invalid/actions/runs/1",
+    EVALUATED_AT: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
     FIXTURE_PARSER_FAILURE: String(parserInstallFailure),
     PR_NUMBER: "42",
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
@@ -264,7 +266,10 @@ exit 1
   assert.ifError(evaluation.error);
   const outputs = Object.fromEntries(fs.readFileSync(env.GITHUB_OUTPUT, "utf8").trim().split("\n")
     .filter(Boolean).map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
-  const records = prepareStatuses(JSON.parse(outputs.statuses || "[]"), pull);
+  const evaluatedRecords = JSON.parse(outputs.statuses || "[]");
+  assert.deepEqual(JSON.parse(outputs.heads || "[]"), [...new Set(evaluatedRecords.map((record) => record.head_sha))].sort());
+  assert.ok(evaluatedRecords.every((record) => record.evaluated_at === env.EVALUATED_AT));
+  const records = prepareStatuses(evaluatedRecords, pull);
   if (statusesBeforePublish) {
     fs.writeFileSync(env.FIXTURE_STATUSES, JSON.stringify(statusesBeforePublish(pull)));
   }
@@ -276,7 +281,7 @@ exit 1
   if (records.length) {
     publication = spawnSync("bash", ["-e", "-c", shellScript(job === reconciliation ? reconcilePublisher : perPrPublisher)], {
       cwd: checkout,
-      env: { ...env, PREPARED_STATUSES: JSON.stringify(records), EVALUATION_FAILED: outputs.evaluation_failed },
+      env: { ...env, PUBLISH_HEAD_SHA: head, PREPARED_STATUSES: JSON.stringify(records), EVALUATION_FAILED: outputs.evaluation_failed },
       encoding: "utf8", timeout: 30_000,
     });
     assert.ifError(publication.error);
@@ -311,7 +316,7 @@ for (const state of ["success", "failure"]) {
   });
 }
 
-test("reconcile: a fork PR is still judged and refused even when publication deduplicates a final status", (t) => {
+test("reconcile: a fork PR rejection replaces a success with the same fingerprint", (t) => {
   const { result, output, posts, records } = runWorkflow(t, {
     forkHead: true,
     statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull)] }),
@@ -321,8 +326,7 @@ test("reconcile: a fork PR is still judged and refused even when publication ded
   assert.match(output, /evaluated 1, skipped 0/);
   assert.equal(records[0].payload.state, "failure");
   assert.match(records[0].payload.description, /Fork pull requests require owner review/);
-  assert.deepEqual(posts, []);
-  assert.match(output, /final feature-flag-gate status has the same fingerprint/);
+  assert.deepEqual(posts.map((post) => post.state), ["failure"]);
 });
 
 for (const change of ["base", "title", "head", "error", "pending", "missing fingerprint", "old format", "red older than 30 minutes", "labels"]) {
@@ -350,16 +354,11 @@ for (const change of ["base", "title", "head", "error", "pending", "missing fing
     assert.equal(records[0].payload.state, "success");
     assert.equal(records[0].payload.description, "ok");
     assert.equal(new URL(records[0].payload.target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
-    if (change === "red older than 30 minutes") {
-      assert.deepEqual(posts, []);
-      assert.match(output, /final feature-flag-gate status has the same fingerprint/);
-    } else {
-      assert.doesNotMatch(output, /skip #42/);
-      assert.equal(posts.length, 1);
-      assert.equal(posts[0].state, "success");
-      assert.equal(posts[0].description, "ok");
-      assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
-    }
+    assert.doesNotMatch(output, /skip #42/);
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].state, "success");
+    assert.equal(posts[0].description, "ok");
+    assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
     assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 2);
     assert.equal(calls.filter((call) => call.endpoint.endsWith("/pulls/42")).length, 2);
     assert.equal(calls.filter((call) => call.endpoint.includes("/pulls?")).length, 3);
@@ -387,8 +386,8 @@ for (const state of ["success", "failure"]) {
     assert.match(output, /evaluated 2, skipped 0/);
     assert.equal(records.length, 2);
     assert.ok(records.every((record) => record.payload.state === "failure" && /shared by multiple/.test(record.payload.description)));
-    assert.deepEqual(posts, []);
-    assert.match(output, /final feature-flag-gate status has the same fingerprint/);
+    assert.deepEqual(posts.map((post) => post.state), state === "success" ? ["failure"] : []);
+    assert.match(output, /final feature-flag-gate status has the same fingerprint and state/);
     assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 4);
   });
 }
@@ -557,15 +556,26 @@ test('publishers serialize trusted final-only code with error recovery and minim
   assert.match(reconciliation, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
   for (const evaluation of [singlePullRequest, reconciliation]) {
     assert.doesNotMatch(evaluation, /group: feature-flag-gate-publish|statuses: write|gh_api -X POST/);
-    assert.doesNotMatch(evaluation, /JOB_STARTED_AT|job_started_at|deduplicate:|Record job start time/);
-    assert.match(evaluation, /\{pr_number: \$pr_number, head_sha: \$head_sha, fingerprint: \$fingerprint, payload: \.\}/);
+    assert.doesNotMatch(evaluation, /JOB_STARTED_AT|job_started_at|deduplicate:/);
+    assert.match(evaluation, /\{pr_number: \$pr_number, head_sha: \$head_sha, fingerprint: \$fingerprint, evaluated_at: \$evaluated_at, payload: \.\}/);
     assert.match(evaluation, /elif node \.github\/scripts\/feature-flag-gate\.mjs/);
     assert.match(evaluation, /steps\.evaluate\.outputs\.statuses/);
+    assert.match(evaluation, /heads: \$\{\{ steps\.evaluate\.outputs\.heads \}\}/);
+    assert.match(evaluation, /map\(\.head_sha\) \| unique/);
+    assert.match(evaluation, /EVALUATED_AT: \$\{\{ steps\.started\.outputs\.evaluated_at \}\}/);
+    assert.match(evaluation, /date -u \+'%Y-%m-%dT%H:%M:%SZ'/);
+    assert.match(evaluation, /--arg evaluated_at "\$EVALUATED_AT"/);
+    assert.ok(evaluation.indexOf('id: started') < evaluation.indexOf('uses: actions/checkout'));
     assert.match(evaluation, /\.heads=\$evaluated_head_pr_count/);
     assert.match(evaluation, /evaluated_head_pr_count=\$fresh_head_pr_count/);
   }
   for (const publisher of [perPrPublisher, reconcilePublisher]) {
-    assert.match(publisher, /group: feature-flag-gate-publish\s+cancel-in-progress: false/);
+    assert.match(publisher, /strategy:\s+fail-fast: false\s+matrix:\s+head_sha: \$\{\{ fromJSON\(needs\.[a-z-]+\.outputs\.heads\) \}\}/);
+    const evaluationName = publisher === perPrPublisher ? "feature-flag-gate" : "reconcile-open-pull-requests";
+    assert.ok(publisher.includes(`head_sha: \${{ fromJSON(needs.${evaluationName}.outputs.heads) }}`));
+    assert.ok(publisher.includes(`PREPARED_STATUSES: \${{ needs.${evaluationName}.outputs.statuses }}`));
+    assert.match(publisher, /group: feature-flag-gate-publish-\$\{\{ matrix\.head_sha \}\}\s+cancel-in-progress: false/);
+    assert.match(publisher, /PUBLISH_HEAD_SHA: \$\{\{ matrix\.head_sha \}\}/);
     assert.match(publisher, /permissions:\s+contents: read\s+pull-requests: read\s+statuses: write\s+steps:/);
     assert.doesNotMatch(publisher, /npm ci|git fetch|feature-flag-gate\.mjs|publish_status_if_current|gh_api -X POST/);
     assert.match(publisher, /if: always\(\) && needs\./);
@@ -577,12 +587,19 @@ test('publishers serialize trusted final-only code with error recovery and minim
   assert.doesNotMatch(publisherScript + workflow, /feature-flag-publish-guard|GUARD_OWNER|\/git\/refs/);
   assert.equal((publisherScript.match(/gh_api -X POST/g) || []).length, 1);
   assert.match(publisherScript, /\.payload\.state == "success" or \.payload\.state == "failure" or \.payload\.state == "error"/);
-  assert.match(publisherScript, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\$state != "error" and/);
+  assert.match(publisherScript, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\$current\.state == \$state and/);
   assert.doesNotMatch(publisherScript, /\$current\.state == "error"/);
   assert.match(publisherScript, /if \[ -z "\$evaluated_fingerprint" \] && \[ "\$state" = "error" \]; then\s+fingerprint=""\s+else/);
   assert.match(publisherScript, /--arg target_url "\$RUN_URL\$\{fingerprint:\+#\$fingerprint\}"/);
   assert.ok(publisherScript.indexOf('.head.sha == $sha') < publisherScript.indexOf('if [ -z "$evaluated_fingerprint" ]'));
-  assert.doesNotMatch(publisherScript, /job_started_at|created_at|deduplicate|state[=:]\s*["']?pending/);
+  assert.doesNotMatch(publisherScript, /job_started_at|deduplicate|state[=:]\s*["']?pending/);
+  assert.doesNotMatch(workflow, /group: feature-flag-gate-publish\s*$/m);
+  assert.match(publisherScript, /--arg head_sha "\$PUBLISH_HEAD_SHA" '\.\[\] \| select\(\.head_sha == \$head_sha\)'/);
+  assert.match(publisherScript, /evaluated_at=\$\(jq -er '\.evaluated_at'/);
+  assert.match(publisherScript, /any\(flatten\[\];\s+\.context == "feature-flag-gate" and\s+\(\.state == "success" or \.state == "failure" or \.state == "error"\) and\s+\(\.created_at \| fromdateiso8601\) > \(\$evaluated_at \| fromdateiso8601\)/);
+  assert.match(publisherScript, /latest-statuses\.json"\) \|\| return 1/);
+  assert.ok(publisherScript.indexOf('/commits/$head_sha/statuses') < publisherScript.indexOf('any(flatten[];'));
+  assert.ok(publisherScript.indexOf('any(flatten[];') < publisherScript.indexOf('gh_api -X POST'));
   assert.match(publisherScript, /\(\$current\.target_url \/\/ "" \| split\("#"\)\[1:\] \| join\("#"\)\) == \$fingerprint/);
   assert.match(publisherScript, /fingerprint="ffg=\$base_sha\.\$\(printf '%s\\n%s' "\$title" "\$labels" \| sha256sum \| cut -c1-16\)\.heads=\$head_pr_count"/);
   assert.match(publisherScript, /\[ "\$evaluated_fingerprint" != "\$fingerprint" \]/);
@@ -595,12 +612,12 @@ test('publishers serialize trusted final-only code with error recovery and minim
 for (const job of [singlePullRequest, reconciliation]) {
   const name = job === singlePullRequest ? "per-PR" : "reconcile";
   for (const state of ["success", "failure"]) {
-    test(`${name}: newer final with the same fingerprint protects against a queued ${state}`, (t) => {
+    test(`${name}: newer equal-state final with the same fingerprint protects against a queued ${state}`, (t) => {
       const { result, output, posts } = runWorkflow(t, {
         job,
         prepareStatuses: (records) => records.map((record) => ({ ...record, payload: { ...record.payload, state } })),
         statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, {
-          created_at: "2099-01-01T00:00:00Z",
+          state, created_at: "2099-01-01T00:00:00Z",
         })] }),
       });
       assert.equal(result.status, 0, output);
@@ -658,6 +675,7 @@ for (const job of [singlePullRequest, reconciliation]) {
     test(`${name}: a final ${state} with the same fingerprint deduplicates regardless of age or description`, (t) => {
       const { result, output, posts } = runWorkflow(t, {
         job,
+        prepareStatuses: (records) => records.map((record) => ({ ...record, payload: { ...record.payload, state } })),
         statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, {
           state, created_at: "2000-01-01T00:00:00Z", description: "a different final description",
         })] }),
@@ -667,6 +685,66 @@ for (const job of [singlePullRequest, reconciliation]) {
       assert.match(output, /final feature-flag-gate status has the same fingerprint/);
     });
   }
+
+  for (const state of ["success", "failure"]) {
+    test(`${name}: an opposite ${state} verdict with the same fingerprint is replaced`, (t) => {
+      const replacement = state === "success" ? "failure" : "success";
+      const { result, output, posts } = runWorkflow(t, {
+        job,
+        prepareStatuses: (records) => records.map((record) => ({ ...record, payload: { ...record.payload, state: replacement } })),
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state })] }),
+      });
+      assert.equal(result.status, 0, output);
+      assert.deepEqual(posts.map((post) => post.state), [replacement]);
+    });
+  }
+
+  for (const state of ["success", "failure", "error"]) {
+    test(`${name}: an early error cannot replace a newer ${state}, even behind a pending context and another status page`, (t) => {
+      const { result, output, posts } = runWorkflow(t, {
+        job, parserInstallFailure: true,
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [
+          ...Array.from({ length: 100 }, () => ({ context: "another-gate", state: "success" })),
+          featureFlagStatus(pull, { state: "pending", created_at: "2099-01-02T00:00:00Z" }),
+          featureFlagStatus(pull, { state, created_at: "2099-01-01T00:00:00Z", target_url: "https://example.invalid/new-inputs" }),
+        ] }),
+      });
+      assert.equal(result.status, 2, output);
+      assert.deepEqual(posts, []);
+      assert.match(output, /final feature-flag-gate status was created after evaluation started/);
+    });
+  }
+
+  for (const current of ["none", "pending", "other context", "equal timestamp"]) {
+    test(`${name}: an early error publishes with ${current} and no later required-context final`, (t) => {
+      const evaluatedAt = "2026-01-01T00:00:00Z";
+      const { result, output, posts } = runWorkflow(t, {
+        job, parserInstallFailure: true,
+        prepareStatuses: (records) => records.map((record) => ({ ...record, evaluated_at: evaluatedAt })),
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: current === "none" ? [] : [featureFlagStatus(pull, {
+          state: current === "pending" ? "pending" : "success",
+          context: current === "other context" ? "another-gate" : "feature-flag-gate",
+          created_at: current === "equal timestamp" ? evaluatedAt : "2099-01-01T00:00:00Z",
+        })] }),
+      });
+      assert.equal(result.status, 2, output);
+      assert.deepEqual(posts.map((post) => post.state), ["error"]);
+    });
+  }
+
+  test(`${name}: each matrix publisher ignores all records for other heads`, (t) => {
+    const { result, output, posts, calls } = runWorkflow(t, {
+      job,
+      prepareStatuses: (records) => [
+        { ...records[0], pr_number: 999, head_sha: "b".repeat(40) },
+        ...records,
+        { ...records[0], pr_number: 998, head_sha: "c".repeat(40) },
+      ],
+    });
+    assert.equal(result.status, 0, output);
+    assert.deepEqual(posts.map((post) => post.state), ["success"]);
+    assert.ok(calls.every((call) => !/\/pulls\/(998|999)$/.test(call.endpoint)));
+  });
 
   for (const state of ["success", "failure", "error"]) {
     test(`${name}: an existing error with the same fingerprint can recover to ${state}`, (t) => {
@@ -691,15 +769,16 @@ for (const job of [singlePullRequest, reconciliation]) {
     });
   }
 
-  test(`${name}: an early evaluation error without a fingerprint replaces the current head's success`, (t) => {
+  test(`${name}: an early evaluation error without a fingerprint replaces an older success for the current head`, (t) => {
     const { result, output, posts, records, calls } = runWorkflow(t, {
       job, parserInstallFailure: true,
-      statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull)] }),
+      statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { created_at: "2000-01-01T00:00:00Z" })] }),
     });
     assert.equal(result.status, 2, output);
     assert.equal(records.length, 1);
     assert.equal(records[0].fingerprint, "");
-    assert.deepEqual(Object.keys(records[0]).sort(), ["fingerprint", "head_sha", "payload", "pr_number"]);
+    assert.match(records[0].evaluated_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    assert.deepEqual(Object.keys(records[0]).sort(), ["evaluated_at", "fingerprint", "head_sha", "payload", "pr_number"]);
     assert.deepEqual(posts.map((post) => post.state), ["error"]);
     assert.match(posts[0].description, /could not install its parser/);
     assert.equal(posts[0].target_url, "https://example.invalid/actions/runs/1");
@@ -710,7 +789,7 @@ for (const job of [singlePullRequest, reconciliation]) {
   test(`${name}: an early error can publish even if current fingerprint metadata is incomplete`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
       job, parserInstallFailure: true,
-      statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull)] }),
+      statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { created_at: "2000-01-01T00:00:00Z" })] }),
       pullBeforePublish: (pull) => ({ ...pull, title: null, base: { ...pull.base, sha: null } }),
     });
     assert.equal(result.status, 2, output);

@@ -1216,9 +1216,15 @@ test("trusted publishers serialize final-only membership-aware verdicts and allo
   assert.match(job("reconcile-open-pull-requests"), /group: feature-flag-gate-production\s+cancel-in-progress: false/);
   for (const name of ["feature-flag-gate", "reconcile-open-pull-requests"]) {
     const evaluation = job(name);
-    assert.doesNotMatch(evaluation, /JOB_STARTED_AT|job_started_at|deduplicate:|Record job start time/);
-    assert.match(evaluation, /\{pr_number: \$pr_number, head_sha: \$head_sha, fingerprint: \$fingerprint, payload: \.\}/);
+    assert.doesNotMatch(evaluation, /JOB_STARTED_AT|job_started_at|deduplicate:/);
+    assert.match(evaluation, /\{pr_number: \$pr_number, head_sha: \$head_sha, fingerprint: \$fingerprint, evaluated_at: \$evaluated_at, payload: \.\}/);
     assert.match(evaluation, /steps\.evaluate\.outputs\.statuses/);
+    assert.match(evaluation, /heads: \$\{\{ steps\.evaluate\.outputs\.heads \}\}/);
+    assert.match(evaluation, /map\(\.head_sha\) \| unique/);
+    assert.match(evaluation, /EVALUATED_AT: \$\{\{ steps\.started\.outputs\.evaluated_at \}\}/);
+    assert.match(evaluation, /date -u \+'%Y-%m-%dT%H:%M:%SZ'/);
+    assert.match(evaluation, /--arg evaluated_at "\$EVALUATED_AT"/);
+    assert.ok(evaluation.indexOf('id: started') < evaluation.indexOf('uses: actions/checkout'));
     assert.match(evaluation, /group_by\(\[\.pr_number, \.head_sha\]\) \| map\(last\)/);
     assert.match(evaluation, /elif node \.github\/scripts\/feature-flag-gate\.mjs/);
     assert.match(evaluation, /\.heads=\$evaluated_head_pr_count/);
@@ -1228,7 +1234,12 @@ test("trusted publishers serialize final-only membership-aware verdicts and allo
   }
   for (const name of ["publish-pull-request", "publish-reconciliation"]) {
     const publication = job(name);
-    assert.match(publication, /group: feature-flag-gate-publish\s+cancel-in-progress: false/);
+    assert.match(publication, /strategy:\s+fail-fast: false\s+matrix:\s+head_sha: \$\{\{ fromJSON\(needs\.[a-z-]+\.outputs\.heads\) \}\}/);
+    const evaluationName = name === "publish-pull-request" ? "feature-flag-gate" : "reconcile-open-pull-requests";
+    assert.ok(publication.includes(`head_sha: \${{ fromJSON(needs.${evaluationName}.outputs.heads) }}`));
+    assert.ok(publication.includes(`PREPARED_STATUSES: \${{ needs.${evaluationName}.outputs.statuses }}`));
+    assert.match(publication, /group: feature-flag-gate-publish-\$\{\{ matrix\.head_sha \}\}\s+cancel-in-progress: false/);
+    assert.match(publication, /PUBLISH_HEAD_SHA: \$\{\{ matrix\.head_sha \}\}/);
     assert.match(publication, /if: always\(\) && needs\./);
     assert.doesNotMatch(publication, /git fetch|npm ci|feature-flag-gate\.mjs|publish_status_if_current|gh_api -X POST/);
     assert.match(publication, /permissions:\s+contents: read\s+pull-requests: read\s+statuses: write\s+steps:/);
@@ -1238,12 +1249,19 @@ test("trusted publishers serialize final-only membership-aware verdicts and allo
   }
   assert.equal((workflow.match(/bash \.github\/scripts\/feature-flag-gate-publish\.sh/g) || []).length, 2);
   assert.match(publisher, /\.payload\.state == "success" or \.payload\.state == "failure" or \.payload\.state == "error"/);
-  assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\$state != "error" and/);
+  assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\$current\.state == \$state and/);
   assert.doesNotMatch(publisher, /\$current\.state == "error"/);
   assert.match(publisher, /if \[ -z "\$evaluated_fingerprint" \] && \[ "\$state" = "error" \]; then\s+fingerprint=""\s+else/);
   assert.match(publisher, /--arg target_url "\$RUN_URL\$\{fingerprint:\+#\$fingerprint\}"/);
   assert.ok(publisher.indexOf('.head.sha == $sha') < publisher.indexOf('if [ -z "$evaluated_fingerprint" ]'));
-  assert.doesNotMatch(publisher, /job_started_at|created_at|deduplicate|state[=:]\s*["']?pending/);
+  assert.doesNotMatch(publisher, /job_started_at|deduplicate|state[=:]\s*["']?pending/);
+  assert.doesNotMatch(workflow, /group: feature-flag-gate-publish\s*$/m);
+  assert.match(publisher, /--arg head_sha "\$PUBLISH_HEAD_SHA" '\.\[\] \| select\(\.head_sha == \$head_sha\)'/);
+  assert.match(publisher, /evaluated_at=\$\(jq -er '\.evaluated_at'/);
+  assert.match(publisher, /any\(flatten\[\];\s+\.context == "feature-flag-gate" and\s+\(\.state == "success" or \.state == "failure" or \.state == "error"\) and\s+\(\.created_at \| fromdateiso8601\) > \(\$evaluated_at \| fromdateiso8601\)/);
+  assert.match(publisher, /latest-statuses\.json"\) \|\| return 1/);
+  assert.ok(publisher.indexOf('/commits/$head_sha/statuses') < publisher.indexOf('any(flatten[];'));
+  assert.ok(publisher.indexOf('any(flatten[];') < publisher.indexOf('gh_api -X POST'));
   assert.match(publisher, /flatten \| map\(select\(\.context == "feature-flag-gate"\)\)\[0\]/);
   assert.match(publisher, /\(\$current\.target_url \/\/ "" \| split\("#"\)\[1:\] \| join\("#"\)\) == \$fingerprint/);
   assert.match(publisher, /\[ "\$evaluated_fingerprint" != "\$fingerprint" \]/);

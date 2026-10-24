@@ -9,9 +9,10 @@ failures=0
 
 publish_status_if_current() {
   local record="$1"
-  local number head_sha state evaluated_fingerprint fingerprint title base_sha labels head_pr_count
+  local number head_sha state evaluated_at newer_final evaluated_fingerprint fingerprint title base_sha labels head_pr_count
   number=$(jq -er '.pr_number' <<<"$record") || return 1
   head_sha=$(jq -er '.head_sha' <<<"$record") || return 1
+  evaluated_at=$(jq -er '.evaluated_at' <<<"$record") || return 1
   evaluated_fingerprint=$(jq -r '.fingerprint // ""' <<<"$record") || return 1
   if ! jq -e '
     .payload.context == "feature-flag-gate" and
@@ -44,19 +45,32 @@ publish_status_if_current() {
   fi
   jq --arg target_url "$RUN_URL${fingerprint:+#$fingerprint}" '.payload | .target_url = $target_url' <<<"$record" >"$gate_tmp/payload.json" || return 1
   gh_api --paginate --slurp "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$gate_tmp/latest-statuses.json" || return 1
+  if [ -z "$evaluated_fingerprint" ] && [ "$state" = "error" ]; then
+    newer_final=$(jq -r --arg evaluated_at "$evaluated_at" '
+      any(flatten[];
+        .context == "feature-flag-gate" and
+        (.state == "success" or .state == "failure" or .state == "error") and
+        (.created_at | fromdateiso8601) > ($evaluated_at | fromdateiso8601)
+      )
+    ' "$gate_tmp/latest-statuses.json") || return 1
+    if [ "$newer_final" = "true" ]; then
+      echo "skip #$number: final feature-flag-gate status was created after evaluation started"
+      return 0
+    fi
+  fi
   if jq -e --arg fingerprint "$fingerprint" --arg state "$state" '
     flatten | map(select(.context == "feature-flag-gate"))[0] as $current |
     ($current.state == "success" or $current.state == "failure") and
-    $state != "error" and
+    $current.state == $state and
     ($current.target_url // "" | split("#")[1:] | join("#")) == $fingerprint
   ' "$gate_tmp/latest-statuses.json" >/dev/null; then
-    echo "skip #$number: final feature-flag-gate status has the same fingerprint"
+    echo "skip #$number: final feature-flag-gate status has the same fingerprint and state"
     return 0
   fi
   gh_api -X POST "repos/$REPO/statuses/$head_sha" --input "$gate_tmp/payload.json" >/dev/null
 }
 
-jq -c '.[]' <<<"$PREPARED_STATUSES" >"$gate_tmp/statuses.jsonl" || exit 2
+jq -c --arg head_sha "$PUBLISH_HEAD_SHA" '.[] | select(.head_sha == $head_sha)' <<<"$PREPARED_STATUSES" >"$gate_tmp/statuses.jsonl" || exit 2
 while IFS= read -r record; do
   if ! publish_status_if_current "$record"; then
     echo "::error::Cannot publish prepared feature-flag-gate status."
