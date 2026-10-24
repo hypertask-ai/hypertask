@@ -458,6 +458,7 @@ for (const enabled of [false, true]) {
     test(`legacy ${branch} creation still saves an empty description, flag ${enabled}`, async () => {
       const writes = [];
       const { POST } = load("src/lib/api/task-writes/create.ts", {
+        "@/lib/flags": { isFeatureEnabled: async () => true },
         "./route": { taskWriteRoute: (options) => (body) => options.operation(body, { user: { id: 985 }, session: { userId: 985, agentId: "agent" } }) },
         "@/lib/auth/sessionUserRecord": {},
         "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: "agent" }) },
