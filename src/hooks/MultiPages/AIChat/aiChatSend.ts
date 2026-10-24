@@ -82,7 +82,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       fileUpload.clearFiles();
       editor?.commands.clearContent();
     }
-    let restoreComposer = consumesComposer;
+    let restoreMessage = !preserveComposer;
     let restoreFiles = files.length > 0;
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
@@ -101,7 +101,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
       if (isGuestBoardBuild(currentProject)) {
         await buildGuestBoard(content.trim(), session);
-        restoreComposer = false;
+        restoreMessage = false;
         return true;
       }
 
@@ -126,7 +126,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     );
 
     restoreFiles = false;
-    restoreComposer = false;
+    restoreMessage = false;
 
     setIsTyping(true);
 
@@ -327,8 +327,19 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         console.log("Message has been completed");
       }
     } finally {
-      if (restoreComposer && editor?.isEmpty) {
-        editor.commands.setContent(composerHtml);
+      if (restoreMessage) {
+        if (consumesComposer && editor?.isEmpty) {
+          editor.commands.setContent(composerHtml);
+        } else {
+          messageQueueRef.current = [{
+            id: crypto.randomUUID(),
+            content,
+            html: editorHtmlForAttachments,
+            files,
+          }, ...messageQueueRef.current];
+          setQueuedMessages(messageQueueRef.current);
+          restoreFiles = false;
+        }
       }
       if (restoreFiles) {
         fileUpload.setFileItems((current) => [
@@ -338,9 +349,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }
       sendInFlightRef.current = false;
       searchHandoff?.onSettled();
-      queueMicrotask(() => {
-        drainQueuedMessage();
-      });
+      if (!restoreMessage) {
+        queueMicrotask(() => {
+          drainQueuedMessage();
+        });
+      }
     }
     return true;
   };

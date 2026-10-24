@@ -212,27 +212,79 @@ for (const fullScreen of [false, true]) {
     { text: "new unsent draft", html: "<p>new <strong>unsent</strong> draft</p>" },
     { text: "", html: '<p><img src="data:image/png;base64,new"></p>' },
   ]) {
-    test(`${surface}: failed preparation preserves a newer ${nextDraft.text ? "text" : "image-only"} draft`, async () => {
-      await withChat(fullScreen, async ({ state, context, renderSender }) => {
-        const preparation = deferred();
-        context.processAttachments = async () => {
-          await preparation.promise;
-          throw new Error("attachment unavailable");
-        };
-        const first = renderSender().handleSendMessage();
-        assert.equal(state.draft, "");
-        await settle();
-        state.draft = nextDraft.text;
-        state.html = nextDraft.html;
-        const rejected = assert.rejects(first, /attachment unavailable/);
-        preparation.resolve();
-        await rejected;
-        assert.equal(state.draft, nextDraft.text);
-        assert.equal(state.html, nextDraft.html);
-        assert.deepEqual(state.payloads, []);
-        assert.equal(context.sendInFlightRef.current, false);
+    for (const preparationStage of ["session", "attachments"]) {
+      test(`${surface}: failed ${preparationStage} preparation retains the original message before queued sends without overwriting a newer ${nextDraft.text ? "text" : "image-only"} draft`, async () => {
+        await withChat(fullScreen, async ({ state, context, streams, queues, renderSender }) => {
+          const preparation = deferred();
+          const waitForChatSession = context.waitForChatSession;
+          const processAttachments = context.processAttachments;
+          const activeFile = { id: 1, file: { name: "first.pdf", type: "application/pdf" } };
+          const draftFile = { id: 2, file: { name: "draft.pdf", type: "application/pdf" } };
+          context.fileUpload.resetFiles([activeFile]);
+          state.html = "<p><strong>first</strong></p>";
+          if (preparationStage === "session") {
+            context.waitForChatSession = () => preparation.promise;
+          } else {
+            context.processAttachments = async () => {
+              await preparation.promise;
+              throw new Error("attachment unavailable");
+            };
+          }
+          const first = renderSender().handleSendMessage();
+          assert.equal(state.draft, "");
+          await settle();
+          assert.equal(await renderSender().handleSendMessage("second", { filesForAttachments: [] }), true);
+          state.draft = nextDraft.text;
+          state.html = nextDraft.html;
+          context.fileUpload.resetFiles([draftFile]);
+          const rejected = preparationStage === "attachments"
+            ? assert.rejects(first, /attachment unavailable/)
+            : first;
+          preparation.resolve();
+          if (preparationStage === "attachments") await rejected;
+          else assert.equal(await first, false);
+          await settle();
+          assert.equal(state.draft, nextDraft.text);
+          assert.equal(state.html, nextDraft.html);
+          assert.deepEqual(context.fileUpload.fileItems, [draftFile]);
+          assert.deepEqual(state.queued.map(({ content, html, files }) => ({ content, html, files })), [
+            { content: "first", html: "<p><strong>first</strong></p>", files: [activeFile] },
+            { content: "second", html: "", files: [] },
+          ]);
+          assert.deepEqual(state.payloads, []);
+          assert.equal(context.sendInFlightRef.current, false);
+
+          const retained = [...state.queued];
+          context.waitForChatSession = async () => undefined;
+          renderSender();
+          queues.drainQueuedMessage();
+          await settle();
+          assert.deepEqual(state.queued.map(({ content, html, files }) => ({ content, html, files })),
+            retained.map(({ content, html, files }) => ({ content, html, files })));
+          assert.equal(context.sendInFlightRef.current, false);
+          assert.deepEqual(state.payloads, []);
+
+          context.waitForChatSession = waitForChatSession;
+          context.processAttachments = processAttachments;
+          renderSender();
+          queues.drainQueuedMessage();
+          await settle();
+          assert.deepEqual(state.payloads.map(({ message, session_id }) => [message, session_id]), [["first", "active-chat"]]);
+          assert.deepEqual(state.processed, [{ html: "<p><strong>first</strong></p>", files: [activeFile] }]);
+          streams[0].resolve();
+          await settle();
+          assert.deepEqual(state.payloads.map(({ message, session_id }) => [message, session_id]), [
+            ["first", "active-chat"], ["second", "active-chat"],
+          ]);
+          streams[1].resolve();
+          await settle();
+          assert.deepEqual(state.queued, []);
+          assert.equal(state.draft, nextDraft.text);
+          assert.equal(state.html, nextDraft.html);
+          assert.deepEqual(context.fileUpload.fileItems, [draftFile]);
+        });
       });
-    });
+    }
   }
 
   for (const withQueuedFile of [false, true]) {
