@@ -10,6 +10,8 @@ import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import { createFullScreenTaskAndReturn } from "./create-fullscreen";
 import { taskWriteRoute } from "./route";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7740_CREATE_RESPONSE_FLAG } from "@/lib/flags/keys";
 
 const schema = z.custom<Record<string, any>>(
   (body) => !!((body as any)?.fullScreenTask || ((body as any)?.title && (body as any)?.projectId)),
@@ -40,11 +42,15 @@ export const POST = taskWriteRoute({
         if (response.status === 200) void broadcastBoardChange(projectId, { originUserId: userObj?.id });
         return NextResponse.json(response.json, { status: response.status });
       }
+      const createResponseEnabled = await isFeatureEnabled(HTPR_7740_CREATE_RESPONSE_FLAG, session.userId);
+      if (createResponseEnabled && !sectionId) {
+        return NextResponse.json({ message: "Missing Required Information" }, { status: 400 });
+      }
       const task = await prisma.task.findFirst({
         where: { sectionId }, orderBy: { ranking: "desc" },
       });
       if (task) {
-        const ranking = generateRank(task.ranking, undefined);
+        const ranking = generateRank(createResponseEnabled ? task.ranking || undefined : task.ranking, undefined);
         if (ranking) {
           const response = await create({ title, description: "", section: task.section, userId: userObj.id, ranking, projectId, sectionId, currentUser: userObj, agentId });
           if (response.status === 200) void broadcastBoardChange(projectId, { originUserId: userObj?.id });
@@ -53,10 +59,14 @@ export const POST = taskWriteRoute({
       } else {
         const section = await prisma.section.findFirst({ where: { id: sectionId, deleted: false } });
         if (section) {
-          const response = await create({ title, description: "", section: section.section_title, userId: userObj.id, ranking, projectId, sectionId, currentUser: userObj, agentId });
+          const taskRanking = createResponseEnabled ? ranking || generateRank(undefined, undefined) : ranking;
+          const response = await create({ title, description: "", section: section.section_title, userId: userObj.id, ranking: taskRanking, projectId, sectionId, currentUser: userObj, agentId });
           if (response.status === 200) void broadcastBoardChange(projectId, { originUserId: userObj?.id });
           return NextResponse.json(response.json, { status: response.status });
         }
+      }
+      if (createResponseEnabled) {
+        return NextResponse.json({ message: "Missing Required Information" }, { status: 400 });
       }
     } catch (error) {
       if (isPlanLimitReachedError(error)) {
