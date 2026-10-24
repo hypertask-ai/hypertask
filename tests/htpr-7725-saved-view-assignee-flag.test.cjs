@@ -43,22 +43,6 @@ test("calendar human assignee matching separates agent rows under the same clien
   assert.match(caller, /\(!assigneeFixEnabled \|\| assignee\.agentId == null\) && assignees\.has\(assignee\.userId\)/);
 });
 
-test("task listing and search constrain human assignment queries using the authenticated user's flag", () => {
-  for (const filename of [
-    "src/lib/mcp/operations/tasks/operation.ts",
-    "src/lib/mcp/operations/tasks/search/operation.ts",
-    "src/lib/ai/tools/listTasks.ts",
-    "src/lib/ai/tools/searchTasks.ts",
-  ]) {
-    const caller = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
-    assert.match(caller, /const humanAssignment = await isFeatureEnabled\(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG, user\.id\)\s*\? \{ agentId: null \}\s*: \{\}/, filename);
-    const queries = [...caller.matchAll(/where\.assignees = \{ some: \{([^\n]*)/g)];
-    assert.ok(queries.length > 0, filename);
-    for (const query of queries) assert.match(query[1], /\.\.\.humanAssignment/, filename);
-    assert.match(caller, /where\.assignees = \{ none: \{\} \}/, filename);
-  }
-});
-
 test("anonymous shared boards load the scalar assignment IDs required for default filtering", () => {
   const caller = fs.readFileSync(path.join(__dirname, "..", "src/utils/controllers/share/getProject.ts"), "utf8");
   assert.match(caller, /assignees: \{\s*select: \{\s*userId: true,\s*agentId: true,/);

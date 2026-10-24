@@ -1,4 +1,3 @@
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/definitions/htpr-7725-saved-view-assignee";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -513,18 +512,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (assignedTo) {
-      const humanAssignment = await isFeatureEnabled(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG, user.id)
-        ? { agentId: null }
-        : {}
       if (assignedTo === 'me') {
-        where.assignees = { some: { ...humanAssignment, userId: user.id } }
+        where.assignees = { some: { userId: user.id } }
       } else if (assignedTo === 'unassigned') {
         where.assignees = { none: {} }
       } else {
         const userIds = assignedTo.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
         if (findIdParamOutOfRange({ assigned_to: userIds })) return validationError(idOutOfRangeMessage('assigned_to'))
         if (userIds.length > 0) {
-          where.assignees = { some: { ...humanAssignment, userId: { in: userIds } } }
+          where.assignees = { some: { userId: { in: userIds } } }
         }
       }
     }
