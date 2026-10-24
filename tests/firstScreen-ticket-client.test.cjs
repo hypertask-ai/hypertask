@@ -118,7 +118,7 @@ test('HTPR-7718: both flag readers apply a first-visit seed on the first render 
           initialIsMobile: true, initialIsApple: false, authenticatedUserId: 985,
           firstScreen: null, shellSeed: null, flagSeed: { ...flagSeed, accountId }, flagProvider: FlagProvider,
         }, React.createElement(Probe))));
-        assert.deepEqual(JSON.parse(dom.window.document.querySelector('output').textContent), expected(accountId === 985, true));
+        assert.deepEqual(JSON.parse(dom.window.document.querySelector('output').textContent), { ...expected(false, true), flag: accountId === 985, loaded: accountId === 985 });
         assert.equal(clients.at(-1).getQueryData(['feature-flags', 985])?.['visible-ticket-flag'] === true, accountId === 985);
         dom.window.close();
       }
