@@ -1,4 +1,4 @@
-import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";

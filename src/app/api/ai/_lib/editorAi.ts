@@ -1,4 +1,3 @@
-import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
@@ -26,7 +25,7 @@ import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
 import prisma from "@/lib/prisma";
-import { HTPR_7038_TASK_WRITER_SONNET_FLAG } from "@/lib/flags/keys";
+import { HTPR_7038_TASK_WRITER_SONNET_FLAG, HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
 export const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
