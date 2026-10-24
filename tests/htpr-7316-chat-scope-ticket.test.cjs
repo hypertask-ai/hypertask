@@ -106,6 +106,7 @@ test("model turn uses the existing authorized builder for only the chosen ticket
     "@/utils/controllers/comments/linkifyTicketRefs": {},
     "@/app/api/ai/_lib/chatSkillResolution": {},
     "@/lib/ai/chatStream/prompt": { AGENT_SYSTEM_PROMPT: "Chat prompt" },
+    "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, aiPromptCachingEnabled: async () => false },
     "@/lib/ai/tools/metadata": {},
     "@/lib/ai/chatStream/title": {},
     "@/lib/ai/tools": { buildTools: () => ({}) },
@@ -113,7 +114,7 @@ test("model turn uses the existing authorized builder for only the chosen ticket
     "./chatNames": { nameChatFromFirstMessage: async () => null },
   });
   const options = h.started[0];
-  await runModelTurn({ ...options, providerAbort: new AbortController(), send() {} }, options.body, {});
+  await runModelTurn({ ...options, selected: options.selected ?? { model: "test-model" }, providerAbort: new AbortController(), send() {} }, options.body, {});
   const prompt = replies[0].messages[0].content;
   assert.match(prompt, /Title: Scoped ticket/);
   assert.match(prompt, /Scoped description/);

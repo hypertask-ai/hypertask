@@ -360,6 +360,7 @@ test("chat turn resolves the server flag once for the authenticated user and for
     "@/app/api/ai/chat/stream/persistAssistantMessage": {},
     "@/utils/controllers/comments/linkifyTicketRefs": {},
     "@/lib/ai/chatStream/prompt": { AGENT_SYSTEM_PROMPT: "chat prompt" },
+    "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, aiPromptCachingEnabled: async () => false },
     "@/lib/ai/chatStream/content": { createUserContent: () => "request" },
     "@/lib/ai/tools/metadata": {}, "@/lib/ai/chatStream/title": {},
     "@/lib/ai/tools": { buildTools: (...args) => { toolArgs.push(args); return {}; } },
@@ -367,7 +368,7 @@ test("chat turn resolves the server flag once for the authenticated user and for
     "./chatNames": { nameChatFromFirstMessage: async () => null },
   });
   const providerAbort = new AbortController();
-  await runModelTurn({ body: { user_context: { id: 999 } }, dbUser: { id: 985 }, providerAbort, send() {} }, {}, {});
+  await runModelTurn({ body: { user_context: { id: 999 } }, dbUser: { id: 985 }, selected: { model: "test-model" }, providerAbort, send() {} }, {}, {});
   assert.deepEqual(plain(checks), [[keys.HTPR_7514_INLINE_AGENT_IMAGES_FLAG, 985], [keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
   assert.equal(toolArgs.length, 1);
   assert.equal(toolArgs[0][7], true);

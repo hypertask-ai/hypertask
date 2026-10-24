@@ -705,10 +705,6 @@ export async function updateTaskSingle(
       requestedMutation.projectId
     )
       upsertAllCommentsToTurbopuffer(task.id);
-    scheduleTaskSummaryGeneration({
-      taskId: newTask.id,
-      agentId: agentId ?? null,
-    });
     const titleChanged =
       requestedMutation.title !== undefined &&
       requestedMutation.title !== taskBeforeWrite.title;
@@ -717,6 +713,17 @@ export async function updateTaskSingle(
       requestedMutation.description !==
         ((taskBeforeWrite as any).description_?.content ??
           taskBeforeWrite.description);
+    scheduleTaskSummaryGeneration({
+      taskId: newTask.id,
+      agentId: agentId ?? null,
+      activityOnlyOwnerId:
+        !titleChanged &&
+        !descriptionChanged &&
+        requestedMutation.ticketNumber === undefined &&
+        requestedMutation.projectId === undefined
+          ? taskBeforeWrite.userId
+          : null,
+    });
     if (titleChanged || descriptionChanged) {
       scheduleClassifyTaskAiLabels(task.id, task.projectId);
     }

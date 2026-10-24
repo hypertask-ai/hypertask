@@ -55,11 +55,13 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
   let usageProjectId: number | null = null;
   let actingAgent: Awaited<ReturnType<typeof loadActingAgent>> = null;
   let teamProviderSettings: unknown;
+  let trustedChatSessionId: string | null = null;
   if (body.session_id) {
     const chatAgent = await prisma.chatSession.findFirst({
       where: { id: body.session_id, userId: dbUser.id },
       select: { agent: { select: { runtimeType: true } } },
     });
+    if (chatAgent) trustedChatSessionId = body.session_id;
     if (chatAgent?.agent?.runtimeType === "EXTERNAL") {
       return NextResponse.json(
         { error: "External agents are chatted with from Agent Chat" },
@@ -283,5 +285,5 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     await reportHandledChatError(error, "select-model");
     return createSseErrorResponse(errorMessage(error));
   }
-  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings };
+  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, trustedChatSessionId };
 }
