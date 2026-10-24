@@ -8,6 +8,8 @@ function harness({ enabled = true, tasks = [], section = { id: 9, section_title:
   const created = [];
   const broadcasts = [];
   const flagReads = [];
+  const sectionLookups = [];
+  const taskLookups = [];
   const sharedRoute = load("src/lib/api/task-writes/route.ts", {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/auth/agentScope": {
@@ -25,8 +27,12 @@ function harness({ enabled = true, tasks = [], section = { id: 9, section_title:
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return enabled; } },
     "@/lib/flags/keys": { HTPR_7740_CREATE_RESPONSE_FLAG: flag },
     "@/lib/prisma": { default: {
-      task: { findFirst: async () => tasks.at(-1) ?? null },
-      section: { findFirst: async () => section },
+      task: { findFirst: async (query) => { taskLookups.push(query); return tasks.at(-1) ?? null; } },
+      section: { findFirst: async (query) => {
+        sectionLookups.push(query);
+        if (!section || (query.where.id && query.where.id !== section.id)) return null;
+        return section;
+      } },
     } },
     "@/utils/controllers/tasks/create": { default: async (data) => {
       if (createError) throw createError;
@@ -46,7 +52,7 @@ function harness({ enabled = true, tasks = [], section = { id: 9, section_title:
     });
     return response;
   }
-  return { request, created, broadcasts, flagReads };
+  return { request, created, broadcasts, flagReads, sectionLookups, taskLookups };
 }
 
 test("HTPR-7740: two creates without section name or ranking both answer with valid positions", async () => {
@@ -72,18 +78,58 @@ for (const ranking of ["", null, undefined]) {
 
 test("HTPR-7740: a missing or deleted section answers 400 without creating a task", async () => {
   const { request, created, broadcasts } = harness({ section: null });
-  assert.deepEqual(await request(), { status: 400, body: { message: "Missing Required Information" } });
+  assert.deepEqual(await request(), { status: 400, body: { message: "Section does not belong to this project" } });
   assert.equal(created.length, 0);
   assert.equal(broadcasts.length, 0);
 });
 
 for (const sectionId of [undefined, null, "", 0]) {
-  test(`HTPR-7740: missing section ID ${String(sectionId)} answers 400`, async () => {
-    const { request, created } = harness();
-    assert.deepEqual(await request({ sectionId }), { status: 400, body: { message: "Missing Required Information" } });
+  test(`HTPR-7740: omitted section ID ${String(sectionId)} resolves the first visible column`, async () => {
+    const { request, created, sectionLookups, taskLookups } = harness();
+    for (let i = 0; i < 2; i += 1) {
+      const response = await request({ sectionId });
+      assert.equal(response?.status, 200);
+      assert.equal(response.body.sectionId, 9);
+      assert.equal(response.body.section, "Todo");
+      assert(response.body.ranking);
+    }
+    assert.equal(created.length, 2);
+    assert.deepEqual(sectionLookups[0], {
+      where: { projectId: 15, visibility: true, deleted: false },
+      orderBy: { ranking: "asc" },
+    });
+    assert.deepEqual(taskLookups[0].where, { sectionId: 9, projectId: 15, status: "Normal" });
+  });
+}
+
+test("HTPR-7740: no default column answers 404 without creating a task", async () => {
+  const { request, created } = harness({ section: null });
+  assert.deepEqual(await request({ sectionId: undefined }), {
+    status: 404, body: { message: "No active section found" },
+  });
+  assert.equal(created.length, 0);
+});
+
+for (const positioning of [{}, { ranking: "A0200", section: "Foreign" }]) {
+  test(`HTPR-7740: a foreign column is rejected before rank lookup with ${JSON.stringify(positioning)}`, async () => {
+    const { request, created, sectionLookups, taskLookups } = harness({ tasks: [{ ranking: "A0100", section: "Foreign" }] });
+    assert.deepEqual(await request({ sectionId: 999, ...positioning }), {
+      status: 400, body: { message: "Section does not belong to this project" },
+    });
+    assert.deepEqual(sectionLookups[0].where, { id: 999, projectId: 15, deleted: false });
+    assert.equal(taskLookups.length, 0);
     assert.equal(created.length, 0);
   });
 }
+
+test("HTPR-7740: a supplied rank without a column uses the default and current user", async () => {
+  const { request } = harness();
+  const response = await request({ sectionId: undefined, ranking: "A0200" });
+  assert.equal(response?.status, 200);
+  assert.equal(response.body.sectionId, 9);
+  assert.equal(response.body.userId, 985);
+  assert.equal(response.body.ranking, "A0200");
+});
 
 test("HTPR-7740: valid explicit positioning and fullscreen creation keep answering", async () => {
   const { request, broadcasts, flagReads } = harness();
@@ -92,7 +138,7 @@ test("HTPR-7740: valid explicit positioning and fullscreen creation keep answeri
   assert.equal(explicit.body.ranking, "A0200");
   assert.deepEqual(await request({ fullScreenTask: true }), { status: 200, body: { newTask: { id: 42 } } });
   assert.equal(broadcasts.length, 2);
-  assert.deepEqual(flagReads, []);
+  assert.deepEqual(flagReads, [[flag, 985]]);
 });
 
 test("HTPR-7740: controller errors still answer 500", async () => {

@@ -23,7 +23,8 @@ export const POST = taskWriteRoute({
   prepare: async (session) => ({ user: await loadSessionUserRecord(session.userId), session }),
   operation: async (body, { user: userObj, session }) => {
     try {
-      const { title, description, section, userId, ranking, projectId, sectionId, index, fullScreenTask, projectIdentifier, agentId: requestedAgentId } = body;
+      const { title, description, userId, ranking, projectId, index, fullScreenTask, projectIdentifier, agentId: requestedAgentId } = body;
+      let { section, sectionId } = body;
       const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
       if (!actingAgent.ok) {
         return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
@@ -37,27 +38,38 @@ export const POST = taskWriteRoute({
         void broadcastBoardChange(projectId, { originUserId: userObj?.id });
         return NextResponse.json({ newTask }, { status: 200 });
       }
+      const createResponseEnabled = await isFeatureEnabled(HTPR_7740_CREATE_RESPONSE_FLAG, session.userId);
+      if (createResponseEnabled) {
+        const resolvedSection = await prisma.section.findFirst({
+          where: { projectId, deleted: false, ...(sectionId ? { id: sectionId } : { visibility: true }) },
+          orderBy: { ranking: "asc" },
+        });
+        if (!resolvedSection) {
+          return NextResponse.json(
+            { message: sectionId ? "Section does not belong to this project" : "No active section found" },
+            { status: sectionId ? 400 : 404 },
+          );
+        }
+        sectionId = resolvedSection.id;
+        section = resolvedSection.section_title;
+      }
       if (ranking && section) {
-        const response = await create({ title, description: agentId ? await inlineAgentImagesForUser(description ?? "", session.userId, { inlineImages: body.inline_images }) : description, section, userId, ranking, projectId, sectionId, index, currentUser: userObj, agentId });
+        const response = await create({ title, description: agentId ? await inlineAgentImagesForUser(description ?? "", session.userId, { inlineImages: body.inline_images }) : description, section, userId: createResponseEnabled ? userId ?? userObj.id : userId, ranking, projectId, sectionId, index, currentUser: userObj, agentId });
         if (response.status === 200) void broadcastBoardChange(projectId, { originUserId: userObj?.id });
         return NextResponse.json(response.json, { status: response.status });
       }
-      const createResponseEnabled = await isFeatureEnabled(HTPR_7740_CREATE_RESPONSE_FLAG, session.userId);
-      if (createResponseEnabled && !sectionId) {
-        return NextResponse.json({ message: "Missing Required Information" }, { status: 400 });
-      }
       const task = await prisma.task.findFirst({
-        where: { sectionId }, orderBy: { ranking: "desc" },
+        where: { sectionId, ...(createResponseEnabled ? { projectId, status: "Normal" as const } : {}) }, orderBy: { ranking: "desc" },
       });
       if (task) {
         const ranking = generateRank(createResponseEnabled ? task.ranking || undefined : task.ranking, undefined);
         if (ranking) {
-          const response = await create({ title, description: "", section: task.section, userId: userObj.id, ranking, projectId, sectionId, currentUser: userObj, agentId });
+          const response = await create({ title, description: "", section: createResponseEnabled ? section : task.section, userId: userObj.id, ranking, projectId, sectionId, currentUser: userObj, agentId });
           if (response.status === 200) void broadcastBoardChange(projectId, { originUserId: userObj?.id });
           return NextResponse.json(response.json, { status: response.status });
         }
       } else {
-        const section = await prisma.section.findFirst({ where: { id: sectionId, deleted: false } });
+        const section = await prisma.section.findFirst({ where: { id: sectionId, deleted: false, ...(createResponseEnabled ? { projectId } : {}) } });
         if (section) {
           const taskRanking = createResponseEnabled ? ranking || generateRank(undefined, undefined) : ranking;
           const response = await create({ title, description: "", section: section.section_title, userId: userObj.id, ranking: taskRanking, projectId, sectionId, currentUser: userObj, agentId });
@@ -66,7 +78,7 @@ export const POST = taskWriteRoute({
         }
       }
       if (createResponseEnabled) {
-        return NextResponse.json({ message: "Missing Required Information" }, { status: 400 });
+        return NextResponse.json({ message: "Could not resolve task position" }, { status: 500 });
       }
     } catch (error) {
       if (isPlanLimitReachedError(error)) {
