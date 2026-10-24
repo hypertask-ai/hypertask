@@ -4,8 +4,13 @@ import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { FEATURE_FLAG_OWNER_USER_ID } from "@/lib/flags";
 import { alertMessage, type AlertDelivery } from "./policy";
 
-export async function deliverManagerAlert(db: PrismaClient, delivery: AlertDelivery) {
+export async function deliverManagerAlert(
+  db: PrismaClient,
+  delivery: AlertDelivery,
+  onStep?: (step: string) => void,
+) {
   const configuredId = process.env.AI_CHAT_ALERT_MANAGER_AGENT_ID?.trim();
+  onStep?.("manager-lookup");
   const manager = await db.agent.findFirst({
     where: {
       ...(configuredId ? { id: configuredId } : { displayName: "Manager" }),
@@ -18,6 +23,7 @@ export async function deliverManagerAlert(db: PrismaClient, delivery: AlertDeliv
   if (!manager) throw new Error("AI Chat alert Manager is not configured");
   const text = alertMessage(delivery);
   const messageId = `ai-chat-alert:${delivery.id}`;
+  onStep?.("transaction");
   const { sessionId, deliveryIds } = await db.$transaction(async (tx) => {
     const agents = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Agent" WHERE "id" = ${manager.id} AND "revokedAt" IS NULL FOR UPDATE`;
     if (!agents.length) throw new Error("AI Chat alert Manager is unavailable");
@@ -33,6 +39,7 @@ export async function deliverManagerAlert(db: PrismaClient, delivery: AlertDeliv
     await tx.chatMessage.create({
       data: { id: messageId, sessionId: session.id, role: "human", content: text, isDelivered: false },
     });
+    onStep?.("webhook-persist");
     const deliveryIds = await persistAgentRunTriggerWebhooks(tx, {
       event: "chat.message",
       agentId: manager.id,
@@ -43,16 +50,20 @@ export async function deliverManagerAlert(db: PrismaClient, delivery: AlertDeliv
       actor: { userId: manager.userId, displayName: "AI Chat monitor" },
       chat: { sessionId: session.id, messageId, text, userName: "AI Chat monitor" },
     });
+    onStep?.("webhook-validation");
     const subscription = await tx.agentWebhookSubscription.findUnique({ where: { agentId: manager.id }, select: { active: true } });
     if (subscription?.active && !deliveryIds.length) {
       throw new Error("AI Chat alert Manager webhook does not accept chat messages");
     }
+    onStep?.("transaction");
     if (deliveryIds.length) {
       await tx.chatMessage.update({ where: { id: messageId }, data: { isDelivered: true } });
     }
     await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
     return { sessionId: session.id, deliveryIds };
   }, { timeout: 10_000 });
+  onStep?.("publish");
   await publishAgentWebhookDeliveries(deliveryIds);
+  onStep?.("broadcast");
   await broadcastChatSession(sessionId, [manager.userId]);
 }

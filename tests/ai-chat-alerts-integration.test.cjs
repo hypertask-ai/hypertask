@@ -32,6 +32,11 @@ function serviceHarness({ environment = "production", deliveryError = false, pro
   let next = { id: "incident:breach", incidentId: "incident", attemptCount: 1, phase: "breach" };
   const service = load("src/lib/ai/chatAlerts/service.ts", {
     "@/lib/prisma": {},
+    "@/lib/flags": {
+      FEATURE_FLAG_OWNER_USER_ID: 6,
+      isFeatureEnabled: async (...args) => { calls.flags.push(args); return true; },
+    },
+    "@/lib/flags/definitions/htpr-7752-chat-alert-diagnostics": { HTPR_7752_CHAT_ALERT_DIAGNOSTICS_FLAG: "htpr-7752-chat-alert-diagnostics" },
     "@/lib/errors/reportError": { reportError: async (report) => calls.reports.push(report) },
     "./manager": { deliverManagerAlert: async (_, delivery) => { calls.deliveries.push(delivery); if (deliveryError) throw new Error("private reply"); } },
     "./store": {
