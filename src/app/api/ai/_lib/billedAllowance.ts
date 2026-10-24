@@ -9,6 +9,7 @@ export const GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
 export const MICRO_USD_PER_USD = 1_000_000;
 export const RESERVATION_TTL_MS = 10 * 60 * 1000;
 export const GATEWAY_REPORT_DELAY_WINDOW_MS = 15 * 60 * 1000;
+export const BILLED_SNAPSHOT_MAX_AGE_MS = 15 * 60 * 1000;
 
 export const finiteNonNegative = (value: unknown): number | null => {
   const parsed = typeof value === "string" ? Number(value) : value;
@@ -196,7 +197,7 @@ export async function effectiveAccountingSource(args: {
   try {
     const redis = await getRedis();
     let saved = await redis.hgetall(key);
-    const usable = () => args.funding && saved.funding === args.funding.provenance && saved.unusable !== "1" &&
+    const usable = () => args.funding && saved.funding === args.funding.provenance && saved.unusable !== "1" && Date.now() - Number(saved.fetchedAt) <= BILLED_SNAPSHOT_MAX_AGE_MS &&
       [saved.visible, saved.system, saved.total, saved.fetchedAt, saved.revision].every((value) =>
         value !== undefined && Number.isSafeInteger(Number(value)) && Number(value) >= 0);
     if (!args.funding || saved.unusable === "1") {
@@ -304,7 +305,7 @@ local details = {}
 local refused = 0
 for _, scope in ipairs(scopes) do
   if now >= scope.endsAt then return "period-rolled" end
-  local billed = scope.source.mode == "billed" and redis.call("HGET", scope.source.key, "funding") == scope.source.funding and redis.call("HGET", scope.source.key, "unusable") ~= "1" and redis.call("HGET", scope.source.key, scope.field)
+  local billed = scope.source.mode == "billed" and redis.call("HGET", scope.source.key, "funding") == scope.source.funding and redis.call("HGET", scope.source.key, "unusable") ~= "1" and now - tonumber(redis.call("HGET", scope.source.key, "fetchedAt") or "0") <= ${BILLED_SNAPSHOT_MAX_AGE_MS} and redis.call("HGET", scope.source.key, scope.field)
   if (not billed or scope.reason ~= "month") and redis.call("EXISTS", scope.seedKey) == 0 then return "shadow-uninitialized" end
 end
 for index, scope in ipairs(scopes) do
@@ -321,7 +322,7 @@ for index, scope in ipairs(scopes) do
   end
   if scope.pending then total = total + tonumber(redis.call("GET", KEYS[scope.pending]) or "0") end
   local mode = "v1"
-  if scope.source.mode == "billed" and redis.call("HGET", scope.source.key, "funding") == scope.source.funding and redis.call("HGET", scope.source.key, "unusable") ~= "1" then
+  if scope.source.mode == "billed" and redis.call("HGET", scope.source.key, "funding") == scope.source.funding and redis.call("HGET", scope.source.key, "unusable") ~= "1" and now - tonumber(redis.call("HGET", scope.source.key, "fetchedAt") or "0") <= ${BILLED_SNAPSHOT_MAX_AGE_MS} then
     local billed = redis.call("HGET", scope.source.key, scope.field)
     if billed then total = tonumber(billed); mode = "billed" end
   end

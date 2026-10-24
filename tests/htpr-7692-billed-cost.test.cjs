@@ -131,7 +131,7 @@ function fakeRedis() {
         for (const scope of scopes) {
           if (now >= scope.endsAt) return "period-rolled";
           const saved = await client.hgetall(scope.source.key);
-          const billed = scope.source.mode === "billed" && saved.funding === scope.source.funding && saved.unusable !== "1" && saved[scope.field] !== undefined;
+          const billed = scope.source.mode === "billed" && saved.funding === scope.source.funding && saved.unusable !== "1" && now - Number(saved.fetchedAt ?? 0) <= 15 * 60_000 && saved[scope.field] !== undefined;
           if ((!billed || scope.reason !== "month") && !values.has(scope.seedKey)) return "shadow-uninitialized";
         }
         for (const [i, scope] of scopes.entries()) {
@@ -139,7 +139,7 @@ function fakeRedis() {
           for (const [c, r] of scope.pairs) { expire(keys[r - 1], expired); total += n(keys[c - 1]); holds += held(keys[r - 1]); }
           const saved = await client.hgetall(scope.source.key);
           let mode = "v1";
-          if (scope.source.mode === "billed" && saved.funding === scope.source.funding && saved.unusable !== "1" && saved[scope.field] !== undefined) {
+          if (scope.source.mode === "billed" && saved.funding === scope.source.funding && saved.unusable !== "1" && now - Number(saved.fetchedAt ?? 0) <= 15 * 60_000 && saved[scope.field] !== undefined) {
             total = Number(saved[scope.field]); mode = "billed";
           }
           details.push({ scope: scope.source.key, mode, billed: total, holds, requested: Number(args[2]), cap: scope.cap });
@@ -174,7 +174,7 @@ function fakeRedis() {
         const expired = [];
         if (script.includes('redis.call("ZRANGEBYSCORE", KEYS[2]')) expire(keys[1], expired);
         let committed = n(keys[0]), mode = "v1";
-        if (keys.length === 3 && h(keys[2]).get("funding") === args[2] && h(keys[2]).get("unusable") !== "1" && h(keys[2]).has("total")) {
+        if (keys.length === 3 && h(keys[2]).get("funding") === args[2] && h(keys[2]).get("unusable") !== "1" && now - Number(h(keys[2]).get("fetchedAt") ?? 0) <= 15 * 60_000 && h(keys[2]).has("total")) {
           committed = Number(h(keys[2]).get("total")); mode = "billed";
         }
         if (script.includes('return "shadow-uninitialized"') && mode === "v1" && !values.has(keys[0].replace(/:committed$/, ":seeded"))) return "shadow-uninitialized";
@@ -438,6 +438,31 @@ for (const backend of ["fake", "real Redis"]) {
         if (scope !== "legacy month") await allowance.settlePlanAllowance(recovered, 0);
       });
     }
+
+    test("F4: prolonged report outage expires billed snapshots and enforces settled v1 spend", async () => {
+      const first = await plan(100_000);
+      await allowance.settlePlanAllowance(first, 0.1);
+      failReport = true;
+      now += 60_001;
+      assert.equal((await effective()).mode, "billed");
+      now += 15 * 60_000;
+      assert.equal((await effective()).mode, "v1");
+      await assert.rejects(plan(1), (error) => error.reason === "month");
+      assert.equal(decisions().at(-1).mode, "v1");
+      assert.equal(decisions().at(-1).billed, 1_000_000);
+      assert.equal(await redis.hget(BILLED, "total"), "100000");
+    });
+
+    test("F4: snapshot aging after source selection atomically falls back before inserting a hold", async () => {
+      let aged = false;
+      evalHook = (script) => {
+        if (!aged && script.includes("local details = {}")) { now += 15 * 60_000 + 1; aged = true; failReport = true; }
+      };
+      await assert.rejects(plan(200_000), (error) => error.reason === "month");
+      assert.equal(decisions().at(-1).mode, "v1");
+      assert.equal(decisions().at(-1).billed, 900_000);
+      assert.deepEqual(await redis.zrange(`${PREFIX}:reservations`, 0, -1), []);
+    });
 
     for (const mode of ["plan", "legacy"]) {
       test(`F5: ${mode} cold and Redis-lost Settings equals initialized admission when billed refresh fails`, async () => {
@@ -795,7 +820,7 @@ for (const backend of ["fake", "real Redis"]) {
       const context = `ai-allowance-drift:${MONTH}:${TEAM}`;
       await redis.sadd(`ai-allowance-drift:${MONTH}:active`, TEAM);
       await redis.set(`${context}:context`, JSON.stringify({ mode: "plan", monthlyUsd: 1, fundingSource: "managed" }));
-      await checkDrift(); now += 31 * 60_000;
+      await checkDrift(); now += 31 * 60_000; await effective();
       const result = await checkDrift();
       assert.equal(result.drift, 0); assert.equal(result.unknown, 0);
       assert.equal(await redis.get(`${PREFIX}:committed`), "900000"); assert.equal(await redis.hget(BILLED, "total"), "100000");

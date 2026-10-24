@@ -20,6 +20,7 @@ import { INCLUDED_WITH_HYPERTASK_GATEWAY_TAG } from "@/lib/aiUsageClassification
 
 import {
   BILLED_ALLOWANCE_SCOPE_INDEX,
+  BILLED_SNAPSHOT_MAX_AGE_MS,
   EXPIRE_RESERVATION_SCRIPT,
   GATEWAY_BASE_URL,
   GATEWAY_REPORT_DELAY_WINDOW_MS,
@@ -826,7 +827,7 @@ ${args.billed ? `for _, member in ipairs(redis.call("ZRANGEBYSCORE", KEYS[2], "-
 end` : ""}
 local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
 local mode = "v1"
-${source?.mode === "billed" ? `if redis.call("HGET", KEYS[3], "funding") == ARGV[3] and redis.call("HGET", KEYS[3], "unusable") ~= "1" then
+${source?.mode === "billed" ? `if redis.call("HGET", KEYS[3], "funding") == ARGV[3] and redis.call("HGET", KEYS[3], "unusable") ~= "1" and ${Date.now()} - tonumber(redis.call("HGET", KEYS[3], "fetchedAt") or "0") <= ${BILLED_SNAPSHOT_MAX_AGE_MS} then
   local billed = redis.call("HGET", KEYS[3], "total")
   if billed then committed = tonumber(billed); mode = "billed" end
 end` : ""}
