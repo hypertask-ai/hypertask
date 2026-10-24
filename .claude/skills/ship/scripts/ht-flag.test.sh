@@ -104,6 +104,7 @@ while [ "$#" -gt 0 ]; do
 done
 if [ "$method" = GET ] && [ -n "${TEST_FLAGS:-}" ]; then
   printf '%s\n' "$TEST_FLAGS" > "$output"
+  if [ "${TEST_REOPEN:-0}" = 1 ]; then printf 'In Progress\n' > "$HOME/section"; fi
 elif [ -n "${TEST_RESPONSE:-}" ]; then
   printf '%s\n' "$TEST_RESPONSE" > "$output"
 else
@@ -144,7 +145,11 @@ set -euo pipefail
 [ "$SHIP_SESSION_NAME" = 'Runner 3' ] || exit 92
 printf '%s\n' "$*" >> "$HOME/vcc-log"
 case "$1:$2" in
-  task:get) jq -nc --arg section "${TEST_SECTION:-Flags}" '{success:true,tasks:[{section:$section}]}' ;;
+  task:get)
+    if [ "${TEST_REREAD_ERROR:-0}" = 1 ] && [ "$(grep -c '^task get ' "$HOME/vcc-log")" = 2 ]; then exit 1; fi
+    section=${TEST_SECTION:-Flags}
+    if [ -f "$HOME/section" ]; then section=$(cat "$HOME/section"); fi
+    jq -nc --arg section "$section" '{success:true,tasks:[{section:$section}]}' ;;
   task:move) [ "$*" = 'task move HTPR-6136 --section Done' ] || exit 93; [ "${TEST_MOVE_ERROR:-0}" = 0 ] ;;
   *) exit 94 ;;
 esac
@@ -154,12 +159,23 @@ export TEST_RESPONSE='{"flag":{"key":"htpr-6136-figma-connect","mode":"EVERYONE"
 export TEST_FLAGS='{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"}]}'
 : > "$HOME/vcc-log"
 "$script" set "$key" everyone --reason "$reason" > "$tmp/output" 2>&1
-[ "$(cat "$HOME/vcc-log")" = $'task get HTPR-6136 --json\ntask move HTPR-6136 --section Done' ]
+[ "$(cat "$HOME/vcc-log")" = $'task get HTPR-6136 --json\ntask get HTPR-6136 --json\ntask move HTPR-6136 --section Done' ]
 grep -q 'moved HTPR-6136 from Flags to Done' "$tmp/output"
 # --review uses the same post-switch path, and owner can be inferred from the key.
 : > "$HOME/vcc-log"
 TEST_RESPONSE='{"flag":{"key":"htpr-6136-figma-connect","mode":"EVERYONE"}}' "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1
 grep -q '^task move HTPR-6136 --section Done$' "$HOME/vcc-log"
+# Reopening during the live flag-list request must not be overwritten.
+: > "$HOME/vcc-log"
+TEST_REOPEN=1 "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1
+if grep -q '^task move ' "$HOME/vcc-log"; then echo 'FAIL: reopening overwritten'; exit 1; fi
+grep -q 'no longer in Flags' "$tmp/output"
+rm "$HOME/section"
+echo 'ok ht-flag skips reopening during live flag read'
+: > "$HOME/vcc-log"
+if TEST_REREAD_ERROR=1 "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1; then exit 1; fi
+if grep -q '^task move ' "$HOME/vcc-log"; then exit 1; fi
+grep -q 'cannot reread' "$tmp/output"
 for section in 'In Progress' 'Valentin Review' Done; do
   : > "$HOME/vcc-log"
   TEST_SECTION="$section" "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1

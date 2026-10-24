@@ -150,6 +150,14 @@ except (ValueError, KeyError, TypeError) as error:
     print("ht-flag: " + str(error), file=sys.stderr)
     sys.exit(1)
 ' "$(dirname "$(readlink -f "$0")")" "$owner" || fail "flag is Everyone; $owner remains in Flags"
+      task=$(SHIP_SESSION_NAME="$IDENTITY" vcc task get "$owner" --json) \
+        || fail "flag is Everyone, but cannot reread $owner; no ticket moved"
+      section=$(jq -er '.success == true and (.tasks | length == 1)' <<<"$task" >/dev/null &&
+        jq -er '.tasks[0].section' <<<"$task") || fail "flag is Everyone, but cannot reread $owner section"
+      if [ "$section" != Flags ]; then
+        printf 'ht-flag: leave %s: no longer in Flags\n' "$owner" >&2
+        exit 0
+      fi
       SHIP_SESSION_NAME="$IDENTITY" vcc task move "$owner" --section Done \
         || fail "flag is Everyone, but moving $owner from Flags to Done failed; retry the sweep"
       printf 'ht-flag: moved %s from Flags to Done (%s is Everyone)\n' "$owner" "$key" >&2

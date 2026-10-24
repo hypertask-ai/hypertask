@@ -97,4 +97,21 @@ if "$here/ship-check" done YPER4-999 > "$tmp/output" 2>&1; then exit 1; fi
 grep -q 'flags are not Everyone' "$tmp/output"
 echo '{"flags":[{"key":"yper4-999-test","mode":"EVERYONE"}]}' > "$tmp/flags"
 "$here/ship-check" done YPER4-999 | grep -q 'done ok'
-echo 'All tests passed: offline Done/Flags guard'
+# Synthetic keys from this PR's fixtures, docs, and unchanged context are not rollout requirements.
+echo '' > "$tmp/body"
+echo '{"flags":[{"key":"htpr-1-a","mode":"OFF"}]}' > "$tmp/flags"
+jq -nc --rawfile patch "$here/ht-flags-sweep.test.sh" '[[{filename:".claude/skills/ship/scripts/ht-flags-sweep.test.sh",status:"added",patch:($patch | split("\n") | map("+" + .) | join("\n"))}]]' > "$tmp/files"
+check 0 Done ''
+jq -nc '[[{filename:"src/example.test.tsx",patch:"+useFlag(\"htpr-2-fixture\")"},{filename:"docs/flags.md",patch:"+useFlag(\"htpr-3-example\")"},{filename:"src/page.tsx",patch:" useFlag(\"htpr-4-context\")\n-useFlag(\"htpr-5-removed\")\n+const message = \"htpr-6-not-a-flag\";"}]]' > "$tmp/files"
+check 0 Done ''
+jq -nc '[[{filename:"src/page.tsx",patch:"+useFlag(\n+  \"htpr-8-multiline\"\n+); const sample = \"htpr-9-not-a-flag\";"}]]' > "$tmp/files"
+echo '{"flags":[{"key":"htpr-8-multiline","mode":"OWNER_AND_QA"}]}' > "$tmp/flags"
+check 2 Done 'htpr-8-multiline=OWNER_AND_QA'
+jq '.flags[0].mode="EVERYONE"' "$tmp/flags" > "$tmp/new"; mv "$tmp/new" "$tmp/flags"
+check 0 Done ''
+jq -nc '[[{filename:"src/page.tsx",patch:"+import { FLAG } from \"@/lib/flags/definitions/htpr-10-imported\";"}]]' > "$tmp/files"
+check 2 Done 'cannot read live mode for htpr-10-imported'
+echo 'Canonical flag: https://app.hypertask.ai/admin/flags/htpr-7-linked' > "$tmp/body"
+echo '[[]]' > "$tmp/files"
+check 2 Done 'cannot read live mode for htpr-7-linked'
+echo 'All tests passed: offline Done/Flags guard (fixture patches ignored, live references enforced)'

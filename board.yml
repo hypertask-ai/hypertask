@@ -14,4 +14,5 @@ roles:
   ai_review: AI Review
   manager_review: Supervisor Review
   human_review: Valentin Review
+  flags: Flags
   done: Done

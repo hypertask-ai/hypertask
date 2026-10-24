@@ -58,20 +58,33 @@ def main():
     ticket, repo, pr = sys.argv[1:]
     references = ""
     if pr:
-        references = subprocess.check_output([
+        body = subprocess.check_output([
             "gh", "pr", "view", pr, "-R", repo, "--json", "body", "--jq", ".body"], text=True)
+        references = "\n".join(re.findall(
+            r"https://app\.hypertask\.ai/admin/flags/[a-z0-9-]+|"
+            r"^\s*(?:feature flag|flag):[^\n]+", body, re.MULTILINE | re.IGNORECASE))
         pages = subprocess.check_output([
             "gh", "api", f"repos/{repo}/pulls/{pr}/files?per_page=100", "--paginate", "--slurp"], text=True)
         pages = json.loads(pages)
         if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
             raise ValueError("cannot read PR flag references")
-        # Removed lines describe old behaviour, not flags the shipped ticket still needs.
         for page in pages:
             for file in page:
-                if file.get("status") == "removed":
+                path = file["filename"]
+                if file.get("status") == "removed" or not path.startswith("src/") or re.search(
+                    r"(?:^|/)(?:__tests__|__mocks__|fixtures|tests|docs)/|\.(?:test|spec)\.", path
+                ):
                     continue
-                references += "\n" + file["filename"] + "\n" + "\n".join(
-                    line for line in file.get("patch", "").splitlines() if not line.startswith("-"))
+                if path.startswith("src/lib/flags/definitions/") and path.endswith(".ts"):
+                    references += "\n" + path
+                else:
+                    added = "\n".join(line[1:] for line in file.get("patch", "").splitlines()
+                                      if line.startswith("+") and not line.startswith("+++"))
+                    references += "\n" + "\n".join(re.findall(
+                        r"\b(?:useFlag(?:Loaded|Ready)?|isFeatureEnabled|defaultFeatureFlagMode)"
+                        r"\s*\(\s*['\"]([a-z0-9-]+)['\"]", added))
+                    references += "\n" + "\n".join(re.findall(
+                        r"\b(?:from|import)\s*['\"][^'\"]*lib/flags/definitions/([^'\"]+)['\"]", added))
     require_everyone(ticket, read_flags(), references)
     print("flags ok (Everyone or no ticket flag)")
 

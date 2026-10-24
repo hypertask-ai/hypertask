@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'printf "sweep test failed at line %s\n" "$LINENO" >&2' ERR
 here=$(cd "$(dirname "$0")" && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -13,7 +14,14 @@ case "$1:$2" in
   task:list)
     [ "$*" = 'task list --project 15 --section Flags --limit 100 --json' ] || exit 90
     cat "$SWEEP_TEST_DIR/tasks" ;;
-  task:get) jq -nc --arg section "${SWEEP_SECTION:-Flags}" '{success:true,tasks:[{section:$section}]}' ;;
+  task:get)
+    section=${SWEEP_SECTION:-Flags}
+    if [ "${SWEEP_REOPEN:-0}" = 1 ]; then
+      section=$(cat "$SWEEP_TEST_DIR/section")
+      printf 'In Progress\n' > "$SWEEP_TEST_DIR/section"
+    fi
+    [ "${SWEEP_GET_ERROR:-0}" = 0 ] || exit 1
+    jq -nc --arg section "$section" --arg description "${SWEEP_CURRENT_DESCRIPTION:-}" '{success:true,tasks:[{section:$section,description:$description}]}' ;;
   task:move) [ "$*" = 'task move HTPR-1 --section Done' ] || exit 91 ;;
   *) exit 92 ;;
 esac
@@ -67,6 +75,18 @@ for ticket in HTPR-2 HTPR-3 HTPR-4 HTPR-5 HTPR-7; do grep -q "leave $ticket in F
 SWEEP_SECTION='Valentin Review' run --go
 ! grep -q '^task move ' "$tmp/calls"
 grep -q 'no longer in Flags' "$tmp/output"
+# The first per-ticket snapshot says Flags; a concurrent reopening changes the next read.
+echo Flags > "$tmp/section"
+SWEEP_REOPEN=1 run --go
+if grep -q '^task move ' "$tmp/calls"; then echo 'FAIL: reopening overwritten'; exit 1; fi
+grep -q 'no longer in Flags' "$tmp/output"
+echo 'ok sweep skips reopening after eligibility snapshot'
+SWEEP_CURRENT_DESCRIPTION='Flag: htpr-50-shared' run --go
+if grep -q '^task move ' "$tmp/calls"; then echo 'FAIL: current flag reference ignored'; exit 1; fi
+grep -q 'htpr-50-shared=OWNER_ONLY' "$tmp/output"
+: > "$tmp/calls"
+if SWEEP_GET_ERROR=1 "$here/ht-flags-sweep" --go > "$tmp/output" 2>&1; then exit 1; fi
+if grep -q '^task move ' "$tmp/calls"; then exit 1; fi
 : > "$tmp/calls"
 if FLAGS_ERROR=1 "$here/ht-flags-sweep" --go > "$tmp/output" 2>&1; then exit 1; fi
 ! grep -q '^task move ' "$tmp/calls"
