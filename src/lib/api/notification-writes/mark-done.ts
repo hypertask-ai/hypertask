@@ -5,13 +5,15 @@ import { taskReadQuery } from "@/lib/api/task-writes/read-query";
 import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7691_IDEMPOTENT_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7691-idempotent-archive";
 
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
   validationMessage: "Invalid request",
   allowNullBody: true,
   operation: async (body, session, request) => {
-    const { id, taskId, tutorial } = body;
+    const { id, taskId, tutorial, intent } = body;
     const userId = session.userId;
     const excludeSocketId = socketIdFromHeader(request.rawHeaders ? request.rawHeaders["x-socket-id"] : request.headers.get("x-socket-id"));
     if (!taskId && !id) {
@@ -138,6 +140,14 @@ const route = taskWriteRoute({
       void broadcastInboxChange(notification_.userId, { originUserId: notification_.userId }, excludeSocketId);
       return NextResponse.json(updatedNotifiction, { status: 200 });
 
+    }
+
+    else if (
+      notification_?.status === "Archive" &&
+      intent === "archive" &&
+      await isFeatureEnabled(HTPR_7691_IDEMPOTENT_ARCHIVE_FLAG, userId)
+    ) {
+      return NextResponse.json(notification_, { status: 200 });
     }
 
     else if (notification_?.status === "Archive") {
