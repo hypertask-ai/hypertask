@@ -341,6 +341,12 @@ test("manifest analytics enqueue failure cannot compensate or fail a successfull
   h.mocks["@/utils/generateRank"] = { default: () => "A0100" };
   h.mocks["@/lib/mcp/tasks/services"] = { createTask: async () => { throw Error("no tasks in fixture"); } };
   h.mocks["@/lib/mcp/boards/links"] = { buildMcpBoardUrl: (id: number) => `board:${id}`, buildMcpTaskUrl: () => "task" };
+  h.mocks["@/lib/constants/constants"] = { PriorityConstants: [], EstimateConstants: [] };
+  h.mocks["@/lib/mcp/webhooks/taskEvents"] = { persistTaskCreatedWebhook: async () => {} };
+  h.mocks["@/lib/agentWebhooks/outbox"] = { persistAgentTaskCreatedPending: async () => {} };
+  h.mocks["@/lib/api/task-writes/create-global-effects"] = { schedulePostCreateWork: () => {}, createPriorityActivity: async () => {} };
+  h.mocks["@/utils/controllers/activities/createEstimateActivity"] = { default: async () => {} };
+  h.mocks["@/models/model"] = {};
   h.prisma.project.findUniqueOrThrow = async ({ where }: any) => ({ ...h.projects.get(where.id), uniqueIdentifier: "BOARD" });
   h.prisma.section.findMany = async () => [];
   const updates: any[] = [];
