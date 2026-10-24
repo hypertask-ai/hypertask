@@ -9,12 +9,13 @@ import { MentionItem, IChatSession } from "@/models/model";
 import { usePathname } from "next/navigation";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
-import { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
+import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
+import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
 
 export function useAiChatState() {
 
@@ -90,12 +91,19 @@ export function useAiChatState() {
   const [chatMounted, setChatMounted] = useState<boolean>(false);
   const [minimized, setMinimized] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [queuedMessages, setQueuedMessages] = useState<
-    { id: string; content: string; html: string; files: FileItem[] }[]
-  >([]);
-  const messageQueueRef = useRef<
-    { id: string; content: string; html: string; files: FileItem[] }[]
-  >([]);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedAiChatMessage[]>([]);
+  const messageQueueRef = useRef<QueuedAiChatMessage[]>([]);
+  const persistentQueueEnabled = useFlag(HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG);
+  const [, refreshQueue] = useState(0);
+  const sessionQueue = useMemo(() => {
+    let storage: Storage | null = null;
+    try {
+      if (typeof window !== "undefined") storage = window.sessionStorage;
+    } catch {
+    }
+    return createSessionMessageQueue(currentUser?.id ?? 0, storage, () => refreshQueue((version) => version + 1));
+  }, [currentUser?.id]);
+  const persistentQueue = persistentQueueEnabled ? sessionQueue : undefined;
   const [showScrollUpIndicator, setShowScrollUpIndicator] =
     useState<boolean>(false);
   const { currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption } =
@@ -199,6 +207,11 @@ export function useAiChatState() {
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
   } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
+  sessionQueue.sessionId = currentSession?.id;
+  useEffect(() => {
+    sessionQueue.sessionId = currentSession?.id;
+    return () => { sessionQueue.sessionId = undefined; };
+  }, [sessionQueue, currentSession?.id]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const chatHistoryReadyRef = useRef(chatHistoryReady);
@@ -241,6 +254,10 @@ export function useAiChatState() {
   useEffect(() => {
     setQueuedMessages((prev) => (prev.length === 0 ? prev : []));
   }, [sessionContextKey]);
+  let visibleQueuedMessages = queuedMessages;
+  if (persistentQueue) {
+    visibleQueuedMessages = currentSession ? persistentQueue.get(currentSession.id) : [];
+  }
   return {
   lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
@@ -248,7 +265,7 @@ export function useAiChatState() {
   setIsSidebarMode, showMentionList, inViewObject, dockedChatScope, setDockedChatScope,
   pathname, isDetailPage, isFullScreenChat, surface, spansAllBoards,
   chatMounted, setChatMounted, minimized, setMinimized, isTyping,
-  setIsTyping, queuedMessages, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
+  setIsTyping, queuedMessages: visibleQueuedMessages, persistentQueue, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
   setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption,
   streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, currentStreamingSession,
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,

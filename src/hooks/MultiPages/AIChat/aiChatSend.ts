@@ -12,15 +12,16 @@ import { chatModelRequestFields } from "@/lib/aiModelOptions";
 import type { useAiChatSessions } from "./useAiChatSessions";
 import type { useAiChatState } from "./useAiChatState";
 import type { useAiChatAttachments } from "./useAiChatAttachments";
+import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sessionMessageQueue";
 
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
   Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
-  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean };
+  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean; persistentQueue?: SessionMessageQueue };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
   const {
-  sessionPagingEnabled, getDisplayedSession, isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
+  sessionPagingEnabled, getDisplayedSession, isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
   setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
   currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
   scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
@@ -34,26 +35,44 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
   const handleSendMessage = async (
     retryContent?: string,
-    options?: { htmlForAttachments?: string; preserveComposer?: boolean }
+    options?: { htmlForAttachments?: string; preserveComposer?: boolean; queuedMessage?: QueuedAiChatMessage; sessionId?: string; onQueueBusy?: (retryAfterMs: number) => void }
   ): Promise<boolean> => {
     if (isByokBlocked) return false;
     if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     const preserveComposer = options?.preserveComposer;
 
-    if (retryContent === undefined && isTyping) {
+    const queuedMessage = options?.queuedMessage;
+    const queueSessionId = persistentQueue?.sessionId;
+    const hasQueuedMessages = persistentQueue && queueSessionId &&
+      (persistentQueue.get(queueSessionId).length > 0 || persistentQueue.hasPending(queueSessionId));
+    const shouldQueue = isTyping || (persistentQueue && (sendInFlightRef.current || hasQueuedMessages));
+    if (retryContent === undefined && shouldQueue) {
       const content = (editor?.getText() ?? "").trim();
       if (!content) return false;
       const files = [...fileUpload.fileItems];
       const queued = {
         id: crypto.randomUUID(),
+        ...(persistentQueue ? { assistantMessageId: crypto.randomUUID() } : {}),
         content,
         html: editor?.getHTML() ?? "",
         files,
       };
-      messageQueueRef.current = [...messageQueueRef.current, queued];
-      setQueuedMessages(messageQueueRef.current);
-      editor?.commands.clearContent();
-      fileUpload.clearFiles();
+      if (persistentQueue) {
+        if (!queueSessionId) return false;
+        try {
+          await persistentQueue.enqueue(queueSessionId, queued, () => processAttachments(queued.html, files));
+        } catch {
+          toast.error("Could not save the queued message. Your draft is still in the composer.");
+          return false;
+        }
+      } else {
+        messageQueueRef.current = [...messageQueueRef.current, queued];
+        setQueuedMessages(messageQueueRef.current);
+      }
+      if (!persistentQueue || (persistentQueue.sessionId === queueSessionId && editor?.getHTML() === queued.html)) {
+        editor?.commands.clearContent();
+        fileUpload.clearFiles();
+      }
       return true;
     }
 
@@ -78,7 +97,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         ? inViewObject.taskId
         : undefined;
 
+    let completedSessionId: string | undefined;
+    let queueAccepted = false;
     try {
+      if (queuedMessage && persistentQueue?.sessionId !== options?.sessionId) return false;
       const session = await waitForChatSession();
       if (!session) {
         toast.error("AI chat is still loading. Please try again.");
@@ -86,16 +108,18 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         return false;
       }
 
+      if (queuedMessage && (session.id !== options?.sessionId || persistentQueue?.sessionId !== session.id)) return false;
+      completedSessionId = session.id;
       if (isGuestBoardBuild(currentProject)) {
         await buildGuestBoard(content.trim(), session);
         return true;
       }
 
     const sidebarHeaders = sidebarChatHeaders(session.id);
-    const processedAttachments = preserveComposer ? [] : await processAttachments(
+    const processedAttachments = queuedMessage?.attachments ?? (preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
       fileUpload.fileItems
-    );
+    ));
 
     if (sessionPagingEnabled && !isDemo && getDisplayedSession()?.id !== session.id) return false;
 
@@ -111,7 +135,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
 
-    if (!preserveComposer) editor?.commands.clearContent();
+    if (!preserveComposer && !queuedMessage) editor?.commands.clearContent();
 
     setIsTyping(true);
 
@@ -125,10 +149,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         createdAt: new Date(),
       })
     );
-    const assistantMessageId = crypto.randomUUID();
+    const assistantMessageId = queuedMessage?.assistantMessageId ?? crypto.randomUUID();
 
     const userMessage: IChatMessage = {
-      id: Date.now().toString(),
+      id: queuedMessage?.id ?? Date.now().toString(),
       content,
       role: "human",
       createdAt: new Date(),
@@ -142,13 +166,15 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       role: message.role,
     }));
 
-    addMessageToSessionQuery(
-      session.id,
-      userMessage,
-      false,
-      false,
-      scopedProjectId
-    );
+    if (!queuedMessage) {
+      addMessageToSessionQuery(
+        session.id,
+        userMessage,
+        false,
+        false,
+        scopedProjectId
+      );
+    }
 
     if (!session.agentId && !isFullScreenChat && taskId === undefined && dockedProjectId !== undefined) {
       setAiChatBoardSessionMap((previousMap) => ({
@@ -238,6 +264,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
               refusalMessage =
                 (await extractStreamRefusalMessage(response)) ??
                 "The chat server refused this reply. Wait a moment and try again.";
+              if (queuedMessage && ((response.status === 409 && refusalMessage.includes("already in progress")) || response.status === 429)) {
+                options?.onQueueBusy?.(response.status === 429 ? 60000 : 15000);
+                return false;
+              }
             }
             throw new ChatRequestRefusedError(
               "Network response was not ok or body is missing",
@@ -245,7 +275,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             );
           }
 
-          if (!preserveComposer) fileUpload.clearFiles();
+          if (!queueAccepted && queuedMessage) {
+            addMessageToSessionQuery(session.id, userMessage, false, false, scopedProjectId);
+          }
+          queueAccepted = true;
+          if (!preserveComposer && !queuedMessage) fileUpload.clearFiles();
 
           if (!assistantPlaceholderAdded) {
             const initialAssistantMessage: IChatMessage = {
@@ -317,10 +351,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       sendInFlightRef.current = false;
       searchHandoff?.onSettled();
       queueMicrotask(() => {
-        drainQueuedMessage();
+        drainQueuedMessage(completedSessionId);
       });
     }
-    return true;
+    return !queuedMessage || queueAccepted;
   };
   handleSendMessageRef.current = handleSendMessage;
   return {
