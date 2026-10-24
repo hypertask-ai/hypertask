@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
+import { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG } from "@/lib/flags/definitions/htpr-7716-allowance-fallbacks";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -35,6 +37,7 @@ export function getCommentSummaryTargetLines(wordCount: number) {
 }
 
 export async function generateAndStoreCommentSummary(commentId: number) {
+  let allowanceFallbacksEnabled = false;
   try {
     const comment = await prisma.comment.findUnique({
       where: { id: commentId },
@@ -83,6 +86,7 @@ export async function generateAndStoreCommentSummary(commentId: number) {
       return comment.summary;
     }
 
+    allowanceFallbacksEnabled = await isFeatureEnabled(HTPR_7716_ALLOWANCE_FALLBACKS_FLAG, comment.creatorId ?? comment.task.userId);
     const targetLines = getCommentSummaryTargetLines(wordCount);
     const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: comment.task.project.teamId, userId: comment.creatorId ?? comment.task.userId }) : { haiku55Enabled: false, byok: undefined };
     const systemModel = resolveSystemModel(
@@ -140,6 +144,7 @@ TL;DR:`,
 
     return stored.count > 0 ? summary : null;
   } catch (error) {
+    if (allowanceFallbacksEnabled && warnIfAllowanceRefused(error, "commentSummaries")) return null;
     if (findSharedAiAllowanceError(error) && await isFeatureEnabled(HTPR_7728_COMMENT_SUMMARY_REFUSAL_FLAG, 0).catch(() => false)) {
       return null;
     }
