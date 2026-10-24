@@ -24,6 +24,24 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
   return tokens.every((token) => vocabulary.has(token)) ? "yes" : "unclear";
 }
 
+const SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
+const BATCH_SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question:((?:\s*Switch [a-z0-9]+(?:-[a-z0-9]+)* to (?:Only me|Owner \+ QA|Everyone|Off)\?)+)$/;
+const BATCH_SWITCH_ITEM = /Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?/g;
+
+export function strictSwitchRequest(words: string, batchAllowed: boolean): Map<string, string> | null {
+  const text = words.replace(/\s+/g, " ").trim();
+  const single = SWITCH_REQUEST.exec(text);
+  if (single) return new Map([[single[1], single[2]]]);
+  const batch = batchAllowed ? BATCH_SWITCH_REQUEST.exec(text) : null;
+  if (!batch) return null;
+  const switches = new Map<string, string>();
+  for (const [, key, mode] of batch[1].matchAll(BATCH_SWITCH_ITEM)) {
+    if (switches.has(key)) return null;
+    switches.set(key, mode);
+  }
+  return switches;
+}
+
 export function parseSwitchQuestion(text: string): Map<string, string> | null {
   const visible = text.toLowerCase().replace(/"[^"]*(?:"|$)/g, '""');
   const switches = new Map<string, string>();
@@ -34,9 +52,9 @@ export function parseSwitchQuestion(text: string): Map<string, string> | null {
     off: "Off",
   };
   const switchClause = /\bswitch\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s+to\s+(only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-])/g;
-  if (visible.split(/[.!?\n]/).some((sentence) => !sentence.match(switchClause)
-    && (/^\s*(?:no|nope|not|don't|do not|never|keep|stop|hold|cancel)\b/.test(sentence)
-      || /\b(?:instead|unless)\b/.test(sentence)))) return null;
+  const remainder = text.toLowerCase().replace(switchClause, " ");
+  if (/\b(?:if|unless|only|instead|except|but|not|don't|do not|never|no|wait|later|tomorrow|maybe|until)\b/.test(remainder)) return null;
+  if (remainder.split(/[.!?\n]/).some((sentence) => /^\s*(?:no|nope|not|don't|do not|never|keep|stop|hold|cancel)\b/.test(sentence))) return null;
   for (const match of visible.matchAll(switchClause)) {
     const prefix = visible.slice(0, match.index).split(/[.!?\n]/).at(-1) ?? "";
     if (/\b(?:not|don't|do not|never|no|didn't|won't|shouldn't)\b/.test(prefix)) return null;

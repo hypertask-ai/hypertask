@@ -562,8 +562,19 @@ test("PATCH accepts thumbs-up on a free-wording switch question", async () => {
   await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
 });
 
+test("PATCH refuses a conditional switch question even with a thumbs-up", async () => {
+  approvalComment.text = `Switch ${key} to Everyone only if I approve tomorrow`;
+  await assertRefused();
+});
+
 test("PATCH accepts the lead in-chat record of yes, ship it", async () => {
   chatRecord();
+  await assertAllowed("chat-record");
+});
+
+test("PATCH accepts a lead in-chat record with a trailing period", async () => {
+  chatRecord();
+  approvalComment.text += ".";
   await assertAllowed("chat-record");
 });
 
@@ -580,6 +591,14 @@ test("PATCH accepts the lead in-chat record naming its own switch without an ear
   assert.deepEqual(candidateLocks, []);
 });
 
+test("PATCH accepts a lead in-chat record followed only by punctuation-separated batch switch clauses", async () => {
+  chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "yes, ship it". Switch ${key} to Only me?; Switch other-flag to Owner + QA!`);
+  batchFlagOn = true;
+  ticketComments = [];
+  await assertAllowed("chat-record", key, "OWNER_ONLY", [123]);
+  await assertAllowed("chat-record", "other-flag", "OWNER_AND_QA", [123]);
+});
+
 test("PATCH refuses the lead in-chat record naming its own switch when the quote is no", async () => {
   chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "no". Switch ${key} to Off`);
   ticketComments = [];
@@ -591,8 +610,31 @@ for (const kind of ["ticket-yes", "chat-record", "thumbs-up"]) {
     plainYesFlagOn = false;
     if (kind === "ticket-yes") ticketYes();
     else if (kind === "chat-record") chatRecord();
-    else approvalComment.text = `Switch ${key} to Everyone`;
+    else approvalComment.text = `Question: Switch ${key} to Everyone?`;
     if (kind === "thumbs-up") await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
+    else await assertRefused();
+  });
+}
+
+for (const [name, text] of [
+  ["free wording", `@Valentin Yeo can I switch ${key}? Switch ${key} to Everyone`],
+  ["trailing thanks", `Question: Switch ${key} to Everyone? Thanks`],
+  ["lowercase wording", `question: switch ${key} to everyone?`],
+  ["normalized fullwidth wording", `Ｑuestion: Switch ${key} to Everyone?`],
+]) {
+  test(`PATCH with plain-yes flag off refuses thumbs-up on ${name}`, async () => {
+    plainYesFlagOn = false;
+    approvalComment.text = text;
+    await assertRefused();
+  });
+}
+
+for (const batchOn of [false, true]) {
+  test(`PATCH with plain-yes flag off ${batchOn ? "accepts" : "refuses"} strict batch thumbs-up with batch flag ${batchOn ? "on" : "off"}`, async () => {
+    plainYesFlagOn = false;
+    batchFlagOn = batchOn;
+    approvalComment.text = `<p>@Valentin Yeo Question: Switch ${key} to Everyone?</p>\n<p>Switch other-flag to Off?</p>`;
+    if (batchOn) await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
     else await assertRefused();
   });
 }
@@ -690,6 +732,24 @@ test("PATCH refuses a human no after the newest qualifying thumbs-up", async () 
   await assertRefused("Valentin said no after that approval (comment 124)");
 });
 
+test("PATCH refuses a chat record posted after a human no on its recorded UTC date", async (t) => {
+  const now = Date.parse("2026-10-24T12:00:00.000Z");
+  t.mock.method(Date, "now", () => now);
+  chatRecord(`Valentin said in chat (2026-10-24): "yes, ship it". Switch ${key} to Everyone`);
+  approvalComment.createdAt = new Date(now - 1000);
+  ticketComments = [ticketComment(122, "no", { agentId: null, createdAt: new Date("2026-10-24T00:00:00.000Z") })];
+  await assertRefused("Valentin said no after that approval (comment 122)");
+});
+
+test("PATCH accepts a chat record when the human no predates its recorded UTC date", async (t) => {
+  const now = Date.parse("2026-10-24T12:00:00.000Z");
+  t.mock.method(Date, "now", () => now);
+  chatRecord(`Valentin said in chat (2026-10-24): "yes, ship it". Switch ${key} to Everyone`);
+  approvalComment.createdAt = new Date(now - 1000);
+  ticketComments = [ticketComment(122, "no", { agentId: null, createdAt: new Date("2026-10-23T23:59:59.999Z") })];
+  await assertAllowed("chat-record", key, "EVERYONE", [123]);
+});
+
 test("PATCH refuses a later edited human no withdrawing yes", async () => {
   ticketYes();
   ticketComments.push(ticketComment(124, "no", {
@@ -710,6 +770,10 @@ for (const [name, setup] of [
   ["chat record with text before the prefix", () => { approvalComment.text = `Earlier discussion: ${approvalComment.text}`; }],
   ["chat record without in chat", () => { approvalComment.text = `Valentin said (${new Date().toISOString().slice(0, 10)}): "yes, ship it"`; }],
   ["chat record quoting no", () => { approvalComment.text = `Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "no"`; }],
+  ["chat record with trailing denial", () => { approvalComment.text += ", but not for this flag."; }],
+  ["chat record with unrelated trailing text", () => { approvalComment.text += ". Thanks"; }],
+  ["chat record with denial after a switch clause", () => { approvalComment.text += `. Switch ${key} to Everyone, but not for this flag.`; }],
+  ["chat record with unrelated text before a switch clause", () => { approvalComment.text += `. Please Switch ${key} to Everyone`; }],
   ["chat record with two quoted spans", () => { approvalComment.text += ' "yes"'; }],
   ["chat record with an unmatched extra quote", () => { approvalComment.text += ' "'; }],
   ["chat record from a lead owned by another user", () => { leadAgent.userId = 7; }],

@@ -7,7 +7,7 @@ export default {
   kind: "bugfix",
   shippedOn: "2026-10-24",
   defaultMode: "OWNER_AND_QA",
-  description: "On lets Valentin's plain yes in a ticket comment, or HT Product Lead's in-chat record of his words, approve a flag switch. Off allows only his thumbs up.",
+  description: "On lets Valentin's plain yes in a ticket comment, or HT Product Lead's in-chat record of his words, approve a flag switch, and lets questions use free wording. Off restores the old rule: only his thumbs up on an exact Question: Switch <flag> to <mode>? comment.",
   releaseRisk: {
     risk: "small",
     highRisk: "access",

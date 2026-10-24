@@ -2,8 +2,9 @@ import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
+import { parse } from "node-html-parser";
 import { NextRequest } from "next/server";
-import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, normalizeVisibleText, parseSwitchQuestion } from "@/lib/flags/approvalWords";
+import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_MODES,
@@ -198,7 +199,8 @@ export async function PATCH(request: NextRequest) {
       if (human && answer === "no") {
         throw new FeatureFlagApprovalError(`Valentin said no on comment ${comment.id}; no switch`);
       }
-      let switches = parseSwitchQuestion(words);
+      let switches = plainYesAllowed ? parseSwitchQuestion(words)
+        : strictSwitchRequest(parse(comment.text || comment.commentText || "").text, batchAllowed);
       let kind: "thumbs-up" | "ticket-yes" | "chat-record";
       let questionCommentIds = [comment.id];
       let approvedAt = comment.createdAt;
@@ -211,7 +213,7 @@ export async function PATCH(request: NextRequest) {
         if (human && fresh && answer === "yes") {
           kind = "ticket-yes";
         } else {
-          const record = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):\s*"([^"]*)"/.exec(words);
+          const record = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):\s*"([^"]*)"(?:(?:[\s\p{P}]+switch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s+(?:only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-]))+[\s\p{P}]*|\.)?$/u.exec(words);
           const recordDate = record ? Date.parse(`${record[1]}T00:00:00.000Z`) : NaN;
           if (!unedited || !fresh || comment.creatorId !== FEATURE_FLAG_OWNER_USER_ID
             || comment.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !record || !Number.isFinite(recordDate)
@@ -227,6 +229,7 @@ export async function PATCH(request: NextRequest) {
             throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
           }
           kind = "chat-record";
+          approvedAt = new Date(recordDate);
         }
         if (kind !== "chat-record" || !switches) {
           const beforeApproval = { OR: [
@@ -278,7 +281,8 @@ export async function PATCH(request: NextRequest) {
       const laterComments = await tx.comment.findMany({
         where: {
           taskId: comment.taskId, creatorId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null,
-          ...(kind === "thumbs-up" ? { createdAt: { gt: approvedAt } } : { OR: [
+          ...(kind === "chat-record" ? { createdAt: { gte: approvedAt } }
+            : kind === "thumbs-up" ? { createdAt: { gt: approvedAt } } : { OR: [
             { createdAt: { gt: approvedAt } },
             { createdAt: approvedAt, id: { gt: comment.id } },
           ] }),
