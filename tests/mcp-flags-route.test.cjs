@@ -30,6 +30,7 @@ let approvalComment;
 let approvalQueries;
 let lockQueries;
 let batchFlagOn;
+let plainYesFlagOn;
 let commentLockLost;
 let ticketComments;
 let leadAgent;
@@ -59,9 +60,10 @@ stubModule("src/lib/flags.ts", {
   FeatureFlagApprovalError,
   defaultFeatureFlagMode: () => "OWNER_AND_QA",
   isFeatureEnabled: async (flagKey, userId) => {
-    assert.equal(flagKey, "htpr-7364-batch-flag-approval");
     assert.equal(userId, 6);
-    return batchFlagOn;
+    if (flagKey === "htpr-7364-batch-flag-approval") return batchFlagOn;
+    assert.equal(flagKey, "htpr-7727-plain-yes-flag-approval");
+    return plainYesFlagOn;
   },
   isFeatureFlagOwnerUserId: async (userId) => { calls.push("owner"); return owner && userId === 6; },
   listFeatureFlagModes: async (options) => { calls.push("list"); assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } }); return rows; },
@@ -142,6 +144,9 @@ const tx = {
       calls.push("approval");
       approvalQueries.push(query);
       const reaction = query.select.reactions.where;
+      assert.deepEqual(query.select.reactions.select, { createdAt: true });
+      assert.deepEqual(query.select.reactions.orderBy, { createdAt: "desc" });
+      assert.equal(query.select.reactions.take, 1);
       assert.deepEqual({ ...query.select, reactions: undefined }, {
         id: true, text: true, commentText: true, creatorId: true, agentId: true,
         agentDisplayName: true, editedAt: true, editedByUserId: true, editedByAgentId: true,
@@ -165,7 +170,9 @@ const tx = {
       const reactions = approvalComment.reactions.filter(row => row.userId === reaction.userId
         && row.agentId === reaction.agentId && row.agentDisplayName === reaction.agentDisplayName
         && row.isDeleted === reaction.isDeleted && row.unified.startsWith(reaction.unified.startsWith)
-        && row.createdAt >= reaction.createdAt.gte);
+        && row.createdAt >= reaction.createdAt.gte)
+        .sort((a, b) => b.createdAt - a.createdAt).slice(0, 1)
+        .map(({ createdAt }) => ({ createdAt }));
       return { ...approvalComment, reactions };
     },
   },
@@ -209,7 +216,7 @@ test.beforeEach((t) => {
   ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3", agentRole: "write" };
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
-  approvalQueries = []; lockQueries = []; batchFlagOn = false; commentLockLost = false;
+  approvalQueries = []; lockQueries = []; batchFlagOn = false; plainYesFlagOn = true; commentLockLost = false;
   approvalComment = {
     id: 123, taskId: 900, creatorId: 6, agentId: "runner-3", agentDisplayName: null,
     createdAt: new Date(), editedByUserId: null, editedByAgentId: null,
@@ -357,7 +364,7 @@ test("PATCH accepts thumbs up with a skin tone and visible text", async () => {
 
 for (const [name, text] of [
   ["no question mark", `Switch ${key} to Off`],
-  ["extra text after", `Question: Switch ${key} to Off? No, keep it.`],
+  ["plain extra text after", `Question: Switch ${key} to Off? Thanks`],
 ]) {
   test(`PATCH accepts approval from ${name}`, async () => {
     approvalComment.commentText = text;
@@ -365,9 +372,10 @@ for (const [name, text] of [
   });
 }
 
-for (const rejected of ["missing key", "wrong mode", "refusal naming both modes", "two requests", "prefix key", "negated request", "quoted request", "empty comment", "visible text differs from commentText", "no reaction", "agent reaction", "deleted agent reaction", "non-thumbs emoji", "old reaction", "other user reaction", "deleted reaction", "unknown comment", "different comment", "wrong project", "wrong ticket", "deleted ticket"]) {
+for (const rejected of ["refusal after switch", "missing key", "wrong mode", "refusal naming both modes", "two requests", "prefix key", "negated request", "quoted request", "empty comment", "visible text differs from commentText", "no reaction", "agent reaction", "deleted agent reaction", "non-thumbs emoji", "old reaction", "other user reaction", "deleted reaction", "unknown comment", "different comment", "wrong project", "wrong ticket", "deleted ticket"]) {
   test(`PATCH refuses approval from ${rejected}`, async () => {
     const reaction = approvalComment.reactions[0];
+    if (rejected === "refusal after switch") approvalComment.commentText = `Question: Switch ${key} to Off? No, keep it.`;
     if (rejected === "missing key") approvalComment.commentText = "Question: Switch another-flag to Off?";
     if (rejected === "wrong mode") approvalComment.commentText = `Question: Switch ${key} to Everyone?`;
     if (rejected === "refusal naming both modes") approvalComment.commentText = `Keep ${key} Off, not Everyone`;
@@ -507,7 +515,7 @@ function ticketYes(text = "Yes") {
   Object.assign(approvalComment, { text, commentText: "", agentId: null, reactions: [] });
   ticketComments = [ticketComment(100, `Question: Switch ${key} to Everyone?`)];
 }
-function chatRecord(text = 'Valentin said in chat (2026-10-24): "yes, ship it"') {
+function chatRecord(text = `Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "yes, ship it"`) {
   ticketYes(text);
   approvalComment.agentId = FLAG_CHAT_RECORD_AGENT_ID;
   approvalComment.agentDisplayName = "HT Product Lead";
@@ -559,18 +567,35 @@ test("PATCH accepts the lead in-chat record of yes, ship it", async () => {
   await assertAllowed("chat-record");
 });
 
+test("PATCH accepts a dated chat record after a leading mention", async () => {
+  chatRecord();
+  approvalComment.text = `@Valentin Yeo ${approvalComment.text}`;
+  await assertAllowed("chat-record");
+});
+
 test("PATCH accepts the lead in-chat record naming its own switch without an earlier question", async () => {
-  chatRecord(`Valentin said in chat (2026-10-24): "yes, ship it". Switch ${key} to Off`);
+  chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "yes, ship it". Switch ${key} to Off`);
   ticketComments = [];
   await assertAllowed("chat-record", key, "OFF", [123]);
   assert.deepEqual(candidateLocks, []);
 });
 
 test("PATCH refuses the lead in-chat record naming its own switch when the quote is no", async () => {
-  chatRecord(`Valentin said in chat (2026-10-24): "no". Switch ${key} to Off`);
+  chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "no". Switch ${key} to Off`);
   ticketComments = [];
   await assertRefused(approvalRequired, "OFF");
 });
+
+for (const kind of ["ticket-yes", "chat-record", "thumbs-up"]) {
+  test(`PATCH with plain-yes flag off ${kind === "thumbs-up" ? "accepts" : "refuses"} ${kind}`, async () => {
+    plainYesFlagOn = false;
+    if (kind === "ticket-yes") ticketYes();
+    else if (kind === "chat-record") chatRecord();
+    else approvalComment.text = `Switch ${key} to Everyone`;
+    if (kind === "thumbs-up") await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
+    else await assertRefused();
+  });
+}
 
 test("PATCH accepts both batch keys after one question comment and one human yes", async () => {
   ticketYes();
@@ -641,6 +666,30 @@ for (const path of ["yes", "thumbs-up"]) {
   });
 }
 
+test("PATCH accepts a fresh thumbs-up after a human no using the newest qualifying reaction", async () => {
+  const now = Date.now();
+  approvalComment.text = `Switch ${key} to Everyone`;
+  approvalComment.createdAt = new Date(now - 4000);
+  const reaction = approvalComment.reactions[0];
+  reaction.createdAt = new Date(now - 3000);
+  ticketComments.push(ticketComment(124, "no", { agentId: null, createdAt: new Date(now - 2000) }));
+  approvalComment.reactions.push({ ...reaction, createdAt: new Date(now - 1000) });
+  approvalComment.reactions.push({ ...reaction, agentId: "impostor", createdAt: new Date(now) });
+  await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
+});
+
+test("PATCH refuses a human no after the newest qualifying thumbs-up", async () => {
+  const now = Date.now();
+  approvalComment.text = `Switch ${key} to Everyone`;
+  approvalComment.createdAt = new Date(now - 4000);
+  const reaction = approvalComment.reactions[0];
+  reaction.createdAt = new Date(now - 3000);
+  approvalComment.reactions.push({ ...reaction, createdAt: new Date(now - 2000) });
+  ticketComments.push(ticketComment(124, "no", { agentId: null, createdAt: new Date(now - 1000) }));
+  approvalComment.reactions.push({ ...reaction, agentId: "impostor", createdAt: new Date(now) });
+  await assertRefused("Valentin said no after that approval (comment 124)");
+});
+
 test("PATCH refuses a later edited human no withdrawing yes", async () => {
   ticketYes();
   ticketComments.push(ticketComment(124, "no", {
@@ -653,8 +702,14 @@ test("PATCH refuses a later edited human no withdrawing yes", async () => {
 for (const [name, setup] of [
   ["chat record by another agent with the lead display name", () => { approvalComment.agentId = "impostor"; }],
   ["chat record by a revoked lead", () => { leadAgent.revokedAt = new Date(); }],
-  ["chat record without in chat", () => { approvalComment.text = 'Valentin said (2026-10-24): "yes, ship it"'; }],
-  ["chat record quoting no", () => { approvalComment.text = 'Valentin said in chat (2026-10-24): "no"'; }],
+  ["negated chat record", () => { approvalComment.text = 'Valentin did not say in chat: "yes, ship it"'; }],
+  ["chat record missing date", () => { approvalComment.text = 'Valentin said in chat: "yes, ship it"'; }],
+  ["chat record with stale 2020-01-01 date", () => { approvalComment.text = 'Valentin said in chat (2020-01-01): "yes, ship it"'; }],
+  ["chat record with future date", () => { approvalComment.text = `Valentin said in chat (${new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)}): "yes, ship it"`; }],
+  ["chat record with unparseable date", () => { approvalComment.text = 'Valentin said in chat (2026-99-99): "yes, ship it"'; }],
+  ["chat record with text before the prefix", () => { approvalComment.text = `Earlier discussion: ${approvalComment.text}`; }],
+  ["chat record without in chat", () => { approvalComment.text = `Valentin said (${new Date().toISOString().slice(0, 10)}): "yes, ship it"`; }],
+  ["chat record quoting no", () => { approvalComment.text = `Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "no"`; }],
   ["chat record with two quoted spans", () => { approvalComment.text += ' "yes"'; }],
   ["chat record with an unmatched extra quote", () => { approvalComment.text += ' "'; }],
   ["chat record from a lead owned by another user", () => { leadAgent.userId = 7; }],
@@ -666,6 +721,15 @@ for (const [name, setup] of [
     await assertRefused();
   });
 }
+
+test("PATCH refuses a rolled-over chat record date within the freshness window", async (t) => {
+  const now = Date.parse("2026-03-02T12:00:00.000Z");
+  t.mock.method(Date, "now", () => now);
+  chatRecord('Valentin said in chat (2026-02-30): "yes, ship it"');
+  approvalComment.createdAt = new Date(now);
+  ticketComments[0].createdAt = new Date(now - 1000);
+  await assertRefused();
+});
 
 test("PATCH refuses yes when the requested mode differs from the question", async () => {
   ticketYes();

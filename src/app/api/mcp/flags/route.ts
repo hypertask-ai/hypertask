@@ -17,6 +17,7 @@ import {
   type FeatureFlagMode,
 } from "@/lib/flags";
 import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
+import { HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7727-plain-yes-flag-approval";
 import { authorize } from "@/lib/flags/agentAuthorization";
 import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
 import { FEATURE_FLAG_RELEASE_RISKS } from "@/lib/flags/releaseRisk";
@@ -110,6 +111,7 @@ export async function PATCH(request: NextRequest) {
       select: { displayName: true },
     });
     const batchAllowed = await isFeatureEnabled(HTPR_7364_BATCH_FLAG_APPROVAL_FLAG, ctx.user.id);
+    const plainYesAllowed = await isFeatureEnabled(HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG, ctx.user.id);
     const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
@@ -184,7 +186,7 @@ export async function PATCH(request: NextRequest) {
             userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
             unified: { startsWith: "1f44d" },
             createdAt: { gte: new Date(now - week) },
-          } },
+          }, select: { createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 },
         },
       });
       if (!comment) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
@@ -199,18 +201,23 @@ export async function PATCH(request: NextRequest) {
       let switches = parseSwitchQuestion(words);
       let kind: "thumbs-up" | "ticket-yes" | "chat-record";
       let questionCommentIds = [comment.id];
+      let approvedAt = comment.createdAt;
       if (unedited && comment.reactions.length && switches) {
         kind = "thumbs-up";
+        approvedAt = comment.reactions[0].createdAt;
       } else {
+        if (!plainYesAllowed) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         const fresh = comment.createdAt.getTime() >= now - week;
         if (human && fresh && answer === "yes") {
           kind = "ticket-yes";
         } else {
-          const quotes = [...words.matchAll(/"([^"]*)"/g)];
+          const record = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):\s*"([^"]*)"/.exec(words);
+          const recordDate = record ? Date.parse(`${record[1]}T00:00:00.000Z`) : NaN;
           if (!unedited || !fresh || comment.creatorId !== FEATURE_FLAG_OWNER_USER_ID
-            || comment.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !/\bin chat\b/.test(words)
-            || quotes.length !== 1 || (words.match(/"/g) ?? []).length !== 2
-            || classifyAnswer(quotes[0][1]) !== "yes") {
+            || comment.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !record || !Number.isFinite(recordDate)
+            || new Date(recordDate).toISOString().slice(0, 10) !== record[1]
+            || recordDate > now || recordDate < now - week
+            || (words.match(/"/g) ?? []).length !== 2 || classifyAnswer(record[2]) !== "yes") {
             throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
           }
           const lead = await tx.agent.findUnique({
@@ -271,10 +278,10 @@ export async function PATCH(request: NextRequest) {
       const laterComments = await tx.comment.findMany({
         where: {
           taskId: comment.taskId, creatorId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null,
-          OR: [
-            { createdAt: { gt: comment.createdAt } },
-            { createdAt: comment.createdAt, id: { gt: comment.id } },
-          ],
+          ...(kind === "thumbs-up" ? { createdAt: { gt: approvedAt } } : { OR: [
+            { createdAt: { gt: approvedAt } },
+            { createdAt: approvedAt, id: { gt: comment.id } },
+          ] }),
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: commentSelect,
       });

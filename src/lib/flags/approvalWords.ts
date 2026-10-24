@@ -33,7 +33,11 @@ export function parseSwitchQuestion(text: string): Map<string, string> | null {
     everyone: "Everyone",
     off: "Off",
   };
-  for (const match of visible.matchAll(/\bswitch\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s+to\s+(only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-])/g)) {
+  const switchClause = /\bswitch\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s+to\s+(only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-])/g;
+  if (visible.split(/[.!?\n]/).some((sentence) => !sentence.match(switchClause)
+    && (/^\s*(?:no|nope|not|don't|do not|never|keep|stop|hold|cancel)\b/.test(sentence)
+      || /\b(?:instead|unless)\b/.test(sentence)))) return null;
+  for (const match of visible.matchAll(switchClause)) {
     const prefix = visible.slice(0, match.index).split(/[.!?\n]/).at(-1) ?? "";
     if (/\b(?:not|don't|do not|never|no|didn't|won't|shouldn't)\b/.test(prefix)) return null;
     const key = match[1];

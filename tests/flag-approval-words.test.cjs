@@ -43,8 +43,7 @@ for (const [fixture, expected] of [
   ["Switch x to Everyone? Switch y to Off?", [["x", "Everyone"], ["y", "Off"]]],
   ["Switch x to Everyone? Switch x to Everyone?", [["x", "Everyone"]]],
   ['He said "Switch hidden to Off?". Switch x to Everyone?', [["x", "Everyone"]]],
-  ["No earlier. Switch x to Everyone?", [["x", "Everyone"]]],
-  ["Switch x to Everyone? No, keep it.", [["x", "Everyone"]]],
+  ["Question: Switch x to Everyone? Thanks", [["x", "Everyone"]]],
   ["Switch x to Everyone? and also make it faster", [["x", "Everyone"]]],
   ["Switch htpr-3533-google-calendar-extra to Off?", [["htpr-3533-google-calendar-extra", "Off"]]],
 ]) {
@@ -54,6 +53,12 @@ for (const [fixture, expected] of [
 }
 
 for (const fixture of [
+  "Switch x to Everyone? No, keep it.", "No earlier. Switch x to Everyone?",
+  "Switch x to Everyone! Nope, keep it", "Switch x to Everyone. Not now", "Switch x to Everyone? Don't do it",
+  "Switch x to Everyone? Do not do it", "Switch x to Everyone? Never do it", "Switch x to Everyone? Keep it off",
+  "Switch x to Everyone? Stop", "Switch x to Everyone? Hold", "Switch x to Everyone? Cancel",
+  "Switch x to Everyone? Try something else instead", "Switch x to Everyone? Proceed unless it fails",
+  "Switch x to Everyone\nNo, keep it", "No, keep it\nSwitch x to Everyone",
   "Do not switch x to Everyone", "don't switch x to Everyone", "not switch x to Everyone", "never switch x to Everyone",
   "no switch x to Everyone", "didn't switch x to Everyone", "won't switch x to Everyone", "shouldn't switch x to Everyone",
   "Switch x to Everyone? Do not switch y to Off?", "Switch x to Everyone? Switch x to Off?",
