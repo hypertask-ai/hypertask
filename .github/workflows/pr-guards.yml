@@ -6,24 +6,14 @@ on:
 permissions:
   contents: read
   statuses: write
-  actions: read
   pull-requests: read
 
 concurrency:
-  group: pr-guards-${{ github.event.pull_request.number || format('{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
+  group: pr-guards-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   pr-guards:
-    # Dependabot/fork PR tokens are read-only, and a maintainer push to a Dependabot
-    # branch skips direct publication too. Those completed scans get a trusted
-    # status-only pass; a completion of that pass cannot recurse.
-    if: >-
-      github.event_name == 'pull_request' ||
-      (github.event.workflow_run.event == 'pull_request' &&
-       (github.event.workflow_run.actor.login == 'dependabot[bot]' ||
-        startsWith(github.event.workflow_run.head_branch, 'dependabot/') ||
-        github.event.workflow_run.head_repository.full_name != github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -112,42 +102,20 @@ jobs:
           RESULTS: ${{ toJSON(steps) }}
         with:
           script: |
-            let results = JSON.parse(process.env.RESULTS);
-            let sha = context.payload.pull_request?.head.sha;
-            const run = context.payload.workflow_run;
-            // Never check out the completed workflow's branch or download its artifacts.
-            // Read GitHub's step conclusions only, with fixed context names.
-            if (run) {
-              sha = run.head_sha;
-              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
-                ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
-              });
-              const job = jobs.find(job => job.name === 'pr-guards');
-              const outcome = name => job?.steps?.find(step => step.name === name)?.conclusion;
-              results = {
-                gitleaks: { outcome: outcome('Run gitleaks') },
-                trufflehog: { outcome: outcome('Run trufflehog') },
-                'public-secrets': { outcome: outcome('Fail on NEXT_PUBLIC_ secret-named vars') },
-              };
-            }
-            const canPublish = Boolean(run) || (context.actor !== 'dependabot[bot]' && context.payload.pull_request.user.login !== 'dependabot[bot]' &&
-              context.payload.pull_request.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`);
-            let pullNumber = context.payload.pull_request?.number || run?.pull_requests?.[0]?.number;
-            if (canPublish && !pullNumber) {
-              const pulls = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
-                ...context.repo, commit_sha: sha, per_page: 100,
-              });
-              pullNumber = pulls.find(pr => pr.head.sha === sha)?.number;
-            }
+            const results = JSON.parse(process.env.RESULTS);
+            const pr = context.payload.pull_request;
+            const sha = pr.head.sha;
+            const canPublish = context.actor !== 'dependabot[bot]' && pr.user.login !== 'dependabot[bot]' &&
+              pr.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`;
             const guards = [["secret-scan", "gitleaks"], ["next-public-secrets", "public-secrets"]];
             let failed = false;
             for (const [name, id] of guards) {
               const passed = results[id]?.outcome === 'success' &&
                 (name !== 'secret-scan' || results.trufflehog?.outcome === 'success');
               failed ||= !passed;
-              if (!canPublish || !pullNumber) continue;
+              if (!canPublish) continue;
               const { data: current } = await github.rest.pulls.get({
-                ...context.repo, pull_number: pullNumber,
+                ...context.repo, pull_number: pr.number,
               });
               if (current.head.sha !== sha) continue;
               await github.rest.repos.createCommitStatus({

@@ -3,6 +3,9 @@ name: PR Guards Trusted
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited, ready_for_review]
+  workflow_run:
+    workflows: [PR Guards]
+    types: [completed]
 
 permissions:
   contents: read
@@ -10,11 +13,12 @@ permissions:
   statuses: write
 
 concurrency:
-  group: pr-guards-trusted-${{ github.event.pull_request.number }}
+  group: pr-guards-trusted-${{ github.event.pull_request.number || format('scan-{0}', github.event.workflow_run.id) }}
   cancel-in-progress: true
 
 jobs:
   pr-guards-trusted:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -238,6 +242,64 @@ jobs:
                 context: name, state: passed ? 'success' : 'failure',
                 description: passed ? `${name} passed` : `${name} failed or did not run`,
                 target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              });
+            }
+            if (failed) core.setFailed('One or more guards failed.');
+
+  scan-completion:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.actor.login == 'dependabot[bot]' ||
+       startsWith(github.event.workflow_run.head_branch, 'dependabot/') ||
+       github.event.workflow_run.head_repository.full_name != github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Publish original guard contexts
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const sha = run.head_sha;
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+            });
+            const job = jobs.find(job => job.name === 'pr-guards');
+            const outcome = name => job?.steps?.find(step => step.name === name)?.conclusion;
+            const results = {
+              gitleaks: { outcome: outcome('Run gitleaks') },
+              trufflehog: { outcome: outcome('Run trufflehog') },
+              'public-secrets': { outcome: outcome('Fail on NEXT_PUBLIC_ secret-named vars') },
+            };
+            let pullNumber = run.pull_requests?.[0]?.number;
+            if (!pullNumber) {
+              const pulls = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
+                ...context.repo, commit_sha: sha, per_page: 100,
+              });
+              pullNumber = pulls.find(pr => pr.state === 'open' && pr.base.ref === 'production' && pr.head.sha === sha)?.number;
+            }
+            if (!pullNumber) return;
+            const guards = [["secret-scan", "gitleaks"], ["next-public-secrets", "public-secrets"]];
+            let failed = false;
+            for (const [name, id] of guards) {
+              const { data: current } = await github.rest.pulls.get({
+                ...context.repo, pull_number: pullNumber,
+              });
+              if (current.state !== 'open' || current.base.ref !== 'production' || current.head.sha !== sha) continue;
+              const passed = results[id]?.outcome === 'success' &&
+                (name !== 'secret-scan' || results.trufflehog?.outcome === 'success');
+              failed ||= !passed;
+              await github.rest.repos.createCommitStatus({
+                ...context.repo, sha,
+                context: name, state: passed ? 'success' : 'failure',
+                description: passed ? `${name} passed` : `${name} failed or did not run`,
+                target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${run.id}`,
               });
             }
             if (failed) core.setFailed('One or more guards failed.');
