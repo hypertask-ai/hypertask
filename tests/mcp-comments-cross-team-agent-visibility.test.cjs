@@ -33,6 +33,7 @@ function loadRoute(comments) {
     "@/utils/controllers/projects/getAllIncludes": {},
     "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
+    "@/lib/planLimits": { isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 402, body: {} }) },
     "next/server": {
       NextResponse: {
         json: (body, init = {}) => ({ body, status: init.status ?? 200 }),
