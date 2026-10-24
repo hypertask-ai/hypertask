@@ -114,6 +114,34 @@ feature_map_weekly:
   fixtures: offline_with_temporary_home_and_no_secrets
   app_driving: false
 
+ai_model_watch:
+  workflow: .github/workflows/ai-model-watch.yml
+  runs_on: ubuntu-latest
+  required: false
+  cron_utc: "43 5 * * *"
+  triggers: [schedule, workflow_dispatch]
+  trusted_code_ref: event_production_sha
+  workflow_dispatch: production_only
+  node_major: 24
+  timeout_minutes: 10
+  permissions: [contents_read]
+  concurrency_group: ai-model-watch
+  cancel_in_progress: false
+  commands:
+    - node --test tests/model-diff.test.cjs
+    - node scripts/model-diff --json
+    - node .github/scripts/ai-model-watch.cjs
+  fixtures: offline_synthetic_no_secrets
+  ticket_project_id: 15
+  ticket_section_id: 4389
+  ticket_secret: HYPERTASK_MCP_TOKEN
+  optional_provider_secrets: [OPENAI_API_KEY, ANTHROPIC_API_KEY]
+  deduplication: stable_title_search_and_idempotency_key
+  fail_closed_on: [no_discovery_sources, failed_search, partial_search, malformed_search, truncated_search]
+  premium_input_usd_per_million_tokens_over: 5
+  premium_waits_for: HTPR-7746
+  automatic_model_changes: false
+
 ux_signoff:
   context: ux-signoff
   workflow: .github/workflows/ux-signoff-gate.yml

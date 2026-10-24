@@ -7,7 +7,6 @@ const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const key = "htpr-7025-welcome-email";
 process.env.SESSION_SECRET = "welcome-email-test-only-signing-secret";
 
 function load(file, mocks = {}) {
@@ -30,7 +29,7 @@ function load(file, mocks = {}) {
 
 function harness() {
   const user = { id: 3001, uid: "email_test", email: "new@yopmail.com", joinedAt: new Date("2026-10-09T00:00:00Z"), emailVerified: true, UserSetting: { notification: true, notificationPreference: "all", isVerified: true } };
-  const state = { user, enabled: true, qaEnabled: true, failSend: false, failAudit: false, failMarker: false, failQaRead: false, now: 0, owned: { id: 42 }, member: { id: 43 } };
+  const state = { user, failSend: false, failAudit: false, failMarker: false, failQaRead: false, now: 0, owned: { id: 42 }, member: { id: 43 } };
   const values = new Map(), expiries = new Map();
   const sends = [], logs = [], queries = [], redisCalls = [], flagReads = [], errors = [], events = [], captures = [];
   const expire = (key_) => {
@@ -64,7 +63,7 @@ function harness() {
     "@/lib/prisma": { default: prisma },
     "@/lib/telemetry/activationAnalytics": { trackActivation: async (...args) => { captures.push(args); } },
     "@/lib/redis": { getRedis: async () => redis },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, isFeatureEnabled: async (flag, id) => { flagReads.push([flag, id]); return id === 985 ? state.qaEnabled : state.enabled; } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, isFeatureEnabled: async (flag, id) => { flagReads.push([flag, id]); throw new Error("Feature flag service must not be called"); } },
     "@/lib/email/sendEmail": { sendEmail: async (options) => { sends.push(options); if (state.failSend) throw new Error("Provider unavailable"); return { id: "mail-1" }; } },
   };
   const welcome = load("src/lib/onboarding/emails/welcome.ts", mocks);
@@ -78,7 +77,6 @@ function harness() {
 }
 
 for (const [name, change, reason] of [
-  ["flag off", (h) => { h.state.enabled = false; }, "flag_off"],
   ["pre-cohort", (h) => { h.state.user.joinedAt = new Date("2026-10-08T23:59:59Z"); }, "pre_cohort"],
   ["guest", (h) => { h.state.user.uid = "guest_test"; }, "guest"],
   ["service", (h) => { h.state.user.uid = "service_test"; }, "service_identity"],
@@ -168,24 +166,18 @@ test("concurrent sign-ins send once", async () => {
   assert.equal(h.sends.length, 1);
 });
 
-for (const qaEnabled of [true, false]) {
-  test(`armed mail.tm evaluates QA flag ${qaEnabled ? "on" : "off"}`, async () => {
-    const h = harness(); h.state.enabled = false; h.state.qaEnabled = qaEnabled;
+test("welcome sends without consulting feature flags or QA arming", async () => {
+  for (const armed of [false, true]) {
+    const h = harness();
     h.state.user.email = " NEW@MAIL.TM ";
-    h.values.set("onboarding:qa-armed:new@mail.tm", "1");
-    assert.equal(await h.send(), qaEnabled ? "sent" : "flag_off");
-    assert.deepEqual(h.flagReads, [[key, 985]]);
-    assert.equal(h.sends.length, Number(qaEnabled));
-  });
-}
-
-test("QA marker Redis failure preserves welcome's failed outcome without sending", async () => {
-  const h = harness();
-  h.state.failQaRead = true;
-  assert.equal(await h.send(), "failed");
-  assert.equal(h.sends.length, 0);
-  assert.equal(h.flagReads.length, 0);
-  assert.equal(h.errors.length, 1);
+    h.state.failQaRead = true;
+    if (armed) h.values.set("onboarding:qa-armed:new@mail.tm", "1");
+    assert.equal(await h.send(), "sent");
+    assert.equal(h.sends.length, 1);
+    assert.equal(h.sends[0].to, "new@mail.tm");
+    assert.deepEqual(h.flagReads, []);
+    assert.deepEqual(h.errors, []);
+  }
 });
 
 test("arming cannot override cohort, consent or durable sent audit and marker", async () => {
@@ -195,7 +187,7 @@ test("arming cannot override cohort, consent or durable sent audit and marker", 
     (h) => { h.logs.push({ LoggedById: 3001, log: "welcome_email_sent" }); },
     (h) => { h.values.set("onboarding:welcome-sent:3001", "sent"); },
   ]) {
-    const h = harness(); h.state.enabled = false; h.values.set("onboarding:qa-armed:new@yopmail.com", "1"); change(h);
+    const h = harness(); h.values.set("onboarding:qa-armed:new@yopmail.com", "1"); change(h);
     assert.notEqual(await h.send(), "sent");
     assert.equal(h.sends.length, 0);
   }
@@ -358,9 +350,9 @@ test("native hooks exclude bridge and refresh, and schedule after legacy cookies
   }
 });
 
-test("QA arming requires fixed QA identity, matching email, flag, same origin and a new inbox", async () => {
+test("QA arming requires fixed QA identity, matching email, same origin and a new inbox without feature flags", async () => {
   const values = [], flagReads = [], userQueries = [];
-  const state = { id: 985, email: "valentin@hypertask.ai", enabled: true, existingEmail: "Existing@MAIL.TM" };
+  const state = { id: 985, email: "valentin@hypertask.ai", existingEmail: "Existing@MAIL.TM" };
   const { POST } = load("src/app/api/onboarding/emails/qa-arm/route.ts", {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => state.id ? { userId: state.id } : null },
     "@/lib/prisma": { default: { user: {
@@ -371,16 +363,14 @@ test("QA arming requires fixed QA identity, matching email, flag, same origin an
         return query.where.email.equals.toLowerCase() === state.existingEmail.toLowerCase() ? { id: 3001 } : null;
       },
     } } },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER: { userId: 985, email: "valentin@hypertask.ai" }, isFeatureEnabled: async (flag, id) => { flagReads.push([flag, id]); return state.enabled; } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER: { userId: 985, email: "valentin@hypertask.ai" }, isFeatureEnabled: async (flag, id) => { flagReads.push([flag, id]); throw new Error("Feature flag service must not be called"); } },
     "@/lib/redis": { getRedis: async () => ({ set: async (...args) => values.push(args) }) },
   });
   const request = (email, origin = "https://app.hypertask.ai") => new NextRequest("https://app.hypertask.ai/api/onboarding/emails/qa-arm", { method: "POST", headers: { host: "app.hypertask.ai", ...(origin ? { origin } : {}), "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
   for (const id of [null, 6, 3001]) { state.id = id; assert.equal((await POST(request("qa@mail.tm"))).status, 403); }
   state.id = 985; state.email = "other@example.test";
   assert.equal((await POST(request("qa@mail.tm"))).status, 403);
-  state.email = "valentin@hypertask.ai"; state.enabled = false;
-  assert.equal((await POST(request("qa@mail.tm"))).status, 403);
-  state.enabled = true;
+  state.email = "valentin@hypertask.ai";
   for (const email of ["@mail.tm", "a@b@mail.tm", "a b@mail.tm", "qa@localhost", "a".repeat(313) + "@mail.tm", null]) assert.equal((await POST(request(email))).status, 400);
   for (const origin of [null, "https://evil.test", "http://app.hypertask.ai"]) assert.equal((await POST(request("qa@mail.tm", origin))).status, 403);
   assert.deepEqual(userQueries, []);
@@ -392,21 +382,5 @@ test("QA arming requires fixed QA identity, matching email, flag, same origin an
     assert.equal(response.status, 200); assert.deepEqual(await response.json(), { armed: true });
     assert.deepEqual(values.at(-1), [`onboarding:qa-armed:${email.trim().toLowerCase()}`, "1", "EX", 7200]);
   }
-  assert.ok(flagReads.every(([flag, id]) => flag === key && id === 985));
-});
-
-test("welcome flag is a feature with Owner + QA default and respects OFF", async () => {
-  let row = null;
-  const registry = load("src/lib/flags.ts", {
-    "@/lib/prisma": { default: { featureFlag: { findUnique: async () => row, findMany: async () => [] }, user: { findUnique: async ({ where }) => ({ email: where.id === 985 ? "valentin@hypertask.ai" : "new@yopmail.com" }) } } },
-    "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": {},
-  });
-  assert.equal(registry.HTPR_7025_WELCOME_EMAIL_FLAG, key);
-  assert.equal(registry.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  assert.equal((await registry.listFeatureFlagModes()).find((entry) => entry.key === key).kind, "feature");
-  assert.equal(await registry.isFeatureEnabled(key, 3001), false);
-  assert.equal(await registry.isFeatureEnabled(key, 985), true);
-  row = { mode: "OFF" }; assert.equal(await registry.isFeatureEnabled(key, 985), false);
-  assert.match(read("src/lib/onboarding/emails/welcome.ts"), /sent = true;\s+void trackActivation\(userId, "lifecycle_email_sent", \{ type: "welcome" \}\);/);
+  assert.deepEqual(flagReads, []);
 });
