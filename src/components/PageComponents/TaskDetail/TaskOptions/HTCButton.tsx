@@ -38,7 +38,7 @@ const HTCButton = ({
     return (
       <div
         className={`relative group ${
-          isKanban ? "w-[14px]" : "w-[16px]"
+          isKanban ? "w-[14px]" : headerIconSizeEnabled ? "w-5" : "w-[16px]"
         }  rounded-full cursor-pointer flex items-center justify-center`}
         onClick={(e: any) => {
           e.preventDefault();
