@@ -334,6 +334,7 @@ test("only an ownership-checked chat session becomes a trusted cache scope", asy
     const lookups = [];
     const turn = load("src/lib/ai/chatStream/turnModel.ts", {
       "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => {} },
+      "@/lib/flags/keys": { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG: "htpr-7730-deepseek-flash-fast" },
       "next/server": {},
       "@/lib/prisma": { __esModule: true, default: {
         chatSession: { findFirst: async (args) => { lookups.push(plain(args)); return owned ? { agent: null } : null; } },

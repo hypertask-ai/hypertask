@@ -62,7 +62,7 @@ const flagValues = (haiku) => ({
   "htpr-7038-haiku-default": haiku,
 });
 
-async function withPicker(run, { preferenceHook = false, initialFlags, mobile = false } = {}) {
+async function withPicker(run, { preferenceHook = false, initialFlags, mobile = false, selectedId = "claude-haiku-5-5" } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://fixture.invalid/chat" });
   const previous = {
     React: global.React, window: global.window, document: global.document,
@@ -91,7 +91,7 @@ async function withPicker(run, { preferenceHook = false, initialFlags, mobile = 
   const render = () => reactRoot.render(React.createElement(QueryClientProvider, { client },
     React.createElement(FeatureFlagProvider, { userId: 42, initialFlags },
       preferenceHook ? React.createElement(PreferencePicker) : React.createElement(ModelSelectorDropdown, {
-        aiSelected: getAiModelOptionById("claude-haiku-5-5", true),
+        aiSelected: getAiModelOptionById(selectedId, true),
         currentOptions: aiModelOptions,
         mobileQuickPicker: mobile,
         optionCallback: (option) => chosen.push(option.id),
@@ -197,5 +197,33 @@ test("explicit user selection still saves while model flags are unresolved", asy
     await act(async () => option.click());
     assert.equal(chosen.length, 1);
     assert.equal(chosen[0], "deepseek-v4-pro");
+  });
+});
+
+for (const mobile of [false, true]) {
+  test(`saved Fast is retained until its flag loads (${mobile ? "mobile" : "desktop"})`, async () => {
+    await withPicker(async ({ chosen, update }) => {
+      await update(flagValues(false));
+      assert.deepEqual(chosen, []);
+      await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": true });
+      assert.deepEqual(chosen, []);
+      await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": false });
+      assert.deepEqual(chosen, ["gpt-6-luna"]);
+    }, { mobile, selectedId: "deepseek-v4.1-flash-fast" });
+  });
+}
+
+test("the model picker lists Fast only while its ticket flag is On", async () => {
+  await withPicker(async ({ container, update }) => {
+    await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": false });
+    await act(async () => container.querySelector("button").click());
+    const modelMenu = [...container.querySelectorAll("button")].find((button) => button.textContent.startsWith("Model"));
+    await act(async () => modelMenu.click());
+    const hasFast = () => [...container.querySelectorAll("button")].some((button) => button.textContent.includes("DeepSeek V4.1 Flash Fast"));
+    assert.equal(hasFast(), false);
+    await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": true });
+    assert.equal(hasFast(), true);
+    await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": false });
+    assert.equal(hasFast(), false);
   });
 });
