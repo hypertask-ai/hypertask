@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import axios from "axios";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState } from "@/lib/state";
 import { boardSortModeAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
@@ -19,6 +19,8 @@ type BoardSortModeSave =
   | { boardSortMode: BoardSortMode }
   | { boardSortModeIfUnset: BoardSortMode };
 
+const BOARD_SORT_MODE_MUTATION_KEY = ["user-preferences", "board-sort-mode"] as const;
+
 export const useBoardSortMode = () => {
   const enabled = useFlag(HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG);
   const [boardSortMode, setBoardSortMode] = useRecoilState(boardSortModeAtom);
@@ -28,14 +30,16 @@ export const useBoardSortMode = () => {
     { enabled },
   );
   const queryClient = useQueryClient();
-  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
-  const pendingSaves = useRef(0);
+  const pendingSaves = useIsMutating({ mutationKey: BOARD_SORT_MODE_MUTATION_KEY });
   const copiedLocalChoice = useRef(false);
   const serverMode = preferences.boardSortMode;
 
-  const saveBoardSortMode = (save: BoardSortModeSave) => {
-    pendingSaves.current += 1;
-    if ("boardSortMode" in save && dataUpdatedAt) {
+  const { mutate: saveBoardSortMode } = useMutation({
+    mutationKey: BOARD_SORT_MODE_MUTATION_KEY,
+    scope: { id: "sidebar-board-sort-mode" },
+    mutationFn: (save: BoardSortModeSave) => axios.post("/api/users/preferences", save),
+    onMutate: (save) => {
+      if (!("boardSortMode" in save) || !dataUpdatedAt) return;
       void queryClient.cancelQueries(
         { queryKey: USER_PREFERENCES_QUERY_KEY },
         { revert: false },
@@ -47,30 +51,36 @@ export const useBoardSortMode = () => {
           boardSortMode: save.boardSortMode,
         }),
       );
-    }
-    saveQueue.current = saveQueue.current
-      .catch(() => {})
-      .then(() => axios.post("/api/users/preferences", save))
-      .catch((error) => console.error("Could not save sidebar view", error))
-      .finally(() => {
-        pendingSaves.current -= 1;
-        if (!pendingSaves.current) {
-          void queryClient
-            .invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY })
-            .catch((error) => console.error("Could not refresh sidebar view", error));
-        }
-      });
-  };
+    },
+    onError: (error) => console.error("Could not save sidebar view", error),
+    onSettled: async (response) => {
+      if (queryClient.isMutating({ mutationKey: BOARD_SORT_MODE_MUTATION_KEY }) !== 1) return;
+      await queryClient.cancelQueries(
+        { queryKey: USER_PREFERENCES_QUERY_KEY },
+        { revert: false },
+      );
+      const savedMode = response?.data?.settings?.boardSortMode;
+      if (isBoardSortMode(savedMode)) {
+        queryClient.setQueryData<IUserPreferences>(
+          USER_PREFERENCES_QUERY_KEY,
+          (current) => ({ ...(current ?? preferences), boardSortMode: savedMode }),
+        );
+      }
+      await queryClient
+        .invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY })
+        .catch((error) => console.error("Could not refresh sidebar view", error));
+    },
+  });
 
   useEffect(() => {
-    if (!enabled || !dataUpdatedAt || pendingSaves.current) return;
+    if (!enabled || !dataUpdatedAt || pendingSaves) return;
     if (isBoardSortMode(serverMode)) {
       setBoardSortMode((current) => (current === serverMode ? current : serverMode));
     } else if (boardSortMode !== "teams" && !copiedLocalChoice.current) {
       copiedLocalChoice.current = true;
       saveBoardSortMode({ boardSortModeIfUnset: boardSortMode });
     }
-  }, [enabled, dataUpdatedAt, serverMode, boardSortMode, setBoardSortMode]);
+  }, [enabled, dataUpdatedAt, serverMode, boardSortMode, pendingSaves, setBoardSortMode, saveBoardSortMode]);
 
   const changeBoardSortMode = (mode: BoardSortMode) => {
     setBoardSortMode(mode);
