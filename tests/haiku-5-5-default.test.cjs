@@ -219,20 +219,15 @@ test("title callback dependencies refresh the model when the flag changes while 
   }
 });
 
-test("Haiku access, price tier and premium status match production 4.5 on every plan", async () => {
-  const productionSource = require("node:child_process").execFileSync("git", ["show", "origin/production:src/lib/aiModelOptions.ts"], { cwd: root, encoding: "utf8" });
-  const productionModule = { exports: {} };
-  vm.runInNewContext(ts.transpileModule(productionSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module: productionModule, exports: productionModule.exports });
-  const production = productionModule.exports;
-  const oldDefinition = production.getAiModelDefinition("claude-haiku-4.5");
-  const newDefinition = catalog.getAiModelDefinition(haiku.modelKey);
-  assert.equal(newDefinition.priceTier, oldDefinition.priceTier);
-  assert.equal(Boolean(newDefinition.premium), Boolean(oldDefinition.premium));
-  for (const freePlan of [false, true]) assert.equal(catalog.isPremiumAiModelDefinition(newDefinition, freePlan), production.isPremiumAiModelDefinition(oldDefinition, freePlan));
+test("Haiku remains non-premium at price tier 1 with access on every plan", () => {
+  const definition = catalog.getAiModelDefinition(haiku.modelKey);
+  assert.equal(definition.priceTier, 1);
+  for (const freePlan of [false, true]) assert.equal(catalog.isPremiumAiModelDefinition(definition, freePlan), false);
   for (const plan of ["Free", "BYOK", "Pro", "AI"]) {
     const off = composer.buildComposerConfig({ settings: {}, storePlanId: plan, providersWithByok: new Set(), customEndpointConfigured: false, haiku55Enabled: false });
     const on = composer.buildComposerConfig({ settings: {}, storePlanId: plan, providersWithByok: new Set(), customEndpointConfigured: false, haiku55Enabled: true });
-    assert.equal(on.models.some((entry) => entry.id === haiku.id), off.models.some((entry) => entry.id === "claude-haiku-4.5"));
+    assert.equal(off.models.some((entry) => entry.id === "claude-haiku-4.5"), true);
+    assert.equal(on.models.some((entry) => entry.id === haiku.id), true);
   }
 });
 

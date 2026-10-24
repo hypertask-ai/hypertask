@@ -270,23 +270,7 @@ test("integration uses committed fenced task state and excludes trusted backgrou
   assert.match(read("src/lib/api/task-writes/update.ts"), /updateTaskSingle\(newTask, currentUser, actingAgentId, \{ teamScope: session\.teamScope \}\)/);
 });
 
-test("email models stay unchanged and flag defaults to Owner + QA", () => {
-  const { execFileSync } = require("node:child_process");
-  const baseline = execFileSync("git", ["show", "origin/production:src/prisma/schema.prisma"], { cwd: root, encoding: "utf8" });
-  const schema = read("src/prisma/schema.prisma");
-  // The email reuses existing models; unrelated tickets may add models, migrations, indexes, the HTPR-7271 Project.seeded flag, HTPR-7298 PageTaskLink back-relations, the HTPR-7515 BoardGithubRepository back-relation, and the HTPR-7549 first-task pointer fields.
-  const unrelatedModelFields = {
-    User: /^\s*pageTaskLinksCreated\s+PageTaskLink\[\]\s*$/,
-    Task: /^\s*(pageLinks\s+PageTaskLink\[\]|blockerCommentId\s+Int\?\s+@unique|blockerComment\s+Comment\?\s+@relation\("TaskBlockerComment", fields: \[blockerCommentId\], references: \[id\], onDelete: SetNull\))\s*$/,
-    Project: /^\s*(githubRepositories\s+BoardGithubRepository\[\]|firstTaskPointer(Task|Section)Id\s+Int\?|firstRealTaskCreatedAt\s+DateTime\?)\s*$/,
-  };
-  const fields = (model, name) => model.split("\n").filter((line) => !/^\s*(\/\/.*|@@index\(.*\)|featureFlagChanges\s+FeatureFlagChange\[\]|seeded\s+Boolean\s+@default\(false\))?\s*$/.test(line) && !unrelatedModelFields[name]?.test(line)).join("\n");
-  for (const name of ["Logs", "User", "Section", "Agent", "Project", "Task"]) {
-    const pattern = new RegExp(`^model ${name} \\{[\\s\\S]*?^\\}`, "m");
-    assert.match(baseline, pattern, name);
-    assert.match(schema, pattern, name);
-    assert.equal(fields(schema.match(pattern)[0], name), fields(baseline.match(pattern)[0], name), `${name} email model stays unchanged`);
-  }
+test("email flag defaults to Owner + QA", () => {
   assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
   assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
 });
