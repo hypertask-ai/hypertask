@@ -208,7 +208,7 @@ if [ "$use_trusted_dependencies" = false ]; then
     -e HOME=/tmp \
     -w /app \
     "$runtime_image" bash -euo pipefail -c '
-      timeout --signal=KILL 2m env DATABASE_URL=postgresql://core_smoke:core_smoke@database:5432/hypertask_smoke ./node_modules/.bin/prisma generate
+      timeout --signal=KILL 2m env DATABASE_URL=postgresql://core_smoke:core_smoke@database:5432/hypertask_smoke ./node_modules/.bin/prisma generate # trufflehog:ignore
     '
 fi
 
@@ -224,18 +224,6 @@ runtime=(
   -v "$dependencies_mount:/app/node_modules:ro"
   -v "$build:/app/.next"
   -w /app
-)
-
-trusted_runtime=(
-  --cap-drop ALL
-  --security-opt no-new-privileges
-  --read-only
-  --pids-limit 512
-  --memory 2g
-  --cpus 2
-  --tmpfs /tmp:rw,nosuid,nodev,size=128m
-  -v "$trusted_root:/trusted:ro"
-  -w /trusted
 )
 
 postgres_admin_password=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
@@ -264,7 +252,7 @@ docker exec "$database" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "CREATE DATABASE hypertask_smoke OWNER core_smoke"
 
 common_env=(
-  -e DATABASE_URL=postgresql://core_smoke:core_smoke@"$database":5432/hypertask_smoke
+  -e DATABASE_URL=postgresql://core_smoke:core_smoke@"$database":5432/hypertask_smoke # trufflehog:ignore
   -e SESSION_SECRET=core-actions-"$run_key"
   -e NEXT_TELEMETRY_DISABLED=1
   -e GITHUB_ACTIONS="${GITHUB_ACTIONS:-false}"
@@ -277,11 +265,12 @@ common_env=(
 docker run --rm --name "$prepare" --network "$network" "${runtime[@]}" "${common_env[@]}" \
   "$runtime_image" timeout --signal=KILL 2m ./node_modules/.bin/prisma migrate deploy
 
-docker run --rm --name "$seed" --network "$network" "${trusted_runtime[@]}" "${common_env[@]}" \
-  -e CORE_SMOKE_APP_ROOT=/trusted \
+docker run --rm --name "$seed" --network "$network" "${runtime[@]}" "${common_env[@]}" \
+  -e CORE_SMOKE_APP_ROOT=/app \
   -e CORE_SMOKE_ENV_FILE=/state/smoke.env \
+  -v "$trusted_root/scripts:/trusted:ro" \
   -v "$state:/state" \
-  "$runtime_image" timeout --signal=KILL 1m node /trusted/scripts/seed-core-actions-smoke.mjs
+  "$runtime_image" timeout --signal=KILL 1m node /trusted/seed-core-actions-smoke.mjs
 
 docker run --rm --name "$probe" \
   --cap-drop ALL \

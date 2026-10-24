@@ -250,7 +250,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.match(
     isolated,
-    /timeout --signal=KILL 1m node \/trusted\/scripts\/seed-core-actions-smoke\.mjs/,
+    /timeout --signal=KILL 1m node \/trusted\/seed-core-actions-smoke\.mjs/,
   );
   assert.match(isolated, /trap 'cleanup 130' INT/);
   assert.match(isolated, /trap 'cleanup 143' TERM/);
@@ -263,7 +263,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
     isolated,
     /--tmpfs \/var\/lib\/postgresql\/data:rw,nosuid,nodev,size=1g/,
   );
-  assert.match(isolated, /--name "\$seed"[\s\S]*CORE_SMOKE_APP_ROOT=\/trusted/);
+  assert.match(isolated, /--name "\$seed"[\s\S]*CORE_SMOKE_APP_ROOT=\/app/);
   assert.match(seed, /writeFile\(/);
   assert.match(seed, /flag: "wx"/);
   assert.match(seed, /sections: \["Baseline", "Alternate"\]/);

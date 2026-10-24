@@ -57,6 +57,12 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
 
+## App-smoke schema isolation
+
+App-smoke applies the candidate's migrations and seeds with that same candidate's generated Prisma client and app modules. The seed script itself stays production-pinned and runs inside the candidate's read-only, internal-network container runtime. Production dependencies are reused only when all install and Prisma inputs match; a stale branch with different schema inputs generates its own client rather than seeding its database with production's newer client. This tests the exact candidate revision without merging production into it.
+
+`node --test tests/app-smoke-schema.test.cjs tests/app-smoke-prisma.test.cjs` checks both stale-schema and matching-cache runtime paths, and reproduces real `P2022` against disposable PostgreSQL before proving the candidate client can seed the older schema. Set `HT_REQUIRE_PG_TESTS=1` to require Docker instead of skipping the PostgreSQL check when unavailable.
+
 ## Live required-check settings
 
 `Verify live required-check settings` runs the dependency-free
