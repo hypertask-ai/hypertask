@@ -79,6 +79,11 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
     assert.deepEqual(chat.skills.map(skill => skill.id), [15, 16]);
     assert.equal((await route.GET(request('skills?project_id=25'))).status, 403);
     await assert.rejects(f.run(request('skills'), () => f.tool.execute({ project_id: 25 })), /access denied/);
+    const allowed = await route.GET(request('skills?project_id=15'));
+    assert.equal(allowed.status, 200);
+    assert.deepEqual((await allowed.json()).skills.map(skill => skill.id), [15]);
+    const allowedChat = await f.run(request('skills'), () => f.tool.execute({ project_id: 15 }));
+    assert.deepEqual(allowedChat.skills.map(skill => skill.id), [15]);
   });
 }
 
@@ -100,6 +105,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       assert.deepEqual((await allowed.json()).skills.map(skill => skill.id), [15]);
       const chat = await f.run(request('skills'), () => f.tool.execute({ project_id: 15 }));
       assert.deepEqual(chat.skills.map(skill => skill.id), [15]);
+      f.projects[3].members.push({ userId: f.user.id, agentId: f.agent.id, status: 'Accepted', agent: f.agent });
       assert.equal((await route.GET(request('skills?project_id=25'))).status, 403);
       await assert.rejects(f.run(request('skills'), () => f.tool.execute({ project_id: 25 })), /access denied/);
       assert.deepEqual(f.writes, []);
@@ -210,10 +216,15 @@ for (const actor of ['unbound', 'human']) {
 for (const scenario of ['no-board-grants', 'invalid-team-scope', 'revoked']) {
   test(`${scenario}: scoped discovery returns no skills instead of falling back to the owner`, async () => {
     const f = fixture('ENFORCE');
+    const route = f.load('src/lib/mcp/operations/skills/operation.ts');
+    const allowed = await route.GET(request('skills'));
+    assert.equal(allowed.status, 200);
+    assert.deepEqual((await allowed.json()).skills.map(skill => skill.id), [15, 16]);
+    const allowedChat = await f.run(request('skills'), () => f.tool.execute({}));
+    assert.deepEqual(allowedChat.skills.map(skill => skill.id), [15, 16]);
     if (scenario === 'no-board-grants') f.projects.forEach(project => { project.members = []; });
     if (scenario === 'invalid-team-scope') f.state.ctx.teamScope.accessBinding = '';
     if (scenario === 'revoked') f.agent.revokedAt = new Date();
-    const route = f.load('src/lib/mcp/operations/skills/operation.ts');
     const response = await route.GET(request('skills'));
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()).skills, []);
@@ -230,15 +241,16 @@ test('scoped discovery is an access-risk feature restricted to Owner + QA by def
   assert.equal(definition.key, scopedSkillsFlag);
   assert.equal(definition.kind, 'feature');
   assert.equal(definition.releaseRisk.highRisk, 'access');
+  assert.equal(definition.defaultMode, 'OWNER_AND_QA');
   const { defaultFeatureFlagMode, isFeatureEnabled } = f.load('src/lib/flags.ts');
   assert.equal(defaultFeatureFlagMode(scopedSkillsFlag), 'OWNER_AND_QA');
-  for (const mode of [null, 'OFF', 'EVERYONE']) {
+  for (const mode of [null, 'OWNER_AND_QA', 'OFF', 'EVERYONE']) {
     for (const [userId, email, ownerOrQa] of [[6, 'valentin.yeo@gmail.com', true], [985, 'valentin@hypertask.ai', true], [7, 'member@example.invalid', false], [6, 'not-owner@example.invalid', false]]) {
       const db = {
         featureFlag: { findUnique: async () => mode ? { mode } : null },
         user: { findUnique: async () => ({ email }) },
       };
-      assert.equal(await isFeatureEnabled(scopedSkillsFlag, userId, db), mode === 'EVERYONE' || mode === null && ownerOrQa);
+      assert.equal(await isFeatureEnabled(scopedSkillsFlag, userId, db), mode === 'EVERYONE' || (mode === null || mode === 'OWNER_AND_QA') && ownerOrQa);
     }
   }
 });
