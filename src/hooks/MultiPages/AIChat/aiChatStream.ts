@@ -172,7 +172,26 @@ export async function consumeAiChatStream(context: Context) {
                         console.warn("[AI chat] inbox refresh failed", error)
                       );
                     if (parsed.status === "error") {
-                      if (!streamErrorHandled) {
+                      if (!streamErrorHandled && parsed.cancelled === true) {
+                        const stoppedMessage: IChatMessage = {
+                          id: assistantMessageId,
+                          content:
+                            aiContent.trim().length > 0
+                              ? aiContent
+                              : "Stream cancelled.",
+                          role: "assistant",
+                          createdAt: new Date(),
+                          isDelivered: true,
+                          sessionId: session.id,
+                        };
+                        addMessageToSessionQuery(
+                          session.id,
+                          stoppedMessage,
+                          false,
+                          true
+                        );
+                        streamErrorHandled = true;
+                      } else if (!streamErrorHandled) {
                         const rawDone =
                           typeof parsed.content === "string"
                             ? parsed.content

@@ -363,6 +363,32 @@ for (const delayResponse of [false, true]) {
   });
 }
 
+test("graceful Stop keeps the partial answer instead of replacing it with cancellation text", { timeout: 2000 }, async (t) => {
+  const h = client(t);
+  const first = h.send();
+  await h.waitForReader(0);
+  h.emit(0, "content", { content: "The answer so far" });
+  await new Promise((resolve) => setImmediate(resolve));
+  await h.stop();
+  h.emit(0, "done", { status: "error", cancelled: true, content: "Stream cancelled." });
+  h.releaseResponse(0);
+  assert.equal(await first, true);
+  const message = h.messages.get(h.requests[0].assistant_message_id);
+  assert.equal(message.content, "The answer so far");
+  assert.equal(message.isDelivered, true);
+});
+
+test("graceful Stop before the first word shows cancellation text", { timeout: 2000 }, async (t) => {
+  const h = client(t);
+  const first = h.send();
+  await h.waitForReader(0);
+  await h.stop();
+  h.emit(0, "done", { status: "error", cancelled: true, content: "Stream cancelled." });
+  h.releaseResponse(0);
+  assert.equal(await first, true);
+  assert.equal(h.messages.get(h.requests[0].assistant_message_id).content, "Stream cancelled.");
+});
+
 test("late content and done update only their own reply without clearing the newer send status", { timeout: 2000 }, async (t) => {
   const h = client(t);
   const first = h.send();
