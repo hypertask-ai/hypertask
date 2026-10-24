@@ -41,6 +41,7 @@ export const MessageItem: FC<IMessageItemProps> = ({
   retryStream,
   editMessage,
 }) => {
+  const ticketRowsEnabled = useFlag(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG);
   const [carouselItems, setCarouselItems] = useState<TCarousalItems>(undefined);
   const attachments = message.attachments;
   const hasAttachments = Boolean(attachments?.length);
@@ -77,7 +78,7 @@ export const MessageItem: FC<IMessageItemProps> = ({
               : " text-white-black w-full "
           }`}
         >
-          <SubMessage message={message} key={message.id} />
+          <SubMessage message={message} key={message.id} ticketGroups={ticketRowsEnabled ? message.ticketGroups : undefined} />
         </div>
         {message.isDelivered && (
           <div className={`mt-0.5 flex w-full max-md:opacity-100 
@@ -266,8 +267,7 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
   );
 };
 
-const SubMessage = ({ message }: { message: IChatMessage }) => {
-  const ticketRowsEnabled = useFlag(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG);
+const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGroups?: IChatMessage["ticketGroups"] }) => {
   const hasAnimated = useRef(false);
   const [showCursor, setShowCursor] = useState(!message.isDelivered);
   const router = useRouter();
@@ -314,7 +314,7 @@ const SubMessage = ({ message }: { message: IChatMessage }) => {
           className={`content-html ${contentClass}`}
           dangerouslySetInnerHTML={{ __html: messageHtmlWithTableScroll }}
         />
-        {ticketRowsEnabled && message.role === "assistant" && message.isDelivered && message.ticketGroups?.length ? <AiChatTicketRows groups={message.ticketGroups} onNavigate={(url) => { router.push(url); revealNavigationTarget(); }} /> : null}
+        {message.role === "assistant" && message.isDelivered && ticketGroups?.length ? <AiChatTicketRows groups={ticketGroups} onNavigate={(url) => { router.push(url); revealNavigationTarget(); }} /> : null}
         {message.role === "assistant" && !message.isDelivered && (
           <AssistantStreamingStatus
             agentStatus={agentStatus}
@@ -327,4 +327,3 @@ const SubMessage = ({ message }: { message: IChatMessage }) => {
   );
 };
 
-export default SubMessage;
