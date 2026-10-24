@@ -29,32 +29,29 @@ publish_status_if_current() {
     echo "skip #$number: pull request head or base moved before status publication"
     return 0
   fi
-  if [ -z "$evaluated_fingerprint" ] && [ "$state" = "error" ]; then
-    fingerprint=""
-  else
-    title=$(jq -er '.title' "$gate_tmp/current.json") || return 1
-    base_sha=$(jq -er '.base.sha' "$gate_tmp/current.json") || return 1
-    labels=$(jq -c '[.labels[]?.name // empty] | sort' "$gate_tmp/current.json") || return 1
-    gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$gate_tmp/heads.json" || return 1
-    head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$gate_tmp/heads.json") || return 1
-    fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$labels" | sha256sum | cut -c1-16).heads=$head_pr_count"
-    if [ "$evaluated_fingerprint" != "$fingerprint" ]; then
-      echo "skip #$number: evaluation inputs changed before status publication"
-      return 0
-    fi
+  title=$(jq -er '.title' "$gate_tmp/current.json") || return 1
+  base_sha=$(jq -er '.base.sha' "$gate_tmp/current.json") || return 1
+  labels=$(jq -c '[.labels[]?.name // empty] | sort' "$gate_tmp/current.json") || return 1
+  gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$gate_tmp/heads.json" || return 1
+  head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$gate_tmp/heads.json") || return 1
+  fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$labels" | sha256sum | cut -c1-16).heads=$head_pr_count"
+  if [ -n "$evaluated_fingerprint" ] && [ "$evaluated_fingerprint" != "$fingerprint" ]; then
+    echo "skip #$number: evaluation inputs changed before status publication"
+    return 0
   fi
   jq --arg target_url "$RUN_URL${fingerprint:+#$fingerprint}" '.payload | .target_url = $target_url' <<<"$record" >"$gate_tmp/payload.json" || return 1
   gh_api --paginate --slurp "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$gate_tmp/latest-statuses.json" || return 1
   if [ -z "$evaluated_fingerprint" ] && [ "$state" = "error" ]; then
-    newer_final=$(jq -r --arg evaluated_at "$evaluated_at" '
+    newer_final=$(jq -r --arg evaluated_at "$evaluated_at" --arg fingerprint "$fingerprint" '
       any(flatten[];
         .context == "feature-flag-gate" and
         (.state == "success" or .state == "failure" or .state == "error") and
-        (.created_at | fromdateiso8601) > ($evaluated_at | fromdateiso8601)
+        (.created_at | fromdateiso8601) >= ($evaluated_at | fromdateiso8601) and
+        ((.target_url // "" | split("#")[1:] | join("#")) == $fingerprint)
       )
     ' "$gate_tmp/latest-statuses.json") || return 1
     if [ "$newer_final" = "true" ]; then
-      echo "skip #$number: final feature-flag-gate status was created after evaluation started"
+      echo "skip #$number: final with the current fingerprint was created after evaluation started"
       return 0
     fi
   fi
