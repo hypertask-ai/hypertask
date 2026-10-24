@@ -1,6 +1,8 @@
+const SELF_FOLLOW_FLAG = "yper4-651-self-follow-quiet";
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const fs = require("node:fs");
+const { load } = require("./task-route-loader.cjs");
 require("tsx/cjs");
 const { runCoreActionsSmoke } = require("../src/lib/productionSmoke/coreActions.ts");
 const { CoreSmokeRunDeadlineError } = require("../src/lib/productionSmoke/lock.ts");
@@ -40,11 +42,13 @@ function fakeApp(options = {}) {
     if (path === "/api/comments/create") {
       const row = { id: state.nextId++, text: body.text, creatorId: fixture.userId };
       state.comments.push(row);
+      await options.onComment?.(body, row.id);
       return json(row);
     }
     if (path === "/api/comments/updateComment") {
       const row = state.comments.find((row) => row.id === body.commentId);
       row.text = body.text;
+      await options.onComment?.(body, row.id);
       return json(row);
     }
     if (path === "/api/comments/deleteCommentById") {
@@ -62,6 +66,7 @@ function fakeApp(options = {}) {
     }
     if (path === "/api/assignees/assign") {
       state.assignees = body.intent === "assign" ? [{ userId: fixture.userId }] : [];
+      if (body.intent === "assign") options.onAssign?.();
       const row = { id: state.nextId++, activity: { type: "TaskAssigned", data: {
         fromUserId: fixture.userId, toUser: { userId: fixture.userId }, updatedStatus: body.intent === "assign" ? "Assigned" : "Unassigned",
       } } };
@@ -145,7 +150,7 @@ test("all named inbox routines use the UI paths and clean up their notification"
   assert.match(fs.readFileSync("src/app/detail/[...slug]/page.tsx", "utf8"), /fetchTaskDetail\(params.slug\[0\], params.slug\[1\], userObj.id\)/);
 });
 
-test("smoke requests mention only the agent and keep inbox coverage without follower or email writes", async () => {
+test("smoke requests mention only the agent and keep inbox coverage without direct follower or email requests", async () => {
   const app = fakeApp();
   const result = await app.run();
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -259,3 +264,158 @@ test("safe-deadline cleanup uses a fresh signal", async () => {
   assert.equal(deletes[0].signal.aborted, false);
   assertClean(app);
 });
+
+function followerApp(taskOwnerId = 99, flagEnabled = true) {
+  const flagReads = [];
+  const followers = [];
+  const notifications = [];
+  const mentions = [];
+  const pushes = [];
+  const task = { id: fixture.taskId, userId: taskOwnerId, projectId: fixture.projectId,
+    title: "Core actions smoke fixture", uniqueIndex: 1, agentId: null };
+  const { createFollowerService } = load("src/utils/controllers/followers/createFollowerService.ts", {
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+      flagReads.push({ key, userId });
+      return flagEnabled;
+    } },
+    "@/lib/prisma": { default: {
+      task: { findUnique: async () => task },
+      agent: { findFirst: async () => ({ id: fixture.agentId, userId: fixture.userId }) },
+      assignees: { findFirst: async () => null },
+      follower: {
+        findFirst: async ({ where }) => followers.find((row) =>
+          row.userId === where.userId && row.taskId === where.taskId &&
+          (where.agentId === undefined || row.agentId === where.agentId)),
+        create: async ({ data }) => {
+          const row = { id: followers.length + 1, ...data, task };
+          followers.push(row);
+          return row;
+        },
+      },
+      subscribedDevices: { findMany: async () => [] },
+      user: { findFirst: async () => ({ displayName: "Health Check" }) },
+    } },
+    "@/utils/controllers/tasks/getSharedTask": { checkIfBoardMember: async () => 200 },
+    "@/utils/controllers/notifications/creation-service/check-reminder_create-notification": {
+      default: async (_userId, _projectId, _taskId, payload) => {
+        notifications.push(payload);
+        return payload;
+      },
+    },
+    "@/utils/controllers/notifications/createAgentMentionNotification": {
+      createAgentMentionNotification: async (payload) => { mentions.push(payload); },
+    },
+    "@/utils/controllers/FCM": { sendDataNewCommentFCM: async (body) => { pushes.push(body); } },
+  });
+  return { createFollowerService, followers, notifications, mentions, pushes, flagReads };
+}
+
+test("self-follow creates the follower without a follower-added notification or push", async () => {
+  const app = followerApp();
+  const result = await app.createFollowerService({
+    userId: fixture.userId, mentionById: fixture.userId, taskId: fixture.taskId,
+  });
+  assert.equal(result.status, 200);
+  assert.equal(app.followers.length, 1);
+  assert.deepEqual(app.notifications, []);
+  assert.deepEqual(app.pushes, []);
+  assert.deepEqual(app.flagReads, [{ key: SELF_FOLLOW_FLAG, userId: fixture.userId }]);
+});
+
+test("a different user adding a follower still creates the notification and push", async () => {
+  const app = followerApp();
+  const result = await app.createFollowerService({
+    userId: fixture.userId, mentionById: 18, taskId: fixture.taskId,
+  });
+  assert.equal(result.status, 200);
+  assert.equal(app.followers.length, 1);
+  assert.deepEqual(app.notifications, [{
+    userId: fixture.userId, fromUserId: 18, type: "AddedToFollowerInTask",
+    taskId: fixture.taskId, projectId: fixture.projectId,
+  }]);
+  assert.equal(app.pushes.length, 1);
+  assert.deepEqual(app.flagReads, []);
+});
+
+test("an acting agent adding its owner as follower still notifies the human", async () => {
+  const app = followerApp();
+  const result = await app.createFollowerService({
+    userId: fixture.userId, mentionById: fixture.userId, taskId: fixture.taskId,
+    fromAgentId: "acting-agent",
+  });
+  assert.equal(result.status, 200);
+  assert.equal(app.notifications.length, 1);
+  assert.equal(app.pushes.length, 1);
+  assert.deepEqual(app.flagReads, []);
+});
+
+for (const flagEnabled of [true, false]) {
+  test(`smoke agent follower recreation ${flagEnabled ? "suppresses" : "preserves"} self-added follower events with the flag ${flagEnabled ? "on" : "off"}`, async () => {
+    const followers = followerApp(fixture.userId, flagEnabled);
+    let creations = 0;
+    const app = fakeApp({
+      onComment: async (body, commentId) => {
+        assert.match(body.text, /data-label="agent-smoke-agent"/);
+        const result = await followers.createFollowerService({
+          agentId: fixture.agentId, mentionById: fixture.userId, taskId: fixture.taskId, commentId,
+        });
+        assert.ok([200, 201].includes(result.status));
+        if (result.status === 200) creations += 1;
+      },
+      onAssign: () => {
+        const index = followers.followers.findIndex((row) => row.userId === fixture.userId);
+        if (index >= 0) followers.followers.splice(index, 1);
+      },
+    });
+    const result = await app.run();
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(creations, 2, "assignment removes the agent follower and marker edits recreate it");
+    assert.equal(followers.followers.length, 1);
+    assert.equal(followers.followers[0].agentId, fixture.agentId);
+    assert.ok(followers.mentions.length > 1, "agent mention delivery is preserved on marker edits");
+    assert.equal(followers.notifications.length, flagEnabled ? 0 : creations, "flag off restores follower-added rows for the human digest");
+    for (const notification of followers.notifications) {
+      assert.equal(notification.type, "AddedToFollowerInTask");
+      assert.equal(notification.userId, fixture.userId);
+      assert.equal(notification.fromUserId, fixture.userId);
+      assert.equal(notification.agentId, fixture.agentId);
+    }
+    assert.deepEqual(followers.pushes, []);
+    assertClean(app);
+  });
+}
+
+test("a different user adding an agent follower still notifies its owner and mentions the agent", async () => {
+  const app = followerApp(fixture.userId);
+  const result = await app.createFollowerService({
+    agentId: fixture.agentId, mentionById: 18, taskId: fixture.taskId, commentId: 123,
+  });
+  assert.equal(result.status, 200);
+  assert.deepEqual(app.notifications, [{
+    userId: fixture.userId, fromUserId: 18, type: "AddedToFollowerInTask",
+    taskId: fixture.taskId, projectId: fixture.projectId, agentId: fixture.agentId,
+  }]);
+  assert.deepEqual(app.mentions, [{
+    agentId: fixture.agentId, mentionedBy: 18, taskId: fixture.taskId,
+    projectId: fixture.projectId, commentId: 123, fromAgentId: undefined,
+  }]);
+  assert.deepEqual(app.pushes, []);
+});
+
+for (const agentId of [undefined, fixture.agentId]) {
+  test(`flag off restores self-follow notifications for ${agentId ? "an agent follower" : "a human follower"}`, async () => {
+    const app = followerApp(99, false);
+    const result = await app.createFollowerService({
+      userId: fixture.userId, mentionById: fixture.userId, taskId: fixture.taskId, agentId,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(app.followers.length, 1);
+    assert.deepEqual(app.notifications, [{
+      userId: fixture.userId, fromUserId: fixture.userId, type: "AddedToFollowerInTask",
+      taskId: fixture.taskId, projectId: fixture.projectId, ...(agentId ? { agentId } : {}),
+    }]);
+    assert.equal(app.pushes.length, agentId ? 0 : 1);
+    assert.equal(app.mentions.length, agentId ? 1 : 0);
+    assert.deepEqual(app.flagReads, [{ key: SELF_FOLLOW_FLAG, userId: fixture.userId }]);
+  });
+}

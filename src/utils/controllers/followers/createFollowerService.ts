@@ -1,6 +1,7 @@
 import { IFCMReqBody } from "@/models/model";
 import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
 import prisma from "@/lib/prisma";
+import { YPER4_651_SELF_FOLLOW_QUIET_FLAG } from "@/lib/flags/definitions/yper4-651-self-follow-quiet";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import { createAgentMentionNotification } from "@/utils/controllers/notifications/createAgentMentionNotification";
 import { checkIfBoardMember } from "@/utils/controllers/tasks/getSharedTask";
@@ -138,19 +139,29 @@ export async function createFollowerService(params: {
     });
 
     const notificationTargetUserId = agent ? agent.userId : userId;
-    const notification = await checkReminderAndCreateNotification(
-      notificationTargetUserId,
-      newFollower.task.projectId,
-      taskId,
-      {
-        userId: notificationTargetUserId,
-        fromUserId: mentionById,
-        type: "AddedToFollowerInTask",
-        taskId,
-        projectId: newFollower.task.projectId,
-        ...(agentId ? { agentId: agentId } : {}),
-      },
-    );
+    let suppressSelfFollowNotification = false;
+    if (notificationTargetUserId === mentionById && !fromAgentId) {
+      const { isFeatureEnabled } = await import("@/lib/flags");
+      suppressSelfFollowNotification = await isFeatureEnabled(
+        YPER4_651_SELF_FOLLOW_QUIET_FLAG,
+        mentionById,
+      );
+    }
+    const notification = suppressSelfFollowNotification
+      ? undefined
+      : await checkReminderAndCreateNotification(
+          notificationTargetUserId,
+          newFollower.task.projectId,
+          taskId,
+          {
+            userId: notificationTargetUserId,
+            fromUserId: mentionById,
+            type: "AddedToFollowerInTask",
+            taskId,
+            projectId: newFollower.task.projectId,
+            ...(agentId ? { agentId: agentId } : {}),
+          },
+        );
 
     await notifyAgentMention();
 
