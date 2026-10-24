@@ -3,6 +3,7 @@ const { fixture, columns } = require("./fixture.cjs");
 const root = path.resolve(__dirname, "../..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
+  jsx: true,
   alias: { "@": path.join(root, "src"),
     "@/components/Common/UserAvatar": path.join(__dirname, "avatar-stub.cjs") },
 });
