@@ -15,10 +15,7 @@ if (process.env.SMOKE_POSTDEPLOY === '1' && (!process.env.SMOKE_BOARD_PATH || !/
 export default defineConfig({
   testDir: './e2e/smoke',
   fullyParallel: true,
-  // A view that fails once is retried before it counts as a real failure —
-  // the ticket asks to roll back only if the SAME view fails twice, and
-  // Playwright's own retry does that for free per test.
-  retries: 1,
+  retries: process.env.BROWSER_SMOKE_PR ? 0 : 1,
   workers: 4,
   reporter: [['list']],
   timeout: process.env.BROWSER_SMOKE_PR || process.env.SMOKE_POSTDEPLOY === '1' ? 50_000 : 20_000,
