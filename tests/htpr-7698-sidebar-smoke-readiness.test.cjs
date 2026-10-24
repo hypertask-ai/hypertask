@@ -22,18 +22,18 @@ function smoke() {
   Object.assign(register, {
     use: options => { use = options; }, describe: { configure() {} }, skip() {}, beforeAll() {}, beforeEach() {},
   });
-  const expect = locator => ({
+  const expect = (locator, message) => ({
     async toBeVisible() { await locator.ready; assert.equal(locator.visible, true); },
     async toBeHidden() { assert.equal(locator.visible, false); },
     async toHaveText(text) { await locator.ready; assert.equal(locator.text, text); },
-    toBe: expected => assert.equal(locator, expected),
+    toBe: expected => assert.equal(locator, expected, message),
   });
   expect.poll = callback => ({ toBe: async expected => assert.equal(await callback(), expected) });
   const js = ts.transpileModule(read("e2e/smoke/agent-sidebar-chats.spec.ts"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
   const loaded = { exports: {} };
-  new Function("require", "module", "exports", `${js}\nexports.open = open; exports.choose = choose; exports.setFixture = value => { fixture = value; };`)(name => {
+  new Function("require", "module", "exports", `${js}\nexports.open = open; exports.choose = choose; exports.dismissConversationsOutside = dismissConversationsOutside; exports.setFixture = value => { fixture = value; };`)(name => {
     if (name === "@playwright/test") return { test: register, expect };
     if (name === "node:fs") return { ...require("node:fs"), readFileSync: (file, encoding) => file.endsWith("agent-sidebar-fixture.json") ? JSON.stringify(fixture) : require("node:fs").readFileSync(file, encoding) };
     if (name.startsWith("node:")) return require(name);
@@ -220,4 +220,86 @@ test("theme setup clears its own persisted B draft", () => {
 test("history waits for a lane-owned row", () => {
   const source = read("e2e/smoke/agent-sidebar-chats.spec.ts");
   assert.match(source, /page\.locator\('#ai-chat-session-history'\)\.getByRole\('button', \{ name: fixture\.personalChats\.find\(chat => chat\.lane === info\.project\.name\)!\.title, exact: true \}\)\)\.toBeVisible\(\)/);
+});
+
+function outsideView({ menu = { x: 54, y: 60, width: 288, height: 780 }, panel = { x: 0, y: 0, width: 390, height: 844 }, viewport = { width: 390, height: 844 }, hit = "sidebar", dismiss = true, closeSidebar = false } = {}) {
+  const list = { visible: true, boundingBox: async () => menu };
+  const clicks = [];
+  const sidebar = {
+    visible: true, boundingBox: async () => panel,
+    evaluate: async (callback, point) => {
+      const target = { closest: selector => {
+        assert.equal(selector, '#agent-sidebar-conversations, [aria-controls="agent-sidebar-conversations"]');
+        return hit === "list" || hit === "trigger" ? {} : null;
+      } };
+      const document = { elementFromPoint: (x, y) => {
+        assert.ok(x > 0 && x < viewport.width && y > 0 && y < viewport.height);
+        return target;
+      } };
+      return new Function("document", "node", "point", `return (${callback.toString()})(node, point)`)(
+        document, { contains: node => node === target && hit !== "board" }, point,
+      );
+    },
+    click: async options => {
+      assert.deepEqual(Object.keys(options), ["position"]);
+      const point = { x: panel.x + options.position.x, y: panel.y + options.position.y };
+      assert.ok(point.x > panel.x && point.x < panel.x + panel.width);
+      assert.ok(point.y > panel.y && point.y < panel.y + panel.height);
+      assert.ok(point.x < menu.x || point.x > menu.x + menu.width || point.y < menu.y || point.y > menu.y + menu.height);
+      clicks.push(point);
+      if (dismiss) list.visible = false;
+      if (closeSidebar) sidebar.visible = false;
+    },
+  };
+  return { list, sidebar, clicks, page: {
+    getByTestId: id => {
+      assert.ok(["ai-sidebar", "agent-sidebar-conversations"].includes(id));
+      return id === "ai-sidebar" ? sidebar : list;
+    },
+    viewportSize: () => viewport,
+    getByRole: () => assert.fail("the composer can be covered by the list"),
+  } };
+}
+
+for (const height of [364, 780, 1200]) {
+  test(`outside dismissal stays beside a ${height}px phone list and keeps the sidebar open`, async () => {
+    const view = outsideView({ menu: { x: 54, y: 60, width: 288, height } });
+    await smoke().dismissConversationsOutside(view.page);
+    assert.deepEqual(view.clicks, [{ x: 27, y: height === 364 ? 242 : height === 780 ? 450 : 452 }]);
+    assert.equal(view.list.visible, false);
+    assert.equal(view.sidebar.visible, true);
+  });
+}
+
+test("outside dismissal uses viewport coordinates for a right-hand desktop sidebar", async () => {
+  const view = outsideView({ viewport: { width: 1440, height: 900 }, panel: { x: 1080, y: 20, width: 360, height: 880 }, menu: { x: 1088, y: 60, width: 288, height: 300 } });
+  await smoke().dismissConversationsOutside(view.page);
+  assert.deepEqual(view.clicks, [{ x: 1408, y: 210 }]);
+  assert.equal(view.list.visible, false);
+});
+
+test("outside dismissal rejects a fully covered sidebar before clicking", async () => {
+  const view = outsideView({ menu: { x: 0, y: 60, width: 390, height: 780 } });
+  await assert.rejects(smoke().dismissConversationsOutside(view.page), /uncovered strip/);
+  assert.deepEqual(view.clicks, []);
+});
+
+for (const hit of ["list", "trigger", "board"]) {
+  test(`outside dismissal rejects a ${hit} hit before clicking`, async () => {
+    const view = outsideView({ hit });
+    await assert.rejects(smoke().dismissConversationsOutside(view.page), /outside point hits the sidebar/);
+    assert.deepEqual(view.clicks, []);
+  });
+}
+
+test("outside dismissal requires both a closed list and an open sidebar", async () => {
+  await assert.rejects(smoke().dismissConversationsOutside(outsideView({ dismiss: false }).page));
+  await assert.rejects(smoke().dismissConversationsOutside(outsideView({ closeSidebar: true }).page));
+});
+
+test("outside-click smoke uses geometry dismissal before native transport", () => {
+  const source = read("e2e/smoke/agent-sidebar-chats.spec.ts");
+  const outside = source.slice(source.indexOf("test('open error"), source.indexOf("test('flag-off"));
+  assert.match(outside, /await page\.getByRole\('button', \{ name: 'Switch conversation' \}\)\.click\(\)\s+await dismissConversationsOutside\(page\)\s+await choose\(page, native\.name\)/);
+  assert.doesNotMatch(outside, /getByRole\('textbox'[^\n]+\.click\(/);
 });

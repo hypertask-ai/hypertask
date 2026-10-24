@@ -84,6 +84,34 @@ async function settledBox(locator: ReturnType<Page['locator']>) {
   }, { intervals: [150] }).toBe(true)
   return previous!
 }
+async function dismissConversationsOutside(page: Page) {
+  const sidebar = page.getByTestId('ai-sidebar')
+  const list = page.getByTestId('agent-sidebar-conversations')
+  await expect(list).toBeVisible()
+  const menu = (await list.boundingBox())!
+  const panel = (await sidebar.boundingBox())!
+  const viewport = page.viewportSize()!
+  const left = Math.max(0, panel.x)
+  const right = Math.min(viewport.width, panel.x + panel.width)
+  const top = Math.max(0, panel.y, menu.y)
+  const bottom = Math.min(viewport.height, panel.y + panel.height, menu.y + menu.height)
+  const leftGap = menu.x - left
+  const rightGap = right - menu.x - menu.width
+  expect(Math.max(leftGap, rightGap) > 0, 'sidebar has an uncovered strip beside the list').toBe(true)
+  expect(bottom > top, 'list overlaps the visible sidebar').toBe(true)
+  const point = {
+    x: leftGap > rightGap ? left + leftGap / 2 : right - rightGap / 2,
+    y: (top + bottom) / 2,
+  }
+  expect(point.x < menu.x || point.x > menu.x + menu.width, 'outside point is not in the list').toBe(true)
+  expect(await sidebar.evaluate((node, point) => {
+    const target = document.elementFromPoint(point.x, point.y)
+    return node.contains(target) && !target?.closest('#agent-sidebar-conversations, [aria-controls="agent-sidebar-conversations"]')
+  }, point), 'outside point hits the sidebar, not the list or its trigger').toBe(true)
+  await sidebar.click({ position: { x: point.x - panel.x, y: point.y - panel.y } })
+  await expect(list).toBeHidden()
+  await expect(sidebar).toBeVisible()
+}
 async function reveal(list: Locator, row: Locator) {
   const more = list.getByRole('option', { name: /^Show (\d+ )?more$/ })
   await expect.poll(async () => {
@@ -298,8 +326,7 @@ test('open error retries the same selected agent; outside click and native trans
   await expect(page.getByRole('textbox', { name: `Message ${a.name}` })).toBeVisible()
   await expect(page.getByText('Runtime unavailable', { exact: true })).toBeHidden()
   await page.getByRole('button', { name: 'Switch conversation' }).click()
-  await page.getByTestId('ai-sidebar').getByRole('textbox', { name: `Message ${a.name}` }).click()
-  await expect(page.getByTestId('agent-sidebar-conversations')).toBeHidden()
+  await dismissConversationsOutside(page)
   await choose(page, native.name)
   const prompt = `Native sidebar ${randomUUID()}`
   const replyText = `Native transport reply to ${prompt}`
