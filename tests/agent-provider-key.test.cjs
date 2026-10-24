@@ -381,7 +381,7 @@ test("agent provider-key rejects Baseten without storing or returning the suppli
     "@/lib/agents/visibility": { upsertOwnedAgentProviderKey: async (value) => { writes.push(value); return { ok: true }; } },
   };
   const filename = path.join(root, "src/app/api/agents/[agentId]/provider-key/route.ts");
-  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(code, { module, exports: module.exports, require: (id) => {
     assert.ok(Object.hasOwn(stubs, id), `Unexpected dependency: ${id}`);
