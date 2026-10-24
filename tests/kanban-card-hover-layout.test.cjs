@@ -50,6 +50,8 @@ const HTCButton = loadComponent(
     ...shared,
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "@/hooks/MultiPages/HTC/useDarkMode": () => ({ effectiveTheme: "light" }),
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7749-header-icon-size": { HTPR_7749_HEADER_ICON_SIZE_FLAG: "htpr-7749-header-icon-size" },
     "@/models/enums": { CommandMode: { Command: "Command" } },
   },
 );

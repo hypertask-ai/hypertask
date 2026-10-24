@@ -158,9 +158,12 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     }
 
     const streamId = crypto.randomUUID();
+    let chatSurface = isFullScreenChat ? "fullscreen" : "sidebar";
+    if (typeof navigator !== "undefined" && /\bHypertaskApp\b/.test(navigator.userAgent)) chatSurface = "desktop";
     const payload = {
       message: content,
       aiFeature: "aiChat",
+      surface: chatSurface,
       teamId: modelTeamId,
       session_id: session.id,
       assistant_message_id: assistantMessageId,

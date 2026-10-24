@@ -4,14 +4,14 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 175, mcp: 77, cli: 156, ai_chat: 84, hyperai: 77. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 176, mcp: 77, cli: 156, ai_chat: 84, hyperai: 77. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
 | **Discover identity and accessible workspace context** | ✅ 4 | ✅ 3 | ✅ 2 | ✅ 1 | ✅ 3 |
 | **Update the human profile** | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 |
 | **List, inspect, and contact board agents** | ✅ 7 | ✅ 2 | ✅ 4 | ✅ 3 | ✅ 2 |
-| **Agent Chat: an agent runtime reads and answers its owner's chat** | ✅ 10 | ↪ Only the chatted agent's runtime token may read or answer its session; MCP clients act as the human, not as the agent. | ↪ The agent worker runtime posts replies with its own bearer token; the CLI has no agent-side chat command. | ↪ Agent Chat is the surface itself; native agents answer in-process without this route. | ↪ HyperAI inherits the human session and never speaks as an external agent. |
+| **Agent Chat: an agent runtime reads and answers its owner's chat** | ✅ 10 (transition) | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 | ↪ Agent Chat is the surface itself; native agents answer in-process without this route. | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 |
 | **Create, revoke, and rotate managed agents or keys** | ✅ 20 | ✅ 7 | ✅ 18 | ✅ 5 | ✅ 7 |
 | **Owner-approved feature flag changes by agent sessions** | ✅ 3 | ↪ Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags. | ↪ The session-only ht-flag script uses the agent identity directly; the public CLI does not expose release controls. | ↪ Feature flag release controls are restricted to approved owner agent sessions, not AI Chat tools. | ↪ The embedded agent inherits the human session and cannot use the agent-only flag route. |
 | **Create, refresh, inspect, or clear a CLI/API session** | ✅ 4 | ↪ MCP clients receive credentials out of band and do not manage interactive login. | ✅ 4 | ↪ The signed-in web session is managed by the app shell. | ↪ The embedded agent inherits the invoking human session. |
@@ -35,7 +35,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, read, answer, and cancel decision requests** | ✅ 4 | ✅ 1 | ✅ 5 | ✅ 1 | ✅ 1 |
 | **Create, read, update, publish, and delete drafts** | ✅ 5 | ✅ 1 | ✅ 5 | ✅ 1 | ✅ 1 |
 | **Start, stop, pause, resume, log, and report time** | ✅ 10 | ✅ 3 | ✅ 10 | ✅ 8 | ✅ 3 |
-| **Draft, improve, and inspect AI usage** | ✅ 7 (transition) | ↪ AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only. | ✅ 2 | ↪ AI Chat itself is the writing surface rather than a nested tool. | ↪ HyperAI itself is the writing surface rather than a nested tool. |
+| **Draft, improve, and inspect AI usage** | ✅ 8 | ↪ AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only. | ✅ 2 | ↪ AI Chat itself is the writing surface rather than a nested tool. | ↪ HyperAI itself is the writing surface rather than a nested tool. |
 | **Search Hypertask product help** | ↪ Help search uses the public documentation service, not a user-data API route. | ✅ 1 | ↪ The CLI exposes command help locally instead of remote help-center search. | ✅ 1 | ✅ 1 |
 | **Search the public web for current information** | ↪ Public web search is an AI-runtime capability, not a board data endpoint. | ↪ MCP clients can provide their own web-search capability. | ↪ The board CLI does not proxy public web search. | ✅ 1 | ↪ HyperAI does not receive the AI Chat web-search provider. |
 | **Create, inspect, test, and delete webhooks** | ✅ 4 | ✅ 1 | ✅ 11 | ✅ 1 | ✅ 1 |

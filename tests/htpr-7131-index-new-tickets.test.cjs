@@ -39,6 +39,7 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
   const mocks = {
     "@/lib/prisma": { default: db },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+      if (key === "htpr-7740-create-response") return true;
       flags.push([key, userId]);
       assert.equal(key, flagKey);
       return enabled;

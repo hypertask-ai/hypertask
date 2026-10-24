@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
 
 function parseCreateInput(input: z.infer<typeof createSchema>) {
   const markdown = input.markdown ?? input.rawMarkdown;
-  if (markdown) return parseSkillMarkdown(markdown);
+  if (markdown) return parseSkillMarkdown(markdown, input.name);
 
   const name = input.name?.trim() || "";
   const slug = slugifySkill(input.slug || name);

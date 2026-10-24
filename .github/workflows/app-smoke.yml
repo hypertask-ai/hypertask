@@ -12,8 +12,8 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-{0}', github.event.workflow_run.head_sha) }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || github.event.workflow_run.conclusion == 'cancelled' && format('app-smoke-cancelled-request-{0}', github.run_id) || format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
+  cancel-in-progress: true
 
 jobs:
   warm-dependencies:
