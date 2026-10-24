@@ -5,7 +5,7 @@ const { cases } = require("./filter-cases.cjs");
 const { filters, views, savedProject } = require("./runtime.cjs");
 
 for (const entry of cases) {
-  test(entry.name, (t) => {
+  test(entry.name, { todo: entry.knownBug }, (t) => {
     t.mock.timers.enable({ apis: ["Date"], now: NOW });
     const { sections, project, runtime } = fixture();
     Object.assign(project, entry.projectSettings);

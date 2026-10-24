@@ -5,7 +5,7 @@ const { filters, load, restore } = require("./runtime.cjs");
 const { getAppliedSearchedTasks } = load("utils/helperFunctions/Views/SearchFilterHelperFunction.ts");
 const { applySubTaskSetting } = load("utils/helperFunctions/Views/SubtaskHelperFunction.ts");
 const { getFilteredEmptySections } = load("utils/helperFunctions/Views/EmptySectionsHelperFunction.ts");
-const { BUILTIN_VIEWS } = load("lib/constants/builtinViews.ts");
+const { BUILTIN_VIEWS, buildBuiltinViewContext } = load("lib/constants/builtinViews.ts");
 const builtinCases = [
   ["builtin:my-tasks", "My Tasks excludes owned agents", ["a", "c", "h"]],
   ["builtin:overdue", "Overdue excludes Done Archive Deleted and missing dates", ["b"]],
@@ -21,8 +21,8 @@ for (const [id, label, expected] of builtinCases) {
     project.project_view.user_project_views[0].appliedView = { board_filters: {
       matchFilters: "ALL", addedFilters: [{ type: "Priority", searchPayload: [{ priority_index: 99 }] }],
     } };
-    const context = { currentUserId: 6, currentUserNames: [" Valentin "], now: NOW,
-      doneSectionTitles: new Set(["Done"]), cyclesEnabled: true, currentCycleId: 1, nextCycleId: 2 };
+    const context = { ...buildBuiltinViewContext(project, 6, NOW, "Valentin"),
+      cyclesEnabled: true, currentCycleId: 1, nextCycleId: 2 };
     const result = filters.getFilteredSections(sections, project, id, context);
     assert.deepEqual(sectionIds(result), expected);
     if (id === "builtin:decisions") assert.deepEqual(result.map((section) => section.id), [4, 5]);
