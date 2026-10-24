@@ -8,40 +8,42 @@ const allowlistPath = join(root, "tests/source-text-regex-allowlist.json");
 const { allowlist } = JSON.parse(readFileSync(allowlistPath, "utf8"));
 
 /**
- * Heuristic to detect tests that read source files as text and regex-match them.
- * A test is flagged if it:
- * 1. Uses readFileSync (or similar read operations)
- * 2. Contains regex operations on the read content (match, test, assert.match, etc.)
- * 3. Reads from paths that look like source files (not test fixtures or config)
+ * Tightened heuristic to detect tests that read source files AND regex-match them.
+ * A test is flagged only if it:
+ * 1. Reads source files (not fixtures/config) into variables
+ * 2. Applies assert.match/doesNotMatch to those specific variables
  */
 function detectsSourceTextRegex(testPath) {
   const content = readFileSync(testPath, "utf8");
   
-  // Skip if it doesn't read files
-  if (!content.includes("readFileSync")) {
+  // Find all variables assigned from readFileSync
+  const varPattern = /(?:const|let|var)\s+(\w+)\s*=\s*[^;{]*?readFileSync/g;
+  const allVars = [];
+  let match;
+  while ((match = varPattern.exec(content)) !== null) {
+    allVars.push(match[1]);
+  }
+  
+  if (allVars.length === 0) {
     return false;
   }
   
-  // Check for regex operations that might be applied to source files
-  const hasRegexOps = 
-    content.includes(".match(") ||
-    content.includes(".test(") ||
-    content.includes("assert.match") ||
-    content.includes("assert.doesNotMatch") ||
-    content.includes("assert.ok(") && content.includes("RegExp") ||
-    content.includes("/\\/");  // Regex literals
+  // Check if any readFileSync call reads a source file
+  const readsSource = /readFileSync\s*\([^)]*(?:src\/|lib\/|components\/|pages\/|app\/|\.github\/workflows|eslint-local-rules\/|scripts\/[^/]+\.(?:m?js|tsx?)|tsconfig)/g.test(content);
   
-  if (!hasRegexOps) {
+  if (!readsSource) {
     return false;
   }
   
-  // Check if it's reading source files (not test fixtures or package.json only)
-  // Source files are typically in src/, lib/, components/, pages/, app/, or workflow files
-  const readsSourceFiles =
-    /readFileSync[^)]*['"`](?:\.\.\/)?(?:src|lib|components|pages|app|\.github\/workflows|eslint|tsconfig|scripts|\.claude)/.test(content) ||
-    /read\([^)]*['"`](?:src|lib|components|pages|app|\.github\/workflows|eslint)/.test(content);
+  // Check if any of those variables are used with assert.match or assert.doesNotMatch
+  for (const varName of allVars) {
+    const assertPattern = new RegExp(`assert\\.(?:match|doesNotMatch)\\s*\\([^,]*\\b${varName}\\b`, 'g');
+    if (assertPattern.test(content)) {
+      return true;
+    }
+  }
   
-  return hasRegexOps && readsSourceFiles;
+  return false;
 }
 
 function discoverTestFiles(dir) {
