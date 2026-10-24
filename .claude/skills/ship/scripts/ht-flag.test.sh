@@ -96,11 +96,15 @@ config=$(cat)
 [ "$config" = 'header = "Authorization: Bearer offline-test-credential"' ] || exit 1
 [[ "$*" != *offline-test-credential* ]] || exit 1
 output=''
+method=''
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = --output ]; then output=$2; shift; fi
+  if [ "$1" = --request ]; then method=$2; shift
+  elif [ "$1" = --output ]; then output=$2; shift; fi
   shift
 done
-if [ -n "${TEST_RESPONSE:-}" ]; then
+if [ "$method" = GET ] && [ -n "${TEST_FLAGS:-}" ]; then
+  printf '%s\n' "$TEST_FLAGS" > "$output"
+elif [ -n "${TEST_RESPONSE:-}" ]; then
   printf '%s\n' "$TEST_RESPONSE" > "$output"
 else
   printf '%s\n' '{"flag":{"mode":"OFF"}}' > "$output"
@@ -134,4 +138,52 @@ for api_error in 'The review must be recorded by a different agent' 'Failure-Off
   fi
   grep -qE "$api_error" "$tmp/output"
 done
-printf 'ht-flag tests passed\n'
+cat > "$tmp/bin/vcc" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[ "$SHIP_SESSION_NAME" = 'Runner 3' ] || exit 92
+printf '%s\n' "$*" >> "$HOME/vcc-log"
+case "$1:$2" in
+  task:get) jq -nc --arg section "${TEST_SECTION:-Flags}" '{success:true,tasks:[{section:$section}]}' ;;
+  task:move) [ "$*" = 'task move HTPR-6136 --section Done' ] || exit 93; [ "${TEST_MOVE_ERROR:-0}" = 0 ] ;;
+  *) exit 94 ;;
+esac
+SH
+chmod +x "$tmp/bin/vcc"
+export TEST_RESPONSE='{"flag":{"key":"htpr-6136-figma-connect","mode":"EVERYONE","ticketId":"HTPR-6136"}}'
+export TEST_FLAGS='{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"}]}'
+: > "$HOME/vcc-log"
+"$script" set "$key" everyone --reason "$reason" > "$tmp/output" 2>&1
+[ "$(cat "$HOME/vcc-log")" = $'task get HTPR-6136 --json\ntask move HTPR-6136 --section Done' ]
+grep -q 'moved HTPR-6136 from Flags to Done' "$tmp/output"
+# --review uses the same post-switch path, and owner can be inferred from the key.
+: > "$HOME/vcc-log"
+TEST_RESPONSE='{"flag":{"key":"htpr-6136-figma-connect","mode":"EVERYONE"}}' "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1
+grep -q '^task move HTPR-6136 --section Done$' "$HOME/vcc-log"
+for section in 'In Progress' 'Valentin Review' Done; do
+  : > "$HOME/vcc-log"
+  TEST_SECTION="$section" "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1
+  [ "$(cat "$HOME/vcc-log")" = 'task get HTPR-6136 --json' ]
+done
+for flags in \
+  '{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"},{"key":"htpr-6136-another","mode":"OWNER_AND_QA"}]}' \
+  '{"flags":[]}' '{"flags":null}'; do
+  : > "$HOME/vcc-log"
+  if TEST_FLAGS="$flags" "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1; then
+    echo 'must not finish a ticket with pending or unreadable flags'; exit 1
+  fi
+  [ "$(cat "$HOME/vcc-log")" = 'task get HTPR-6136 --json' ]
+done
+: > "$HOME/vcc-log"
+if TEST_MOVE_ERROR=1 "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1; then
+  echo 'move failure must be visible'; exit 1
+fi
+grep -q 'flag is Everyone, but moving HTPR-6136' "$tmp/output"
+: > "$HOME/vcc-log"
+TEST_RESPONSE='{"flag":{"mode":"OFF"}}' "$script" set "$key" off --reason "$reason" >/dev/null
+[ ! -s "$HOME/vcc-log" ]
+if TEST_STATUS=403 "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1; then exit 1; fi
+[ ! -s "$HOME/vcc-log" ]
+"$script" set "$key" everyone --review 42 --dry-run >/dev/null
+[ ! -s "$HOME/vcc-log" ]
+printf 'All tests passed: ht-flag tests passed\n'

@@ -1,14 +1,31 @@
 #!/usr/bin/env bash
 # Live tests for ship-check against real tickets (needs gh and hypertask auth).
-cd "$(dirname "$0")"; fails=0; passes=0
+cd "$(dirname "$0")"
+if [ "${1:-}" = --flags-only ]; then exec bash ./ship-check.flags.test.sh; fi
+fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
 trap 'rm -rf "$E"' EXIT
 export PREMERGE_STATUS_STATE="$E/publisher-state"
 # Live fixtures may read GitHub, but tests never publish real commit statuses.
 real_gh=$(command -v gh); mkdir -p "$E/read-bin"
-printf '#!/usr/bin/env bash\nif [[ $1 == api && $2 == */statuses/* ]]; then exit 0; fi\nexec %q "$@"\n' "$real_gh" > "$E/read-bin/gh"
+printf '#!/usr/bin/env bash\nif [[ $1 == api && $2 == */statuses/* ]]; then exit 0; fi\nlegacy_flag_reads "$@" && exit 0\nexec %q "$@"\n' "$real_gh" > "$E/read-bin/gh"
 chmod +x "$E/read-bin/gh"; export PATH="$E/read-bin:$PATH"
+# Existing fixtures below exercise other gates with no ticket flags; keep their
+# new flag reads offline. --flags-only above exercises real discovery separately.
+cat > "$E/read-bin/ht-flag" <<'MOCK'
+#!/usr/bin/env bash
+echo '{"flags":[]}'
+MOCK
+chmod +x "$E/read-bin/ht-flag"; export HT_FLAG_BIN="$E/read-bin/ht-flag"
+legacy_flag_reads() {
+  case "$*" in
+    *'--json body --jq .body') echo '' ;;
+    'api repos/'*'/pulls/'*'/files?per_page=100 --paginate --slurp') echo '[[]]' ;;
+    *) return 1 ;;
+  esac
+}
+export -f legacy_flag_reads
 G() { local want=$1; shift; echo "{\"tool_input\":{\"command\":$(jq -Rn --arg c "$*" '$c')}}" | ./ship-check guard >/dev/null 2>&1; local got=$?; [ "$got" = "$want" ] && ok "$got <- $*" || bad "want $want got $got <- $*"; }
 DONE='--section "Done"'
 M='gh pr merge'
@@ -161,6 +178,7 @@ out=$(./ship-check deployed YPER4-122)
 mkdir -p "$E/mock-bin" "$E/YPER4-999"; echo 838 > "$E/YPER4-999/pr"
 cat > "$E/mock-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+legacy_flag_reads "$@" && exit 0
 case "$1:$2" in
   pr:view) echo '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"production"}' ;;
   api:*/status) printf '%s' "$STATUS_FIXTURE" | jq -r "$4" ;;
@@ -182,6 +200,7 @@ done
 # A merge Vercel never built passes only when a newer successful Production deploy contains it.
 cat > "$E/mock-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+legacy_flag_reads "$@" && exit 0
 case "$1:$2" in
   pr:view) echo '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"production"}' ;;
   api:*/status) echo '{"statuses":[]}' | jq -r "$4" ;;
@@ -212,6 +231,7 @@ binding_tests() {
   mkdir -p "$HOME" "$E/bind-bin"
   cat > "$E/bind-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+legacy_flag_reads "$@" && exit 0
 [[ $1 == pr && $2 == view && $3 == 163 && $4 == -R && $5 == "$BIND_EXPECT_REPO" ]] || exit 1
 case "$7" in
   title) echo 'YPER4-531 [INFRA] Fixture' ;;
@@ -253,6 +273,7 @@ binding_tests
 # Only analytics/master may use its exact production publishing run without a release.
 cat > "$E/mock-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+legacy_flag_reads "$@" && exit 0
 case "$1:$2" in
   pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"%s"}\n' "$SHIP_BASE" ;;
   release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
@@ -328,6 +349,7 @@ D 1 'FAIL: could not compare' RELEASE_TAG=v1 COMPARE_ERROR=1
 # Docs/main deploys to Cloudflare Pages without releases.
 cat > "$E/mock-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+legacy_flag_reads "$@" && exit 0
 case "$1:$2" in
   pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"%s"}\n' "$SHIP_BASE" ;;
   release:view) exit 1 ;;
@@ -392,6 +414,7 @@ DD 1 'FAIL: no release found' SHIP_REPO=hypertask-ai/other
 mkdir -p "$E/docs-bin"
 cat > "$E/docs-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+legacy_flag_reads "$@" && exit 0
 case "$1:$2" in
   pr:view)
     [[ $* == *'-R hypertask-ai/hypertask'* ]] || exit 1
@@ -456,6 +479,7 @@ DOCS_TICKET=YPER4-390 DC 0 'docs ok (no user-visible change)' docs DOCS_COMMENTS
 mkdir -p "$E/worker-bin" "$E/worker-checkout/workers/docs-agent"
 cat > "$E/worker-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+legacy_flag_reads "$@" && exit 0
 case "$1:$2" in
   pr:view)
     if [[ $* == *'--json title --jq'* ]]; then echo 'YPER4-999 [INFRA] Fixture'; exit; fi
@@ -954,6 +978,7 @@ fi
 mkdir -p "$E/drop-bin"
 cat > "$E/drop-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+legacy_flag_reads "$@" && exit 0
 # pr view <n> ... : state comes from $DROP_DIR/state-<n>; the title names YPER4-777.
 [[ $1 == pr && $2 == view ]] || exit 1
 st=$(cat "$DROP_DIR/state-$3") || exit 1
