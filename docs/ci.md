@@ -207,6 +207,14 @@ GitHub-only verification for [YPER4-562](https://app.hypertask.ai/detail/project
 - The /admin/flags page is not in the matrix: only user 6 may open it and the smoke session must never be user 6.
 - First-load jump (CLS under 0.05) is HTPR-7074, not this check.
 
+## Premerge verify-qa (YPER4-673)
+
+`browser-smoke` keeps its one `next build`. After the live-like inbox cycle, it reseeds with `scripts/seed-browser-smoke.mjs --inbox-cycle` and runs `.github/scripts/verify-qa-premerge.mjs` against `http://127.0.0.1:3100`. The script maps the PR diff onto `.claude/skills/verify-qa/reference/feature-map/` and drives that page's journey. The only premerge driver in this unit is the inbox cycle (open by click and by Enter, send a comment, J, E, then reload). Anything else, including a tie or a page with no driver yet, falls back to that inbox cycle. The script refuses every base that is not loopback HTTP, so it cannot touch `app.hypertask.ai`.
+
+Screenshots, `result.json` and `summary.md` upload as `verify-qa-premerge` for 7 days. The job summary names the journey, the feature-map page and the artifact URL. The step is report-only: `VERIFY_QA_REPORT_ONLY=1` and a non-zero exit become a warning, not a failed `browser-smoke`. It is not a ruleset context and does not block merges. A later unit can make it required after a clean week.
+
+Sharing that `.next` build with app-smoke is deferred. `app-smoke.yml` is loaded from `production`, and its build runs inside a locked-down container with `CORE_APP_SMOKE`, a mocked Google font file and a docker-network callback URL. browser-smoke bakes different `NEXT_PUBLIC_*` values, including `NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100`. The two workflows also run in parallel, so waiting on a large `.next` upload would slow a required check. The container build at `scripts/run-app-smoke-isolated.sh` stays.
+
 ## Action archive cache operations
 
 The manifest at [`.github/actions/action-archive-cache-manifest.txt`](../.github/actions/action-archive-cache-manifest.txt) is the single inventory of cached action commits. Workflow `uses:` entries carry the same 40-character SHAs; release tags remain comments for readability and never decide execution.
