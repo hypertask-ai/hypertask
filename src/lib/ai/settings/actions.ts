@@ -5,7 +5,9 @@ import { themeOptions } from "@/lib/themePreferences";
 import setMemberRole from "@/utils/controllers/projects/setMemberRole";
 import { notificationCategories, notificationCellValue, updateNotificationMatrix } from "@/utils/controllers/notifications/updateNotificationMatrix";
 import { broadcastBoardChange } from "@/lib/realtime/server";
-import { assertSettingPage, type SettingChange, type SettingProposal, type SettingsScope } from "./catalog";
+import { assertSettingPage, type SettingChange, type SettingProposal, type SettingsScope, type SettingValue } from "./catalog";
+
+export class SettingChangeRejectedError extends Error {}
 
 export async function readSettingsPage(userId: number, scope: SettingsScope) {
   if (scope.section === "appearance") {
@@ -49,10 +51,10 @@ export async function readSettingsPage(userId: number, scope: SettingsScope) {
   return { manualOnly: true };
 }
 
-export async function readSettingChange(userId: number, scope: SettingsScope, change: SettingChange) {
+export async function readSettingChange(userId: number, scope: SettingsScope, change: SettingChange, destination: SettingValue = change.value) {
   assertSettingPage(scope, change);
   if (change.kind === "theme") {
-    if (change.value === "rounded" && !(await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId))) {
+    if (destination === "rounded" && !(await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId))) {
       throw new Error("Material theme is not available for your account.");
     }
     return { label: "Theme", value: scope.theme ?? "system" };
@@ -78,10 +80,10 @@ export async function readSettingChange(userId: number, scope: SettingsScope, ch
 
 export async function applySettingChange(proposal: SettingProposal, undo: boolean, currentTheme?: SettingsScope["theme"]): Promise<{ theme?: SettingsScope["theme"] }> {
   const scope = { ...proposal.scope, ...(currentTheme ? { theme: currentTheme } : {}) };
-  const current = await readSettingChange(proposal.userId, scope, proposal.change);
   const expected = undo ? proposal.after : proposal.before;
   const next = undo ? proposal.before : proposal.after;
-  if (current.value !== expected) throw new Error("This setting changed since the preview. Ask for a fresh proposal.");
+  const current = await readSettingChange(proposal.userId, scope, proposal.change, next);
+  if (current.value !== expected) throw new SettingChangeRejectedError("This setting changed since the preview. Ask for a fresh proposal.");
   const change = proposal.change;
   if (change.kind === "theme") {
     if (next === "rounded" && !(await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, proposal.userId))) throw new Error("Material theme is not available for your account.");
@@ -92,7 +94,10 @@ export async function applySettingChange(proposal: SettingProposal, undo: boolea
     return {};
   }
   const result = await setMemberRole(proposal.userId, scope.projectId!, change.targetUserId, next as "Admin" | "Member", expected as "Admin" | "Member");
-  if (result.status !== 200) throw new Error((result.json as { message?: string }).message ?? "Could not change member role");
+  if (result.status !== 200) {
+    const message = (result.json as { message?: string }).message ?? "Could not change member role";
+    throw result.status < 500 ? new SettingChangeRejectedError(message) : new Error(message);
+  }
   void broadcastBoardChange(scope.projectId!, { originUserId: proposal.userId });
   return {};
 }

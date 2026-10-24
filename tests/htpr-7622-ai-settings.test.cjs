@@ -48,7 +48,10 @@ function harness() {
       if (mode === "NX" && state.records.has(key)) return null;
       if (mode !== "NX" && state.failProposalSave) {
         const proposal = JSON.parse(value);
-        if (state.failProposalSave === (proposal.applying ? "applying" : proposal.status)) {
+        const phase = proposal.operation
+          ? proposal.operation.committed ? `${proposal.operation.action}-committed` : proposal.operation.action === "undo" ? "undoing" : "applying"
+          : proposal.status;
+        if (state.failProposalSave === phase) {
           state.failProposalSave = null;
           throw new Error("Redis proposal SET failed");
         }
@@ -135,13 +138,81 @@ for (const kind of ["board-role", "notification"]) {
     assert.equal(value(), card.after);
     assert.equal(h.state.writes, 1);
     const interrupted = JSON.parse(h.state.records.get(key));
-    assert.deepEqual([interrupted.status, interrupted.applying, interrupted.before], ["pending", true, card.before]);
+    assert.deepEqual([interrupted.status, interrupted.operation, interrupted.before], ["pending", { action: "apply", committed: true }, card.before]);
     await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "cancel"), /no longer pending/);
     const retried = await h.proposals.actOnSettingProposal(6, card.id, "apply", scope);
     assert.deepEqual([retried.proposal.status, value(), h.state.writes], ["applied", card.after, 1]);
-    assert.equal(JSON.parse(h.state.records.get(key)).applying, undefined);
+    assert.equal(JSON.parse(h.state.records.get(key)).operation, undefined);
     const undone = await h.proposals.actOnSettingProposal(6, card.id, "undo", scope);
     assert.deepEqual([undone.proposal.status, value(), h.state.writes], ["undone", card.before, 2]);
+  });
+}
+
+for (const kind of ["board-role", "notification"]) {
+  test(`${kind}: retry recovers a committed Undo after Redis status SET fails without a second reversal`, async () => {
+    const h = harness();
+    const scope = kind === "board-role" ? boardScope : { section: "notifications" };
+    const change = kind === "board-role" ? roleChange : { kind, category: "comments", channel: "email", value: false };
+    const value = () => kind === "board-role" ? h.state.members[0].role : h.state.settings.get(6).notificationMatrix.comments.email;
+    const card = await h.proposals.createSettingProposal(6, sessionId, scope, change);
+    const key = `ai-setting:6:${card.id}`;
+    await h.proposals.actOnSettingProposal(6, card.id, "apply", scope);
+    h.state.failProposalSave = "undone";
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", scope), /Redis proposal SET failed/);
+    assert.deepEqual([value(), h.state.writes], [card.before, 2]);
+    const interrupted = JSON.parse(h.state.records.get(key));
+    assert.deepEqual([interrupted.status, interrupted.operation], ["applied", { action: "undo", committed: true }]);
+    const retried = await h.proposals.actOnSettingProposal(6, card.id, "undo", scope);
+    assert.deepEqual([retried.proposal.status, value(), h.state.writes], ["undone", card.before, 2]);
+    assert.equal(JSON.parse(h.state.records.get(key)).operation, undefined);
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", scope), /already been handled/);
+  });
+}
+
+test("a failed undoing marker SET prevents reversal and permits a later Undo", async () => {
+  const h = harness();
+  const card = await h.proposals.createSettingProposal(6, sessionId, boardScope, roleChange);
+  await h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope);
+  h.state.failProposalSave = "undoing";
+  await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", boardScope), /Redis proposal SET failed/);
+  assert.deepEqual([h.state.members[0].role, h.state.writes], ["Admin", 1]);
+  const applied = JSON.parse(h.state.records.get(`ai-setting:6:${card.id}`));
+  assert.deepEqual([applied.status, applied.operation], ["applied", undefined]);
+  const undone = await h.proposals.actOnSettingProposal(6, card.id, "undo", boardScope);
+  assert.deepEqual([undone.proposal.status, h.state.members[0].role, h.state.writes], ["undone", "Member", 2]);
+});
+
+for (const failCleanup of [false, true]) {
+  test(`a rejected concurrent role promotion cannot be adopted on retry or undone, even with cleanup failure: ${failCleanup}`, async () => {
+    const h = harness();
+    const card = await h.proposals.createSettingProposal(6, sessionId, boardScope, roleChange);
+    const key = `ai-setting:6:${card.id}`;
+    h.state.beforeRoleWrite = () => { h.state.members[0].role = "Admin"; };
+    if (failCleanup) h.state.failProposalSave = "pending";
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), failCleanup ? /Redis proposal SET failed/ : /Role or board access changed/);
+    h.state.beforeRoleWrite = null;
+    const rejected = JSON.parse(h.state.records.get(key));
+    assert.equal(rejected.status, "pending");
+    assert.deepEqual(rejected.operation, failCleanup ? { action: "apply" } : undefined);
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), /changed since the preview/);
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", boardScope), /already been handled/);
+    assert.deepEqual([h.state.members[0].role, h.state.writes], ["Admin", 0]);
+    assert.equal(JSON.parse(h.state.records.get(key)).status, "pending");
+  });
+}
+
+for (const action of ["apply", "undo"]) {
+  test(`${action}: a matching role value without a committed receipt is not recovered as this proposal's write`, async () => {
+    const h = harness();
+    const card = await h.proposals.createSettingProposal(6, sessionId, boardScope, roleChange);
+    if (action === "undo") await h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope);
+    h.state.failProposalSave = `${action}-committed`;
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, action, boardScope), /Redis proposal SET failed/);
+    const interrupted = JSON.parse(h.state.records.get(`ai-setting:6:${card.id}`));
+    assert.deepEqual([interrupted.status, interrupted.operation], [action === "undo" ? "applied" : "pending", { action }]);
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, action, boardScope), /changed since the preview/);
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, action === "undo" ? "apply" : "undo", boardScope), /already been handled/);
+    assert.deepEqual([h.state.members[0].role, h.state.writes], action === "undo" ? ["Member", 2] : ["Admin", 1]);
   });
 }
 
@@ -165,7 +236,7 @@ test("a failed applying marker SET prevents mutation and permits a later Apply",
   await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), /Redis proposal SET failed/);
   assert.deepEqual([h.state.members[0].role, h.state.writes], ["Member", 0]);
   const pending = JSON.parse(h.state.records.get(`ai-setting:6:${card.id}`));
-  assert.deepEqual([pending.status, pending.applying], ["pending", undefined]);
+  assert.deepEqual([pending.status, pending.operation], ["pending", undefined]);
   const applied = await h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope);
   assert.deepEqual([applied.proposal.status, h.state.members[0].role, h.state.writes], ["applied", "Admin", 1]);
 });
@@ -426,6 +497,20 @@ test("Material theme's own availability flag is respected on proposal and Undo",
   assert.equal(applied.theme, "graphite");
   h.state.rounded = false;
   await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", { ...themeScope, theme: "graphite" }), /not available/);
+});
+
+test("Undo from Material restores an available theme after Material is disabled", async () => {
+  const h = harness();
+  const card = await h.proposals.createSettingProposal(6, sessionId, themeScope, { kind: "theme", value: "rounded" });
+  const applied = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
+  assert.equal(applied.status, 200);
+  assert.equal(applied.cookies.get("theme").value, "rounded");
+  h.state.rounded = false;
+  const undone = await h.route.POST(request({ id: card.id, action: "undo", scope: themeScope }, { theme: "rounded" }));
+  assert.equal(undone.status, 200);
+  assert.equal((await undone.json()).proposal.status, "undone");
+  assert.equal(undone.cookies.get("theme").value, "porcelain");
+  assert.equal(h.state.writes, 0);
 });
 
 test("Settings chat cannot bypass Apply with legacy mutation tools; ordinary chat keeps those tools", () => {

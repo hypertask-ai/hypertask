@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
-import { applySettingChange, readSettingChange } from "./actions";
+import { applySettingChange, readSettingChange, SettingChangeRejectedError } from "./actions";
 import { settingProposalCard, type SettingChange, type SettingProposal, type SettingsScope } from "./catalog";
 
 const TTL_SECONDS = 900;
@@ -33,7 +33,7 @@ export async function loadSettingProposal(userId: number, id: string) {
   const redis = await getRedis();
   const raw = await redis.get(proposalKey(userId, id));
   if (!raw) throw new Error("This change expired or is not yours. Ask for a fresh proposal.");
-  const proposal = JSON.parse(raw) as SettingProposal & { applying?: boolean };
+  const proposal = JSON.parse(raw) as SettingProposal & { operation?: { action: "apply" | "undo"; committed?: boolean } };
   if (proposal.userId !== userId || proposal.id !== id) throw new Error("Setting change not found.");
   const session = await prisma.chatSession.findFirst({ where: { id: proposal.sessionId, userId, agentId: null }, select: { id: true } });
   if (!session) throw new Error("Chat no longer available.");
@@ -49,7 +49,7 @@ export async function actOnSettingProposal(userId: number, id: string, action: "
   try {
     const proposal = await loadSettingProposal(userId, id);
     if (action === "cancel") {
-      if (proposal.status !== "pending" || proposal.applying) throw new Error("This change is no longer pending.");
+      if (proposal.status !== "pending" || proposal.operation) throw new Error("This change is no longer pending.");
       proposal.status = "cancelled";
     } else {
       if (!scope || scope.section !== proposal.scope.section || scope.projectId !== proposal.scope.projectId) {
@@ -57,24 +57,40 @@ export async function actOnSettingProposal(userId: number, id: string, action: "
       }
       const undo = action === "undo";
       const currentScope = { ...proposal.scope, ...(scope.theme ? { theme: scope.theme } : {}) };
-      let recovered = false;
-      if (proposal.applying) {
-        const current = await readSettingChange(userId, currentScope, proposal.change);
-        if (current.value === proposal.after) {
-          proposal.status = "applied";
-          recovered = !undo;
+      if (proposal.operation?.committed) {
+        const operationUndo = proposal.operation.action === "undo";
+        const destination = operationUndo ? proposal.before : proposal.after;
+        const current = await readSettingChange(userId, currentScope, proposal.change, undo ? proposal.before : proposal.after);
+        if (current.value !== destination && !(proposal.change.kind === "theme" && current.value === (operationUndo ? proposal.after : proposal.before))) {
+          throw new Error("This setting changed since the preview. Ask for a fresh proposal.");
+        }
+        const recoveredAction = proposal.operation.action;
+        proposal.status = operationUndo ? "undone" : "applied";
+        delete proposal.operation;
+        await redis.set(key, JSON.stringify(proposal), "EX", TTL_SECONDS);
+        if (action === recoveredAction) {
+          return { proposal: settingProposalCard(proposal), ...(proposal.change.kind === "theme" ? { theme: destination as SettingsScope["theme"] } : {}) };
         }
       }
-      if (!recovered && proposal.status !== (undo ? "applied" : "pending")) throw new Error("This action has already been handled.");
-      if (!undo && !recovered) {
-        const current = await readSettingChange(userId, currentScope, proposal.change);
-        if (current.value !== proposal.before) throw new Error("This setting changed since the preview. Ask for a fresh proposal.");
-        proposal.applying = true;
-        await redis.set(key, JSON.stringify(proposal), "EX", TTL_SECONDS);
+      if (proposal.status !== (undo ? "applied" : "pending")) throw new Error("This action has already been handled.");
+      const current = await readSettingChange(userId, currentScope, proposal.change, undo ? proposal.before : proposal.after);
+      if (current.value !== (undo ? proposal.after : proposal.before)) throw new Error("This setting changed since the preview. Ask for a fresh proposal.");
+      proposal.operation = { action };
+      await redis.set(key, JSON.stringify(proposal), "EX", TTL_SECONDS);
+      let result: { theme?: SettingsScope["theme"] };
+      try {
+        result = await applySettingChange(proposal, undo, scope.theme);
+      } catch (error) {
+        if (error instanceof SettingChangeRejectedError) {
+          delete proposal.operation;
+          await redis.set(key, JSON.stringify(proposal), "EX", TTL_SECONDS);
+        }
+        throw error;
       }
-      const result: { theme?: SettingsScope["theme"] } = recovered ? {} : await applySettingChange(proposal, undo, scope.theme);
+      proposal.operation.committed = true;
+      await redis.set(key, JSON.stringify(proposal), "EX", TTL_SECONDS);
       proposal.status = undo ? "undone" : "applied";
-      delete proposal.applying;
+      delete proposal.operation;
       await redis.set(key, JSON.stringify(proposal), "EX", TTL_SECONDS);
       return { proposal: settingProposalCard(proposal), ...result };
     }
