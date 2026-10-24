@@ -34,6 +34,7 @@ export async function generateTaskWriterDraft(
     agentId: agentId,
     provider: selected.usageProvider,
     feature: "task-writer",
+    reasoningFeature: "task-writer",
   });
   const { text } = await generateText({
     experimental_download: downloadWithoutBrotli,
