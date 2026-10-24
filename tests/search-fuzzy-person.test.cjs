@@ -2,7 +2,6 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
-const flag = 'htpr-6881-search-fuzzy-person'
 let state
 const people = [
   { id: 1, displayName: 'Valentin Yeo', email: 'owner@example.com', boards: [7] },
@@ -33,8 +32,8 @@ function matches(row, where) {
   if (where.assignees?.some && !row.assignees.some((person) => matches(person, where.assignees.some))) return false
   return true
 }
-function reset(fuzzy = true) {
-  state = { fuzzy, poolQueries: 0, flagCalls: [], taskQueries: [] }
+function reset() {
+  state = { poolQueries: 0, flagCalls: [], taskQueries: [] }
 }
 const tasks = people.map((person) => ({
   id: 100 + person.id, userId: person.id, user: person, projectId: person.boards[0],
@@ -72,12 +71,10 @@ const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => ({ userId: 42 }) }],
   ['src/lib/mcp/auth.ts', { validateMcpAuth: async () => ({ user: { id: 42 }, agentId: null }), checkMcpRateLimit: async () => null }],
   ['src/lib/flags.ts', {
-    HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: flag,
     isFeatureEnabled: async (key, userId) => {
       state.flagCalls.push([key, userId])
       assert.equal(userId, 42)
-      return key === flag ? state.fuzzy
-        : false
+      return false
     },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: () => ({}), projectContentAccessWhere: () => ({}) }],
@@ -95,9 +92,9 @@ const { searchFilterWhere } = jiti(path.join(root, 'src/lib/search/filters.ts'))
 const handler = jiti(path.join(root, 'src/pages/api/search/document.ts')).default
 const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts'))
 const { NextRequest } = require('next/server')
-async function filter(query, fuzzy = true, chips = false) {
-  reset(fuzzy)
-  const parsed = await (chips ? parseSearchWithChipNames : parseSearchWithNames)(query, [7], fuzzy)
+async function filter(query, chips = false) {
+  reset()
+  const parsed = await (chips ? parseSearchWithChipNames : parseSearchWithNames)(query, [7])
   const where = await searchFilterWhere(parsed, [7], 'Normal')
   return { parsed, where, ids: tasks.filter((row) => matches(row, where)).map((row) => row.userId) }
 }
@@ -114,7 +111,7 @@ test('typed from and assignee match all three similar visible names, including @
 })
 test('numeric picked chips stay exact and do not load the person pool', async () => {
   for (const query of ['from:1', 'assignee:2', 'from:"@3"']) {
-    const result = await filter(query, true, true)
+    const result = await filter(query, true)
     assert.deepEqual(result.ids, [Number(query.match(/\d/)[0])])
     assert.equal(state.poolQueries, 0)
     assert.ok(Object.values(result.parsed.filters).every((filters) => filters.every((filter) => !('userIds' in filter))))
@@ -142,50 +139,48 @@ test('inaccessible and unrequested-board users are excluded from the resolved se
   assert.deepEqual((await filter('from:private@example.com')).ids, [])
   assert.deepEqual((await filter('from:nine@example.com')).ids, [])
 })
-test('flag off retains byte-identical parsed filters and exact database predicates', async () => {
-  for (const chips of [false, true]) {
-    const result = await filter('from:@valentin', false, chips)
-    assert.equal(JSON.stringify(result.parsed), '{"text":"","filters":{"from":[{"value":"@valentin","negated":false}]}}')
-    assert.equal(JSON.stringify(result.where), '{"projectId":{"in":[7]},"status":"Normal","AND":[{"OR":[{"user":{"OR":[{"displayName":{"equals":"valentin","mode":"insensitive"}},{"email":{"equals":"valentin","mode":"insensitive"}}]}}]}]}')
-    assert.deepEqual(result.ids, [2])
-    assert.equal(state.poolQueries, 0)
-  }
-})
 test('unquoted full names still consume their trailing words rather than searching them', async () => {
-  assert.deepEqual((await filter('from:@Valentin Yeo', true, true)).parsed, {
+  assert.deepEqual((await filter('from:@Valentin Yeo', true)).parsed, {
     text: '', filters: { from: [{ value: '@Valentin Yeo', negated: false, userIds: [1] }] },
   })
 })
+test('both name parsers resolve typed people without an opt-in argument', async () => {
+  for (const parser of [parseSearchWithNames, parseSearchWithChipNames]) {
+    reset()
+    const parsed = await parser('from:valentin assignee:JOSE', [7])
+    assert.deepEqual(parsed.filters.from[0].userIds, [1, 2, 3])
+    assert.deepEqual(parsed.filters.assignee[0].userIds, [4])
+    assert.equal(state.poolQueries, 1)
+    assert.deepEqual(state.flagCalls, [])
+  }
+})
 for (const surface of ['API', 'MCP']) {
-  test(`${surface} checks the requester flag and uses the shared chip rule`, async () => {
-    for (const fuzzy of [false, true]) {
-      reset(fuzzy)
-      let ids
-      if (surface === 'API') {
-        const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; return this } }
-        await handler({ method: 'POST', headers: {}, body: { searchQuery: 'from:valentin', projectIds: [7], archive: 'Normal' } }, res)
-        assert.equal(res.code, 200)
-        ids = res.body.processedData.All.map((row) => row.taskId)
-      } else {
-        const res = await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=from:valentin&board_id=7'))
-        assert.equal(res.status, 200)
-        ids = (await res.json()).tasks.map((row) => row.id)
-      }
-      assert.deepEqual(ids, fuzzy ? [101, 102, 103] : [102])
-      assert.ok(state.flagCalls.some(([key, userId]) => key === flag && userId === 42))
-      assert.equal(state.poolQueries, Number(fuzzy))
+  test(`${surface} always uses fuzzy people when every remaining flag is off`, async () => {
+    reset()
+    let ids
+    if (surface === 'API') {
+      const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; return this } }
+      await handler({ method: 'POST', headers: {}, body: { searchQuery: 'from:valentin', projectIds: [7], archive: 'Normal' } }, res)
+      assert.equal(res.code, 200)
+      ids = res.body.processedData.All.map((row) => row.taskId)
+    } else {
+      const res = await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=from:valentin&board_id=7'))
+      assert.equal(res.status, 200)
+      ids = (await res.json()).tasks.map((row) => row.id)
     }
+    assert.deepEqual(ids, [101, 102, 103])
+    assert.equal(state.poolQueries, 1)
   })
 }
-test('fuzzy and exact people always include match highlights', async () => {
+test('fuzzy and exact picked people always include match highlights', async () => {
   for (const operator of ['from', 'assignee']) {
-    for (const fuzzy of [false, true]) {
-      reset(fuzzy)
+    for (const value of ['valentin', '2']) {
+      reset()
       const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; return this } }
-      await handler({ method: 'POST', headers: {}, body: { searchQuery: `${operator}:valentin`, projectIds: [7], archive: 'Normal' } }, res)
+      await handler({ method: 'POST', headers: {}, body: { searchQuery: `${operator}:${value}`, projectIds: [7], archive: 'Normal' } }, res)
       assert.equal(res.code, 200)
       const rows = res.body.processedData.All
-      const expected = fuzzy ? people.slice(0, 3) : [people[1]]
+      const expected = value === 'valentin' ? people.slice(0, 3) : [people[1]]
       assert.deepEqual(rows.map((row) => row.taskId), expected.map((person) => 100 + person.id))
       assert.deepEqual(rows.map((row) => row.searchMatch?.people), expected.map((person) => [person.displayName]))
     }
@@ -194,9 +189,9 @@ test('fuzzy and exact people always include match highlights', async () => {
 
 test('board-name parsing keeps accessible boards separate from the scoped fuzzy person pool', async () => {
   for (const chips of [false, true]) {
-    reset(true)
+    reset()
     const parsed = await (chips ? parseSearchWithChipNames : parseSearchWithNames)(
-      '-in:Other Board from:valentin', [7, 9], true, [7],
+      '-in:Other Board from:valentin', [7, 9], [7],
     )
     assert.equal(parsed.text, '')
     assert.deepEqual(parsed.filters.in, [{ value: 'Other Board', negated: true }])
@@ -205,7 +200,7 @@ test('board-name parsing keeps accessible boards separate from the scoped fuzzy 
 })
 for (const surface of ['API', 'MCP']) {
   test(`${surface} board-name parsing consumes other accessible board names with a board scope`, async () => {
-    reset(true)
+    reset()
     const query = '-in:Other Board from:valentin'
     let ids
     if (surface === 'API') {

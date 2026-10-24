@@ -28,6 +28,10 @@ For the new catalog, invalid arguments, unsupported actions, authorization failu
 
 HTTP and existing legacy SSE share catalog selection and the flagged output/error behavior. Already-open SSE sessions evaluate the current server flag and relayed credential scope for every tool list or call; switching the flag Off restores the original SDK handlers without reconnecting. Invocation identity retains the SSE session id. Only the response bindings change; transport, OAuth, annotations and Directory work belong to https://app.hypertask.ai/detail/project-15/6478. The eval harness and CI integration belong to https://app.hypertask.ai/detail/project-15/6505; `tests/fixtures/mcp-6804/golden-tasks.json` contains 25 seeded, realistic tasks as data only. Run mutating tasks only against an isolated fixture environment, never production or shared previews. Chat tool extraction belongs to https://app.hypertask.ai/detail/project-15/6506 and can consume this catalog later; it is not changed here.
 
+## Scope-limited agent skills
+
+A team-bound agent sees only skills on boards readable within its credential's team. With `htpr-7663-scoped-agent-skills` enabled server-side (Owner + QA by default), MCP and app-chat skill lists without `project_id` return those readable board skills; flag off or a flag lookup failure refuses unfiltered team-bound discovery without weakening scope restrictions. With either flag state, a supplied `project_id` narrows the list and must be accessible. Account-wide personal skills remain unavailable for reads, writes, imports and prompt resolution. App chat applies the same scope to skill discovery and slash-skill resolution. Human sessions and credentials without a team binding retain personal-skill access. Built-in formatting skills remain available.
+
 ## Comment timestamps
 
 `GET /api/mcp/comments`, `POST /api/mcp/comments` and `PATCH /api/mcp/comments/:comment_id` include `editedAt` on each returned comment: an ISO timestamp of its latest text edit, or `null` if it has never been edited. Existing comments are not backfilled. Reactions and other non-text changes do not mark a comment edited. `editedBy` is `{ userId, agentId }` for the latest editor, or `null` when never edited; `agentId` is `null` for a human edit. An agent editing its owner's comment is recorded as the editor without changing the comment's original author. Editor names are not included because there is no existing editor-agent relation to select.
@@ -76,3 +80,17 @@ Reports land in board 15, Bugs, with the ai-feedback label and Medium priority. 
 An agent comment without `kind`, a reply target, a person @mention, images or attachments goes to the hidden ticket agent log, not the conversation people read. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. This documents the existing routing; it does not change it.
 
 Comment-create receipts retain `routedTo`, `url` and either `activity` or `comment`. They also return `visibleToPeople: false` plus a resend `notice` for the log, or `visibleToPeople: true` for the comment thread.
+
+### Blocker comment
+
+In a ticket, select a comment and open its existing Commands palette (Ctrl+K, or long-press on a phone). **Mark as blocker**, beside **Pin comment**, gives it the same full 1px frame in red. **Unmark as blocker** removes the frame. Marking another comment replaces the previous marker; pinning remains independent.
+
+The CLI-facing `POST /api/mcp/tasks/waiting-on` endpoint and MCP `hypertask_set_task_waiting_on` tool (consolidated `hypertask_tasks`, action `waiting_on`) accept:
+
+```json
+{ "taskId": 42, "userId": 7, "blockerCommentId": 101 }
+```
+
+Both fields are updated atomically. The person must be a board member, and the comment must belong to that ticket and not be an activity entry. Omit either field to preserve it; send both as `null` to clear both. A comment-only update or clear leaves the blocking person unchanged. Task reads and marker-write receipts expose `blockerCommentId`. Deleting the marked comment clears the marker automatically.
+
+This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Everyone. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.

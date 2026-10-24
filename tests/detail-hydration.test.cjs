@@ -61,6 +61,8 @@ const mocks = {
   "./BaseCommentAndDescriptionContainer": { default: ({ children }) => React.createElement("section", null, children) },
   "@/components/Common/RichTextPersonHovercards": { default: noop },
   "./AgentRunActivityRow": { default: noop },
+  "./TicketChatSessionsReminder": { TicketChatSessionsReminder: noop },
+  "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
 };
 const Thread = load("src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx", mocks).default;
 

@@ -35,56 +35,56 @@
     "path": "src/lib/mcp/operations/tasks/operation.ts",
     "call": "prisma.task.findMany({ where, include })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7733",
-    "sha256": "386bb3777d3050484b329e9ffee8324f46e2cf0166ce5c9db34b45c570f51f34",
-    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged."
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7724",
+    "sha256": "5aeaa8bb80e362d281e1821cd391f41993850d605b7b746269768373643c4465",
+    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged. HTPR-7724 adds only the blockerCommentId scalar to the list selection and response types/mapping; all authorization predicates and query boundaries above remain unchanged."
   },
   {
     "path": "src/lib/mcp/operations/tasks/operation.ts",
     "call": "prisma.task.count({ where })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7733",
-    "sha256": "386bb3777d3050484b329e9ffee8324f46e2cf0166ce5c9db34b45c570f51f34",
-    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged."
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7724",
+    "sha256": "5aeaa8bb80e362d281e1821cd391f41993850d605b7b746269768373643c4465",
+    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged. HTPR-7724 adds only the blockerCommentId scalar to the list selection and response types/mapping; all authorization predicates and query boundaries above remain unchanged."
   },
   {
     "path": "src/lib/mcp/operations/tasks/operation.ts",
-    "call": "prisma.task.findMany({ where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, section: true, description_:true, sectionId: true, parentTaskId: true, projectId: true, project: { select: { id: true, title: true, staleWarnDays: true, staleHotDays: true, } }, parentTask: { ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { where: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } } : {}), select: { id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true } }, status: true, priority: { select: { Priority_Value: true } }, dueDate: true, createdAt: true, updatedAt: true, permanentlyDeleteAt: true, sectionChangedAt: true, lastCommentAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, assignees: { where: { OR: [ { agentId: null }, { agent: accessibleAgentWhere(user.id) }, ], }, include: { user: { select: { id: true, email: true, displayName: true, }, }, agent: { select: mcpVisibleAgentSelect(user.id) }, agentAssigner: { select: mcpVisibleAgentSelect(user.id) }, }, }, taskLabels: { select: { label: { select: mcpTaskLabelSelect, }, }, }, savedContent: { where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' }, select: { id: true, type: true }, }, _count: { select: { taskLabels: true, comments: mcpTaskUserCommentCount, }, }, subTasks: { where: { ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } : {}), status: { not: \"Deleted\", }, }, select:{ id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true }, orderBy: { createdAt: \"asc\", }, }, }, orderBy, take: limit, ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : { skip: usesCursor ? 0 : offset }), })",
+    "call": "prisma.task.findMany({ where, select: { id: true, blockerCommentId: true, ticketNumber: true, uniqueIndex: true, title: true, section: true, description_:true, sectionId: true, parentTaskId: true, projectId: true, project: { select: { id: true, title: true, staleWarnDays: true, staleHotDays: true, } }, parentTask: { ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { where: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } } : {}), select: { id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true } }, status: true, priority: { select: { Priority_Value: true } }, dueDate: true, createdAt: true, updatedAt: true, permanentlyDeleteAt: true, sectionChangedAt: true, lastCommentAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, assignees: { where: { OR: [ { agentId: null }, { agent: accessibleAgentWhere(user.id) }, ], }, include: { user: { select: { id: true, email: true, displayName: true, }, }, agent: { select: mcpVisibleAgentSelect(user.id) }, agentAssigner: { select: mcpVisibleAgentSelect(user.id) }, }, }, taskLabels: { select: { label: { select: mcpTaskLabelSelect, }, }, }, savedContent: { where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' }, select: { id: true, type: true }, }, _count: { select: { taskLabels: true, comments: mcpTaskUserCommentCount, }, }, subTasks: { where: { ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } : {}), status: { not: \"Deleted\", }, }, select:{ id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true }, orderBy: { createdAt: \"asc\", }, }, }, orderBy, take: limit, ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : { skip: usesCursor ? 0 : offset }), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7733",
-    "sha256": "386bb3777d3050484b329e9ffee8324f46e2cf0166ce5c9db34b45c570f51f34",
-    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged."
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7724",
+    "sha256": "5aeaa8bb80e362d281e1821cd391f41993850d605b7b746269768373643c4465",
+    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged. HTPR-7724 adds only the blockerCommentId scalar to the list selection and response types/mapping; all authorization predicates and query boundaries above remain unchanged."
   },
   {
     "path": "src/lib/mcp/operations/tasks/search/operation.ts",
     "call": "prisma.task.count({ where })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7733",
-    "sha256": "18b4862af8ac267b2310a9941990636368f6fbf35e16c32ed10b1164b0037483",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7703",
+    "sha256": "927bd20b65f6535ac800a3041fdd043ef0fdb4918a9aeed48b9c565b364794ff",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged."
   },
   {
     "path": "src/lib/mcp/operations/tasks/search/operation.ts",
     "call": "prisma.task.findMany({ where: filtered.paged || rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, description: true, section: true, projectId: true, project: { select: { id: true, title: true } }, dueDate: true, createdAt: true, updatedAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, }, ...(!rankedResults || sortField ? { orderBy: sortField ? [{ [sortField]: sortOrder }, { id: 'asc' as const }] : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}), ...(filtered.paged || rankedResults && !sortField ? {} : { take: limit, skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}), }), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7733",
-    "sha256": "18b4862af8ac267b2310a9941990636368f6fbf35e16c32ed10b1164b0037483",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7703",
+    "sha256": "927bd20b65f6535ac800a3041fdd043ef0fdb4918a9aeed48b9c565b364794ff",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged."
   },
   {
     "path": "src/lib/mcp/operations/tasks/search/operation.ts",
     "call": "prisma.task.count({ where })",
     "occurrence": 2,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7733",
-    "sha256": "18b4862af8ac267b2310a9941990636368f6fbf35e16c32ed10b1164b0037483",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7703",
+    "sha256": "927bd20b65f6535ac800a3041fdd043ef0fdb4918a9aeed48b9c565b364794ff",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged."
   },
   {
     "path": "src/lib/mcp/operations/tasks/search/operation.ts",
     "call": "prisma.task.findMany({ where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, description: true, section: true, projectId: true, project: { select: { id: true, title: true } }, dueDate: true, createdAt: true, updatedAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, }, ...(orderBy ? { orderBy } : {}), ...(useTurbopufferWindow ? {} : { take: limit, skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}), }), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7733",
-    "sha256": "18b4862af8ac267b2310a9941990636368f6fbf35e16c32ed10b1164b0037483",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7703",
+    "sha256": "927bd20b65f6535ac800a3041fdd043ef0fdb4918a9aeed48b9c565b364794ff",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged."
   }
 ]
