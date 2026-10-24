@@ -210,25 +210,10 @@
         "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$"]
       },
       "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7723",
-          "expires": "2026-11-13",
-          "entries": ["POST /api/mcp/tasks/waiting-on"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7723",
-          "expires": "2026-11-13",
-          "entries": ["hypertask_set_task_waiting_on"]
-        },
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/7723",
           "expires": "2026-11-13",
           "entries": ["task waiting-on"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7723",
-          "expires": "2026-11-13",
-          "entries": ["hypertask_set_task_waiting_on"]
         }
       }
     },

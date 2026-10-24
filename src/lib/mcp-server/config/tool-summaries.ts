@@ -66,6 +66,7 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   ATTACH_FILES: 'Returns attachment URLs.',
   UPDATE_TASK: 'Returns the updated task.',
   CREATE_TASK: 'Returns the created task.',
+  SET_TASK_WAITING_ON: 'Returns the task waiting-on person, setter and timestamp.',
   MOVE_TASK_BETWEEN_BOARDS: 'Returns the moved task.',
   ASSIGN_USER: 'Returns the assignees.',
   INBOX_LIST: 'Returns inbox items.',

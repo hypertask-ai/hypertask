@@ -34,6 +34,11 @@ const taskContentTypeSchema = z
   .optional()
   .describe('Input format for description. Defaults to HTML.');
 
+export const SetTaskWaitingOnInputSchema = z.object({
+  taskId: z.number().int().positive().max(2_147_483_647).describe('Task database ID from get_tasks.'),
+  userId: z.number().int().positive().max(2_147_483_647).nullable().describe('Board member user ID to wait on, or null to clear.'),
+}).strict();
+
 export function getGetTasksInputSchema() {
   return createTaskIdentificationArraySchema();
 }
