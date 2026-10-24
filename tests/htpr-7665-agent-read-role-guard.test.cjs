@@ -478,9 +478,9 @@ const HYBRID_INPUTS = {
   hypertask_draft: { read: { action: "list" }, write: { action: "publish" } },
 };
 
-test("7673 native tools: the tool list has 84 tools and every one is classified", () => {
+test("7673 native tools: the tool list has 85 tools and every one is classified", () => {
   const names = nativeToolNames();
-  assert.equal(names.length, 84);
+  assert.equal(names.length, 85);
   const { gate } = nativeWorld(READ_REFUSED);
   const read = names.filter((name) => gate.NATIVE_READ_ONLY_TOOLS.has(name));
   const hybrid = names.filter((name) => gate.NATIVE_READ_ACTIONS.has(name));
