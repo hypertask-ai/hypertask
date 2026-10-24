@@ -16,7 +16,7 @@ import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sess
 
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
-  Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
+  Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache" | "startSending" | "startStreaming" | "completeStream"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean; persistentQueue?: SessionMessageQueue };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
@@ -30,6 +30,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
   setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
   appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry,
+  startSending, startStreaming, completeStream,
   } = context;
 
 
@@ -90,7 +91,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     }
 
     if (!content.trim()) return false;
-    sendInFlightRef.current = true;
+    startSending();
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
     const streamTaskId =
@@ -243,10 +244,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         : {}),
     };
 
-    streamingSessionRef.current = session.id;
-    streamingAssistantMessageRef.current = assistantMessageId;
-    setCurrentStreamingSession(session.id);
-    streamingRequestRef.current = streamId;
+    startStreaming(session.id, assistantMessageId, streamId);
 
     let assistantPlaceholderAdded = false;
     let refusalMessage: string | null = null;
@@ -345,15 +343,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }
       } finally {
         setAgentStatus(undefined);
-        setIsTyping(false);
-        streamingSessionRef.current = null;
-        streamingAssistantMessageRef.current = null;
-        streamingRequestRef.current = null;
-        setCurrentStreamingSession(null);
+        completeStream();
         console.log("Message has been completed");
       }
     } finally {
-      sendInFlightRef.current = false;
       searchHandoff?.onSettled();
       queueMicrotask(() => {
         drainQueuedMessage(completedSessionId);

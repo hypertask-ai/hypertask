@@ -17,6 +17,50 @@ import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
 
+type AiChatInteractionState =
+  | { kind: 'idle' }
+  | { kind: 'recording' }
+  | { kind: 'sending' }
+  | { kind: 'streaming'; sessionId: string; assistantMessageId: string; requestId: string };
+
+type AiChatStateAction =
+  | { type: 'START_RECORDING' }
+  | { type: 'STOP_RECORDING' }
+  | { type: 'START_SENDING' }
+  | { type: 'START_STREAMING'; sessionId: string; assistantMessageId: string; requestId: string }
+  | { type: 'CANCEL_STREAM' }
+  | { type: 'COMPLETE_STREAM' };
+
+function aiChatStateReducer(state: AiChatInteractionState, action: AiChatStateAction): AiChatInteractionState {
+  switch (action.type) {
+    case 'START_RECORDING':
+      if (state.kind === 'idle') return { kind: 'recording' };
+      return state;
+    case 'STOP_RECORDING':
+      if (state.kind === 'recording') return { kind: 'idle' };
+      return state;
+    case 'START_SENDING':
+      if (state.kind === 'idle') return { kind: 'sending' };
+      return state;
+    case 'START_STREAMING':
+      if (state.kind === 'sending' || state.kind === 'idle') {
+        return {
+          kind: 'streaming',
+          sessionId: action.sessionId,
+          assistantMessageId: action.assistantMessageId,
+          requestId: action.requestId,
+        };
+      }
+      return state;
+    case 'CANCEL_STREAM':
+    case 'COMPLETE_STREAM':
+      if (state.kind === 'streaming') return { kind: 'idle' };
+      return state;
+    default:
+      return state;
+  }
+}
+
 export function useAiChatState() {
 
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
@@ -90,7 +134,7 @@ export function useAiChatState() {
     surface === "my_tasks" || surface === "inbox" || surface === "calendar";
   const [chatMounted, setChatMounted] = useState<boolean>(false);
   const [minimized, setMinimized] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
+  const [interactionState, dispatch] = useState<AiChatInteractionState>({ kind: 'idle' });
   const [queuedMessages, setQueuedMessages] = useState<QueuedAiChatMessage[]>([]);
   const messageQueueRef = useRef<QueuedAiChatMessage[]>([]);
   const persistentQueueEnabled = useFlag(HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG);
@@ -112,10 +156,10 @@ export function useAiChatState() {
   const streamingAssistantMessageRef = useRef<string | null>(null);
   const streamingRequestRef = useRef<string | null>(null);
   const sendInFlightRef = useRef(false);
-  const [currentStreamingSession, setCurrentStreamingSession] = useState<
-    string | null
-  >(null);
-  const [isRecording, setIsRecording] = useState<boolean>(false);
+  
+  const dispatchStateAction = useCallback((action: AiChatStateAction) => {
+    dispatch((prevState) => aiChatStateReducer(prevState, action));
+  }, []);
   const [displayAiOptions] = useState<TAiModal[]>(aiOptionsWithoutOpenRouter);
   const [contextList, setContextList] = useState<MentionItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<string | undefined>(undefined);
@@ -258,6 +302,58 @@ export function useAiChatState() {
   if (persistentQueue) {
     visibleQueuedMessages = currentSession ? persistentQueue.get(currentSession.id) : [];
   }
+
+  const isTyping = interactionState.kind === 'streaming';
+  const isRecording = interactionState.kind === 'recording';
+  const currentStreamingSession = interactionState.kind === 'streaming' ? interactionState.sessionId : null;
+
+  const setIsTyping = useCallback((value: boolean) => {
+    if (value) {
+      dispatchStateAction({ type: 'START_STREAMING', sessionId: '', assistantMessageId: '', requestId: '' });
+    } else {
+      dispatchStateAction({ type: 'COMPLETE_STREAM' });
+    }
+  }, [dispatchStateAction]);
+
+  const setIsRecording = useCallback((value: boolean) => {
+    if (value) {
+      dispatchStateAction({ type: 'START_RECORDING' });
+    } else {
+      dispatchStateAction({ type: 'STOP_RECORDING' });
+    }
+  }, [dispatchStateAction]);
+
+  const setCurrentStreamingSession = useCallback((sessionId: string | null) => {
+    if (sessionId) {
+      dispatchStateAction({ type: 'START_STREAMING', sessionId, assistantMessageId: '', requestId: '' });
+    } else {
+      dispatchStateAction({ type: 'COMPLETE_STREAM' });
+    }
+  }, [dispatchStateAction]);
+
+  useEffect(() => {
+    streamingSessionRef.current = interactionState.kind === 'streaming' ? interactionState.sessionId : null;
+    streamingAssistantMessageRef.current = interactionState.kind === 'streaming' ? interactionState.assistantMessageId : null;
+    streamingRequestRef.current = interactionState.kind === 'streaming' ? interactionState.requestId : null;
+    sendInFlightRef.current = interactionState.kind === 'sending';
+  }, [interactionState]);
+
+  const startSending = useCallback(() => {
+    dispatchStateAction({ type: 'START_SENDING' });
+  }, [dispatchStateAction]);
+
+  const startStreaming = useCallback((sessionId: string, assistantMessageId: string, requestId: string) => {
+    dispatchStateAction({ type: 'START_STREAMING', sessionId, assistantMessageId, requestId });
+  }, [dispatchStateAction]);
+
+  const completeStream = useCallback(() => {
+    dispatchStateAction({ type: 'COMPLETE_STREAM' });
+  }, [dispatchStateAction]);
+
+  const cancelStream = useCallback(() => {
+    dispatchStateAction({ type: 'CANCEL_STREAM' });
+  }, [dispatchStateAction]);
+
   return {
   lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
@@ -277,5 +373,6 @@ export function useAiChatState() {
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
+  startSending, startStreaming, completeStream, cancelStream,
   };
 }

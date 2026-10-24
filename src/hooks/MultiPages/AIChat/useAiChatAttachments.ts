@@ -11,7 +11,7 @@ import type { useAiChatState } from "./useAiChatState";
 import type { useAiChatSessions } from "./useAiChatSessions";
 import { AiChatProcessedAttachment } from "./aiChatShared";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "streamingSessionRef" | "currentStreamingSession" | "streamingAssistantMessageRef" | "streamingRequestRef" | "setCurrentStreamingSession" | "setIsTyping" | "setAgentStatus" | "token" | "editor" | "setIsRecording" | "addMessageToSessionQuery" | "scopedProjectId"> &
+type Context = Pick<ReturnType<typeof useAiChatState>, "streamingSessionRef" | "currentStreamingSession" | "streamingAssistantMessageRef" | "streamingRequestRef" | "setCurrentStreamingSession" | "setIsTyping" | "setAgentStatus" | "token" | "editor" | "setIsRecording" | "addMessageToSessionQuery" | "scopedProjectId" | "cancelStream"> &
   Pick<ReturnType<typeof useAiChatSessions>, "chatRoute" | "ensureSessionForCurrentBoard">;
 
 export function useAiChatAttachments(context: Context) {
@@ -19,6 +19,7 @@ export function useAiChatAttachments(context: Context) {
   streamingSessionRef, currentStreamingSession, streamingAssistantMessageRef, streamingRequestRef, setCurrentStreamingSession,
   setIsTyping, setAgentStatus, chatRoute, token, editor,
   setIsRecording, addMessageToSessionQuery, scopedProjectId, ensureSessionForCurrentBoard,
+  cancelStream,
   } = context;
 
 
@@ -39,11 +40,7 @@ export function useAiChatAttachments(context: Context) {
       ) {
         return;
       }
-      streamingSessionRef.current = null;
-      streamingAssistantMessageRef.current = null;
-      streamingRequestRef.current = null;
-      setCurrentStreamingSession(null);
-      setIsTyping(false);
+      cancelStream();
       setAgentStatus(undefined);
     };
 
