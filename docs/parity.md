@@ -35,7 +35,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, read, answer, and cancel decision requests** | ✅ 4 | ✅ 1 | ✅ 5 | ✅ 1 | ✅ 1 |
 | **Create, read, update, publish, and delete drafts** | ✅ 5 | ✅ 1 | ✅ 5 | ✅ 1 | ✅ 1 |
 | **Start, stop, pause, resume, log, and report time** | ✅ 10 | ✅ 3 | ✅ 10 | ✅ 8 | ✅ 3 |
-| **Draft, improve, and inspect AI usage** | ✅ 7 | ↪ AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only. | ✅ 2 | ↪ AI Chat itself is the writing surface rather than a nested tool. | ↪ HyperAI itself is the writing surface rather than a nested tool. |
+| **Draft, improve, and inspect AI usage** | ✅ 7 (transition) | ↪ AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only. | ✅ 2 | ↪ AI Chat itself is the writing surface rather than a nested tool. | ↪ HyperAI itself is the writing surface rather than a nested tool. |
 | **Search Hypertask product help** | ↪ Help search uses the public documentation service, not a user-data API route. | ✅ 1 | ↪ The CLI exposes command help locally instead of remote help-center search. | ✅ 1 | ✅ 1 |
 | **Search the public web for current information** | ↪ Public web search is an AI-runtime capability, not a board data endpoint. | ↪ MCP clients can provide their own web-search capability. | ↪ The board CLI does not proxy public web search. | ✅ 1 | ↪ HyperAI does not receive the AI Chat web-search provider. |
 | **Create, inspect, test, and delete webhooks** | ✅ 4 | ✅ 1 | ✅ 11 | ✅ 1 | ✅ 1 |
