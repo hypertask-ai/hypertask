@@ -304,11 +304,9 @@ export async function aiPromptCachingEnabled(model: LanguageModel): Promise<bool
   if (typeof model === "string" || model.provider !== "gateway") return false;
   const context = modelUsageContexts.get(model);
   if (!context?.initiatingUserId) return false;
-  return context.promptCachingEnabled ??= Promise.all([
-    import("@/lib/flags"),
-    import("@/lib/flags/definitions/htpr-7689-prompt-caching"),
-  ])
-    .then(([{ isFeatureEnabled }, { HTPR_7689_PROMPT_CACHING_FLAG }]) => isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, context.initiatingUserId!))
+  return context.promptCachingEnabled ??= import("@/lib/flags/definitions/htpr-7689-prompt-caching")
+    .then(({ HTPR_7689_PROMPT_CACHING_FLAG }) => import("@/lib/flags")
+      .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, context.initiatingUserId!)))
     .catch(() => false);
 }
 
