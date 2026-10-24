@@ -139,6 +139,18 @@ export const AI_Chat_Sidebar = ({
   selectTargetRef.current = selectTarget;
 
   useEffect(() => {
+    const resumeTicketChat = (event: Event) => {
+      const sessionId = (event as CustomEvent<{ sessionId: string }>).detail.sessionId;
+      ++intentRef.current;
+      setNativeSidebarChat(null);
+      aiSessionRef.current = sessionId;
+      setTarget({ kind: "ai" });
+    };
+    window.addEventListener("ht-ticket-chat-resume", resumeTicketChat);
+    return () => window.removeEventListener("ht-ticket-chat-resume", resumeTicketChat);
+  }, []);
+
+  useEffect(() => {
     if (!generalChatPending || resolvingGeneralChat.current) return;
     if (pastChatsFirst && aiSessionRef.current) return;
     resolvingGeneralChat.current = true;

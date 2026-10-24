@@ -61,6 +61,7 @@ const mocks = {
   "./BaseCommentAndDescriptionContainer": { default: ({ children }) => React.createElement("section", null, children) },
   "@/components/Common/RichTextPersonHovercards": { default: noop },
   "./AgentRunActivityRow": { default: noop },
+  "./TicketChatSessionsReminder": { TicketChatSessionsReminder: noop },
 };
 const Thread = load("src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx", mocks).default;
 

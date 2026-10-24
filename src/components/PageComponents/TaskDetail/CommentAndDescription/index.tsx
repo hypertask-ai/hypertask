@@ -32,6 +32,7 @@ import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import BaseCommentAndDescriptionContainer from "./BaseCommentAndDescriptionContainer";
 import RichTextPersonHovercards from "@/components/Common/RichTextPersonHovercards";
 import AgentRunActivityRow from "./AgentRunActivityRow";
+import { TicketChatSessionsReminder } from "./TicketChatSessionsReminder";
 
 const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const {
@@ -190,7 +191,14 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = <div id="bottom-description" className="h-0" />;
+            contentToRender = (
+              <>
+                <div id="bottom-description" className="h-0" />
+                {secondaryPanelsReady !== false && currentTask && (
+                  <TicketChatSessionsReminder taskId={currentTask.id} />
+                )}
+              </>
+            );
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments

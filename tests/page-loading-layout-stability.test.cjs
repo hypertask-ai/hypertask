@@ -458,6 +458,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     ServerRenderedDescription: () => React.createElement("article", { "data-server-description": true }, "Server description"),
     BaseCommentAndDescriptionContainer: ({ children }) => React.createElement("main", null, children),
     RichTextPersonHovercards: noop,
+    TicketChatSessionsReminder: noop,
     Description: () => React.createElement("article", { style: { height: 711 }, "data-description": true }, "Cached description"),
     NewCommentComponent: () => React.createElement("div", { id: "comment", style: { height: 168 } }, "Composer"),
     taskDetailSpacing: { mobile: {} },
