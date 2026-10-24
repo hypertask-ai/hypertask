@@ -25,7 +25,7 @@ function fixture(actor = 'bound', skillContextEnabled = true) {
   f.prisma.aI_Skill = f.model(skills, 'skill')
   f.tasks.forEach(task => { task.comments = [] })
   const helper = f.load('src/lib/mcp/skills/context.ts', {
-    '@/app/api/ai/_lib/skillAccess': { AccountSkillAccessError: class extends Error {} },
+    './skillAccess': { AccountSkillAccessError: class extends Error {} },
     '@/lib/flags': {
       isFeatureEnabled: async (key, userId) => {
         flagReads.push({ key, userId })
