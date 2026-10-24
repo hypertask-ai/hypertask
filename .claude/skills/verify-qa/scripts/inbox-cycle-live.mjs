@@ -37,9 +37,11 @@ const waitForMove = (from) => page.waitForURL((url) => url.pathname !== from, { 
 const blurAndPress = async (key) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press(key); };
 async function send(text) {
   const editor = page.getByTestId('comment-composer').locator('.ProseMirror[contenteditable="true"]');
+  if (phone && !(await editor.isVisible())) await page.locator('#comment-input-input').click();
   await editor.click();
   await page.keyboard.insertText(text);
-  await page.keyboard.press('Control+Enter');
+  if (phone) await page.getByRole('button', { name: 'Send comment' }).tap();
+  else await page.keyboard.press('Control+Enter');
 }
 
 try {
@@ -70,7 +72,7 @@ try {
   await topSeededRow.click();
   await page.waitForURL(/\/detail\/project-\d+\/\d+/, { timeout: 30_000 });
   const clickCounter = await counter();
-  step('open by click keeps inboxFlow and shows the inbox counter', inFlow() && openedTask()?.id === first.id && Boolean(clickCounter), { url: page.url(), counter: clickCounter });
+  step(phone ? 'open by click keeps inboxFlow' : 'open by click keeps inboxFlow and shows the inbox counter', inFlow() && openedTask()?.id === first.id && (phone || Boolean(clickCounter)), { url: page.url(), counter: clickCounter });
 
   const clicked = new URL(page.url()).pathname;
   await send(`QA inbox cycle reply ${stamp}`);

@@ -1,3 +1,4 @@
+import type { AiChatAutoOpenPreferences } from "@/lib/aiChat/autoOpenPreferences";
 import { ICommandList } from "@/components/Modals/commands/HTC/HTCTypes";
 import { DisplayDate } from "@/components/Modals/RemindMe/RemindMeComponent";
 import { Tgroup } from "@/components/sidebars/leftSidebar";
@@ -357,6 +358,28 @@ export const keepAiChatClosedAtom = atom<boolean>({
     effects_UNSTABLE: [persistAtom],
 });
 
+export const aiChatAutoOpenPreferencesAtom = atom<Record<number, AiChatAutoOpenPreferences>>({
+    key: "aiChatAutoOpenPreferences",
+    default: {},
+    effects_UNSTABLE: [persistAtom],
+});
+
+export const aiChatAutoOpenPageAtom = atom<string | null>({
+    key: "aiChatAutoOpenPage",
+    default: null,
+    effects_UNSTABLE: [persistAtom],
+});
+
+export const aiChatEmbeddedTicketPathAtom = atom<string | null>({
+    key: "aiChatEmbeddedTicketPath",
+    default: null,
+});
+
+export const aiChatNewTicketPathAtom = atom<string | null>({
+    key: "aiChatNewTicketPath",
+    default: null,
+});
+
 export const aiChatAutoOpenSuppressedAtom = atom<boolean>({
     key: "aiChatAutoOpenSuppressed",
     default: false,
@@ -401,6 +424,11 @@ export const dockedChatScopeAtom = atom<number | "all" | "ticket" | null>({
     key: "dockedChatScope",
     default: null,
     effects_UNSTABLE: [persistAtom],
+});
+
+export const dockedChatScopePickedOnBoardAtom = atom<{ boardId: number | null } | null>({
+    key: "dockedChatScopePickedOnBoard",
+    default: null,
 });
 
 export const recentChatBoardIdsAtom = atom<number[]>({

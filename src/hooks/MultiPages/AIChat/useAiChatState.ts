@@ -3,7 +3,8 @@ import type { Editor } from "@tiptap/react";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { useSessionAndChatHistory } from "@/hooks/MultiPages/AIChat/useSessionAndChatHistory";
-import { currentProjectAtom, currentUserAtom, aiChatAutoOpenSuppressedAtom, aiChatBoardSessionMapAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, dockedChatScopeAtom, fullScreenChatScopeAtom, inViewObjectAtom, isAiChatSidebarModeAtom, recentChatBoardIdsAtom, showAIChatInterfaceAtom, showMentionListAtom } from "@/store";
+import { useDockedChatScope } from "@/hooks/MultiPages/AIChat/useDockedChatScope";
+import { currentProjectAtom, currentUserAtom, aiChatAutoOpenSuppressedAtom, aiChatBoardSessionMapAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, fullScreenChatScopeAtom, inViewObjectAtom, isAiChatSidebarModeAtom, recentChatBoardIdsAtom, showAIChatInterfaceAtom, showMentionListAtom } from "@/store";
 import { MentionItem, IChatSession } from "@/models/model";
 import { usePathname } from "next/navigation";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
@@ -40,9 +41,7 @@ export function useAiChatState() {
   const showMentionList = useRecoilValue(showMentionListAtom);
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const fullScreenChatScope = useRecoilValue(fullScreenChatScopeAtom);
-  const [dockedChatScope, setDockedChatScope] = useRecoilState(
-    dockedChatScopeAtom
-  );
+  const [dockedChatScope, setDockedChatScope] = useDockedChatScope();
   const pathname = usePathname();
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
@@ -99,7 +98,7 @@ export function useAiChatState() {
   >([]);
   const [showScrollUpIndicator, setShowScrollUpIndicator] =
     useState<boolean>(false);
-  const { currentAiOption, setAiOption, modelTeamId, modelBilling } =
+  const { currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption } =
     useAiChatModelPreference();
   const streamingSessionRef = useRef<string | null>(null);
   const streamingAssistantMessageRef = useRef<string | null>(null);
@@ -250,7 +249,7 @@ export function useAiChatState() {
   pathname, isDetailPage, isFullScreenChat, surface, spansAllBoards,
   chatMounted, setChatMounted, minimized, setMinimized, isTyping,
   setIsTyping, queuedMessages, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
-  setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling,
+  setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption,
   streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, currentStreamingSession,
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,

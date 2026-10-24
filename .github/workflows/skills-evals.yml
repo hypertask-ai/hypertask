@@ -4,6 +4,10 @@ on:
     paths:
       - '.claude/skills/**'
       - '.github/workflows/skills-evals.yml'
+concurrency:
+  group: skills-evals-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:

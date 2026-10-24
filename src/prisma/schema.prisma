@@ -611,6 +611,9 @@ model UserSetting {
   // then opens on the Last 7 days default. Chosen value syncs across devices.
   allTasksDateRange        String?
   boardSortMode            String?
+  aiChatOpenNewTickets     Boolean?
+  aiChatOpenTickets        Boolean?
+  aiChatOpenBoards         Boolean?
   playGifs                 Boolean       @default(true)
   autoDescriptionSuggestions Boolean      @default(true)
   notificationMatrix       Json          @default("{}")

@@ -44,7 +44,7 @@ function gatedValue(file, name, bindings, extraNames = [], flagName) {
 
 function groups(showHistory, roundedEnabled = false, isMobile = false, kanbanSelectAllEnabled) {
   const getCommands = gatedValue(palette, "getCommands", {
-    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "",
+    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "", aiChatAutoOpenCommandName: "",
   }, ["getRoundedCommands", "getLegacyCommands"], "roundedEnabled");
   return getCommands({ context: "Task", kanbanSelectAllEnabled, taskOptions: { showHistory, isKanban: false } });
 }

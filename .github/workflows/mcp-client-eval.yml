@@ -14,6 +14,10 @@ on:
       - ".github/workflows/mcp-client-eval.yml"
   workflow_dispatch:
 
+concurrency:
+  group: mcp-client-eval-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   mcp-client-eval:
     name: mcp-client-eval

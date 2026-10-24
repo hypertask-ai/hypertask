@@ -31,6 +31,72 @@ if helper_run; then
   esac
 fi
 
+question_check() {
+  jq -nr --arg text "$1" --arg markdown "${2:-false}" '
+    def visible:
+      gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") |
+      gsub("&quot;"; "\"") | gsub("&amp;"; "&") | gsub("^\\s+|\\s+$"; "");
+    def unmention:
+      sub("^\\s*(<p\\b[^>]*>\\s*)?<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
+    ($markdown == "true") as $md |
+    (if $md then $text | split("\n") | map(gsub("^\\s+|\\s+$"; "") | select(length > 0))
+     else [$text | scan("<p\\b[^>]*>(.*?)</p>"; "s") | .[0]] end) as $paragraphs |
+    ($paragraphs | map(if $md then gsub("\\*\\*"; "") else visible end)) as $plain |
+    (if $md then $text | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)")
+     else $text | visible end) as $visible |
+    (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "")
+     else $text | gsub("<a\\b[^>]*>.*?</a>"; ""; "is") | visible end) as $unlinked |
+    [
+      (if any($paragraphs[];
+        (if $md then . else unmention end) |
+        [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
+          else "^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>" end; "s").question |
+          (if $md then . else visible end) | endswith("?")] | any)
+       then empty else "Question: <strong>yes/no question?</strong> (Markdown: Question: **yes/no question?**)" end),
+      ("Yes:", "No:", "My recommendation:") as $part |
+        if any($plain[]; startswith($part)) then empty else $part end
+    ] + [
+      (if any($plain[]; startswith("Why:") or (startswith("My recommendation:") and test("\\bWhy:")))
+       then empty else "Why:" end),
+      ($visible | scan("(?i)\\bsrc/[^\\s]*|\\b[\\w./-]+\\.(?:tsx?|js|md)\\b|[^\\s]*/api/[^\\s]*|\\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\\b")),
+      ($visible | scan("\\bCI\\b")),
+      ($unlinked | scan("(?i)\\bPR ?#?[0-9]+\\b|#[0-9]+\\b"))
+    ] | unique | join("; ")
+  '
+}
+question_refuse() {
+  printf 'vcc: Question refused: %s; rewrite it for a product owner (pospeak)\n' "$1" >&2
+  exit 5
+}
+question_comment() {
+  case "${1:-} ${2:-}" in 'comment add'|'comments add') ;; *) return 0 ;; esac
+  local kind='' text='' file='' markdown=false reason
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --kind|--text|--body|--file)
+        case "$1" in
+          --kind) kind=${2:-} ;;
+          --text|--body) text=${2:-}; file='' ;;
+          --file) file=${2:-}; text='' ;;
+        esac
+        shift; [ "$#" -gt 0 ] || break ;;
+      --kind=*) kind=${1#*=} ;;
+      --text=*|--body=*) text=${1#*=}; file='' ;;
+      --file=*) file=${1#*=}; text='' ;;
+      --markdown) markdown=true ;;
+    esac
+    shift
+  done
+  [ "$kind" = question ] || return 0
+  if [ -n "$file" ]; then
+    text=$(cat -- "$file" 2>/dev/null) || question_refuse 'cannot read --file'
+  fi
+  reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
+  [ -z "$reason" ] || question_refuse "$reason"
+}
+question_comment "$@"
+
 # Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
 TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 IDENTITY="Valentins Claude Code"
@@ -40,12 +106,12 @@ fi
 HT_TOKEN="$(cat "$TOKEN_FILE")"
 export HT_TOKEN
 review_refuse() {
-  printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", one line of why, then "Yes:" and "No:" lines. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
+  printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", "Yes:", "No:", "My recommendation:" and "Why:" paragraphs. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5
 }
 review_move() {
   case "${1:-} ${2:-}" in 'task move'|'tasks move') ;; *) return 0 ;; esac
-  local ticket='' section='' comments newest
+  local ticket='' section='' comments newest reason
   shift 2
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -66,15 +132,8 @@ review_move() {
       (.createdAt | type) == "string" and (.createdAt | test("^\\d{4}-\\d\\d-\\d\\dT")) and (.text | type) == "string")
     then .comments | max_by(.createdAt) else error("invalid comments") end
   ' <<< "$comments" 2>/dev/null) || review_refuse "$ticket" 'cannot parse comments'
-  jq -e '
-    def visible: gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") | gsub("^\\s+|\\s+$"; "");
-    .text | select(type == "string") |
-    sub("^\\s*(<p\\b[^>]*>\\s*)?<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "") |
-    (visible | startswith("Question:")) and
-    (capture("^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>"; "s").question | visible | endswith("?")) and
-    ([scan("<p\\b[^>]*>(.*?)</p>"; "s") | .[0] | visible] |
-      any(.[]; startswith("Yes:")) and any(.[]; startswith("No:")))
-  ' <<< "$newest" >/dev/null 2>&1 || review_refuse "$ticket"
+  reason=$(question_check "$(jq -r '.text // ""' <<< "$newest")") || review_refuse "$ticket" 'cannot check Question'
+  [ -z "$reason" ] || review_refuse "$ticket" "$reason; rewrite it for a product owner (pospeak)"
 }
 if [ "${1:-}" != activity ]; then
   review_move "$@"

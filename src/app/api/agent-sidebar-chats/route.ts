@@ -1,4 +1,6 @@
 import { readAgentRuntimeSnapshot, filterRuntimeSnapshotToBoards, classifyRuntimeHealth } from "@/lib/agents/runtimeState";
+import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
+import { AGENT_STATUS_MAX_AGE_MS } from "@/lib/agentStatus/chip";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -39,6 +41,7 @@ export async function GET(request: NextRequest) {
   const [teamIds, agentTeamIds] = await Promise.all([
     userTeamIds(viewer.userId), getAgentTeamIds(agents.map((agent) => agent.id)),
   ]);
+  const pastChatsFirst = await isFeatureEnabled(HTPR_7688_PAST_CHATS_FIRST_FLAG, viewer.userId);
   const roster = await Promise.all(agents.map(async (agent) => {
     if (agent.runtimeType === "NATIVE" && agent.userId !== viewer.userId) return null;
     const session = await prisma.chatSession.findUnique({
@@ -54,9 +57,12 @@ export async function GET(request: NextRequest) {
     } else if (agent.userId !== viewer.userId &&
       (!(await isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, agent.userId)) ||
         !teamIds.includes(agentTeamIds.get(agent.id) ?? ""))) return null;
-    const snapshot = filterRuntimeSnapshotToBoards(await readAgentRuntimeSnapshot(agent.id, agent.runtimeGeneration), new Set([projectId]));
-    const status = snapshot ? classifyRuntimeHealth(snapshot)
-      : hasFreshAgentChatHeartbeat(agent.heartbeatAt) ? "connected" : "offline";
+    let status: string | null = null;
+    if (!pastChatsFirst) {
+      const snapshot = filterRuntimeSnapshotToBoards(await readAgentRuntimeSnapshot(agent.id, agent.runtimeGeneration), new Set([projectId]));
+      status = snapshot ? classifyRuntimeHealth(snapshot)
+        : hasFreshAgentChatHeartbeat(agent.heartbeatAt) ? "connected" : "offline";
+    }
     return {
       id: agent.id, displayName: agent.displayName, photoURL: agent.photoURL,
       runtimeType: agent.runtimeType, sessionId: session?.id ?? null,
@@ -64,7 +70,21 @@ export async function GET(request: NextRequest) {
       deliveryMode: agentChatDeliveryMode({ heartbeatAt: agent.heartbeatAt, subscription: agent.agentWebhookSubscription }),
     };
   }));
-  return respond({ success: true, agents: roster.filter((agent) => agent !== null) });
+  const authorizedAgents = roster.filter((agent) => agent !== null);
+  if (pastChatsFirst && authorizedAgents.length) {
+    const runs = await prisma.agentRun.findMany({
+      where: {
+        agentId: { in: authorizedAgents.map((agent) => agent.id) },
+        status: "ACTIVE",
+        lastActivityAt: { gte: new Date(Date.now() - AGENT_STATUS_MAX_AGE_MS) },
+      },
+      select: { agentId: true },
+      distinct: ["agentId"],
+    });
+    const working = new Set(runs.map((run) => run.agentId));
+    for (const agent of authorizedAgents) agent.status = working.has(agent.id) ? "working" : null;
+  }
+  return respond({ success: true, agents: authorizedAgents });
 }
 
 export async function POST(request: NextRequest) {

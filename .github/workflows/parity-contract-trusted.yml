@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: parity-contract-trusted-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   parity-contract-trusted:
     # Self-hosted despite pull_request_target: the job takes no secrets, runs

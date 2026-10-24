@@ -26,6 +26,16 @@ async function expectOpenInFlow(page: Page, item: Item, counter: RegExp) {
   await expect(page.getByText(item.title).first(), `${item.title} ticket content is shown`).toBeVisible()
 }
 
+function archiveSettles(page: Page) {
+  return page.waitForResponse((response) => /\/api\/notifications\/markAsDone/.test(response.url()), { timeout: 15_000 })
+    .then(async (response) => {
+      const body = await response.json().catch(() => null)
+      const outcome = `${response.status()} ${body?.status ?? 'no status'}`
+      console.log(`[inbox-cycle archive] ${new URL(response.url()).search} -> ${outcome}`)
+      return outcome
+    }, () => 'no archive response in 15s')
+}
+
 async function sendComment(page: Page, text: string) {
   const editor = page.getByTestId('comment-composer').locator('.ProseMirror[contenteditable="true"]')
   await expect(editor).toBeVisible()
@@ -50,10 +60,16 @@ async function sendComment(page: Page, text: string) {
 test.beforeEach(async ({ page }) => {
   page.on('request', (request) => {
     const { pathname } = new URL(request.url())
-    if (pathname.startsWith('/api/') && request.method() !== 'GET') console.log(`[inbox-cycle request] ${request.method()} ${pathname} on ${new URL(page.url()).pathname}`)
+    if (pathname.startsWith('/api/') && (request.method() !== 'GET' || pathname.endsWith('/markAsDone'))) console.log(`[inbox-cycle request] ${request.method()} ${pathname} on ${new URL(page.url()).pathname}`)
   })
   page.on('console', (message) => {
     if (/Saving|blank|Could not|draft/i.test(message.text())) console.log(`[inbox-cycle console] ${message.text().slice(0, 200)}`)
+  })
+  page.on('response', async (response) => {
+    if (!/\/api\/notifications\/getAll/.test(response.url())) return
+    const body = await response.json().catch(() => null)
+    const titles = (body?.notifications ?? []).map((row: { task?: { title?: string } }) => row.task?.title).filter((title: string | undefined) => title?.startsWith('Inbox cycle'))
+    console.log(`[inbox-cycle getAll] ${response.status()} on ${new URL(page.url()).pathname}: ${JSON.stringify(titles)}`)
   })
   page.on('framenavigated', (frame) => {
     if (frame === page.mainFrame()) console.log(`[inbox-cycle url] ${new URL(frame.url()).pathname}${new URL(frame.url()).search}`)
@@ -81,8 +97,10 @@ test('inbox cycle: open by Enter, send a comment, archive and go to the next mes
   await page.keyboard.press('Enter')
   await expectOpenInFlow(page, items[0], /^1 \/ 5$/)
 
+  const keyboardReplyArchive = archiveSettles(page)
   await sendComment(page, 'Inbox cycle reply by keyboard')
   await expectOpenInFlow(page, items[1], /^2 \/ 5$/)
+  expect(await keyboardReplyArchive, 'sending a comment after Enter archives the message').toBe('200 Archive')
 })
 
 test('inbox cycle: open by click, send a comment, J and E all stay in the inbox flow', async ({ page }) => {
@@ -91,14 +109,18 @@ test('inbox cycle: open by click, send a comment, J and E all stay in the inbox 
   await page.getByText(items[1].title).first().click()
   await expectOpenInFlow(page, items[1], /^1 \/ 4$/)
 
+  const clickReplyArchive = archiveSettles(page)
   await sendComment(page, 'Inbox cycle reply')
   await expectOpenInFlow(page, items[2], /^\d+ \/ \d+$/)
+  expect(await clickReplyArchive, 'sending a comment after a click archives the message').toBe('200 Archive')
 
   await pressOutsideEditor(page, 'j')
   await expectOpenInFlow(page, items[3], /^\d+ \/ \d+$/)
 
+  const eArchive = archiveSettles(page)
   await pressOutsideEditor(page, 'e')
   await expectOpenInFlow(page, items[4], /^\d+ \/ \d+$/)
+  expect(await eArchive, 'E archives the message').toBe('200 Archive')
 
   await openInbox(page, items[2])
   await expect(page.getByText(items[2].title).first(), 'J leaves the message in the inbox').toBeVisible()

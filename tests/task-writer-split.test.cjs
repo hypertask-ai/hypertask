@@ -315,7 +315,7 @@ test("actual composer send caches every saved ticket and publishes the complete 
     createTaskGlobally: body => cache.push(body.task), mobile: false, onCreated() {},
     ticketQuestionsEnabled: true, setQuestionsTaskId: value => questionsTaskIds.push(value),
     setIntro: value => intros.push(value), composeTaskAssistantMessage: h.composeTaskAssistantMessage,
-    chatAutoOpenAllowed: { current: true },
+    chatAutoOpenAllowed: { current: true }, setNewTicketPath() {},
     updateActiveItemAndItemInView() {}, setScope() {}, setSidebar() {}, setSuppressed() {}, setExplicitOpen() {}, setShowChat() {},
     router: { push: url => navigations.push(url) },
   };
