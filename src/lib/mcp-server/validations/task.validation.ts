@@ -561,7 +561,7 @@ export function getAssignUserInputSchema() {
         return hasUserId || hasUserIds || hasAgentId || data.assign_self === true;
       },
       {
-        message: 'Either user_id, user_ids, agent_id, or assign_self must be provided',
+        message: 'Provide exactly one of user_id, user_ids, agent_id, or assign_self',
         path: ['user_id', 'user_ids', 'agent_id', 'assign_self'],
       }
     )
@@ -570,12 +570,20 @@ export function getAssignUserInputSchema() {
         const hasUserId = data.user_id !== undefined;
         const hasUserIds = data.user_ids !== undefined;
         const hasAgentId = data.agent_id !== undefined;
-        const hasAssignSelf = data.assign_self === true;
-        return [hasUserId, hasUserIds, hasAgentId, hasAssignSelf].filter(Boolean).length === 1;
+        return [hasUserId, hasUserIds, hasAgentId].filter(Boolean).length <= 1;
       },
       {
-        message: 'Cannot provide multiple assignee identification methods. Use one of user_id, user_ids, agent_id, or assign_self.',
-        path: ['user_id', 'user_ids', 'agent_id', 'assign_self'],
+        message: 'Cannot provide multiple assignee identification methods. Use one of user_id, user_ids, or agent_id.',
+        path: ['user_id', 'user_ids', 'agent_id'],
+      }
+    )
+    .refine(
+      (data) =>
+        data.assign_self !== true ||
+        (data.user_id === undefined && data.user_ids === undefined),
+      {
+        message: 'assign_self already names you; drop user_id and user_ids',
+        path: ['assign_self', 'user_id', 'user_ids'],
       }
     );
 }

@@ -45,6 +45,32 @@ test("MCP assign schema accepts only one assignee identification method", () => 
   );
 });
 
+test("MCP assign schema lets assign_self stand beside the caller's own agent_id", () => {
+  const result = AssignUserInputSchema.safeParse({
+    ticket_number: "HTPR-7827",
+    assign_self: true,
+    agent_id: agentId,
+  });
+  assert.equal(result.success, true);
+});
+
+test("MCP assign schema still refuses assign_self with a user target, naming the fix", () => {
+  const result = AssignUserInputSchema.safeParse({
+    ticket_number: "HTPR-7827",
+    assign_self: true,
+    user_id: 6,
+  });
+  assert.equal(result.success, false);
+  assert.match(result.error.issues[0].message, /assign_self already names you/);
+});
+
+test("MCP assign schema reports one clear issue when no assignee is given", () => {
+  const result = AssignUserInputSchema.safeParse({ ticket_number: "HTPR-7827" });
+  assert.equal(result.success, false);
+  assert.equal(result.error.issues.length, 1);
+  assert.match(result.error.issues[0].message, /Provide exactly one of user_id, user_ids, agent_id, or assign_self/);
+});
+
 test("MCP task service forwards agent_id to the shared assign endpoint", () => {
   const source = fs.readFileSync(
     path.join(root, "src/lib/mcp-server/lib/services/task.service.ts"),
