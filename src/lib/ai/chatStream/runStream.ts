@@ -2,7 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/definitions/htpr-7794-stop-closes-stream";
+import { HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
 
 import { releaseAiChatStreamLease, createTurnDeadline, AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS, isAiChatCancellationRequested, AI_CHAT_TURN_DEADLINE_USER_MESSAGE, AI_CHAT_TURN_DEADLINE_REASON, watchAiChatCancellation } from "@/app/api/ai/chat/stream/streamLease";
 import { failHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
