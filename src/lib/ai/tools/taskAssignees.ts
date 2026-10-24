@@ -123,7 +123,7 @@ export function createTaskAssigneeMutation(context: TaskAssigneeContext) {
           sessionId: confirmationSessionId,
           operationKey,
           confirmed: input.confirmed,
-          ...(context.bulkScopeConfirmationEnabled ? { subjectKeys: bulkOperationSubjectKeys(operationSubjects), reuseUnchangedPreview: true } : {}),
+          ...(context.bulkScopeConfirmationEnabled ? { subjectKeys: bulkOperationSubjectKeys(operationSubjects), scopePreviewsThisRequest: context.bulkScopePreviews } : {}),
           previewsIssuedThisRequest: bulkPreviewsIssued,
         }) === "preview"
       ) {
@@ -224,6 +224,7 @@ export type TaskAssigneeContext = {
   confirmationSessionId: string;
   bulkPreviewsIssued: Set<string>;
   bulkScopeConfirmationEnabled?: boolean;
+  bulkScopePreviews?: Map<string, { pending: number; changed: boolean }>;
 };
 export type TaskAssigneeTarget = {
   identifier: ToolTaskIdentifierInput;

@@ -110,7 +110,7 @@ export function createAddCommentTool(context: ToolContext) {
               sessionId: confirmationSessionId,
               operationKey,
               confirmed: input.confirmed,
-              ...(context.bulkScopeConfirmationEnabled ? { subjectKeys: bulkOperationSubjectKeys(operationSubjects), reuseUnchangedPreview: true } : {}),
+              ...(context.bulkScopeConfirmationEnabled ? { subjectKeys: bulkOperationSubjectKeys(operationSubjects), scopePreviewsThisRequest: context.bulkScopePreviews } : {}),
               previewsIssuedThisRequest: bulkPreviewsIssued,
             }) === "preview"
           ) {

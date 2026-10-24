@@ -129,7 +129,7 @@ export function createUpdateTaskTool(context: ToolContext) {
               operationKey,
               subjectKeys: bulkOperationSubjectKeys(operationSubjects),
               confirmed: input.confirmed,
-              reuseUnchangedPreview: context.bulkScopeConfirmationEnabled,
+              scopePreviewsThisRequest: context.bulkScopePreviews,
               previewsIssuedThisRequest: bulkPreviewsIssued,
             }) === "preview"
           ) {

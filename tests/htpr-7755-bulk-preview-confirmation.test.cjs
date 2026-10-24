@@ -112,6 +112,7 @@ function toolTurn(mode, redis, writes, enabled = true, sessionId = "chat-7755") 
     user: { id: 985 }, requestingUserId: 985, actingAgentId: null,
     confirmationSessionId: sessionId, bulkPreviewsIssued: new Set(),
     bulkScopeConfirmationEnabled: enabled, inlineAgentImagesEnabled: false,
+    bulkScopePreviews: enabled ? new Map() : undefined,
     sendStatus() {}, body: {},
   };
   if (mode === "assign" || mode === "unassign") {
@@ -184,6 +185,18 @@ for (const mode of ["archive", "status", "assign", "unassign", "comment"]) {
     assert.deepEqual(writes.map(({ id }) => id).sort((a, b) => a - b), scope);
   });
 
+  test(`${mode}: an unchanged re-preview still guards unconfirmed small tails`, async () => {
+    const redis = new MemoryRedis();
+    const writes = [];
+    await toolTurn(mode, redis, writes)(inputFor(mode, scope, false));
+    const turn = toolTurn(mode, redis, writes);
+    assert.equal((await turn(inputFor(mode, scope, false))).confirmation_required, true);
+    assert.equal((await turn(inputFor(mode, scope.slice(8)))).confirmation_required, true);
+    assert.deepEqual(writes, []);
+    assert.equal((await turn(inputFor(mode, scope, true))).success, true);
+    assert.deepEqual(writes.map(({ id }) => id).sort((a, b) => a - b), scope);
+  });
+
   test(`${mode}: a tail batch cannot write while the first preview is still awaiting a yes`, async () => {
     const redis = new MemoryRedis();
     const writes = [];
@@ -217,4 +230,36 @@ test("a preview stays bound to its chat session", async () => {
   assert.deepEqual(writes, []);
   assert.equal((await toolTurn("archive", redis, writes)(inputFor("archive", scope, true))).success, true);
   assert.deepEqual(writes.map(({ id }) => id).sort((a, b) => a - b), scope);
+});
+
+test("overlapping preview and confirmation cannot authorize a fresh scope in the same turn", async () => {
+  const redis = new MemoryRedis();
+  const multi = redis.multi.bind(redis);
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  let started;
+  const hasStarted = new Promise((resolve) => { started = resolve; });
+  redis.multi = () => {
+    const transaction = multi();
+    const exec = transaction.exec;
+    transaction.exec = async () => {
+      const result = await exec();
+      started();
+      await pending;
+      return result;
+    };
+    return transaction;
+  };
+  const input = {
+    userId: 985, sessionId: "overlap", operationKey: "archive",
+    subjectKeys: ["task:1", "task:2"], previewsIssuedThisRequest: new Set(),
+    scopePreviewsThisRequest: new Map(), getRedisClient: async () => redis,
+  };
+  const preview = requireCrossMessageConfirmation({ ...input, confirmed: false });
+  await hasStarted;
+  const confirmation = requireCrossMessageConfirmation({ ...input, confirmed: true });
+  release();
+  assert.deepEqual(await Promise.all([preview, confirmation]), ["preview", "preview"]);
+  assert.equal(await requireCrossMessageConfirmation({ ...input, confirmed: true }), "preview");
+  assert.equal(await requireCrossMessageConfirmation({ ...input, confirmed: true, previewsIssuedThisRequest: new Set(), scopePreviewsThisRequest: new Map() }), "proceed");
 });
