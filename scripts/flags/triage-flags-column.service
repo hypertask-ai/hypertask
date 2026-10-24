@@ -1,0 +1,9 @@
+[Unit]
+Description=Mini Boss CEO read-only Flags-column drift report
+[Service]
+Type=oneshot
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+WorkingDirectory=%h/projects/hypertask
+ExecStart=/usr/bin/env node scripts/flags/triage-flags-column.mjs
+SuccessExitStatus=2
+TimeoutStartSec=15min
