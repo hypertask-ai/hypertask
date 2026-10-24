@@ -111,7 +111,7 @@ async function resolveLookupTeamId(lookup?: ByokLookupContext) {
 async function resolveTeamByokSecret(
   provider: TByokProviderKey | typeof MANAGED_TEAM_GATEWAY_PROVIDER,
   lookup?: ByokLookupContext,
-  options?: { includeDisabled?: boolean }
+  options?: { includeDisabled?: boolean; onResolved?: (row: { id: string; updatedAt: Date }) => void }
 ) {
   const teamId = await resolveLookupTeamId(lookup);
   if (!teamId) return undefined;
@@ -121,6 +121,7 @@ async function resolveTeamByokSecret(
     select: {
       enabled: true,
       ciphertext: true,
+      ...(options?.onResolved ? { id: true, updatedAt: true } : {}),
       team: { select: { aiProviderSettings: true } },
     },
   });
@@ -141,6 +142,7 @@ async function resolveTeamByokSecret(
         return undefined;
       }
     }
+    if (options?.onResolved) options.onResolved(row);
     return decrypted;
   }
 
@@ -193,6 +195,8 @@ function getSharedIncludedAllowanceGatewayKey(plan: string | undefined) {
 export type TeamGatewayFunding = {
   apiKey: string;
   source: GatewayFundingSource;
+  managedKeyId?: string;
+  managedKeyUpdatedAt?: string;
 };
 
 function managedFunding(apiKey: string): TeamGatewayFunding {
@@ -342,6 +346,7 @@ export async function getTeamGatewayApiKeyForProvider(
 
 export async function getTeamGatewayFunding(
   lookup?: ByokLookupContext,
+  options?: { includeProvenance?: boolean },
 ): Promise<TeamGatewayFunding | undefined> {
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
@@ -368,12 +373,16 @@ export async function getTeamGatewayFunding(
     return apiKey ? { apiKey, source: "shared" } : undefined;
   }
 
+  let metadata: { managedKeyId: string; managedKeyUpdatedAt: string } | undefined;
   const managedGatewayKey = await resolveTeamByokSecret(
     MANAGED_TEAM_GATEWAY_PROVIDER,
-    lookup
+    lookup,
+    options?.includeProvenance ? { onResolved: (row) => {
+      metadata = { managedKeyId: row.id, managedKeyUpdatedAt: row.updatedAt.toISOString() };
+    } } : undefined,
   );
   if (isVercelAiGatewayKey(managedGatewayKey)) {
-    return managedFunding(managedGatewayKey);
+    return { ...managedFunding(managedGatewayKey), ...metadata };
   }
 
   return undefined;
