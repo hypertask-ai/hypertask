@@ -53,6 +53,7 @@ import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
@@ -71,6 +72,7 @@ const SCREENSHOT_MIME_TYPES = new Set([
 ]);
 
 type ControlledComposer = {
+  showScope?: boolean;
   value: string;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   editorRef?: RefObject<Editor | null>;
@@ -103,6 +105,8 @@ export function AI_Tiptap_Container({
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
+  const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
+  const agentContextEnabled = agentContextFlag && !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
   let composeBoardChipEnabled = false;
@@ -271,13 +275,13 @@ export function AI_Tiptap_Container({
           onRemove={removeQueuedMessage}
         />
       )}
-      {!controlledComposer && isMbl && (
+      {(!controlledComposer || agentContextEnabled) && isMbl && (
         <div
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
         >
           {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
-          <div
+          {!controlledComposer && <div
             data-ai-chat-mobile-context-scroll
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
           >
@@ -287,7 +291,7 @@ export function AI_Tiptap_Container({
               mobile
             />
             <AddContextButton onClick={handleAddContext} mobile />
-          </div>
+          </div>}
         </div>
       )}
       <div
@@ -375,7 +379,7 @@ export function AI_Tiptap_Container({
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
           leadingControls={
-            controlledComposer ? null : (
+            controlledComposer ? (agentContextEnabled ? <ChatScopeDropdown reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
                 <AIModelDropDownButton
                   optionCallback={dropDownButtonAICallback}

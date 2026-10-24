@@ -12,7 +12,7 @@ import type { Editor } from "@tiptap/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useContext, useEffect, useRef, useState } from "react";
 import type { TAgent } from "../AgentsRegister";
-import { IProp, TAgentChatSession, TChatMessage } from "./agentChatTypes";
+import { IProp, TAgentChatSession, TChatMessage, type QueuedAgentChatMessage } from "./agentChatTypes";
 
 export function useAgentChatState(props: IProp) {
   const { currentUser, roomsEnabled, embedded } = props;
@@ -56,9 +56,9 @@ export function useAgentChatState(props: IProp) {
   const [awaiting, setAwaiting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<
-    { id: string; content: string }[]
+    QueuedAgentChatMessage[]
   >([]);
-  const messageQueueRef = useRef<{ id: string; content: string }[]>([]);
+  const messageQueueRef = useRef<QueuedAgentChatMessage[]>([]);
   const blockedQueueIdRef = useRef<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<

@@ -20,6 +20,8 @@ import {
   serializeChatTicketProposal,
 } from '@/lib/agents/chatTicketProposal'
 import { loadAgentTokenChatSession } from '@/lib/agents/chatAccess'
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from '@/lib/flags/definitions/htpr-7734-agent-chat-context'
+import { agentChatContextPayload } from '@/lib/agents/chatContext'
 
 const MAX_MESSAGE_LENGTH = 8000
 const TRANSCRIPT_LIMIT = 50
@@ -79,10 +81,12 @@ export async function GET(
       })
     ).reverse()
 
-    const normalMessages = messages.map(({ id, role, content, createdAt }) => ({
+    const contextEnabled = await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id)
+    const normalMessages = messages.map(({ id, role, content, context, createdAt }) => ({
       id,
       role,
-      content,
+      content: contextEnabled && role === 'human' ? agentChatContextPayload(content, context).text : content,
+      ...(contextEnabled && role === 'human' && context ? { context } : {}),
       createdAt,
     }))
     const latestMessage = messages[messages.length - 1]

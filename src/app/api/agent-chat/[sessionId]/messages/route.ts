@@ -1,4 +1,6 @@
 import prisma from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { agentChatContextPayload } from "@/lib/agents/chatContext";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   persistAgentRunTriggerWebhooks,
@@ -19,6 +21,9 @@ import {
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
 } from "@/lib/flags/keys";
 import { hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
+import { defaultContextSchema } from "@/lib/ai/chatStream/request";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export const runtime = "nodejs";
 
@@ -72,6 +77,36 @@ export async function POST(
       );
     }
 
+    let messageContext: Prisma.JsonObject | undefined;
+    if (sidebarChatProjectId(request.headers) !== undefined && body?.default_context !== undefined &&
+        await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, userId)) {
+      const parsed = defaultContextSchema.safeParse(body.default_context);
+      if (!parsed.success || (parsed.data.surface_path?.length ?? 0) > 500) {
+        return NextResponse.json({ success: false, error: "Invalid chat context" }, { status: 400 });
+      }
+      const context = parsed.data;
+      let selected: Prisma.JsonObject = { scope: "all" };
+      if (context.scope === "ticket") {
+        if (!context.task_id || !context.project_id) {
+          return NextResponse.json({ success: false, error: "Ticket context requires a ticket and board" }, { status: 400 });
+        }
+        const task = await prisma.task.findFirst({
+          where: { id: context.task_id, projectId: context.project_id, project: projectContentAccessWhere(userId) },
+          select: { id: true, projectId: true, ticketNumber: true, title: true },
+        });
+        if (!task) return NextResponse.json({ success: false, error: "Ticket not found" }, { status: 404 });
+        selected = { scope: "ticket", task_id: task.id, project_id: task.projectId, ticket_number: task.ticketNumber, title: task.title };
+      } else if (context.project_id) {
+        const board = await prisma.project.findFirst({
+          where: { id: context.project_id, ...projectContentAccessWhere(userId) },
+          select: { id: true, title: true },
+        });
+        if (!board) return NextResponse.json({ success: false, error: "Board not found" }, { status: 404 });
+        selected = { scope: "board", project_id: board.id, title: board.title };
+      }
+      messageContext = { ...selected, ...(context.surface_path !== undefined ? { surface_path: context.surface_path } : {}) };
+    }
+
     await ensureChatParticipant(session.id, userId);
 
     const sender = await prisma.user.findUnique({
@@ -117,6 +152,7 @@ export async function POST(
         data: {
           sessionId: session.id,
           content: text,
+          ...(messageContext ? { context: messageContext } : {}),
           role: "human",
           isDelivered: true,
           authorUserId: userId,
@@ -141,7 +177,7 @@ export async function POST(
         chat: {
           sessionId: session.id,
           messageId: message.id,
-          text,
+          ...(messageContext ? agentChatContextPayload(text, messageContext) : { text }),
           userName: sender?.displayName ?? null,
           ...(adhdReplyEnabled
             ? { replyGuidance: AGENT_CHAT_ADHD_REPLY_GUIDANCE }

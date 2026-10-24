@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+
 export const AGENT_RUN_WEBHOOK_EVENTS = [
   "run.created",
   "run.prompted",
@@ -226,6 +228,7 @@ export type AgentWebhookChat = {
   text: string;
   userName: string | null;
   replyGuidance?: string;
+  context?: Prisma.JsonValue;
 };
 
 export type AgentWebhookRun = {

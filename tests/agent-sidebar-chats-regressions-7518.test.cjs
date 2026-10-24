@@ -15,6 +15,11 @@ const deferred = () => {
 const viewer = load("src/lib/agents/chatViewerState.ts", {});
 const sendHook = load("src/app/agents/chat/useAgentChatSend.ts", {
   react: hooks,
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/hooks/MultiPages/AIChat/useDockedChatScope": { useDockedChatScope: () => [null, noop] },
+  "@/lib/state": { useRecoilValue: () => null },
+  "@/store": {},
+  "next/navigation": { usePathname: () => "/project" },
   "react-hot-toast": { default: { error: assert.fail } },
 }).useAgentChatSend;
 const sessionHook = load("src/app/agents/chat/useAgentChatSession.ts", {
@@ -752,6 +757,8 @@ test("switching away cancels the recorder and clears retained recording state be
   }
   const { AgentChatPane } = loadChatComponent("src/app/agents/chat/AgentChatPane.tsx", {
     react: React,
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7734-agent-chat-context": { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG: "htpr-7734-agent-chat-context" },
     "@/components/Agents/AgentAvatar": { default: () => null },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: Composer },
     "@/components/AI_CHAT/TypingIndicator": { TypingIndicator: () => null },
@@ -865,6 +872,7 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     "./AiComposerTextarea", "@/lib/flags/keys", "./ChatScopeChip", "./SendMessageButton",
     "@/components/Common/QueuedMessagesStrip", "react-hot-toast", "@/utils/aiChat/focusRequestWindow",
     "@/hooks/MultiPages/AIChat/useDockedChatScope",
+    "@/lib/flags/definitions/htpr-7734-agent-chat-context",
   ].map((specifier) => [specifier, {}]));
   const chat = {
     editor: { getHTML: () => "", getText: () => "" }, isTyping: false, isRecording: false,

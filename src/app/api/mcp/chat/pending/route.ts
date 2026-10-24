@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
+import { agentChatContextPayload } from "@/lib/agents/chatContext";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +17,7 @@ type PendingChatMessage = {
   id: string;
   sessionId: string;
   text: string;
+  context?: Prisma.JsonValue;
   userName: string | null;
 };
 
@@ -40,6 +44,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const contextEnabled = await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id);
     const result = await prisma.$transaction(async (tx) => {
       const agents = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT "id"
@@ -66,6 +71,7 @@ export async function GET(request: NextRequest) {
             message."id",
             message."sessionId",
             message."content" AS "text",
+            ${contextEnabled ? Prisma.sql`message."context"` : Prisma.sql`NULL::jsonb`} AS "context",
             COALESCE(author."displayName", owner."displayName") AS "userName",
             message."createdAt"
           FROM "ChatMessage" message
@@ -91,7 +97,7 @@ export async function GET(request: NextRequest) {
           WHERE message."id" = pending."id"
           RETURNING message."id"
         )
-        SELECT pending."id", pending."sessionId", pending."text", pending."userName"
+        SELECT pending."id", pending."sessionId", pending."text", pending."context", pending."userName"
         FROM pending
         JOIN delivered ON delivered."id" = pending."id"
         ORDER BY pending."createdAt" ASC, pending."id" ASC
@@ -105,7 +111,11 @@ export async function GET(request: NextRequest) {
         { status: 404 },
       );
     }
-    return NextResponse.json({ success: true, messages: result.messages });
+    const messages = result.messages.map(({ context, ...message }) => ({
+      ...message,
+      ...(contextEnabled ? agentChatContextPayload(message.text, context) : {}),
+    }));
+    return NextResponse.json({ success: true, messages });
   } catch (error) {
     console.error("[mcp chat] GET pending failed:", error);
     return NextResponse.json(
