@@ -348,13 +348,13 @@ test("history batches references once per session and preserves separate message
   assert.deepEqual(session.messages[2], { content: "Legacy" });
 });
 
-test("client caches ticket rows from durable done only, not failed or unpersisted completion", async () => {
+test("client caches ticket rows from durable done only with the flag On, not failed, unpersisted or flag Off", async () => {
   const { consumeAiChatStream } = load("src/hooks/MultiPages/AIChat/aiChatStream.ts", {
     "@/lib/realtime/taskCommentsRefresh": {}, "@/lib/realtime/shared": {},
     "@/hooks/Inbox/useGetNotifications": { INBOX_QUERY_KEY: ["inbox"] },
     "./aiChatShared": { parseAiStreamErrorContent: (v) => v },
   });
-  for (const [persisted, status] of [[false, "complete"], [true, "complete"], [true, "error"]]) {
+  for (const [persisted, status, enabled] of [[false, "complete", true], [true, "complete", true], [true, "error", true], [true, "complete", false]]) {
     const rows = [{ label: "Done", tasks: [{ id: 1 }] }];
     const payload = `event: content\ndata: ${JSON.stringify({ content: "Tickets." })}\n\nevent: done\ndata: ${JSON.stringify({ status, assistant_persisted: persisted, ticketGroups: rows })}\n\n`;
     const messages = [];
@@ -364,12 +364,12 @@ test("client caches ticket rows from durable done only, not failed or unpersiste
       await consumeAiChatStream({
         response: new Response(payload), session: { id: "s" }, assistantMessageId: "m",
         addMessageToSessionQuery: (_, message) => messages.push(message), setAgentStatus() {}, setIsTyping() {},
-        queryClient: { refetchQueries: async () => {} },
+        queryClient: { refetchQueries: async () => {} }, ticketRowsEnabled: enabled,
       });
     } finally { console.log = original; }
     assert.equal(messages.length, 2);
     assert.equal(messages.at(-1).content, status === "error" ? "Sorry, an error occurred while processing your request." : "Tickets.");
-    assert.deepEqual(messages.at(-1).ticketGroups, persisted && status === "complete" ? rows : undefined);
+    assert.deepEqual(messages.at(-1).ticketGroups, enabled && persisted && status === "complete" ? rows : undefined);
     assert.equal(messages[0].ticketGroups, undefined);
   }
 });

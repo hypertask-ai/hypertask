@@ -9,6 +9,7 @@ import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 
 import { useRecoilState } from "@/lib/state";
@@ -23,6 +24,7 @@ export function useAiChat() {
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const reloadTaskAfterChat = useFlag(HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG);
+  const ticketRowsEnabled = useFlag(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG);
   const connectionRetry = useFlag(HTPR_7099_CHAT_CONNECTION_LOST_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
@@ -91,7 +93,7 @@ export function useAiChat() {
     pathname, currentUser, billing, isDemo, streamingSessionRef,
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
-    appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry,
+    appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, ...(ticketRowsEnabled ? { ticketRowsEnabled } : {}), connectionRetry,
   }, askAiFullscreenEnabled ? {
     preserveComposer: true,
     onSettled: () => setSendSettledVersion((version) => version + 1),
