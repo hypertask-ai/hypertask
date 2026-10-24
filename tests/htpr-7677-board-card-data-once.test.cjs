@@ -160,7 +160,7 @@ test("the flag is read once when the board opens, so cards never switch readers 
   const provider = read("src/components/PageComponents/Kanban/KanbanTaskComponents/BoardCardData.tsx");
   assert.match(provider, /const \[shared\] = useState\(enabled\);/);
   const homepage = read("src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx");
-  assert.match(homepage, /return boardCardDataOnce \? \(\n    <BoardCardDataProvider project=\{_currentProject\} enabled>\{board\}<\/BoardCardDataProvider>\n  \) : \(\n    <BoardCardDataProvider project=\{_currentProject\} enabled=\{false\}>\{board\}<\/BoardCardDataProvider>/);
+  assert.match(homepage, /boardCardDataOnce \? \(\n      <BoardCardDataProvider project=\{_currentProject\} enabled>\{board\}<\/BoardCardDataProvider>\n    \) : \(\n      <BoardCardDataProvider project=\{_currentProject\} enabled=\{false\}>\{board\}<\/BoardCardDataProvider>/);
 });
 
 test("the card takes its Draft mark from the board when it can and keeps its own drafts read otherwise", () => {

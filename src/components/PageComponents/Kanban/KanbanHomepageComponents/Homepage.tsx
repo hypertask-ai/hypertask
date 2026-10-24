@@ -951,10 +951,12 @@ const HomePage = ({
       </>
     </KanbanBulkSelectionProvider>
   );
-  return boardCardDataOnce ? (
-    <BoardCardDataProvider project={_currentProject} enabled>{board}</BoardCardDataProvider>
-  ) : (
-    <BoardCardDataProvider project={_currentProject} enabled={false}>{board}</BoardCardDataProvider>
+  return (
+    boardCardDataOnce ? (
+      <BoardCardDataProvider project={_currentProject} enabled>{board}</BoardCardDataProvider>
+    ) : (
+      <BoardCardDataProvider project={_currentProject} enabled={false}>{board}</BoardCardDataProvider>
+    )
   );
 };
 
