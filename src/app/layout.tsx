@@ -110,6 +110,9 @@ export default async function RootLayout(
   const themeClassName = themeValue === "system"
     ? "system"
     : resolvedThemeDomMetadata[initialResolvedTheme].classes.join(" ");
+  const plexPreloadHref = shellSeed && ["amoled", "graphite", "porcelain"].includes(initialResolvedTheme)
+    ? (ibmPlexSans as typeof ibmPlexSans & { preloadHref?: string }).preloadHref
+    : undefined;
 
   return (
     <html
@@ -119,6 +122,9 @@ export default async function RootLayout(
       data-theme={themeValue === "rounded" ? initialResolvedTheme : themeValue}
     >
       <head>
+        {plexPreloadHref && (
+          <link rel="preload" href={plexPreloadHref} as="font" type="font/woff2" crossOrigin="anonymous" />
+        )}
         {!deferUnusedBoardFonts && [INTER_LATIN_FONT_HREF, ...NEWSREADER_LATIN_FONT_HREFS].map(href => (
           <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
         ))}
