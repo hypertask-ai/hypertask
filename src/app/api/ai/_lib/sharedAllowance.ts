@@ -609,7 +609,7 @@ export type EffectiveAccountingSource = {
   total?: number;
 };
 
-type BilledCall = { teamId: string; userId: number | null; reservationId: string };
+type BilledCall = { teamId: string; userId: number; reservationId: string };
 type HoldReleaseReason = "finish" | "stop" | "error" | "eof" | "expiry" | "disconnect-end";
 
 export async function billedCostEnabled(userId: number | null): Promise<boolean> {
@@ -1144,7 +1144,7 @@ async function reserveSharedAllowance(args: {
   const policy = await args.resolvePolicy?.(args.teamId);
   const observe = await observeAllowanceAttempt({ ...args, policy: policy ?? { mode: "legacy", monthlyUsd: args.allowanceUsd } });
   const billed = await billedCostEnabled(args.userId);
-  const call: BilledCall = { teamId: args.teamId, userId: args.userId, reservationId: randomUUID() };
+  const call: BilledCall = { teamId: args.teamId, userId: args.userId ?? 0, reservationId: randomUUID() };
   const selectedMonth = aiAllowancePeriod();
   const source = billed && policy?.mode !== "plan" ? await effectiveAccountingSource({ teamId: args.teamId, kind: "month",
     period: selectedMonth.key, funding: await resolveBilledFunding(args) }) : null;
@@ -1621,7 +1621,7 @@ async function reserveBilledScopes(args: {
   const redis = await getRedis();
   const result = await redis.eval(RESERVE_BILLED_SCOPES_SCRIPT, args.keys.length, ...args.keys,
     JSON.stringify(args.encoded), String(Date.now()), String(args.amount), String(Date.now() + RESERVATION_TTL_MS), args.id,
-    BILLED_ALLOWANCE_SCOPE_INDEX, `${args.call.teamId}|${args.month}|${args.day}`, String(args.call.userId ?? 0), `demo|${args.month}|${args.day}`);
+    BILLED_ALLOWANCE_SCOPE_INDEX, `${args.call.teamId}|${args.month}|${args.day}`, String(args.call.userId), `demo|${args.month}|${args.day}`);
   if (!Array.isArray(result)) throw new Error("Invalid billed allowance reservation response");
   const accepted = Number(result[0]);
   const details = JSON.parse(String(result[1])) as Array<{ scope: string; mode: string; billed: number; holds: number; requested: number; cap: number }>;
@@ -1760,7 +1760,7 @@ export async function reservePlanAllowance(args: {
   }));
   const amount = args.amountMicroUsd ?? usdToMicroUsd(args.amountUsd);
   const originalScopes = scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds }));
-  const call: BilledCall | undefined = billed ? args.billedCall ?? { teamId: args.teamId ?? "demo", userId: args.userId ?? null, reservationId: randomUUID() } : undefined;
+  const call: BilledCall | undefined = billed ? args.billedCall ?? { teamId: args.teamId ?? "demo", userId: args.userId ?? 0, reservationId: randomUUID() } : undefined;
   const id = `${call?.reservationId ?? randomUUID()}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds, ...(call ? [amount, call] : [])]))}|${amount}`;
   const redis = await getRedis();
   const followsRealSpend = await allowanceFollowsRealSpend(args.userId ?? null);
