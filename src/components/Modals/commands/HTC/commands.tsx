@@ -50,6 +50,7 @@ import type { CommandIdentity } from "./commandSelection";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
+import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
@@ -177,6 +178,7 @@ const Commands = (props: Props) => {
   const buildTimeLabel = buildId !== "dev" && !Number.isNaN(buildTime.getTime())
     ? `${buildTime.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${buildTime.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}`
     : "";
+  const basetenByokEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -264,6 +266,7 @@ const Commands = (props: Props) => {
           (command) =>
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
+            (command.key !== "settingsApiKeysBasetenApiKey" || basetenByokEnabled) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -409,6 +412,7 @@ const Commands = (props: Props) => {
     pinCommentActions,
     pageActions,
     googleCalendarSettingsEnabled,
+    basetenByokEnabled,
     autoTaskDescriptionsEnabled,
     currentProject,
     frequentlyUsed,

@@ -1,5 +1,6 @@
 import { wrapLanguageModel, type LanguageModel } from "ai";
 import prisma from "@/lib/prisma";
+import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr-7634-openai-only-default";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -24,6 +25,7 @@ import {
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import {
+  BASETEN_MODEL_SLUGS,
   getAiProviderInfo,
   isByokProviderRestrictedInGdprSafeMode,
   isGdprSafeModeEnabled,
@@ -169,6 +171,7 @@ export async function resolveAgentByokApiKey(
   provider: TByokProviderKey,
   lookup?: ByokLookupContext
 ) {
+  if (provider === "baseten") return undefined;
   const decrypted = await resolveAgentByokSecret(provider, lookup);
   if (!decrypted) return undefined;
   if (provider !== "custom") return decrypted;
@@ -269,6 +272,14 @@ export async function getByokApiKeyForProvider(
     resolveWithoutFlag?: boolean;
   }
 ) {
+  if (provider === "baseten") {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    if (!(await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, lookup?.userId ?? 0))) return undefined;
+    const plan = await resolveLookupPlan(lookup);
+    if (!plan || plan === "Free") return undefined;
+    return resolveTeamByokApiKey("baseten", lookup);
+  }
+
   if (lookup?.agentId && provider !== "custom") {
     const agentKey = await resolveAgentByokApiKey(provider, lookup);
     if (agentKey && (await isByokProviderAllowedForLookup(provider, lookup))) {
@@ -436,6 +447,33 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
     const plan = await resolveLookupPlan(lookup);
     if (!plan || plan === "Free") return undefined;
     return resolveTeamCustomEndpoint(lookup);
+  }
+
+  if (Object.hasOwn(BASETEN_MODEL_SLUGS, option.modelKey)) {
+    const basetenKey = await getByokApiKeyForProvider("baseten", undefined, lookup);
+    if (basetenKey) {
+      const definition = getAiModelDefinition(option.modelKey);
+      const providerInfo = definition && definition.provider !== "custom"
+        ? getAiProviderInfo(definition.provider)
+        : undefined;
+      const teamId = await resolveLookupTeamId(lookup);
+      const team = teamId ? await prisma.team.findUnique({
+        where: { id: teamId },
+        select: { aiProviderSettings: true },
+      }) : null;
+      if (providerInfo && team && resolveTeamProviderEnabled(team.aiProviderSettings, providerInfo.key)) {
+        const nativeKey = await getByokApiKeyForProvider(providerInfo.byokKey, flags, lookup, { resolveWithoutFlag: true });
+        if (!nativeKey) {
+          const funding = await getTeamGatewayFunding(lookup);
+          if (funding?.source === "customer") return funding.apiKey;
+          return {
+            kind: "baseten",
+            apiKey: basetenKey,
+            modelKey: option.modelKey as keyof typeof BASETEN_MODEL_SLUGS,
+          };
+        }
+      }
+    }
   }
 
   if (option.modelKey === "deepseek-v4.1-flash-fast") {

@@ -690,6 +690,13 @@ const settings: CommandGroup = {
       keywords: "settings openrouter api key use byok",
     },
     {
+      key: "settingsApiKeysBasetenApiKey",
+      name: "Settings: Baseten API key",
+      commandMode: CommandMode.Setting,
+      payload: "apiKeys",
+      keywords: "settings baseten api key use byok aggregator",
+    },
+    {
       key: "settingsApiKeysVercelAiGatewayApiKey",
       name: "Settings: Vercel AI Gateway API key",
       commandMode: CommandMode.Setting,

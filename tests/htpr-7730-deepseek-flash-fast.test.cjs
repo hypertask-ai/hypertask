@@ -111,6 +111,7 @@ test("saved and requested Fast choices use each plan default while Off", () => {
 });
 
 test("Fast credentials skip direct team and agent keys but retain gateway funding", async () => {
+  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
   const catalog = loadTs("src/lib/aiModelOptions.ts");
   let gatewayKey = "vck_team_gateway";
   const keyLookups = [];

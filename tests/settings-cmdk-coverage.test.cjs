@@ -71,7 +71,7 @@ function labelValues(node, file) {
   const text = node.getText().replace(/\s+/g, " ");
   if (text === "provider.label") return labelsFrom("src/lib/aiProviders.ts", "AI_PROVIDERS");
   if (text === "row.label" && file.endsWith("ApiKeysSection.tsx")) {
-    return [...labelsFrom("src/lib/aiProviders.ts", "AI_PROVIDERS"), ...strings(property(declaration("src/lib/aiProviders.ts", "AI_GATEWAY_BYOK_PROVIDER"), "label"))];
+    return [...labelsFrom("src/lib/aiProviders.ts", "AI_PROVIDERS"), ...["AI_GATEWAY_BYOK_PROVIDER", "BASETEN_BYOK_PROVIDER"].flatMap((name) => strings(property(declaration("src/lib/aiProviders.ts", name), "label")))];
   }
   if (text === "AI_FEATURES[feature].label") {
     const features = declaration("src/lib/systemModelLadder.ts", "AI_FEATURES");
@@ -273,6 +273,7 @@ test("unresolved shared row labels fail rather than silently dropping a setting"
 });
 
 const gatedCommands = [
+  { keys: ["settingsApiKeysBasetenApiKey"], flag: "basetenByokEnabled", file: "ApiKeysSection.tsx", uiFlag: "basetenEnabled" },
   { keys: ["settingsCalendarKeepTasksUpdated"], flag: "googleCalendarSettingsEnabled", file: "CalendarSection.tsx", uiFlag: "enabled" },
   { keys: ["settingsTaskPageSuggestDescriptionsFromTaskTitles"], flag: "autoTaskDescriptionsEnabled", file: "src/components/sidebars/RightSidebar/UserPreference.tsx", uiFlag: "autoTaskDescriptionsEnabled" },
 ];
