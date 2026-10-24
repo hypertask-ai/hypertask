@@ -190,10 +190,11 @@ const NewCommentComponent = (
         applyPendingIdleDictation();
       }
       const redirectMiddleware = (obj: RedirectAPIParams) =>{
-        redirectAPI(obj);
+        const result = redirectAPI(obj);
         setTimeout(()=>{
           setShowTaskOptions(true)
         },200)
+        return result;
       }
 
       useEffect(() => {

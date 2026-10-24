@@ -236,6 +236,82 @@ test("comment Send awaits upload and preserves text and attachments on a refusal
   }
 });
 
+const newComment = "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent.tsx";
+
+function phoneEditorSend(redirectAPI, state, toasts) {
+  const handleSave = evaluate(initializer(newComment, "redirectMiddleware"), {
+    redirectAPI, setTimeout() {}, setShowTaskOptions() {},
+  });
+  return editorSend(handleSave, state, toasts);
+}
+
+test("phone Send preserves the draft and attachment chip when upload or finalize refuses the file", async () => {
+  for (const endpoint of ["upload", "finalize"]) for (const error of [fileRefusal(), refusal(500), refusal(402, "OTHER_ERROR"), new Error("offline")]) {
+    const queued = [], toasts = [];
+    const state = { text: "Keep my phone comment draft", attachments: [file] };
+    const chips = state.attachments;
+    const redirect = commentRedirect(true, async () => {
+      if (endpoint === "upload") throw error;
+      return "https://files.example/large.bin";
+    }, queued, toasts, async () => { throw error; });
+    assert.equal(await phoneEditorSend(redirect, state, toasts)(), false);
+    assert.equal(state.text, "Keep my phone comment draft");
+    assert.equal(state.attachments, chips);
+    assert.deepEqual(state.attachments, [file]);
+    assert.deepEqual(queued, []);
+    assert.deepEqual(toasts, [isPlan(error) ? fileMessage : `Could not upload "${file.name}". Please try again.`]);
+  }
+});
+
+test("phone Send preserves text and chips on a rejected save exactly like desktop", async () => {
+  for (const send of [editorSend, phoneEditorSend]) {
+    const state = { text: "Unsaved phone comment", attachments: [file] };
+    const chips = state.attachments;
+    const toasts = [];
+    assert.equal(await send(async () => { throw new Error("offline"); }, state, toasts)(), false);
+    assert.equal(state.text, "Unsaved phone comment");
+    assert.equal(state.attachments, chips);
+    assert.deepEqual(toasts, ["Could not save. Your changes are still here."]);
+  }
+});
+
+test("phone Send waits for success before clearing the draft and attachment chip", async () => {
+  const queued = [], toasts = [];
+  const state = { text: "Phone comment", attachments: [file] };
+  let finishUpload;
+  const upload = new Promise(resolve => { finishUpload = resolve; });
+  const redirect = commentRedirect(true, () => upload, queued, toasts);
+  let settled = false;
+  const sending = phoneEditorSend(redirect, state, toasts)().then(result => {
+    settled = true;
+    return result;
+  });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.equal(state.text, "Phone comment");
+  assert.deepEqual(state.attachments, [file]);
+  assert.deepEqual(queued, []);
+  finishUpload("https://files.example/large.bin");
+  assert.equal(await sending, true);
+  assert.equal(state.text, "");
+  assert.deepEqual(state.attachments, []);
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].content, "Phone comment");
+  assert.equal(queued[0].attachments[0].file.source, "https://files.example/large.bin");
+  assert.deepEqual(toasts, []);
+});
+
+test("flag-Off phone Send keeps the existing queued-and-clear behavior", async () => {
+  const queued = [], toasts = [];
+  const state = { text: "Phone comment", attachments: [file] };
+  const redirect = commentRedirect(false, async () => assert.fail("flag Off must not preflight"), queued, toasts);
+  assert.equal(await phoneEditorSend(redirect, state, toasts)(), true);
+  assert.equal(state.text, "");
+  assert.deepEqual(state.attachments, []);
+  assert.equal(queued.length, 1);
+  assert.deepEqual(toasts, []);
+});
+
 test("successful flagged comment Send queues sourced attachments without a second upload", async () => {
   const queued = [], toasts = [];
   const source = "https://files.example/large.bin";
