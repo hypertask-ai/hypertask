@@ -444,6 +444,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
     HTPR_7074_TICKET_PAGE_CLS_FLAG: "cls",
     HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "server-description",
+    HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "ticket-chat-reminder",
     useThreadSettled: () => ({ settled: true, slotRef: () => {} }),
     SettledComposerSlot: ({ children }) => children,
     useTaskContext: () => ({

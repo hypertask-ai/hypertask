@@ -33,6 +33,7 @@ import BaseCommentAndDescriptionContainer from "./BaseCommentAndDescriptionConta
 import RichTextPersonHovercards from "@/components/Common/RichTextPersonHovercards";
 import AgentRunActivityRow from "./AgentRunActivityRow";
 import { TicketChatSessionsReminder } from "./TicketChatSessionsReminder";
+import { HTPR_7318_TICKET_CHAT_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder";
 
 const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const {
@@ -81,6 +82,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     showLiveRows,
   } = useTaskContext();
   const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
   const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
 
   const {
@@ -194,7 +196,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
             contentToRender = (
               <>
                 <div id="bottom-description" className="h-0" />
-                {secondaryPanelsReady !== false && currentTask && (
+                {ticketChatReminder && secondaryPanelsReady !== false && currentTask && (
                   <TicketChatSessionsReminder taskId={currentTask.id} />
                 )}
               </>

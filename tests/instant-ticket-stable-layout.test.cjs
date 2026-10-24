@@ -85,6 +85,7 @@ const thread = load("src/components/PageComponents/TaskDetail/CommentAndDescript
   "@/components/Common/RichTextPersonHovercards": { default: marker("hovercards") },
   "./AgentRunActivityRow": { default: marker("activity") },
   "./TicketChatSessionsReminder": { TicketChatSessionsReminder: (props) => (chatReminderShown ? marker("chat-reminder")(props) : null) },
+  "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
 }).default;
 
 function html(Component, isMobile, props = {}) {

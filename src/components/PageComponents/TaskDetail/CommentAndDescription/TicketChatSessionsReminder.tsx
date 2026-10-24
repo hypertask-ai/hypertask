@@ -37,8 +37,10 @@ export const TicketChatSessionsReminder = ({ taskId }: { taskId: number }) => {
     }
     if (!chat?.chatHistoryReady) return;
     setPending(null);
-    window.dispatchEvent(new CustomEvent("ht-ticket-chat-resume", { detail: { sessionId: pending.sessionId } }));
-    chat.selectSession(pending.sessionId);
+    const sidebarResumed = !window.dispatchEvent(
+      new CustomEvent("ht-ticket-chat-resume", { cancelable: true, detail: { sessionId: pending.sessionId } }),
+    );
+    if (!sidebarResumed) chat.selectSession(pending.sessionId);
     chat.restoreChat();
   }, [pending, enabled, chatOpen, taskId, user?.id, chat]);
 
