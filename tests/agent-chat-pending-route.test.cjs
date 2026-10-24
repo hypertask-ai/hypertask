@@ -2,12 +2,15 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { createJiti } = require("jiti");
+const { Prisma } = require("@prisma/client");
 
 process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
 
 const root = path.resolve(__dirname, "..");
 let authContext;
 let activeWebhook;
+let enabled;
+let events;
 let pendingRows;
 let replies;
 let rawQueries;
@@ -18,7 +21,7 @@ function stubModule(relativePath, exports) {
 }
 
 function sqlText(args) {
-  return Array.isArray(args[0]) ? args[0].join("?") : String(args[0]);
+  return Array.isArray(args[0]) ? Prisma.sql(args[0], ...args.slice(1)).text : String(args[0]);
 }
 
 const chatMessage = {
@@ -68,7 +71,7 @@ const tx = {
     return [];
   },
   agentWebhookSubscription: {
-    findUnique: async () => (activeWebhook ? { active: true } : null),
+    findUnique: async () => (activeWebhook ? { active: true, events } : null),
   },
   chatSession: { update: async () => null },
   chatMessage,
@@ -80,6 +83,9 @@ const prisma = {
   chatMessage,
 };
 
+stubModule("src/lib/flags/keys.ts", {});
+stubModule("src/utils/controllers/projects/getAllIncludes.ts", { projectContentAccessWhere: () => ({}) });
+stubModule("src/lib/mcp/tasks/agentMutationFence.ts", { TaskTeamScopeError: class TaskTeamScopeError extends Error {} });
 stubModule("src/lib/prisma.ts", { default: prisma });
 stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => null,
@@ -102,7 +108,7 @@ stubModule("src/lib/agents/chatAccess.ts", {
 });
 stubModule("src/lib/flags.ts", {
   AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
-  isFeatureEnabled: async () => false,
+  isFeatureEnabled: async () => enabled,
 });
 stubModule("src/lib/agents/chatBroadcast.ts", {
   broadcastChatSession: async () => null,
@@ -178,7 +184,7 @@ test.beforeEach(() => {
     agentId: "agent-polling",
     user: { id: 6, displayName: "Valentin" },
   };
-  activeWebhook = false;
+  activeWebhook = false; enabled = false; events = ["chat.message"];
   pendingRows = [
     {
       id: "message-1",
@@ -321,4 +327,27 @@ test("polling claims once and a repeated pending request cannot replay the promp
   assert.equal((await fetchPending()).body.messages.length, 1);
   assert.deepEqual((await fetchPending()).body.messages, []);
   assert.equal(pendingRows[0].isDelivered, true);
+});
+
+test("flag on allows CLI pending for active non-chat and run-only webhooks; flag off retains exclusion", async () => {
+  activeWebhook = true;
+  for (const event of ['task.assigned', 'run.created']) {
+    events = [event]; enabled = false; pendingRows[0].isDelivered = false;
+    assert.deepEqual((await fetchPending()).body.messages, []);
+    assert.equal(pendingRows[0].isDelivered, false);
+    enabled = true;
+    assert.equal((await fetchPending()).body.messages.length, 1);
+    assert.equal(pendingRows[0].isDelivered, true);
+  }
+});
+test("flag on still excludes chat.message webhook agents from CLI pending", async () => {
+  activeWebhook = true; enabled = true; events = ['chat.message'];
+  assert.deepEqual((await fetchPending()).body.messages, []);
+  assert.equal(pendingRows[0].isDelivered, false);
+});
+test("pending refuses missing authentication before claiming messages", async () => {
+  authContext = null;
+  assert.equal((await fetchPending()).response.status, 401);
+  assert.equal(rawQueries.length, 0);
+  assert.equal(pendingRows[0].isDelivered, false);
 });

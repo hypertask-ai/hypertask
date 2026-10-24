@@ -1,3 +1,4 @@
+import { agentChatTools } from './tools/agent-chat.tool'
 import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
 import { observeFeedbackTools, queueAiFeedback, queueMcpAuthFailure } from '@/lib/aiFeedback/automatic'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
@@ -136,7 +137,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
     const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
     const consolidated = Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
-    const portableTools = observeFeedbackTools(selectMcpTools(
+    const portableTools = observeFeedbackTools([...selectMcpTools(
       availableTools,
       consolidated,
       {
@@ -147,7 +148,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
       },
       v2,
       consolidated && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),
-    ), ctx.user.id)
+    ), ...await agentChatTools(ctx)], ctx.user.id)
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)
     }

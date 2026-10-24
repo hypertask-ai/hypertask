@@ -1,3 +1,7 @@
+import { isFeatureEnabled, isFeatureFlagOwnerUserId } from '@/lib/flags'
+import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from '@/lib/flags/definitions/htpr-7742-agent-chat-all'
+import { AGENT_CHAT_HEARTBEAT_MAX_AGE_MS } from '@/lib/agents/chatAvailability'
+import { noStore } from '@/lib/flags/http'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -29,6 +33,39 @@ export async function GET(request: NextRequest) {
     }
 
     const sp = request.nextUrl.searchParams
+    if (sp.get('chat') === 'true') {
+      if (ctx.agentId || ctx.management || !(await isFeatureFlagOwnerUserId(ctx.user.id))) {
+        return noStore({ success: false, error: 'Forbidden' }, 403)
+      }
+      if (!(await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, ctx.user.id))) {
+        return noStore({ success: false, error: 'Chat measurement is not enabled' }, 404)
+      }
+      const now = new Date()
+      const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const [activeWebhookWithoutChat, freshHeartbeat, unanswered] = await Promise.all([
+        prisma.agent.count({ where: {
+          revokedAt: null, archivedAt: null,
+          agentWebhookSubscription: { is: { active: true, NOT: { events: { has: 'chat.message' } } } },
+        } }),
+        prisma.agent.count({ where: {
+          revokedAt: null, archivedAt: null,
+          heartbeatAt: { gt: new Date(now.getTime() - AGENT_CHAT_HEARTBEAT_MAX_AGE_MS) },
+        } }),
+        prisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*) AS count
+          FROM "ChatMessage" message
+          JOIN "ChatSession" session ON session.id = message."sessionId"
+          WHERE session."agentId" IS NOT NULL
+            AND message.role = 'human'::"ChatRole"
+            AND message."createdAt" >= ${since}
+            AND NOT EXISTS (
+              SELECT 1 FROM "ChatMessage" reply WHERE reply."replyToMessageId" = message.id
+            )
+        `,
+      ])
+      return noStore({ success: true, activeWebhookWithoutChat, freshHeartbeat,
+        unansweredLast7Days: Number(unanswered[0].count), since: since.toISOString(), asOf: now.toISOString() })
+    }
     const projectId = Number(sp.get('project_id'))
     if (!Number.isSafeInteger(projectId) || projectId <= 0) {
       return validationError('project_id is required', 'project_id')
