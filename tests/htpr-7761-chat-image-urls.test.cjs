@@ -44,7 +44,7 @@ function harness({ enabled = true, modelId = "claude-haiku-5.5", download } = {}
     await runModelTurn({ body, dbUser: user, selected: { model: {}, resolvedModelId: modelId }, providerAbort: controller }, body, {});
     return replies.at(-1).messages[0].content;
   };
-  return { send, downloads, checks, controller, content };
+  return { send, downloads, checks, controller };
 }
 
 const files = (content) => Array.isArray(content) ? content.filter((part) => part.type === "file") : [];
@@ -81,8 +81,12 @@ test("flag Off retains text-only links and existing image/PDF attachments withou
   const h = harness({ enabled: false });
   const body = { message: `Describe ${imageUrl}`, images64: [{ url: imageUrl, mimeType: "image/png" }], pdfs64: [{ url: "https://files.example.test/note.pdf", mimeType: "application/pdf" }] };
   const result = await h.send(body);
-  assert.deepEqual(result, h.content.createUserContent(body, user, ""));
-  assert.deepEqual(files(result).map((part) => part.mediaType), ["image/png", "application/pdf"]);
+  assert.deepEqual(files(result), [
+    { type: "file", mediaType: "image/png", filename: undefined, data: new URL(imageUrl) },
+    { type: "file", mediaType: "application/pdf", filename: undefined, data: new URL("https://files.example.test/note.pdf") },
+  ]);
+  assert.match(text(result), /User query: Describe https:\/\/screencast2.com\/bobER.png/);
+  assert.doesNotMatch(text(result), /IMAGE CAPABILITY/);
   assert.deepEqual(h.downloads, []);
   assert.equal(typeof await h.send(), "string");
 });
