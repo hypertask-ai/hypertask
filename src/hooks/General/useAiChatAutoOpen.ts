@@ -49,7 +49,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
     }
     if (!page || manualOpen) return;
     if (changed) setSuppressed(false);
-    if ((suppressed && !changed) || !allowed || (mobile && page !== "aiChatOpenNewTickets")) {
+    if ((suppressed && !changed) || !allowed) {
       const savedOffAfterAutoOpen = !allowed && autoOpenedPage.current === pageKey;
       if (changed || savedOffAfterAutoOpen) setOpen(false);
       autoOpenedPage.current = null;

@@ -170,10 +170,16 @@ test("reload preserves a close on the same page; pins and session-open storage c
   h.navigate("/detail/project-15/2"); assert.equal(h.values.showAIChatInterfaceAtom, false);
   h.navigate("/detail/project-15/3"); assert.equal(h.values.showAIChatInterfaceAtom, true);
 });
-test("new ticket marker expires after leaving, and mobile retains new-ticket opening without desktop board auto-open", () => {
+test("new ticket marker expires after leaving, and phone follows every switch like desktop", () => {
   const h = pageHarness({ ...defaults, aiChatOpenBoards: true });
   h.navigate("/detail/project-15/1", true); assert.equal(h.values.showAIChatInterfaceAtom, true);
-  h.navigate("/project?id=15", true); assert.equal(h.values.showAIChatInterfaceAtom, false);
+  h.navigate("/project?id=15", true); assert.equal(h.values.showAIChatInterfaceAtom, true);
+  const boardsOff = pageHarness(defaults);
+  boardsOff.navigate("/project?id=15", true); assert.equal(boardsOff.values.showAIChatInterfaceAtom, false);
+  const tickets = pageHarness({ ...allOff, aiChatOpenTickets: true });
+  tickets.navigate("/detail/project-15/2", true); assert.equal(tickets.values.showAIChatInterfaceAtom, true);
+  const ticketsOff = pageHarness(allOff, { state: { showAIChatInterfaceAtom: true, aiChatAutoOpenPageAtom: "7:/inbox::" } });
+  ticketsOff.navigate("/detail/project-15/2", true); assert.equal(ticketsOff.values.showAIChatInterfaceAtom, false);
   h.navigate("/detail/project-15/1"); assert.equal(h.values.showAIChatInterfaceAtom, false);
   assert.equal(h.values.aiChatNewTicketPathAtom, null);
 });
