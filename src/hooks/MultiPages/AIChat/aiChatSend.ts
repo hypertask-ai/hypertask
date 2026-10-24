@@ -71,7 +71,8 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }
       if (!persistentQueue || (persistentQueue.sessionId === queueSessionId && editor?.getHTML() === queued.html)) {
         editor?.commands.clearContent();
-        fileUpload.clearFiles();
+        if (persistentQueue) fileUpload.setFileItems((currentFiles) => currentFiles.filter((file) => !files.includes(file)));
+        else fileUpload.clearFiles();
       }
       return true;
     }
@@ -320,6 +321,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     } catch (error) {
       setAgentStatus(undefined);
       console.error("Error generating AI response:", error);
+      if (queuedMessage && !queueAccepted) return false;
       const errorMessage: IChatMessage = {
         id: isDemo
           ? assistantMessageId

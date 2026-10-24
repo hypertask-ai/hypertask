@@ -48,7 +48,11 @@ function chatFixture({ enabled = true, storage = storageFixture() } = {}) {
   Object.assign(context, {
     isByokBlocked: false, isTyping: false,
     editor: { getText: () => draft, getHTML: () => `<p>${draft}</p>`, commands: { clearContent: () => { draft = ""; clears++; } } },
-    fileUpload: { fileItems: [], clearFiles() {} }, surface: "chat", inViewObject: {},
+    fileUpload: {
+      fileItems: [],
+      clearFiles() { context.fileUpload.fileItems = []; },
+      setFileItems(update) { context.fileUpload.fileItems = update(context.fileUpload.fileItems); },
+    }, surface: "chat", inViewObject: {},
     waitForChatSession: async () => ({ id: selected, messages: [] }),
     processAttachments: async () => [], setIsTyping() {}, addMessageToSessionQuery: (_id, item) => added.push(item),
     isFullScreenChat: true, contextList: [], currentAiOption: { id: "model", model: "model", source: "openai" },
@@ -258,6 +262,78 @@ test("a pending draft with changed attachments permits its own submission", asyn
   resolvePreparation([]);
   assert.deepEqual(await Promise.all([first, edited]), [true, true]);
   assert.deepEqual(fixture.queue.get("A").map((item) => item.files[0].id), ["first-file", "second-file"]);
+});
+
+for (const change of ["unchanged", "added", "replaced", "removed"]) {
+  test(`queue preparation preserves ${change} attachments without a second submission`, async () => {
+    const fixture = chatFixture();
+    const originalFile = { id: 1, file: new File(["original"], "original.txt") };
+    const newFile = { id: 1, file: new File(["new"], "new.txt") };
+    fixture.context.fileUpload.fileItems = [originalFile];
+    let resolvePreparation;
+    let preparedFiles;
+    const preparation = new Promise((resolve) => { resolvePreparation = resolve; });
+    fixture.context.processAttachments = (_html, files) => { preparedFiles = files; return preparation; };
+    const pending = fixture.enqueue("same text");
+    await flush();
+    const changedFiles = change === "unchanged" ? [originalFile]
+      : change === "added" ? [originalFile, newFile]
+        : change === "replaced" ? [newFile] : [];
+    fixture.context.fileUpload = { ...fixture.context.fileUpload, fileItems: changedFiles };
+    fixture.bind(true);
+    const attachments = [{ fileName: "original.txt", url: "data:text/plain;base64,b3JpZ2luYWw=", mimeType: "text/plain" }];
+    resolvePreparation(attachments);
+    assert.equal(await pending, true);
+    assert.deepEqual(preparedFiles, [originalFile]);
+    assert.deepEqual(fixture.queue.get("A").map((item) => item.attachments), [attachments]);
+    assert.deepEqual(fixture.context.fileUpload.fileItems, change === "added" || change === "replaced" ? [newFile] : []);
+    assert.equal(fixture.draft(), "");
+  });
+}
+
+test("legacy history stays clean across repeated queue failures and recovery", async () => {
+  const fixture = chatFixture();
+  const originalMessages = [{ id: "previous", content: "previous question", role: "human" }];
+  let cache = { data: { sessions: [{ id: "A", messages: originalMessages }] } };
+  const queryClient = { setQueryData: (_key, update) => { cache = update(cache); } };
+  const { useSessionAndChatHistory } = load("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts", {
+    react: { useCallback: (callback) => callback, useRef: (current) => ({ current }), useEffect() {}, useState: (initial) => [initial, () => {}] },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/store": { currentUserAtom: "user" },
+    "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? { id: 985, uid: "qa-985" } : null, useRecoilState: () => [null, () => {}] },
+    "@/utils/api/ai_chat": { AI_Chat_API: { addMessage: async () => ({ data: {} }) } },
+    "@tanstack/react-query": { useQuery: () => ({ data: cache, isSuccess: true }), useQueryClient: () => queryClient },
+    "next/navigation": { usePathname: () => "/chat" },
+    "./usePagedChatHistory": { usePagedChatHistory: () => ({}) },
+    "./useDockedChatScope": { useDockedChatScope: () => [null] },
+  });
+  const history = useSessionAndChatHistory();
+  assert.equal(history.sessionPagingEnabled, false);
+  fixture.context.sessionPagingEnabled = history.sessionPagingEnabled;
+  fixture.context.waitForChatSession = async () => cache.data.sessions[0];
+  fixture.context.addMessageToSessionQuery = history.addMessageToSessionQuery;
+  fixture.context.appendMessageToSessionCache = history.appendMessageToSessionCache;
+  fixture.context.updateLastMessageInSessionCache = history.updateLastMessageInSessionCache;
+  fixture.queue.set("A", [message("one", "retry this")]);
+  fixture.bind();
+  const originalNow = Date.now;
+  let now = 100000;
+  Date.now = () => now;
+  try {
+    await withTransport(fixture, async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        fixture.controls.drainQueuedMessage("A"); await flush();
+        assert.deepEqual(cache.data.sessions[0].messages, originalMessages);
+        assert.deepEqual(fixture.queue.get("A").map((item) => item.id), ["one"]);
+        now += 15000;
+      }
+      fixture.controls.drainQueuedMessage("A"); await flush();
+    }, [500, 500, 500, 200]);
+  } finally { Date.now = originalNow; }
+  assert.equal(fixture.sent.length, 4);
+  assert.deepEqual(fixture.sent.map((item) => item.chat_history), Array.from({ length: 4 }, () => [{ content: "previous question", role: "human" }]));
+  assert.deepEqual(cache.data.sessions[0].messages.map((item) => item.id), ["previous", "one", "assistant-one"]);
+  assert.deepEqual(fixture.queue.get("A"), []);
 });
 
 for (const enabled of [false, true]) {
