@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
   }
   const turnModel = await loadTurnModel(body, dbUser);
   if (turnModel instanceof Response) return turnModel;
-  const { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings } = turnModel;
+  const { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, trustedChatSessionId } = turnModel;
 
   const streamId = body.stream_id ?? randomUUID();
   const isolateAgentLease = !!actingAgent && await isFeatureEnabled(HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, dbUser.id);
@@ -265,5 +265,5 @@ export async function POST(request: NextRequest) {
   }
 
   const firstTurn = !body.chat_history?.length;
-  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
+  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, trustedChatSessionId, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
 }
