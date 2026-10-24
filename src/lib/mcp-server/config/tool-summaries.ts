@@ -1,6 +1,8 @@
 import { buildToolName } from './mcp-standards'
 
 export const TOOL_SUMMARIES: Record<string, string> = {
+  CHAT_INBOX: 'Returns unanswered messages for the authenticated agent.',
+  CHAT_REPLY: 'Returns the agent chat reply receipt.',
   REPORT_FEEDBACK: 'Returns a feedback receipt; report failures without being asked.',
   HELLO: 'Returns a welcome map.',
   LIST_FEATURES: 'Returns available product features and destinations.',

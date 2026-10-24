@@ -1,4 +1,4 @@
-import { agentChatTools } from './tools/agent-chat.tool'
+import { agentChatTools, isAgentChatTool } from './tools/agent-chat.tool'
 import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
 import { observeFeedbackTools } from '@/lib/aiFeedback/automatic'
 import { rememberFeedbackClient } from '@/lib/aiFeedback/clientInfo'
@@ -186,7 +186,7 @@ export async function handleLegacySseRequest(
             }
             if (method === 'tools/list' || method === 'tools/call') {
               const feedbackEnabled = await aiFeedbackEnabled(userId)
-              const available = tools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+              const available = tools.filter((tool) => !isAgentChatTool(tool) && (feedbackEnabled || tool.name !== 'hypertask_report_feedback'))
               const catalog = observeFeedbackTools([...selectMcpTools(available, enabled, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,

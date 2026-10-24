@@ -65,13 +65,15 @@ stub('src/lib/aiFeedback/automatic.ts', { queueAiFeedback: () => {}, observeFeed
 stub('src/lib/aiFeedback/enabled.ts', { aiFeedbackEnabled: async () => false });
 stub('src/lib/telemetry/mcpSseAnalytics.ts', { recordLegacyMcpRequest: () => {} });
 stub('src/lib/mcp/mcpV2.ts', { isMcpV2Enabled: async () => false });
-stub('src/lib/mcp-server/tools/index.ts', { MCP_TOOLS: [] });
 stub('src/lib/mcp-server/listQueryContract.ts', { resolvePortableTools: (tools) => tools });
 stub('src/lib/mcp-server/legacy-sse.ts', { isLegacySseRequest: () => false });
 stub('src/lib/aiFeedback/clientInfo.ts', { rememberFeedbackClient: () => {} });
 stub('src/lib/mcp-server/resource-url.ts', { getMcpRequestOrigin: async () => 'https://app.hypertask.ai' });
 const load = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true });
 const { agentChatTools } = load(path.join(root, 'src/lib/mcp-server/tools/agent-chat.tool.ts'));
+const { chatInboxTool } = load(path.join(root, 'src/lib/mcp-server/tools/chat-inbox.tool.ts'));
+const { chatReplyTool } = load(path.join(root, 'src/lib/mcp-server/tools/chat-reply.tool.ts'));
+stub('src/lib/mcp-server/tools/index.ts', { MCP_TOOLS: [chatInboxTool, chatReplyTool] });
 const { selectMcpTools } = load(path.join(root, 'src/lib/mcp-server/consolidated-tools.ts'));
 const { handleStatelessMcpRequest } = load(path.join(root, 'src/lib/mcp-server/stateless-http.ts'));
 const { mcpHandler } = load(path.join(root, 'src/lib/mcp-server/handler.ts'));
@@ -169,6 +171,7 @@ test('actual MCP handler advertises chat tools and connect guidance behind the t
     const list = await (await mcpHandler(request('tools/list'))).json();
     assert.equal(list.result.tools.some((tool) => tool.name === 'hypertask_chat_inbox'), on);
     assert.equal(list.result.tools.some((tool) => tool.name === 'hypertask_chat_reply'), on);
+    assert.equal(list.result.tools.filter((tool) => tool.name.startsWith('hypertask_chat_')).length, on ? 2 : 0);
     const init = await (await mcpHandler(request('initialize'))).json();
     assert.equal(typeof init.result.instructions === 'string', on);
   }
@@ -214,4 +217,25 @@ test('MCP inbox updates stale heartbeat but refuses revoked caller without refre
   assert.equal(agents[0].heartbeatAt, first);
   assert.equal(agents[1].heartbeatAt, null);
   assert.equal(heartbeatUpdates.length, 1);
+});
+
+test('both chat tools belong to the frozen canonical parity registry', async () => {
+  const { collectMcpRegistryVariables } = await import('../scripts/parity-ai-chat-inventory.mjs');
+  const registry = collectMcpRegistryVariables(require('typescript'), fs.readFileSync(path.join(root, 'src/lib/mcp-server/tools/index.ts'), 'utf8'));
+  for (const [variable, importedFrom] of [['chatInboxTool', './chat-inbox.tool'], ['chatReplyTool', './chat-reply.tool']]) {
+    assert.deepEqual(registry.find((entry) => entry.variable === variable), { variable, importedFrom });
+  }
+});
+
+test('actual MCP handler hides canonical chat tools from management and when the flag is off', async () => {
+  contexts.management = { ...contexts['token-1'], management: { permissions: { management: ['read'] } } };
+  const request = (token) => new Request('https://app.hypertask.ai/mcp', {
+    method: 'POST', headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+  });
+  for (const [token, on, expected] of [['token-1', true, 2], ['management', true, 0], ['token-1', false, 0], ['token-1', true, 2]]) {
+    enabled = on;
+    const list = await (await mcpHandler(request(token))).json();
+    assert.equal(list.result.tools.filter((tool) => tool.name.startsWith('hypertask_chat_')).length, expected);
+  }
 });

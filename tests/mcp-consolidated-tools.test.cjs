@@ -35,7 +35,8 @@ const { handleStatelessMcpRequest } = load('src/lib/mcp-server/stateless-http.ts
 const { handleMcpHttp } = load('src/lib/mcp-server/mcp-http.ts')
 const { mcpHandler } = load('src/lib/mcp-server/handler.ts')
 const flags = load('src/lib/flags.ts')
-const legacy = resolvePortableTools(MCP_TOOLS)
+const { isAgentChatTool } = load('src/lib/mcp-server/tools/agent-chat.tool.ts')
+const legacy = resolvePortableTools(MCP_TOOLS).filter((tool) => !isAgentChatTool(tool))
 const ajv = new Ajv({ strict: false })
 require('ajv-formats')(ajv)
 const request = (method, params) => new Request('https://mcp.example.com/mcp', {
@@ -124,7 +125,9 @@ test('server flag defaults to Owner + QA and evaluates the authenticated user', 
     authUserId = id
     assert.equal(await flags.isFeatureEnabled(flags.HTPR_6804_MCP_TOOLS_FLAG, id), enabled)
     const listed = (await (await mcpHandler(request('tools/list'))).json()).result.tools
-    assert.equal(listed.length, enabled ? definitions.length : legacy.length + 1)
+    const chatEnabled = await flags.isFeatureEnabled('htpr-7742-agent-chat-all', id)
+    assert.deepEqual(listed.filter((tool) => tool.name.startsWith('hypertask_chat_')).map((tool) => tool.name), chatEnabled ? ['hypertask_chat_inbox', 'hypertask_chat_reply'] : [])
+    assert.equal(listed.length, (enabled ? definitions.length : legacy.length + 1) + (chatEnabled ? 2 : 0))
   }
   mode = 'OFF'
   authUserId = 6

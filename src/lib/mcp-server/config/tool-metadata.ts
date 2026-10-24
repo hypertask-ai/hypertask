@@ -11,6 +11,15 @@ export interface ToolMetadata {
 
   
 const RAW_TOOL_METADATA = {
+  CHAT_INBOX: {
+    name: buildToolName('chat_inbox'),
+    description: 'Lists up to 50 oldest unanswered chat messages for the authenticated agent, including previously delivered messages. Requires that agent’s token. Returns id, sessionId, text and userName; does not claim messages. Refreshes your online heartbeat at most every 30 seconds. Call again after replying for the next batch.',
+  },
+  CHAT_REPLY: {
+    name: buildToolName('chat_reply'),
+    description: 'Replies to a human message in the same agent chat session. Use sessionId and id from hypertask_chat_inbox as session_id and reply_to_message_id. Requires that agent’s token; retries return the existing reply.',
+  },
+
   REPORT_FEEDBACK: {
     name: buildToolName('report_feedback'),
     description: 'Call this ON YOUR OWN, without being asked, when a Hypertask tool call fails, returns something unexpected (including an empty tools list or a result that should not be empty), or the user says something in Hypertask does not work. Report only the tool, HTTP status, error code and category (call_failed, empty_result, unexpected_result, auth_failed, slow, user_reported_broken or other; default other). Never include task, board or comment content, request bodies or tool arguments. Free-form note and error are accepted for compatibility but never stored. Structured fields must not contain credentials. The server files anonymous, deduplicated feedback.',

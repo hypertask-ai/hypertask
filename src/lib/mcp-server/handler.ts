@@ -1,4 +1,4 @@
-import { agentChatTools } from './tools/agent-chat.tool'
+import { agentChatTools, isAgentChatTool } from './tools/agent-chat.tool'
 import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
 import { observeFeedbackTools, queueAiFeedback, queueMcpAuthFailure } from '@/lib/aiFeedback/automatic'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
@@ -135,7 +135,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const v2 = await isMcpV2Enabled(ctx.user.id)
     const feedbackEnabled = await aiFeedbackEnabled(ctx.user.id)
     const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
-    const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+    const availableTools = resolvedTools.filter((tool) => !isAgentChatTool(tool) && (feedbackEnabled || tool.name !== 'hypertask_report_feedback'))
     const consolidated = Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
     const portableTools = observeFeedbackTools([...selectMcpTools(
       availableTools,

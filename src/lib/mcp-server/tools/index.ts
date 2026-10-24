@@ -1,3 +1,5 @@
+import { chatInboxTool } from './chat-inbox.tool';
+import { chatReplyTool } from './chat-reply.tool';
 
 import { reportFeedbackTool } from './report-feedback.tool';
 import { helloTool } from './hello.tool';
@@ -78,6 +80,8 @@ import { deleteViewTool } from './delete-view.tool';
 import { switchViewTool } from './switch-view.tool';
 
 export const MCP_TOOLS = [
+  chatInboxTool,
+  chatReplyTool,
   reportFeedbackTool,
   helloTool,
   listFeaturesTool,
