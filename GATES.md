@@ -9,22 +9,22 @@ Breaks if: changing the shared config removes production's second attempt and ch
 - [x] G1: Every resolved PR project has zero retries; post-deploy Desktop/Mobile retain one retry; the test rejects the old global retry policy
   CHECK: NODE_PATH=/home/valentin/projects/hypertask/node_modules node --test tests/smoke-retries.test.cjs
   EXPECT: fail 0
-  EVIDENCE: automatic-evidence=v1; definition-sha256=3281ff2cde280b8281c096db4aeb67da56abac8f74969bf26cf89808958b6b4f; exit=0; EXPECT=matched; output-sha256=5aab9b9578fd62f10f6f0bee8e1a66b646c475802b4e2da96d2e663922f915ac; output-bytes=567; shell=/bin/sh; cwd=/home/valentin/projects/.worktrees/poteto-YPER4-696; path=d01735fb690d/13 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=3281ff2cde280b8281c096db4aeb67da56abac8f74969bf26cf89808958b6b4f; exit=0; EXPECT=matched; output-sha256=383ab7ffaa8fa4f8051d74480bbdc2e9bb9fc18f40739f5dd7195dbfde4d4073; output-bytes=567; shell=/bin/sh; cwd=/home/valentin/projects/.worktrees/poteto-YPER4-696; path=d01735fb690d/13 entries
 
 - [x] G2: Existing smoke workflow and post-deploy regression checks remain green
   CHECK: NODE_PATH=/home/valentin/projects/hypertask/node_modules node --test tests/browser-smoke-workflow.test.cjs tests/postdeploy-browser-smoke.test.cjs
   EXPECT: fail 0
-  EVIDENCE: automatic-evidence=v1; definition-sha256=eb4e2f6d0ee70b7f95a656f76f3a8b0e9f8f5d698885c84254c35e8b918b4b5b; exit=0; EXPECT=matched; output-sha256=63f74b80f31a4a7c6cb09739a110344c3db2ccd4970d759e499824ad13e43134; output-bytes=7333; shell=/bin/sh; cwd=/home/valentin/projects/.worktrees/poteto-YPER4-696; path=d01735fb690d/13 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=eb4e2f6d0ee70b7f95a656f76f3a8b0e9f8f5d698885c84254c35e8b918b4b5b; exit=0; EXPECT=matched; output-sha256=49641f6feaa7b555faf530f994c1b7ad496b6f76fc27fc731ed5d5825b00b421; output-bytes=7332; shell=/bin/sh; cwd=/home/valentin/projects/.worktrees/poteto-YPER4-696; path=d01735fb690d/13 entries
 
 - [x] G3: The focused change passes diff whitespace validation
   CHECK: git diff --check origin/production
   EXPECT: /^$/
   EVIDENCE: automatic-evidence=v1; definition-sha256=4c19cabb67add4f96f042fdf728af19173e0432efe5ad442819a23f892a77eb8; exit=0; EXPECT=matched; output-sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855; output-bytes=0; shell=/bin/sh; cwd=/home/valentin/projects/.worktrees/poteto-YPER4-696; path=d01735fb690d/13 entries
 
-- [ ] G4: One held PR targets production with a repo-compliant INFRA title, ticket URL, rationale, test proof and reporting handoff
+- [x] G4: One held PR targets production with a repo-compliant INFRA title, ticket URL, rationale, test proof and reporting handoff
   CHECK: gh pr view ceo/YPER4-696 --repo hypertask-ai/hypertask --json url,title,baseRefName,labels,body,state | node -e 'const a=require("node:assert/strict");let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const p=JSON.parse(s);a.equal(p.state,"OPEN");a.equal(p.baseRefName,"production");a.match(p.title,/^YPER4-696 \[INFRA\] /);a.ok(p.labels.some(l=>l.name==="hold"));for(const text of ["https://app.hypertask.ai/detail/project-4060/696","37 passed","zero retries","first 20","Poteto"])a.ok(p.body.includes(text),text);console.log("PR handoff verified",p.url)})'
   EXPECT: PR handoff verified
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=bbc92564b521c04e597be6142392a6766fd6ba53a8ff1e14cac15b3976885157; exit=0; EXPECT=matched; output-sha256=e92d6f7faff5342956eb26487aab145872ad41783568ac4c63a28cb806330c74; output-bytes=72; shell=/bin/sh; cwd=/home/valentin/projects/.worktrees/poteto-YPER4-696; path=d01735fb690d/13 entries
 
 - [ ] G5: Report flaky tests from the first 20 PR browser-smoke runs after adoption
   EVIDENCE: pending
