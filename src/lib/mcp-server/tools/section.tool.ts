@@ -1,3 +1,6 @@
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_7843_SECTIONS_ROLE_FLAG } from '@/lib/flags/keys';
+import { getMcpExecutionContext } from '@/lib/mcp/operationContext';
 import { getSectionCrudBaseSchema } from '../validations/project.validation';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { executeWithService } from '../utils/executeWithService';
@@ -9,6 +12,13 @@ export const sectionTool = {
   parameters: getSectionCrudBaseSchema(),
   execute: async (args: unknown, context: unknown) => {
     const validatedInput = args;
-    return executeWithService(context, SectionService, 'manageSection', validatedInput);
+    const userId = typeof context === 'string' ? getMcpExecutionContext(context)?.user.id : undefined;
+    const roleEnabled = Boolean(userId) && await isFeatureEnabled(HTPR_7843_SECTIONS_ROLE_FLAG, userId as number).catch(() => false);
+    return executeWithService(
+      context,
+      SectionService,
+      (service, input: unknown) => service.manageSection(input, { roleEnabled }),
+      validatedInput
+    );
   },
 };

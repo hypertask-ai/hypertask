@@ -26,7 +26,7 @@ function service(extra = {}) {
 
 test('list accepts a semantic role and filters columns by it', async () => {
   const { client } = service()
-  const result = await client.manageSection({ action: 'list', project_id: 10450, role: 'in-progress' })
+  const result = await client.manageSection({ action: 'list', project_id: 10450, role: 'in-progress' }, { roleEnabled: true })
   assert.equal(result.sections.length, 1)
   assert.equal(result.sections[0].section_title, 'In Progress')
   assert.equal(result.sections[0].role, 'in-progress')
@@ -34,7 +34,7 @@ test('list accepts a semantic role and filters columns by it', async () => {
 
 test('list without a role returns every column with its role, unchanged order', async () => {
   const { client } = service()
-  const result = await client.manageSection({ action: 'list', project_id: 10450 })
+  const result = await client.manageSection({ action: 'list', project_id: 10450 }, { roleEnabled: true })
   assert.deepEqual(result.sections.map((section) => section.id), [1, 2, 3])
   assert.deepEqual(result.sections.map((section) => section.role), ['intake', 'in-progress', 'done'])
 })
@@ -47,13 +47,13 @@ test('a done column reports done even when its title does not say so', async () 
       sections: [{ ...sections[0], id: 7, section_title: 'Shipped it', isDone: true }],
     }),
   })
-  const result = await client.manageSection({ action: 'list', project_id: 10450, role: 'done' })
+  const result = await client.manageSection({ action: 'list', project_id: 10450, role: 'done' }, { roleEnabled: true })
   assert.deepEqual(result.sections.map((section) => section.id), [7])
 })
 
 test('get with a matching role returns the column and its role', async () => {
   const { client } = service()
-  const result = await client.manageSection({ action: 'get', project_id: 10450, section_id: 2, role: 'in-progress', include_tasks: false })
+  const result = await client.manageSection({ action: 'get', project_id: 10450, section_id: 2, role: 'in-progress', include_tasks: false }, { roleEnabled: true })
   assert.equal(result.section.id, 2)
   assert.equal(result.section.role, 'in-progress')
 })
@@ -61,7 +61,7 @@ test('get with a matching role returns the column and its role', async () => {
 test('get with a different role fails with the reason', async () => {
   const { client } = service()
   await assert.rejects(
-    () => client.manageSection({ action: 'get', project_id: 10450, section_id: 2, role: 'done', include_tasks: false }),
+    () => client.manageSection({ action: 'get', project_id: 10450, section_id: 2, role: 'done', include_tasks: false }, { roleEnabled: true }),
     /has role in-progress, not done/
   )
 })
@@ -94,8 +94,18 @@ test('create and update responses carry the new column role', async () => {
       section: { ...sections[0], id: 11, section_title: options.method === 'POST' ? 'Ready to start' : 'Review' },
     }),
   })
-  const created = await client.manageSection({ action: 'create', project_id: 10450, title: 'Ready to start' })
+  const created = await client.manageSection({ action: 'create', project_id: 10450, title: 'Ready to start' }, { roleEnabled: true })
   assert.equal(created.section.role, 'ready')
-  const updated = await client.manageSection({ action: 'update', project_id: 10450, section_id: 11, title: 'Review' })
+  const updated = await client.manageSection({ action: 'update', project_id: 10450, section_id: 11, title: 'Review' }, { roleEnabled: true })
   assert.equal(updated.section.role, 'human-review')
+})
+
+test('with the flag off, role is ignored and the output matches today', async () => {
+  const { client } = service()
+  const listed = await client.manageSection({ action: 'list', project_id: 10450, role: 'in-progress' })
+  assert.deepEqual(listed.sections.map((section) => section.id), [1, 2, 3])
+  assert.equal(Object.hasOwn(listed.sections[0], 'role'), false)
+  const got = await client.manageSection({ action: 'get', project_id: 10450, section_id: 2, role: 'done', include_tasks: false })
+  assert.equal(got.section.id, 2)
+  assert.equal(Object.hasOwn(got.section, 'role'), false)
 })
