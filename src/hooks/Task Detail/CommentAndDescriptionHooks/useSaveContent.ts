@@ -1,3 +1,5 @@
+import { planLimitRefusalMessage } from "@/lib/planLimitsClient";
+import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useFlag } from "@/hooks/useFlag";
 import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
@@ -50,10 +52,13 @@ import {
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
 import { LEARN_TUTORIAL_COMMENT_SAVED_EVENT } from "@/lib/tutorial/learnTutorialState";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
+import { UploadTooLargeError } from "@/lib/storage/uploadLimits";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
 export default function useSaveContent() {
+  let showPlanLimitToast = false;
+  if (useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG)) showPlanLimitToast = true;
   const {
     focusOn,
     currentTask,
@@ -747,7 +752,8 @@ export default function useSaveContent() {
         }
       } catch (error) {
         console.error(error);
-        toast.error("Could not update comment. Your changes are still here.");
+        const message = showPlanLimitToast ? planLimitRefusalMessage(error) : null;
+        toast.error(message ?? "Could not update comment. Your changes are still here.");
       }
     }
     return false;
@@ -1060,6 +1066,26 @@ export default function useSaveContent() {
     const totalAttachments = imgTags.length + attachments.length;
 
     if (mode === "create-comment") {
+      if (showPlanLimitToast) {
+        for (const attachment of attachments) {
+          if (attachment.file.source) continue;
+          try {
+            const source = await uploadSingleFileViaApi(attachment.file as File);
+            attachment.file = {
+              name: attachment.file.name,
+              size: attachment.file.size,
+              type: attachment.file.type,
+              source,
+            };
+          } catch (error) {
+            const message = error instanceof UploadTooLargeError
+              ? error.message
+              : `Could not upload "${attachment.file.name}". Please try again.`;
+            toast.error(planLimitRefusalMessage(error) ?? message);
+            return false;
+          }
+        }
+      }
       let navigateToNextParams: NavigateToNextTaskParams = {
         archiveNotification: inbox,
         shouldNavigate: movetonext,

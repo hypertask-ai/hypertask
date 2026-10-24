@@ -1,3 +1,5 @@
+import { PlanLimitRefusal, planLimitRefusalMessage } from "@/lib/planLimitsClient";
+import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import { buildStyles, CircularProgressbar } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 
@@ -27,7 +29,7 @@ interface ISingleFile {
     allowDelete?: boolean;
     handleRemove: any;
     callback?:(attachmentReturned: any) => void;
-    onUploadFailed?: (fileName: string) => void;
+    onUploadFailed?: (fileName: string, error?: Error) => void;
     variant?: "default" | "chat";
     backgroundTaskUpload?: boolean;
   }
@@ -44,6 +46,8 @@ interface ISingleFile {
     variant = "default",
     backgroundTaskUpload = false,
   }) => {
+    let showPlanLimitToast = false;
+    if (useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG)) showPlanLimitToast = true;
     const [progressPercentage, setProgressBar] = useState<number>(0);
     const previewImageRef = useRef<HTMLImageElement>(null);
     const backgroundUploadIdRef = useRef<string | undefined>(undefined);
@@ -122,10 +126,11 @@ interface ISingleFile {
 
       void uploadFile().catch((error: unknown) => {
         if (!active) return;
-        const message =
+        const planMessage = showPlanLimitToast ? planLimitRefusalMessage(error) : null;
+        const message = planMessage ?? (
           error instanceof UploadTooLargeError
             ? error.message
-            : `Could not upload "${file.name}". Please try again.`;
+            : `Could not upload "${file.name}". Please try again.`);
         toast.error(message);
         const reservedForSave =
           backgroundTaskUpload &&
@@ -134,13 +139,14 @@ interface ISingleFile {
         if (!reservedForSave) {
           latestHandlersRef.current.handleRemove?.(file.name);
         }
-        latestHandlersRef.current.reportUploadFailure?.(file.name);
+        if (planMessage) latestHandlersRef.current.reportUploadFailure?.(file.name, new PlanLimitRefusal(planMessage));
+        else latestHandlersRef.current.reportUploadFailure?.(file.name);
       });
       return () => {
         active = false;
         unsubscribe();
       };
-    }, [backgroundTaskUpload, file, hasCallback, id, shouldUpload]);
+    }, [backgroundTaskUpload, file, hasCallback, id, shouldUpload, showPlanLimitToast]);
 
     const isChat = variant === "chat";
     const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);

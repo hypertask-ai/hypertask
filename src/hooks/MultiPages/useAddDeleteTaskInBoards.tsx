@@ -98,7 +98,7 @@ const useAddDeleteTaskInBoards = () => {
   };
   
 
-  const createItem = async (props: CreateItemParams): Promise<boolean> => {
+  const createItem = async (props: CreateItemParams): Promise<boolean | "plan-limit"> => {
     console.log("🚀 ~ createItem ~ props:", props)
     const { sectionId, section, item, position, createAnother, projectId } = props
     console.log("🚀 ~ createItem ~ _currentProject:", _currentProject)
@@ -149,7 +149,10 @@ const useAddDeleteTaskInBoards = () => {
         if (result?.error || !result?.resposne?.newTask) {
           if (showPlanLimitToast) {
             const message = planLimitRefusalMessage(result?.ErrorMessage);
-            if (message) toast.error(message);
+            if (message) {
+              toast.error(message);
+              return "plan-limit";
+            }
           }
           return false;
         }
@@ -202,7 +205,10 @@ const useAddDeleteTaskInBoards = () => {
     } catch (error) {
       if (showPlanLimitToast) {
         const message = planLimitRefusalMessage(error);
-        if (message) toast.error(message);
+        if (message) {
+          toast.error(message);
+          return "plan-limit";
+        }
       }
       console.log("🚀 ~ createItem ~ error:", error);
       return false;

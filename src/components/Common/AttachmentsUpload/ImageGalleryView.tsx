@@ -27,7 +27,7 @@ interface IProps {
   callbackAttachments?: (
     attachments: GalleryAttachment[],
   ) => void | Promise<void>;
-  onUploadFailed?: (fileName: string) => void;
+  onUploadFailed?: (fileName: string, error?: Error) => void;
   onUploadPendingChange?: (pending: boolean) => void;
   variant?: "default" | "chat";
   backgroundTaskUploads?: boolean;
