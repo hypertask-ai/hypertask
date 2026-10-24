@@ -56,14 +56,57 @@
           "^POST /api/mcp/chat/rooms/messages/\\[messageId\\]/handled$",
           "^POST /api/mcp/chat/activity$",
           "^POST /api/mcp/agents/runs/\\[id\\]/activities$",
-          "^POST /api/mcp/agents/runs/\\[id\\]/activities/\\[activityId\\]/select$"
+          "^POST /api/mcp/agents/runs/\\[id\\]/activities/\\[activityId\\]/select$",
+          "^POST /api/mcp/chat/heartbeat$"
+        ],
+        "mcp": [
+          "^hypertask_chat_inbox$",
+          "^hypertask_chat_reply$"
+        ],
+        "cli": [
+          "^chat listen$",
+          "^chat reply$"
+        ],
+        "hyperai": [
+          "^hypertask_chat_inbox$",
+          "^hypertask_chat_reply$"
         ]
       },
       "exclusions": {
-        "mcp": "Only the chatted agent's runtime token may read or answer its session; MCP clients act as the human, not as the agent.",
-        "cli": "The agent worker runtime posts replies with its own bearer token; the CLI has no agent-side chat command.",
-        "ai_chat": "Agent Chat is the surface itself; native agents answer in-process without this route.",
-        "hyperai": "HyperAI inherits the human session and never speaks as an external agent."
+        "ai_chat": "Agent Chat is the surface itself; native agents answer in-process without this route."
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7742",
+          "expires": "2026-11-13",
+          "entries": [
+            "POST /api/mcp/chat/heartbeat"
+          ]
+        },
+        "mcp": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7742",
+          "expires": "2026-11-13",
+          "entries": [
+            "hypertask_chat_inbox",
+            "hypertask_chat_reply"
+          ]
+        },
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7742",
+          "expires": "2026-11-13",
+          "entries": [
+            "chat listen",
+            "chat reply"
+          ]
+        },
+        "hyperai": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7742",
+          "expires": "2026-11-13",
+          "entries": [
+            "hypertask_chat_inbox",
+            "hypertask_chat_reply"
+          ]
+        }
       }
     },
     {
