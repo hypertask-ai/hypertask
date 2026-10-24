@@ -129,3 +129,47 @@ test("assignee ALL is independent of assignee order", () => {
     assert.equal(assigneeFilterCondition(task, [agent, owner], undefined, "ALL"), true);
   }
 });
+
+test("saved human assignee filters exclude agent backing users in ANY and default modes", () => {
+  const owner = { id: 6, uid: "user-6" };
+  const sections = [{ items: [
+    { id: 1, assignees: [{ userId: 6, agentId: "agent-a" }] },
+    { id: 2, assignees: [{ userId: 6, agentId: null }] },
+    { id: 3, assignees: [{ userId: 6, agentId: "agent-a" }, { userId: 6 }] },
+    { id: 4, assignees: [{ userId: 7, agentId: null }] },
+    { id: 5, assignees: [] },
+    { id: 6 },
+  ] }];
+
+  for (const overallMode of ["ANY", "ALL"]) {
+    for (const match of [undefined, "ANY", "ALL"]) {
+      const filters = [{ type: "Assignees", searchPayload: [owner], ...(match ? { match } : {}) }];
+      assert.deepEqual(
+        applyFilters(sections, filters, overallMode, undefined, { humanAssigneesOnly: true })[0].items.map(({ id }) => id),
+        [2, 3],
+      );
+    }
+  }
+});
+
+test("human assignee isolation preserves explicit agent and mixed selections", () => {
+  const task = { assignees: [{ userId: 6, agentId: "agent-a" }] };
+  const owner = { id: 6, uid: "user-6" };
+  const agent = { id: "agent-a" };
+  const runtime = { humanAssigneesOnly: true };
+
+  assert.equal(assigneeFilterCondition(task, [agent], undefined, "ANY", runtime), true);
+  assert.equal(assigneeFilterCondition(task, [agent], undefined, "ALL", runtime), true);
+  assert.equal(assigneeFilterCondition(task, [owner, agent], undefined, "ANY", runtime), true);
+  assert.equal(assigneeFilterCondition(task, [owner, agent], undefined, "ALL", runtime), false);
+  assert.equal(assigneeFilterCondition(task, [{ id: "agent-b" }], undefined, "ANY", runtime), false);
+  assert.equal(assigneeFilterCondition(task, [], undefined, "ANY", runtime), true);
+});
+
+test("human assignee isolation flag off retains legacy ANY matching", () => {
+  const task = { assignees: [{ userId: 6, agentId: "agent-a" }] };
+  const owner = { id: 6, uid: "user-6" };
+
+  assert.equal(assigneeFilterCondition(task, [owner], undefined, "ANY", { humanAssigneesOnly: false }), true);
+  assert.equal(assigneeFilterCondition(task, [owner], undefined, "ALL", { humanAssigneesOnly: false }), false);
+});
