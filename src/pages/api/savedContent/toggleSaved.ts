@@ -2,7 +2,8 @@ import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { includeSavedContentComment } from "@/utils/controllers/savedContent/helper";
 import { withTaskStarWriteLock } from "@/lib/taskCardActions/writeLocks";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getDesktopCliTokenUser, logDesktopCliAuthorization } from "@/lib/auth/desktopCliTokenUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
@@ -10,10 +11,13 @@ const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
+  let session: SessionUser | null = null;
   try {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
+    const headers = new Headers(req.headers as Record<string, string>);
+    session = (await getSessionUser(headers)) ??
+      (req.method === "POST" && req.body?.commentId != null && req.body.commentId !== ""
+        ? await getDesktopCliTokenUser(headers, "comment-star-pin")
+        : null);
     if (!session) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -103,6 +107,8 @@ const handler: NextApiHandler = async (
   } catch (error) {
     console.log("🚀 ~ error:", error);
     return res.status(400).json({ message: JSON.stringify(error) });
+  } finally {
+    logDesktopCliAuthorization(session, "comment-star-pin", res.statusCode);
   }
 };
 

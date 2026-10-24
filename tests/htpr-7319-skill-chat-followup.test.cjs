@@ -183,6 +183,7 @@ async function writerResponse(options = {}) {
     "@/lib/ai/taskWriterTicketType": {},
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key) => [flag].includes(key) && options.enabled !== false },
     "@/app/api/ai/_lib/taskWriterProperties": properties,

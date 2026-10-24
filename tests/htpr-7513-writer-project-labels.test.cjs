@@ -217,6 +217,7 @@ function harness(options = {}) {
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
     "@/app/api/ai/_lib/editorAi": { ...editor, SSE_HEADERS: { "content-type": "text/event-stream" }, sseFrame: () => "event: error", createSseErrorResponse: (error, status) => Response.json({ error }, { status }) },
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/app/api/ai/_lib/taskWriterRun": run,
     "@/app/api/ai/_lib/taskWriterProperties": properties,

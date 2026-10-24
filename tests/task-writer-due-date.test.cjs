@@ -177,6 +177,7 @@ function writerHarness(enabled, output = html, fail = false) {
       return { textStream: (async function* () { yield output.slice(0, 35); if (fail) throw new Error("Interrupted"); yield output.slice(35); })() };
     } },
     "@/app/api/ai/_lib/editorAi": editor,
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/app/api/ai/_lib/taskWriterRun": run,
     "@/app/api/ai/_lib/taskWriterProperties": { extractTaskWriterProperties: (value) => ({ description: value }), hasUsableTaskWriterDraft: () => true, TASK_WRITER_EMPTY_DRAFT_MESSAGE: "" },

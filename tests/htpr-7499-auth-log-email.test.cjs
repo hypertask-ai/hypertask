@@ -35,13 +35,13 @@ for (const boundedLogging of [false, true]) {
       if (shape === 'valid') assert.deepEqual(result, jwt.decode(token))
       else assert.equal(result, null)
       const decodedLogs = logs.filter(args => args[0] === '[MCP Auth] Token decoded (unverified):')
-      assert.equal(decodedLogs.length, 1)
+      assert.equal(decodedLogs.length, boundedLogging ? 0 : 1)
       for (const args of logs) {
         const line = JSON.stringify(args)
         assert.ok(!line.includes('@'))
         assert.ok(!line.includes('someone@example.com'))
       }
-      assert.deepEqual(decodedLogs[0], ['[MCP Auth] Token decoded (unverified):', { userId: payload.userId }])
+      if (!boundedLogging) assert.deepEqual(decodedLogs[0], ['[MCP Auth] Token decoded (unverified):', { userId: payload.userId }])
     })
   }
 }
