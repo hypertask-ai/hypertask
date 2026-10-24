@@ -52,6 +52,7 @@ async function post({ enabled = true, validate = true, output = "", error } = {}
       sharedAiAllowanceErrorMessage: (error) => error?.name === "SharedAiAllowanceExceededError" ? error.message : null,
     },
     "@/app/api/ai/_lib/taskWriterProperties": properties,
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/app/api/ai/_lib/taskWriterRun": {
       missingRequiredFields: () => false,

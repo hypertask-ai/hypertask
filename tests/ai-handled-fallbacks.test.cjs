@@ -34,6 +34,7 @@ function nodesWithin(node, predicate, shallow = true) {
 function isClientResponse(expression) {
   if (!ts.isCallExpression(expression)) return false;
   const name = expression.expression.getText();
+  if (name === "respond" && expression.arguments.length === 1) return isClientResponse(expression.arguments[0]);
   let status;
   if (name === "createSseErrorResponse") {
     status = expression.arguments[1];
@@ -169,6 +170,7 @@ test("AI route catches never report the same error twice", () => {
 test("coverage detects generic, empty, streaming and nested fallbacks, not just known copy", () => {
   for (const fallback of [
     'return NextResponse.json({ error: "New friendly wording" }, { status: 500 });',
+    'return respond(NextResponse.json({ error: "Server failure" }, { status: 500 }));',
     'return NextResponse.json({ questions: [] });',
     'return [];',
     'mentionModelUnavailable = true; selected = await selectModel(true);',
@@ -192,6 +194,7 @@ test("coverage detects generic, empty, streaming and nested fallbacks, not just 
 test("coverage permits expected client responses and rethrows but rejects wrong report sources", () => {
   for (const body of [
     'return NextResponse.json({ error: "Invalid request" }, { status: 400 });',
+    'return respond(NextResponse.json({ error: "Invalid request" }, { status: 400 }));',
     'return createSseErrorResponse(requestErrorMessage(error, "body"));',
     'throw error;',
     'await reportError({ source: "handled" }); return [];',
@@ -274,6 +277,7 @@ function routeStubs(error, reports) {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
     "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
     "@/utils/controllers/projects/getAllIncludes": {},
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 7 }) },
     "@/app/api/ai/_lib/aiUsage": {},
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },

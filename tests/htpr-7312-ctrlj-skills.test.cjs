@@ -244,6 +244,7 @@ for (const splitTasks of [false, true]) {
           errorMessage: (error) => error.message,
           SSE_HEADERS: { 'content-type': 'text/plain' },
         },
+        "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
         '@/app/api/ai/_lib/requestUser': { getAiRequestUser: async () => ({ id: 985 }) },
         '@/app/api/ai/_lib/taskWriterProperties': {},
         '@/app/api/ai/_lib/taskWriterRun': h.run,

@@ -83,7 +83,7 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
   let decodedWithoutVerify: jwt.JwtPayload | null = null
   try {
     decodedWithoutVerify = jwt.decode(token, { complete: false }) as jwt.JwtPayload
-    if (decodedWithoutVerify) {
+    if (decodedWithoutVerify && !options.boundedLogging) {
       log('[MCP Auth] Token decoded (unverified):', {
         userId: decodedWithoutVerify.userId
       })

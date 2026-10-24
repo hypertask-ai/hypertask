@@ -81,6 +81,7 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
     "@/app/api/ai/_lib/taskWriterRun": run,
     "@/app/api/ai/_lib/taskWriterProperties": properties,
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/lib/mcp/routeWrapper": { wrapMcpRoute: (handler) => handler, validateMcpRouteAuth: async () => ({ user: { id: 985 } }), checkMcpRouteRateLimit: async () => null },
     "@/lib/mcp/auth": {}, "@/lib/ai/taskWriterDuplicateGuard": { taskTitleFromBrief: () => "Research Paperclip" },

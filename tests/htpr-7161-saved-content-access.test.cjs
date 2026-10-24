@@ -55,6 +55,7 @@ function loadToggle() {
     '@/lib/auth/agentScope': { withAgentScopeRequest: (_request, run) => run() },
     '@/utils/controllers/savedContent/helper': { includeSavedContentComment: () => true },
     '@/lib/taskCardActions/writeLocks': { withTaskStarWriteLock: async (_id, op) => op(tx) },
+    '@/lib/auth/desktopCliTokenUser': { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 7 }) },
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: () => ACCESS },

@@ -197,6 +197,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
     "@/app/api/ai/_lib/editorAi": editor,
     "@/app/api/ai/_lib/modelProvider": modelApi,
     "@/app/api/ai/_lib/taskWriterRun": run,
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: userId }) },
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (handler) => handler,

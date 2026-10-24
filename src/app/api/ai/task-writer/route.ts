@@ -13,6 +13,7 @@ import {
   sseFrame,
   SSE_HEADERS,
 } from "@/app/api/ai/_lib/editorAi";
+import { getDesktopCliTokenUser, logDesktopCliAuthorization } from "@/lib/auth/desktopCliTokenUser";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
 import { normalizeTaskWriterLabels, validateTaskWriterLabelIds, extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
 import {
@@ -49,9 +50,15 @@ async function logTaskWriterFailure(label: string, error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const requestUser = await getAiRequestUser(request);
+  const existingUser = await getAiRequestUser(request);
+  const cliSession = existingUser ? null : await getDesktopCliTokenUser(request.headers, "task-writer");
+  const requestUser = existingUser ?? cliSession?.user;
+  const respond = <T extends Response>(response: T): T => {
+    logDesktopCliAuthorization(cliSession, "task-writer", response.status);
+    return response;
+  };
   if (!requestUser?.id) {
-    return createSseErrorResponse("Unauthorized", 401);
+    return respond(createSseErrorResponse("Unauthorized", 401));
   }
   const userId = requestUser.id;
   const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0]) => {
@@ -66,18 +73,18 @@ export async function POST(request: NextRequest) {
   try {
     body = taskWriterRequestSchema.parse(await request.json());
   } catch (error) {
-    return NextResponse.json(
+    return respond(NextResponse.json(
       { error: `Invalid request: ${errorMessage(error)}` },
       { status: 400 }
-    );
+    ));
   }
 
   try {
     if (missingRequiredFields(body)) {
-      return NextResponse.json(
+      return respond(NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
-      );
+      ));
     }
 
     const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, skills, composeSkillsEnabled } =
@@ -110,7 +117,7 @@ export async function POST(request: NextRequest) {
       });
       const fieldTools = customFieldDefinitions?.length ? await import("@/lib/ai/taskWriterCustomFields") : null;
       const { tasks } = tasksSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
-      return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...draft }) => {
+      return respond(NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...draft }) => {
         const { customFields: modelCustomFields, labelIds: modelLabelIds, ...task } = draft as typeof draft & { customFields?: unknown; labelIds?: unknown };
         const customFields = customFieldDefinitions?.length
           ? fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, modelCustomFields) : [];
@@ -122,7 +129,7 @@ export async function POST(request: NextRequest) {
         return { ...task, description, ...fieldValues, ...(dueDate ? { dueDate } : {}) };
       }) }, dueDateContext || ticketTypeEnabled || boardLabelIds || skillsHeader
         ? { headers: { ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders } }
-        : undefined);
+        : undefined));
     }
     const encoder = new TextEncoder();
 
@@ -247,7 +254,7 @@ export async function POST(request: NextRequest) {
     const headers = dueDateContext || ticketTypeEnabled || boardLabelIds || skillsHeader
       ? { ...SSE_HEADERS, ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders }
       : SSE_HEADERS;
-    return new Response(stream, { headers });
+    return respond(new Response(stream, { headers }));
   } catch (error) {
     if (
       error instanceof AiFeatureDisabledError ||
@@ -257,7 +264,7 @@ export async function POST(request: NextRequest) {
         (error.name === "AiGatewayKeyRequiredError" ||
           error.name === "AiPlanAccessError"))
     ) {
-      return createSseErrorResponse(error.message, 403);
+      return respond(createSseErrorResponse(error.message, 403));
     }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
@@ -267,6 +274,6 @@ export async function POST(request: NextRequest) {
       extra: { stage: "request" },
     });
     const allowanceUsedUp = await logTaskWriterFailure("fatal error", error);
-    return NextResponse.json({ error: errorMessage(error) }, { status: allowanceUsedUp ? 429 : 500 });
+    return respond(NextResponse.json({ error: errorMessage(error) }, { status: allowanceUsedUp ? 429 : 500 }));
   }
 }
