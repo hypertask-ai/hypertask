@@ -590,7 +590,8 @@ jobs:
           retention-days: 7
       - name: Link premerge verify-qa evidence
         if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
-        run: printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
 
 
   mcp-cli-api-contract:
