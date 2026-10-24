@@ -74,7 +74,13 @@ export async function sweepValentinWaitingOn(): Promise<number> {
       const inWaitingColumn = task.status === "Normal" && WAITING_COLUMNS.includes(task.section);
       const question = task.comments.find((comment) =>
         (comment.agentId || comment.agentDisplayName) &&
-        (isQuestionComment(comment.text) || isQuestionComment(comment.commentText)),
+        [comment.text, comment.commentText].some((text) =>
+          isQuestionComment(text) || isQuestionComment((text ?? "")
+            .replace(/<\/(p|div|li|h[1-6]|blockquote)>|<br\s*\/?>/gi, "\n")
+            .replace(/<[^<>]*>/g, "")
+            .replace(/&nbsp;/g, " ")
+            .replace(/^\s*@?Valentin(?:\s+Yeo)?\s+(?=Question:)/gim, "")),
+        ),
       );
       const explicitWaitSetAt = task.waitingOnSetById !== null ? task.waitingOnSetAt : null;
       const answered = question && (
