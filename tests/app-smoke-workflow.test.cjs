@@ -103,18 +103,16 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.match(workflow, /workflow_run:/);
   assert.match(workflow, /workflows: \["App Smoke Request"\]/);
-  assert.match(
-    workflow,
-    /format\('app-smoke-\{0\}-\{1\}', github\.event\.workflow_run\.head_repository\.full_name, github\.event\.workflow_run\.head_branch\)/,
-  );
-  assert.match(
-    workflow,
-    /cancel-in-progress: true/,
-  );
-  assert.match(
-    workflow,
-    /github\.event\.workflow_run\.conclusion == 'cancelled' && format\('app-smoke-cancelled-request-\{0\}', github\.run_id\)/,
-  );
+  assert.deepEqual(parsedWorkflow.concurrency, {
+    group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
+    "cancel-in-progress": true,
+  });
+  assert.deepEqual(parsedWorkflow.jobs["app-smoke"].concurrency, {
+    group: "${{ format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}",
+    "cancel-in-progress": true,
+  });
+  assert.equal(parsedWorkflow.jobs.validate.concurrency, undefined);
+  assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(
     parsedWorkflow.jobs.validate.if,
     "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",

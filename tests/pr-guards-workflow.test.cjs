@@ -10,39 +10,47 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const SHA = 'a'.repeat(40);
 const TITLE = 'YPER4-663 [INFRA] Reduce CI queue';
 
-async function publish(name, outcomes, completedRun = false, { current = {}, evaluated = {} } = {}) {
+async function publish(name, outcomes, completedRun = false, { current = {}, evaluated = {}, runPulls = [{ number: 663 }], associatedPulls } = {}) {
   const job = workflow(name).jobs[name];
   const step = job.steps.find(step => step.name === 'Publish original guard contexts');
   const posts = [];
   const failures = [];
   const gets = [];
+  const associations = [];
+  const headSha = completedRun ? 'b'.repeat(40) : SHA;
   const previous = process.env.RESULTS;
   process.env.RESULTS = JSON.stringify(Object.fromEntries(Object.entries(outcomes).map(([id, outcome]) => [id, { outcome, outputs: { sha: SHA, ...(id === 'title' ? { title: TITLE } : {}), ...evaluated[id] } }])));
   try {
     await new AsyncFunction('github', 'context', 'core', step.with.script)(
       {
         rest: {
-          repos: { createCommitStatus: async status => posts.push(status) },
+          repos: { createCommitStatus: async status => posts.push(status), listPullRequestsAssociatedWithCommit() {} },
           pulls: { get: async params => {
             gets.push(params);
-            return { data: { head: { sha: SHA }, title: TITLE, ...(typeof current === 'function' ? current(gets.length) : current) } };
+            return { data: { head: { sha: headSha }, title: TITLE, ...(typeof current === 'function' ? current(gets.length) : current) } };
           } },
           actions: { listJobsForWorkflowRun() {} },
         },
-        paginate: async () => [{ name: 'pr-guards', steps: [
-          { name: 'Run gitleaks', conclusion: outcomes.gitleaks },
-          { name: 'Run trufflehog', conclusion: outcomes.trufflehog },
-          { name: 'Fail on NEXT_PUBLIC_ secret-named vars', conclusion: outcomes['public-secrets'] },
-        ] }],
+        paginate: async (method, params) => {
+          if (method.name === 'listPullRequestsAssociatedWithCommit') {
+            associations.push(params);
+            return associatedPulls ?? [{ number: 663, head: { sha: headSha } }];
+          }
+          return [{ name: 'pr-guards', steps: [
+            { name: 'Run gitleaks', conclusion: outcomes.gitleaks },
+            { name: 'Run trufflehog', conclusion: outcomes.trufflehog },
+            { name: 'Fail on NEXT_PUBLIC_ secret-named vars', conclusion: outcomes['public-secrets'] },
+          ] }];
+        },
       },
-      { actor: 'fixture', repo: { owner: 'fixture', repo: 'repo' }, payload: { ...(completedRun ? { workflow_run: { id: 123, head_sha: 'b'.repeat(40) } } : {}), action: 'synchronize', pull_request: { number: 663, title: TITLE, user: { login: 'fixture' }, head: { sha: 'a'.repeat(40), repo: { full_name: 'fixture/repo' } }, base: { ref: 'production' } } } },
+      { actor: 'fixture', repo: { owner: 'fixture', repo: 'repo' }, payload: completedRun ? { workflow_run: { id: 123, head_sha: headSha, pull_requests: runPulls } } : { action: 'synchronize', pull_request: { number: 663, title: TITLE, user: { login: 'fixture' }, head: { sha: SHA, repo: { full_name: 'fixture/repo' } }, base: { ref: 'production' } } } },
       { setFailed: message => failures.push(message), info() {} },
     );
   } finally {
     if (previous === undefined) delete process.env.RESULTS;
     else process.env.RESULTS = previous;
   }
-  return { posts, failures, gets };
+  return { posts, failures, gets, associations };
 }
 
 test('PR guards share one runner, retain every verdict and never persist checkout credentials', () => {
@@ -56,7 +64,7 @@ test('PR guards share one runner, retain every verdict and never persist checkou
       assert.notEqual(step['continue-on-error'], true, `${step.id}: a failed guard must remain failed`);
       assert.match(step.if, name.endsWith('trusted') ? /!cancelled\(\)/ : /^always\(\)/);
     }
-    assert.equal(w.jobs[name].steps.at(-1).if, name.endsWith('trusted') ? '${{ !cancelled() }}' : 'always()');
+    assert.equal(w.jobs[name].steps.at(-1).if, '${{ !cancelled() }}');
     for (const step of w.jobs[name].steps.filter(step => step.uses?.startsWith('actions/checkout@'))) {
       assert.equal(step.with['persist-credentials'], false);
       if (name.endsWith('trusted')) assert.equal(step.with.ref, 'production');
@@ -235,13 +243,57 @@ test('heavy scope skips docs/skills/unit tests but never src, CI, dependencies, 
   const smoke = workflow('app-smoke');
   assert.match(smoke.jobs['app-smoke'].if, /needs.validate.outputs.docs-only != 'true'/);
   assert.match(smoke.jobs.report.steps[0].run, /description='docs-only change, skipped'/);
-  assert.match(smoke.concurrency.group, /head_branch/);
-  assert.doesNotMatch(smoke.concurrency.group, /head_sha/);
-  assert.equal(smoke.concurrency['cancel-in-progress'], true);
-  assert.match(smoke.concurrency.group, /format\('app-smoke-cancelled-request-\{0\}', github\.run_id\)/);
+  assert.deepEqual(smoke.concurrency, {
+    group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
+    'cancel-in-progress': true,
+  });
+  assert.deepEqual(smoke.jobs['app-smoke'].concurrency, {
+    group: "${{ format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}",
+    'cancel-in-progress': true,
+  });
   const browser = workflow('ci-tests').jobs['browser-smoke'];
   assert.equal(browser.outputs.docs_only, "${{ steps.scope.outputs.heavy_needed == 'false' }}");
   assert.match(browser.steps.find(step => step.id === 'smoke').if, /heavy_needed == 'true'/);
   assert.equal(workflow('ci-tests').on.pull_request['paths-ignore'], undefined);
   assert.ok(workflow('visual-regression').on.pull_request.paths.includes('!**/*.md'));
+});
+
+test('scan publication skips cancellation and re-reads each status head for PR and completion events', async () => {
+  const step = workflow('pr-guards').jobs['pr-guards'].steps.at(-1);
+  assert.equal(step.if, '${{ !cancelled() }}');
+  const green = { gitleaks: 'success', trufflehog: 'success', 'public-secrets': 'success' };
+  for (const completedRun of [false, true]) {
+    const fresh = await publish('pr-guards', green, completedRun);
+    assert.deepEqual(fresh.posts.map(post => post.context), ['secret-scan', 'next-public-secrets']);
+    assert.ok(fresh.posts.every(post => post.state === 'success'));
+    assert.equal(fresh.gets.length, 2);
+    for (const outcome of ['success', 'failure']) {
+      const stale = await publish('pr-guards', { ...green, gitleaks: outcome }, completedRun,
+        { current: { head: { sha: 'c'.repeat(40) } } });
+      assert.deepEqual(stale.posts, []);
+      assert.equal(stale.gets.length, 2);
+    }
+    const moved = await publish('pr-guards', green, completedRun,
+      { current: call => call === 2 ? { head: { sha: 'c'.repeat(40) } } : {} });
+    assert.deepEqual(moved.posts.map(post => post.context), ['secret-scan']);
+    assert.equal(moved.gets.length, 2);
+  }
+});
+
+test('completion without embedded PRs resolves commit associations then rechecks the PR before each status', async () => {
+  const green = { gitleaks: 'success', trufflehog: 'success', 'public-secrets': 'success' };
+  const fresh = await publish('pr-guards', green, true, { runPulls: [] });
+  assert.equal(fresh.posts.length, 2);
+  assert.equal(fresh.gets.length, 2);
+  assert.equal(fresh.associations.length, 1);
+  assert.equal(fresh.associations[0].commit_sha, 'b'.repeat(40));
+  const stale = await publish('pr-guards', green, true,
+    { runPulls: [], current: { head: { sha: 'c'.repeat(40) } } });
+  assert.deepEqual(stale.posts, []);
+  assert.equal(stale.gets.length, 2);
+  for (const associatedPulls of [[], [{ number: 663, head: { sha: 'c'.repeat(40) } }]]) {
+    const missing = await publish('pr-guards', green, true, { runPulls: [], associatedPulls });
+    assert.deepEqual(missing.posts, []);
+    assert.deepEqual(missing.gets, []);
+  }
 });

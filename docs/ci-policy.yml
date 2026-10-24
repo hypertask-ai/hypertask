@@ -250,7 +250,7 @@ policies:
     cancel_superseded_pull_request_runs: true
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
-    app_smoke_cancelled_requests: separate_group_per_run
+    app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
     non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-major-ticket]
     prefer_queue_over_oom: true
   review:

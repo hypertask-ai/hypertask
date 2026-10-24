@@ -12,7 +12,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || github.event.workflow_run.conclusion == 'cancelled' && format('app-smoke-cancelled-request-{0}', github.run_id) || format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
+  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}
   cancel-in-progress: true
 
 jobs:
@@ -163,6 +163,9 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     if: needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'
+    concurrency:
+      group: ${{ format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
+      cancel-in-progress: true
     timeout-minutes: 15
     permissions:
       contents: read

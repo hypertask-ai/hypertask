@@ -107,3 +107,17 @@ test("the smoke and report jobs are skipped for a superseded request", () => {
   assert.equal(workflow.jobs["app-smoke"].if, "needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'");
   assert.match(workflow.jobs.report.if, /needs\.validate\.outputs\.superseded != 'true'$/);
 });
+
+test("old request reruns validate outside the current build's branch cancellation group", () => {
+  assert.deepEqual(workflow.concurrency, {
+    group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
+    "cancel-in-progress": true,
+  });
+  assert.equal(workflow.jobs["app-smoke"].needs, "validate");
+  assert.deepEqual(workflow.jobs["app-smoke"].concurrency, {
+    group: "${{ format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}",
+    "cancel-in-progress": true,
+  });
+  assert.equal(workflow.jobs.validate.concurrency, undefined);
+  assert.equal(workflow.jobs.report.concurrency, undefined);
+});
