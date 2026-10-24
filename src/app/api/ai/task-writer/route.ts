@@ -1,4 +1,3 @@
-import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
 import { normalizeTaskWriterTicketType, readTaskWriterTicketType, ticketTypeSafeCut, TICKET_TYPE_HEADER } from "@/lib/ai/taskWriterTicketType";
@@ -36,12 +35,12 @@ async function isRealErrorEnabled(userId: number) {
 
 async function isAllowanceLimitMessage(message: string) {
   if (!message.includes("AI allowance")) return false;
-  const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
-  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
+  const { DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE, SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
+  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE || message === DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE;
 }
 
 async function logTaskWriterFailure(label: string, error: unknown) {
-  if (sharedAiAllowanceErrorMessage(error) || await isAllowanceLimitMessage(errorMessage(error))) {
+  if (await isAllowanceLimitMessage(errorMessage(error))) {
     console.warn(`[ai/task-writer] refused: included AI allowance used up (${label})`);
     return true;
   }
@@ -55,8 +54,8 @@ export async function POST(request: NextRequest) {
     return createSseErrorResponse("Unauthorized", 401);
   }
   const userId = requestUser.id;
-  const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0], error: unknown) => {
-    if (sharedAiAllowanceErrorMessage(error)) {
+  const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0]) => {
+    if (await isAllowanceLimitMessage(payload.message)) {
       const { HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, isFeatureEnabled } = await import("@/lib/flags");
       if (await isFeatureEnabled(HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, userId)) return;
     }
@@ -205,7 +204,7 @@ export async function POST(request: NextRequest) {
               url: "/api/ai/task-writer",
               source: "handled",
               extra: { stage: "stream-empty" },
-            }, error);
+            });
             await logTaskWriterFailure("stream ended empty after error", error);
             enqueueError("error", errorMessage(error), "task-writer-stream-error");
             return;
@@ -232,7 +231,7 @@ export async function POST(request: NextRequest) {
             url: "/api/ai/task-writer",
             source: "handled",
             extra: { stage: "stream" },
-          }, error);
+          });
           await logTaskWriterFailure("stream error", error);
           enqueueError("error", errorMessage(error));
         } finally {
@@ -266,7 +265,7 @@ export async function POST(request: NextRequest) {
       url: "/api/ai/task-writer",
       source: "handled",
       extra: { stage: "request" },
-    }, error);
+    });
     const allowanceUsedUp = await logTaskWriterFailure("fatal error", error);
     return NextResponse.json({ error: errorMessage(error) }, { status: allowanceUsedUp ? 429 : 500 });
   }

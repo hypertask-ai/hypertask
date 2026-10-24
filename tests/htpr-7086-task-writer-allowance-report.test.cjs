@@ -44,10 +44,7 @@ async function post({ skipEnabled = true, error } = {}) {
       HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG: skipFlag,
       isFeatureEnabled: async (flag) => flag === realErrorFlag || skipEnabled,
     },
-    "@/lib/aiAllowancePolicy": { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE },
-    "@/app/api/ai/_lib/sharedAllowance": {
-      sharedAiAllowanceErrorMessage: (error) => error?.name === "SharedAiAllowanceExceededError" ? error.message : null,
-    },
+    "@/lib/aiAllowancePolicy": { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE, DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE },
     "@/app/api/ai/_lib/editorAi": {
       errorMessage: (caught) => caught.message,
       sseFrame: (event, data) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
@@ -82,8 +79,6 @@ async function main() {
   const dayLimit = await post({ error: allowanceError(DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE) });
   assert.ok(dayLimit.content.includes(DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE));
   assert.equal(dayLimit.reports.length, 0);
-  const untyped = await post({ error: new Error(SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE) });
-  assert.equal(untyped.reports.length, 1);
 
   const providerError = new Error("Provider is overloaded, try again in a minute");
   const other = await post({ error: providerError });
