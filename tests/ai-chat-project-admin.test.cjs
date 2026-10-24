@@ -79,7 +79,7 @@ test("hypertask_project_admin archive and restore are owner-only", () => {
   );
   const archiveBranch = body.slice(archiveStart, inviteAccessStart);
   const ownerCheckAt = archiveBranch.indexOf("ownerId: user.id");
-  const updateAt = archiveBranch.indexOf("prisma.project.update({");
+  const updateAt = archiveBranch.indexOf("updateProjectStatus(project.id, status, {");
 
   assert.notEqual(archiveStart, -1, "archive action branch missing");
   assert.notEqual(inviteAccessStart, -1, "invite access branch missing");
@@ -87,6 +87,9 @@ test("hypertask_project_admin archive and restore are owner-only", () => {
   assert.match(archiveBranch, /status: \{ not: "Deleted" \}/);
   assert.notEqual(ownerCheckAt, -1, "archive must match the authenticated owner");
   assert.notEqual(updateAt, -1, "archive must update the owned project");
+  const quota = require("node:fs").readFileSync(path.resolve(__dirname, "../src/utils/controllers/projects/boardQuota.ts"), "utf8");
+  assert.match(quota, /status !== "Normal" \|\| !\(await isPlanLimitsEnabled\(context.actorUserId\)\)/);
+  assert.match(quota, /return prisma.project.update\(\{[\s\S]*?where: \{ id: projectId \},[\s\S]*?data: \{ status \}/);
   assert.ok(ownerCheckAt < updateAt, "ownership must be checked before archive or restore");
 });
 
@@ -100,7 +103,7 @@ test("hypertask_project_admin previews archive and restore without mutating", ()
   const archiveBranch = body.slice(archiveStart, inviteAccessStart);
   const lookupAt = archiveBranch.indexOf("prisma.project.findFirst({");
   const confirmationAt = archiveBranch.indexOf("confirmation_required: true");
-  const updateAt = archiveBranch.indexOf("prisma.project.update({");
+  const updateAt = archiveBranch.indexOf("updateProjectStatus(project.id, status, {");
 
   assert.match(
     body,
@@ -149,7 +152,7 @@ test("hypertask_project_admin rejects a mismatched title, names both titles, and
   const mismatchReturnAt = archiveBranch.indexOf(
     "error: `Board title mismatch:",
   );
-  const updateAt = archiveBranch.indexOf("prisma.project.update({");
+  const updateAt = archiveBranch.indexOf("updateProjectStatus(project.id, status, {");
 
   assert.match(archiveBranch, /const expectedTitle = input\.expected_title!\.trim\(\)/);
   assert.match(
@@ -173,7 +176,7 @@ test("hypertask_project_admin archive with the exact trimmed title proceeds", ()
   const titleGateAt = archiveBranch.indexOf(
     "if (expectedTitle.toLowerCase() !== boardTitle.trim().toLowerCase())",
   );
-  const updateAt = archiveBranch.indexOf("prisma.project.update({");
+  const updateAt = archiveBranch.indexOf("updateProjectStatus(project.id, status, {");
 
   assert.notEqual(titleGateAt, -1, "archive title gate missing");
   assert.notEqual(updateAt, -1, "exact-title archive update path missing");
@@ -213,7 +216,7 @@ test("hypertask_project_admin keeps the archive update path after the gate and i
   const confirmationGateAt = archiveBranch.indexOf(
     "await requireCrossMessageConfirmation({",
   );
-  const updateAt = archiveBranch.indexOf("prisma.project.update({");
+  const updateAt = archiveBranch.indexOf("updateProjectStatus(project.id, status, {");
 
   assert.notEqual(confirmationGateAt, -1, "archive confirmation gate missing");
   assert.notEqual(updateAt, -1, "confirmed archive update path missing");

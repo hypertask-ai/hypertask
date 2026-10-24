@@ -77,8 +77,10 @@ test("mention and assignment outbox rows share their domain transactions", () =>
   );
   assert.match(
     creates,
-    /createTaskWithBoardWebhookOutbox\([\s\S]*?async \(tx\) =>[\s\S]*?persistAgentTaskCreatedPending\(tx,[\s\S]*?return \{ taskId:/,
+    /writeTask\([\s\S]*?async \(tx\) =>[\s\S]*?persistAgentTaskCreatedPending\(tx,[\s\S]*?return \{ taskId:/,
   );
+  assert.match(creates, /createTaskCoreWithWriter\(options, createTaskWithBoardWebhookOutbox\)/);
+  assert.match(creates, /createTaskCoreWithWriter\(options, createProvisionedTaskWithBoardWebhookOutbox\)/);
   assert.match(
     createRoute,
     /createTaskWithBoardWebhookOutbox\([\s\S]*?async \(tx\) =>[\s\S]*?persistAgentTaskCreatedPending\(tx,[\s\S]*?return \{ taskId:/,

@@ -396,7 +396,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (isPlanLimitReachedError(error)) {
       const refusal = planLimitResponse(error);
-      return NextResponse.json(refusal.body, { status: refusal.status });
+      return NextResponse.json(refusal.body, { status: 402 });
     }
     if (error instanceof IdempotencyInProgressError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
