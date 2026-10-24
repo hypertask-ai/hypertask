@@ -18,7 +18,7 @@ on:
 
 concurrency:
   group: dependabot-major-ticket-${{ github.event.pull_request.number }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
+  cancel-in-progress: false
 
 permissions:
   pull-requests: write

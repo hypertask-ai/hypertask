@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { readFile, access } = require("node:fs/promises");
 const yaml = require("js-yaml");
 
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const runOutsideGuard = require("../.github/scripts/outside-pr-guard.cjs");
 const workflowPath = ".github/workflows/pr-guards-trusted.yml";
 const dispatchPath = ".github/workflows/outside-pr-guard.yml";
 const base = "hypertask-ai/hypertask";
@@ -34,11 +34,11 @@ async function runGuard({
   inputs = {},
   commentError,
 } = {}) {
-  const workflow = await loadWorkflow();
   const calls = { gets: [], permissions: [], lists: [], writes: [] };
   const logs = [];
   const summaries = [];
   const failures = [];
+  const outputs = {};
   const listComments = () => {};
   const summary = {
     addRaw(message) {
@@ -48,8 +48,8 @@ async function runGuard({
     async write() {},
   };
 
-  await new AsyncFunction("github", "context", "core", workflow.jobs["pr-guards-trusted"].steps.find(step => step.id === "outside").with.script)(
-    {
+  await runOutsideGuard({
+    github: {
       rest: {
         pulls: {
           async get(params) {
@@ -57,7 +57,7 @@ async function runGuard({
             return { data: {
               number: 347,
               user: { login, type },
-              head: { repo: head === null ? null : { full_name: head } },
+              head: { sha: "a".repeat(40), repo: head === null ? null : { full_name: head } },
               base: { repo: { full_name: base } },
             } };
           },
@@ -86,21 +86,22 @@ async function runGuard({
         return comments;
       },
     },
-    {
+    context: {
       eventName,
       payload: eventName === "pull_request_target"
         ? { pull_request: { number: 347, user: { login: "stale-author" } }, inputs }
         : { inputs },
       repo: { owner: "hypertask-ai", repo: "hypertask" },
     },
-    {
+    core: {
+      setOutput(name, value) { outputs[name] = value; },
       info(message) { logs.push(message); },
       setFailed(message) { failures.push(message); },
       summary,
     },
-  );
+  });
   assert.deepEqual(summaries, logs);
-  return { calls, logs, summaries, failures };
+  return { calls, logs, summaries, failures, outputs };
 }
 
 function assertClosed(result, { comment = true } = {}) {
@@ -138,16 +139,24 @@ test("workflow has safe triggers, permissions, concurrency and a pinned metadata
   assert.equal(job["runs-on"], "ubuntu-latest");
   const step = job.steps.find(step => step.id === "outside");
   assertSafeSteps([step]);
-  assert.equal(step.with.script, dispatch.jobs["outside-pr-guard"].steps[0].with.script);
-  for (const checkout of job.steps.filter(step => step.uses?.startsWith("actions/checkout"))) {
-    assert.equal(checkout.with.ref, "production");
-    assert.equal(checkout.with["persist-credentials"], false);
+  const dispatchJob = dispatch.jobs["outside-pr-guard"];
+  const dispatchStep = dispatchJob.steps.find(step => step.uses?.startsWith("actions/github-script"));
+  assertSafeSteps([dispatchStep]);
+  assert.equal(step.with.script, dispatchStep.with.script);
+  assert.equal(step.with.script.trim(), "await require('./.github/scripts/outside-pr-guard.cjs')({ github, context, core });");
+  for (const guardJob of [job, dispatchJob]) {
+    const checkouts = guardJob.steps.filter(step => step.uses?.startsWith("actions/checkout"));
+    assert.equal(checkouts.length, 1);
+    assert.ok(guardJob.steps.indexOf(checkouts[0]) < guardJob.steps.findIndex(step => step.uses?.startsWith("actions/github-script")));
+    assert.equal(checkouts[0].with.ref, "production");
+    assert.equal(checkouts[0].with["persist-credentials"], false);
   }
   assert.throws(() => assertSafeSteps([{ uses: "actions/checkout@v4" }]), assert.AssertionError);
 });
 
 test("same-repo Dependabot branch is trusted without permission lookup or writes", async () => {
   const result = await runGuard({ head: base, login: "dependabot[bot]", type: "Bot", permissionError: apiError(500) });
+  assert.equal(result.outputs.sha, "a".repeat(40));
   assert.deepEqual(result.calls.permissions, []);
   assert.deepEqual(result.calls.writes, []);
   assert.deepEqual(result.calls.lists, []);
@@ -194,6 +203,7 @@ test("dispatch simulated fork outsider logs outside without fetching a PR or wri
   for (const simulate_fork of [true, "true"]) {
     const result = await runGuard({ eventName: "workflow_dispatch", inputs: { simulate_author: "visitor", simulate_fork }, permissionError: apiError(404) });
     assert.deepEqual(result.failures, []);
+    assert.deepEqual(result.outputs, {});
     assert.deepEqual(result.calls.gets, []);
     assert.deepEqual(result.calls.writes, []);
     assert.deepEqual(result.calls.lists, []);

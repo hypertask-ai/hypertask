@@ -10,15 +10,16 @@ The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jo
 Small guards share runners, not verdicts:
 
 - `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
-- `pr-guards-trusted.yml`: outside-PR, size, title, feature-flag evaluation/reconciliation and UX reconciliation. Only trusted production code runs; PR blobs are data, never a checkout or executable.
+- `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code.
 - Dependabot/fork scans use a trusted completion pass to publish statuses because their PR tokens are read-only. It reads GitHub step conclusions only; it never checks out candidate code. Ordinary same-repo PRs need no extra runner.
-- Each old guard context is still published through commit statuses. Independent steps continue after a failure; the original context and aggregate job both fail. Flag/UX scripts keep their own semantic statuses and flag fingerprints.
-- Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token or MCP secret.
-- Push secret scans and feature reconciliation, manual outside-PR dry runs, and scheduled/manual UX reconciliation keep their original workflows. PR runs cancel older work per PR; production pushes and schedules are not made cancellable. App Smoke groups PR work by head repository/branch, not SHA. The shared auto-merge sweeper stays serialized because it scans all open PRs, including on scheduled runs.
+- Each folded guard context is still published through commit statuses. Independent steps continue after a failure; the original context and aggregate job both fail. Trusted publishers skip cancellation, re-read the current head before each status, and also compare the evaluated title for `pr-title`.
+- Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
+- Feature-flag evaluation and all-open reconciliation stay in the original two-job `feature-flag-gate.yml`, globally serialized by `feature-flag-gate-production` with cancellation off. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group. Their original semantic statuses and flag fingerprints are unchanged.
+- Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work and groups PR work by head repository/branch, not SHA. Cancelled request completions use a separate group per run so they cannot cancel the current smoke.
 
-Static normal non-draft app PR budget: **17 → 12 jobs** per synchronize event
-(18 → 12 on opening, when the old outside guard also ran). Path-specific evals,
-visual checks, preview deployments and external review are extra. Snapshot actual
+Static normal non-draft app PR budget: **17 → 15 jobs** per synchronize event
+(18 → 15 on opening, when the old outside guard also ran). Path-specific evals,
+visual checks, preview deployments and external review are extra. Docs-only PRs start 14 jobs; Dependabot/fork app PRs add one trusted scan-publication job (16 total). Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
 runs stay attached to their old commit; record both snapshots for comparison.

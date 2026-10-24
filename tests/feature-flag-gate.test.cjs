@@ -1146,9 +1146,7 @@ test("missing tags produce a useful failure instead of [null]", async (t) => {
 });
 
 test("workflow covers metadata changes, uses trusted code, and reconciles old PRs", () => {
-  const trusted = fs.readFileSync(path.join(root, ".github/workflows/pr-guards-trusted.yml"), "utf8");
-  const push = fs.readFileSync(path.join(root, ".github/workflows/feature-flag-gate.yml"), "utf8");
-  const workflow = trusted + "\n" + push;
+  const workflow = fs.readFileSync(path.join(root, ".github/workflows/feature-flag-gate.yml"), "utf8");
   assert.match(workflow, /pull_request_target:/);
   assert.doesNotMatch(workflow, /^  pull_request\s*:/m);
   assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled, closed\]/);
@@ -1157,17 +1155,15 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /push:\s+branches: \[production\]/);
   assert.doesNotMatch(workflow, /workflow_dispatch:/);
   assert.match(workflow, /github\.event\.action != 'closed'/);
-  assert.match(push, /if: github\.event_name == 'push'/);
-  assert.doesNotMatch(push, /pull_request_target:/);
-  assert.match(trusted, /cancel-in-progress: true/);
-  assert.match(trusted, /timeout-minutes: 25/);
+  assert.match(workflow, /if: github\.event_name == 'push' \|\| github\.event_name == 'pull_request_target'/);
+  assert.match(workflow, /timeout-minutes: 5/);
   assert.match(workflow, /Every event reconciles all open PRs/);
   assert.match(workflow, /group: feature-flag-gate-production/);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal((workflow.match(/cache: npm/g) || []).length, 2);
   assert.equal((workflow.match(/cache-dependency-path: \.github\/scripts\/feature-flag-parser\/package-lock\.json/g) || []).length, 2);
-  assert.equal((workflow.match(/npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/g) || []).length, 3);
-  assert.equal((workflow.match(/FEATURE_FLAG_TYPESCRIPT_PATH/g) || []).length, 3);
+  assert.equal((workflow.match(/npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/g) || []).length, 2);
+  assert.equal((workflow.match(/FEATURE_FLAG_TYPESCRIPT_PATH/g) || []).length, 2);
   const parserLock = JSON.parse(fs.readFileSync(path.join(root, ".github/scripts/feature-flag-parser/package-lock.json"), "utf8"));
   assert.equal(parserLock.packages["node_modules/typescript"].version, "6.0.3");
   assert.match(parserLock.packages["node_modules/typescript"].integrity, /^sha512-/);
@@ -1175,10 +1171,10 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
   assert.match(workflow, /git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production "refs\/pull\/\$PR_NUMBER\/head"/);
-  assert.equal((workflow.match(/git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production/g) || []).length, 3);
+  assert.equal((workflow.match(/git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production/g) || []).length, 2);
   assert.match(workflow, /--argjson labels "\$FEATURE_FLAG_PR_LABELS"/);
-  assert.equal((workflow.match(/--argjson labels "\$FEATURE_FLAG_PR_LABELS"/g) || []).length, 3);
-  assert.equal((workflow.match(/git rev-parse HEAD\)" != "\$\(git rev-parse origin\/production\)/g) || []).length, 3);
+  assert.equal((workflow.match(/--argjson labels "\$FEATURE_FLAG_PR_LABELS"/g) || []).length, 2);
+  assert.equal((workflow.match(/git rev-parse HEAD\)" != "\$\(git rev-parse origin\/production\)/g) || []).length, 2);
   assert.match(workflow, /Trusted production checkout drifted/);
   assert.doesNotMatch(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled, closed\]/);
@@ -1200,7 +1196,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/feature-flag-gate.mjs"));
   assert.match(workflow, /statuses\/\$head_sha/);
   assert.match(workflow, /gh_api --paginate --slurp/);
-  assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 3);
+  assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);
   assert.doesNotMatch(workflow, /^\s+node \.github\/scripts\/feature-flag-gate\.mjs/m);
   assert.match(workflow, /head_pr_count.*flatten\[\].*\.head\.sha == \$sha/);
   assert.match(workflow, /fresh_head_pr_count/);
@@ -1208,8 +1204,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /jq -c 'flatten\[\]' \"\$pages\"/);
   assert.doesNotMatch(workflow, /jq -ce 'flatten\[\]'/);
   assert.match(workflow, /changed during evaluation/);
-  assert.doesNotMatch(push, /pull-requests: write/);
-  assert.match(trusted, /pull-requests: write/);
+  assert.doesNotMatch(workflow, /pull-requests: write/);
 });
 
 test("Factory ticket flags retain exact prefix and owner-only preview requirements", async (t) => {

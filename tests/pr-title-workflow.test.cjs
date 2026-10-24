@@ -26,12 +26,13 @@ async function runTitleCheck(title) {
   );
   const script = workflow.jobs["pr-guards-trusted"].steps.find(step => step.id === "title").with.script;
   const failures = [];
+  const outputs = {};
 
   await new AsyncFunction("github", "context", "core", script)(
     {
       rest: {
         pulls: {
-          get: async () => ({ data: { title, user: { login: "owner" } } }),
+          get: async () => ({ data: { title, head: { sha: "a".repeat(40) }, user: { login: "owner" } } }),
         },
       },
     },
@@ -41,12 +42,14 @@ async function runTitleCheck(title) {
     },
     {
       info() {},
+      setOutput(name, value) { outputs[name] = value; },
       setFailed(message) {
         failures.push(message);
       },
     },
   );
 
+  assert.deepEqual(outputs, { sha: "a".repeat(40), title });
   return failures;
 }
 

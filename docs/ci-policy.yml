@@ -35,22 +35,33 @@ topology:
 pr_job_budget:
   parallel_job_limit: 20
   normal_synchronize_before: 17
-  normal_synchronize_after: 12
+  normal_synchronize_after: 15
   opened_before: 18
-  opened_after: 12
+  opened_after: 15
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
     workflow: .github/workflows/pr-guards.yml
     jobs: 1
-    contexts: [secret-scan, next-public-secrets]
+    published_statuses: [secret-scan, next-public-secrets]
     read_only_pr_tokens: trusted_workflow_run_status_only_pass
   trusted_pull_request_guards:
     workflow: .github/workflows/pr-guards-trusted.yml
     jobs: 1
-    contexts: [outside-pr-guard, pr-size, pr-title, feature-flag-gate, reconcile-feature-flag-gate, ux-signoff-gate, ux-signoff]
+    published_statuses: [outside-pr-guard, pr-size, pr-title]
     checkout: production_only
     candidate_code_execution: false
+  serialized_reconciliation_guards:
+    - workflow: .github/workflows/feature-flag-gate.yml
+      jobs: 2
+      published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
+      concurrency_group: feature-flag-gate-production
+      cancel_in_progress: false
+    - workflow: .github/workflows/ux-signoff-gate.yml
+      jobs: 1
+      published_statuses: [ux-signoff-gate, ux-signoff]
+      concurrency_group: ux-signoff-gate
+      cancel_in_progress: false
   context_publication: commit_status_per_guard_and_fail_closed_aggregate_job
   isolated_guards:
     node_version: vercel_secret_runner_separate_from_candidate_scripts
@@ -182,7 +193,6 @@ ai_model_watch:
 ux_signoff:
   context: ux-signoff
   workflow: .github/workflows/ux-signoff-gate.yml
-  pull_request_workflow: .github/workflows/pr-guards-trusted.yml
   script: .github/scripts/ux-signoff-gate.mjs
   # HT Product Lead flips this after statuses are seeded on all open PRs.
   required: false
@@ -195,12 +205,11 @@ light_gate_dependencies:
   parser_locks: [.github/scripts/node-version-guard/package-lock.json, .github/scripts/feature-flag-parser/package-lock.json]
   scope: per_job_transitive_imports_of_light_gate_node_scripts
   excludes: [visual_runner_full_installs, private_scheduled_speed_measurements]
-  missing_install_negative_control: feature_flag_push_and_trusted_pr_steps
+  missing_install_negative_control: feature_flag_gate_both_jobs
   parser_load_failures: [unset_path, missing_file]
 
 feature_flag_gate:
   workflow: .github/workflows/feature-flag-gate.yml
-  pull_request_workflow: .github/workflows/pr-guards-trusted.yml
   decision_script: .github/scripts/feature-flag-gate.mjs
   runs_on: ubuntu-latest
   trusted_script_source: production_base_commit
@@ -240,6 +249,9 @@ policies:
   concurrency:
     cancel_superseded_pull_request_runs: true
     cancel_production_push_runs: false
+    app_smoke_production_cache_cancel_superseded: true
+    app_smoke_cancelled_requests: separate_group_per_run
+    non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-major-ticket]
     prefer_queue_over_oom: true
   review:
     # The reviewer repository owns provider order, models, and failover; this
