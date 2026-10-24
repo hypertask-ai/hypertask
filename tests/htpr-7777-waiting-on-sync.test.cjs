@@ -61,6 +61,7 @@ for (const [name, comments] of [
   ["comment", [question(), reply()]],
   ["thumbs up", [question({ reactions: [reaction()] })]],
   ["skin-tone thumbs up", [question({ reactions: [reaction({ emoji: "👍🏽" })] })]],
+  ["restored thumbs up", [question({ reactions: [reaction({ createdAt: at(5), updatedAt: at(20) })] })]],
 ]) {
   test(`Valentin's ${name} after the last agent Question clears all waiting-on fields`, async () => {
     const row = task({ comments }), f = fixture([row]);
@@ -74,6 +75,26 @@ for (const [name, comments] of [
     assert.equal(await fixture([row]).sweep(), 1);
     assert.deepEqual([row.waitingOnUserId, row.waitingOnSetById, row.waitingOnSetAt], [null, null, null]);
   });
+
+  for (const section of ["Valentin Review", "In Progress"]) {
+    for (const [timing, waitingOnSetAt, waitingOnSetById, clears] of [
+      ["before a newer explicit wait", at(30), 7, false],
+      ["at the explicit wait timestamp", at(20), 7, true],
+      ["after the explicit wait timestamp", at(15), 7, true],
+      ["before a newer auto-managed wait", at(30), null, true],
+    ]) {
+      test(`Valentin's ${name} ${timing} ${clears ? "still clears" : "does not clear"} waiting-on in ${section}`, async () => {
+        const row = task({ comments, section, waitingOnSetAt, waitingOnSetById }), f = fixture([row]);
+        assert.equal(await f.sweep(), clears ? 1 : 0);
+        assert.deepEqual(
+          [row.waitingOnUserId, row.waitingOnSetById, row.waitingOnSetAt],
+          clears ? [null, null, null] : [6, waitingOnSetById, waitingOnSetAt],
+        );
+        assert.deepEqual([f.boards, f.inboxes, f.tickets], clears ? [[15], [6], [42]] : [[], [], []]);
+        if (!clears) assert.deepEqual(f.writes, []);
+      });
+    }
+  }
 
   test(`still-cleared: an answered ticket stays cleared in its waiting column after a ${name}`, async () => {
     const row = task({ comments, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null });

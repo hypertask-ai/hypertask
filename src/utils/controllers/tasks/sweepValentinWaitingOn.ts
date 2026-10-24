@@ -23,6 +23,7 @@ export async function sweepValentinWaitingOn(): Promise<number> {
         status: true,
         waitingOnUserId: true,
         waitingOnSetById: true,
+        waitingOnSetAt: true,
         sectionEvents: {
           orderBy: [{ timestamp: "desc" }, { id: "desc" }],
           take: 1,
@@ -74,13 +75,16 @@ export async function sweepValentinWaitingOn(): Promise<number> {
         (comment.agentId || comment.agentDisplayName) &&
         (isQuestionComment(comment.text) || isQuestionComment(comment.commentText)),
       );
+      const explicitWaitSetAt = task.waitingOnSetById !== null ? task.waitingOnSetAt : null;
       const answered = question && (
         task.comments.some((comment) =>
           comment.creatorId === VALENTIN_USER_ID && !comment.agentId && !comment.agentDisplayName &&
+          (!explicitWaitSetAt || comment.createdAt >= explicitWaitSetAt) &&
           (comment.createdAt > question.createdAt ||
             (comment.createdAt.getTime() === question.createdAt.getTime() && comment.id > question.id)),
         ) || question.reactions.some((reaction) =>
           /^👍[\u{1f3fb}-\u{1f3ff}]?$/u.test(reaction.emoji) &&
+          (!explicitWaitSetAt || (reaction.updatedAt ?? reaction.createdAt) >= explicitWaitSetAt) &&
           (reaction.updatedAt ?? reaction.createdAt) > question.createdAt,
         )
       );
