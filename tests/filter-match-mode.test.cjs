@@ -93,7 +93,6 @@ test("assignee ALL does not let one agent row satisfy both its owner and itself"
 
   assert.equal(assigneeFilterCondition(onlyTheAgent, [owner, agent], undefined, "ALL"), false);
   assert.equal(assigneeFilterCondition(bothSeparately, [owner, agent], undefined, "ALL"), true);
-  // ANY is unchanged: the shared row still counts for either selection.
   assert.equal(assigneeFilterCondition(onlyTheAgent, [owner, agent], undefined, "ANY"), true);
 });
 
@@ -145,7 +144,7 @@ test("saved human assignee filters exclude agent backing users in ANY and defaul
     for (const match of [undefined, "ANY", "ALL"]) {
       const filters = [{ type: "Assignees", searchPayload: [owner], ...(match ? { match } : {}) }];
       assert.deepEqual(
-        applyFilters(sections, filters, overallMode, undefined, { humanAssigneesOnly: true })[0].items.map(({ id }) => id),
+        applyFilters(sections, filters, overallMode)[0].items.map(({ id }) => id),
         [2, 3],
       );
     }
@@ -156,7 +155,7 @@ test("human assignee isolation preserves explicit agent and mixed selections", (
   const task = { assignees: [{ userId: 6, agentId: "agent-a" }] };
   const owner = { id: 6, uid: "user-6" };
   const agent = { id: "agent-a" };
-  const runtime = { humanAssigneesOnly: true };
+  const runtime = { legacyAgentAssigneeMatch: false };
 
   assert.equal(assigneeFilterCondition(task, [agent], undefined, "ANY", runtime), true);
   assert.equal(assigneeFilterCondition(task, [agent], undefined, "ALL", runtime), true);
@@ -166,10 +165,14 @@ test("human assignee isolation preserves explicit agent and mixed selections", (
   assert.equal(assigneeFilterCondition(task, [], undefined, "ANY", runtime), true);
 });
 
-test("human assignee isolation flag off retains legacy ANY matching", () => {
+test("explicit legacy assignee matching restores ANY and default modes but not ALL", () => {
   const task = { assignees: [{ userId: 6, agentId: "agent-a" }] };
   const owner = { id: 6, uid: "user-6" };
 
-  assert.equal(assigneeFilterCondition(task, [owner], undefined, "ANY", { humanAssigneesOnly: false }), true);
-  assert.equal(assigneeFilterCondition(task, [owner], undefined, "ALL", { humanAssigneesOnly: false }), false);
+  for (const match of [undefined, "ANY"]) {
+    assert.equal(assigneeFilterCondition(task, [owner], undefined, match), false);
+    assert.equal(assigneeFilterCondition(task, [owner], undefined, match, { legacyAgentAssigneeMatch: false }), false);
+    assert.equal(assigneeFilterCondition(task, [owner], undefined, match, { legacyAgentAssigneeMatch: true }), true);
+  }
+  assert.equal(assigneeFilterCondition(task, [owner], undefined, "ALL", { legacyAgentAssigneeMatch: true }), false);
 });

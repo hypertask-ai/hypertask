@@ -27,7 +27,7 @@ export function useLandingSectionState(context: Context) {
   } = context;
 
 
-const humanAssigneesOnly = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
+const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
 const router = useRouter();
 const queryClient = useQueryClient();
 const {
@@ -66,13 +66,13 @@ const { timers: runningTimers, timerDataReady } = useBoardRunningTimers(
   { enabled: secondaryStartupEnabled },
 );
 const filterRuntimeContext = useMemo(() => ({
-  humanAssigneesOnly,
+  legacyAgentAssigneeMatch: !assigneeFixEnabled,
   runningTaskIds: timerDataReady
     ? new Set(runningTimers.keys())
     : new Set(sections.flatMap((section) =>
         (section.items ?? []).map((task) => task.id)
       )),
-}), [humanAssigneesOnly, runningTimers, sections, timerDataReady]);
+}), [assigneeFixEnabled, runningTimers, sections, timerDataReady]);
 
 useEffect(() => {
   const project = _allProjects?.[_projectIndex]

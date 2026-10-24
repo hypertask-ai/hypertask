@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/definitions/htpr-7725-saved-view-assignee";
 import { tool } from "ai";
 import { z } from "zod";
 import { buildSearchTotalMetadata } from "@/app/api/ai/chat/stream/bulkTools";
@@ -50,14 +52,17 @@ export function createSearchTasksTool(context: ToolContext) {
         };
         if (input.section) where.section = input.section;
         if (input.assigned_to) {
+          const humanAssignment = await isFeatureEnabled(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG, user.id)
+            ? { agentId: null }
+            : {};
           if (input.assigned_to === "me") {
-            where.assignees = { some: { userId: user.id } };
+            where.assignees = { some: { ...humanAssignment, userId: user.id } };
           } else if (input.assigned_to === "unassigned") {
             where.assignees = { none: {} };
           } else {
             const assignedUserId = parseInt(input.assigned_to, 10);
             if (Number.isInteger(assignedUserId)) {
-              where.assignees = { some: { userId: assignedUserId } };
+              where.assignees = { some: { ...humanAssignment, userId: assignedUserId } };
             }
           }
         }

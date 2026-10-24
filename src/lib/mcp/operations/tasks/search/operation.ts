@@ -1,3 +1,4 @@
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/definitions/htpr-7725-saved-view-assignee";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -235,6 +236,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (assignedTo) {
+      const humanAssignment = await isFeatureEnabled(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG, user.id)
+        ? { agentId: null }
+        : {}
       if (listQuery) {
         const assignee = parseAssigneeFilter(assignedTo)
         if (!assignee.ok) {
@@ -244,21 +248,21 @@ export async function GET(request: NextRequest) {
           )
         }
         if (assignee.kind === 'me') {
-          where.assignees = { some: { userId: user.id } }
+          where.assignees = { some: { ...humanAssignment, userId: user.id } }
         } else if (assignee.kind === 'unassigned') {
           where.assignees = { none: {} }
         } else {
           // @ts-expect-error kind is ids after me/unassigned
-          where.assignees = { some: { userId: { in: assignee.userIds } } }
+          where.assignees = { some: { ...humanAssignment, userId: { in: assignee.userIds } } }
         }
       } else if (assignedTo === 'me') {
-        where.assignees = { some: { userId: user.id } }
+        where.assignees = { some: { ...humanAssignment, userId: user.id } }
       } else if (assignedTo === 'unassigned') {
         where.assignees = { none: {} }
       } else {
         const userId = parseInt(assignedTo)
         if (!isNaN(userId)) {
-          where.assignees = { some: { userId } }
+          where.assignees = { some: { ...humanAssignment, userId } }
         }
       }
     }

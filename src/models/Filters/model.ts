@@ -34,7 +34,7 @@ export type TFilter = "Labels" | "Assignees" | "BlockedByPerson" | "UpdatedBy" |
 export type TMatchFilters = "ALL"|"ANY";
 export interface IFilterRuntimeContext {
   runningTaskIds?: ReadonlySet<number>;
-  humanAssigneesOnly?: boolean;
+  legacyAgentAssigneeMatch?: boolean;
 }
 export type TCondition = (item: ITask, value: any, project?: IProject, match?: TMatchFilters, runtimeContext?: IFilterRuntimeContext) => boolean;
 export interface IFilter {

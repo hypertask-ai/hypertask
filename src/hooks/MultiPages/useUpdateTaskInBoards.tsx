@@ -177,7 +177,7 @@ const applyProjectFilters = (
 const UpdateKanban = () => {
   const queryClient = useQueryClient();
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
-  const humanAssigneesOnly = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
+  const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const setactiveitem = useSetRecoilState(activeItemAtom);
   const setInViewObject = useSetRecoilState(inViewObjectAtom);
   const [_currentProject, __] = useRecoilState(currentProjectAtom)
@@ -254,7 +254,7 @@ const UpdateKanban = () => {
       projectToUpdate.id,
     ]);
     const filterRuntimeContext = {
-      humanAssigneesOnly,
+      legacyAgentAssigneeMatch: !assigneeFixEnabled,
       ...(Array.isArray(runningTimers)
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
         : {}),

@@ -275,16 +275,16 @@ export const updatedByFilterCondition = (item: ITask, value: any[]) =>
 export const createdByFilterCondition = (item: ITask, value: any[]) =>
   (value.length === 0 || value.some(v => Number(item.userId) === Number(v.id))) ?? false;
 
-const assigneeRowMatches = (row: any, v: any, humanAssigneesOnly?: boolean) =>
+const assigneeRowMatches = (row: any, v: any, legacyAgentAssigneeMatch?: boolean) =>
   "uid" in v
-    ? (!humanAssigneesOnly || row.agentId == null) && row.userId === v.id
+    ? (legacyAgentAssigneeMatch === true || row.agentId == null) && row.userId === v.id
     : row.agentId === v.id;
 
 export const assigneeFilterCondition: TCondition = (item, value: any[], _project, match, runtimeContext) => {
   if (value.length === 0) return true;
   const assignees = item.assignees ?? [];
   if (match !== "ALL") {
-    return assignees.some(row => value.some(v => assigneeRowMatches(row, v, runtimeContext?.humanAssigneesOnly)));
+    return assignees.some(row => value.some(v => assigneeRowMatches(row, v, runtimeContext?.legacyAgentAssigneeMatch)));
   }
   return value.every(v =>
     "uid" in v

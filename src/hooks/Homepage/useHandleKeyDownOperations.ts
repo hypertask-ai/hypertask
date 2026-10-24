@@ -41,7 +41,7 @@ interface IHandleKeyDownOperations {
 
 const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const {initialSections , handleBoardChange, filteredSections} = props
-    const humanAssigneesOnly = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
+    const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const queryClient = useQueryClient();   
     const store = useStore();
     const {showManageColumnsModal, showSaveModal, toggleViewsModal, toggleSaveViewsModal, toggleSearchTasks, showSearchTasks} = useKanbanModalStatesContext()
@@ -471,7 +471,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       _currentProject.id,
     ])
     const filterRuntimeContext = {
-      humanAssigneesOnly,
+      legacyAgentAssigneeMatch: !assigneeFixEnabled,
       ...(Array.isArray(runningTimers)
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
         : {}),
