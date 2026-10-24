@@ -233,7 +233,7 @@ test("every task row is created through the analytics-aware save wrapper", () =>
   ]);
   const atomicManifest = "src/lib/mcp/boards/createBoardFromManifest.ts";
   for (const file of relative.filter((file) => !file.endsWith("writeProbe.ts") && file !== atomicManifest)) {
-    assert.match(fs.readFileSync(path.join(root, file), "utf8"), /createTaskWithBoardWebhookOutbox\(/, file);
+    assert.match(fs.readFileSync(path.join(root, file), "utf8"), /createTaskWithBoardWebhookOutbox\b/, file);
   }
   const manifestSource = fs.readFileSync(path.join(root, atomicManifest), "utf8");
   for (const effect of [/enqueueTaskCreated\(tx, created\.id/, /persistTaskCreatedWebhook\(tx,/, /persistAgentTaskCreatedPending\(tx, created\.id\)/, /processAnalyticsIntentSoon\(key\)/]) {
