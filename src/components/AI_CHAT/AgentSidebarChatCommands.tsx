@@ -8,6 +8,7 @@ import type { ICommandList } from "@/components/Modals/commands/HTC/HTCTypes";
 import { CommandMode } from "@/models/enums";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
+import { HTPR_7702_PHONE_CHAT_LIST_FLAG } from "@/lib/flags/definitions/htpr-7702-phone-chat-list";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
 
@@ -21,6 +22,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose }: {
   const rowRef = useRef<HTMLDivElement>(null);
   const [selectedKey, setSelectedKey] = useState(context.target.kind === "ai" ? "ai" : context.target.agent.id);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
+  const phoneChatList = useFlag(HTPR_7702_PHONE_CHAT_LIST_FLAG);
   const { sessions, historySessions, sessionPagingEnabled, hasMoreSessions, isLoadingMoreSessions, loadMoreSessions, refreshHistorySessions } = useAiChatContext();
   const [expanded, setExpanded] = useState(false);
   const personalSessions = pastChatsFirst
@@ -74,7 +76,16 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose }: {
     if (!host || !anchor) return;
     const place = () => {
       const box = anchor.getBoundingClientRect();
-      host.style.maxHeight = `${Math.max(0, window.innerHeight - box.bottom - 12)}px`;
+      let maxHeight = window.innerHeight - box.bottom - 12;
+      if (isMobile && phoneChatList) {
+        const composers = host.closest('[data-testid="ai-sidebar"]')?.querySelectorAll<HTMLElement>('[data-ai-chat-composer-root]:not([inert])');
+        const composer = Array.from(composers ?? []).find((node) => {
+          const rect = node.getBoundingClientRect();
+          return !node.closest('[inert]') && rect.width > 0 && rect.height > 0;
+        });
+        if (composer) maxHeight = Math.min(window.innerHeight, composer.getBoundingClientRect().top) - host.getBoundingClientRect().top - 12;
+      }
+      host.style.maxHeight = `${Math.max(0, maxHeight)}px`;
       host.style.maxWidth = `${Math.max(0, window.innerWidth - box.left - 8)}px`;
     };
     place();
@@ -92,12 +103,17 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose }: {
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", escape, true);
     window.addEventListener("resize", place);
+    const viewport = isMobile && phoneChatList ? window.visualViewport : null;
+    viewport?.addEventListener("resize", place);
+    viewport?.addEventListener("scroll", place);
     return () => {
       document.removeEventListener("pointerdown", outside);
       document.removeEventListener("keydown", escape, true);
       window.removeEventListener("resize", place);
+      viewport?.removeEventListener("resize", place);
+      viewport?.removeEventListener("scroll", place);
     };
-  }, [anchorRef, onClose]);
+  }, [anchorRef, onClose, isMobile, phoneChatList]);
 
   useEffect(() => {
     hostRef.current?.querySelector(`[data-command-key="${selected.key}"]`)?.scrollIntoView({ block: "nearest" });

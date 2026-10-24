@@ -70,8 +70,12 @@ function menu({ enabled = true, paging = false, mobile = false } = {}) {
   const context = { target: { kind: "ai" }, agents, error: null, onSelectSession: id => selections.push(id), onSelect: target => targets.push(target), onRetry: noop };
   const { AgentSidebarChatCommands } = load("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
     react: { ...state.react, useContext: () => mobile },
-    "@/hooks/useFlag": { useFlag: key => { assert.equal(key, flag.HTPR_7688_PAST_CHATS_FIRST_FLAG); return enabled; } },
+    "@/hooks/useFlag": { useFlag: key => {
+      if (key === "htpr-7702-phone-chat-list") return false;
+      assert.equal(key, flag.HTPR_7688_PAST_CHATS_FIRST_FLAG); return enabled;
+    } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
+    "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "htpr-7702-phone-chat-list" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => history },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/components/Modals/commands/HTC/CommandList": { default: "CommandList" },

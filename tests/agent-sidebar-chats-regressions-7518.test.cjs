@@ -528,6 +528,7 @@ test("sidebar command rows forward mobile context to the shared CommandList", ()
       "@/components/Modals/commands/HTC/commandSelection": { findCommandPosition: noop },
       "@/hooks/useFlag": { useFlag: () => false },
       "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+      "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "htpr-7702-phone-chat-list" },
       "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({}) },
       "@/models/enums": { CommandMode: { GoToAgentChat: 1 } },
     });
@@ -688,6 +689,7 @@ test("conversation Escape is captured even when the mobile sheet moved focus awa
     "@/components/Modals/commands/HTC/commandSelection": { findCommandPosition: noop },
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+    "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "htpr-7702-phone-chat-list" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({}) },
     "@/models/enums": { CommandMode: { GoToAgentChat: 1 } },
   });
