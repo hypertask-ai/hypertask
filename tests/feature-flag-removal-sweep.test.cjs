@@ -65,7 +65,7 @@ stubModule("src/utils/controllers/tasks/createTaskCore.ts", {
   },
 });
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
-const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
+const { FEATURE_FLAG_KEYS, RETIRED_FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
 const { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } = jiti(path.join(root, "src/lib/flags/removal.ts"));
 const { GET } = jiti(path.join(root, "src/app/api/cron/feature-flag-removals/route.ts"));
 
@@ -95,7 +95,7 @@ test("the removal sweep skips the legacy shallow-switch flag without blocking ot
     headers: { authorization: "Bearer test-cron-secret" },
   }));
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [] });
+  assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
   assert.deepEqual(candidates.map(({ key }) => key), [registeredKey]);
   assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
   assert.equal(filed[0].userId, 6);
@@ -116,7 +116,7 @@ test("the removal sweep leaves overdue unregistered rows unchanged and tickets a
     headers: { authorization: "Bearer test-cron-secret" },
   }));
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [] });
+  assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
   assert.deepEqual(candidates.map(({ key }) => key), [registeredKey]);
   assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
   assert.deepEqual([removed, pending], before);
@@ -142,6 +142,7 @@ test("bugfix flags are due after 7 days while money and data-deletion stay at 14
     filed: 2,
     keys: ["htpr-7702-phone-chat-list", "yper4-651-self-follow-quiet"],
     failed: [],
+    deferred: 0,
   });
   assert.deepEqual(filed.map(({ title }) => title), [
     "Remove feature flag htpr-7702-phone-chat-list",
@@ -184,7 +185,7 @@ test("a recorded removal ticket is not filed again", async () => {
     headers: { authorization: "Bearer test-cron-secret" },
   }));
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { filed: 0, failed: [] });
+  assert.deepEqual(await response.json(), { filed: 0, failed: [], deferred: 0 });
   assert.deepEqual(filed, []);
 });
 
@@ -203,7 +204,7 @@ test("an existing open removal ticket is reused and no second task is created", 
       headers: { authorization: "Bearer test-cron-secret" },
     }));
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [] });
+    assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
     assert.deepEqual(filed, []);
     assert.equal(dueFlags[0].removalTaskId, 42);
   } finally {
@@ -220,8 +221,37 @@ test("the conditional claim rejects an unregistered key returned in the candidat
     headers: { authorization: "Bearer test-cron-secret" },
   }));
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [] });
+  assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
   assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
   assert.deepEqual(removed, before);
   assert.deepEqual(writes, [registeredKey, registeredKey]);
+});
+
+test("44 eligible flags file the 10 oldest and the rest stay eligible next run", async () => {
+  const retired = new Set(RETIRED_FEATURE_FLAG_KEYS);
+  const keys = FEATURE_FLAG_KEYS.filter((key) => !retired.has(key)).slice(0, 44);
+  assert.equal(keys.length, 44);
+  const start = Date.UTC(2026, 0, 1);
+  dueFlags = keys.map((key, index) => ({
+    key,
+    mode: "EVERYONE",
+    keep: false,
+    removalTaskId: null,
+    releasedAt: new Date(start + index * 60 * 60 * 1000),
+  }));
+  const call = () => GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", {
+    headers: { authorization: "Bearer test-cron-secret" },
+  }));
+  const first = await (await call()).json();
+  const oldest = keys.slice(0, 10);
+  assert.deepEqual(first, { filed: 10, keys: oldest, failed: [], deferred: 34 });
+  const second = await (await call()).json();
+  const next = keys.slice(10, 20);
+  assert.deepEqual(second, { filed: 10, keys: next, failed: [], deferred: 24 });
+  assert.equal(next.some((key) => oldest.includes(key)), false);
+  assert.deepEqual(
+    filed.map(({ title }) => title),
+    [...oldest, ...next].map((key) => `Remove feature flag ${key}`),
+  );
+  assert.deepEqual(new Set(filed.map(({ title }) => title)).size, 20);
 });

@@ -10,7 +10,7 @@ import {
   FEATURE_FLAG_TICKET_PROJECT_ID,
   RETIRED_FEATURE_FLAG_KEYS,
 } from "@/lib/flags";
-import { PENDING_REMOVAL_TASK_ID, removalProfile, removalWindowForFlag, selectDueFlags } from "@/lib/flags/removal";
+import { FLAG_REMOVAL_TICKETS_PER_RUN, PENDING_REMOVAL_TASK_ID, removalProfile, removalWindowForFlag, selectDueFlags } from "@/lib/flags/removal";
 import { createProvisionedTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 
@@ -20,7 +20,6 @@ export const dynamic = "force-dynamic";
 const REMOVAL_PROJECT_ID = FEATURE_FLAG_TICKET_PROJECT_ID;
 const REMOVAL_SECTION_TITLE = "Bugs";
 const REMOVAL_LABEL_VALUE = "Bug";
-const MAX_TICKETS_PER_RUN = 3;
 const REMOVAL_SWEEP_LOCK_NAMESPACE = 1_179_207_763;
 const REMOVAL_SWEEP_LOCK_KEY = 1;
 
@@ -90,11 +89,13 @@ async function sweep() {
     select: { key: true, releasedAt: true, mode: true, keep: true, removalTaskId: true },
     orderBy: { releasedAt: "asc" },
   });
-  const due = selectDueFlags(stored.map((flag) => ({
+  const eligible = selectDueFlags(stored.map((flag) => ({
     ...flag,
     ...removalProfile(flag.key),
-  }))).slice(0, MAX_TICKETS_PER_RUN);
-  if (due.length === 0) return NextResponse.json({ filed: 0, failed: [] });
+  })));
+  const due = eligible.slice(0, FLAG_REMOVAL_TICKETS_PER_RUN);
+  const deferred = eligible.length - due.length;
+  if (due.length === 0) return NextResponse.json({ filed: 0, failed: [], deferred });
 
   const project = await prisma.project.findFirst({
     where: { id: REMOVAL_PROJECT_ID, status: "Normal" },
@@ -194,5 +195,5 @@ async function sweep() {
     }
   }
 
-  return NextResponse.json({ filed: filed.length, keys: filed, failed });
+  return NextResponse.json({ filed: filed.length, keys: filed, failed, deferred });
 }

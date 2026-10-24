@@ -1,5 +1,6 @@
 export const FEATURE_FLAG_REMOVAL_DAYS: 14;
 export const BUGFIX_FLAG_REMOVAL_DAYS: 7;
+export const FLAG_REMOVAL_TICKETS_PER_RUN: 10;
 
 export function removalWindowDays(flag: { kind?: string | null; highRisk?: string | null }): number;
 

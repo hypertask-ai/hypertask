@@ -2,7 +2,7 @@ import type { FeatureFlagRow } from "@/lib/flags";
 import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
 import { removalWindowDays } from "@/lib/flags/removalWindow.mjs";
 
-export { BUGFIX_FLAG_REMOVAL_DAYS, FEATURE_FLAG_REMOVAL_DAYS, removalWindowDays, selectDueFlags } from "@/lib/flags/removalWindow.mjs";
+export { BUGFIX_FLAG_REMOVAL_DAYS, FEATURE_FLAG_REMOVAL_DAYS, FLAG_REMOVAL_TICKETS_PER_RUN, removalWindowDays, selectDueFlags } from "@/lib/flags/removalWindow.mjs";
 
 export const PENDING_REMOVAL_TASK_ID = 0;
 const DAY_MS = 24 * 60 * 60 * 1000;

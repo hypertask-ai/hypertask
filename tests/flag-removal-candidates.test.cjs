@@ -57,6 +57,8 @@ test("dry run lists flags past their window and a rerun files nothing new", () =
   assert.equal(report.filesTickets, false);
   assert.equal(report.switchesMode, false);
   assert.equal(report.filed, 0);
+  assert.equal(report.deferred, 0);
+  assert.equal(report.ticketsPerRun, 10);
   assert.deepEqual(report.missingSince, ["htpr-7308-phone-layout-width"]);
   assert.deepEqual(report.wouldFile.map((item) => [item.key, item.windowDays]), [
     ["htpr-7324-plan-ai-caps", 14],
@@ -69,8 +71,41 @@ test("dry run lists flags past their window and a rerun files nothing new", () =
   const again = JSON.parse(second.stdout);
   assert.deepEqual(again.wouldFile, []);
   assert.equal(again.newTickets, 0);
+  assert.equal(again.deferred, 0);
   assert.equal(again.filed, 0);
   assert.deepEqual(again.alreadyRecorded.map((item) => item.key), report.wouldFile.map((item) => item.key));
+});
+
+test("44 eligible flags would file the 10 oldest and leave the rest for the next run", async () => {
+  const { removalCandidates } = await import("../scripts/flags/flag-removal-candidates.mjs");
+  const start = Date.parse("2026-01-01T00:00:00.000Z");
+  const definitions = Array.from({ length: 44 }, (_, index) => ({
+    key: `flag-${String(index).padStart(2, "0")}`,
+    kind: "bugfix",
+  }));
+  const modes = Object.fromEntries(definitions.map((definition) => [definition.key, "EVERYONE"]));
+  const since = Object.fromEntries(definitions.map((definition, index) => [
+    definition.key,
+    new Date(start + index * 60 * 60 * 1000).toISOString(),
+  ]));
+  const now = new Date("2026-10-24T00:00:00.000Z");
+  const first = removalCandidates({ definitions, modes, since, now });
+  const oldest = definitions.slice(0, 10).map((definition) => definition.key);
+  assert.deepEqual(first.wouldFile.map((item) => item.key), oldest);
+  assert.equal(first.deferred, 34);
+  assert.equal(first.filed, 0);
+  assert.equal(first.filesTickets, false);
+  assert.equal(first.switchesMode, false);
+  const second = removalCandidates({
+    definitions,
+    modes,
+    since,
+    now,
+    already: oldest,
+  });
+  assert.deepEqual(second.wouldFile.map((item) => item.key), definitions.slice(10, 20).map((definition) => definition.key));
+  assert.equal(second.deferred, 24);
+  assert.equal(second.wouldFile.some((item) => oldest.includes(item.key)), false);
 });
 
 test("the candidate command refuses to file tickets", () => {

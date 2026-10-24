@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { removalWindowDays, selectDueFlags } from "../../src/lib/flags/removalWindow.mjs";
+import { FLAG_REMOVAL_TICKETS_PER_RUN, removalWindowDays, selectDueFlags } from "../../src/lib/flags/removalWindow.mjs";
 
 const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -61,7 +61,7 @@ export function removalCandidates({ definitions, modes, since, now, already = []
     });
   }
   const due = selectDueFlags(rows, now);
-  const wouldFile = [];
+  const fresh = [];
   const alreadyRecorded = [];
   for (const row of due) {
     const item = {
@@ -73,14 +73,17 @@ export function removalCandidates({ definitions, modes, since, now, already = []
       title: `Remove feature flag ${row.key}`,
     };
     if (alreadyKeys.has(row.key)) alreadyRecorded.push(item);
-    else wouldFile.push(item);
+    else fresh.push(item);
   }
+  const wouldFile = fresh.slice(0, FLAG_REMOVAL_TICKETS_PER_RUN);
   return {
     dryRun: true,
     filesTickets: false,
     switchesMode: false,
     now: now.toISOString(),
+    ticketsPerRun: FLAG_REMOVAL_TICKETS_PER_RUN,
     wouldFile,
+    deferred: fresh.length - wouldFile.length,
     alreadyRecorded,
     newTickets: wouldFile.length,
     filed: 0,

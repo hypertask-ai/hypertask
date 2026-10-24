@@ -1,5 +1,6 @@
 export const FEATURE_FLAG_REMOVAL_DAYS = 14;
 export const BUGFIX_FLAG_REMOVAL_DAYS = 7;
+export const FLAG_REMOVAL_TICKETS_PER_RUN = 10;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LONG_WINDOW_HIGH_RISKS = new Set(["money", "access", "data-deletion"]);
