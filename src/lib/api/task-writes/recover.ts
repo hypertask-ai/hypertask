@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "./route";
@@ -70,6 +71,10 @@ export const POST: TaskWriteRoute = async (request, session) => {
     const { taskId, agentId } = req.body;
     return await route({ ...request, headers: request.headers, json: async () => ({ taskId, agentId }) }, session);
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error);
+      return NextResponse.json(refusal.body, { status: refusal.status });
+    }
     if (error instanceof AgentMutationLeaseConflictError) {
       return NextResponse.json({ message: error.message }, { status: 409 })
     }

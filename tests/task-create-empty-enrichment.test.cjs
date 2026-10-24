@@ -23,6 +23,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
+  stubs = withStubs({ "@/lib/planLimits": { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {} }, "@/lib/storage/verifyTaskAttachmentLinks": { verifyTaskAttachmentLinks: async () => new Map() } }, stubs);
   stubs = withStubs({ "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html } }, stubs);
   stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const originalLoad = Module._load;
@@ -135,6 +136,7 @@ function loadCreateRoute() {
   const sharedRoute = loadSharedRoute(async () => ({ userId: 6 }));
   const stubs = {
     "@/utils/controllers/tasks/parentTaskAccess": execute(compile("src/utils/controllers/tasks/parentTaskAccess.ts"), {}),
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/lib/api/task-writes/route": sharedRoute,
     "./route": sharedRoute,
     "@/lib/ai/composeTaskTarget": execute(compile("src/lib/ai/composeTaskTarget.ts"), {}),

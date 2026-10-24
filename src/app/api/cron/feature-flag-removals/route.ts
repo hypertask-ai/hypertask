@@ -11,7 +11,7 @@ import {
   RETIRED_FEATURE_FLAG_KEYS,
 } from "@/lib/flags";
 import { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } from "@/lib/flags/removal";
-import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
+import { createProvisionedTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 
 export const runtime = "nodejs";
@@ -144,7 +144,7 @@ async function sweep() {
           await withAdoptedAgentMutationLease(
             prisma,
             { agentId: FEATURE_FLAG_SWEEP_AGENT_ID, userId: FEATURE_FLAG_OWNER_USER_ID },
-            () => createTaskCore({
+            () => createProvisionedTaskCore({
               creationChannel: "api",
               title,
               description,

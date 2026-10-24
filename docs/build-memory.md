@@ -45,3 +45,11 @@ The baseline kept roughly 5.94 GB in the main Next process while 17 page workers
 - Full repository lint passes with 21 existing warnings and no errors; final touched-file lint passes without warnings.
 
 Vercel logs/API access was unavailable. These are local measurements, not claims that the two failed cloud builds were reproduced on identical hardware. Vercel's environment-dependent PostHog upload and production migration steps still need the owning session's deploy verification.
+
+## Heap cap 5 GB (2026-10-24)
+
+Ticket: https://app.hypertask.ai/detail/project-4060/650
+
+Production builds for d92ae07cf and 3f9488694 were killed with a Vercel Out of Memory event during "Creating an optimized production build". No build settings changed after the last good build (7c5de02bf); the added code was mostly server routes.
+
+Next passes `NODE_OPTIONS` to the webpack build worker unchanged (`isolatedMemory: false` in `next/dist/build/webpack-build`), so the 6 GB cap let the compiler heap reach 6 GB on an 8 GB machine, leaving too little for native memory and the parent process. The cap is now 5120 MB. If the heap ever needs more, the log says "Reached heap limit" instead of a silent kill, which gives the real heap size for the next step.

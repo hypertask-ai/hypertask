@@ -7,6 +7,9 @@ const { load } = require("./helpers/create-view-context.cjs");
 
 const root = path.resolve(__dirname, "..");
 const emptyFilters = { addedFilters: [], matchFilters: "ALL" };
+const { planLimitRefusalMessage } = load("src/lib/planLimitsClient.ts", {
+  axios: { default: { isAxiosError: error => error?.isAxiosError === true } },
+});
 const constants = load("src/lib/constants/constants.ts", {
   "../configs/general.config": { generalConfig: {} },
   "@/lib/aiModelOptions": { aiModelOptions: [], defaultAiModelOption: {} },
@@ -37,7 +40,7 @@ const conditions = load("src/utils/helperFunctions/Views/FilterHelperFunctions.t
   "@/lib/constants/builtinViews": {},
 });
 
-async function create({ activeFilters = emptyFilters, position = "bottom", view = "appliedView", fail = false, existing = true, sorting = "Manual" } = {}) {
+async function create({ activeFilters = emptyFilters, position = "bottom", view = "appliedView", fail = false, existing = true, sorting = "Manual", error, planToastEnabled = false } = {}) {
   const project = {
     id: 15, uniqueIdentifier: "HTPR", sorting_mode: sorting, sections: [{ sectionId: 7 }],
     project_view: { user_project_views: [{ [view]: { board_filters: activeFilters } }] },
@@ -47,16 +50,21 @@ async function create({ activeFilters = emptyFilters, position = "bottom", view 
   const sections = [{ sectionId: 7, items: existing ? [previousTask] : [] }];
   const allData = { updatedProjects: [{ ...project, sections }] };
   const posts = [];
+  const toasts = [];
   const cached = new Map();
   let inserted;
   let selected;
   const hook = load("src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx", {
-    "@/store": { currentProjectAtom: "project", currentUserAtom: "user", activeSectionAtom: "section" },
+    "@/hooks/useFlag": { useFlag: () => planToastEnabled },
+    "@/lib/flags/definitions/htpr-7686-free-plan-limits": { HTPR_7686_FREE_PLAN_LIMITS_FLAG: "htpr-7686-free-plan-limits" },
+    "@/lib/planLimitsClient": { planLimitRefusalMessage },
+    "react-hot-toast": { default: { error: message => toasts.push(message) } },
+    "@/store": { currentProjectAtom: "project", currentUserAtom: "user", activeSectionAtom: "section", aiChatNewTicketPathAtom: "new-ticket-path" },
     "@tanstack/react-query": { useQueryClient: () => ({ setQueryData: (key, value) => cached.set(JSON.stringify(key), value), invalidateQueries: () => assert.fail("must not need a reload") }) },
     "@/lib/state": { useRecoilValue: (atom) => atom === "project" ? project : { id: 6 } },
-    "jotai": { useStore: () => ({ get: () => 0 }) },
+    "jotai": { useStore: () => ({ get: () => 0, set: () => {} }) },
     "@/utils/generateRank": { default: (before, after) => { assert.equal(before, position === "bottom" && existing ? "a" : undefined); assert.equal(after, position === "top" && existing ? "a" : undefined); return "rank-new"; } },
-    "axios": { default: { post: async (url, body) => { posts.push({ url, body }); return { status: 200, data: { ...body, id: 101, taskLabels: [] } }; } } },
+    "axios": { default: { post: async (url, body) => { posts.push({ url, body }); if (error) throw error; return { status: 200, data: { ...body, id: 101, taskLabels: [] } }; } } },
     "./useUpdateTaskInBoards": { default: () => ({
       getProjectIdxAndAllData: async () => ({ allData, projectToUpdateIndex: 0 }),
       mutationHandler: (index, next) => { assert.equal(index, 0); inserted = next[0].items; },
@@ -68,7 +76,7 @@ async function create({ activeFilters = emptyFilters, position = "bottom", view 
     "@/lib/constants/constants": constants,
     "@/utils/api/global/apiHelpers/createTaskGloballycontroller": { default: async (body) => {
       posts.push({ url: "modal-create", body });
-      if (fail) return { error: true };
+      if (fail || error) return { error: true, ErrorMessage: error };
       const newTask = {
         ...body, id: 101, section: body.section_title,
         taskLabels: (body.tags ?? []).map(label => ({ label })),
@@ -83,7 +91,7 @@ async function create({ activeFilters = emptyFilters, position = "bottom", view 
   try {
     success = await hook.createItem({ sectionId: 7, section: "Bugs", item: { title: "Quick ticket", description: "", id: -1 }, position, createAnother: true, projectId: 15 });
   } finally { console.log = originalLog; }
-  return { success, posts, cached, inserted, selected };
+  return { success, posts, cached, inserted, selected, toasts };
 }
 
 test("label-filter quick add inserts a matching card with labels immediately at either end", async () => {
@@ -272,4 +280,22 @@ test("failed filtered creation neither inserts a card nor retries without labels
   assert.equal(result.posts.length, 1);
   assert.equal(result.inserted, undefined);
   assert.equal(result.cached.size, 0);
+});
+
+
+test("both inline create branches toast only flagged plan refusals without inserting a card", async () => {
+  const message = "Free team ticket limit reached. Upgrade to add more.";
+  for (const activeFilters of [emptyFilters, filters({ Labels: labels })]) {
+    for (const planToastEnabled of [false, true]) {
+      for (const [status, code] of [[402, "PLAN_LIMIT_REACHED"], [500, "PLAN_LIMIT_REACHED"], [402, "OTHER_ERROR"]]) {
+        const error = { isAxiosError: true, response: { status, data: { code, message } } };
+        const result = await create({ activeFilters, error, planToastEnabled });
+        assert.equal(result.success, planToastEnabled && status === 402 && code === "PLAN_LIMIT_REACHED" ? "plan-limit" : false);
+        assert.equal(result.posts.length, 1);
+        assert.equal(result.inserted, undefined);
+        assert.equal(result.cached.size, 0);
+        assert.deepEqual(result.toasts, planToastEnabled && status === 402 && code === "PLAN_LIMIT_REACHED" ? [message] : []);
+      }
+    }
+  }
 });

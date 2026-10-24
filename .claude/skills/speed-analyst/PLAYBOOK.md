@@ -583,6 +583,25 @@ The three per-card hooks read board-wide lists with one shared key each, so ten 
 
 **Next probe.** HTPR-7677 on/off. Then whether the board page shell renders twice on `g` then `b` (once at route mount, once at the data publish), and starting the device-copy read at the key press (HTPR-7588's next probe).
 
+### 2026-10-24: one board-level reader for drafts and timers; identical cards, no measurable phone gain (HTPR-7677)
+
+https://app.hypertask.ai/detail/project-15/7677, flag `htpr-7677-board-card-data-once`, PR 2007, merge 9826e609d.
+
+**Daily read.** Can't verify: `--latest` is still the 2026-10-22 06:17 UTC run on 0f0854834; production was 530a88039 at the start of this round. `speed-live.yml` still skips. No browser run filled the gap. The dispatcher saw no free [SPEED] ticket because the playbook PR carrying HTPR-7677 (PR 1978) moved the unstarted ticket to QA on merge.
+
+**Change.** `BoardCardDataProvider` in the board page reads drafts and running timers once; cards take their own Draft mark, timer and time total from it. Cross-board cards and boards mounted with the flag off keep their own reads. The provider freezes the flag at mount, so a first visit (flags arrive after mount) never swaps card reader components. Custom field chips mount only on cards with values.
+
+**Live result (phone, QA 2343, board 6859, 10 cards, My Tasks then g then b, flag forced per sample, 10 interleaved pairs, load 7 to 11).** Same card list hash in 10 of 10 pairs. Drawing step (`ht-board-query-published` to `ht-board-first-commit`): off 656 ms (349 to 885), on 647 ms (545 to 701). Card visible: off 2388 ms (2111 to 5009), on 2208 ms (2087 to 2751). Overlapping: no measurable gain. Draft mark identical on and off as QA 985 on board 7049 (4 of 4); timer badge not reachable live (time tracking off on the QA boards), covered by the render test. Evidence: `~/.local/state/vcc-evidence/HTPR-7677/` (`navab.mjs`, `marks.mjs`, `summarize.mjs`, `onoff-summary.json`, `proof.md`).
+
+**Why the profile overstated it.** The 90 to 140 ms came from CPU profiles that slow JavaScript, on 3 samples at load 17 to 25. Unprofiled, the drawing step is about 650 ms and varies by 350 to 500 ms between samples, so a 30 to 60 ms real cost cannot show at N=10.
+
+**Lessons.**
+- Profiled per-hook costs on a profiled run overstate the unprofiled saving; before filing, compare the profiled share against the unprofiled step's sample spread.
+- The feature-flag gate needs every exported JSX entry in a changed UI file to branch on the flag (an `&&`, ternary or `if` on the `useFlag` value). Passing the value as a prop or into `useState` does not count. Run `.github/scripts/feature-flag-gate.mjs` locally with `FEATURE_FLAG_TYPESCRIPT_PATH` before pushing.
+- A playbook PR titled with a ticket moves that ticket to QA on merge; title playbook-only PRs so the ticket's column stays truthful, or move it back at once.
+
+**Next probe.** The phone drawing step is about 650 ms of one synchronous render for 10 cards. Profile which card subcomponents dominate it on a larger board (50+ cards) where per-card cost would show, or move the device-copy publish off the sync lane (react-query notify inside a transition).
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -614,6 +633,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7617 | Phone board first visit, early layout and page script tags injected live, interleaved N=5+5 and 2+2 | 12315 ms (off) → 12354 ms (on); second run 11.8 → 13.7 s | 0, regression risk | no-go, nothing shipped; layout code started 3.2 s sooner but shares the link with the first wave |
 | https://app.hypertask.ai/detail/project-4060/615 | Phone board first visit, harness readiness, interleaved N=4+4 | 12030 ms (Playwright pre-scroll, median of 4) → 9212 ms (in-page scroll) | n/a (measurement, not app speed) | about 2.8 s of the 11.7 s baseline was the harness; board paths version 2 |
 | https://app.hypertask.ai/detail/project-15/7644 | Board cards after g then b, live on/off interleaved N=5+5 per profile, load 10.7 to 17.7 | desktop 962 → 966 ms, phone 2333 → 2425 ms (overlapping); placeholder frame 10 of 10 → 0 of 5 desktop, 1 of 5 phone | 0, no measurable difference | flag `htpr-7644-board-cards-first-draw` Everyone, PR 1953; first visit unaffected (no flag seed); same cards in all 30 samples |
+| https://app.hypertask.ai/detail/project-15/7677 | Phone g then b, drawing step and card visible, live on/off interleaved N=10+10, load 7 to 11 | step 656 → 647 ms, card 2388 → 2208 ms (overlapping) | 0, no measurable difference | flag `htpr-7677-board-card-data-once` Everyone, PR 2007; same cards 10 of 10, Draft mark 4 of 4 |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
@@ -631,7 +651,7 @@ Confirmed, comparable saved-ms total in this seed: **not established**. Future e
 | Re-baseline phone daily read | Profile fixed 2026-10-11; older phone days not comparable | Run the daily harness at host load below 12, record as the new phone baseline |
 | Live description sooner after a server description (HTPR-7367) | Controls arrive about 1 s later with the server description | Time the editor chunk against the live swap; if it gates the transition, nest a Suspense with the static frame as fallback; ABAB phone N=5 |
 | Account-based flag A/B on a shared board | HTPR-6934 verdict pending | Seed inboxes for both accounts, run desktop and inbox when load is low |
-| Per-card board-wide data watchers (HTPR-7677) | Drafts, running timers and custom fields: about 90 to 140 ms of a 1 s phone render on 10 cards (2026-10-23 profiles) | Lift to the board behind a flag; one-observer-per-list test; live phone on/off of query-published to first-commit, at least 10 interleaved pairs |
+| Per-card board-wide data watchers (HTPR-7677) | Shipped 2026-10-24; no measurable gain on 10 cards, unprofiled step about 650 ms with 350 to 500 ms spread | Retest only on a 50+ card board, where per-card cost grows |
 | Flag readers redraw after load (HTPR-7560) | `useFlag` context swaps to an equal new object after hydration; 399 readers | Per-key subscription behind a server flag, live ABAB phone N=5, render-count test |
 | Name the React work in a phone tap from the board (HTPR-7395) | Tap window is 5.4 s React, 1.4 s module eval, 1.2 s idle of 10.8 s | Local production build with source maps, phone profile, CPU profile the tap; then defer the pointerdown Firebase and emoji warm until the ticket paints, ABAB N=5 at load under 20 |
 

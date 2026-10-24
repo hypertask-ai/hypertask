@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'printf "ht-flag test failed at line %s\n" "$LINENO" >&2' ERR
 script="$(cd "$(dirname "$0")" && pwd)/ht-flag"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -50,7 +51,7 @@ for bad_reason in \
   'https://app.hypertask.ai/detail/project-4060/1000000000#comment-123' \
   "${reason}junk" "${reason}?extra=1" "${reason}/extra" "${reason}#extra"; do
   reject set "$key" off --reason "$bad_reason"
-  rg -q 'Question comment.*flag key and target mode.*#comment-<id>' "$tmp/output"
+  grep -qE 'clear yes from Valentin within 7 days:.*thumbs up on a switch question.*ticket yes after exactly one switch question.*in-chat record.*HT Product Lead.*#comment-<id>.*questions name Switch <flag-key> to <mode>' "$tmp/output"
 done
 reject set "$key" off --reason 'https://app.hypertask.ai/page/approval'
 reject set "$key" off --reason 'https://app.hypertask.ai/detail/project-4060/215/extra'
@@ -62,6 +63,26 @@ reject set "$key" off --reason 'https://app.hypertask.ai@evil.test/detail/projec
 reject set "$key" off --reason 'https://app.hypertask.ai/admin/flags'
 reject set "$key" off --reason 'https://app.hypertask.ai/detail/../admin/flags'
 reject set "$key" off --reason "https://app.hypertask.ai/page/$(printf '%0500d' 0)"
+ai_review='https://github.com/hypertask-ai/hypertask/pull/123'
+live_qa='https://qa.example.test/pass'
+independent='Checked independently'
+"$script" review "$key" everyone --ai-review "$ai_review" --independent "$independent" --live-qa "$live_qa" --dry-run |
+  jq -e --arg key "$key" --arg ai "$ai_review" --arg text "$independent" --arg qa "$live_qa" \
+    '.method == "POST" and .url == "https://app.hypertask.ai/api/mcp/flags/reviews" and .body == {key:$key,mode:"EVERYONE",aiReviewUrl:$ai,independentReview:$text,liveQaUrl:$qa,inboxCycle:"passed"}' >/dev/null
+"$script" set "$key" everyone --review 42 --dry-run | jq -e '.method == "PATCH" and .body.review == 42 and .body.mode == "EVERYONE" and (.body | has("reason") | not)' >/dev/null
+"$script" set "$key" off --failure "$live_qa" --dry-run | jq -e --arg qa "$live_qa" '.body.failure == $qa and .body.mode == "OFF"' >/dev/null
+reject set "$key" off --review 42
+reject set "$key" everyone --failure "$live_qa"
+reject set "$key" everyone --review 0
+reject set "$key" everyone --review 1.5
+reject set "$key" everyone --review 9007199254740992
+reject set "$key" off --failure http://qa.test/fail
+reject set "$key" everyone --review 42 --reason "$reason"
+reject review "$key" off --ai-review "$ai_review" --independent "$independent" --live-qa "$live_qa"
+reject review "$key" everyone --ai-review https://github.com/other/repo/pull/123 --independent "$independent" --live-qa "$live_qa"
+reject review "$key" everyone --ai-review "$ai_review" --independent ' ' --live-qa "$live_qa"
+reject review "$key" everyone --ai-review "$ai_review" --independent "$independent" --live-qa http://qa.test/pass
+reject review "$key" everyone --ai-review "$ai_review" --independent "$independent"
 mkdir -p "$tmp/bin"
 printf 'offline-test-credential\n' > "$tmp/credential"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'SH'
@@ -79,7 +100,11 @@ while [ "$#" -gt 0 ]; do
   if [ "$1" = --output ]; then output=$2; shift; fi
   shift
 done
-printf '%s\n' "${TEST_RESPONSE:-{\"flag\":{\"mode\":\"OFF\"}}}" > "$output"
+if [ -n "${TEST_RESPONSE:-}" ]; then
+  printf '%s\n' "$TEST_RESPONSE" > "$output"
+else
+  printf '%s\n' '{"flag":{"mode":"OFF"}}' > "$output"
+fi
 printf '%s' "${TEST_STATUS:-200}"
 SH
 chmod +x "$tmp/bin/curl"
@@ -90,9 +115,23 @@ if TEST_STATUS=403 TEST_RESPONSE='{"error":"Forbidden"}' "$script" get > "$tmp/o
   printf 'non-2xx must fail\n' >&2
   exit 1
 fi
-rg -q 'Forbidden' "$tmp/output"
-if rg -q 'offline-test-credential' "$tmp/output"; then
+grep -qE 'Forbidden' "$tmp/output"
+if grep -qE 'offline-test-credential' "$tmp/output"; then
   printf 'credential leaked\n' >&2
   exit 1
 fi
+TEST_STATUS=201 TEST_RESPONSE='{"review":{"id":42}}' "$script" review "$key" everyone --ai-review "$ai_review" --independent "$independent" --live-qa "$live_qa" > "$tmp/output" 2>&1
+grep -qE '^review 42$' "$tmp/output"
+for api_error in 'The review must be recorded by a different agent' 'Failure-Off is not allowed for high-risk flags'; do
+  if [[ $api_error == *high-risk* ]]; then
+    switch_args=(off --failure "$live_qa")
+  else
+    switch_args=(everyone --review 42)
+  fi
+  if TEST_STATUS=403 TEST_RESPONSE="$(jq -nc --arg error "$api_error" '{error:$error}')" "$script" set "$key" "${switch_args[@]}" > "$tmp/output" 2>&1; then
+    printf 'API refusal must fail\n' >&2
+    exit 1
+  fi
+  grep -qE "$api_error" "$tmp/output"
+done
 printf 'ht-flag tests passed\n'

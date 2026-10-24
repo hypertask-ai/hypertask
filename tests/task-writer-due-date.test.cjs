@@ -23,6 +23,9 @@ function moduleWithStubs(file, stubs) {
   const mod = { exports: {} };
   new Function("module", "exports", "require", code)(mod, mod.exports, (id) => {
     if (id === "@/utils/controllers/tasks/parentTaskAccess") return load(path.join(root, "src/utils/controllers/tasks/parentTaskAccess.ts"));
+    if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
+    if (id === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
+    if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
     if (id in stubs) return stubs[id];
     if (!id.startsWith("@/") && !id.startsWith(".")) return require(id);
     throw new Error(`Unexpected dependency: ${id}`);
@@ -163,6 +166,7 @@ function writerHarness(enabled, output = html, fail = false) {
   });
   const calls = [];
   const route = moduleWithStubs("src/app/api/ai/task-writer/route.ts", {
+    "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: () => null },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/utils/htmlEscape": load(path.join(root, "src/utils/htmlEscape.ts")),
     "@/lib/errors/reportError": { reportError: async () => {} },
@@ -173,6 +177,7 @@ function writerHarness(enabled, output = html, fail = false) {
       return { textStream: (async function* () { yield output.slice(0, 35); if (fail) throw new Error("Interrupted"); yield output.slice(35); })() };
     } },
     "@/app/api/ai/_lib/editorAi": editor,
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/app/api/ai/_lib/taskWriterRun": run,
     "@/app/api/ai/_lib/taskWriterProperties": { extractTaskWriterProperties: (value) => ({ description: value }), hasUsableTaskWriterDraft: () => true, TASK_WRITER_EMPTY_DRAFT_MESSAGE: "" },

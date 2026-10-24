@@ -126,6 +126,7 @@ function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
   };
 
   const stubs = {
+    "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, assertProjectTicketRoom: async () => {} },
     "@/lib/tasks/sameBoardRelations": loadTs("src/lib/tasks/sameBoardRelations.ts"),
     "date-fns": { subMinutes: (date) => date },
     sugar: {

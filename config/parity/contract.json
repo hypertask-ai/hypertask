@@ -126,7 +126,7 @@
       "id": "flags.manage",
       "title": "Owner-approved feature flag changes by agent sessions",
       "matches": {
-        "api": ["^(GET|PATCH) /api/mcp/flags$"]
+        "api": ["^(GET|POST|PATCH) /api/mcp/flags$", "^POST /api/mcp/flags/reviews$"]
       },
       "exclusions": {
         "mcp": "Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags.",
@@ -155,8 +155,15 @@
         "api": ["^GET /api/mcp/tasks$", "^GET /api/mcp/tasks/mine$"],
         "mcp": ["^hypertask_(list_tasks|get_tasks)$"],
         "cli": ["^task (list|get)$"],
-        "ai_chat": ["^hypertask_(list_tasks|get_tasks|my_tasks)$"],
+        "ai_chat": ["^hypertask_(list_tasks|get_tasks|my_tasks)$", "^hypertask_show_ticket_rows$"],
         "hyperai": ["^hypertask_(list_tasks|get_tasks)$"]
+      },
+      "planned": {
+        "ai_chat": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7683",
+          "expires": "2026-11-20",
+          "entries": ["hypertask_show_ticket_rows"]
+        }
       }
     },
     {
@@ -196,11 +203,18 @@
       "id": "tasks.mutate",
       "title": "Create, update, move, batch, or escalate tasks",
       "matches": {
-        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate)$", "^POST /api/mcp/tasks/card-actions$"],
-        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
-        "cli": ["^task (create|update|move|move-board)$", "^agent move$"],
+        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate)$", "^POST /api/mcp/tasks/card-actions$", "^POST /api/mcp/tasks/waiting-on$"],
+        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$"],
+        "cli": ["^task (create|update|move|move-board)$", "^agent move$", "^task waiting-on$"],
         "ai_chat": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
-        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$"]
+        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7723",
+          "expires": "2026-11-13",
+          "entries": ["task waiting-on"]
+        }
       }
     },
     {

@@ -1,3 +1,4 @@
+import { assertProjectTicketRoom, isPlanLimitsEnabled } from "@/lib/planLimits";
 
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { subMinutes } from "date-fns"
@@ -215,6 +216,21 @@ async function updateTaskTreeStatus(
         status,
         actingAgentId,
       )
+    }
+    if (status === "Normal" && await isPlanLimitsEnabled(actingUserId)) {
+      const restoring = await tx.task.findMany({
+        where: { id: { in: taskIds }, status: { not: "Normal" } },
+        select: { projectId: true },
+      });
+      const deltas = new Map<number, number>();
+      for (const task of restoring) deltas.set(task.projectId, (deltas.get(task.projectId) ?? 0) + 1);
+      for (const [projectId, delta] of [...deltas].sort(([a], [b]) => a - b)) {
+        await assertProjectTicketRoom(tx, projectId, delta, {
+          actorUserId: actingUserId,
+          agentId: actingAgentId,
+          entryPoint: "task.recover",
+        });
+      }
     }
     await tx.task.updateMany({
       where: { id: { in: taskIds } },

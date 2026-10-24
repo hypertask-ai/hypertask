@@ -82,10 +82,10 @@ function Probe() {
   const snapshot = surface.useFirstScreenSurface(985);
   return React.createElement('output', null, JSON.stringify({ flag, loaded, isMobile, rail, expanded, width, user, project, surface: snapshot }));
 }
-const tree = (FlagProvider, shellSeed = seed, accountId = 985) => React.createElement(Provider, {
-  initialIsMobile: false, initialIsApple: false, authenticatedUserId: accountId, shellSeed, flagProvider: FlagProvider,
+const tree = (FlagProvider, shellSeed = seed, accountId = 985, initialIsMobile = false) => React.createElement(Provider, {
+  initialIsMobile, initialIsApple: false, authenticatedUserId: accountId, shellSeed, flagProvider: FlagProvider,
 }, React.createElement(Probe));
-const expected = (accepted) => ({ flag: accepted, loaded: accepted, isMobile: accepted,
+const expected = (accepted, isMobile = accepted) => ({ flag: accepted, loaded: accepted, isMobile,
   rail: accepted ? false : null, expanded: accepted ? false : null, width: accepted ? 517 : null, user: null, project: null, surface: null });
 function clearClients() { for (const client of clients.splice(0)) client.clear(); }
 
@@ -96,10 +96,23 @@ test('both real flag readers seed flags/mobile/preferences but never route data,
         [{ ...seed, flags: { ...seed.flags, accountId: 6 } }, 985, false]]) {
         const html = renderToString(tree(FlagProvider, shellSeed, accountId));
         const dom = new JSDOM(html);
-        assert.deepEqual(JSON.parse(dom.window.document.querySelector('output').textContent), expected(accepted));
+        assert.deepEqual(JSON.parse(dom.window.document.querySelector('output').textContent), expected(accepted, false));
         const client = clients.at(-1);
         assert.equal(client.getQueryData(['feature-flags', accountId])?.['visible-ticket-flag'] === true, accepted);
         assert.ok(client.getQueryCache().getAll().every(query => query.queryKey[0] === 'feature-flags'));
+        dom.window.close();
+      }
+    }
+  } finally { clearClients(); }
+});
+
+test('HTPR-7696: request device wins over a stale opposite-device ticket shell on the server', () => {
+  try {
+    for (const FlagProvider of [flags.FeatureFlagProvider, flags.SubscribedFeatureFlagProvider]) {
+      for (const initialIsMobile of [true, false]) {
+        const staleShell = { ...seed, display: { ...seed.display, isMobile: !initialIsMobile } };
+        const dom = new JSDOM(renderToString(tree(FlagProvider, staleShell, 985, initialIsMobile)));
+        assert.deepEqual(JSON.parse(dom.window.document.querySelector('output').textContent), expected(true, initialIsMobile));
         dom.window.close();
       }
     }
@@ -111,7 +124,7 @@ test('matching shell markup hydrates in place with either flag reader, without r
     for (const seeded of [true, false]) {
       pathname = seeded ? '/detail/project-15/7627' : '/project';
       const initial = seeded ? seed : null;
-      const html = renderToString(tree(FlagProvider, initial));
+      const html = renderToString(tree(FlagProvider, initial, 985, seeded));
       const dom = new JSDOM(`<div id="root">${html}</div>`, { url: 'https://app.hypertask.ai/detail/project-15/7627' });
       const names = ['window', 'document', 'fetch', 'IS_REACT_ACT_ENVIRONMENT'];
       const previous = names.map(name => [name, Object.getOwnPropertyDescriptor(global, name)]);
@@ -122,13 +135,13 @@ test('matching shell markup hydrates in place with either flag reader, without r
       const node = document.querySelector('output'), errors = [];
       let instance;
       try {
-        await React.act(async () => { instance = hydrateRoot(document.getElementById('root'), tree(FlagProvider, initial), {
+        await React.act(async () => { instance = hydrateRoot(document.getElementById('root'), tree(FlagProvider, initial, 985, seeded), {
           onRecoverableError: error => errors.push(error.message),
         }); });
         assert.deepEqual(errors, []); assert.equal(document.querySelector('output'), node);
         assert.deepEqual(JSON.parse(node.textContent), expected(seeded));
         pathname = '/detail/project-15/7628';
-        await React.act(async () => instance.render(tree(FlagProvider, { ...seed, display: { ...seed.display, railCollapsed: false } })));
+        await React.act(async () => instance.render(tree(FlagProvider, { ...seed, display: { ...seed.display, railCollapsed: false } }, 985, seeded)));
         assert.equal(document.querySelector('output'), node);
         assert.deepEqual(JSON.parse(node.textContent), expected(seeded));
       } finally {

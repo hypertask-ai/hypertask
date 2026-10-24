@@ -1,3 +1,4 @@
+import { assertTicketRoom, isPlanLimitsEnabled, isPlanLimitReachedError, scopeForProject, scopeKey } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import { Prisma, type Task } from "@prisma/client";
@@ -233,6 +234,7 @@ async function moveAllSubtasksRecursively(
       teamScope,
     });
     if (result.status !== 200) {
+      if (isPlanLimitReachedError(result.json)) throw result.json;
       throw new Error(toErrorMessage(result.json, "Failed to move subtask"));
     }
     if (subtask.subTasks?.length > 0) {
@@ -432,7 +434,6 @@ export async function moveTaskToDifferentBoard(
     taskId,
     targetProjectId,
     targetSectionId,
-    currentProjectId,
     currentUser,
     agentId,
     teamScope,
@@ -443,6 +444,7 @@ export async function moveTaskToDifferentBoard(
     return { success: false, error: "Task not found", statusCode: 404 };
   }
 
+  const currentProjectId = taskToMove.projectId;
   const { newProject, currentProject, section } = await getProjectData(
     targetProjectId,
     currentProjectId,
@@ -480,6 +482,7 @@ export async function moveTaskToDifferentBoard(
       { teamScope }
     );
     if (result.status !== 200) {
+      if (isPlanLimitReachedError(result.json)) throw result.json;
       return {
         success: false,
         error: toErrorMessage(result.json, "Failed to update task"),
@@ -496,6 +499,27 @@ export async function moveTaskToDifferentBoard(
       error: "Target project has no ticket identifier",
       statusCode: 409,
     };
+  }
+
+  if (await isPlanLimitsEnabled(currentUser.id)) {
+    await prisma.$transaction(async (tx) => {
+      const destination = await tx.project.findUniqueOrThrow({
+        where: { id: targetProjectId },
+        select: { teamId: true, ownerId: true, status: true },
+      });
+      if (destination.status !== "Normal") return;
+      const scope = scopeForProject(destination);
+      const incoming = await tx.task.findMany({
+        where: { id: { in: getAllTaskIdsRecursively(taskToMove) }, status: "Normal" },
+        select: { project: { select: { teamId: true, ownerId: true, status: true } } },
+      });
+      const delta = incoming.filter(({ project }) => project.status !== "Normal" || scopeKey(scopeForProject(project)) !== scopeKey(scope)).length;
+      await assertTicketRoom(tx, scope, delta, {
+        actorUserId: currentUser.id,
+        agentId,
+        entryPoint: "task.move.tree",
+      });
+    });
   }
 
   const parentAlreadyInTarget = taskToMove.parentTaskId
@@ -521,6 +545,7 @@ export async function moveTaskToDifferentBoard(
     teamScope,
   });
   if (result.status !== 200) {
+    if (isPlanLimitReachedError(result.json)) throw result.json;
     return {
       success: false,
       error: toErrorMessage(result.json, "Failed to update task"),

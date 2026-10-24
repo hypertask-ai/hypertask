@@ -18,6 +18,7 @@ function load(file, mocks = {}) {
   }).outputText;
   new Function("require", "module", "exports", compiled)((name) => {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
+    if (name === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
     if (name.startsWith("@/") || name.startsWith("./")) throw new Error(`Unstubbed dependency: ${name}`);
     return require(name);
   }, mod, mod.exports);
@@ -217,12 +218,12 @@ function draftHandoff(enabled, create, calls, dom, apple = false, options = {}) 
   visit(file);
   assert.ok(effect);
   const compiled = ts.transpileModule(`const effect = ${effect};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", "_mbl", "closeBackDismissBeforeNavigation", `${compiled}; return effect();`)(
+  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", "_mbl", "closeBackDismissBeforeNavigation", "PlanLimitRefusal", `${compiled}; return effect();`)(
     enabled, dom.window, dom.window.document, apple, false, false, false, { current: false }, false,
     options.formValues ?? { currentProject: { id: 6859 }, status: { sectionId: 7 }, title: "" },
     (value) => calls.push(["busy", value]), create, options.router ?? { push: (url) => calls.push(["navigate", url]) },
     options.closeHandler ?? ((save) => calls.push(["close", save])), { error: () => calls.push(["error"]) },
-    options.mobile ?? false, load("src/lib/mobile/backDismiss.ts").closeBackDismissBeforeNavigation,
+    options.mobile ?? false, load("src/lib/mobile/backDismiss.ts").closeBackDismissBeforeNavigation, load("src/lib/planLimitsClient.ts").PlanLimitRefusal,
   );
 }
 

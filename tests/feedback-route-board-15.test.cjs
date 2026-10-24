@@ -63,7 +63,7 @@ stubModule('src/utils/controllers/assignees/assign.ts', {
 })
 
 stubModule('src/utils/controllers/tasks/createTaskCore.ts', {
-  createTaskCore: async (options) => {
+  createProvisionedTaskCore: async (options) => {
     calls.createTaskCoreArgs = options
     return { task: { id: 999 }, description: {} }
   },

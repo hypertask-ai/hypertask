@@ -34,6 +34,7 @@ function nodesWithin(node, predicate, shallow = true) {
 function isClientResponse(expression) {
   if (!ts.isCallExpression(expression)) return false;
   const name = expression.expression.getText();
+  if (name === "respond" && expression.arguments.length === 1) return isClientResponse(expression.arguments[0]);
   let status;
   if (name === "createSseErrorResponse") {
     status = expression.arguments[1];
@@ -93,7 +94,7 @@ function reportsHandledError(block) {
     // Existing chat reporter already delegates to reportError with source: handled.
     if (call.expression.getText() === "reportHandledChatError") return true;
     return call.expression.getText() === "reportError" &&
-      call.arguments.length === 1 &&
+      (call.arguments.length === 1 || (call.getSourceFile().fileName.endsWith("/task-writer/route.ts") && call.arguments.length === 2 && call.arguments[1].getText() === "error")) &&
       ts.isObjectLiteralExpression(call.arguments[0]) &&
       call.arguments[0].properties.some((property) =>
         ts.isPropertyAssignment(property) && property.name.getText() === "source" &&
@@ -169,6 +170,7 @@ test("AI route catches never report the same error twice", () => {
 test("coverage detects generic, empty, streaming and nested fallbacks, not just known copy", () => {
   for (const fallback of [
     'return NextResponse.json({ error: "New friendly wording" }, { status: 500 });',
+    'return respond(NextResponse.json({ error: "Server failure" }, { status: 500 }));',
     'return NextResponse.json({ questions: [] });',
     'return [];',
     'mentionModelUnavailable = true; selected = await selectModel(true);',
@@ -192,6 +194,7 @@ test("coverage detects generic, empty, streaming and nested fallbacks, not just 
 test("coverage permits expected client responses and rethrows but rejects wrong report sources", () => {
   for (const body of [
     'return NextResponse.json({ error: "Invalid request" }, { status: 400 });',
+    'return respond(NextResponse.json({ error: "Invalid request" }, { status: 400 }));',
     'return createSseErrorResponse(requestErrorMessage(error, "body"));',
     'throw error;',
     'await reportError({ source: "handled" }); return [];',
@@ -239,6 +242,7 @@ test("new report payloads use only error diagnostics and literal route/stage met
 });
 
 function loadRoute(relativePath, stubs, logs = []) {
+  stubs = { "@/lib/planLimits": { isPlanLimitReachedError: () => false }, ...stubs };
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -273,9 +277,11 @@ function routeStubs(error, reports) {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
     "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
     "@/utils/controllers/projects/getAllIncludes": {},
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 7 }) },
     "@/app/api/ai/_lib/aiUsage": {},
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
+    "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: (value) => value?.name === "SharedAiAllowanceExceededError" ? value.message : null },
     "@/app/api/ai/_lib/taskWriterProperties": {},
     "@/app/api/ai/_lib/editorAi": {
       errorMessage: (value) => value instanceof Error ? value.message : "Sorry, an error occurred while processing your request.",

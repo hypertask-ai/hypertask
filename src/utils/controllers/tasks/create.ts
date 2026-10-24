@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
@@ -153,7 +154,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                   })
                   await persistAgentTaskCreatedPending(tx, row.id)
                   return { taskId: row.id, firstTaskPointerTaskId: getProject?.firstTaskPointerTaskId ?? null, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
-                }, "web")
+                }, "web", null, projectId)
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
                 await prisma.team_Activity.update({
@@ -185,7 +186,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                   })
                   await persistAgentTaskCreatedPending(tx, row.id)
                   return { taskId: row.id, firstTaskPointerTaskId: getProject?.firstTaskPointerTaskId ?? null, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
-                }, "web")
+                }, "web", null, projectId)
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
                 await prisma.team_Activity.update({
@@ -293,6 +294,10 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 json:task
             })
         } catch (error) {
+            if (isPlanLimitReachedError(error)) {
+                const refusal = planLimitResponse(error)
+                return { status: refusal.status, json: refusal.body }
+            }
             console.log(error)
             return ({
                 status:500,

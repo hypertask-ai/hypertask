@@ -295,6 +295,7 @@ function loadCommentsRoute({
     if (request === './agentChatterRouting') return jiti(path.join(root, 'src/lib/mcp/operations/comments/agentChatterRouting.ts'))
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(modules)
     if (modules[request]) return modules[request]
+    if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false }
     throw new Error(`Unexpected import: ${request}`)
   }
   modules['@/lib/mcp/comments/visibleReactionAgents'] =

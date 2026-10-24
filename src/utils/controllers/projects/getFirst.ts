@@ -1,6 +1,6 @@
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { randomBytes } from "crypto";
+import { createProvisionedProjectWithStableName } from "./createProjectWithStableName";
 import prisma from "@/lib/prisma";
 import { createProjectViewAndCreateDefault } from "./create";
 import { getProjectViewInclude } from "./getAll";
@@ -55,21 +55,13 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
 
             console.log("🚀 ~ getFirst ~ project:", project)
             if (!project) {
-                const provisionalName = `n${randomBytes(5).toString("hex")}`;
                 const { created, analyticsKey } = await prisma.$transaction(async (tx) => {
-                    const created = await tx.project.create({
-                        data: {
-                            ownerId: userId,
-                            name: provisionalName,
-                            uniqueIdentifier: "",
-                        },
-                    });
+                    const created = await createProvisionedProjectWithStableName({
+                        ownerId: userId,
+                        uniqueIdentifier: "",
+                    }, tx);
                     const analyticsKey = await enqueueBoardCreated(tx, created.id, "auto", { userId });
                     return { created, analyticsKey };
-                });
-                await prisma.project.update({
-                    where: { id: created.id },
-                    data: { name: `project-${created.id}` },
                 });
                 await createProjectViewAndCreateDefault({
                     projectId: created.id,

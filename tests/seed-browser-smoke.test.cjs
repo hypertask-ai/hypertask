@@ -94,11 +94,30 @@ await seedSessionFixtures({});`,
   const sidebar = files["/fixtures/agent-sidebar-fixture.json"];
   assert.equal(sidebar.projectId, boards[0].id);
   assert.deepEqual(Object.keys(sidebar.lanes), ["Desktop", "Mobile"]);
+  assert.deepEqual(sidebar.personalChats.map(chat => chat.title), ["Desktop", "Mobile"].flatMap(lane =>
+    [`Smoke ${lane} chat: planning`, `Smoke${lane}${"1792812226726848138aiChatOpenNewTickets".repeat(6)}`, `Smoke ${lane} chat: next steps`]));
+  assert.deepEqual(sidebar.personalChats.map(chat => chat.updatedAt), ["Desktop", "Mobile"].flatMap(() =>
+    ["2026-10-22T10:00:00.000Z", "2026-10-22T11:00:00.000Z", "2026-10-22T12:00:00.000Z"]));
+  assert.equal(new Set(sidebar.personalChats.map(chat => chat.id)).size, 6);
+  assert.equal(new Set(sidebar.personalChats.map(chat => chat.message)).size, 6);
+  for (const fixture of sidebar.personalChats) {
+    const session = records.chatSession.find(row => row.id === fixture.id);
+    assert.equal(session.userId, records.user.find(user => user.displayName === `Sidebar ${fixture.lane}`).id);
+    assert.equal(session.agentId, null);
+    assert.equal(session.taskId, null);
+    assert.equal(session.projectId, sidebar.projectId);
+    assert.equal(session.title, fixture.title);
+    assert.equal(session.updatedAt.toISOString(), fixture.updatedAt);
+    const history = records.chatMessage.filter(row => row.sessionId === fixture.id);
+    assert.equal(history.length, 1);
+    assert.equal(history[0].role, "assistant");
+    assert.equal(history[0].content, fixture.message);
+  }
   for (const [lane, agents] of Object.entries(sidebar.lanes)) {
     assert.deepEqual(agents.map(agent => agent.name), ["A", "B", "Native"].map(suffix => `Sidebar ${lane} ${suffix}`));
     for (const fixture of agents) {
       const agent = records.agent.find(row => row.id === fixture.id);
-      assert.equal(agent.userId, smoke.id);
+      assert.equal(agent.userId, records.user.find(user => user.displayName === `Sidebar ${lane}`).id);
       assert.equal(agent.runtimeType, fixture.name.endsWith("Native") ? "NATIVE" : "EXTERNAL");
       assert.equal(agent.mcpTokenHash, `hash:${fixture.token}`);
       assert.ok(records.member.some(row => row.agentId === agent.id && row.projectId === sidebar.projectId && row.status === "Accepted"));
@@ -137,5 +156,5 @@ await seedSessionFixtures({});`,
     assert.ok(records.invite.filter(row => row.projectId === project.id).every(row => row.userId === owner.id));
   }
   assert.ok(records.member_Team.filter(row => [contract.callers.guest.id, contract.callers.unaccepted.id].includes(row.userId)).length === 0);
-  assert.deepEqual(records.member_Team.filter(row => row.teamId === boards[0].teamId).map(row => row.userId), [smoke.id]);
+  assert.deepEqual(records.member_Team.filter(row => row.teamId === boards[0].teamId).map(row => row.userId), [smoke.id, ...records.user.filter(user => user.displayName.startsWith("Sidebar ")).map(user => user.id)]);
 });

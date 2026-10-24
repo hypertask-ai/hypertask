@@ -55,6 +55,8 @@ const prisma = {
   featureFlag: { findUnique: async () => null, findMany: async () => [] },
 };
 const mocks = {
+  "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false },
+  "@/lib/mcp/boards/createBoardFromManifest": {},
   "@/lib/prisma": { default: prisma },
   "@/lib/flags": flagsMock,
   "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
@@ -64,10 +66,10 @@ const mocks = {
   "@/utils/controllers/logs/createLog": { default: () => {} },
   "../projects/create": { createProjectViewAndCreateDefault: async () => {} },
   "@/utils/controllers/projects/create": { createProjectViewAndCreateDefault: async () => {} },
-  "../projects/createProjectWithStableName": { createProjectWithStableName: async () => ({ id: 42 }) },
-  "@/utils/controllers/projects/createProjectWithStableName": { createProjectWithStableName: async () => ({ id: 42 }) },
-  "../tasks/createTaskCore": { createTaskCore: async (task) => { taskCalls.push(task); return { task: { id: taskCalls.length } }; } },
-  "@/utils/controllers/tasks/createTaskCore": { createTaskCore: async (task) => { taskCalls.push(task); return { task: { id: taskCalls.length } }; } },
+  "../projects/createProjectWithStableName": { createProvisionedProjectWithStableName: async () => ({ id: 42 }) },
+  "@/utils/controllers/projects/createProjectWithStableName": { createProvisionedProjectWithStableName: async () => ({ id: 42 }) },
+  "../tasks/createTaskCore": { createProvisionedTaskCore: async (task) => { taskCalls.push(task); return { task: { id: taskCalls.length } }; } },
+  "@/utils/controllers/tasks/createTaskCore": { createProvisionedTaskCore: async (task) => { taskCalls.push(task); return { task: { id: taskCalls.length } }; } },
   "../assignees/assign": { default: async () => {} },
   "@/utils/controllers/projects/views/viewsHelperAPIfunctions": {},
   "@/utils/helperFunctions/Views/BoardFilterSanitizer": {},

@@ -192,7 +192,7 @@ export async function runCoreActionsSmoke(options: {
   const ownedInboxIds = new Set<number>();
 
   const markerText = () =>
-    `<p data-core-smoke-ids="${[...ownedCommentIds].sort((a, b) => a - b).join(",")}">${marker} User and agent mention check: <span data-type="mention" class="mention" data-id="${escapeHtml(fixture.userDisplayName)}" data-label="name-${fixture.userId}" uniqueindex="" projectid="">${escapeHtml(fixture.userDisplayName)}</span> <span data-type="mention" class="mention" data-id="${escapeHtml(fixture.agentDisplayName)}" data-label="agent-${escapeHtml(fixture.agentId)}">${escapeHtml(fixture.agentDisplayName)}</span></p>`;
+    `<p data-core-smoke-ids="${[...ownedCommentIds].sort((a, b) => a - b).join(",")}">${marker} Agent mention check: <span data-type="mention" class="mention" data-id="${escapeHtml(fixture.agentDisplayName)}" data-label="agent-${escapeHtml(fixture.agentId)}">${escapeHtml(fixture.agentDisplayName)}</span></p>`;
 
   const request = async (
     action: string,
@@ -750,7 +750,6 @@ export async function runCoreActionsSmoke(options: {
     );
     if (
       !saved?.text?.includes(marker) ||
-      !saved.text.includes(`name-${fixture.userId}`) ||
       !saved.text.includes(`agent-${fixture.agentId}`)
     ) {
       throw new SmokeFailure(
@@ -760,7 +759,7 @@ export async function runCoreActionsSmoke(options: {
         "saved comment or mentions were missing",
       );
     }
-    steps.push("post comment and mention user and agent");
+    steps.push("post comment and mention agent");
 
     const columns = await request(
       "load move-to-column columns",

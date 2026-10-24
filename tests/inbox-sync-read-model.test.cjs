@@ -1133,7 +1133,8 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   assert.match(hook, /useSearchParams\(\)/);
   assert.match(hook, /currentInboxReadModelRevision\(userId\)/);
   assert.match(hook, /latestNetworkRequestRevisionByAccount\.set/);
-  assert.match(hook, /latestObservedRevision === latestNetworkRequestRevision/);
+  assert.match(hook, /isStaleInboxHydration\(\{[\s\S]*?observedRevision: latestObservedRevision,[\s\S]*?networkRequestRevision: latestNetworkRequestRevision,/);
+  assert.match(read("src/lib/inboxSync/hydrationStaleness.ts"), /observedRevision === networkRequestRevision/);
   assert.match(hook, /isInboxAuthorizationError\(error\)/);
   assert.match(hook, /authorizationFailureBlocksRevision/);
   assert.match(hook, /Ignored Inbox persisted fallback/);
@@ -1197,9 +1198,10 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
     /latestObservedRevision = currentInboxReadModelRevision\(userId\)/,
   );
   assert.match(hook, /latestQueryPayload\?\.readModelRevision/);
+  assert.match(hook, /payloadRevision: payload\.revision,/);
   assert.match(
-    hook,
-    /compareInboxReadModelRevisions\(payload\.revision, candidate\) < 0/,
+    read("src/lib/inboxSync/hydrationStaleness.ts"),
+    /compareInboxReadModelRevisions\(payloadRevision, candidate\) < 0/,
   );
   assert.match(
     hook,

@@ -93,7 +93,6 @@ test("assignee ALL does not let one agent row satisfy both its owner and itself"
 
   assert.equal(assigneeFilterCondition(onlyTheAgent, [owner, agent], undefined, "ALL"), false);
   assert.equal(assigneeFilterCondition(bothSeparately, [owner, agent], undefined, "ALL"), true);
-  // ANY is unchanged: the shared row still counts for either selection.
   assert.equal(assigneeFilterCondition(onlyTheAgent, [owner, agent], undefined, "ANY"), true);
 });
 
@@ -128,4 +127,52 @@ test("assignee ALL is independent of assignee order", () => {
     assert.equal(assigneeFilterCondition(task, [owner, agent], undefined, "ALL"), true);
     assert.equal(assigneeFilterCondition(task, [agent, owner], undefined, "ALL"), true);
   }
+});
+
+test("saved human assignee filters exclude agent backing users in ANY and default modes", () => {
+  const owner = { id: 6, uid: "user-6" };
+  const sections = [{ items: [
+    { id: 1, assignees: [{ userId: 6, agentId: "agent-a" }] },
+    { id: 2, assignees: [{ userId: 6, agentId: null }] },
+    { id: 3, assignees: [{ userId: 6, agentId: "agent-a" }, { userId: 6 }] },
+    { id: 4, assignees: [{ userId: 7, agentId: null }] },
+    { id: 5, assignees: [] },
+    { id: 6 },
+  ] }];
+
+  for (const overallMode of ["ANY", "ALL"]) {
+    for (const match of [undefined, "ANY", "ALL"]) {
+      const filters = [{ type: "Assignees", searchPayload: [owner], ...(match ? { match } : {}) }];
+      assert.deepEqual(
+        applyFilters(sections, filters, overallMode)[0].items.map(({ id }) => id),
+        [2, 3],
+      );
+    }
+  }
+});
+
+test("human assignee isolation preserves explicit agent and mixed selections", () => {
+  const task = { assignees: [{ userId: 6, agentId: "agent-a" }] };
+  const owner = { id: 6, uid: "user-6" };
+  const agent = { id: "agent-a" };
+  const runtime = { legacyAgentAssigneeMatch: false };
+
+  assert.equal(assigneeFilterCondition(task, [agent], undefined, "ANY", runtime), true);
+  assert.equal(assigneeFilterCondition(task, [agent], undefined, "ALL", runtime), true);
+  assert.equal(assigneeFilterCondition(task, [owner, agent], undefined, "ANY", runtime), true);
+  assert.equal(assigneeFilterCondition(task, [owner, agent], undefined, "ALL", runtime), false);
+  assert.equal(assigneeFilterCondition(task, [{ id: "agent-b" }], undefined, "ANY", runtime), false);
+  assert.equal(assigneeFilterCondition(task, [], undefined, "ANY", runtime), true);
+});
+
+test("explicit legacy assignee matching restores ANY and default modes but not ALL", () => {
+  const task = { assignees: [{ userId: 6, agentId: "agent-a" }] };
+  const owner = { id: 6, uid: "user-6" };
+
+  for (const match of [undefined, "ANY"]) {
+    assert.equal(assigneeFilterCondition(task, [owner], undefined, match), false);
+    assert.equal(assigneeFilterCondition(task, [owner], undefined, match, { legacyAgentAssigneeMatch: false }), false);
+    assert.equal(assigneeFilterCondition(task, [owner], undefined, match, { legacyAgentAssigneeMatch: true }), true);
+  }
+  assert.equal(assigneeFilterCondition(task, [owner], undefined, "ALL", { legacyAgentAssigneeMatch: true }), false);
 });

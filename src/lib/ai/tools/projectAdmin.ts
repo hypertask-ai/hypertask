@@ -4,6 +4,8 @@ import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 import { tool } from "ai";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import { updateProjectStatus } from "@/utils/controllers/projects/boardQuota";
 import { requireCrossMessageConfirmation } from "@/lib/ai/bulkConfirmation";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { addAgentToBoard } from "@/utils/controllers/agents/boardMembers";
@@ -128,11 +130,17 @@ export function createProjectAdminTool(context: ToolContext) {
             });
           }
 
-          const updated = await prisma.project.update({
-            where: { id: project.id },
-            data: { status },
-            select: { id: true, name: true, title: true, status: true },
-          });
+          let updated;
+          try {
+            updated = await updateProjectStatus(project.id, status, {
+              actorUserId: user.id,
+              agentId: actingAgentId,
+              entryPoint: "ai.project_admin.restore",
+            });
+          } catch (error) {
+            if (isPlanLimitReachedError(error)) return planLimitResponse(error).body;
+            throw error;
+          }
 
           return sanitizeForJson({ success: true, project: updated });
         }

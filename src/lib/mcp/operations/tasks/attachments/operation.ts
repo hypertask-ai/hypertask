@@ -1,3 +1,4 @@
+import { assertFileSizeForProject, isPlanLimitsEnabled, isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
@@ -165,6 +166,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const planLimitContext = await isPlanLimitsEnabled(user.id) ? {
+      actorUserId: user.id, agentId: ctx.agentId, entryPoint: 'mcp.tasks.attachments',
+    } : undefined;
     const targetKey = commentId !== null ? `comment-${commentId}` : `description-${descriptionId}`;
     const createdAttachments = await storeAttachmentBatchWithTargetLock(
       prisma,
@@ -177,8 +181,12 @@ export async function POST(request: NextRequest) {
         teamScope: ctx.teamScope,
         commentId,
         descriptionId,
+        ...(planLimitContext ? { planLimitContext } : {}),
         inlineImages: mayRewriteTargetText && parsed.inline_images !== false && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id),
-      }
+      },
+      planLimitContext ? {
+        assertFileSize: (bytes) => assertFileSizeForProject(task.projectId, bytes, planLimitContext),
+      } : {}
     );
 
     if (commentId !== null) {
@@ -199,6 +207,10 @@ export async function POST(request: NextRequest) {
       })),
     });
   } catch (e) {
+    if (isPlanLimitReachedError(e)) {
+      const response = planLimitResponse(e);
+      return NextResponse.json(response.body, { status: response.status });
+    }
     console.error('[MCP attachments]', e);
     const status = e instanceof AttachmentBatchError ? e.status : 500;
     const partialAttachments =

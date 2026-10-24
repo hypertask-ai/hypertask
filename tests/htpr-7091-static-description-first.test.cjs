@@ -167,9 +167,9 @@ test("phone shell uses the phone container, desktop the drag container", () => {
   assert.match(desktop, /flex flex-col/);
 });
 
-test("the static copy sets the rules the editor adds for its root", () => {
+test("the static copy sets the rules the editor adds for its root, with stored whitespace collapsed like the editor parser", () => {
   const html = renderToString(React.createElement(shell.StaticDescriptionBody, { html: "<p>x</p>", isMbl: false }));
-  assert.match(html, /white-space:break-spaces/);
+  assert.match(html, /white-space:normal/);
   assert.match(html, /word-wrap:break-word/);
   assert.match(html, /font-variant-ligatures:none/);
   assert.match(html, /position:relative/);

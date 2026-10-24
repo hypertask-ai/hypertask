@@ -5,13 +5,14 @@ import prisma from "@/lib/prisma";
 
 import { type LanguageModel } from "ai";
 import { type AiProviderOptions, type AiModelCredential, type AiGatewayTags, isCustomEndpointConfig, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
-import { type TAiModelOption, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan } from "@/lib/aiModelOptions";
+import { type TAiModelOption, type AiDefaultModelContext, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, isOpenAiOnlyPaidTeam } from "@/lib/aiModelOptions";
+import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 
@@ -21,6 +22,16 @@ import { AuthedUser, ProviderId } from "@/lib/ai/chatStream/types";
 
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { resolveModelSelection, selectionFromModelOption, ModelSelection, defaultModelSelection, selectModel } from "@/lib/ai/chatStream/models";
+
+function isBrowserLunaDefaultUnqualifiedHere(body: ChatRequest, serverContext: AiDefaultModelContext, plan: StorePlanKind | null | undefined) {
+  if (body.modelFromDefault !== true) return false;
+  if (getAiModelOptionById(body.modelOptionId ?? body.model, true)?.modelKey !== "gpt-6-luna") return false;
+  return !isOpenAiOnlyPaidTeam({ ...serverContext, plan });
+}
+
+function isServerChosenDefaultTurn(body: ChatRequest, requested: { modelOptionId?: string | null; model?: string | null }) {
+  return body.modelFromDefault === true && !requested.modelOptionId && !requested.model;
+}
 
 export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
 
@@ -44,11 +55,13 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
   let usageProjectId: number | null = null;
   let actingAgent: Awaited<ReturnType<typeof loadActingAgent>> = null;
   let teamProviderSettings: unknown;
+  let trustedChatSessionId: string | null = null;
   if (body.session_id) {
     const chatAgent = await prisma.chatSession.findFirst({
       where: { id: body.session_id, userId: dbUser.id },
       select: { agent: { select: { runtimeType: true } } },
     });
+    if (chatAgent) trustedChatSessionId = body.session_id;
     if (chatAgent?.agent?.runtimeType === "EXTERNAL") {
       return NextResponse.json(
         { error: "External agents are chatted with from Agent Chat" },
@@ -125,7 +138,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     }
     const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
     const defaultContext = haiku55Enabled
-      ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId)
+      ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId, body.byokProviderFlags)
       : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
@@ -134,14 +147,17 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       defaultContext.haikuDefaultEnabled,
       defaultContext,
     );
+    const requestedModel = isBrowserLunaDefaultUnqualifiedHere(body, defaultContext, storePlanId)
+      ? { modelOptionId: null, model: null, provider: null }
+      : body;
     const modelOptionIdForTurn = resolveAgentModelPin({
-      requestedModelOptionId: body.modelOptionId,
-      requestedModel: body.model,
-      agentModelOptionId: actingAgent?.modelOptionId,
+      requestedModelOptionId: requestedModel.modelOptionId,
+      requestedModel: requestedModel.model,
+      agentModelOptionId: isServerChosenDefaultTurn(body, requestedModel) ? null : actingAgent?.modelOptionId,
     });
     let selection = resolveModelSelection(
-      body.provider,
-      body.model,
+      requestedModel.provider,
+      requestedModel.model,
       modelOptionIdForTurn,
       teamProviderSettings,
       body.aiFeature,
@@ -201,7 +217,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         requestDefaultModelOption,
       haiku55Enabled,
       );
-      byokApiKey = await getSelectionApiKey(selection);
+      byokApiKey = await resolveAiFallbackCredential(
+        () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
+      );
     }
 
     if (selection.provider === "openrouter") {
@@ -223,7 +241,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           requestDefaultModelOption,
       haiku55Enabled,
         );
-        byokApiKey = await getSelectionApiKey(selection);
+        byokApiKey = await resolveAiFallbackCredential(
+          () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
+        );
       }
     }
 
@@ -265,5 +285,5 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     await reportHandledChatError(error, "select-model");
     return createSseErrorResponse(errorMessage(error));
   }
-  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings };
+  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, trustedChatSessionId };
 }

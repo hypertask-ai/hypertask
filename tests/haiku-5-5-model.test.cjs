@@ -509,6 +509,7 @@ function editorWithFallback(h, credentialPicks, enabled = true, credential = "fi
     "@/lib/prisma": { userSetting: { findUnique: async () => null } },
     "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
     "@/app/api/ai/_lib/byokKeys": {
+      resolveAiFallbackCredential: async (load) => load(),
       getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(byokProvider), byok: enabled && plan !== "Free" && byokProvider ? { provider: byokProvider, credential } : undefined }),
       getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return entry.id === "gpt-6-luna" ? typeof lunaCredential === "object" ? "fixture-openai" : lunaCredential : credential; },
       getByokOrTeamGatewayApiKeyForProvider: async (provider) => { credentialPicks.push(provider); return credential; },
@@ -551,7 +552,10 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
   });
   const reply = moduleWithStubs("src/lib/ai/chatStream/modelReply.ts", {
     "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled },
-    "@/app/api/ai/_lib/byokKeys": { getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return "fixture-openai"; } },
+    "@/app/api/ai/_lib/byokKeys": {
+      resolveAiFallbackCredential: async (load) => load(),
+      getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return "fixture-openai"; },
+    },
     "@/app/api/ai/_lib/modelProvider": h.api, "@/lib/aiModelOptions": catalog,
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/app/api/ai/chat/stream/modelFallback": load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts")),
@@ -584,7 +588,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
       Object.assign(state, options);
       return reply.generateModelReply(state, { instructions: "fixture", messages: [], tools: {}, toolExecutions: [] });
     } },
-    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => state.dbUser },
+    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => state.dbUser, getCliBearerChatUser: async () => null },
     "@/app/api/ai/_lib/cronServiceAuth": {}, "@/lib/nativeAgent/heartbeatTurnEnvelope": {},
     "@/lib/prisma": { user: { findUnique: async () => state.dbUser } },
     "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/keys": keys,
@@ -733,6 +737,7 @@ test("editor cross-provider fallback rebuilds gateway tags for generation and ev
 function automaticKeys(h, picks, { openai = true, credential = "vck_fixture" } = {}) {
   return moduleWithStubs("src/app/api/ai/_lib/byokKeys.ts", {
     ai,
+    "./planAllowancePolicy": { teamPlanAllowanceEnabled: async () => false },
     "@/lib/prisma": {
       project: { findFirst: async () => ({ teamId: "fixture-team" }) },
       team: { findUnique: async () => ({ aiProviderSettings: { providers: { openai } } }) },

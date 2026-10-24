@@ -1,6 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys";
-import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, dockedChatScopeAtom, fullScreenChatScopeAtom } from "@/store";
+import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
   AI_Chat_API,
@@ -13,6 +13,7 @@ import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
 import { usePagedChatHistory } from "./usePagedChatHistory";
+import { useDockedChatScope } from "./useDockedChatScope";
 
 const createDemoSession = (user: IUser): IChatSession => {
   const now = new Date();
@@ -50,7 +51,7 @@ export const useSessionAndChatHistory = (
   const pathname = usePathname();
   const isDemo = pathname?.startsWith("/demo") ?? false;
   const currentProject = useRecoilValue(currentProjectAtom);
-  const dockedScope = useRecoilValue(dockedChatScopeAtom);
+  const [dockedScope] = useDockedChatScope();
   const fullScreenScope = useRecoilValue(fullScreenChatScopeAtom);
   const nameBoardRef = useRef<number | undefined>(undefined);
   let scopedBoardId: number | undefined = fullScreenScope ?? undefined;

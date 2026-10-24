@@ -3,7 +3,7 @@ import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constant
 import prisma from '@/lib/prisma';
 import { googleCalendarDisconnectData } from '@/lib/googleCalendar/connection';
 import { IUser } from '@/models/model';
-import { CompleteOnboardingFirstStep } from '@/utils/controllers/users/completeOnboardingStep';
+import { CompleteOnboardingFirstStepProvisioning } from '@/utils/controllers/users/completeOnboardingStep';
 
 const TERMINAL_SUBSCRIPTION_STATUSES = [
     'Free',
@@ -216,7 +216,7 @@ export const resetUserAccount = async (
         });
 
         try {
-            await CompleteOnboardingFirstStep(
+            await CompleteOnboardingFirstStepProvisioning(
                 userToReset as unknown as IUser,
                 "MyTeam",
                 "MyBoard",

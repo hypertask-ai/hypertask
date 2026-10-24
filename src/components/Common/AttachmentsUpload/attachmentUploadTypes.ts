@@ -20,7 +20,7 @@ export interface IProps {
   editor: Editor | null;
   returnUploadedAttachments?: (attachmentsReturned: any[]) => Promise<void>;
   onFilesSelected?: (files: File[], preparation: Promise<FileItem[]>) => void;
-  onUploadFailed?: (fileName: string) => void;
+  onUploadFailed?: (fileName: string, error?: Error) => void;
   inInbox?: boolean;
   handleCallback?: (
     mode_?: "moveToNext",

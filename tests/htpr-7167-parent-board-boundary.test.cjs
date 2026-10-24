@@ -15,6 +15,8 @@ function load(file, stubs = {}) {
   }).outputText;
   const mod = { exports: {} };
   new Function("module", "exports", "require", javascript)(mod, mod.exports, (request) => {
+    if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
+    if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
     assert.ok(request in stubs, `Unexpected dependency: ${request}`);
     return stubs[request];
   });

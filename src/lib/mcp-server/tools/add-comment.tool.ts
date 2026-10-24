@@ -65,7 +65,7 @@ export const addCommentTool = {
             inline_images: validatedInput.inline_images,
             mentions: validatedInput.mentions,
           });
-          return { success: true, comment: result.comment };
+          return result;
         }
 
         if (validatedInput.action === 'delete') {

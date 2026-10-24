@@ -619,7 +619,7 @@ test("runs every core action and restores the fixture", async () => {
     "open board",
     "open task",
     "load comments",
-    "post comment and mention user and agent",
+    "post comment and mention agent",
     "load move-to-column columns",
     "move task",
     "assign and unassign",

@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import type { IApiClient } from '../../types/index';
 import { logger } from '../../utils/logger';
 import { generateCorrelationId } from '../../utils/correlation';
@@ -8,6 +9,7 @@ import {
   UpdateTaskInputSchema,
   CreateTaskInputSchema,
   MoveTaskBetweenBoardsInputSchema,
+  SetTaskWaitingOnInputSchema,
   AssignUserInputSchema,
   LinkTasksInputSchema,
   NextTasksInputSchema,
@@ -21,6 +23,7 @@ import { appendListQueryParams, parseFields, projectedListEnvelope } from '@/lib
 import {
   attachFilesAfterMutation,
   type AttachmentUploadItem,
+  type InlineAttachmentOutcome,
 } from './attachment.service';
 import {
   idempotencyKeyForInvocation,
@@ -160,7 +163,7 @@ export interface GetTaskResponse {
   tasks: TaskDetail[];
 }
 
-export interface UpdateTaskResponse {
+export interface UpdateTaskResponse extends Partial<InlineAttachmentOutcome> {
   success: boolean;
   task: TaskDetail;
   attachments?: AttachmentUploadItem[];
@@ -172,7 +175,7 @@ export interface UpdateTaskResponse {
   message?: string;
 }
 
-export interface CreateTaskResponse {
+export interface CreateTaskResponse extends Partial<InlineAttachmentOutcome> {
   success: boolean;
   task: TaskDetail;
   attachments?: AttachmentUploadItem[];
@@ -771,7 +774,7 @@ export class TaskService {
   async updateTask(
     params: unknown,
     invocation?: McpInvocationIdentity
-  ): Promise<UpdateTaskResponse> {
+  ): Promise<UpdateTaskResponse | (ReturnType<typeof planLimitResponse>["body"] & { status: 402 })> {
     const correlationId = generateCorrelationId();
     try {
       const validatedInput = UpdateTaskInputSchema.parse(params);
@@ -854,6 +857,12 @@ export class TaskService {
             attachment_status: attachmentResult.attachment_status,
             failed_files: attachmentResult.failed_files,
             attachment_error: attachmentResult.attachment_error,
+            error: attachmentResult.error,
+            operation_message: attachmentResult.operation_message,
+            status: attachmentResult.status,
+            code: attachmentResult.code,
+            limit: attachmentResult.limit,
+            max: attachmentResult.max,
             cleanup_confirmed: attachmentResult.cleanup_confirmed,
             retry_note: attachmentResult.retry_note,
             message: attachmentResult.message,
@@ -870,6 +879,11 @@ export class TaskService {
 
       return response;
     } catch (error) {
+      const body = (error as { httpResponse?: unknown })?.httpResponse ?? error;
+      if (isPlanLimitReachedError(body)) {
+        const refusal = planLimitResponse(body);
+        return { ...refusal.body, status: refusal.status };
+      }
       logger.failure('Failed to update task', error, {
         correlationId,
       });
@@ -880,7 +894,7 @@ export class TaskService {
   async createTask(
     params: unknown,
     invocation?: McpInvocationIdentity
-  ): Promise<CreateTaskResponse> {
+  ): Promise<CreateTaskResponse | (ReturnType<typeof planLimitResponse>["body"] & { status: 402 })> {
     const correlationId = generateCorrelationId();
     try {
       const validatedInput = CreateTaskInputSchema.parse(params);
@@ -945,6 +959,11 @@ export class TaskService {
 
       return response;
     } catch (error) {
+      const body = (error as { httpResponse?: unknown })?.httpResponse ?? error;
+      if (isPlanLimitReachedError(body)) {
+        const refusal = planLimitResponse(body);
+        return { ...refusal.body, status: refusal.status };
+      }
       logger.failure('Failed to create task', error, {
         correlationId,
       });
@@ -952,7 +971,18 @@ export class TaskService {
     }
   }
 
-  async moveTaskBetweenBoards(params: unknown): Promise<UpdateTaskResponse> {
+  async setTaskWaitingOn(params: unknown) {
+    const body = SetTaskWaitingOnInputSchema.parse(params);
+    return this.apiClient.makeRequest<{
+      success: true;
+      task: { id: number; waitingOnUserId: number | null; waitingOnSetById: number | null; waitingOnSetAt: string | null };
+    }>('/mcp/tasks/waiting-on', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, generateCorrelationId());
+  }
+
+  async moveTaskBetweenBoards(params: unknown): Promise<UpdateTaskResponse | (ReturnType<typeof planLimitResponse>["body"] & { status: 402 })> {
     const correlationId = generateCorrelationId();
     try {
       const validatedInput = MoveTaskBetweenBoardsInputSchema.parse(params);
@@ -994,6 +1024,11 @@ export class TaskService {
 
       return response;
     } catch (error) {
+      const body = (error as { httpResponse?: unknown })?.httpResponse ?? error;
+      if (isPlanLimitReachedError(body)) {
+        const refusal = planLimitResponse(body);
+        return { ...refusal.body, status: refusal.status };
+      }
       logger.failure('Failed to move task between boards', error, {
         correlationId,
       });

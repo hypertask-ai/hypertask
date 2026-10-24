@@ -1,3 +1,4 @@
+import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { pinProjectViewToUrl } from "@/lib/firstScreen/boardView";
 import { IFilterSettings } from "@/models/Filters/model";
 import { IProject, IProjectView, ISection, IUserProjectView, IView, IViewType } from "@/models/model";
@@ -638,11 +639,11 @@ export const sanitizeTableSort = (column: unknown, direction: unknown): { column
 
 export { getViewFromProject } from "@/lib/firstScreen/boardView";
 
-export const pinProjectToUrlView = (project: IProject, viewSlug?: string | null) => {
+export const pinProjectToUrlView = (project: IProject, viewSlug?: string | null, runtimeContext?: IFilterRuntimeContext) => {
   const pinnedProject = pinProjectViewToUrl(project, viewSlug)
   if (pinnedProject === project) return project
 
-  let filteredSections = getFilteredSections(pinnedProject.sections ?? [], pinnedProject)
+  let filteredSections = getFilteredSections(pinnedProject.sections ?? [], pinnedProject, undefined, {}, runtimeContext)
   filteredSections = getAppliedSubtaskSections(filteredSections, pinnedProject)
   filteredSections = getFilteredEmptySections(filteredSections, pinnedProject)
   pinnedProject.filteredSections = filteredSections

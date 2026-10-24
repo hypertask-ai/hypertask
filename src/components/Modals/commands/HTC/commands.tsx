@@ -25,7 +25,7 @@ import { ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/keys";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import {
@@ -110,6 +110,9 @@ const Commands = (props: Props) => {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  const ctrlJSkillMenuFlag = useFlag(HTPR_7656_CTRLJ_SKILL_MENU_FLAG);
+  let skillMenuOwnsKeys = false;
+  if (ctrlJSkillMenuFlag) skillMenuOwnsKeys = true;
   let composeBoardChipEnabled = false;
   if (composeTaskWriterEnabled && composeBoardChipFlag) composeBoardChipEnabled = true;
   let newTaskWindow = false;
@@ -144,16 +147,19 @@ const Commands = (props: Props) => {
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
+  const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  let aiChatAutoOpenCommandName = "";
+  if (aiChatOpenSwitchesEnabled) aiChatAutoOpenCommandName = "Settings: AI chat auto-open";
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords),
-    [isMobile, keepAiChatClosedKeywords]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName),
+    [isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords),
-    [keepAiChatClosedKeywords]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName),
+    [keepAiChatClosedKeywords, aiChatAutoOpenCommandName]
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled) getCommands = getRoundedCommands;
@@ -659,13 +665,14 @@ const Commands = (props: Props) => {
     const close = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (composeBoardChipEnabled && document.querySelector("[data-compose-board-picker-open]")) return;
+      if (skillMenuOwnsKeys && document.querySelector("[data-compose-skill-menu-open]")) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       toggle();
     };
     document.addEventListener("keydown", close, true);
     return () => document.removeEventListener("keydown", close, true);
-  }, [composeEnabled, writing, composeBoardChipEnabled]);
+  }, [composeEnabled, writing, composeBoardChipEnabled, skillMenuOwnsKeys]);
   useEffect(() => {
     if (composeEnabled && !isCompose) inputRef.current?.focus();
   }, [composeEnabled, isCompose]);
@@ -674,6 +681,7 @@ const Commands = (props: Props) => {
     if (!newTaskWindow) return;
     const switchTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || writing) return;
+      if (skillMenuOwnsKeys && document.querySelector("[data-compose-skill-menu-open]")) return;
       const target = event.target as HTMLElement;
       if (composeBoardChipEnabled && isCompose && target.matches("[data-compose-task-writer] textarea") &&
           document.querySelector("[data-compose-board-chip]")) return;
@@ -684,7 +692,7 @@ const Commands = (props: Props) => {
     };
     document.addEventListener("keydown", switchTab, true);
     return () => document.removeEventListener("keydown", switchTab, true);
-  }, [newTaskWindow, isCompose, writing, setShowCommands, composeBoardChipEnabled]);
+  }, [newTaskWindow, isCompose, writing, setShowCommands, composeBoardChipEnabled, skillMenuOwnsKeys]);
 
   const modeSwitch = composeTaskWriterEnabled && !isDemo && !isInteractive ? (
     <div className="absolute -top-12 left-0 flex w-full justify-center">

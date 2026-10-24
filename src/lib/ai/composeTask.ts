@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@/lib/api/errorMessage";
 import { readTaskWriterSkills, TASK_WRITER_SKILLS_HEADER, MAX_SKILL_INPUT_LENGTH, type TaskWriterSkills } from "./taskWriterSkills";
 import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut } from "@/lib/media/inlineAgentImages";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
@@ -127,6 +128,12 @@ export async function createComposedTask({
       }),
     });
     if (!response.ok) {
+      if (response.status === 402) {
+        const refusal = await response.clone().json().catch(() => null);
+        if (refusal?.code === "PLAN_LIMIT_REACHED") {
+          throw Object.assign(new Error(toErrorMessage(refusal, "Could not create this ticket")), { status: 402, code: refusal.code });
+        }
+      }
       if (explainWriterFailure) writerFailureReason = await describeTaskWriterFailure(response);
       throw new Error("Task writer unavailable");
     }
@@ -218,7 +225,8 @@ export async function createComposedTask({
     skills = readTaskWriterSkills(response.headers?.get(TASK_WRITER_SKILLS_HEADER));
     title = drafts[0].title;
     description = drafts[0].description;
-  } catch {
+  } catch (error) {
+    if ((error as { code?: string })?.code === "PLAN_LIMIT_REACHED") throw error;
     writerFailed = true;
     drafts = [];
   }
@@ -271,10 +279,24 @@ export async function createComposedTask({
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });
       const task = created?.resposne?.newTask;
-      if (created?.error || !task?.id) throw new Error("Couldn’t create the task. Your note is still here. Try again.");
+      if (created?.error || !task?.id) {
+        const failure = created?.ErrorMessage;
+        const body = (failure as { response?: { data?: unknown } } | undefined)?.response?.data ?? failure;
+        if ((body as { code?: string } | undefined)?.code === "PLAN_LIMIT_REACHED") {
+          throw Object.assign(new Error(toErrorMessage(body, "Could not create this ticket")), body);
+        }
+        throw new Error("Couldn’t create the task. Your note is still here. Try again.");
+      }
       tasks.push(task);
       bindCreateTaskUploads(task.id, files);
     } catch (error) {
+      if ((error as { code?: string })?.code === "PLAN_LIMIT_REACHED") {
+        if (!tasks.length) throw error;
+        failedTitles.push(...drafts.slice(index).map((remaining, offset) => offset === 0
+          ? `${remaining.title}: ${toErrorMessage(error, "Could not create this ticket")}`
+          : remaining.title));
+        break;
+      }
       if (drafts.length === 1 || fillsExistingTask) throw error;
       failedTitles.push(draft.title);
     }

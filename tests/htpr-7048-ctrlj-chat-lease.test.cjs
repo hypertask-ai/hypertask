@@ -28,6 +28,7 @@ function load(relativePath, stubs, globals = {}) {
     module: loadedModule, exports: loadedModule.exports,
     require(id) {
       if (Object.hasOwn(stubs, id)) return stubs[id];
+      if (id === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
       if (id === "./taskWriterSkills") return require("jiti")(__filename, { fsCache: false })(path.join(root, "src/lib/ai/taskWriterSkills.ts"));
       if (id === "@/lib/media/inlineAgentImages") return require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/media/inlineAgentImages.ts"));
       if (id.startsWith("node:")) return require(id);
@@ -101,7 +102,7 @@ function harness({ enabled = true } = {}) {
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async (body) => ({ actingAgent: body.session_id === agentSession ? { id: agentId } : null }) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => { started.push(options); return new Response("reply started"); } },
     "next/server": next,
-    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async (request) => request.headers.has("x-hypertask-heartbeat-execution-id") ? null : user },
+    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async (request) => request.headers.has("x-hypertask-heartbeat-execution-id") ? null : user, getCliBearerChatUser: async () => null },
     "@/app/api/ai/_lib/cronServiceAuth": { getCronServiceRequestUser: async () => user },
     "@/lib/nativeAgent/heartbeatTurnEnvelope": { decodeHeartbeatTurnMessage: () => ({ prompt: "heartbeat", metadata: { executionId: streamId, agentId, claimedAt: "2026-10-09T00:00:00.000Z", scanWatermark: "2026-10-09T00:00:00.000Z" } }) },
     "@/lib/prisma": { default: { user: { findUnique: async () => user }, chatSession: { updateMany: async () => ({ count: 1 }) } } },
@@ -120,7 +121,7 @@ function harness({ enabled = true } = {}) {
     "@/lib/errors/reportError": { reportError: async () => {} },
     "next/server": next,
     zod: { z },
-    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => user },
+    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => user, getCliBearerChatUser: async () => null },
     "@/lib/ai/tools/helpers": { loadActingAgent: async (sessionId, userId) => {
       assert.equal(userId, user.id);
       return sessionId === agentSession ? { id: agentId } : null;

@@ -2,7 +2,8 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getDesktopCliTokenUser, logDesktopCliAuthorization } from "@/lib/auth/desktopCliTokenUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { taskWriteHandler } from "@/lib/api/task-writes/route";
 
@@ -15,6 +16,7 @@ const loadDefaults: NextApiHandler = async (
 ) => {
   if (req.method === "GET") {
     const requestStartedAt = performance.now();
+    let session: SessionUser | null = null;
     try {
       const { sectionId, projectId, position } = req.query;
 
@@ -25,9 +27,8 @@ const loadDefaults: NextApiHandler = async (
       if (!Number.isInteger(project_id) || project_id <= 0) {
         return res.status(400).json({ message: "Invalid project id" });
       }
-      const session = await getSessionUser(
-        new Headers(req.headers as Record<string, string>)
-      );
+      const headers = new Headers(req.headers as Record<string, string>);
+      session = (await getSessionUser(headers)) ?? (await getDesktopCliTokenUser(headers, "task-defaults"));
       if (!session) return res.status(401).json({ message: "Unauthorized" });
 
       const authorizedProject = await prisma.project.findFirst({
@@ -101,6 +102,8 @@ const loadDefaults: NextApiHandler = async (
     } catch (error) {
       console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
       res.status(500).json({ message: "Could not load task defaults" });
+    } finally {
+      logDesktopCliAuthorization(session, "task-defaults", res.statusCode);
     }
   } else {
     return res.status(405).json({ message: "Method not allowed" });

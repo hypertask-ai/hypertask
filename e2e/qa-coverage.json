@@ -167,14 +167,14 @@
       "label": "Post a comment",
       "detail": "A comment saves and appears when the task is read again.",
       "checkIds": ["pre-merge-app", "live-core-actions"],
-      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "post comment and mention user and agent" }]
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "post comment and mention agent" }]
     },
     {
       "id": "mention-person-agent",
       "label": "Mention a person and an agent",
-      "detail": "Both mention links survive saving and reloading a comment.",
+      "detail": "Mention links survive saving and reloading a comment. The live check mentions only the agent, so no person is followed or emailed.",
       "checkIds": ["pre-merge-app", "live-core-actions"],
-      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "post comment and mention user and agent" }]
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "post comment and mention agent" }]
     },
     {
       "id": "load-columns",

@@ -1,4 +1,4 @@
-import { test, expect, type Page, type APIRequestContext, type Response } from '@playwright/test'
+import { test, expect, type Page, type Locator, type APIRequestContext, type Response } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -6,18 +6,23 @@ import { withRealtime } from './lib/realtime'
 import { waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const FLAG = 'htpr-7518-agent-sidebar-chats'
+const PAST_CHATS_FLAG = 'htpr-7688-past-chats-first'
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
-test.use({ storageState: stateFile })
+const readFixture = (): Fixture => JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'agent-sidebar-fixture.json'), 'utf8'))
+test.use({ storageState: async ({}, applyState, info) => {
+  await applyState(readFixture().storageStates[info.project.name])
+} })
 test.describe.configure({ mode: 'serial' })
 test.skip(!process.env.BROWSER_SMOKE_PR, 'Writes only to GitHub disposable loopback fixtures')
 
 type Agent = { id: string; name: string; sessionId: string; token: string }
-type Fixture = { projectId: number; lanes: Record<string, Agent[]> }
+type PersonalChat = { lane: string; id: string; title: string; updatedAt: string; message: string }
+type Fixture = { projectId: number; lanes: Record<string, Agent[]>; personalChats: PersonalChat[]; storageStates: Record<string, string> }
 let fixture: Fixture
 
 test.beforeAll(() => {
   expect(['127.0.0.1', 'localhost']).toContain(new URL(process.env.BASE_URL!).hostname)
-  fixture = JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'agent-sidebar-fixture.json'), 'utf8'))
+  fixture = readFixture()
 })
 
 test.beforeEach(async ({ page }) => {
@@ -58,13 +63,16 @@ async function heartbeat(request: APIRequestContext, agent: Agent) {
   expect(response.status()).toBe(200)
 }
 
-async function open(page: Page) {
+async function open(page: Page, lane: string) {
+  const flags = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board&agentSidebar=1`))
   await expect(page.getByTestId('ai-sidebar')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toBeVisible()
-  const flags = await page.request.get('/api/flags')
-  expect(flags.status()).toBe(200)
-  expect((await flags.json()).flags[FLAG], 'server sidebar flag in disposable fixture').toBe(true)
+  const enabledFlags = (await (await flags).json()).flags
+  expect(enabledFlags[FLAG], 'server sidebar flag in disposable fixture').toBe(true)
+  expect(enabledFlags[PAST_CHATS_FLAG], 'past chats flag in disposable fixture').toBe(true)
+  await expect(page.getByTestId('agent-sidebar-conversations')).toBeVisible()
+  await choose(page, fixture.personalChats.find(chat => chat.lane === lane)!.title)
 }
 async function settledBox(locator: ReturnType<Page['locator']>) {
   let previous = await locator.boundingBox()
@@ -76,12 +84,180 @@ async function settledBox(locator: ReturnType<Page['locator']>) {
   }, { intervals: [150] }).toBe(true)
   return previous!
 }
-async function choose(page: Page, name: string) {
+async function dismissConversationsOutside(page: Page) {
+  const sidebar = page.getByTestId('ai-sidebar')
+  const list = page.getByTestId('agent-sidebar-conversations')
+  await expect(list).toBeVisible()
+  const menu = (await list.boundingBox())!
+  const panel = (await sidebar.boundingBox())!
+  const viewport = page.viewportSize()!
+  const left = Math.max(0, panel.x)
+  const right = Math.min(viewport.width, panel.x + panel.width)
+  const top = Math.max(0, panel.y, menu.y)
+  const bottom = Math.min(viewport.height, panel.y + panel.height, menu.y + menu.height)
+  const leftGap = menu.x - left
+  const rightGap = right - menu.x - menu.width
+  expect(Math.max(leftGap, rightGap) > 0, 'sidebar has an uncovered strip beside the list').toBe(true)
+  expect(bottom > top, 'list overlaps the visible sidebar').toBe(true)
+  const point = {
+    x: leftGap > rightGap ? left + leftGap / 2 : right - rightGap / 2,
+    y: (top + bottom) / 2,
+  }
+  expect(point.x < menu.x || point.x > menu.x + menu.width, 'outside point is not in the list').toBe(true)
+  expect(await sidebar.evaluate((node, point) => {
+    const target = document.elementFromPoint(point.x, point.y)
+    return node.contains(target) && !target?.closest('#agent-sidebar-conversations, [aria-controls="agent-sidebar-conversations"]')
+  }, point), 'outside point hits the sidebar, not the list or its trigger').toBe(true)
+  await sidebar.click({ position: { x: point.x - panel.x, y: point.y - panel.y } })
+  await expect(list).toBeHidden()
+  await expect(sidebar).toBeVisible()
+}
+async function reveal(list: Locator, row: Locator) {
+  const more = list.getByRole('option', { name: /^Show (\d+ )?more$/ })
+  await expect.poll(async () => {
+    if (await row.isVisible()) return true
+    if (await more.isVisible()) await more.click()
+    return false
+  }, { timeout: 15_000 }).toBe(true)
+}
+async function choose(page: Page, name: string, error?: string) {
   const list = page.getByTestId('agent-sidebar-conversations')
   if (!await list.isVisible()) await page.getByRole('button', { name: 'Switch conversation', exact: true }).click()
-  await list.locator('li').filter({ hasText: name }).click()
+  const agent = Object.values(fixture.lanes).flat().find(agent => agent.name === name)
+  const chat = fixture.personalChats.find(chat => chat.title === name)
+  const key = agent?.id ?? (chat ? `session:${chat.id}` : 'ai')
+  const row = list.locator(`[data-command-key="${key}"]`)
+  await reveal(list, row)
+  await row.click()
   await expect(list).toBeHidden()
+  if (error) {
+    await expect(page.getByText(error, { exact: true })).toBeVisible()
+    return
+  }
+  await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toHaveText(agent?.name ?? 'AI chat')
+  if (agent) await expect(page.getByTestId('ai-sidebar').getByText(`${agent.name} history 1`, { exact: true })).toBeVisible()
+  else if (chat) await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
+  await expect(agent && !agent.name.endsWith('Native')
+    ? page.getByRole('textbox', { name: `Message ${agent.name}`, exact: true })
+    : page.locator('[data-ai-chat-composer-root]:not([inert]) #ai-chat-tiptap-editor .ProseMirror:visible')).toBeVisible()
 }
+
+test('phone conversation list leaves the composer clear and typing taps never switch chats', async ({ page }, info) => {
+  test.skip(info.project.name !== 'Mobile', 'Phone composer clearance')
+  await page.setViewportSize({ width: 390, height: 664 })
+  await open(page, info.project.name)
+  const sidebar = page.getByTestId('ai-sidebar')
+  const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
+  const list = page.getByTestId('agent-sidebar-conversations')
+  const [external, , native] = fixture.lanes[info.project.name]
+  for (const name of ['AI chat', external.name, native.name]) {
+    await choose(page, name)
+    const selectedTitle = await title.textContent()
+    const composer = sidebar.locator('[data-ai-chat-composer-root]:not([inert]):visible')
+    const editor = composer.locator('[contenteditable="true"]')
+    await expect(editor).toBeVisible()
+    await title.click()
+    await expect(list).toBeVisible()
+    const menu = (await list.boundingBox())!
+    const boundary = (await composer.boundingBox())!
+    expect(menu.y + menu.height).toBeLessThanOrEqual(boundary.y - 12)
+    expect(await list.evaluate(node => node.scrollHeight > node.clientHeight), 'phone list scrolls above the composer').toBe(true)
+    const box = (await editor.boundingBox())!
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    expect(await editor.evaluate((node, point) => {
+      const target = document.elementFromPoint(point.x, point.y)
+      return node.contains(target) && !target?.closest('#agent-sidebar-conversations')
+    }, point), 'composer center hits the editor, never a conversation row').toBe(true)
+    await page.touchscreen.tap(point.x, point.y)
+    await expect(list).toBeHidden()
+    await expect(editor).toBeFocused()
+    await expect(title).toHaveText(selectedTitle!)
+    await expect(sidebar).toBeVisible()
+  }
+})
+
+test('conversation rows contain two-line titles without overlap on desktop and phone', async ({ page }, info) => {
+  await page.setViewportSize(info.project.name === 'Desktop' ? { width: 1440, height: 900 } : { width: 390, height: 844 })
+  await open(page, info.project.name)
+  const longChat = fixture.personalChats.find(chat => chat.lane === info.project.name && !/\s/.test(chat.title) && chat.title.length > 150)
+  expect(longChat, 'fixture includes a long unbroken conversation title').toBeDefined()
+  const list = page.getByTestId('agent-sidebar-conversations')
+  await page.getByRole('button', { name: 'Switch conversation', exact: true }).click()
+  await expect(list).toBeVisible()
+  const longRow = list.locator(`[data-command-key="session:${longChat!.id}"]`)
+  await expect(longRow).toHaveText(longChat!.title)
+  await longRow.scrollIntoViewIfNeeded()
+  await page.evaluate(() => document.fonts.ready)
+  const boxes = await list.locator('li').evaluateAll(rows => rows.map(row => {
+    const title = row.querySelector<HTMLElement>(':scope > span.line-clamp-2')!
+    const rowBox = row.getBoundingClientRect()
+    const titleBox = title.getBoundingClientRect()
+    const style = getComputedStyle(title)
+    return {
+      key: row.getAttribute('data-command-key'), top: rowBox.top, bottom: rowBox.bottom,
+      left: rowBox.left, right: rowBox.right, height: rowBox.height,
+      titleTop: titleBox.top, titleBottom: titleBox.bottom, titleLeft: titleBox.left, titleRight: titleBox.right,
+      titleHeight: titleBox.height, lineHeight: parseFloat(style.lineHeight),
+      clamp: style.webkitLineClamp, overflow: style.overflow, overflowWrap: style.overflowWrap,
+      scrollHeight: row.scrollHeight, clientHeight: row.clientHeight,
+      titleScrollWidth: title.scrollWidth, titleClientWidth: title.clientWidth,
+    }
+  }))
+  expect(boxes.length).toBeGreaterThan(1)
+  for (const [index, box] of boxes.entries()) {
+    if (index > 0) expect(box.top, `${box.key} does not overlap the previous row`).toBeGreaterThanOrEqual(boxes[index - 1].bottom)
+    expect(box.titleTop).toBeGreaterThanOrEqual(box.top)
+    expect(box.titleBottom).toBeLessThanOrEqual(box.bottom)
+    expect(box.titleLeft).toBeGreaterThanOrEqual(box.left)
+    expect(box.titleRight).toBeLessThanOrEqual(box.right)
+    expect(box.titleHeight).toBeLessThanOrEqual(2 * box.lineHeight + 1)
+    expect(box.clamp).toBe('2')
+    expect(box.overflow).toBe('hidden')
+    expect(box.overflowWrap).toBe('anywhere')
+    expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight + 1)
+    expect(box.titleScrollWidth).toBeLessThanOrEqual(box.titleClientWidth + 1)
+    if (info.project.name === 'Mobile') expect(box.height).toBeGreaterThanOrEqual(52)
+  }
+  const longBox = boxes.find(box => box.key === `session:${longChat!.id}`)!
+  expect(longBox.titleHeight).toBeGreaterThan(longBox.lineHeight + 1)
+  if (info.project.name === 'Desktop') expect(longBox.height).toBeGreaterThan(36)
+  await longRow.click()
+  await expect(list).toBeHidden()
+  await expect(page.getByTestId('ai-sidebar').getByText(longChat!.message, { exact: true })).toBeVisible()
+})
+
+test('past chats are listed newest first above agents and reopen', async ({ page }, info) => {
+  await open(page, info.project.name)
+  const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
+  const list = page.getByTestId('agent-sidebar-conversations')
+  if (!await list.isVisible()) await title.click()
+  const chats = fixture.personalChats.filter(chat => chat.lane === info.project.name).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+  await expect(list.locator('li').first()).toHaveText('AI chat')
+  for (const chat of chats) {
+    const row = list.locator(`[data-command-key="session:${chat.id}"]`)
+    await reveal(list, row)
+    await expect(row).toHaveText(chat.title)
+  }
+  const keys = await list.locator('li').evaluateAll(rows => rows.map(row => row.getAttribute('data-command-key')))
+  const positions = chats.map(chat => keys.indexOf(`session:${chat.id}`))
+  expect(positions).toEqual([...positions].sort((a, b) => a - b))
+  const agentPositions = fixture.lanes[info.project.name].map(agent => keys.indexOf(agent.id))
+  for (const position of positions) {
+    expect(position).toBeGreaterThan(0)
+    for (const agentPosition of agentPositions) expect(position).toBeLessThan(agentPosition)
+  }
+  const [external, , native] = fixture.lanes[info.project.name]
+  for (const [index, chat] of chats.entries()) {
+    await choose(page, index % 2 ? native.name : external.name)
+    await choose(page, chat.title)
+    await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
+    await expect(page.locator('#ai-chat-tiptap-editor .ProseMirror:visible')).toBeVisible()
+    await expect(title).toHaveText('AI chat')
+    await choose(page, native.name)
+    await choose(page, 'AI chat')
+    await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
+  }
+})
 
 for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
   test(`${theme}: anchored switch, real polling round trip, independent drafts/history and shell`, async ({ page, request }, info) => {
@@ -91,15 +267,19 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     page.on('response', (response) => {
       if (/^\/api\/agent-chat\/[^/]+$/.test(new URL(response.url()).pathname) && response.request().method() === 'GET') historyResponses.push(response)
     })
+    const clearedDraft = await request.patch(`/api/agent-chat/${b.sessionId}/participant`, {
+      headers: { 'x-hypertask-sidebar-project': String(fixture.projectId) }, data: { draft: '' },
+    })
+    expect(clearedDraft.status()).toBe(200)
     await heartbeat(request, a)
     await page.context().addCookies([{ name: 'theme', value: theme, url: process.env.BASE_URL! }])
-    await open(page)
+    await open(page, info.project.name)
     const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
     const list = page.getByTestId('agent-sidebar-conversations')
     if (!await list.isVisible()) await title.click()
     await expect(list.locator('li').first()).toHaveText('AI chat')
-    await expect(list.locator('li').filter({ hasText: a.name })).toContainText('connected')
-    await expect(list.locator('li').filter({ hasText: b.name })).toContainText('offline')
+    await expect(list.locator(`[data-command-key="${a.id}"]`)).toHaveText(`${a.name} · polling`)
+    await expect(list.locator(`[data-command-key="${b.id}"]`)).toHaveText(b.name)
     const trigger = await settledBox(title)
     if (info.project.name === 'Mobile') {
       expect(trigger.height).toBeGreaterThanOrEqual(44)
@@ -192,7 +372,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     expect(Math.abs(aiAfter.height - aiComposer.height)).toBeLessThan(2)
     expect(await boardCard.boundingBox()).toEqual(boardBefore)
     await page.getByRole('button', { name: 'Chat history', exact: true }).click()
-    await expect(page.locator('#ai-chat-session-history')).toBeVisible()
+    await expect(page.locator('#ai-chat-session-history').getByRole('button', { name: fixture.personalChats.find(chat => chat.lane === info.project.name)!.title, exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
     if (info.project.name === 'Desktop') {
       const resize = page.getByTestId('ai-sidebar').getByRole('separator')
@@ -213,7 +393,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
 
 test('open error retries the same selected agent; outside click and native transport preserve the board', async ({ page }, info) => {
   const [a, , native] = fixture.lanes[info.project.name]
-  await open(page)
+  await open(page, info.project.name)
   await choose(page, 'AI chat')
   const aiDraft = `General draft ${randomUUID()}`
   await page.locator('#ai-chat-tiptap-editor .ProseMirror:visible').fill(aiDraft)
@@ -224,14 +404,13 @@ test('open error retries the same selected agent; outside click and native trans
       await route.fulfill({ status: 503, json: { error: 'Runtime unavailable' } })
     } else await route.continue()
   })
-  await choose(page, a.name)
+  await choose(page, a.name, 'Runtime unavailable')
   await expect(page.getByText('Runtime unavailable', { exact: true })).toBeVisible()
   await choose(page, a.name)
   await expect(page.getByRole('textbox', { name: `Message ${a.name}` })).toBeVisible()
   await expect(page.getByText('Runtime unavailable', { exact: true })).toBeHidden()
   await page.getByRole('button', { name: 'Switch conversation' }).click()
-  await page.getByTestId('ai-sidebar').getByRole('textbox', { name: `Message ${a.name}` }).click()
-  await expect(page.getByTestId('agent-sidebar-conversations')).toBeHidden()
+  await dismissConversationsOutside(page)
   await choose(page, native.name)
   const prompt = `Native sidebar ${randomUUID()}`
   const replyText = `Native transport reply to ${prompt}`
@@ -284,6 +463,7 @@ test('switching chats does not move the ticket, its comments or its comment comp
   await expect(page.getByTestId('comment-composer')).toBeAttached()
   await expect(page.getByTestId('ticket-comment')).toHaveCount(2)
   await waitForTicketInitialScroll(page)
+  await page.evaluate(() => document.fonts.ready)
   const selectors = ['#title-input', '[data-testid="ticket-description"]', '[data-testid="ticket-comment"]', '[data-testid="comment-composer"]']
   const measure = () => Promise.all(selectors.map((selector) => page.locator(selector).first().boundingBox()))
   let settled = await measure()
@@ -296,6 +476,7 @@ test('switching chats does not move the ticket, its comments or its comment comp
   const before = settled
   for (const box of before) expect(box).not.toBeNull()
   await choose(page, fixture.lanes[info.project.name][0].name)
+  await page.evaluate(() => document.fonts.ready)
   const after = await Promise.all(selectors.map((selector) => page.locator(selector).first().boundingBox()))
   expect(after).toEqual(before)
   if (info.project.name === 'Mobile') {
@@ -313,7 +494,7 @@ test('new flag On works with parked room, mobile composer and activity flags Off
       'htpr-6407-mobile-agent-chat-layout': false, 'htpr-6094-agent-activity-rows': false,
     } } })
   })
-  await open(page)
+  await open(page, info.project.name)
   const agent = fixture.lanes[info.project.name][1]
   await choose(page, agent.name)
   await expect(page.getByRole('textbox', { name: `Message ${agent.name}` })).toBeVisible()

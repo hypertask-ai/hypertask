@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -90,7 +91,7 @@ async function confirmProposal(
         where: { id: proposal.id },
         select: chatTicketProposalSelect,
       });
-    const fail = async (message: string, status: number) => {
+    const fail = async (message: string, status: number, refusal?: ReturnType<typeof planLimitResponse>["body"]) => {
       await prisma.chatTicketProposal.updateMany({
         where: { id: proposal.id, status: "CONFIRMED", taskId: null },
         data: {
@@ -104,6 +105,7 @@ async function confirmProposal(
         {
           success: false,
           error: message,
+          ...refusal,
           proposal: serializeChatTicketProposal(await reread()),
         },
         { status }
@@ -205,6 +207,10 @@ async function confirmProposal(
       });
       task = created.task;
     } catch (error: any) {
+      if (isPlanLimitReachedError(error)) {
+        const refusal = planLimitResponse(error);
+        return fail(error.message, refusal.status, refusal.body);
+      }
       console.error("[agent-chat] confirm failed to create the ticket", error);
       return fail(error?.message || "Could not create the ticket", 500);
     }

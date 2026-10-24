@@ -134,6 +134,7 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
     },
   });
   const byok = moduleWithStubs("src/app/api/ai/_lib/byokKeys.ts", {
+    "./planAllowancePolicy": { teamPlanAllowanceEnabled: async () => false },
     "@/lib/prisma": prisma, "@/lib/aiModelOptions": catalog, "@/lib/aiProviders": providers,
     "@/lib/crypto/byokCipher": { decryptByokSecret: (value) => value },
     "@/app/api/ai/_lib/modelProvider": modelApi,
@@ -193,10 +194,12 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
     })() }),
   };
   const routeStubs = {
+    "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: () => null },
     ai: inference, "next/server": { NextResponse: { json: Response.json } },
     "@/app/api/ai/_lib/editorAi": editor,
     "@/app/api/ai/_lib/modelProvider": modelApi,
     "@/app/api/ai/_lib/taskWriterRun": run,
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: userId }) },
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (handler) => handler,

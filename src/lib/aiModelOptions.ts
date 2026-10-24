@@ -442,6 +442,7 @@ export const aiModelOptions: TAiModelOption[] = [
     source: "gateway",
     title: "DeepSeek V4.1 Flash",
     model: "deepseek/deepseek-v4.1-flash",
+    directModel: "deepseek-flash",
     desc: "Cheapest general model",
     reasoning: "instant",
     modelKey: "deepseek-v4.1-flash",
@@ -550,6 +551,14 @@ export type AiDefaultModelContext = {
 
 export function isOpenAiOnlyPaidTeam({ openaiOnlyDefaultEnabled, plan, hasClaudeRoute, hasDirectOpenAiKey }: AiDefaultModelContext): boolean {
   return Boolean(openaiOnlyDefaultEnabled && (plan === "Pro" || plan === "AI") && hasClaudeRoute === false && hasDirectOpenAiKey);
+}
+
+export function chatModelRequestFields(
+  { currentOption, agentSessionOption, usesPlanDefault }: { currentOption: TAiModelOption; agentSessionOption: TAiModelOption | null; usesPlanDefault: boolean },
+  agentId: string | null | undefined,
+) {
+  if (agentId && agentSessionOption) return { modelFromDefault: true };
+  return { modelOptionId: currentOption.id, model: currentOption.model, provider: currentOption.source, modelFromDefault: usesPlanDefault };
 }
 
 export function defaultModelKeyFor(context: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {

@@ -2,7 +2,7 @@ import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { loadTurnModel } from "@/lib/ai/chatStream/turnModel";
 import { createChatStream } from "@/lib/ai/chatStream/stream";
 import { NextRequest } from "next/server";
-import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
+import { getAiRequestUser, getCliBearerChatUser } from "@/app/api/ai/_lib/requestUser";
 import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
@@ -28,9 +28,10 @@ export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   const turnStartedAtMs = Date.now();
-  const requestUser =
+  const sessionOrServiceUser =
     (await getAiRequestUser(request)) ??
     (await getCronServiceRequestUser(request));
+  const requestUser = sessionOrServiceUser ?? (await getCliBearerChatUser(request, "chat-stream"));
   if (!requestUser?.id) {
     return createSseErrorResponse("Unauthorized", 401);
   }
@@ -203,7 +204,7 @@ export async function POST(request: NextRequest) {
   }
   const turnModel = await loadTurnModel(body, dbUser);
   if (turnModel instanceof Response) return turnModel;
-  const { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings } = turnModel;
+  const { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, trustedChatSessionId } = turnModel;
 
   const streamId = body.stream_id ?? randomUUID();
   const isolateAgentLease = !!actingAgent && await isFeatureEnabled(HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, dbUser.id);
@@ -264,5 +265,5 @@ export async function POST(request: NextRequest) {
   }
 
   const firstTurn = !body.chat_history?.length;
-  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
+  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, trustedChatSessionId, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
 }

@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
@@ -109,6 +110,10 @@ export async function POST(request: NextRequest) {
 
     return result.response
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error);
+      return NextResponse.json(refusal.body, { status: refusal.status });
+    }
     if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse

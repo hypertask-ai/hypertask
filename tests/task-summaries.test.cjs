@@ -93,6 +93,7 @@ test("task summary and description verdict share one model request", async () =>
       isInstance: (error) => error?.name === "AI_NoObjectGeneratedError",
     },
   });
+  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
   stubModule("src/lib/prisma.ts", {
     default: {
       $transaction: async (operations) => Promise.all(operations),

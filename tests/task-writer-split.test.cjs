@@ -69,6 +69,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
   });
   const route = load("src/app/api/ai/task-writer/route.ts", {
+    "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: () => null },
     "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     zod: { z },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
@@ -85,6 +86,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage: (...args) => usage.push(args) },
     "@/app/api/ai/_lib/editorAi": editor,
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/app/api/ai/_lib/taskWriterRun": run,
     "@/app/api/ai/_lib/taskWriterProperties": { extractTaskWriterProperties: html => ({ description: html }), hasUsableTaskWriterDraft: () => true, TASK_WRITER_EMPTY_DRAFT_MESSAGE: "" },
@@ -315,7 +317,7 @@ test("actual composer send caches every saved ticket and publishes the complete 
     createTaskGlobally: body => cache.push(body.task), mobile: false, onCreated() {},
     ticketQuestionsEnabled: true, setQuestionsTaskId: value => questionsTaskIds.push(value),
     setIntro: value => intros.push(value), composeTaskAssistantMessage: h.composeTaskAssistantMessage,
-    chatAutoOpenAllowed: { current: true },
+    chatAutoOpenAllowed: { current: true }, setNewTicketPath() {},
     updateActiveItemAndItemInView() {}, setScope() {}, setSidebar() {}, setSuppressed() {}, setExplicitOpen() {}, setShowChat() {},
     router: { push: url => navigations.push(url) },
   };

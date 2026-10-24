@@ -1,3 +1,4 @@
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import "@/styles/globals.scss";
 import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
@@ -16,7 +17,7 @@ import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
 import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
-import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
+import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   normalizeThemePreference,
@@ -84,8 +85,13 @@ export default async function RootLayout(
 
   const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;
   const sidebarFlags = analyticsSession && sidebarFirstPaint ? await Promise.all([
-    HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG,
-  ].map(key => isFeatureEnabled(key, analyticsSession.id))) : null;
+    isFeatureEnabled(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, analyticsSession.id),
+    isFeatureEnabled(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, analyticsSession.id),
+  ]) : null;
+  let autoOpenSwitchesUserId: number | null = null;
+  if (analyticsSession && sidebarFlags && await isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, analyticsSession.id)) {
+    autoOpenSwitchesUserId = analyticsSession.id;
+  }
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
@@ -104,6 +110,9 @@ export default async function RootLayout(
   const themeClassName = themeValue === "system"
     ? "system"
     : resolvedThemeDomMetadata[initialResolvedTheme].classes.join(" ");
+  const plexPreloadHref = shellSeed && ["amoled", "graphite", "porcelain"].includes(initialResolvedTheme)
+    ? (ibmPlexSans as typeof ibmPlexSans & { preloadHref?: string }).preloadHref
+    : undefined;
 
   return (
     <html
@@ -113,6 +122,9 @@ export default async function RootLayout(
       data-theme={themeValue === "rounded" ? initialResolvedTheme : themeValue}
     >
       <head>
+        {plexPreloadHref && (
+          <link rel="preload" href={plexPreloadHref} as="font" type="font/woff2" crossOrigin="anonymous" />
+        )}
         {!deferUnusedBoardFonts && [INTER_LATIN_FONT_HREF, ...NEWSREADER_LATIN_FONT_HREFS].map(href => (
           <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
         ))}
@@ -122,9 +134,6 @@ export default async function RootLayout(
             __html: "window.addEventListener('popstate',function(event){window.dispatchEvent(new CustomEvent('cached-task-detail-popstate',{detail:event}));},true);",
           }}
         />
-        {firstScreen && ["amoled", "graphite", "porcelain"].includes(firstScreen.display.theme) && (
-          <link rel="preload" href={IBM_PLEX_SANS_LATIN_FONT_HREF} as="font" type="font/woff2" crossOrigin="anonymous" />
-        )}
         <meta
           name="theme-color"
           content={initialThemeColor}
@@ -154,6 +163,8 @@ export default async function RootLayout(
                 __html: buildTicketSidebarBootScript({
                   keepClosed: sidebarFlags[0],
                   overlayTicket: sidebarFlags[1],
+                  autoOpenSwitches: autoOpenSwitchesUserId !== null,
+                  userId: autoOpenSwitchesUserId,
                 }),
               }}
             />

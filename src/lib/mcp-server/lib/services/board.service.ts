@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import type { IApiClient } from '../../types/index';
 import { getConfig } from '../../config/index';
 import { logger } from '../../utils/logger';
@@ -59,7 +60,7 @@ export class BoardService {
     });
   }
 
-  async createBoard(params: unknown): Promise<CreateBoardResponse> {
+  async createBoard(params: unknown): Promise<CreateBoardResponse | (ReturnType<typeof planLimitResponse>["body"] & { status: 402 })> {
     const correlationId = generateCorrelationId();
     const validatedInput = CreateBoardInputSchema.parse(params) as CreateBoardInput;
     const teamSegment = encodeURIComponent(String(validatedInput.team_id));
@@ -89,7 +90,15 @@ export class BoardService {
       },
       correlationId,
       { timeoutMs: getConfig().createBoardRequestTimeoutMs }
-    );
+    ).catch((error: unknown) => {
+      const body = (error as { httpResponse?: unknown })?.httpResponse ?? error;
+      if (isPlanLimitReachedError(body)) {
+        const refusal = planLimitResponse(body);
+        return { ...refusal.body, status: refusal.status };
+      }
+      throw error;
+    });
+    if ("code" in response) return response;
 
     const tasksWithLinks = (response.tasks ?? []).map((task) => {
       const fromTicket = getTaskLinkInfo({

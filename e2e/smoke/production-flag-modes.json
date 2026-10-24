@@ -5,6 +5,7 @@
   "modes": {
     "htpr-3533-google-calendar": "OWNER_AND_QA",
     "htpr-4857-add-to-slack": "OWNER_AND_QA",
+    "htpr-5906-no-phone-nudges": "EVERYONE",
     "htpr-5906-shortcut-nudges": "OWNER_AND_QA",
     "htpr-5908-local-writing-assistance": "OWNER_AND_QA",
     "htpr-6002-shared-agent-chat": "EVERYONE",
@@ -76,7 +77,6 @@
     "htpr-7020-tag-full-name": "EVERYONE",
     "htpr-7025-welcome-email": "EVERYONE",
     "htpr-7026-agent-connect-check": "EVERYONE",
-    "htpr-7027-agent-nudge-email": "EVERYONE",
     "htpr-7028-first-task-email": "EVERYONE",
     "htpr-7029-keep-demo-board-on-email-signup": "EVERYONE",
     "htpr-7030-google-signup-starter-board": "EVERYONE",
@@ -220,6 +220,8 @@
     "htpr-7544-ctrlj-sidebar-on-new-task": "EVERYONE",
     "htpr-7559-enter-runs-search": "EVERYONE",
     "htpr-7560-flag-reader-subscribe": "OFF",
-    "htpr-7649-sidebar-view-saved": "EVERYONE"
+    "htpr-7649-sidebar-view-saved": "EVERYONE",
+    "htpr-7650-ai-chat-open-switches": "EVERYONE",
+    "htpr-7723-task-waiting-on": "EVERYONE"
   }
 }

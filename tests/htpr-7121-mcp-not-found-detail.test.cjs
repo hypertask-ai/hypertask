@@ -80,6 +80,7 @@ function loadPost({ flagOn, knownLabelIds }) {
   m.paths = Module._nodeModulePaths(path.dirname(file));
   const originalLoad = Module._load;
   Module._load = function (request, parent, isMain) {
+    if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
     if (request in stubs) return stubs[request];
     if (request.startsWith("@/lib/flags/definitions/")) {
       return { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG: "htpr-7121-mcp-not-found-detail" };

@@ -46,7 +46,7 @@ function setup({ mode = null, name = 'Robin', flagError = false, auth, pending =
       reserveFeedbackAttempt: async () => true,
       reserveFeedbackQuota: async (userId, existing) => { quotas.push({ userId, existing }); return true },
     },
-    '@/utils/controllers/tasks/createTaskCore': { createTaskCore: async options => {
+    '@/utils/controllers/tasks/createTaskCore': { createProvisionedTaskCore: async options => {
       created.push(options)
       const task = { ...options, id: created.length, ticketNumber: `HTPR-${8000 + created.length}`, uniqueIndex: 8000 + created.length }
       rows.push(task)

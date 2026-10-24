@@ -311,6 +311,82 @@ test('layout lock: desktop New Task window stays narrow and inside the viewport'
   expect(box!.y + box!.height).toBeLessThanOrEqual(900)
 })
 
+type DescriptionFrame = {
+  time: number
+  height: number
+  live: boolean
+  fontReady: boolean
+  chain: Array<{ id: string; width: number; paddingLeft: string; paddingRight: string; containerType: string }>
+}
+
+test('layout lock: an agent-written description keeps its height from first paint to the live editor', async ({ page }, testInfo) => {
+  test.setTimeout(90_000)
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { agentDescriptionDetailPath: string }
+  const phone = testInfo.project.name === 'Mobile'
+  const identity = (await page.context().cookies()).find(cookie => cookie.name === 'nookies_user')
+  expect(identity, 'description regression needs the authenticated smoke identity').toBeDefined()
+  const accountId = (JSON.parse(decodeURIComponent(identity!.value)) as { id: number }).id
+  await page.context().addCookies([{
+    name: 'ht_board_display_v1', url: testInfo.project.use.baseURL!,
+    value: encodeURIComponent(JSON.stringify({ version: 1, accountId, timeZone: 'UTC', locale: 'en-US', boardLayout: 'board', theme: 'graphite',
+      railCollapsed: true, quickTips: false, draftsFirst: false, isMobile: !phone,
+      board: { railOn: false, showEmptyViewTabs: false, hiddenViewTabIds: {}, viewTabsOrder: {}, tableColumns: ['title'], tableWidths: {},
+        tableTitleWrap: false, openChat: false, keepChatClosed: true, chatSuppressed: true, chatPinned: false } })),
+  }])
+  await page.setViewportSize(phone ? { width: 390, height: 844 } : { width: 1440, height: 900 })
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Network.enable')
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
+  await cdp.send('Network.setBypassServiceWorker', { bypass: true })
+  if (phone) await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 })
+  await page.addInitScript(() => {
+    const state: { frames: DescriptionFrame[]; done: boolean } = { frames: [], done: false }
+    ;(window as unknown as { __descriptionFrames: typeof state }).__descriptionFrames = state
+    const sample = () => {
+      const text = document.querySelector('[data-testid="ticket-description"] .ProseMirror')
+      if (text) {
+        const height = text.getBoundingClientRect().height
+        const live = !!(text as Element & { editor?: unknown }).editor
+        const fontReady = document.fonts.check(`14px ${getComputedStyle(text).fontFamily.split(',')[0]}`)
+        const chain: DescriptionFrame['chain'] = []
+        for (let node: Element | null = text; node; node = node.parentElement) {
+          const style = getComputedStyle(node)
+          chain.push({ id: node.id, width: node.getBoundingClientRect().width, paddingLeft: style.paddingLeft, paddingRight: style.paddingRight, containerType: style.containerType })
+          if (node.id === 'description-container') break
+        }
+        const last = state.frames[state.frames.length - 1]
+        if (height > 0 && (!last || last.height !== height || last.live !== live || last.fontReady !== fontReady || JSON.stringify(last.chain) !== JSON.stringify(chain))) {
+          state.frames.push({ time: performance.now(), height, live, fontReady, chain })
+        }
+      }
+      if (!state.done) requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  })
+  await page.goto(withRealtime(fixture.agentDescriptionDetailPath), { waitUntil: 'load' })
+  const description = page.locator('[data-testid="ticket-description"] .ProseMirror').first()
+  await expect(description).toContainText('Last paragraph with extra spaces.', { timeout: 30_000 })
+  await expect.poll(() => description.evaluate(element => !!(element as Element & { editor?: unknown }).editor), { message: 'the real description editor must replace the static first paint', timeout: 30_000 }).toBe(true)
+  await page.evaluate(() => document.fonts.ready)
+  await page.waitForTimeout(1000)
+  const frames = await page.evaluate(() => {
+    const state = (window as unknown as { __descriptionFrames: { frames: DescriptionFrame[]; done: boolean } }).__descriptionFrames
+    state.done = true
+    return state.frames
+  })
+  await testInfo.attach('description-first-paint-frames', { body: JSON.stringify(frames, null, 2), contentType: 'application/json' })
+  expect(frames.length, 'layout lock: the description text was never measured').toBeGreaterThan(0)
+  expect(frames[0].live, 'layout lock: measurement must start at the static first paint, not after hydration').toBe(false)
+  expect(frames[frames.length - 1].live, 'layout lock: measurement must include the live editor').toBe(true)
+  const first = frames[0]
+  for (const frame of frames) {
+    const sameFont = frames.find(other => other.fontReady === frame.fontReady)!
+    expect(frame.height, `layout lock: description height changed at the same font state (${testInfo.project.name}): ${JSON.stringify(frames)}`).toBe(sameFont.height)
+    expect(frame.chain, `layout lock: description box chain changed (${testInfo.project.name})`).toEqual(first.chain)
+    if (phone) for (const box of frame.chain) expect(box.width, `phone ${box.id || 'editor wrapper'} must not overflow 390px`).toBeLessThanOrEqual(390)
+  }
+})
+
 // HTPR-7074: a cold ticket open must not shove the comment box (or anything else) down the page.
 const CLS_BUDGET = 0.05
 type ShiftSource = { node: string; previous: number[]; current: number[] }

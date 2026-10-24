@@ -2,8 +2,6 @@ import { LogType, Status } from "@prisma/client";
 import { fallbackBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { unsubscribeHeaders, unsubscribeUrl } from "@/lib/email/unsubscribe";
-import { FEATURE_FLAG_QA_USER_ID, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7027_AGENT_NUDGE_EMAIL_FLAG } from "@/lib/flags/keys";
 import { getFirstAgentConnection } from "@/lib/onboarding/agentConnection";
 import { MCP_ADD_COMMAND } from "@/lib/onboarding/installCommands";
 import prisma from "@/lib/prisma";
@@ -25,7 +23,6 @@ export async function maybeScheduleAgentNudge(userId: number) {
     const redis = await getRedis();
     const email = user.email.trim().toLowerCase();
     const armed = Boolean(await redis.get(`onboarding:qa-armed:${email}`));
-    if (!await isFeatureEnabled(HTPR_7027_AGENT_NUDGE_EMAIL_FLAG, armed ? FEATURE_FLAG_QA_USER_ID : userId)) return "flag_off";
 
     const scheduledKey = `onboarding:nudge-scheduled:${userId}`;
     if (await redis.get(scheduledKey)) return "already_scheduled";
@@ -61,7 +58,6 @@ export async function sendAgentNudgeEmail(userId: number) {
   const redis = await getRedis();
   const email = user.email.trim().toLowerCase();
   const armed = Boolean(await redis.get(`onboarding:qa-armed:${email}`));
-  if (!await isFeatureEnabled(HTPR_7027_AGENT_NUDGE_EMAIL_FLAG, armed ? FEATURE_FLAG_QA_USER_ID : userId)) return skip("flag_off");
   if (await getFirstAgentConnection(userId)) return skip("agent_connected");
   const sentKey = `onboarding:nudge-sent:${userId}`;
   if (await redis.get(sentKey) || await prisma.logs.findFirst({ where: { LoggedById: userId, log: "agent_nudge_email_sent" } })) return skip("already_sent");

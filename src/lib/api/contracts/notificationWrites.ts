@@ -8,6 +8,7 @@ export const notificationArchiveQuerySchema = z.object({
   userId: id,
   type: z.string(),
   tutorial: z.literal(1).optional(),
+  intent: z.literal("archive").optional(),
 });
 export const notificationUnarchiveBodySchema = z.object({ notificationId: z.union([id, z.string()]) });
 export const notificationBulkArchiveBodySchema = z.object({

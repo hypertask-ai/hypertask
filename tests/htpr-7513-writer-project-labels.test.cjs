@@ -37,6 +37,9 @@ function moduleWithStubs(file, stubs) {
     console: { log() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
+      if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
+      if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false };
+      if (id === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
       if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
       if (id === "@/app/api/ai/_lib/skillAccess") return { AccountSkillAccessError: class extends Error {} };
       if (id === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;
@@ -214,6 +217,7 @@ function harness(options = {}) {
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
     "@/app/api/ai/_lib/editorAi": { ...editor, SSE_HEADERS: { "content-type": "text/event-stream" }, sseFrame: () => "event: error", createSseErrorResponse: (error, status) => Response.json({ error }, { status }) },
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/app/api/ai/_lib/taskWriterRun": run,
     "@/app/api/ai/_lib/taskWriterProperties": properties,

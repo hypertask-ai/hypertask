@@ -1,5 +1,5 @@
 import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
 import { logAiUsage, type AiUsageRecord } from "./aiUsage";
 import { identifyPrompt } from "@/lib/ai/prompts/registry";
@@ -133,6 +133,11 @@ function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
     providerId: "gateway",
     middleware: createSharedAllowanceMiddleware({
       allowanceUsd,
+      fundingSource,
+      resolvePolicy: async (teamId) => {
+        const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
+        return resolveTeamAllowancePolicy(teamId, fundingSource);
+      },
       gatewayApiKey,
       modelSlug,
     }),
@@ -151,6 +156,11 @@ function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
         model,
         providerId: "gateway",
         middleware: createImageAllowanceMiddleware({
+          fundingSource,
+          resolvePolicy: async (teamId) => {
+            const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
+            return resolveTeamAllowancePolicy(teamId, fundingSource);
+          },
           allowanceUsd:
             fundingSource === "shared"
               ? FREE_TEAM_AI_ALLOWANCE_USD
@@ -277,7 +287,11 @@ function resolveUntracedAiModel(
 
 type ModelUsageContext = Partial<Pick<AiUsageRecord,
   "userId" | "teamId" | "projectId" | "taskId" | "agentId" | "feature" | "provider" | "promptId" | "promptVersion"
->>;
+>> & {
+  initiatingUserId?: number | null;
+  trustedChatSessionId?: string | null;
+  promptCachingEnabled?: Promise<boolean>;
+};
 
 const modelUsageContexts = new WeakMap<object, ModelUsageContext>();
 
@@ -294,6 +308,54 @@ export function inheritAiModelUsage(model: LanguageModel, source: LanguageModel)
   const current = modelUsageContexts.get(model);
   if (current) Object.assign(current, context);
   else modelUsageContexts.set(model, context);
+}
+
+export async function aiPromptCachingEnabled(model: LanguageModel): Promise<boolean> {
+  if (typeof model === "string" || model.provider !== "gateway") return false;
+  const context = modelUsageContexts.get(model);
+  if (!context?.initiatingUserId) return false;
+  return context.promptCachingEnabled ??= import("@/lib/flags/definitions/htpr-7689-prompt-caching")
+    .then(({ HTPR_7689_PROMPT_CACHING_FLAG }) => import("@/lib/flags")
+      .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, context.initiatingUserId!)))
+    .catch(() => false);
+}
+
+function createPromptCachingMiddleware(model: LanguageModel, context: ModelUsageContext, enabled: () => Promise<boolean>): LanguageModelMiddleware {
+  return {
+    specificationVersion: "v4",
+    transformParams: async ({ params }) => {
+      if (typeof model === "string" || model.provider !== "gateway" ||
+        (!model.modelId.startsWith("anthropic/") && !model.modelId.startsWith("openai/")) ||
+        !await enabled()) return params;
+      if (model.modelId.startsWith("anthropic/")) {
+        return {
+          ...params,
+          prompt: params.prompt.map((message) => {
+            if (message.role !== "system" || !message.providerOptions?.anthropic?.cacheControl) return message;
+            const { cacheControl: _cacheControl, ...anthropic } = message.providerOptions.anthropic;
+            return { ...message, providerOptions: { ...message.providerOptions, anthropic } };
+          }),
+          providerOptions: {
+            ...params.providerOptions,
+            gateway: { ...params.providerOptions?.gateway, caching: "auto" },
+          },
+        };
+      }
+      const secret = process.env.BETTER_AUTH_SECRET;
+      if (!context.trustedChatSessionId || !secret) return params;
+      const namespace = context.teamId ? `team:${context.teamId}` : `user:${context.initiatingUserId}`;
+      const promptCacheKey = createHmac("sha256", secret)
+        .update(`htpr-7689:v1:${namespace}:${context.trustedChatSessionId}`)
+        .digest("base64url").slice(0, 32);
+      return {
+        ...params,
+        providerOptions: {
+          ...params.providerOptions,
+          openai: { ...params.providerOptions?.openai, promptCacheKey },
+        },
+      };
+    },
+  };
 }
 
 async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number, cacheReadTokens = 0, cacheWriteTokens = 0) {
@@ -482,7 +544,10 @@ function traceLanguageModel(
   const context: ModelUsageContext = { provider };
   let traced = wrapLanguageModel({
     model,
-    middleware: createUsageTracingMiddleware(context, model.modelId, allowanceFundedModels.get(model)),
+    middleware: [
+      createUsageTracingMiddleware(context, model.modelId, allowanceFundedModels.get(model)),
+      createPromptCachingMiddleware(model, context, () => aiPromptCachingEnabled(traced)),
+    ],
   });
   if (replacement && isHaiku45Model(model.modelId)) {
     const upgradedModel = async () => {

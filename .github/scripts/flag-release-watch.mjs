@@ -1,31 +1,14 @@
-import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { RELEASE_WATCH, isReleaseWatchSpike } from "../../src/lib/flags/releaseWatch.mjs";
 
 export { RELEASE_WATCH, isReleaseWatchSpike };
 const APP = "https://app.hypertask.ai";
-const FLAG_FILE = /^src\/lib\/flags\/definitions\/(htpr-[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*)\.ts$/;
-
-export function parseAddedDefinitions(log) {
-  const added = new Map();
-  let releasedAt;
-  for (const line of log.split("\n")) {
-    if (/^\d+$/.test(line)) releasedAt = new Date(Number(line) * 1000).toISOString();
-    const match = FLAG_FILE.exec(line);
-    if (match && releasedAt && !added.has(match[1])) added.set(match[1], releasedAt);
-  }
-  return added;
-}
-
-export function addedProductionDefinitions() {
-  return parseAddedDefinitions(execFileSync("git", ["log", "origin/production", "--first-parent", "--diff-merges=first-parent", "--diff-filter=A", "--since=60 minutes ago", "--format=%ct", "--name-only", "--", "src/lib/flags/definitions/"], { encoding: "utf8" }));
-}
-
-export function releaseGroups(flags, additions, now) {
+export function releaseGroups(flags, now) {
   const groups = new Map();
   for (const flag of flags) {
     if (flag.mode !== "EVERYONE" || !/^htpr-[1-9]\d*-/.test(flag.key)) continue;
-    const release = flag.releasedAt ?? additions.get(flag.key);
+    if (!flag.releasedAt) continue;
+    const release = flag.releasedAt;
     const time = new Date(release).getTime();
     const elapsed = (now - time) / 60_000;
     if (!Number.isFinite(elapsed) || elapsed < RELEASE_WATCH.minimumMinutes || elapsed > RELEASE_WATCH.watchMinutes) continue;
@@ -50,12 +33,12 @@ async function json(fetchImpl, url, options) {
   return body;
 }
 
-export async function runReleaseWatch({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, now = Date.now(), additions = addedProductionDefinitions } = {}) {
+export async function runReleaseWatch({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, now = Date.now() } = {}) {
   if (!token || !apiKey) throw new Error("Release watch credentials are missing");
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-  const { flags } = await json(fetchImpl, `${APP}/api/mcp/flags`, { headers });
+  const { flags } = await json(fetchImpl, `${APP}/api/mcp/flags`, { method: "POST", headers });
   if (!Array.isArray(flags)) throw new Error("Release watch flag list is missing");
-  const groups = releaseGroups(flags, typeof additions === "function" ? additions() : additions, now);
+  const groups = releaseGroups(flags, now);
   const switched = [];
   const failures = [];
   for (const [release, keys] of groups) {

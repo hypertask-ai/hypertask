@@ -546,6 +546,22 @@ model FeatureFlagChange {
   @@index([key, createdAt])
 }
 
+model FeatureFlagReview {
+  id                Int             @id @default(autoincrement())
+  key               String
+  mode              FeatureFlagMode
+  reviewerUserId    Int
+  reviewerAgentId   String
+  aiReviewUrl       String          @db.VarChar(300)
+  independentReview String          @db.VarChar(300)
+  liveQaUrl         String          @db.VarChar(300)
+  inboxCyclePassed  Boolean
+  deployedSha       String?
+  createdAt         DateTime        @default(now())
+  usedAt            DateTime?
+  usedByChangeId    Int?
+}
+
 model FigmaConnection {
   userId                Int      @id
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -611,6 +627,9 @@ model UserSetting {
   // then opens on the Last 7 days default. Chosen value syncs across devices.
   allTasksDateRange        String?
   boardSortMode            String?
+  aiChatOpenNewTickets     Boolean?
+  aiChatOpenTickets        Boolean?
+  aiChatOpenBoards         Boolean?
   playGifs                 Boolean       @default(true)
   autoDescriptionSuggestions Boolean      @default(true)
   notificationMatrix       Json          @default("{}")
@@ -893,8 +912,8 @@ model Project {
   statusUpdates          ProjectStatusUpdate[]
   githubRepositories     BoardGithubRepository[]
 
-  // @@index([status, teamId]) // For WHERE status="Normal" AND teamId IS NOT NULL
-  // @@index([ownerId, status]) // For owner-based queries
+  @@index([teamId, status])
+  @@index([ownerId, teamId, status])
   
 }
 

@@ -90,7 +90,7 @@ type TaskWriteRouteLoader = () => Promise<TaskWriteRoute>;
 
 export function taskWriteHandler(
   routes: Partial<Record<string, TaskWriteRouteLoader>>,
-  options: { fallback?: NextApiHandler; methodNotAllowed?: unknown } = {},
+  options: { fallback?: NextApiHandler; methodNotAllowed?: unknown; authenticate?: (headers: Headers) => Promise<SessionUser | null> } = {},
 ): NextApiHandler {
   return async (req, res) => {
     const loadRoute = routes[req.method ?? ""] ?? routes["*"];
@@ -99,17 +99,26 @@ export function taskWriteHandler(
       return res.status(405).json(options.methodNotAllowed ?? { message: "Method not allowed" });
     }
     const headers = new Headers(req.headers as Record<string, string>);
-    const session = (await getSessionUser(headers).catch(() => null)) ?? undefined;
-    const route = await loadRoute();
-    const response = await route({ headers, url: req.url, method: req.method, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
-    if (!response) return;
-    response.headers.forEach((value, name) => {
-      if (name !== "content-type") res.setHeader(name, value);
-    });
-    const text = await response.text();
-    if (text && !response.headers.get("content-type")?.includes("application/json")) {
-      return res.status(response.status).send(text);
+    const session = (await (options.authenticate ? options.authenticate(headers) : getSessionUser(headers)).catch(() => null)) ?? undefined;
+    let status = 500;
+    try {
+      const route = await loadRoute();
+      const response = await route({ headers, url: req.url, method: req.method, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
+      status = response?.status ?? res.statusCode;
+      if (!response) return;
+      response.headers.forEach((value, name) => {
+        if (name !== "content-type") res.setHeader(name, value);
+      });
+      const text = await response.text();
+      if (text && !response.headers.get("content-type")?.includes("application/json")) {
+        return res.status(response.status).send(text);
+      }
+      return res.status(response.status).json(text ? JSON.parse(text) : undefined);
+    } finally {
+      if (session?.source === "cli-bearer") {
+        const { logDesktopCliAuthorization } = await import("@/lib/auth/desktopCliTokenUser");
+        logDesktopCliAuthorization(session, "mention-search", status);
+      }
     }
-    return res.status(response.status).json(text ? JSON.parse(text) : undefined);
   };
 }

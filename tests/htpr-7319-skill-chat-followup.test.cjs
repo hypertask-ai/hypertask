@@ -32,6 +32,7 @@ function load(file, mocks = {}, sourceRoot = root) {
   const mod = { exports: {} };
   new Function("require", "module", "exports", compiled)((id) => {
     if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
+    if (id === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
     if (["./taskWriterSkills", "@/lib/ai/taskWriterSkills"].includes(id)) return metadata;
     if (id === "@/lib/flags/keys") return keys;
     if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
@@ -182,6 +183,7 @@ async function writerResponse(options = {}) {
     "@/lib/ai/taskWriterTicketType": {},
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
+    "@/lib/auth/desktopCliTokenUser": { getDesktopCliTokenUser: async () => null, logDesktopCliAuthorization() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key) => [flag].includes(key) && options.enabled !== false },
     "@/app/api/ai/_lib/taskWriterProperties": properties,
@@ -263,7 +265,7 @@ async function withCompose(options, check) {
   dom.window.HTMLElement.prototype.attachEvent = () => {};
   dom.window.HTMLElement.prototype.detachEvent = () => {};
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  const atoms = Object.fromEntries(["currentProjectAtom", "currentUserAtom", "lastUsedBoardsAtom", "composeTaskChatIntroAtom", "composeTaskSkillFollowupAtom", "composeTaskQuestionsTaskIdAtom", "showAIChatInterfaceAtom", "isAiChatSidebarModeAtom", "aiChatAutoOpenSuppressedAtom", "aiChatExplicitOpenAtAtom", "dockedChatScopeAtom", "fullScreenChatScopeAtom", "inViewObjectAtom", "taskDetailNonEssentialReadyAtom", "aiChatEditTaskIdAtom"].map((name) => [name, name]));
+  const atoms = Object.fromEntries(["currentProjectAtom", "currentUserAtom", "lastUsedBoardsAtom", "composeTaskChatIntroAtom", "composeTaskSkillFollowupAtom", "composeTaskQuestionsTaskIdAtom", "showAIChatInterfaceAtom", "isAiChatSidebarModeAtom", "aiChatAutoOpenSuppressedAtom", "aiChatNewTicketPathAtom", "aiChatExplicitOpenAtAtom", "dockedChatScopeAtom", "fullScreenChatScopeAtom", "inViewObjectAtom", "taskDetailNonEssentialReadyAtom", "aiChatEditTaskIdAtom"].map((name) => [name, name]));
   const project = { id: 15, title: "Board", uniqueIdentifier: "HTPR" };
   const values = new Map([[atoms.currentProjectAtom, project], [atoms.currentUserAtom, { id: 985, uid: "qa" }], [atoms.lastUsedBoardsAtom, {}], [atoms.taskDetailNonEssentialReadyAtom, true], [atoms.inViewObjectAtom, options.existing ? { taskId: 43, taskProjectId: 15 } : {}]]);
   const subscribers = new Set();
@@ -282,7 +284,7 @@ async function withCompose(options, check) {
   if (options.existing) flags.add(keys.HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const taskContext = React.createContext(options.existing ? { currentTask: { ...task, title: "", description_: { content: "" } }, setCurrentTask() {}, setDescription() {} } : undefined);
   const mobileContext = React.createContext(false);
-  const basic = { "@/lib/state": state, "@/store": atoms, "@/hooks/useFlag": { useFlag: (key) => flags.has(key) } };
+  const basic = { "@/lib/state": state, "@/store": atoms, "@/hooks/useFlag": { useFlag: (key) => flags.has(key), useFlagReady: () => true } };
   const api = composeApi();
   let visible = true, history, reactRoot, selectedTask = 43;
   const pending = deferred();
@@ -305,7 +307,8 @@ async function withCompose(options, check) {
       addMessage: async (_id, message) => { persisted.push(message); const stored = { ...message, id: "server-intro-43" }; rows[0] = { ...rows[0], messages: [stored] }; return response({ message: stored }); },
     },
   };
-  const historyMocks = { ...basic, "next/navigation": { usePathname: () => "/detail/project-15/7319" }, "@/utils/api/ai_chat": historyApi };
+  const dockedChatScope = load("src/hooks/MultiPages/AIChat/useDockedChatScope.ts", { ...basic, "@/lib/flags/definitions/htpr-7685-chat-follows-board": { HTPR_7685_CHAT_FOLLOWS_BOARD_FLAG: "htpr-7685-chat-follows-board" } });
+  const historyMocks = { ...basic, "next/navigation": { usePathname: () => "/detail/project-15/7319" }, "@/utils/api/ai_chat": historyApi, "./useDockedChatScope": dockedChatScope };
   const paged = load("src/hooks/MultiPages/AIChat/usePagedChatHistory.ts", { ...historyMocks, "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null } });
   const { useSessionAndChatHistory } = load("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts", { ...historyMocks, "./usePagedChatHistory": paged });
   const chatContext = { useAiChatContext: () => ({ ...history, chatMounted: true, handleMessageListScroll() {}, registerMessageListRef() {}, scrollMessagesToBottom() {}, isTyping: false, handleSendMessage: (value) => sent.push(value), isDetailPage: true, selectSession() {} }) };
@@ -347,6 +350,7 @@ async function withCompose(options, check) {
     "@/lib/realtime/taskDetailRefresh": { preserveTaskAssigneesChangedDuringFetch: (_current, saved) => saved, refreshTaskDetailQueryCache: async () => {}, shouldPreserveTaskEditorContent: () => false, mergeRealtimeTaskDetail: (_current, saved) => saved },
     "@/lib/ai/composeTaskBoard": {}, "./composeBoardTarget": {},
     "@/components/AI_CHAT/ChatScopeChip": {}, "@/components/Modals/MoveTaskToBoard": {},
+    "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu": { useSkillSlashMenu: () => ({ onKeyDown: () => false, onInput() {}, onCaretMove() {}, close() {}, menu: null }) },
     "@/lib/createTaskAttachmentUploads": { discardUnboundCreateTaskUploads() {} },
   }).default;
   global.fetch = async (url, init) => {
@@ -601,6 +605,7 @@ async function sendAfterIntro(session, question) {
     "@/lib/aiChat/streamRefusal": {},
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
     "@/lib/aiChat/transportRetry": {},
+    "@/lib/aiModelOptions": { chatModelRequestFields: load("src/lib/aiModelOptions.ts").chatModelRequestFields },
   });
   const ref = () => ({ current: null });
   const noop = () => {};

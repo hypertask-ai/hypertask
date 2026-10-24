@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { errorQuery, isReleaseWatchSpike, parseAddedDefinitions, releaseGroups, runReleaseWatch, RELEASE_WATCH } from "./flag-release-watch.mjs";
+import { errorQuery, isReleaseWatchSpike, releaseGroups, runReleaseWatch, RELEASE_WATCH } from "./flag-release-watch.mjs";
 
 const now = Date.parse("2026-10-20T12:00:00Z");
 const flag = (key = "htpr-123-feature", minutes = 40, extra = {}) => ({ key, mode: "EVERYONE", releasedAt: new Date(now - minutes * 60_000).toISOString(), ...extra });
@@ -10,7 +10,7 @@ function fake(flags, counts = [4, 12]) {
   return {
     calls,
     options: {
-      now, token: "agent-token", apiKey: "posthog-key", additions: new Map(),
+      now, token: "agent-token", apiKey: "posthog-key",
       fetchImpl: async (url, init) => {
         calls.push({ url, ...init, body: init.body ? JSON.parse(init.body) : undefined });
         assert.ok(init.signal);
@@ -61,15 +61,14 @@ for (const age of [10, 70, -1]) test(`release ${age} minutes ago is skipped`, as
   assert.equal(calls.length, 1);
 });
 
-test("production additions supply release dates only for null-release Everyone flags", async () => {
-  const release = new Date(now - 35 * 60_000).toISOString();
-  const definitions = parseAddedDefinitions(`${Date.parse(release) / 1000}\n\nsrc/lib/flags/definitions/htpr-123-feature.ts\nsrc/lib/flags/definitions/index.generated.ts\nsrc/lib/flags/definitions/htpr-456-other.ts\n`);
-  assert.deepEqual([...definitions.keys()], ["htpr-123-feature", "htpr-456-other"]);
+test("watch enrolls server releases first and never invents missing release dates", async () => {
   const { calls, options } = fake([flag(undefined, 40, { releasedAt: null }), flag("htpr-456-other", 40, { mode: "OFF", releasedAt: null })]);
-  options.additions = definitions;
-  assert.deepEqual(await runReleaseWatch(options), ["htpr-123-feature"]);
-  assert.equal(calls.at(-1).body.watch.windowMinutes, 35);
-  assert.equal(releaseGroups([flag(undefined, 70)], definitions, now).size, 0);
+  assert.deepEqual(await runReleaseWatch(options), []);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, "POST");
+  assert.equal(calls[0].url, "https://app.hypertask.ai/api/mcp/flags");
+  assert.equal(calls[0].body, undefined);
+  assert.equal(releaseGroups([flag(undefined, 70)], now).size, 0);
 });
 
 test("before and after windows have equal duration, only production exceptions count", () => {

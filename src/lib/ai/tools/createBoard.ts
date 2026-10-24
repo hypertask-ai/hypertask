@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
+import { isPlanLimitsEnabled, isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { validateBoardManifest } from "@/lib/mcp/boards/validateManifest";
 import { isBoardLimitReached, FREE_BOARD_LIMIT_MESSAGE } from "@/utils/controllers/projects/boardQuota";
 import { createBoardFromManifest } from "@/lib/mcp/boards/createBoardFromManifest";
@@ -221,15 +222,22 @@ export function createCreateBoardTool(context: ToolContext) {
           };
         }
 
-        const { board, sections, labels, tasks } = await createBoardFromManifest({
-          teamId: team.id,
-          googleAccountId: team.googleAccountId,
-          manifest: validated.data,
-          userId: user.id,
-          userEmail: dbUser.email,
-          userDisplayName: dbUser.displayName,
-          creation: { method: "agent", channel: "agent" },
-        });
+        let result;
+        try {
+          result = await createBoardFromManifest({
+            teamId: team.id,
+            googleAccountId: team.googleAccountId,
+            manifest: validated.data,
+            userId: user.id,
+            userEmail: dbUser.email,
+            userDisplayName: dbUser.displayName,
+            creation: { method: "agent", channel: "agent", agentId: await isPlanLimitsEnabled(user.id) ? context.actingAgentId : undefined },
+          });
+        } catch (error) {
+          if (isPlanLimitReachedError(error)) return planLimitResponse(error).body;
+          throw error;
+        }
+        const { board, sections, labels, tasks } = result;
 
         return sanitizeForJson({
           success: true,

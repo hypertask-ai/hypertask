@@ -1,3 +1,4 @@
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 
 
 import dynamic from "next/dynamic";
@@ -8,6 +9,7 @@ import { rememberLoadedModule } from "@/lib/boardStartup/loadedModule";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG } from "@/lib/flags/definitions/htpr-7644-board-cards-first-draw";
+import { HTPR_7695_COLUMN_REVEAL_AHEAD_FLAG } from "@/lib/flags/definitions/htpr-7695-column-reveal-ahead";
 const taskModule = rememberLoadedModule(() => import("../KanbanTaskComponents/task"));
 const loadTask = taskModule.load;
 if (typeof window !== "undefined") {
@@ -138,6 +140,8 @@ export const Section = ({
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isMbl = useContext(MobileViewContext);
+  const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
+  const revealAheadInColumn = useFlag(HTPR_7695_COLUMN_REVEAL_AHEAD_FLAG);
   const shouldWarmInitialTasks = shouldWarmInitialBoardTasks({
     isMobile: isMbl,
     progressiveRendering,
@@ -282,9 +286,18 @@ export const Section = ({
           });
         }, PROGRESSIVE_REVEAL_SETTLE_MS);
       },
-      {
-        rootMargin: "240px 160px",
-      },
+      revealAheadInColumn
+        ? {
+            root: root.querySelector<HTMLElement>(
+              isMbl
+                ? `#tasks-list-${index}`
+                : `#droppable-section-container-${section.sectionId}`,
+            ),
+            rootMargin: "100% 0px",
+          }
+        : {
+            rootMargin: "240px 160px",
+          },
     );
 
     root
@@ -299,9 +312,13 @@ export const Section = ({
       }
     };
   }, [
+    index,
+    isMbl,
     progressiveRendering,
     renderAllTasks,
+    revealAheadInColumn,
     section.items,
+    section.sectionId,
     sectionRef,
     shouldWarmInitialTasks,
     taskModuleReady,
@@ -346,9 +363,10 @@ export const Section = ({
             archivedTasks,
             section.sectionId,
             currentProject,
+            { legacyAgentAssigneeMatch: !assigneeFixEnabled },
           )
         : [],
-    [archivedTasks, currentProject, section.sectionId, showArchivedOnBoard]
+    [archivedTasks, assigneeFixEnabled, currentProject, section.sectionId, showArchivedOnBoard]
   );
   const archivedTasksPlayList = useMemo(
     () =>

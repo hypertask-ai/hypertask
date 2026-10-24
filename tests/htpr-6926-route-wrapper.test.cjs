@@ -384,13 +384,22 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
               'next/server': { NextRequest, NextResponse },
               '@/lib/mcp/auth': auth,
               '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
-              '@/lib/flags': { isFeatureEnabled: async () => false },
+              '@/lib/flags': { isFeatureEnabled: async () => false, isFeatureFlagOwnerUserId: async () => false },
               '@/lib/flags/keys': {},
               '@/lib/mcp/agents/scopes': { requireRole: async () => null },
               '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },
               '@/lib/mcp/readJsonBody': json,
               '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease,
             })
+            const loadSource = (relativePath, dependencies) => {
+              const sourceCode = fs.readFileSync(path.join(root, relativePath), 'utf8')
+              const transpiled = ts.transpileModule(sourceCode, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
+              const loaded = { exports: {} }
+              new Function('module', 'exports', 'require', transpiled)(loaded, loaded.exports, name => dependencies[name] ?? opaque)
+              return loaded.exports
+            }
+            mocks['@/lib/flags/http'] = loadSource('src/lib/flags/http.ts', { 'next/server': { NextResponse } })
+            mocks['@/lib/flags/agentAuthorization'] = loadSource('src/lib/flags/agentAuthorization.ts', mocks)
             process.env.HTPR_6926_TEST_FLAG = mode
             activeAuth = auth
             const wrapper = wrappers[mode]
@@ -418,8 +427,8 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
     if (originalMode === undefined) delete process.env.HTPR_6926_TEST_FLAG
     else process.env.HTPR_6926_TEST_FLAG = originalMode
   })
-  assert.equal(files.length, 109)
-  assert.equal(compared, 147)
+  assert.equal(files.length, 111)
+  assert.equal(compared, 149)
 })
 
 

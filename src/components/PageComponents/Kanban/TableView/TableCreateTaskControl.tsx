@@ -16,7 +16,7 @@ export type QuickCreateTask = (
   projectId: number,
   sectionId: number,
   sectionTitle: string,
-) => Promise<boolean>;
+) => Promise<boolean | "plan-limit">;
 
 export type TableCreateTaskControlProps = {
   hasCurrentProject: boolean;

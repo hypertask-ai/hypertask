@@ -9,7 +9,8 @@ import { isSessionTokenRevoked } from '@/lib/auth/sessionRevocation'
 
 export type SessionUser = { teamScope: AgentTokenTeamScope | null; agentTokenGeneration?: string | null } & (
   | { userId: number; agentId?: string; source: 'better-auth' }
-  | { userId: number; agentId?: string; source: 'legacy'; needsBridge: true })
+  | { userId: number; agentId?: string; source: 'legacy'; needsBridge: true }
+  | { userId: number; agentId?: never; source: 'cli-bearer' })
 
 export async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
   const session = await readSessionUser(headers);

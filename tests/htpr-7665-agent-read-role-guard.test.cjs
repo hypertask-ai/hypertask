@@ -218,6 +218,7 @@ const CASES = [
   { area: "also guarded", name: "inbox/move", file: `${OPS}/inbox/move/operation.ts`, method: "POST", body: {} },
   { area: "also guarded", name: "tasks/lease/claim", file: `${API}/tasks/lease/claim/route.ts`, method: "POST", body: {} },
   { area: "also guarded", name: "tasks/lease/heartbeat", file: `${API}/tasks/lease/heartbeat/route.ts`, method: "POST", body: {} },
+  { area: "also guarded", name: "tasks/waiting-on", file: `${OPS}/tasks/waiting-on/operation.ts`, method: "POST", body: { taskId: 1, userId: null } },
   { area: "also guarded", name: "tasks/session", file: `${API}/tasks/session/route.ts`, method: "POST", body: {} },
   { area: "also guarded", name: "view/{id}/apply", file: `${OPS}/view/[viewId]/apply/operation.ts`, method: "POST", params: { viewId: "v" } },
   {
@@ -455,6 +456,7 @@ function nativeWorld(scenario) {
     throw new Error(`Unexpected gate import: ${request}`);
   });
   const execution = load("src/lib/ai/tools/execution.ts", (request) => {
+    if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false };
     if (request === "@/lib/ai/tools/readAgentGate") return gate;
     if (request === "@/lib/auth/agentScope") return { withAgentScopeRequest: (_request, runIt) => runIt(), prepareAgentScope: async () => {} };
     if (request === "@/lib/mcp/tasks/agentMutationLeaseAdoption") return { withAdoptedAgentMutationLease: async (_db, _actor, runIt) => runIt() };

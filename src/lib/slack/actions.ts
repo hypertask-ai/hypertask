@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError } from "@/lib/planLimits";
 import type { Prisma, Status } from "@prisma/client";
 
 import { PriorityConstants } from "@/lib/constants/constants";
@@ -151,7 +152,9 @@ async function createTask(
   const priorityIndex = priorityToIndex(optionalString(params.priority));
   const activityUser = toActivityUser(actor);
   const description = optionalString(params.description);
-  const result = await createTaskCore({
+  let result;
+  try {
+    result = await createTaskCore({
     creationChannel: "api",
     title,
     description: description ? toStoredHtml(description) : "",
@@ -162,7 +165,11 @@ async function createTask(
     projectIdentifier: project.uniqueIdentifier,
     priorityIndex,
     dueDate,
-  });
+    });
+  } catch (error) {
+    if (!isPlanLimitReachedError(error)) throw error;
+    return errorBlock(error.message);
+  }
 
   const labels = optionalStringArray(params.labels);
   if (labels.length) await setTaskLabels(result.task.id, project.id, labels, actor.user);

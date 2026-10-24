@@ -67,6 +67,7 @@ require.cache[nextServerPath] = {
   exports: { NextRequest, NextResponse },
 };
 
+stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
 stubModule("src/lib/auth/betterAuth.ts", {
   auth: { handler: async () => new Response(null, { status: 204 }) },
 });

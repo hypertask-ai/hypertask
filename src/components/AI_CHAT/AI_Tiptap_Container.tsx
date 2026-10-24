@@ -42,10 +42,10 @@ import {
   aiChatExplicitOpenAtAtom,
   currentProjectAtom,
   currentUserAtom,
-  dockedChatScopeAtom,
   inViewObjectAtom,
   recentChatBoardIdsAtom,
 } from "@/store";
+import { useDockedChatScope } from "@/hooks/MultiPages/AIChat/useDockedChatScope";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
@@ -538,7 +538,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
   const inViewObject = useRecoilValue(inViewObjectAtom);
-  const [dockedScope, setDockedScope] = useRecoilState(dockedChatScopeAtom);
+  const [dockedScope, setDockedScope] = useDockedChatScope();
   const [recentChatBoardIds, setRecentChatBoardIds] = useRecoilState<number[]>(
     recentChatBoardIdsAtom
   );
@@ -605,6 +605,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
     <div
       ref={rootRef}
       data-ai-chat-mobile-scope={mobile || undefined}
+      data-ai-chat-scope
       className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
     >
       {reuseChip ? (

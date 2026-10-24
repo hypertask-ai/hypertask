@@ -13,7 +13,7 @@ import { assertUserCanManageTeamByok } from "@/utils/controllers/teams/assertTea
 import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiSettingsForViewer";
 import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import prisma from "@/lib/prisma";
-import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getOpenAiOnlyDefaultContext } from "@/app/api/ai/_lib/byokKeys";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 class ProviderSettingsError extends Error {}
@@ -85,7 +85,7 @@ const handler: NextApiHandler = async (
       return res.status(lookup.status).json({ message: lookup.message });
     }
 
-    const { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute } = await getAiDefaultModelContext({ trustedTeamId: teamId, userId: user.id });
+    const { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute } = await getOpenAiOnlyDefaultContext({ trustedTeamId: teamId, userId: user.id }).catch(() => ({ openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false }));
     return res.status(200).json({
       defaultModelContext: { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute },
       gdprSafeMode: isGdprSafeModeEnabled(lookup.settings),
@@ -180,7 +180,7 @@ const handler: NextApiHandler = async (
       return res.status(404).json({ message: "Team not found" });
     }
 
-    const { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute } = await getAiDefaultModelContext({ trustedTeamId: teamId, userId: user.id });
+    const { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute } = await getOpenAiOnlyDefaultContext({ trustedTeamId: teamId, userId: user.id }).catch(() => ({ openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false }));
     return res.status(200).json({
       defaultModelContext: { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute },
       gdprSafeMode: isGdprSafeModeEnabled(nextSettings),

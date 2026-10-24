@@ -187,6 +187,7 @@ test("shared human/agent task transaction records the irreversible milestone onl
   let completed = false;
   let fail = false;
   const { createTaskWithBoardWebhookOutbox } = load("src/lib/mcp/webhooks/taskEvents.ts", {
+    "@/lib/planLimits": { isPlanLimitsEnabled: async () => false },
     "./outbox": { persistBoardWebhookEvent: async () => [] },
     "../../telemetry/savedWork": { enqueueTaskCreated: async () => { if (fail) throw new Error("rollback"); return "key"; }, processAnalyticsIntentSoon() {} },
   });

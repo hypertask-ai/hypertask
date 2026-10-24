@@ -27,6 +27,8 @@ function loadTs(relativePath, mocks = {}) {
     const mod = { exports: {} };
     cache.set(filename, mod);
     const defaults = {
+      "@/lib/planLimits": { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {}, assertTicketRoom: async () => {} },
+      "@/lib/planLimitNotifications": { notifyPlanLimitOwner: async () => {} },
       "@/lib/flags": { HTPR_6817_SLACK_APP_FLAG: "htpr-6817-slack-app", isFeatureEnabled: async () => false },
       "@/lib/slack/feature": { isSlackAppEnabled: async () => false },
       "@/lib/prisma": { __esModule: true, default: new Proxy({}, { get: () => { throw new Error("Unexpected database access in test"); } }) },

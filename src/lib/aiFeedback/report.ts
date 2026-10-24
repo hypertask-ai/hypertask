@@ -3,7 +3,7 @@ import { aiFeedbackEnabled } from './enabled'
 import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7536-plain-ai-feedback'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
-import { createTaskCore } from '@/utils/controllers/tasks/createTaskCore'
+import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
@@ -197,7 +197,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           ownerName: displayName,
           origin: reporter.origin,
         }) : undefined
-        const { task } = await createTaskCore({
+        const { task } = await createProvisionedTaskCore({
           creationChannel: "agent",
           title: readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
           description: readable?.description ?? description(input, fingerprint, displayName),

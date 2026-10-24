@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { lstatSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -5,6 +6,30 @@ import { fileURLToPath } from "node:url";
 
 process.env.FEATURE_FLAG_TYPESCRIPT_PATH = createRequire(import.meta.url).resolve("typescript");
 const { FLAG_DEFINITIONS_DIRECTORY, parseFlagFiles } = await import("../.github/scripts/feature-flag-registry.mjs");
+
+export function productionFlagReleases(root, env = process.env, git = execFileSync) {
+  if (env.VERCEL_ENV !== "production" || env.VERCEL_GIT_COMMIT_REF !== "production"
+    || !/^[a-f0-9]{40}$/.test(env.VERCEL_GIT_COMMIT_SHA ?? "")) return {};
+  const options = { cwd: root, encoding: "utf8", timeout: 10_000 };
+  let log;
+  try {
+    if (git("git", ["rev-parse", "HEAD"], options).trim() !== env.VERCEL_GIT_COMMIT_SHA) {
+      throw new Error("Production flag metadata must match the deployed commit");
+    }
+    log = git("git", ["log", "HEAD", "--min-parents=1", "--first-parent", "--diff-merges=first-parent", "--diff-filter=A", "--since=2 hours ago", "--format=%ct", "--name-only", "--", FLAG_DEFINITIONS_DIRECTORY], options);
+  } catch {
+    console.warn("Production flag release history unavailable or mismatched; default-on flags will not be enrolled");
+    return {};
+  }
+  const releases = {};
+  let releasedAt;
+  for (const line of log.split("\n")) {
+    if (/^\d+$/.test(line)) releasedAt = new Date(Number(line) * 1000).toISOString();
+    const match = /^src\/lib\/flags\/definitions\/(htpr-[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*)\.ts$/.exec(line);
+    if (match && releasedAt && !releases[match[1]]) releases[match[1]] = releasedAt;
+  }
+  return releases;
+}
 
 export function generateFlagIndex(root = process.cwd()) {
   const directory = path.join(root, FLAG_DEFINITIONS_DIRECTORY);
@@ -35,6 +60,8 @@ export function generateFlagIndex(root = process.cwd()) {
     "export const FLAG_DEFINITIONS = [",
     ...rows.map((_, index) => `  flag${index},`),
     "] as const;",
+    "",
+    `export const PRODUCTION_FLAG_RELEASES: Readonly<Record<string, string>> = ${JSON.stringify(productionFlagReleases(root))};`,
     "",
   ].join("\n");
   let existing;

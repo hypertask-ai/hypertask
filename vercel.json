@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/ai-allowance-drift",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/cleanup-guests",
       "schedule": "0 * * * *"
     },

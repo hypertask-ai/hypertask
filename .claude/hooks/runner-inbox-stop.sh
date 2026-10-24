@@ -157,6 +157,14 @@ ticket=""; inbox=$STATE/runner-$runner.json
 ticket_ok() {
   [ -n "$runner" ] && [ "$mode" != post ] && [ -s "$inbox" ] || return 1
   [ "$mode" != stop ] || [ "$active" != true ] || return 1
+  local week
+  # Gate delivery, not collection: queued tickets survive the pause; human events still arrive.
+  week=$(jq -er '.claude.week.used | select(type == "number") | select(. > 85 and . <= 100)' \
+    "$HOME/.local/state/token-ladder/status.json" 2>/dev/null) || week=""
+  if [ -n "$week" ]; then
+    printf 'pickup paused: claude week %s%%\n' "$week" >&2
+    return 1
+  fi
   # Idle means no unmet gate in this session's unlazy ledger (unchecked and not abandoned).
   local sid cwd ledger id
   sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null); cwd=$(jq -r '.cwd // empty' <<<"$payload" 2>/dev/null)

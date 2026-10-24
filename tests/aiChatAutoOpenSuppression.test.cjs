@@ -45,9 +45,10 @@ function effectFrom(relative, identifies, extraNames = []) {
   visit(ast);
   assert.equal(effects.length, 1, `identify exactly one production effect in ${relative}`);
   return load(`export function run(scope) { const { useEffect, ...values } = scope;
-    const { hydrated, slugs, _parsedTask, openAiChatByDefault, aiChatAutoOpenSuppressed, keepAiChatClosed, chatAutoOpenReady,
+    const { aiChatOpenSwitchesReady = true, aiChatOpenSwitchesEnabled = false, hydrated, slugs, _parsedTask, openAiChatByDefault, aiChatAutoOpenSuppressed, keepAiChatClosed, chatAutoOpenReady,
       aiChatPinned, isMblForChat, _mbl, isGuest, setShowAiChatInterface,
       ${extraNames.join(", ")} } = values;
+    const legacyAutoOpenReady = aiChatOpenSwitchesReady && !aiChatOpenSwitchesEnabled;
     ${effects[0]}; }`).run;
 }
 
@@ -92,7 +93,7 @@ const pinOpen = userOpenFrom("src/components/AI_CHAT/ChatHeader.tsx",
       (declaration) => declaration.name.getText(ast) === "nextPinned")),
   (source) => `(${source})();`);
 
-async function harness(persisted, run, flagEnabled = true, flagReady = true) {
+async function harness(persisted, run, flagEnabled = true, flagReady = true, switchesEnabled = false) {
   const previous = { window: global.window, document: global.document,
     IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/project?id=1" });
@@ -149,7 +150,7 @@ async function harness(persisted, run, flagEnabled = true, flagReady = true) {
     const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
     const restoreRef = React.useRef(false);
     const effect = effects[relative];
-    effect({ useEffect: React.useEffect, hydrated, slugs: String(id), _parsedTask: { id },
+    effect({ useEffect: React.useEffect, aiChatOpenSwitchesEnabled: switchesEnabled, hydrated, slugs: String(id), _parsedTask: { id },
       openAiChatByDefault, aiChatAutoOpenSuppressed, keepAiChatClosed, chatAutoOpenReady, aiChatPinned, isMblForChat: mobile,
       _mbl: mobile, isGuest: guest, setShowAiChatInterface,
       hasAttemptedChatRestoreRef: restoreRef, hasAttemptedRestoreRef: restoreRef,
@@ -396,4 +397,16 @@ for (const relative of [boardPath, detailPath, ...restorePaths]) {
       }, false, false);
     });
   }
+}
+
+for (const relative of [boardPath, detailPath, ...restorePaths]) {
+  test(`${relative}: three-switch policy disables this legacy automatic path`, async () => {
+    await harness({ openAiChatByDefault: true, aiChatPinned: true }, async (h) => {
+      window.sessionStorage.setItem("ht:aiChatOpen", "1");
+      await h.hydrate({ relative });
+      assert.deepEqual(h.attemptedOpens, []);
+      await React.act(async () => h.ui().open());
+      assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), true);
+    }, false, true, true);
+  });
 }

@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
+import { assertProjectTicketRoom, isPlanLimitsEnabled } from '@/lib/planLimits'
 import { persistBoardWebhookEvent } from './outbox'
 import type { WebhookDelivery, WebhookTaskStatus } from './events'
 import { enqueueTaskCreated, processAnalyticsIntentSoon, type CreationChannel } from '../../telemetry/savedWork'
@@ -15,6 +16,8 @@ type TaskCreatedRootDb = Pick<PrismaClient, '$transaction'>
 interface TaskCreatedActor {
   userId: number | null
   agentId: string | null
+  actingUserId?: number
+  actingAgentId?: string | null
 }
 
 export interface WebhookTaskSnapshot {
@@ -44,9 +47,41 @@ export async function createTaskWithBoardWebhookOutbox<T>(
     tx: Prisma.TransactionClient
   ) => Promise<CreatedTaskResult<T>>,
   channel: CreationChannel,
-  analyticsAgentId: string | null = null
+  analyticsAgentId: string | null = null,
+  projectId?: number,
+): Promise<{ result: T; boardWebhookDeliveryIds: string[] }> {
+  const enforceLimits = await isPlanLimitsEnabled(actor.actingUserId ?? actor.userId)
+  if (enforceLimits && projectId == null) throw new Error("Ticket destination is required")
+  return createTaskWithOutbox(db, actor, createTask, channel, analyticsAgentId, enforceLimits ? projectId : undefined)
+}
+
+export async function createProvisionedTaskWithBoardWebhookOutbox<T>(
+  db: TaskCreatedRootDb,
+  actor: TaskCreatedActor,
+  createTask: (tx: Prisma.TransactionClient) => Promise<CreatedTaskResult<T>>,
+  channel: CreationChannel,
+  analyticsAgentId: string | null = null,
+  _projectId?: number,
+): Promise<{ result: T; boardWebhookDeliveryIds: string[] }> {
+  return createTaskWithOutbox(db, actor, createTask, channel, analyticsAgentId)
+}
+
+async function createTaskWithOutbox<T>(
+  db: TaskCreatedRootDb,
+  actor: TaskCreatedActor,
+  createTask: (tx: Prisma.TransactionClient) => Promise<CreatedTaskResult<T>>,
+  channel: CreationChannel,
+  analyticsAgentId: string | null,
+  projectId?: number,
 ): Promise<{ result: T; boardWebhookDeliveryIds: string[] }> {
   const committed = await db.$transaction(async (tx) => {
+    if (projectId != null) {
+      await assertProjectTicketRoom(tx, projectId, 1, {
+        actorUserId: actor.actingUserId ?? actor.userId,
+        agentId: actor.actingAgentId ?? actor.agentId,
+        entryPoint: `task.create.${channel}`,
+      })
+    }
     const created = await createTask(tx)
     const boardWebhookDeliveryIds = await persistTaskCreatedWebhook(
       tx,

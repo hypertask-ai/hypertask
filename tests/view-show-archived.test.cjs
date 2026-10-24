@@ -179,3 +179,24 @@ test("a non-boolean board_show_archived is rejected, not forwarded", () => {
   assert.equal(resolveShowArchivedRequest({ board_show_archived: "true" }, true), null);
   assert.equal(resolveShowArchivedRequest({ board_show_archived: 1 }, false), null);
 });
+
+test("archived human assignee filters exclude agent-only cards unless legacy matching is requested", () => {
+  const tasks = [
+    archived(1, { assignees: [{ userId: 6, agentId: "runner-5" }] }),
+    archived(2, { assignees: [{ userId: 6, agentId: null }] }),
+  ];
+  const project = buildProject({
+    defaultView: view({
+      board_filters: {
+        matchFilters: "ANY",
+        addedFilters: [{ type: "Assignees", searchPayload: [{ id: 6, uid: "user-6" }] }],
+      },
+    }),
+  });
+
+  assert.deepEqual(getViewAppliedArchivedTasks(tasks, SECTION_ID, project).map(({ id }) => id), [2]);
+  assert.deepEqual(
+    getViewAppliedArchivedTasks(tasks, SECTION_ID, project, { legacyAgentAssigneeMatch: true }).map(({ id }) => id),
+    [2, 1],
+  );
+});

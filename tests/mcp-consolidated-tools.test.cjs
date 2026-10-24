@@ -88,7 +88,7 @@ test('catalog flag off preserves the entire current deferred list exactly', asyn
   assert.ok(toolNamed(deferred, 'hypertask_list_features'))
   assert.ok((await rpc(deferred, 'tools/list')).result.tools.some(({ name }) => name === 'hypertask_list_features'))
   assert.equal(definitions.find(({ name }) => name === 'hypertask_user_context').actions.features.tool, 'hypertask_list_features')
-  const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features'].includes(tool.name))
+  const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features', 'hypertask_set_task_waiting_on'].includes(tool.name))
   const selected = selectMcpTools(originalLegacy, false, { managementPermissions: { management: ['read'] } })
   assert.equal(selected, originalLegacy)
   const listed = (await rpc(selected, 'tools/list')).result.tools

@@ -1,3 +1,5 @@
+import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
+import { isPlanLimitReachedError, isPlanLimitsEnabled, type PlanLimitContext } from "@/lib/planLimits";
 import type { Prisma } from "@prisma/client";
 import { IUrl } from '@/models/model';
 
@@ -6,7 +8,13 @@ import { measuredSizeString } from "@/lib/attachments/measuredSize";
 import { urlRowData } from '@/lib/attachments/urlRowData';
 
 
-export const addIntoTaskDesc = async (urlsToAdd:IUrl[], taskId:number, method:string|undefined, db: Prisma.TransactionClient = prisma) => {
+export const addIntoTaskDesc = async (urlsToAdd:IUrl[], taskId:number, method:string|undefined, db: Prisma.TransactionClient = prisma, planLimitContext?: PlanLimitContext): Promise<{ status: number; json: any }> => {
+if (db === prisma && planLimitContext && method === "PUT" && urlsToAdd.some((url) => url.Attachment) && await isPlanLimitsEnabled(planLimitContext.actorUserId)) {
+  return prisma.$transaction((tx) => addIntoTaskDesc(urlsToAdd, taskId, method, tx, planLimitContext), { timeout: 10_000 });
+}
+const measuredSizes = planLimitContext && method === "PUT"
+  ? await verifyTaskAttachmentLinks(db, urlsToAdd.filter((url) => url.Attachment).map((url) => url.urlString), { taskId }, planLimitContext)
+  : new Map<string, number>();
 if (method==="POST"){
   if (urlsToAdd.length==0 &&!taskId ) {
       return({
@@ -23,6 +31,7 @@ if (method==="POST"){
       json:urlRecords
     })        
   } catch (error) {
+    if (isPlanLimitReachedError(error)) throw error;
     console.error('Error:', error);
     return({
       status:300,
@@ -127,7 +136,7 @@ else if (method==="PUT"){
           fileType: url.attachmentType??"",
           fileSource: url.urlString,
           fileName: url.title ?? "",
-          fileSize: measuredSizeString(url.fileSize),
+          fileSize: measuredSizeString(measuredSizes.get(url.urlString) ?? url.fileSize),
           descriptionId: description.id,
           taskId:taskId,
         }
@@ -156,6 +165,7 @@ else if (method==="PUT"){
       json:{ success: true }
     }) 
   } catch (error) {
+    if (isPlanLimitReachedError(error)) throw error;
     console.error('Error:', error);
     return({
       status:200,

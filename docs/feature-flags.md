@@ -11,3 +11,9 @@ New feature and improvement flags set `defaultMode: "EVERYONE"` in their definit
 Only for Valentin's own explicit request, a new flag may instead use `defaultMode: "OWNER_ONLY"` with `releaseRisk.ownerRequest: { quote: "<his exact request>", ticketUrl: "<ticket link>" }`: the quote must be non-blank and the link must match `^https://app\.hypertask\.ai/detail/project-\d+/\d+$`. This exception permits only Owner only, not Owner + QA or Off, and does not replace required `releaseRisk.highRisk` metadata.
 
 Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
+
+## Release watch
+
+The dedicated owner-owned agent in `FLAG_RELEASE_WATCH_AGENT_ID` enrolls recent default-on releases with `POST /api/mcp/flags` before comparing production errors. Unset disables enrollment and automatic Off. HT Product Lead enables this identity only after live QA. The request cannot supply release metadata: production builds generate timestamps from definition additions on the deployed commit's first-parent history, excluding root/shallow-boundary commits. Preview builds generate no release timestamps. Merge time is a release-time proxy, not a verified Vercel activation time; unavailable history leaves a flag unwatched rather than inventing a date.
+
+Enrollment stores only recent declared Everyone defaults under the same lock as mode changes; it preserves Off/protected overrides and any stored release time. The watch uses only stored `releasedAt`, never client-side git fallback dates. Rollback still requires the same dedicated identity, stored Everyone mode, matching recent timestamp and a qualifying spike. Counts are intentionally supplied by that trusted identity rather than re-queried server-side. Notification delivery is best-effort: a failed ticket comment is reported as `notified:false` and requires manual follow-up; Off is not undone and later watch runs do not retry that comment.

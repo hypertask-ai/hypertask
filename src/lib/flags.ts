@@ -7,6 +7,8 @@ import prisma from "@/lib/prisma";
 import { cache } from "react";
 import type { RawFlagMode } from "@/lib/flags/modeCache";
 import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
+import { PRODUCTION_FLAG_RELEASES } from "@/lib/flags/definitions/index.generated";
+import { RELEASE_WATCH } from "@/lib/flags/releaseWatch.mjs";
 import type { FeatureFlagDefinition, FeatureFlagKind } from "@/lib/flags/definitions";
 
 import {
@@ -343,6 +345,26 @@ export async function isFeatureEnabled(
   );
 }
 
+export async function recordDefaultFeatureFlagReleases(): Promise<void> {
+  for (const [key, release] of Object.entries(PRODUCTION_FLAG_RELEASES)) {
+    const releasedAt = new Date(release);
+    const age = Date.now() - releasedAt.getTime();
+    if (!(FEATURE_FLAG_KEYS as readonly string[]).includes(key) || RETIRED_FEATURE_FLAG_KEYS.has(key)
+      || defaultFeatureFlagMode(key) !== "EVERYONE" || !Number.isFinite(age)
+      || age < 0 || age > RELEASE_WATCH.maximumMinutes * 60_000) continue;
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(CAST(${FEATURE_FLAG_MODE_LOCK_NAMESPACE} AS integer), hashtext(${key}))`;
+      const stored = await tx.featureFlag.findUnique({ where: { key }, select: { mode: true, releasedAt: true } });
+      if (stored && (stored.mode !== "EVERYONE" || stored.releasedAt)) return;
+      await tx.featureFlag.upsert({
+        where: { key },
+        create: { key, mode: "EVERYONE", releasedAt },
+        update: { releasedAt },
+      });
+    });
+  }
+}
+
 export async function listFeatureFlagModes(
   options: { includeTicketTitles?: boolean; includeLastChange?: boolean; principal?: { userId: number; agentId?: string | null; teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null } } = {},
 ): Promise<FeatureFlagRow[]> {
@@ -423,6 +445,7 @@ export async function setFeatureFlagMode(
   mode: FeatureFlagMode,
   actor?: { userId: number; agentId?: string; agentName?: string; reason?: string; source: "page" | "api" },
   verify?: (tx: Prisma.TransactionClient) => Promise<void>,
+  recordChange?: (tx: Prisma.TransactionClient, changeId: number) => Promise<void>,
 ): Promise<FeatureFlagRow> {
   if (!validFeatureFlagKey(key) || !FEATURE_FLAG_MODES.includes(mode)) {
     throw new FeatureFlagInputError("Invalid feature flag");
@@ -449,11 +472,13 @@ export async function setFeatureFlagMode(
       ? await tx.featureFlagChange.create({
           data: { key, oldMode: stored?.mode ?? null, newMode: mode, ...actor },
           select: {
-            oldMode: true, newMode: true, reason: true, createdAt: true,
+            id: true, oldMode: true, newMode: true, reason: true, createdAt: true,
             user: { select: { displayName: true, email: true } },
           },
         })
       : null;
+
+    if (change) await recordChange?.(tx, change.id);
 
     const entersEveryone = mode === "EVERYONE" && (stored?.mode !== "EVERYONE" || !stored.releasedAt);
     const release = entersEveryone ? { releasedAt: new Date(), removalTaskId: null } : {};
