@@ -226,11 +226,17 @@ test("every task row is created through the analytics-aware save wrapper", () =>
   const relative = taskWriters.map((file) => path.relative(root, file)).sort();
   assert.deepEqual(relative, [
     "src/lib/api/task-writes/create-global.ts",
+    "src/lib/mcp/boards/createBoardFromManifest.ts",
     "src/lib/taskCardActions/writeProbe.ts",
     "src/utils/controllers/tasks/create.ts",
     "src/utils/controllers/tasks/createTaskCore.ts",
   ]);
-  for (const file of relative.filter((file) => !file.endsWith("writeProbe.ts"))) {
+  const atomicManifest = "src/lib/mcp/boards/createBoardFromManifest.ts";
+  for (const file of relative.filter((file) => !file.endsWith("writeProbe.ts") && file !== atomicManifest)) {
     assert.match(fs.readFileSync(path.join(root, file), "utf8"), /createTaskWithBoardWebhookOutbox\(/, file);
+  }
+  const manifestSource = fs.readFileSync(path.join(root, atomicManifest), "utf8");
+  for (const effect of [/enqueueTaskCreated\(tx, created\.id/, /persistTaskCreatedWebhook\(tx,/, /persistAgentTaskCreatedPending\(tx, created\.id\)/, /processAnalyticsIntentSoon\(key\)/]) {
+    assert.match(manifestSource, effect, `${atomicManifest} must keep the save wrapper's effects in its board transaction`);
   }
 });
