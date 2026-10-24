@@ -403,7 +403,13 @@ function analyze(file) {
   // directory only counts as a dependency on its whole tree when the file
   // also walks directories (contract tests that scan every source file).
   const walks = /\b(?:readdir(?:Sync)?|opendir|glob(?:Sync)?|walk\w*|collect\w*Files|ls-files)\b/.test(text);
-  const add = (ref, prefix) => {
+  // Only an import/require specifier is a module edge. fs.cpSync("src/utils", …)
+  // and path.join("src", "utils") name the directory even when index.ts exists.
+  const specifierAt = (index) =>
+    /(?:\bfrom\s*|\b(?:require|import)(?:\.resolve)?\s*\(|(?:^|[^\w$.])import\s*)$/.test(
+      text.slice(Math.max(0, index - 160), index).trimEnd(),
+    );
+  const add = (ref, prefix, specifier) => {
     if (!ref) return;
     if (!ref.includes("/") && !walks) return;
     const resolved = [];
@@ -415,23 +421,21 @@ function analyze(file) {
       }
       for (const cand of resolved) result.edges.add(cand);
     }
-    // import "@/utils" resolves to src/utils/index.ts. That module is the
-    // dependency, not every file under src/utils/. A prefix, a directory
-    // walk, or a path that names no file still covers the tree.
-    if (prefix || walks || resolved.length === 0) result.refs.push({ ref, prefix });
+    if (prefix || walks || resolved.length === 0 || !specifier) result.refs.push({ ref, prefix });
   };
   for (const m of text.matchAll(LITERAL_RE)) {
     const raw = m[1] ?? m[2] ?? m[3] ?? "";
     const cut = raw.indexOf("${");
     const lit = cut === -1 ? raw : raw.slice(0, cut);
     const prefix = cut !== -1;
+    const specifier = specifierAt(m.index);
     if (!lit.includes("/") && !lit.startsWith(".")) continue;
     if (lit.startsWith("./") || lit.startsWith("../")) {
-      add(clean(path.posix.join(dir, lit)), prefix);
-    } else if (lit.startsWith("@/")) add(`src/${lit.slice(2)}`, prefix);
-    else if (!lit.startsWith("@") && !lit.startsWith("/")) add(clean(lit), prefix);
+      add(clean(path.posix.join(dir, lit)), prefix, specifier);
+    } else if (lit.startsWith("@/")) add(`src/${lit.slice(2)}`, prefix, specifier);
+    else if (!lit.startsWith("@") && !lit.startsWith("/")) add(clean(lit), prefix, specifier);
   }
-  for (const { ref, prefix } of joinRefs(text, dir)) add(ref, prefix);
+  for (const { ref, prefix } of joinRefs(text, dir)) add(ref, prefix, false);
   // Any non-literal require/import makes the file unresolvable, whatever else
   // it resolves.
   if (DYNAMIC_RE.test(text)) {
