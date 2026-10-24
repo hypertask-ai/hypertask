@@ -549,6 +549,27 @@ jobs:
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --live-like-control
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/inbox-cycle.spec.ts
+          # YPER4-673: one feature-map journey on this same build. Report only, so a red journey never fails browser-smoke.
+          set +e
+          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
+          reseed_status=$?
+          if [ "$reseed_status" -eq 0 ]; then
+            export VERIFY_QA_REPORT_ONLY=1
+            export VERIFY_QA_BASE="$BASE_URL"
+            export VERIFY_QA_STATE_FILE=e2e/smoke/.state/smoke-state.json
+            export VERIFY_QA_FIXTURE=e2e/smoke/.state/inbox-cycle-fixture.json
+            export VERIFY_QA_CHANGED_FILES="${RUNNER_TEMP}/changed-files.txt"
+            export VERIFY_QA_OUT=verify-qa-premerge
+            timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+            verify_qa_status=$?
+          else
+            verify_qa_status=$reseed_status
+            echo "::warning::inbox reseed failed (${reseed_status}); skipped premerge verify-qa"
+          fi
+          set -e
+          if [ "${verify_qa_status:-0}" -ne 0 ]; then
+            echo "::warning::verify-qa premerge journey exited ${verify_qa_status}; evidence is report-only"
+          fi
       # Failing parts are listed in the job log; their "after" screenshots (baseline boxes outlined) are here.
       - name: Upload layout lock screenshots
         if: failure() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')
@@ -558,6 +579,19 @@ jobs:
           path: test-results/layout-lock-matrix/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Upload premerge verify-qa evidence
+        id: verify-qa-evidence
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verify-qa-premerge
+          path: verify-qa-premerge/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Link premerge verify-qa evidence
+        if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
+        run: |
+          printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
 
 
   mcp-cli-api-contract:
