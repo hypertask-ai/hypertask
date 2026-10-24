@@ -9,6 +9,7 @@ const { StarterKit } = require("@tiptap/starter-kit");
 const { load } = require("./task-route-loader.cjs");
 
 const { useAiChatDraft } = load("src/hooks/MultiPages/AIChat/useAiChatDraft.ts", {});
+const { bindAiChatDraft } = load("src/lib/aiChatDraftStore.ts", {});
 const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
   "react-hot-toast": { default: { error() {} } },
   "@/lib/mcp/bearerAuth": { mcpAuthorizationHeaders: () => ({}) },
@@ -464,6 +465,31 @@ test("two composers in one window synchronize writes and clearing without cleanu
     assert.equal(h.editor.getText(), "");
     assert.equal(peer.getText(), "");
   });
+});
+
+test("the draft store restores, saves and detaches without React ownership", async () => {
+  await withComposer(async ({ editor, storage }) => {
+    const key = "aiChat.draft.985.session-a";
+    storage.setItem(key, "<p>Saved draft</p>");
+    const drafts = { current: new Map() };
+    const previousBinding = { current: null };
+    const binding = bindAiChatDraft(editor, 985, "session-a", drafts, previousBinding);
+    try {
+      assert.equal(editor.getHTML(), "<p>Saved draft</p>");
+      editor.commands.setContent("<p>Updated draft</p>");
+      assert.equal(storage.getItem(key), "<p>Updated draft</p>");
+      assert.equal(drafts.current.get(key), "<p>Updated draft</p>");
+    } finally {
+      binding.cleanup();
+    }
+    editor.commands.setContent("<p>Detached edit</p>");
+    storage.setItem(key, "<p>Remote draft</p>");
+    window.dispatchEvent(new window.StorageEvent("storage", { key }));
+    window.dispatchEvent(new window.Event("aiChatDraftChanged"));
+    assert.equal(editor.getHTML(), "<p>Detached edit</p>");
+    assert.equal(drafts.current.get(key), "<p>Updated draft</p>");
+    assert.equal(storage.getItem(key), "<p>Remote draft</p>");
+  }, false);
 });
 
 test("the ticket flag supplies Everyone bugfix defaults and release risk", () => {
