@@ -54,7 +54,7 @@ function repoWithFix(expectedOnHead) {
 }
 
 test("the title tag used by pr-title is the bugfix signal", async () => {
-  const { isBugfixTitle, classifyPullRequest } = await load();
+  const { isBugfixTitle, classifyPullRequest, decideRun } = await load();
   assert.equal(isBugfixTitle("HTPR-7686 [BUGFIX] Keep the draft"), true);
   assert.equal(isBugfixTitle("HYFA-4 [BUGFIX] Repair login"), true);
   assert.equal(isBugfixTitle("YPER4-651 [BUGFIX] No follower email"), true);
@@ -66,7 +66,11 @@ test("the title tag used by pr-title is the bugfix signal", async () => {
     "HTPR-1 [bugfix] Lower case tag",
   ]) {
     assert.equal(classifyPullRequest({ title, testFiles: [] }).status, "skip", title);
+    assert.equal(decideRun({ title }).status, "skip", title);
   }
+  const bugfix = "HTPR-1 [BUGFIX] Repair the draft";
+  assert.equal(decideRun({ title: bugfix }).status, "run");
+  assert.equal(classifyPullRequest({ title: bugfix, testFiles: [] }).status, "flag");
 });
 
 test("a bugfix with no changed test is flagged, and the escape hatch needs a real reason", async () => {
@@ -245,6 +249,24 @@ test("decide runs only for a bugfix that is not exempt, and a bad sha does not f
   assert.equal(bugfix.status, 0, bugfix.stderr);
   assert.equal(bugfix.stdout, "");
   assert.match(readFileSync(bugfixOutput, "utf8"), /run=true/);
+
+  const exemptOutput = path.join(dir, "exempt-output.txt");
+  const exempt = spawnSync(process.execPath, [script, "--decide"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PR_TITLE: "HTPR-5 [BUGFIX] Repair the draft",
+      PR_BODY: "no-regression-test: native crash dump with no Node harness",
+      PR_LABELS: JSON.stringify(["no-regression-test"]),
+      GITHUB_OUTPUT: exemptOutput,
+      GITHUB_EVENT_PATH: "",
+      GITHUB_ACTIONS: "",
+      GITHUB_STEP_SUMMARY: "",
+    },
+  });
+  assert.equal(exempt.status, 0, exempt.stderr);
+  assert.match(exempt.stdout, /bugfix-regression exempt native crash dump/);
+  assert.match(readFileSync(exemptOutput, "utf8"), /run=false/);
 
   const broken = spawnSync(process.execPath, [
     script, "--title", "HTPR-6 [BUGFIX] Repair", "--base", "nope", "--head", "nope", "--repo", dir,

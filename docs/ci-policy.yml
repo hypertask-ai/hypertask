@@ -27,10 +27,6 @@ topology:
   # so App Smoke depends on production remaining the default.
   repository_default_branch: production
   production_target: "Vercel project hypertasks-prod"
-  # Non-gating housekeeping workflows (pr-size, gitleaks, vercel-deploy-log,
-  # app-smoke-request, parity-contract-trusted, preview-smoke,
-  # bugfix-regression) also run on ubuntu-latest; their implementation lives
-  # in .github/workflows/ and is not duplicated here.
 
 review_first_gate:
   # Owner decision 2026-08-26 made CI wait for the full-ci label. Retired

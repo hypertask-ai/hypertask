@@ -69,12 +69,18 @@ function overlayPaths(rows) {
     .map((row) => row.path);
 }
 
-export function classifyPullRequest({ title, body = "", labels = [], testFiles = [] }) {
+export function decideRun({ title, body = "", labels = [] }) {
   if (!isBugfixTitle(title)) {
     return { status: "skip", lines: ["bugfix-regression skip not a bugfix pull request"] };
   }
   const reason = exemptionReason(labels, body);
   if (reason) return { status: "exempt", lines: [`bugfix-regression exempt ${reason}`] };
+  return { status: "run", lines: [] };
+}
+
+export function classifyPullRequest({ title, body = "", labels = [], testFiles = [] }) {
+  const decided = decideRun({ title, body, labels });
+  if (decided.status !== "run") return decided;
   if (testFiles.length === 0) {
     return { status: "flag", lines: ["bugfix-regression flag no test file added or changed"] };
   }
@@ -425,7 +431,7 @@ function main() {
     }
     const pullRequest = readPullRequest(argv);
     if (argv.includes("--decide")) {
-      const result = classifyPullRequest({ ...pullRequest, testFiles: ["unknown"] });
+      const result = decideRun(pullRequest);
       const willRun = result.status === "run";
       writeOutput("run", willRun ? "true" : "false");
       if (!willRun) report({ ...result, details: [] });
