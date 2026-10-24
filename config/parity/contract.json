@@ -410,13 +410,20 @@
       "id": "ai.write",
       "title": "Draft, improve, and inspect AI usage",
       "matches": {
-        "api": ["^(GET|POST) /api/mcp/ai/(improve|task-writer|usage)$", "^GET /api/mcp/ai/sessions$", "^POST /api/mcp/ai/sessions$", "^PATCH /api/mcp/ai/sessions/\\[sessionId\\]$", "^DELETE /api/mcp/ai/sessions/\\[sessionId\\]$"],
+        "api": ["^(GET|POST) /api/mcp/ai/(improve|task-writer|usage)$", "^GET /api/mcp/ai/sessions$", "^POST /api/mcp/ai/sessions$", "^PATCH /api/mcp/ai/sessions/\\[sessionId\\]$", "^DELETE /api/mcp/ai/sessions/\\[sessionId\\]$", "^GET /api/mcp/ai/models/status$"],
         "cli": ["^ai (write|improve)$"]
       },
       "exclusions": {
         "mcp": "AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only.",
         "ai_chat": "AI Chat itself is the writing surface rather than a nested tool.",
         "hyperai": "HyperAI itself is the writing surface rather than a nested tool."
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7748",
+          "expires": "2026-11-13",
+          "entries": ["GET /api/mcp/ai/models/status"]
+        }
       }
     },
     {
