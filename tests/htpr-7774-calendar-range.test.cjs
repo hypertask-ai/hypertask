@@ -43,12 +43,12 @@ function modal(mode, enabled = true) {
       esModuleInterop: true,
     },
   }).outputText;
-  const module = { exports: {} };
+  const loaded = { exports: {} };
   new Function("require", "module", "exports", compiled)((request) => {
     assert.ok(request in stubs, `Unexpected import: ${request}`);
     return stubs[request];
-  }, module, module.exports);
-  const render = () => module.exports.default({
+  }, loaded, loaded.exports);
+  const render = () => loaded.exports.default({
     mode,
     closeHandler: (...args) => results.push(args),
   }).props.children[1].props.children.props;
