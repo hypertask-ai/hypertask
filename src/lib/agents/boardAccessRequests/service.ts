@@ -209,8 +209,13 @@ export async function decideBoardAccessRequest(session: SessionUser, id: string,
       await boardAccessAudit(db, actor, decision, "replay", current.row.status, row);
       return { request: receipt(current.row, current.state) };
     }
+    const decidedAt = at ?? new Date();
+    if (row.expiresAt <= decidedAt) {
+      const expired = await resolve(db, row, actor, "expired", "expired", row.expiresAt);
+      return { request: receipt(expired, current.state) };
+    }
     if (decision === "decline") {
-      const declined = await resolve(db, row, actor, "declined", "owner_declined", now);
+      const declined = await resolve(db, row, actor, "declined", "owner_declined", decidedAt);
       await boardAccessAudit(db, actor, "decline", "allowed", "owner_declined", declined);
       return { request: receipt(declined, current.state) };
     }
@@ -221,7 +226,7 @@ export async function decideBoardAccessRequest(session: SessionUser, id: string,
       if (!grant.ok) throw new BoardAccessError(grant.status, "grant_refused");
       memberId = grant.member.id;
     }
-    const approved = await resolve(db, row, actor, "approved", current.state.member ? "already_member" : "owner_approved", now, memberId);
+    const approved = await resolve(db, row, actor, "approved", current.state.member ? "already_member" : "owner_approved", decidedAt, memberId);
     await boardAccessAudit(db, actor, "approve", "allowed", approved.resolutionReason!, approved);
     return { request: receipt(approved, { ...current.state, member: { id: memberId } }) };
   }, id);
