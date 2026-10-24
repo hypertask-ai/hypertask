@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError } from '@/lib/planLimits';
 import { createHash } from 'node:crypto';
 import {
   buildTaskAttachmentStorageKey,
@@ -73,6 +74,7 @@ export interface AttachmentBatchDependencies {
   objectState: typeof getHypertasksObjectState;
   publicUrlForKey: typeof getHypertasksStoragePublicUrl;
   assertOwnership: () => void;
+  assertFileSize: (bytes: number) => Promise<void>;
   batchTimeoutMs: number;
 }
 
@@ -83,6 +85,7 @@ const defaultDependencies: AttachmentBatchDependencies = {
   objectState: getHypertasksObjectState,
   publicUrlForKey: getHypertasksStoragePublicUrl,
   assertOwnership: () => {},
+  assertFileSize: async () => {},
   batchTimeoutMs: MCP_ATTACHMENT_BATCH_TIMEOUT_MS,
 };
 
@@ -188,6 +191,9 @@ export async function storeAttachmentBatch(
           contentType = fetched.contentType;
         }
 
+        await dependencies.assertFileSize(buffer.length);
+        assertBatchActive(batchSignal);
+
         const storageKey = dependencies.buildKey({
           taskId: target.taskId,
           targetKey: target.targetKey,
@@ -218,6 +224,7 @@ export async function storeAttachmentBatch(
         prepared.push({ spec, buffer, contentType, storageKey });
       }
     } catch (error) {
+      if (isPlanLimitReachedError(error)) throw error;
       const effectiveError = batchSignal.aborted
         ? new AttachmentBatchTimeoutError()
         : error;
@@ -296,7 +303,8 @@ export async function storeAttachmentBatch(
             );
             assertBatchActive(batchSignal);
             dependencies.assertOwnership();
-          } catch {
+          } catch (persistenceError) {
+            if (isPlanLimitReachedError(persistenceError)) throw persistenceError;
             throw new AttachmentBatchError(
               'Failed to store attachment(s)',
               500,
@@ -327,6 +335,7 @@ export async function storeAttachmentBatch(
       dependencies.assertOwnership();
       return withFileSizes(stored, uploads);
     } catch (error) {
+      if (isPlanLimitReachedError(error)) throw error;
       if (
         error instanceof AttachmentPersistenceUncertainError ||
         error instanceof AttachmentBatchTimeoutError ||

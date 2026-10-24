@@ -1,9 +1,10 @@
 import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
-import { LogType, Status } from "@prisma/client";
+import { LogType, Prisma, Status } from "@prisma/client";
 import createLog from "../logs/createLog";
 import { CreateLogInput } from "@/models/model";
 
 import prisma from "@/lib/prisma";
+import { assertBoardRoom, isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { normalizeProjectPrefix, suggestProjectPrefix } from "@/lib/projectPrefix";
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { buildDefaultTitle } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -67,6 +68,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
     }
     const prefix = hasPrefix ? normalizeProjectPrefix(ticketPrefix) : undefined;
     const committed = await prisma.$transaction(async (tx) => {
+      await assertBoardRoom(tx, { kind: "team", teamId }, 1, { actorUserId: userId, entryPoint: "projects.create" });
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
       if (prefix && await tx.project.findFirst({
         where: { teamId, OR: [
@@ -146,6 +148,10 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       json: project
     })
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error);
+      return { status: refusal.status, json: refusal.body };
+    }
     console.log(error);
     return ({
       status: 400,
@@ -164,9 +170,11 @@ export async function createProjectViewAndCreateDefault(
   }: {
     userId: number,
     projectId: number
-  }
+  },
+  transaction?: Prisma.TransactionClient,
 ) {
-  const project_view = await prisma.project_View.upsert({
+  const db = transaction ?? prisma;
+  const project_view = await db.project_View.upsert({
     create: {
       projectId
     },
@@ -191,7 +199,7 @@ export async function createProjectViewAndCreateDefault(
   if (!project_view.default_view_id){
     console.log("🚀 ~ project_view had no default view, hence adding one")
     const currentDate= new Date()
-    const view = await prisma.view.create({
+    const view = await db.view.create({
       data: {
         title: buildDefaultTitle(projectId),
         project_view_id: project_view.id,
@@ -204,7 +212,7 @@ export async function createProjectViewAndCreateDefault(
       }
     })
 
-    const lastviewused = await prisma.view_Last_Used.upsert({
+    const lastviewused = await db.view_Last_Used.upsert({
       create:{
           userId:userId,
           viewId:view.id,
@@ -221,7 +229,7 @@ export async function createProjectViewAndCreateDefault(
       }
   })
 
-    await prisma.project_View.update({
+    await db.project_View.update({
       where:{
         projectId
       },
@@ -236,9 +244,9 @@ export async function createProjectViewAndCreateDefault(
   
 }
 
-export async function updateUniqueIdentifier(teamId: string, title: string, projectId: number) {
+export async function updateUniqueIdentifier(teamId: string, title: string, projectId: number, transaction?: Prisma.TransactionClient): Promise<string> {
   const base = suggestProjectPrefix(title);
-  return prisma.$transaction(async (tx) => {
+  const update = async (tx: Prisma.TransactionClient) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
 
     let candidate = base;
@@ -267,5 +275,6 @@ export async function updateUniqueIdentifier(teamId: string, title: string, proj
       data: { uniqueIdentifier: candidate },
     });
     return candidate;
-  });
+  };
+  return transaction ? update(transaction) : prisma.$transaction(update);
 }

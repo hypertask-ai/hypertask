@@ -28,6 +28,7 @@ function load(relativePath, stubs, globals = {}) {
     module: loadedModule, exports: loadedModule.exports,
     require(id) {
       if (Object.hasOwn(stubs, id)) return stubs[id];
+      if (id === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
       if (id === "./taskWriterSkills") return require("jiti")(__filename, { fsCache: false })(path.join(root, "src/lib/ai/taskWriterSkills.ts"));
       if (id === "@/lib/media/inlineAgentImages") return require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/media/inlineAgentImages.ts"));
       if (id.startsWith("node:")) return require(id);

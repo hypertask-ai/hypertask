@@ -1,5 +1,7 @@
 
 import prisma from "@/lib/prisma";
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import { updateProjectStatus } from "./boardQuota";
 import getFirst from "./getFirst";
 import isProjectAdmin from "./isProjectAdmin";
 
@@ -28,6 +30,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
       }
 
 
+    if (project.status === "Normal") {
     console.log ("--------------------------- Arhciving all the notifications ---------------------")
     await prisma.notification.updateMany({
         where:{
@@ -38,6 +41,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
         }
     })
     console.log ("================= notifications Archived. =================")
+    }
 
 
     console.log ("--------------------------- Arhciving THE ACTUAL PROJECT ---------------------")
@@ -66,14 +70,11 @@ const archiveProject = async(projectId:number, userId:number) =>{
       
     }
     else{
-      const updated_project = await prisma.project.update({
-        where:{
-            id:project.id
-        },
-        data:{
-            status:"Normal"
-        }
-    })
+      const updated_project = await updateProjectStatus(project.id, "Normal", {
+        actorUserId: userId,
+        entryPoint: "projects.archiveProject.restore",
+      });
+      await prisma.notification.updateMany({ where: { projectId }, data: { status: "Archive" } });
     console.log("🚀 ~ file: archiveProject.ts:55 ~ archiveProject ~ updated_project:", updated_project)
   
     }
@@ -85,6 +86,10 @@ const archiveProject = async(projectId:number, userId:number) =>{
       })
 
     } catch (error) {
+      if (isPlanLimitReachedError(error)) {
+        const refusal = planLimitResponse(error);
+        return { status: refusal.status, json: refusal.body };
+      }
       console.error(error);
       return ({
         status:500,

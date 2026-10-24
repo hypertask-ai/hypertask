@@ -37,6 +37,9 @@ function moduleWithStubs(file, stubs) {
     console: { log() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
+      if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
+      if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false };
+      if (id === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
       if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
       if (id === "@/app/api/ai/_lib/skillAccess") return { AccountSkillAccessError: class extends Error {} };
       if (id === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;

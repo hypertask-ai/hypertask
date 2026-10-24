@@ -1,7 +1,8 @@
-import { Status } from "@prisma/client";
+import { Prisma, Status } from "@prisma/client";
 
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import prisma from "@/lib/prisma";
+import { assertBoardRoom, assertTicketRoom, isFreeScope, isPlanLimitsEnabled, lockPlanLimitScope, scopeForProject, type PlanLimitContext } from "@/lib/planLimits";
 import { isTeamComped } from "@/lib/teamComp";
 
 export const FREE_BOARD_LIMIT = 3;
@@ -51,6 +52,7 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
 }
 
 export async function isBoardLimitReached(userId: number): Promise<boolean> {
+  if (await isPlanLimitsEnabled(userId)) return false;
   const [ownedBoards, paid] = await Promise.all([
     prisma.project.count({ where: { ownerId: userId, status: Status.Normal } }),
     hasPaidPlan(userId),
@@ -62,4 +64,43 @@ export async function assertBoardQuota(userId: number): Promise<void> {
   if (await isBoardLimitReached(userId)) {
     throw new BoardLimitReachedError();
   }
+}
+
+export async function updateProjectStatus(
+  projectId: number,
+  status: "Normal" | "Archive",
+  context: PlanLimitContext,
+) {
+  if (status !== "Normal" || !(await isPlanLimitsEnabled(context.actorUserId))) {
+    return prisma.project.update({
+      where: { id: projectId },
+      data: { status },
+      select: { id: true, name: true, title: true, status: true },
+    });
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const destination = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { teamId: true, ownerId: true },
+    });
+    const destinationScope = scopeForProject(destination);
+    if (await isFreeScope(destinationScope)) await lockPlanLimitScope(tx, destinationScope);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`);
+    const project = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { teamId: true, ownerId: true, status: true },
+    });
+    if (project.status !== Status.Normal) {
+      const scope = scopeForProject(project);
+      await assertBoardRoom(tx, scope, 1, context);
+      const normalTickets = await tx.task.count({ where: { projectId, status: Status.Normal } });
+      await assertTicketRoom(tx, scope, normalTickets, context);
+    }
+    return tx.project.update({
+      where: { id: projectId },
+      data: { status },
+      select: { id: true, name: true, title: true, status: true },
+    });
+  });
 }

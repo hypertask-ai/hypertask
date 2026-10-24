@@ -169,6 +169,9 @@ export async function persistUrlsForComment(
   extraUrls: IUrl[] = [],
   principal?: BoardKnowledgePrincipal,
 ): Promise<void> {
+  const planLimitContext = principal ? {
+    actorUserId: principal.userId, agentId: principal.agentId, entryPoint: "task-content.attachments",
+  } : undefined;
   const extracted = extractUrlsFromContent(text, taskId);
   const urlsToAdd = mergeUrls(extracted, extraUrls);
 
@@ -178,11 +181,11 @@ export async function persistUrlsForComment(
     await prisma.$transaction(async (tx) => {
       await lockTaskTeamScope(tx, taskId, principal.userId, principal.agentId, principal.teamScope);
       if (!await tx.comment.findFirst({ where: { id: commentId, taskId, task: { project: taskWriteAccessWhere(principal.userId, principal.agentId, principal.teamScope) } }, select: { id: true } })) throw new TaskTeamScopeError();
-      await addIntoTask(urlsToAdd.map((url) => ({ ...url, TaskId: taskId })), commentId, method, tx);
+      await addIntoTask(urlsToAdd.map((url) => ({ ...url, TaskId: taskId })), commentId, method, tx, planLimitContext);
     });
     return;
   }
-  await addIntoTask(urlsToAdd, commentId, method);
+  await addIntoTask(urlsToAdd, commentId, method, prisma, planLimitContext);
 }
 
 export async function persistUrlsForDescription(
@@ -191,6 +194,9 @@ export async function persistUrlsForDescription(
   extraUrls: IUrl[] = [],
   principal?: BoardKnowledgePrincipal,
 ): Promise<void> {
+  const planLimitContext = principal ? {
+    actorUserId: principal.userId, agentId: principal.agentId, entryPoint: "task-content.attachments",
+  } : undefined;
   const extracted = extractUrlsFromContent(text, taskId);
   const urlsToAdd = mergeUrls(extracted, extraUrls);
 
@@ -199,9 +205,9 @@ export async function persistUrlsForDescription(
   if (principal?.teamScope != null) {
     await prisma.$transaction(async (tx) => {
       await lockTaskTeamScope(tx, taskId, principal.userId, principal.agentId, principal.teamScope);
-      await addIntoTaskDesc(urlsToAdd.map((url) => ({ ...url, TaskId: taskId })), taskId, 'PUT', tx);
+      await addIntoTaskDesc(urlsToAdd.map((url) => ({ ...url, TaskId: taskId })), taskId, 'PUT', tx, planLimitContext);
     });
     return;
   }
-  await addIntoTaskDesc(urlsToAdd, taskId, 'PUT');
+  await addIntoTaskDesc(urlsToAdd, taskId, 'PUT', prisma, planLimitContext);
 }

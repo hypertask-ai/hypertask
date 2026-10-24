@@ -30,7 +30,7 @@ export async function updateTaskStatus(context: TaskUpdateFieldContext, task: Ta
                 )
             )
             if (archiveResponse.status >= 400 && archiveResponse.status < 500 && typeof errorData?.code === 'string') {
-                throw Object.assign(error, { status: archiveResponse.status, code: errorData.code })
+                throw Object.assign(error, errorData, { status: archiveResponse.status })
             }
             throw error
         }

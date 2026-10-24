@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { getMcpSessionAgentSummary } from "@/lib/mcp/agents";
 import prisma from "@/lib/prisma";
@@ -64,6 +65,10 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
 
             return { success: true, taskId: task.id }
         } catch (error) {
+            if (isPlanLimitReachedError(error)) {
+                const refusal = planLimitResponse(error);
+                return { ...refusal.body, taskId: task.id, status: refusal.status };
+            }
             const codedError = error instanceof PullRequestLinkError || isCallerRefusal(error) ? error : null
             const callerMistake = codedError !== null && codedError.status < 500
             const log = callerMistake ? console.warn : console.error
@@ -85,14 +90,20 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
         .map(result => result.taskId)
     
     const failedTasks = updateResults.filter(result => !result.success)
-    if (failedTasks.length > 0) {
-        console.warn(`[MCP Update Task] ${failedTasks.length} task(s) failed to update:`, failedTasks)
+    const unexpectedFailures = failedTasks.filter((failure) => !isPlanLimitReachedError(failure))
+    if (unexpectedFailures.length > 0) {
+        console.warn(`[MCP Update Task] ${unexpectedFailures.length} task(s) failed to update:`, unexpectedFailures)
     }
 
     if (updatedTaskIds.length === 0) {
         const errorMessages = failedTasks.map(ft => ft.error).filter(Boolean)
         const isCoded = (failure: (typeof failedTasks)[number]) => failure.status !== undefined && failure.code !== undefined
         const linkFailure = failedTasks.every(isCoded) ? failedTasks[0] : undefined
+        const planFailure = failedTasks.find(isPlanLimitReachedError)
+        if (isPlanLimitReachedError(planFailure)) {
+            const refusal = planLimitResponse(planFailure)
+            throw new UpdateTaskPersistenceError({ ...refusal.body, tasks: [] }, refusal.status)
+        }
         throw new UpdateTaskPersistenceError(
             {
                 success: false,
@@ -130,6 +141,12 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
     
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
 
+    const partialPlanFailure = failedTasks.find(isPlanLimitReachedError)
+    if (isPlanLimitReachedError(partialPlanFailure)) {
+        const refusal = planLimitResponse(partialPlanFailure)
+        throw new UpdateTaskPersistenceError({ ...refusal.body, tasks: mappedTasks }, refusal.status)
+    }
+
     const mcpResponse: UpdateTaskResponse = {
         success: true,
         tasks: mappedTasks,
@@ -137,11 +154,12 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
         message,
         ...(failedTasks.length
             ? {
-                  failed_tasks: failedTasks.map(({ taskId, error, status, code }) => ({
-                      taskId,
-                      error,
-                      status,
-                      code,
+                  failed_tasks: failedTasks.map((failure) => ({
+                      taskId: failure.taskId,
+                      error: failure.error,
+                      status: failure.status,
+                      code: failure.code,
+                      ...(isPlanLimitReachedError(failure) ? planLimitResponse(failure).body : {}),
                   })),
               }
             : {}),

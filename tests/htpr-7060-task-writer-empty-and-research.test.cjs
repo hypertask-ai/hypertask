@@ -22,6 +22,7 @@ function moduleWithStubs(file, stubs, globals = {}) {
     module: loadedModule, exports: loadedModule.exports,
     require: (id) => {
       if (id in stubs) return stubs[id];
+      if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
       if (id.startsWith("@/") || id.startsWith("./")) return {};
       return require(id);
     },

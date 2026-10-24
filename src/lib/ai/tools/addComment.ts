@@ -195,7 +195,7 @@ export function createAddCommentTool(context: ToolContext) {
           const imageUrls = input.images?.length
             ? buildMcpImageUrls(input.images, task.id)
             : [];
-          await persistUrlsForComment(sanitizedText, task.id, comment.id, "POST", imageUrls);
+          await persistUrlsForComment(sanitizedText, task.id, comment.id, "POST", imageUrls, { userId: user.id, agentId: actingAgentId, teamScope: context.teamScope });
 
           const commentWithAttachments = await prisma.comment.findUnique({
             where: { id: comment.id },

@@ -7,6 +7,7 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
+import { isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits'
 import { validateBoardManifest } from '@/lib/mcp/boards/validateManifest'
 import { createBoardFromManifest } from '@/lib/mcp/boards/createBoardFromManifest'
 import { BoardLimitReachedError } from '@/utils/controllers/projects/boardQuota'
@@ -294,6 +295,10 @@ export async function POST(
       { status: 200 }
     )
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error)
+      return NextResponse.json({ ...refusal.body, ...(correlationId && { correlationId }) }, { status: refusal.status })
+    }
     console.error('[MCP Create Board] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(

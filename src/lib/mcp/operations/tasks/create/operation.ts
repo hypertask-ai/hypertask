@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
@@ -281,6 +282,10 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(response, { status: 200 });
     } catch (error) {
+        if (isPlanLimitReachedError(error)) {
+            const refusal = planLimitResponse(error);
+            return NextResponse.json(refusal.body, { status: refusal.status });
+        }
         if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
         if (error instanceof IdempotencyInProgressError) {
             return NextResponse.json(

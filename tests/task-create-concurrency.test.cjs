@@ -24,6 +24,7 @@ function load(relativePath, stubs) {
     mod,
     mod.exports,
     (request) => {
+      if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
       assert.ok(request in stubs, `Unexpected dependency: ${request}`);
       return stubs[request];
     },

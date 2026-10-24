@@ -179,8 +179,9 @@ export function activationHarness() {
     "@/lib/stripeCustomerName": {},
     "@/lib/onboarding/installCommands": { CLI_INSTALL_COMMAND: "mock-install-command", CLI_LOGIN_COMMAND: "hypertask login", CLI_WINDOWS_NOTE: "mock-windows-note" },
     "@/utils/helperFunctions/helperFunctions": { getSequentialLetters: () => "BOARD" },
-    "@/utils/controllers/projects/createProjectWithStableName": { createProjectWithStableName: async (data: any) => prisma.project.create({ data }) },
-    "@/utils/controllers/tasks/createTaskCore": { createTaskCore: async () => ({ task: { id: 8 } }) },
+    "@/utils/controllers/projects/createProjectWithStableName": { createProjectWithStableName: async (data: any) => prisma.project.create({ data }), createProvisionedProjectWithStableName: async (data: any) => prisma.project.create({ data }) },
+    "@/utils/controllers/tasks/createTaskCore": { createTaskCore: async () => ({ task: { id: 8 } }), createProvisionedTaskCore: async () => ({ task: { id: 8 } }) },
+    "@/lib/mcp/boards/createBoardFromManifest": { createBoardFromManifest: async () => { throw new Error("manifest path not expected"); } },
     "@/utils/controllers/assignees/assign": { default: noop },
     "@/pages/api/invite/createInviteLink": { createNotification: noop, generateInviteLink: (id: string) => `http://localhost/invite?key=${id}`, setViewSlug: () => undefined },
     "@/utils/controllers/projects/create": { createProjectViewAndCreateDefault: noop },
@@ -188,6 +189,7 @@ export function activationHarness() {
     "@/lib/teamMembership": {},
     "@/lib/syncSeatBilling": {},
     "@/utils/controllers/members/updateTrial": { updateTrial: noop },
+    "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 402, body: {} }), assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {} },
   };
   const cache = new Map<string, any>();
   function load(file: string, source?: string): any {

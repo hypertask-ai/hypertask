@@ -12,9 +12,9 @@ import prisma from "@/lib/prisma";
 import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
 import { createProjectViewAndCreateDefault } from "@/utils/controllers/projects/create";
-import { createProjectWithStableName } from "@/utils/controllers/projects/createProjectWithStableName";
+import { createProvisionedProjectWithStableName } from "@/utils/controllers/projects/createProjectWithStableName";
 import { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
-import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
+import { createProvisionedTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { generateDemoBoard, type DemoBoard } from "./generateDemoBoard";
 import {
   GUEST_SEED_TASKS,
@@ -267,7 +267,7 @@ async function provisionGeneratedBoard(
   }: { seedGuestInbox?: boolean; boardKind?: GuestBoardKind } = {},
 ): Promise<ProvisionedGuestBoard> {
   const uniqueIdentifier = getSequentialLetters(`${board.name} demo`);
-  const project = await createProjectWithStableName({
+  const project = await createProvisionedProjectWithStableName({
     ownerId: owner.userId,
     title: board.name,
     teamId: owner.teamId,
@@ -310,7 +310,7 @@ async function provisionGeneratedBoard(
         boardKind === "skeleton" && taskCount === 0
           ? dueDateFromDays(-1, dueDateBase)
           : dueDateFromDays(task.dueInDays, dueDateBase);
-      const created = await createTaskCore({
+      const created = await createProvisionedTaskCore({
         creationChannel: "api",
         title: task.title,
         description:

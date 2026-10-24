@@ -1,3 +1,4 @@
+import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import prisma from '@/lib/prisma'
 import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -41,6 +42,12 @@ export async function updateCommentService(params: UpdateCommentParams) {
   await invalidateHyperAiCommentOrigin(commentId)
   const textChanged = text !== normalizeBlockHtml(comment.text)
   const updatedComment = await prisma.$transaction(async (transaction) => {
+    const measuredSizes = attachments && replaceAttachments
+      ? await verifyTaskAttachmentLinks(transaction, attachments.map((attachment) => attachment.fileSource), { commentId }, {
+        actorUserId: userId, agentId, entryPoint: "comments.update",
+      })
+      : new Map<string, number>()
+
     if (teamScope != null) {
       await transaction.$queryRaw`SELECT id FROM "Task" WHERE id = ${comment.taskId} FOR UPDATE`
       const allowed = await transaction.comment.findFirst({
@@ -111,7 +118,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
             fileType: attachment.fileType,
             fileSource: attachment.fileSource,
             fileName: attachment.fileName,
-            fileSize: attachment.fileSize,
+            fileSize: measuredSizes.has(attachment.fileSource) ? String(measuredSizes.get(attachment.fileSource)) : attachment.fileSize,
             commentId,
             taskId: comment.taskId
           }))

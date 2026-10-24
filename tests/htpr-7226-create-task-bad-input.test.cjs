@@ -45,6 +45,7 @@ function loadPost() {
   m.paths = Module._nodeModulePaths(path.dirname(file));
   const originalLoad = Module._load;
   Module._load = function (request, parent, isMain) {
+    if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
     if (request in stubs) return stubs[request];
     if (request.startsWith("@/")) return jiti(path.join(root, "src", request.slice(2)));
     return originalLoad.call(this, request, parent, isMain);

@@ -7,24 +7,27 @@ import prisma from "@/lib/prisma";
 import { stripe } from "@/lib/subscription";
 import { createProjectViewAndCreateDefault } from "../projects/create";
 import { generalConfig } from "@/lib/configs/general.config";
-import { createProjectWithStableName } from "../projects/createProjectWithStableName";
-import { createTaskCore } from "../tasks/createTaskCore";
+import { createProvisionedProjectWithStableName } from "../projects/createProjectWithStableName";
+import { createProvisionedTaskCore } from "../tasks/createTaskCore";
 import assigneesAssign from "../assignees/assign";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
 import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { CLI_INSTALL_COMMAND, CLI_LOGIN_COMMAND, CLI_WINDOWS_NOTE } from "@/lib/onboarding/installCommands";
+import { isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
+import { createBoardFromManifest } from "@/lib/mcp/boards/createBoardFromManifest";
 
 type CompleteOnboardingFirstStepOptions = {
   createInitialBoard?: boolean;
 };
 
-export const CompleteOnboardingFirstStep = async (
+const completeOnboardingFirstStep = async (
   exist_user: IUser,
   teamTitle: string,
   boardTitle: string,
   companySize: string,
   companyRole: string,
-  options: CompleteOnboardingFirstStepOptions = {}
+  options: CompleteOnboardingFirstStepOptions,
+  createSampleBoard: typeof createOnboardingSampleBoardProject,
 ) => {
   try {
     console.log(
@@ -91,7 +94,7 @@ export const CompleteOnboardingFirstStep = async (
     };
     createLog(TeamCreateLog);
     if (options.createInitialBoard !== false) {
-      Project = await createOnboardingSampleBoardProject({
+      Project = await createSampleBoard({
         exist_user,
         boardTitle,
         Team,
@@ -103,10 +106,29 @@ export const CompleteOnboardingFirstStep = async (
 
     return { Project, Team };
   } catch (error) {
+    if (isPlanLimitReachedError(error)) throw error;
     console.error("🚀 ~ CompleteOnboardingFirstStep ~ error:", error);
     throw error;
   }
 };
+
+export const CompleteOnboardingFirstStep = (
+  exist_user: IUser,
+  teamTitle: string,
+  boardTitle: string,
+  companySize: string,
+  companyRole: string,
+  options: CompleteOnboardingFirstStepOptions = {},
+) => completeOnboardingFirstStep(exist_user, teamTitle, boardTitle, companySize, companyRole, options, createOnboardingSampleBoardProject);
+
+export const CompleteOnboardingFirstStepProvisioning = (
+  exist_user: IUser,
+  teamTitle: string,
+  boardTitle: string,
+  companySize: string,
+  companyRole: string,
+  options: CompleteOnboardingFirstStepOptions = {},
+) => completeOnboardingFirstStep(exist_user, teamTitle, boardTitle, companySize, companyRole, options, createProvisionedOnboardingSampleBoardProject);
 
 const SEED_STARTER_TASKS: boolean = false;
 
@@ -192,7 +214,53 @@ const STARTER_BOARD_SECTIONS: {
   },
 ];
 
-export const createOnboardingSampleBoardProject = async ({
+export const createOnboardingSampleBoardProject = async (
+  params: Parameters<typeof createProvisionedOnboardingSampleBoardProject>[0],
+) => {
+  const { exist_user, boardTitle, Team, googleAccount } = params;
+  if (!(await isPlanLimitsEnabled(exist_user.id))) {
+    return createProvisionedOnboardingSampleBoardProject(params);
+  }
+  const firstTaskPointerEnabled = await isFeatureEnabled(HTPR_7549_FIRST_TASK_POINTER_FLAG, exist_user.id);
+  const connectAiTask = firstTaskPointerEnabled ? CONNECT_YOUR_AI_TASK : CONNECT_AI_TASK(
+    await isFeatureEnabled(HTPR_7033_CLI_INSTALL_COMMAND_FLAG, exist_user.id),
+  );
+  const starterTasks = SEED_STARTER_TASKS
+    ? STARTER_BOARD_SECTIONS.flatMap((section, sectionIndex) => section.tasks.map((task) => ({ ...task, sectionIndex, labelNames: [], priority: 0, estimate: 0 })))
+    : [];
+  const result = await createBoardFromManifest({
+    teamId: Team.id,
+    googleAccountId: googleAccount.id,
+    manifest: {
+      title: boardTitle,
+      sections: STARTER_BOARD_SECTIONS.map((section) => ({ title: section.section_title })),
+      labels: [],
+      tasks: [
+        ...starterTasks,
+        { ...connectAiTask, sectionIndex: 0, labelNames: [], priority: 0, estimate: 0 },
+      ],
+    },
+    userId: exist_user.id,
+    userEmail: exist_user.email ?? "",
+    userDisplayName: exist_user.displayName,
+    creation: {
+      method: "seeded",
+      channel: "api",
+      firstTaskPointerIndex: firstTaskPointerEnabled ? starterTasks.length : undefined,
+    },
+  });
+  const pointer = result.tasks[result.tasks.length - 1];
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: result.board.id } });
+  try {
+    const hyperAi = await prisma.user.findUnique({ where: { id: generalConfig.hyperAiId } });
+    if (hyperAi) await assigneesAssign(hyperAi as unknown as IUser, exist_user.id, pointer.id, undefined, undefined, { intent: "assign" });
+  } catch (error) {
+    console.error("Error assigning onboarding task:", error);
+  }
+  return project;
+};
+
+export const createProvisionedOnboardingSampleBoardProject = async ({
   exist_user,
   boardTitle,
   Team,
@@ -205,7 +273,7 @@ export const createOnboardingSampleBoardProject = async ({
 }) => {
   const uniqueIdentifier = getSequentialLetters(boardTitle);
 
-  const Project = await createProjectWithStableName({
+  const Project = await createProvisionedProjectWithStableName({
     ownerId: exist_user.id,
     title: boardTitle,
     teamId: Team.id,
@@ -241,7 +309,7 @@ export const createOnboardingSampleBoardProject = async ({
 
     for (const task of SEED_STARTER_TASKS ? sectionDef.tasks : []) {
       try {
-        await createTaskCore({
+        await createProvisionedTaskCore({
           creationChannel: "api",
           title: task.title,
           description: task.description,
@@ -274,7 +342,7 @@ export const createOnboardingSampleBoardProject = async ({
       const connectAiTask = firstTaskPointerEnabled ? CONNECT_YOUR_AI_TASK : CONNECT_AI_TASK(
         await isFeatureEnabled(HTPR_7033_CLI_INSTALL_COMMAND_FLAG, exist_user.id),
       );
-      const { task } = await createTaskCore({
+      const { task } = await createProvisionedTaskCore({
         creationChannel: "api",
         title: connectAiTask.title,
         description: connectAiTask.description,

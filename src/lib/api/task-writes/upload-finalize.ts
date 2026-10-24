@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { legacyTaskWriteSession, taskWriteRoute, type TaskWriteRoute } from "./route";
@@ -72,6 +73,10 @@ const route = taskWriteRoute({
         }
         return NextResponse.json({ success: true, attachment }, { status: 200 });
       } catch (error) {
+        if (isPlanLimitReachedError(error)) {
+          const response = planLimitResponse(error);
+          return NextResponse.json(response.body, { status: response.status });
+        }
         if (error instanceof TaskAttachmentLinkError) {
           return NextResponse.json({ error: error.message }, { status: error.status });
         }

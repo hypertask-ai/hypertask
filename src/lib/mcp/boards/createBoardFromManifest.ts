@@ -1,5 +1,6 @@
-import { LogType, Status } from '@prisma/client'
+import { LogType, Status, type Priority, type Estimate } from '@prisma/client'
 import prisma from '@/lib/prisma'
+import { generalConfig } from '@/lib/configs/general.config'
 import generateRank from '@/utils/generateRank'
 import {
   createProjectViewAndCreateDefault,
@@ -7,9 +8,17 @@ import {
 } from '@/utils/controllers/projects/create'
 import { enqueueBoardCreated, processAnalyticsIntentSoon, type CreationChannel } from '@/lib/telemetry/savedWork'
 import { createProjectWithStableName } from '@/utils/controllers/projects/createProjectWithStableName'
-import { assertBoardQuota } from '@/utils/controllers/projects/boardQuota'
+import { assertBoardRoom, assertTicketRoom, isPlanLimitsEnabled } from '@/lib/planLimits'
+import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants'
+import { persistTaskCreatedWebhook } from '@/lib/mcp/webhooks/taskEvents'
+import { publishBoardWebhookDeliveries } from '@/lib/mcp/webhooks/outbox'
+import { persistAgentTaskCreatedPending } from '@/lib/agentWebhooks/outbox'
+import { schedulePostCreateWork, createPriorityActivity, type TaskCreatedGlobally } from '@/lib/api/task-writes/create-global-effects'
+import { enqueueTaskCreated } from '@/lib/telemetry/savedWork'
+import { waitUntil } from '@vercel/functions'
 import createLog from '@/utils/controllers/logs/createLog'
-import { CreateLogInput } from '@/models/model'
+import { CreateLogInput, type IUser, type IEstimate } from '@/models/model'
+import createEstimateActivity from '@/utils/controllers/activities/createEstimateActivity'
 import { createTask } from '@/lib/mcp/tasks/services'
 import { buildMcpBoardUrl, buildMcpTaskUrl } from './links'
 import type { ValidatedBoardManifest } from './types'
@@ -25,9 +34,10 @@ export interface CreateBoardFromManifestParams {
 }
 
 export interface ManifestBoardCreation {
-  method: 'api' | 'agent'
+  method: 'api' | 'agent' | 'seeded'
   channel: CreationChannel
   agentId?: string | null
+  firstTaskPointerIndex?: number
 }
 
 export interface CreateBoardSectionResult {
@@ -83,7 +93,7 @@ export async function createBoardFromManifest(
 ): Promise<CreateBoardFromManifestResult> {
   const { teamId, googleAccountId, manifest, userId, userEmail, userDisplayName, creation } = params
 
-  await assertBoardQuota(userId)
+  if (await isPlanLimitsEnabled(userId)) return createManifestBoardAtomically(params)
 
   let prevRank: string | undefined
   const sectionCreates = manifest.sections.map((s) => {
@@ -110,7 +120,7 @@ export async function createBoardFromManifest(
       create: sectionCreates
     },
     ...(creation.agentId ? { members: { create: { userId, agentId: creation.agentId, status: 'Accepted' } } } : {})
-  })
+  }, { actorUserId: userId, agentId: creation.agentId, entryPoint: 'boards.createBoardFromManifest' })
 
   const projectId = projectCore.id
 
@@ -278,4 +288,151 @@ export async function createBoardFromManifest(
     await compensateFailedBoard(projectId)
     throw err
   }
+}
+
+async function createManifestBoardAtomically(
+  params: CreateBoardFromManifestParams
+): Promise<CreateBoardFromManifestResult> {
+  const { teamId, googleAccountId, manifest, userId, userDisplayName, creation } = params
+  const context = { actorUserId: userId, agentId: creation.agentId, entryPoint: 'boards.createBoardFromManifest' }
+  const scope = { kind: 'team' as const, teamId }
+  const actor = { userId, agentId: creation.agentId ?? null }
+  const taskAuthorId = creation.method === 'seeded' ? generalConfig.hyperAiId : userId
+  const committed = await prisma.$transaction(async (tx) => {
+    await assertBoardRoom(tx, scope, 1, context)
+    await assertTicketRoom(tx, scope, manifest.tasks.length, context)
+    let previousRank: string | undefined
+    const project = await createProjectWithStableName({
+      ownerId: userId,
+      seeded: creation.method === 'seeded',
+      title: manifest.title,
+      description: manifest.description,
+      teamId,
+      googleAccountId,
+      sections: manifest.sections.map((section) => section.title),
+      section: { create: manifest.sections.map((section) => {
+        previousRank = generateRank(previousRank, undefined)
+        return { section_title: section.title, ranking: previousRank, visibility: true, deleted: false }
+      }) },
+      ...(creation.agentId ? { members: { create: { userId, agentId: creation.agentId, status: 'Accepted' } } } : {}),
+    }, context, tx)
+    const projectId = project.id
+    const identifier = await updateUniqueIdentifier(teamId, manifest.title, projectId, tx)
+    const sectionRows = await tx.section.findMany({ where: { projectId }, orderBy: { ranking: 'asc' } })
+    const labels: CreateBoardLabelResult[] = []
+    const nameToLabelId = new Map<string, string>()
+    for (const label of manifest.labels) {
+      const created = await tx.label.create({ data: { projectId, value: label.name } })
+      nameToLabelId.set(label.name, created.id)
+      labels.push({ id: created.id, name: label.name, color: label.color })
+    }
+    const tasks: CreateBoardTaskResult[] = []
+    const createdTasks: (TaskCreatedGlobally & { priority: Priority | null; estimate: Estimate | null })[] = []
+    const analyticsKeys: string[] = []
+    const deliveryIds: string[] = []
+    const sectionRanks = new Map<number, string | undefined>()
+    for (const [index, task] of manifest.tasks.entries()) {
+      const section = sectionRows[task.sectionIndex]
+      const priority = PriorityConstants.find((value) => value.priority_index === task.priority)
+      const estimate = EstimateConstants.find((value) => value.estimate_index === task.estimate)
+      const ranking = generateRank(sectionRanks.get(section.id), undefined)
+      sectionRanks.set(section.id, ranking)
+      await assertTicketRoom(tx, scope, 1, context)
+      const created = await tx.task.create({
+        data: {
+          projectId,
+          title: task.title,
+          description: '',
+          description_: { create: { content: task.description ?? '', creatorId: taskAuthorId, agentId: creation.agentId } },
+          userId: taskAuthorId,
+          agentId: creation.agentId ?? null,
+          uniqueIndex: index + 1,
+          ticketNumber: `${identifier}-${index + 1}`,
+          sectionId: section.id,
+          section: section.section_title,
+          ranking,
+          status: Status.Normal,
+          dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+          updatedAt: new Date(),
+          taskLabels: { create: task.labelNames.map((name) => ({ labelId: nameToLabelId.get(name)! })) },
+          ...(task.priority > 0 && priority ? { priority: { create: {
+            projectId, sectionId: section.id, addedByUserId: userId, addedByAgentId: creation.agentId,
+            priority_index: priority.priority_index, Priority_Value: priority.Priority_Value,
+          } } } : {}),
+          ...(task.estimate > 0 && estimate ? { estimate: { create: {
+            projectId, sectionId: section.id, addedByUserId: userId, addedByAgentId: creation.agentId,
+            estimate_index: estimate.estimate_index, estimate_value: estimate.estimate_value,
+          } } } : {}),
+        },
+        include: { priority: true, estimate: true, project: true, parentTask: true, description_: true },
+      })
+      await persistAgentTaskCreatedPending(tx, created.id)
+      createdTasks.push(created)
+      deliveryIds.push(...await persistTaskCreatedWebhook(tx, {
+        id: created.id, ticketNumber: created.ticketNumber, projectId,
+        title: created.title, status: 'Normal', dueDate: created.dueDate,
+        startDate: created.startDate, sectionId: section.id, section: section.section_title,
+        priority: created.priority,
+      }, userId, creation.agentId ?? null))
+      analyticsKeys.push(await enqueueTaskCreated(tx, created.id, actor, creation.channel))
+      tasks.push({
+        id: created.id, ticketNumber: created.ticketNumber ?? undefined,
+        uniqueIndex: index + 1, projectId, title: created.title, sectionId: section.id,
+        link: { url: buildMcpTaskUrl(projectId, index + 1), format: 'detail', example: buildMcpTaskUrl(projectId, index + 1) },
+      })
+    }
+    if (creation.firstTaskPointerIndex != null) {
+      const pointer = tasks[creation.firstTaskPointerIndex]
+      if (!pointer) throw new Error('First task pointer is missing from manifest')
+      await tx.project.update({ where: { id: projectId }, data: { firstTaskPointerTaskId: pointer.id, firstTaskPointerSectionId: pointer.sectionId } })
+    }
+    await createProjectViewAndCreateDefault({ projectId, userId }, tx)
+    analyticsKeys.push(await enqueueBoardCreated(tx, projectId, creation.method, actor, project.createdAt))
+    const result: CreateBoardFromManifestResult = {
+      board: { id: projectId, title: project.title ?? '', name: project.name, status: 'Normal', team_id: teamId, link: { url: buildMcpBoardUrl(projectId), format: 'project' } },
+      sections: sectionRows.map((section, index) => ({
+        id: section.id, section_title: section.section_title, ranking: section.ranking,
+        taskCount: manifest.tasks.filter((task) => task.sectionIndex === index).length,
+      })),
+      labels,
+      tasks,
+    }
+    return { result, analyticsKeys, deliveryIds, createdTasks }
+  }, { timeout: 60000 })
+
+  for (const key of committed.analyticsKeys) processAnalyticsIntentSoon(key)
+  for (const task of committed.createdTasks) {
+    schedulePostCreateWork({ task, userId, projectId: task.projectId, originUserId: userId, agentId: creation.agentId })
+  }
+  waitUntil(Promise.allSettled([
+    publishBoardWebhookDeliveries(committed.deliveryIds),
+    (async () => {
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { id: true, email: true, displayName: true, photoURL: true } })
+      for (const task of committed.createdTasks) {
+        if (task.priority) await createPriorityActivity(task, user as IUser, task.priority)
+        if (task.estimate) await createEstimateActivity({
+          fromUser: user as IUser, taskId: task.id,
+          toEstimate: { ...task.estimate, estimate: task.estimate as unknown as IEstimate },
+        })
+      }
+    })(),
+    ...committed.createdTasks.filter((task) => task.dueDate).map(async (task) => {
+      const { scheduleDueDateJob } = await import('@/pages/api/queues/duedateQueue')
+      await scheduleDueDateJob({ taskId: task.id, projectId: task.projectId }, task.dueDate!)
+    }),
+  ]).then((results) => {
+    for (const result of results) {
+      if (result.status === 'rejected') console.error('[MCP Create Board] post-create handoff failed:', result.reason)
+    }
+  }))
+  try {
+    const team = await prisma.team.findUnique({ where: { id: teamId }, select: { title: true } })
+    createLog({
+      log: `${userDisplayName || 'User'} created a board "${manifest.title}" in team "${team?.title ?? ''}"`,
+      type: LogType.Board, status: Status.Normal, LoggedById: userId,
+    })
+  } catch (error) {
+    console.error('[MCP Create Board] log after success:', error)
+  }
+  return committed.result
 }

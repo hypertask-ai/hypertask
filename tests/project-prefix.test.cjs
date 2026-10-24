@@ -26,6 +26,8 @@ function load(file, stubs = {}) {
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
     if (request in stubs) return stubs[request];
+    if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, isPlanLimitsEnabled: async () => false };
+    if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
     if (request === "@/lib/net/contentEncoding") return load("src/lib/net/contentEncoding.ts");
     if (request === "@/lib/auth/agentCookieBridgeRoutes") return load("src/lib/auth/agentCookieBridgeRoutes.ts");
     if (request === "@/lib/telemetry/signupAnalytics") return { recordServerCapture: () => {} };
@@ -424,6 +426,10 @@ test("transaction locks and fresh prefix reads protect concurrent create and mov
   const single = read("src/utils/controllers/tasks/single.ts");
   assert.ok(single.indexOf("pg_advisory_xact_lock(9428471") < single.indexOf("await assertAgentAssignmentChangeAllowed"));
   assert.match(single, /requestedMutation.ticketNumber = `\$\{destination.uniqueIdentifier\}-/);
+  assert.match(single, /requestedMutation.projectId !== undefined && !enforceMoveLimits/);
+  const enforcedMove = single.indexOf("if (enforceMoveLimits)");
+  assert.ok(enforcedMove > single.indexOf("await assertTaskCountTransition"));
+  assert.ok(enforcedMove < single.indexOf("updateData.ticketNumber ="));
   assert.doesNotMatch(single, /ticketNumber: currentState.ticketNumber,\s+parentTaskId/);
 });
 

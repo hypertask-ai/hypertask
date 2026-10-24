@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseCookies } from "better-auth/cookies";
@@ -120,6 +121,10 @@ export const POST: TaskWriteRoute = async (request, session) => {
     void taskId;
     return await route({ ...request, headers: request.headers, json: async () => body }, session);
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error);
+      return NextResponse.json(refusal.body, { status: refusal.status });
+    }
     console.error(error);
     return NextResponse.json({ message: "Internal server error", error: String(error) }, { status: 500 });
   }

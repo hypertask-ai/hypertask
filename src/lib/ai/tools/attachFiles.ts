@@ -1,3 +1,5 @@
+import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
+import { assertFileSizeForProject, isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
 import { tool } from "ai";
 import { z } from "zod";
 import { MCP_ATTACHMENT_MAX_FILES, normalizeMime } from "@/lib/mcp/attachments/constants";
@@ -98,6 +100,10 @@ export function createAttachFilesTool(context: ToolContext) {
           return { success: false, error: "Task not found or access denied" };
         }
 
+        const planLimitContext = await isPlanLimitsEnabled(user.id) ? {
+          actorUserId: user.id, agentId: context.actingAgentId, entryPoint: "ai.attach-files",
+        } : undefined;
+
         const fetchedByIndex: Array<{ buffer: Buffer; contentType: string }> = [];
         const filesForValidation: Array<{
           filename: string;
@@ -121,6 +127,10 @@ export function createAttachFilesTool(context: ToolContext) {
               success: false,
               error: "Downloaded content does not match declared content type",
             };
+          }
+
+          if (planLimitContext) {
+            await assertFileSizeForProject(task.projectId, fetched.buffer.length, planLimitContext);
           }
 
           fetchedByIndex.push(fetched);
@@ -239,7 +249,7 @@ export function createAttachFilesTool(context: ToolContext) {
               fetched.contentType
             );
 
-            const created = await prisma.attachment.create({
+            const createArgs = {
               data: {
                 fileType: fetched.contentType,
                 fileSource: url,
@@ -250,13 +260,23 @@ export function createAttachFilesTool(context: ToolContext) {
                 ...(descriptionId !== null ? { descriptionId } : {}),
               },
               select: {
-                id: true,
-                fileName: true,
-                fileType: true,
-                fileSize: true,
-                fileSource: true,
+                id: true as const,
+                fileName: true as const,
+                fileType: true as const,
+                fileSize: true as const,
+                fileSource: true as const,
               },
-            });
+            };
+            const created = planLimitContext
+              ? await prisma.$transaction(async (tx) => {
+                  await verifyTaskAttachmentLinks(tx, [url], {
+                    taskId: task.id,
+                    newlyUploadedSources: [url],
+                    ...(commentId !== null ? { commentId } : {}),
+                  }, planLimitContext);
+                  return tx.attachment.create(createArgs);
+                }, { timeout: 10_000 })
+              : await prisma.attachment.create(createArgs);
 
             attachmentsOut.push({
               id: created.id,
@@ -266,6 +286,7 @@ export function createAttachFilesTool(context: ToolContext) {
               url: created.fileSource,
             });
           } catch (error) {
+            if (isPlanLimitReachedError(error)) throw error;
             console.error("[AI chat attachments]", error);
             failures.push({
               ...failureContext,

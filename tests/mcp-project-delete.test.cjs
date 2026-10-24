@@ -21,6 +21,8 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
   const stubs = {
     "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
+    "@/lib/planLimits": { isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 402, body: {} }) },
+    "@/utils/controllers/projects/boardQuota": { updateProjectStatus: async () => { throw new Error("archive path not expected"); } },
     "@/lib/mcp/agents/readRoleGuard": { requireAgentWriteRole: async () => null },
     "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "next/server": {

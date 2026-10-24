@@ -23,6 +23,7 @@ function load(file, stubs = {}) {
   vm.runInNewContext(code, {
     module: loaded, exports: loaded.exports,
     require(id) {
+      if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
       assert.ok(id in stubs, `Unexpected import: ${id}`);
       return stubs[id];
     },

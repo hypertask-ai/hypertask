@@ -17,6 +17,8 @@ function load(file, mocks = {}, runtime = {}) {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
   new Function("require", "module", "exports", "process", "fetch", compiled)((id) => {
+    if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
+    if (id === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
     if (id in mocks) return { __esModule: true, ...mocks[id] };
     assert.ok(!id.startsWith("@/") && !id.startsWith("."), `Unexpected import: ${id}`);
     return require(id);

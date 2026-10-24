@@ -896,8 +896,8 @@ model Project {
   statusUpdates          ProjectStatusUpdate[]
   githubRepositories     BoardGithubRepository[]
 
-  // @@index([status, teamId]) // For WHERE status="Normal" AND teamId IS NOT NULL
-  // @@index([ownerId, status]) // For owner-based queries
+  @@index([teamId, status])
+  @@index([ownerId, teamId, status])
   
 }
 

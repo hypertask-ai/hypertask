@@ -455,6 +455,7 @@ function nativeWorld(scenario) {
     throw new Error(`Unexpected gate import: ${request}`);
   });
   const execution = load("src/lib/ai/tools/execution.ts", (request) => {
+    if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false };
     if (request === "@/lib/ai/tools/readAgentGate") return gate;
     if (request === "@/lib/auth/agentScope") return { withAgentScopeRequest: (_request, runIt) => runIt(), prepareAgentScope: async () => {} };
     if (request === "@/lib/mcp/tasks/agentMutationLeaseAdoption") return { withAdoptedAgentMutationLease: async (_db, _actor, runIt) => runIt() };

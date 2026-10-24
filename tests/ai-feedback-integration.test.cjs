@@ -46,7 +46,7 @@ stub('src/lib/redis.ts', { getRedis: async () => ({
   get: async (key) => clientNames.get(key),
   eval: async (script) => script.includes("redis.call('INCR'") ? ++attemptCount : script.includes('ZCARD') ? ++quotaCount <= 10 ? 1 : 0 : 1,
 }) })
-stub('src/utils/controllers/tasks/createTaskCore.ts', { createTaskCore: async (options) => { if (coreBlock) await coreBlock; if (coreThrow) throw new Error('storage failed'); files.push(options); return { task: { ticketNumber: 'HTPR-7196', uniqueIndex: 7196 } } } })
+stub('src/utils/controllers/tasks/createTaskCore.ts', { createProvisionedTaskCore: async (options) => { if (coreBlock) await coreBlock; if (coreThrow) throw new Error('storage failed'); files.push(options); return { task: { ticketNumber: 'HTPR-7196', uniqueIndex: 7196 } } } })
 stub('src/utils/controllers/comments/createCommentService.ts', { createCommentService: async () => {} })
 stub('src/lib/realtime/server.ts', { broadcastTaskChange: async () => {} })
 stub('src/lib/mcp/auth.ts', {

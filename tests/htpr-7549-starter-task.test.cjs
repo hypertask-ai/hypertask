@@ -21,6 +21,8 @@ async function seed(enabled, cliEnabled) {
     project: { update: async ({ where, data }) => { assert.equal(where.id, 7); markers.push(data); return data; } },
   };
   const { createOnboardingSampleBoardProject } = load("src/utils/controllers/users/completeOnboardingStep.ts", {
+    "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false },
+    "@/lib/mcp/boards/createBoardFromManifest": {},
     "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "seed", processAnalyticsIntentSoon() {} },
     "@/utils/helperFunctions/helperFunctions": { getSequentialLetters: () => "MYB" },
     "@/utils/controllers/logs/createLog": { __esModule: true, default() {} },
@@ -28,8 +30,8 @@ async function seed(enabled, cliEnabled) {
     "@/lib/subscription": { stripe: {} },
     "../projects/create": { createProjectViewAndCreateDefault() {} },
     "@/lib/configs/general.config": { generalConfig: { hyperAiId: 900 } },
-    "../projects/createProjectWithStableName": { createProjectWithStableName: async () => ({ id: 7, uniqueIdentifier: "MYB" }) },
-    "../tasks/createTaskCore": { createTaskCore: async (options) => { tasks.push(options); return { task: { id: 71 } }; } },
+    "../projects/createProjectWithStableName": { createProvisionedProjectWithStableName: async () => ({ id: 7, uniqueIdentifier: "MYB" }) },
+    "../tasks/createTaskCore": { createProvisionedTaskCore: async (options) => { tasks.push(options); return { task: { id: 71 } }; } },
     "../assignees/assign": { __esModule: true, default: async (...args) => assignments.push(args) },
     "@/lib/stripeCustomerName": { stripeCustomerName() {} },
     "@/lib/onboarding/installCommands": commands,

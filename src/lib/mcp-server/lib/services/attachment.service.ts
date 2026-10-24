@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import type { IApiClient } from '../../types/index';
 import { logger } from '../../utils/logger';
 import { generateCorrelationId } from '../../utils/correlation';
@@ -13,6 +14,10 @@ export interface AttachmentUploadItem {
 }
 
 export interface AttachFilesResponse {
+  status?: number;
+  code?: string;
+  limit?: string;
+  max?: number;
   success: boolean;
   attachments: AttachmentUploadItem[];
   attachment_status?: 'complete' | 'partial' | 'failed';
@@ -24,6 +29,13 @@ export interface AttachFilesResponse {
 }
 
 export interface InlineAttachmentOutcome {
+  success?: boolean;
+  error?: string;
+  status?: 402;
+  code?: "PLAN_LIMIT_REACHED";
+  limit?: "boards" | "tickets" | "file_size";
+  max?: number;
+  operation_message?: string;
   attachments: AttachmentUploadItem[];
   attachment_status: 'complete' | 'partial' | 'failed';
   failed_files?: Array<{ index: number; filename: string; error: string }>;
@@ -75,6 +87,11 @@ export class AttachmentService {
 
       return response;
     } catch (error) {
+      const body = (error as { httpResponse?: unknown })?.httpResponse ?? error;
+      if (isPlanLimitReachedError(body)) {
+        const refusal = planLimitResponse(body);
+        return { ...refusal.body, status: refusal.status, attachments: [] };
+      }
       logger.failure('Failed to attach files', error, {
         correlationId,
       });
@@ -93,6 +110,20 @@ export async function attachFilesAfterMutation(
     if (!result.success) {
       const status = result.attachment_status ?? ((result.attachments?.length ?? 0) > 0 ? 'partial' : 'failed');
       const reason = result.error ?? result.message ?? 'Attachment upload failed';
+      if (isPlanLimitReachedError(result)) {
+        const refusal = planLimitResponse(result);
+        return {
+          ...refusal.body,
+          attachments: [],
+          attachment_status: 'failed',
+          attachment_error: refusal.body.error,
+          status: refusal.status,
+          code: refusal.body.code,
+          limit: refusal.body.limit,
+          max: refusal.body.max,
+          operation_message: `${completedOperation} succeeded, but attachment upload was refused: ${refusal.body.message}`,
+        };
+      }
       return {
         attachments: result.attachments ?? [],
         attachment_status: status,

@@ -1,3 +1,5 @@
+import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
+import { isPlanLimitReachedError } from '@/lib/planLimits';
 import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
@@ -61,6 +63,13 @@ async function persistOrReconcile(
         await tx.$queryRaw(
           Prisma.sql`SELECT pg_advisory_xact_lock(${transactionLockId})::text AS lock_result`
         );
+        if (persistenceTarget.planLimitContext) {
+          await verifyTaskAttachmentLinks(tx, uploads.map((upload) => upload.url), {
+            taskId: persistenceTarget.taskId,
+            newlyUploadedSources: uploads.map((upload) => upload.url),
+            ...(persistenceTarget.commentId !== null ? { commentId: persistenceTarget.commentId } : {}),
+          }, persistenceTarget.planLimitContext);
+        }
         await authorizeAttachmentTarget(tx, persistenceTarget);
         return persistAttachmentRows(tx, uploads, persistenceTarget);
       },
@@ -69,6 +78,7 @@ async function persistOrReconcile(
     if (signal.aborted) throw new AttachmentPersistenceUncertainError();
     return stored;
   } catch (persistenceError) {
+    if (isPlanLimitReachedError(persistenceError)) throw persistenceError;
     if (persistenceError instanceof AttachmentBatchError && persistenceError.status === 404) throw persistenceError;
     let committed: StoredAttachmentResult[];
     try {
@@ -139,7 +149,7 @@ export async function storeAttachmentBatchWithTargetLock(
       )
     );
   } catch (error) {
-    if (error instanceof AttachmentBatchError) throw error;
+    if (isPlanLimitReachedError(error) || error instanceof AttachmentBatchError) throw error;
     throw new AttachmentBatchError('Attachment storage is temporarily unavailable', 503, true);
   }
 }

@@ -23,6 +23,9 @@ function moduleWithStubs(file, stubs) {
   const mod = { exports: {} };
   new Function("module", "exports", "require", code)(mod, mod.exports, (id) => {
     if (id === "@/utils/controllers/tasks/parentTaskAccess") return load(path.join(root, "src/utils/controllers/tasks/parentTaskAccess.ts"));
+    if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
+    if (id === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
+    if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
     if (id in stubs) return stubs[id];
     if (!id.startsWith("@/") && !id.startsWith(".")) return require(id);
     throw new Error(`Unexpected dependency: ${id}`);

@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard';
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
@@ -326,6 +327,10 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (err) {
+    if (isPlanLimitReachedError(err)) {
+      const refusal = planLimitResponse(err);
+      return NextResponse.json(refusal.body, { status: refusal.status });
+    }
     const identifierResponse = taskIdentifierErrorResponse(err);
     if (identifierResponse) return identifierResponse;
     console.error("[MCP Move Task] Error:", err);
