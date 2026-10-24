@@ -1,3 +1,4 @@
+import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from "@/lib/flags/definitions/htpr-7742-agent-chat-all";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -166,7 +167,7 @@ export async function GET(
     const deliveryMode = agentChatDeliveryMode({
       heartbeatAt: session.agent?.heartbeatAt ?? null,
       subscription,
-    });
+    }, new Date(), await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, userId));
 
     return NextResponse.json({
       success: true,

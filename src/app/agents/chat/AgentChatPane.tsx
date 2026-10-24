@@ -8,6 +8,8 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from "@/lib/flags/definitions/htpr-7742-agent-chat-all";
 import { ActivityGroup, chatStatusText, emptyFeedText, FeedFilter, MessageBubble, ScrollToBottomButton } from "./AgentChatFeedItems";
 import type { useAgentChatComposer } from "./useAgentChatComposer";
 import type { useAgentChatFeed } from "./useAgentChatFeed";
@@ -114,6 +116,7 @@ export function AgentChatPane({
   composerLocked, isDictationProcessing, setIsRecording, setIsDictationProcessing, insertDictation,
   mobileFullscreenFlag, dictationProjectId, isRecording, handleSend,
 }: Props) {
+  const chatAllEnabled = useFlag(HTPR_7742_AGENT_CHAT_ALL_FLAG);
   useEffect(() => {
     if (embedded && !active) setIsRecording(false);
   }, [embedded, active, setIsRecording]);
@@ -283,9 +286,9 @@ export function AgentChatPane({
                 className="-top-12 z-50"
               />
             )}
-            {deliveryNotice && (
+            {(deliveryNotice || chatAllEnabled) && (
               <p className="mb-2 text-meta text-text-light-gray">
-                This agent&apos;s runtime has not enabled chat yet.
+                {chatAllEnabled ? (deliveryMode ? "Online" : "Reads when it next runs") : "This agent's runtime has not enabled chat yet."}
               </p>
             )}
             <div className="relative">

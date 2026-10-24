@@ -1,3 +1,4 @@
+import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from "@/lib/flags/definitions/htpr-7742-agent-chat-all";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
@@ -18,7 +19,7 @@ import {
   AGENT_CHAT_ADHD_REPLY_GUIDANCE,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
 } from "@/lib/flags/keys";
-import { hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
+import { agentChatDeliveryMode } from "@/lib/agents/chatAvailability";
 
 export const runtime = "nodejs";
 
@@ -94,6 +95,7 @@ export async function POST(
       userId,
     );
 
+    const pollingFallbackEnabled = await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, userId);
     const { message, deliveryIds, pollingChatEnabled } =
       await prisma.$transaction(async (tx) => {
       const [agent] = await tx.$queryRaw<Array<{ heartbeatAt: Date | null }>>`
@@ -106,11 +108,10 @@ export async function POST(
       if (!agent) throw new Error("Agent not found");
       const subscription = await tx.agentWebhookSubscription.findUnique({
         where: { agentId },
-        select: { active: true },
+        select: { active: true, events: true },
       });
       const pollingChatEnabled =
-        !subscription?.active &&
-        hasFreshAgentChatHeartbeat(agent.heartbeatAt);
+        agentChatDeliveryMode({ heartbeatAt: agent.heartbeatAt, subscription }, new Date(), pollingFallbackEnabled) === "polling";
 
       await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
       const message = await tx.chatMessage.create({
@@ -150,7 +151,7 @@ export async function POST(
         ...(agentBrief ? { agentBrief } : {}),
       });
 
-      if (deliveryIds.length === 0 && pollingChatEnabled) {
+      if (pollingChatEnabled && (pollingFallbackEnabled || deliveryIds.length === 0)) {
         await tx.chatMessage.update({
           where: { id: message.id },
           data: { isDelivered: false },

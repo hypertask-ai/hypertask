@@ -1,3 +1,4 @@
+import { agentChatTools } from './tools/agent-chat.tool'
 import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
 import { observeFeedbackTools } from '@/lib/aiFeedback/automatic'
 import { rememberFeedbackClient } from '@/lib/aiFeedback/clientInfo'
@@ -8,7 +9,7 @@ import type { ServerResponse } from 'node:http'
 import { PassThrough, Readable } from 'node:stream'
 import crypto from 'node:crypto'
 import Redis from 'ioredis'
-import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from './stateless-http'
+import { handleStatelessMcpRequest, MCP_SERVER_INFO, agentChatInstructions, type PortableTool } from './stateless-http'
 import { selectMcpTools } from './consolidated-tools'
 import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
@@ -120,7 +121,7 @@ export async function handleLegacySseRequest(
     const stream = new PassThrough()
     const response = Object.assign(stream, { writeHead: () => response })
     const transport = new SSEServerTransport('/message', response as unknown as ServerResponse)
-    const server = new McpServer(MCP_SERVER_INFO)
+    const server = new McpServer(MCP_SERVER_INFO, { instructions: agentChatInstructions(initialTools) })
     const registered: { remove: () => void }[] = []
     let registeredWithV2 = initialTools.some((tool) => tool.annotations)
     const register = (catalog: readonly PortableTool[]) => {
@@ -186,12 +187,12 @@ export async function handleLegacySseRequest(
             if (method === 'tools/list' || method === 'tools/call') {
               const feedbackEnabled = await aiFeedbackEnabled(userId)
               const available = tools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
-              const catalog = observeFeedbackTools(selectMcpTools(available, enabled, {
+              const catalog = observeFeedbackTools([...selectMcpTools(available, enabled, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
                 ...(v2 && ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
-              }, v2, enabled && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId)), userId)
+              }, v2, enabled && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId)), ...(ctx ? await agentChatTools(ctx) : [])], userId)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
