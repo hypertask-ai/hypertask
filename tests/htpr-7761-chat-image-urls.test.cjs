@@ -177,10 +177,16 @@ test("the real public-address downloader refuses loopback links through the new 
   assert.deepEqual(files(result), []);
 });
 
-test("markdown image links drop the closing delimiter from a signed URL", async () => {
-  const h = harness();
-  const signed = "https://files.example.test/screenshot.png?token=fixture";
-  const result = await h.send({ message: `See [image](${signed}) here` });
-  assert.deepEqual(h.downloads.map(({ url }) => url), [signed]);
-  assert.equal(files(result).length, 1);
+test("markdown image links drop the closing delimiter and sentence punctuation", async () => {
+  for (const message of [
+    (url) => `See [image](${url}) here`,
+    (url) => `See [image](${url}).`,
+    (url) => `See [image](${url}), and more`,
+  ]) {
+    const h = harness();
+    const signed = "https://files.example.test/screenshot.png?token=fixture";
+    const result = await h.send({ message: message(signed) });
+    assert.deepEqual(h.downloads.map(({ url }) => url), [signed]);
+    assert.equal(files(result).length, 1);
+  }
 });
