@@ -17,8 +17,8 @@ Scope: Keep app-smoke migrations and seed Prisma client compatible on stale cand
   EXPECT: /^$/
   EVIDENCE: automatic-evidence=v1; definition-sha256=97f88f7ebfd264c112f4d4ec9d65b6bda5a659c4cada93fdbd5d06babda4cffb; exit=0; EXPECT=matched; output-sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855; output-bytes=0; shell=/bin/sh; cwd=/home/valentin/projects/.worktrees/poteto-YPER4-680; path=d01735fb690d/13 entries
 
-- [ ] G4: Root cause and choice are explained in one production-targeted, hold-labeled, unmerged PR with local proof and only ticket-scoped changes
-  EVIDENCE: pending
+- [x] G4: Root cause and choice are explained in one production-targeted, hold-labeled, unmerged PR with local proof and only ticket-scoped changes
+  EVIDENCE: Verified PR https://github.com/hypertask-ai/hypertask/pull/2120 via gh pr view: OPEN, production base, ceo/YPER4-680 head, hold label, mergedAt null, autoMergeRequest null. Body contains ticket link, root cause, option 1 rationale and all local proof. Reviewed exactly six scoped files: GATES.md, docs/ci.md, scripts/run-app-smoke-isolated.sh and the three app-smoke tests.
 
 - [x] G5: Repository lint passes
   CHECK: PATH="$PWD/node_modules/.bin:$PATH" npm run lint && printf 'repository lint passed\n'
