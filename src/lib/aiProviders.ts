@@ -10,6 +10,7 @@ export type TAiProviderKey =
   | "openrouter";
 
 export type TByokProviderKey =
+  | "baseten"
   | "gateway"
   | "custom"
   | "openai"
@@ -157,8 +158,30 @@ export const AI_GATEWAY_BYOK_PROVIDER: TByokProviderInfo & {
   keyPlaceholder: "Enter your Vercel AI Gateway key (vck_)",
 };
 
+export const BASETEN_BYOK_PROVIDER: TByokProviderInfo & {
+  byokKey: "baseten";
+  label: string;
+  badge: string;
+} = {
+  byokKey: "baseten",
+  label: "Baseten",
+  badge: "Aggregator",
+  keyUrl: "https://app.baseten.co/settings/api_keys",
+  keyUrlLabel: "app.baseten.co/settings/api_keys",
+  keyPlaceholder: "Enter your Baseten API key",
+  openAiCompatibleBaseUrl: "https://inference.baseten.co/v1",
+};
+
+export const BASETEN_MODEL_SLUGS = {
+  "deepseek-v4.1-flash": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  "deepseek-v4.1-flash-fast": "deepseek-ai/DeepSeek-V4.1-Flash-1017-Fast",
+  "kimi-k3": "moonshotai/Kimi-K3",
+  "glm-5.3-flash": "zai-org/GLM-5.3-Flash",
+} as const;
+
 export const BYOK_PROVIDER_KEYS: TByokProviderKey[] = [
   AI_GATEWAY_BYOK_PROVIDER.byokKey,
+  BASETEN_BYOK_PROVIDER.byokKey,
   ...AI_PROVIDERS.map((provider) => provider.byokKey),
   "custom",
 ];
@@ -193,7 +216,7 @@ export function getAiProviderByByokKey(provider: TByokProviderKey) {
 export function isByokProviderRestrictedInGdprSafeMode(
   provider: TByokProviderKey,
 ): boolean {
-  return Boolean(getAiProviderByByokKey(provider)?.chinaHosted);
+  return provider === "baseten" || Boolean(getAiProviderByByokKey(provider)?.chinaHosted);
 }
 
 export function isGdprSafeModeEnabled(settings: unknown): boolean {

@@ -22,7 +22,8 @@ export function createToolContext(
   chatTaskWriterEnabled = false,
   abortSignal?: AbortSignal,
   inlineAgentImagesEnabled = false,
-  teamScope?: AgentTokenTeamScope | null
+  teamScope?: AgentTokenTeamScope | null,
+  bulkScopeConfirmationEnabled = false
 ) {
   if (actingAgentId && teamScope === undefined) throw new Error("Agent team scope is unavailable");
   const requestingUserId = user.id;
@@ -32,6 +33,9 @@ export function createToolContext(
   };
 
   const bulkPreviewsIssued = new Set<string>();
+  const bulkScopePreviews = bulkScopeConfirmationEnabled
+    ? new Map<string, { pending: number; changed: boolean }>()
+    : undefined;
   const confirmationSessionId = body.session_id ?? "no-session";
   const invokeAgentManagementHandler = async (
     operation: "create" | "revoke",
@@ -75,8 +79,8 @@ export function createToolContext(
       })
       : null;
   };
-  const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued });
-  return { teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
+  const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued, bulkScopeConfirmationEnabled, bulkScopePreviews });
+  return { bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
 }
 
 export type ToolContext = ReturnType<typeof createToolContext>;

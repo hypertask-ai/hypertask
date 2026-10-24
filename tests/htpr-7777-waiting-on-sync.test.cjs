@@ -108,6 +108,44 @@ for (const [name, comments] of [
   });
 }
 
+for (const [name, text, commentText] of [
+  ["HTML mention", '<p><span data-type="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> <strong>Question:</strong> Publish the CLI update to npm?</p>', null],
+  ["display name", null, "Valentin Yeo Question: Publish the CLI update to npm?"],
+  ["first name", null, "Valentin Question: Publish the CLI update to npm?"],
+  ["@mention", null, "@Valentin Question: Publish the CLI update to npm?"],
+  ["mention on a later line", '<p>CLI release is ready.</p><p><span data-type="mention">Valentin Yeo</span>&nbsp;Question: Publish the CLI update to npm?</p>', null],
+]) {
+  test(`Valentin's thumbs up on a Question prefixed with ${name} clears a newer auto-managed wait`, async () => {
+    const row = task({
+      comments: [question({ text, commentText, reactions: [reaction()] })],
+      waitingOnSetById: null, waitingOnSetAt: at(30),
+    });
+    assert.equal(await fixture([row]).sweep(), 1);
+    assert.deepEqual([row.waitingOnUserId, row.waitingOnSetById, row.waitingOnSetAt], [null, null, null]);
+  });
+
+  test(`an unanswered Question prefixed with ${name} keeps the waiting-on mark`, async () => {
+    const row = task({ comments: [question({ text, commentText })], waitingOnSetById: null, waitingOnSetAt: at(30) });
+    const f = fixture([row]);
+    assert.equal(await f.sweep(), 0);
+    assert.deepEqual([row.waitingOnUserId, row.waitingOnSetById, row.waitingOnSetAt], [6, null, at(30)]);
+    assert.deepEqual(f.writes, []);
+  });
+}
+
+for (const commentText of [
+  "We discussed the question: Publish the CLI update to npm?",
+  "We asked Valentin Yeo Question: Publish the CLI update to npm?",
+]) {
+  test(`a thumbs up does not clear waiting-on for mid-sentence text: ${commentText}`, async () => {
+    const row = task({ comments: [question({ text: `<p>${commentText}</p>`, commentText, reactions: [reaction()] })] });
+    const f = fixture([row]);
+    assert.equal(await f.sweep(), 0);
+    assert.deepEqual([row.waitingOnUserId, row.waitingOnSetById, row.waitingOnSetAt], [6, 7, at(0)]);
+    assert.deepEqual(f.writes, []);
+  });
+}
+
 for (const [name, comments] of [
   ["no reply", [question()]],
   ["reply predates the latest Question", [question({ id: 12, createdAt: at(30) }), reply()]],

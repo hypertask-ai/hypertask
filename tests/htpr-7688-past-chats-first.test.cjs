@@ -75,6 +75,7 @@ function menu({ enabled = true, paging = false, mobile = false } = {}) {
       assert.equal(key, flag.HTPR_7688_PAST_CHATS_FIRST_FLAG); return enabled;
     } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
+    "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "htpr-7702-phone-chat-list" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => history },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
@@ -165,6 +166,7 @@ function sidebar(initialSession = { id: "remembered", agentId: null }) {
     react: { ...state.react, default: state.react },
     "@/hooks/useFlag": { useFlag: () => true }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
+    "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },
     "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: noop },
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => nativeContext, setNativeSidebarChat: value => { nativeContext = value; events.push(value ? "native:set" : "native:clear"); } },
@@ -263,6 +265,7 @@ function roster(enabled) {
     "@/utils/controllers/agents/boardMembers": { getAgentTeamIds: async () => new Map() },
     "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return enabled; } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag, "@/lib/agentStatus/chip": chip,
+    "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/lib/api/rateLimit": { checkRestRateLimit: noop }, "@/lib/agentRuns/service": { browserMutationIsSameOrigin: noop },
     "@/lib/agents/runtimeState": {
       readAgentRuntimeSnapshot: async id => { snapshots.push(id); return id === "working" ? { status: "waiting" } : null; },

@@ -277,7 +277,7 @@ test("email models stay unchanged and flag defaults to Owner + QA", () => {
   // The email reuses existing models; unrelated tickets may add models, migrations, indexes, the HTPR-7271 Project.seeded flag, HTPR-7298 PageTaskLink back-relations, the HTPR-7515 BoardGithubRepository back-relation, and the HTPR-7549 first-task pointer fields.
   const unrelatedModelFields = {
     User: /^\s*pageTaskLinksCreated\s+PageTaskLink\[\]\s*$/,
-    Task: /^\s*pageLinks\s+PageTaskLink\[\]\s*$/,
+    Task: /^\s*(pageLinks\s+PageTaskLink\[\]|blockerCommentId\s+Int\?\s+@unique|blockerComment\s+Comment\?\s+@relation\("TaskBlockerComment", fields: \[blockerCommentId\], references: \[id\], onDelete: SetNull\))\s*$/,
     Project: /^\s*(githubRepositories\s+BoardGithubRepository\[\]|firstTaskPointer(Task|Section)Id\s+Int\?|firstRealTaskCreatedAt\s+DateTime\?)\s*$/,
   };
   const fields = (model, name) => model.split("\n").filter((line) => !/^\s*(\/\/.*|@@index\(.*\)|featureFlagChanges\s+FeatureFlagChange\[\]|seeded\s+Boolean\s+@default\(false\))?\s*$/.test(line) && !unrelatedModelFields[name]?.test(line)).join("\n");

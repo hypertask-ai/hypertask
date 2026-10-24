@@ -16,7 +16,7 @@ const keys = load(path.join(root, "src/lib/flags/keys.ts"));
 const option = catalog.getAiModelOptionById("claude-haiku-5-5");
 
 function moduleWithStubs(relativePath, stubs, extra = "") {
-  stubs = withStubs({ "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("Unexpected network request"); } }, "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/flags/keys": keys, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" } }, stubs);
+  stubs = withStubs({ "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("Unexpected network request"); } }, "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/flags/keys": keys, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-7732-baseten-byok": { HTPR_7732_BASETEN_BYOK_FLAG: "htpr-7732-baseten-byok" } }, stubs);
   const filename = path.join(root, relativePath);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

@@ -1,6 +1,7 @@
 'use client'
 import { HTPR_7775_SAVED_URL_VIEW_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
@@ -85,6 +86,7 @@ const queryClient = useQueryClient();
 const setRouteCurrentProject = useSetRecoilState(currentProjectAtom)
 const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
+const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
 const router = useRouter()
 const {
   releaseSecondaryStartup,
@@ -178,7 +180,7 @@ const markLocalBoardPublished = useCallback(
           )
         : undefined
     if (!localProject) return
-    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled }, restoreUrlViewSections))
+    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections))
     setBoardAccess((current) =>
       current.key === boardAccessKey &&
       (current.status === "authorized" || current.status === "denied")
@@ -188,6 +190,7 @@ const markLocalBoardPublished = useCallback(
   },
   [
     assigneeFixEnabled,
+    defaultFiltersFixEnabled,
     restoreUrlViewSections,
     boardAccessKey,
     currentView,
@@ -581,6 +584,7 @@ type useLandingBoardSurfaceContext = Pick<LandingPageInput, "user"> &
 export function useLandingBoardSurface(context: useLandingBoardSurfaceContext) {
   const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
+  const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
   const {
   setBoardAccess, boardAccessKey, setNetworkAccess, pilotParameter, setSyncedBoardPilotEnabled,
   setPilotPreferenceResolved, pilotPreferenceResolved, pilotExplicitlyDisabled, latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef,
@@ -708,10 +712,10 @@ const projectsForSection = useMemo(() => {
   if (!data?.updatedProjects) return []
   const projects = [...data.updatedProjects]
   if (projectIndex >= 0 && projects[projectIndex]) {
-    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled }, restoreUrlViewSections)
+    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections)
   }
   return projects
-}, [assigneeFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
+}, [assigneeFixEnabled, defaultFiltersFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
 
 const pinnedProject = projectsForSection[projectIndex]
 const boardLayoutForRender =
