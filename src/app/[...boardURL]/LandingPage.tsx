@@ -190,11 +190,8 @@ const markLocalBoardPublished = useCallback(
   },
   [
     assigneeFixEnabled,
-<<<<<<< HEAD
     defaultFiltersFixEnabled,
-=======
     restoreUrlViewSections,
->>>>>>> origin/production
     boardAccessKey,
     currentView,
     queryClient,
