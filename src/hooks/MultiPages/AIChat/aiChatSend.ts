@@ -17,12 +17,12 @@ import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sess
 
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
-  Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
+  Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean; persistentQueue?: SessionMessageQueue };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
   const {
-  sessionPagingEnabled, getDisplayedSession, isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
+  sessionIntentGenerationRef, sessionPagingEnabled, getDisplayedSession, isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
   setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
   currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
   scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
@@ -36,30 +36,22 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
   const handleSendMessage = async (
     retryContent?: string,
-<<<<<<< HEAD
-    options?: { htmlForAttachments?: string; filesForAttachments?: FileItem[]; preserveComposer?: boolean }
-=======
-    options?: { htmlForAttachments?: string; preserveComposer?: boolean; queuedMessage?: QueuedAiChatMessage; sessionId?: string; onQueueBusy?: (retryAfterMs: number) => void }
->>>>>>> origin/production
+    options?: { htmlForAttachments?: string; filesForAttachments?: FileItem[]; preserveComposer?: boolean; queuedMessage?: QueuedAiChatMessage; sessionId?: string; onQueueBusy?: (retryAfterMs: number) => void }
   ): Promise<boolean> => {
+    const originatingSessionId = getDisplayedSession?.()?.id ?? persistentQueue?.sessionId;
+    const originatingIntentGeneration = sessionIntentGenerationRef.current;
     if (isByokBlocked) return false;
     if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     const preserveComposer = options?.preserveComposer;
     if (preserveComposer && sendInFlightRef.current) return false;
-    const consumesComposer = !preserveComposer && options?.filesForAttachments === undefined;
+    const consumesComposer = !preserveComposer && !options?.queuedMessage && options?.filesForAttachments === undefined;
 
-<<<<<<< HEAD
-    if (sendInFlightRef.current || (retryContent === undefined && isTyping)) {
-      const content = (retryContent ?? editor?.getText() ?? "").trim();
-=======
     const queuedMessage = options?.queuedMessage;
     const queueSessionId = persistentQueue?.sessionId;
     const hasQueuedMessages = persistentQueue && queueSessionId &&
       (persistentQueue.get(queueSessionId).length > 0 || persistentQueue.hasPending(queueSessionId));
-    const shouldQueue = isTyping || (persistentQueue && (sendInFlightRef.current || hasQueuedMessages));
-    if (retryContent === undefined && shouldQueue) {
-      const content = (editor?.getText() ?? "").trim();
->>>>>>> origin/production
+    if (sendInFlightRef.current || (retryContent === undefined && (isTyping || hasQueuedMessages))) {
+      const content = (retryContent ?? editor?.getText() ?? "").trim();
       if (!content) return false;
       const files = [...(options?.filesForAttachments ?? fileUpload.fileItems)];
       const queued = {
@@ -71,13 +63,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
           : options?.htmlForAttachments ?? "",
         files,
       };
-<<<<<<< HEAD
-      messageQueueRef.current = [...messageQueueRef.current, queued];
-      setQueuedMessages(messageQueueRef.current);
-      if (consumesComposer) {
-        editor?.commands.clearContent();
-        fileUpload.clearFiles();
-=======
       if (persistentQueue) {
         if (!queueSessionId) return false;
         try {
@@ -90,11 +75,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         messageQueueRef.current = [...messageQueueRef.current, queued];
         setQueuedMessages(messageQueueRef.current);
       }
-      if (!persistentQueue || (persistentQueue.sessionId === queueSessionId && editor?.getHTML() === queued.html)) {
+      if (consumesComposer && (!persistentQueue || (persistentQueue.sessionId === queueSessionId && editor?.getHTML() === queued.html))) {
         editor?.commands.clearContent();
         if (persistentQueue) fileUpload.setFileItems((currentFiles) => currentFiles.filter((file) => !files.includes(file)));
         else fileUpload.clearFiles();
->>>>>>> origin/production
       }
       return true;
     }
@@ -112,13 +96,13 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
     if (!content.trim()) return false;
     sendInFlightRef.current = true;
-    const files = preserveComposer ? [] : [...(options?.filesForAttachments ?? fileUpload.fileItems)];
+    const files = preserveComposer ? [] : [...(options?.filesForAttachments ?? queuedMessage?.files ?? fileUpload.fileItems)];
     if (consumesComposer) {
       fileUpload.clearFiles();
       editor?.commands.clearContent();
     }
-    let restoreMessage = !preserveComposer;
-    let restoreFiles = files.length > 0;
+    let restoreMessage = !preserveComposer && !queuedMessage;
+    let restoreFiles = files.length > 0 && !queuedMessage;
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
     const streamTaskId =
@@ -148,13 +132,8 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     const sidebarHeaders = sidebarChatHeaders(session.id);
     const processedAttachments = queuedMessage?.attachments ?? (preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
-<<<<<<< HEAD
       files
-    );
-=======
-      fileUpload.fileItems
     ));
->>>>>>> origin/production
 
     if (sessionPagingEnabled && !isDemo && getDisplayedSession()?.id !== session.id) return false;
 
@@ -170,12 +149,8 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
 
-<<<<<<< HEAD
     restoreFiles = false;
     restoreMessage = false;
-=======
-    if (!preserveComposer && !queuedMessage) editor?.commands.clearContent();
->>>>>>> origin/production
 
     setIsTyping(true);
 
@@ -318,15 +293,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             );
           }
 
-<<<<<<< HEAD
-=======
           if (!queueAccepted && queuedMessage) {
             addMessageToSessionQuery(session.id, userMessage, false, false, scopedProjectId);
           }
           queueAccepted = true;
-          if (!preserveComposer && !queuedMessage) fileUpload.clearFiles();
 
->>>>>>> origin/production
           if (!assistantPlaceholderAdded) {
             const initialAssistantMessage: IChatMessage = {
               id: assistantMessageId,
@@ -399,13 +370,20 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         if (consumesComposer && editor?.isEmpty) {
           editor.commands.setContent(composerHtml);
         } else {
-          messageQueueRef.current = [{
+          const message = {
             id: crypto.randomUUID(),
+            ...(persistentQueue ? { assistantMessageId: crypto.randomUUID() } : {}),
             content,
             html: editorHtmlForAttachments,
             files,
-          }, ...messageQueueRef.current];
-          setQueuedMessages(messageQueueRef.current);
+          };
+          const activeSessionId = getDisplayedSession?.()?.id ?? persistentQueue?.sessionId;
+          if (activeSessionId === originatingSessionId && sessionIntentGenerationRef.current === originatingIntentGeneration) {
+            messageQueueRef.current = [message, ...messageQueueRef.current];
+            setQueuedMessages(messageQueueRef.current);
+          } else if (persistentQueue && originatingSessionId) {
+            persistentQueue.set(originatingSessionId, [...persistentQueue.get(originatingSessionId), message]);
+          }
           restoreFiles = false;
         }
       }
@@ -417,17 +395,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }
       sendInFlightRef.current = false;
       searchHandoff?.onSettled();
-<<<<<<< HEAD
       if (!restoreMessage) {
         queueMicrotask(() => {
-          drainQueuedMessage();
+          drainQueuedMessage(completedSessionId);
         });
       }
-=======
-      queueMicrotask(() => {
-        drainQueuedMessage(completedSessionId);
-      });
->>>>>>> origin/production
     }
     return !queuedMessage || queueAccepted;
   };

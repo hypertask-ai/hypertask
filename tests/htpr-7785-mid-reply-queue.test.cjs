@@ -11,9 +11,9 @@ function deferred() {
   return { promise, resolve };
 }
 
-function chatFixture(fullScreen) {
+function chatFixture(fullScreen, persistent = false) {
   const state = { draft: "first", html: "<p>first</p>", queued: [], payloads: [], created: [], messages: [], processed: [], errors: [] };
-  const session = { id: "active-chat", userId: 985, agentId: null, taskId: null, messages: [] };
+  let session = { id: "active-chat", userId: 985, agentId: null, taskId: null, messages: [] };
   const fileUpload = {
     fileItems: [],
     clearFiles() { fileUpload.fileItems = []; },
@@ -32,6 +32,13 @@ function chatFixture(fullScreen) {
         clearContent() { state.draft = ""; state.html = ""; },
         setContent(html) { state.draft = html.replace(/<[^>]*>/g, ""); state.html = html; },
       },
+    },
+    getDisplayedSession: () => session,
+    clearMessageQueue() { context.messageQueueRef.current = []; state.queued = []; },
+    selectSessionInHistory(id) {
+      session = { ...session, id };
+      context.sessionsRef.current = [session];
+      if (context.persistentQueue) context.persistentQueue.sessionId = id;
     },
     fileUpload, messageQueueRef: { current: [] }, sendInFlightRef: { current: false },
     setQueuedMessages(items) { state.queued = items; },
@@ -57,6 +64,16 @@ function chatFixture(fullScreen) {
       return Promise.resolve(nested);
     },
   };
+  if (persistent) {
+    const values = new Map();
+    const { createSessionMessageQueue } = load("src/lib/aiChat/sessionMessageQueue.ts", {});
+    context.persistentQueue = createSessionMessageQueue(985, {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    }, noop);
+    context.persistentQueue.sessionId = session.id;
+  }
   const { useAiChatSessions } = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
     react: hooks,
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null },
@@ -92,8 +109,8 @@ function chatFixture(fullScreen) {
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-async function withChat(fullScreen, check) {
-  const fixture = chatFixture(fullScreen);
+async function withChat(fullScreen, check, persistent = false) {
+  const fixture = chatFixture(fullScreen, persistent);
   const originalFetch = global.fetch;
   global.fetch = async (url, options) => {
     assert.equal(url, "/api/ai/chat/stream");
@@ -188,6 +205,75 @@ for (const fullScreen of [false, true]) {
         assert.equal(state.payloads.length, 1);
       });
     });
+  }
+
+  for (const persistent of [false, true]) {
+    for (const transition of ["different session", "new intent in the same session"]) {
+      test(`${surface}: failed preparation after ${transition} ${persistent ? "retains only in the originating persistent queue" : "never requeues with persistence off"}`, async () => {
+        await withChat(fullScreen, async ({ state, context, streams, queues, renderSender }) => {
+          context.sessionPagingEnabled = true;
+          const preparation = deferred();
+          const processAttachments = context.processAttachments;
+          const originalFile = { id: 1, file: { name: "first.pdf", type: "application/pdf" } };
+          const newFile = { id: 2, file: { name: "new.pdf", type: "application/pdf" } };
+          context.fileUpload.resetFiles([originalFile]);
+          context.processAttachments = async (...args) => {
+            await preparation.promise;
+            if (transition !== "different session") throw new Error("attachment unavailable");
+            return processAttachments(...args);
+          };
+          const first = renderSender().handleSendMessage();
+          await settle();
+          const newSessionId = transition === "different session" ? "new-chat" : "active-chat";
+          queues.selectSession(newSessionId);
+          state.draft = "new draft";
+          state.html = "<p>new <strong>draft</strong></p>";
+          context.fileUpload.resetFiles([newFile]);
+          const rejected = transition !== "different session" ? assert.rejects(first, /attachment unavailable/) : null;
+          preparation.resolve();
+          if (rejected) await rejected;
+          else assert.equal(await first, false);
+          await settle();
+          assert.deepEqual(context.messageQueueRef.current, []);
+          assert.deepEqual(state.queued, []);
+          assert.equal(state.html, "<p>new <strong>draft</strong></p>");
+          assert.deepEqual(context.fileUpload.fileItems, [newFile]);
+          assert.deepEqual(state.payloads, []);
+          if (persistent) {
+            const retained = context.persistentQueue.get("active-chat");
+            assert.equal(retained.length, 1);
+            assert.equal(retained[0].content, "first");
+            assert.deepEqual(retained[0].files, [originalFile]);
+            if (newSessionId !== "active-chat") assert.deepEqual(context.persistentQueue.get(newSessionId), []);
+          }
+          if (transition !== "different session") return;
+          context.processAttachments = processAttachments;
+          const next = renderSender().handleSendMessage();
+          await settle();
+          assert.deepEqual(state.payloads.map(({ message, session_id }) => [message, session_id]), [["new draft", "new-chat"]]);
+          streams[0].resolve();
+          assert.equal(await next, true);
+          await settle();
+          queues.drainQueuedMessage();
+          await settle();
+          assert.deepEqual(state.payloads.map(({ message, session_id }) => [message, session_id]), [["new draft", "new-chat"]]);
+          assert.deepEqual(context.messageQueueRef.current, []);
+          if (persistent) {
+            queues.selectSession("active-chat");
+            renderSender();
+            queues.drainQueuedMessage();
+            await settle();
+            assert.deepEqual(state.payloads.map(({ message, session_id }) => [message, session_id]), [
+              ["new draft", "new-chat"], ["first", "active-chat"],
+            ]);
+            assert.equal(state.payloads[1].attachments[0].fileName, "first.pdf");
+            streams[1].resolve();
+            await settle();
+            assert.deepEqual(context.persistentQueue.get("active-chat"), []);
+          }
+        }, persistent);
+      });
+    }
   }
 
   test(`${surface}: unavailable session restores the detached text-only draft and its formatting`, async () => {
