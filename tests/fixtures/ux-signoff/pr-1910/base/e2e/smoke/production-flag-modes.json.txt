@@ -84,6 +84,7 @@
     "htpr-7010-haiku-5-5": "EVERYONE",
     "htpr-7016-phone-board-cold-start": "EVERYONE",
     "htpr-7020-tag-full-name": "EVERYONE",
+    "htpr-7025-welcome-email": "EVERYONE",
     "htpr-7026-agent-connect-check": "EVERYONE",
     "htpr-7027-agent-nudge-email": "EVERYONE",
     "htpr-7028-first-task-email": "EVERYONE",
