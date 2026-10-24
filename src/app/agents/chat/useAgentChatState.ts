@@ -12,7 +12,8 @@ import type { Editor } from "@tiptap/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useContext, useEffect, useRef, useState } from "react";
 import type { TAgent } from "../AgentsRegister";
-import { IProp, TAgentChatSession, TChatMessage, type QueuedAgentChatMessage } from "./agentChatTypes";
+import { IProp, TAgentChatSession, TChatMessage } from "./agentChatTypes";
+import type { QueuedAgentChatMessage } from "@/lib/agents/chatContext";
 
 export function useAgentChatState(props: IProp) {
   const { currentUser, roomsEnabled, embedded } = props;

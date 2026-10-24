@@ -55,16 +55,3 @@ export interface SidebarChatContext {
 
 
 export const EMPTY_PROJECTS: IProject[] = [];
-
-export type AgentChatContext = {
-  project_id?: number;
-  task_id?: number;
-  scope?: "ticket";
-  surface_path?: string;
-};
-
-export type QueuedAgentChatMessage = {
-  id: string;
-  content: string;
-  context?: AgentChatContext;
-};

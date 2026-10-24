@@ -14,3 +14,16 @@ export function agentChatContextPayload(
       : "all boards";
   return { context, text: `Context: ${label}\n\n${text}` };
 }
+
+export type AgentChatContext = {
+  project_id?: number;
+  task_id?: number;
+  scope?: "ticket";
+  surface_path?: string;
+};
+
+export type QueuedAgentChatMessage = {
+  id: string;
+  content: string;
+  context?: AgentChatContext;
+};
