@@ -234,8 +234,8 @@ function fetchFixture() {
 }
 const plan = (amountMicroUsd = 20_000, overrides = {}) => allowance.reservePlanAllowance({ teamId: TEAM,
   gatewayApiKey: funding.apiKey, fundingSource: funding.source, userId: 985, policy, amountUsd: amountMicroUsd / 1e6, amountMicroUsd, ...overrides });
-const effective = (kind = "month", period = kind === "month" ? MONTH : DAY) => allowance.effectiveAccountingSource({ teamId: TEAM,
-  kind, period, funding: { apiKey: funding.apiKey, provenance: funding.source === "managed" ? JSON.stringify([funding.source, funding.managedKeyId, funding.managedKeyUpdatedAt]) : funding.source } });
+const effective = async (kind = "month", period = kind === "month" ? MONTH : DAY) => allowance.effectiveAccountingSource({ teamId: TEAM,
+  kind, period, funding: await allowance.resolveBilledFunding({ teamId: TEAM, gatewayApiKey: funding.apiKey, fundingSource: funding.source }) });
 const params = (signal, user = 985) => ({ prompt: [], maxOutputTokens: 16_000, abortSignal: signal,
   providerOptions: { gateway: { tags: [`team:${TEAM}`, ...(user === null ? [] : [`user:${user}`])] } } });
 const middleware = (withPolicy = false) => allowance.createSharedAllowanceMiddleware({ allowanceUsd: 1, gatewayApiKey: funding.apiKey,
