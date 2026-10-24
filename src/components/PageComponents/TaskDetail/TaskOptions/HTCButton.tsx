@@ -31,12 +31,7 @@ const HTCButton = ({
           setShowCommands({ show: true, mode: CommandMode.Command })
         }
       >
-        <Image
-          src={"/HTCLogoGrayMbl.png"}
-          width={headerIconSizeEnabled ? 16 : 18}
-          height={headerIconSizeEnabled ? 16 : 14}
-          alt=""
-        />
+        <Image src={"/HTCLogoGrayMbl.png"} width={18} height={14} alt="" />
       </div>
     );
   else
@@ -60,6 +55,7 @@ const HTCButton = ({
           }
           width={16}
           height={16}
+          className={headerIconSizeEnabled ? "h-4 w-4 object-contain" : undefined}
           alt=""
         />
         <Tooltip

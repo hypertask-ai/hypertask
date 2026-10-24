@@ -94,8 +94,10 @@ for (const mobile of [false, true]) {
       assert.doesNotMatch(props.className, /keep-stroke|\b[hw]-\[/);
     }
     const image = icon(nodes, "Image");
-    assert.equal(image.width, 16);
-    assert.equal(image.height, 16);
+    assert.equal(image.width, mobile ? 18 : 16);
+    assert.equal(image.height, mobile ? 14 : 16);
+    if (mobile) assert.equal(image.className, undefined);
+    else assert.equal(image.className, "h-4 w-4 object-contain");
   });
 
   test(`flag off keeps the original sizes and stroke classes (${mobile ? "phone" : "desktop"})`, () => {
@@ -118,6 +120,7 @@ for (const mobile of [false, true]) {
     const image = icon(nodes, "Image");
     assert.equal(image.width, mobile ? 18 : 16);
     assert.equal(image.height, mobile ? 14 : 16);
+    assert.equal(image.className, undefined);
   });
 }
 
