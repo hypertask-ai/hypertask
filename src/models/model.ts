@@ -525,6 +525,7 @@ export interface ITask {
   sectionChangedAt?: string;
   lastCommentAt?: string | null;
   staleNudgedAt?: string | null;
+  blockerCommentId?: number | null;
   waitingOnUserId?: number | null;
   waitingOnUser?: {
     id: number;
@@ -1135,6 +1136,8 @@ export interface IAllCommands {
     isApple: boolean;
     isCurrentUserCreator: boolean;
     isPinned: boolean;
+    blockerCommentEnabled?: boolean;
+    isBlocker?: boolean;
     isStarred: boolean;
     creatorId?: number;
   };

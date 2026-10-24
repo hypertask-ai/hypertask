@@ -20,6 +20,7 @@ import ReplyToComment from "./CommentOptions/ReplyToComment";
 import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG, HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG } from "@/lib/flags/keys";
 import { isTaskDetailEditTarget } from "@/lib/taskDetailEditTarget";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
@@ -76,7 +77,7 @@ const CommentReadReceipts = () => {
 
 const CommentsContainer = () => {
   const { comment, i, isStacked, pinned } = useCommentsContext();
-  const { editState, setCurrentId, currentId, setCarousalItems, newCommentIds } =
+  const { editState, setCurrentId, currentId, setCarousalItems, newCommentIds, currentTask } =
     useTaskContext();
 
   const { updateStackedComments, editCommentHandler, replyToCommentHandler } =
@@ -84,6 +85,8 @@ const CommentsContainer = () => {
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
   const doubleClickToEdit = useFlag(HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG);
+  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const isBlocker = blockerCommentEnabled && !comment.activity && currentTask?.blockerCommentId === Number(comment.id);
   const CommentReactions = useFlag(HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG) ? CommentReactionsInOnePass : CommentReactionsLoadedLater;
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
@@ -178,6 +181,7 @@ const CommentsContainer = () => {
         id={`comment-${i}`}
         data-testid="ticket-comment"
         data-task-comment-box={!comment.activity || undefined}
+        data-task-comment-blocker={isBlocker || undefined}
         data-task-comment-collapsed={isStacked || undefined}
         data-task-comment-state={
           comment.activity
@@ -237,6 +241,7 @@ const CommentsContainer = () => {
     const commentBubble = (
       <div
         data-task-comment-box
+        data-task-comment-blocker={isBlocker || undefined}
         className={`
                         rounded-sm
                         ${styles.hellow}

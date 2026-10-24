@@ -33,7 +33,7 @@ import {
   type TAiModelOption,
   type TAiProviderOptions,
 } from "@/lib/aiModelOptions";
-import { getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
+import { BASETEN_BYOK_PROVIDER, BASETEN_MODEL_SLUGS, getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
 import {
   FREE_TEAM_AI_ALLOWANCE_USD,
   PAID_TEAM_AI_ALLOWANCE_USD,
@@ -59,7 +59,16 @@ export { isCustomEndpointConfig };
 
 export type ModelProviderId =
   "claude" | "openai" | "openrouter" | "gateway" | "custom";
-export type AiModelCredential = string | CustomEndpointConfig;
+export type BasetenCredential = {
+  kind: "baseten";
+  apiKey: string;
+  modelKey: keyof typeof BASETEN_MODEL_SLUGS;
+};
+export type AiModelCredential = string | CustomEndpointConfig | BasetenCredential;
+
+function isBasetenCredential(credential: AiModelCredential | undefined): credential is BasetenCredential {
+  return credential !== null && typeof credential === "object" && "kind" in credential && credential.kind === "baseten";
+}
 export type AiGatewayFeature =
   | "chat"
   | "summary"
@@ -218,6 +227,17 @@ function resolveUntracedAiModel(
     if (stub) return stub;
   }
 
+  if (isBasetenCredential(byokCredential)) {
+    const slug = BASETEN_MODEL_SLUGS[byokCredential.modelKey];
+    if (!slug || modelOption?.modelKey !== byokCredential.modelKey || modelOption.model !== model) {
+      throw new Error("Baseten credential does not match the selected model");
+    }
+    return createOpenAI({
+      apiKey: byokCredential.apiKey,
+      baseURL: BASETEN_BYOK_PROVIDER.openAiCompatibleBaseUrl,
+    }).chat(slug);
+  }
+
   const byokApiKey =
     typeof byokCredential === "string" ? byokCredential : undefined;
 
@@ -363,7 +383,7 @@ function createPromptCachingMiddleware(model: LanguageModel, context: ModelUsage
 
 async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number, cacheReadTokens = 0, cacheWriteTokens = 0) {
   if (!inputTokens && !outputTokens) return 0;
-  if (provider === "byok:custom") return null;
+  if (provider === "byok:custom" || provider === "byok:baseten") return null;
   const slug = modelId.includes("/") ? modelId : `${modelId.startsWith("claude-") ? "anthropic" : "openai"}/${modelId}`;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -624,6 +644,7 @@ export function aiUsageProviderForCredential(
   modelOption?: TAiModelOption,
   directProvider?: TAiProviderKey,
 ) {
+  if (isBasetenCredential(credential)) return "byok:baseten";
   if (isCustomEndpointConfig(credential)) return "byok:custom";
   if (typeof credential !== "string" || isVercelAiGatewayKey(credential)) {
     return provider;

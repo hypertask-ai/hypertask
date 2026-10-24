@@ -24,6 +24,7 @@ const stubbedModulePaths = [
   "src/app/api/ai/_lib/planAllowancePolicy.ts",
   "src/app/api/ai/_lib/providerGate.ts",
   "src/lib/crypto/byokCipher.ts",
+  "src/lib/flags.ts",
   "src/lib/net/fetchWithoutBrotli.ts",
   "src/lib/prisma.ts",
   "src/utils/controllers/projects/getAllIncludes.ts",
@@ -47,6 +48,7 @@ function stubModule(relativePath, exports) {
 }
 
 function stubPlan(plan = "Pro") {
+  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
   stubModule("src/app/api/ai/_lib/planAllowancePolicy.ts", { teamPlanAllowanceEnabled: async () => false });
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},

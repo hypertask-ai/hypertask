@@ -224,6 +224,14 @@ export const getCommentCommands = (commandOptions?: IAllCommands): CommandGroup 
           keyboard: ["CTRL", "SHIFT", "P"],
           keywords: "pin unpin comment message top important fixed save highlight",
         },
+        commentProps.blockerCommentEnabled
+          ? {
+              key: "blockerComment",
+              name: commentProps.isBlocker ? "Unmark as blocker" : "Mark as blocker",
+              commandMode: CommandMode.BlockerComment,
+              keywords: "blocker blocked reason unblock mark unmark comment",
+            }
+          : null,
         {
           key: "copyCommentContent",
           name: "Copy comment content",

@@ -63,19 +63,19 @@ function paletteGroups(enabled, frequent = {}, contextOptions) {
     getHTCFrecencyScore: () => 0,
   };
   const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible"]);
+  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible", "hiddenBasetenCommandKey"]);
   const statements = [];
   function visit(node) {
     if ((ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => names.has(declaration.name.getText(source)))) ||
-        (ts.isIfStatement(node) && node.expression.getText(source) === "ticketPrefixEnabled")) {
+        (ts.isIfStatement(node) && ["ticketPrefixEnabled", "!basetenByokEnabled"].includes(node.expression.getText(source)))) {
       statements.push(node.getText(source));
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  bindings.isTicketPrefixCommandVisible = evaluate(`(() => { ${statements.join("\n")} return isTicketPrefixCommandVisible; })()`, {
+  Object.assign(bindings, evaluate(`(() => { ${statements.join("\n")} return { isTicketPrefixCommandVisible, hiddenBasetenCommandKey }; })()`, {
     ...bindings, useCallback: (callback) => callback,
-  });
+  }));
   bindings.getCommands = registry.getAllCommands;
   return evaluate(initializer(palette, "allCommands_"), bindings);
 }
