@@ -152,6 +152,7 @@ test("opening edit mode opens the existing sidebar and starts a fresh session be
 function editModeCleanup({ enabled = true, open = true, taskId = 123, messages = [] }) {
   const cleared = [];
   const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
+    "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
     react: hookReact,
     "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
     "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },

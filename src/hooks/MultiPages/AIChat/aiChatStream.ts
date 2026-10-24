@@ -5,7 +5,7 @@ import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
-type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat"> & {
+type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "navigateToTask"> & {
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
   assistantMessageId: string;
@@ -15,7 +15,7 @@ type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQu
 export async function consumeAiChatStream(context: Context) {
   const {
   response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
-  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat,
+  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, navigateToTask,
   } = context;
 
 
@@ -27,6 +27,7 @@ export async function consumeAiChatStream(context: Context) {
       let currentEventType = "";
       let replyAuthorAgent: { id: string; name: string } | null = null;
       let streamErrorHandled = false;
+      let navigationFailed = false;
       let sawDone = false;
 
       while (!done) {
@@ -83,7 +84,28 @@ export async function consumeAiChatStream(context: Context) {
                       };
                     }
                     break;
+                  case "open_task": {
+                    try {
+                      if (!navigateToTask || !Number.isSafeInteger(parsed.projectId) || parsed.projectId <= 0 || !Number.isSafeInteger(parsed.uniqueIndex) || parsed.uniqueIndex <= 0) {
+                        throw new Error("Task navigation is unavailable");
+                      }
+                      navigateToTask(parsed.projectId, parsed.uniqueIndex);
+                    } catch {
+                      navigationFailed = true;
+                      streamErrorHandled = true;
+                      addMessageToSessionQuery(session.id, {
+                        id: assistantMessageId,
+                        content: "I could not open the task. Please open it from the board.",
+                        role: "assistant",
+                        createdAt: new Date(),
+                        sessionId: session.id,
+                        isDelivered: true,
+                      }, false, true);
+                    }
+                    break;
+                  }
                   case "content":
+                    if (navigationFailed) break;
                     setAgentStatus(undefined);
                     aiContent += parsed.content;
 

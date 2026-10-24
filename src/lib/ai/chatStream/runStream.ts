@@ -120,15 +120,17 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     )
     : () => undefined;
   state.send = (event, data) => {
-    if (!state.clientConnected) return;
+    if (!state.clientConnected) return false;
     try {
       controller.enqueue(encoder.encode(sseFrame(event, data)));
+      return true;
     } catch (error) {
       state.clientConnected = false;
       console.info(
         "[ai/chat/stream] client disconnected; completing in background",
         error,
       );
+      return false;
     }
   };
   state.finish = (
