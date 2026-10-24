@@ -237,7 +237,7 @@ async function seedSessionFixtures(flags) {
       "<p>What happened:\n1. Opened a ticket.\n2. Every line had blank space below it.\n3. Then the text moved into place.</p>",
       "<p>Expected: the text shows at its final spacing from the first frame.</p>",
       "<ul>\n<li>First point</li>\n<li>Second point</li>\n</ul>",
-      "<p>Last paragraph   with  extra   spaces.</p>",
+      "<p>Last paragraph   with  extra   spaces.</p>\n",
     ].join("\n\n"),
   });
 
