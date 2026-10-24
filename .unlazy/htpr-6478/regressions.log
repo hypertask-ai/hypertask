@@ -1,0 +1,4367 @@
+TAP version 13
+# Subtest: rename_board is present in MCP registry, metadata and deferred catalog
+ok 1 - rename_board is present in MCP registry, metadata and deferred catalog
+  ---
+  duration_ms: 608.853132
+  type: 'test'
+  ...
+# Subtest: rename_board is registered in AI chat and marked as a write with a status label
+ok 2 - rename_board is registered in AI chat and marked as a write with a status label
+  ---
+  duration_ms: 7.326207
+  type: 'test'
+  ...
+# Subtest: MCP tool sends the CLI-compatible PATCH and reaches the UI controller
+ok 3 - MCP tool sends the CLI-compatible PATCH and reaches the UI controller
+  ---
+  duration_ms: 475.091605
+  type: 'test'
+  ...
+# Subtest: MCP managed-agent rename reaches the shared controller with its agent scope
+ok 4 - MCP managed-agent rename reaches the shared controller with its agent scope
+  ---
+  duration_ms: 231.679824
+  type: 'test'
+  ...
+# Subtest: MCP tool passes through the shared permission failure and never writes
+ok 5 - MCP tool passes through the shared permission failure and never writes
+  ---
+  duration_ms: 206.759556
+  type: 'test'
+  ...
+# Subtest: AI chat rename calls the shared UI controller for a human
+ok 6 - AI chat rename calls the shared UI controller for a human
+  ---
+  duration_ms: 254.807843
+  type: 'test'
+  ...
+# Subtest: AI chat rename calls the shared UI controller for an agent
+ok 7 - AI chat rename calls the shared UI controller for an agent
+  ---
+  duration_ms: 147.496785
+  type: 'test'
+  ...
+# Subtest: AI chat returns the shared readable permission denial without mutation
+ok 8 - AI chat returns the shared readable permission denial without mutation
+  ---
+  duration_ms: 181.457319
+  type: 'test'
+  ...
+# Subtest: MCP and AI tool inputs trim titles and reject empty or overlong titles before mutation
+ok 9 - MCP and AI tool inputs trim titles and reject empty or overlong titles before mutation
+  ---
+  duration_ms: 461.538078
+  type: 'test'
+  ...
+# Subtest: both server pages reject non-owners before reading flags
+ok 10 - both server pages reject non-owners before reading flags
+  ---
+  duration_ms: 4.300385
+  type: 'test'
+  ...
+# Subtest: known and legacy flags reuse the admin component; unknown keys return not found
+ok 11 - known and legacy flags reuse the admin component; unknown keys return not found
+  ---
+  duration_ms: 3.342241
+  type: 'test'
+  ...
+# Subtest: overview keys link to pages across metadata and title variants (details=true)
+ok 12 - overview keys link to pages across metadata and title variants (details=true)
+  ---
+  duration_ms: 581.834871
+  type: 'test'
+  ...
+# Subtest: overview keys link to pages across metadata and title variants (details=false)
+ok 13 - overview keys link to pages across metadata and title variants (details=false)
+  ---
+  duration_ms: 230.268036
+  type: 'test'
+  ...
+# Subtest: detail shows just htpr-6752-instant-ticket-open, metadata, audience, ticket and back link even when overview details are off
+ok 14 - detail shows just htpr-6752-instant-ticket-open, metadata, audience, ticket and back link even when overview details are off
+  ---
+  duration_ms: 116.052715
+  type: 'test'
+  ...
+# Subtest: detail shows just yper4-123-board-check, metadata, audience, ticket and back link even when overview details are off
+ok 15 - detail shows just yper4-123-board-check, metadata, audience, ticket and back link even when overview details are off
+  ---
+  duration_ms: 89.772163
+  type: 'test'
+  ...
+# Subtest: audit metadata uses one existing label line and a safe styled reason link
+ok 16 - audit metadata uses one existing label line and a safe styled reason link
+  ---
+  duration_ms: 277.706035
+  type: 'test'
+  ...
+# Subtest: legacy detail has no invented ticket or shipped date; missing client row has a plain not-found state
+ok 17 - legacy detail has no invented ticket or shipped date; missing client row has a plain not-found state
+  ---
+  duration_ms: 95.195611
+  type: 'test'
+  ...
+# Subtest: overview counts every audience and Unreleased filters exactly the release pile
+ok 18 - overview counts every audience and Unreleased filters exactly the release pile
+  ---
+  duration_ms: 391.799335
+  type: 'test'
+  ...
+# Subtest: counts and the active Unreleased list update before PATCH finishes, then roll back a failed release
+ok 19 - counts and the active Unreleased list update before PATCH finishes, then roll back a failed release
+  ---
+  duration_ms: 362.064405
+  type: 'test'
+  ...
+# Subtest: shared controls PATCH the existing API, refetch, invalidate and roll back failures (detail=false)
+ok 20 - shared controls PATCH the existing API, refetch, invalidate and roll back failures (detail=false)
+  ---
+  duration_ms: 235.536142
+  type: 'test'
+  ...
+# Subtest: shared controls PATCH the existing API, refetch, invalidate and roll back failures (detail=true)
+ok 21 - shared controls PATCH the existing API, refetch, invalidate and roll back failures (detail=true)
+  ---
+  duration_ms: 161.5697
+  type: 'test'
+  ...
+# Subtest: flag off keeps the original cards, no search, badges, relations, anchors or focus changes
+ok 22 - flag off keeps the original cards, no search, badges, relations, anchors or focus changes
+  ---
+  duration_ms: 75.661568
+  type: 'test'
+  ...
+# Subtest: flag on shows shared kind labels, sticky search, all-word reduction, empty state and Escape clears
+ok 23 - flag on shows shared kind labels, sticky search, all-word reduction, empty state and Escape clears
+  ---
+  duration_ms: 188.043228
+  type: 'test'
+  ...
+# Subtest: related link clears filters, reveals its target, scrolls, highlights and focuses without a network read
+ok 24 - related link clears filters, reveals its target, scrolls, highlights and focuses without a network read
+  ---
+  duration_ms: 175.851174
+  type: 'test'
+  ...
+# Subtest: detail related links point to anchored cards on the overview
+ok 25 - detail related links point to anchored cards on the overview
+  ---
+  duration_ms: 30.61619
+  type: 'test'
+  ...
+# Subtest: flagged page restores type and risk filters, excludes Off from waiting, and displays risk reasons
+ok 26 - flagged page restores type and risk filters, excludes Off from waiting, and displays risk reasons
+  ---
+  duration_ms: 388.05907
+  type: 'test'
+  ...
+# Subtest: flag Off leaves URL, legacy waiting count, sort and cards unchanged
+ok 27 - flag Off leaves URL, legacy waiting count, sort and cards unchanged
+  ---
+  duration_ms: 77.992238
+  type: 'test'
+  ...
+# Subtest: non-owners receive 404 before flag metadata is read or changed
+ok 28 - non-owners receive 404 before flag metadata is read or changed
+  ---
+  duration_ms: 35.343287
+  type: 'test'
+  ...
+# Subtest: authentication failures return private structured errors
+ok 29 - authentication failures return private structured errors
+  ---
+  duration_ms: 2.619826
+  type: 'test'
+  ...
+# Subtest: the owner can list and change a declared flag with server-owned metadata
+ok 30 - the owner can list and change a declared flag with server-owned metadata
+  ---
+  duration_ms: 3.200658
+  type: 'test'
+  ...
+# Subtest: committed updates still succeed when realtime delivery fails
+ok 31 - committed updates still succeed when realtime delivery fails
+  ---
+  duration_ms: 2.889659
+  type: 'test'
+  ...
+# Subtest: owner writes reject cross-origin and invalid modes
+ok 32 - owner writes reject cross-origin and invalid modes
+  ---
+  duration_ms: 2.409997
+  type: 'test'
+  ...
+# Subtest: the owner can pause removal with Keep without touching the mode
+ok 33 - the owner can pause removal with Keep without touching the mode
+  ---
+  duration_ms: 5.026076
+  type: 'test'
+  ...
+# Subtest: a Keep write must say exactly one thing
+ok 34 - a Keep write must say exactly one thing
+  ---
+  duration_ms: 2.365404
+  type: 'test'
+  ...
+# Subtest: user flag responses are private, per-user booleans
+ok 35 - user flag responses are private, per-user booleans
+  ---
+  duration_ms: 0.979412
+  type: 'test'
+  ...
+# Subtest: unauthenticated flag reads fail closed
+ok 36 - unauthenticated flag reads fail closed
+  ---
+  duration_ms: 0.594657
+  type: 'test'
+  ...
+# Subtest: Flags dropdown filters default to Owner + QA as a feature and respect OFF
+ok 37 - Flags dropdown filters default to Owner + QA as a feature and respect OFF
+  ---
+  duration_ms: 28.529295
+  type: 'test'
+  ...
+# Subtest: Ctrl+J split tasks default to Owner + QA as a feature and respect OFF
+ok 38 - Ctrl+J split tasks default to Owner + QA as a feature and respect OFF
+  ---
+  duration_ms: 7.980935
+  type: 'test'
+  ...
+# Subtest: Background Claude 5.5 fix defaults to Everyone as a bugfix and respects OFF
+ok 39 - Background Claude 5.5 fix defaults to Everyone as a bugfix and respects OFF
+  ---
+  duration_ms: 3.024521
+  type: 'test'
+  ...
+# Subtest: task-writer empty draft and research fix defaults to Everyone and respects OFF
+ok 40 - task-writer empty draft and research fix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 1.807724
+  type: 'test'
+  ...
+# Subtest: agent reaction webhook fix defaults to Everyone and respects OFF
+ok 41 - agent reaction webhook fix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 2.429963
+  type: 'test'
+  ...
+# Subtest: deleted saved view leaves the tabs fix defaults to Everyone and respects OFF
+ok 42 - deleted saved view leaves the tabs fix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 2.561637
+  type: 'test'
+  ...
+# Subtest: task-writer real error fix defaults to Everyone and respects OFF
+ok 43 - task-writer real error fix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 1.91233
+  type: 'test'
+  ...
+# Subtest: Full task tag names default to Everyone as a bugfix and respect OFF
+ok 44 - Full task tag names default to Everyone as a bugfix and respect OFF
+  ---
+  duration_ms: 1.427828
+  type: 'test'
+  ...
+# Subtest: Ctrl+J deadline extraction defaults Everyone as a bugfix and respects OFF
+ok 45 - Ctrl+J deadline extraction defaults Everyone as a bugfix and respects OFF
+  ---
+  duration_ms: 2.762172
+  type: 'test'
+  ...
+# Subtest: Inbox reminder returns default to Everyone as a bugfix and respect OFF
+ok 46 - Inbox reminder returns default to Everyone as a bugfix and respect OFF
+  ---
+  duration_ms: 2.602413
+  type: 'test'
+  ...
+# Subtest: Ctrl+O ticket sources default to Everyone as a bugfix and respect OFF
+ok 47 - Ctrl+O ticket sources default to Everyone as a bugfix and respect OFF
+  ---
+  duration_ms: 26.698727
+  type: 'test'
+  ...
+# Subtest: ticket reminders without Inbox items default to Everyone as a bugfix and respect OFF
+ok 48 - ticket reminders without Inbox items default to Everyone as a bugfix and respect OFF
+  ---
+  duration_ms: 4.501339
+  type: 'test'
+  ...
+# Subtest: image chat task refresh is an Everyone bugfix and respects OFF
+ok 49 - image chat task refresh is an Everyone bugfix and respects OFF
+  ---
+  duration_ms: 2.113283
+  type: 'test'
+  ...
+# Subtest: phone shortcuts help is an Everyone-default bugfix and respects OFF
+ok 50 - phone shortcuts help is an Everyone-default bugfix and respects OFF
+  ---
+  duration_ms: 2.329876
+  type: 'test'
+  ...
+# Subtest: activation analytics defaults Owner + QA and respects OFF
+ok 51 - activation analytics defaults Owner + QA and respects OFF
+  ---
+  duration_ms: 0.503416
+  type: 'test'
+  ...
+# Subtest: sign-in expiry copy is an Everyone bugfix including anonymous recipients and respects OFF
+ok 52 - sign-in expiry copy is an Everyone bugfix including anonymous recipients and respects OFF
+  ---
+  duration_ms: 1.910596
+  type: 'test'
+  ...
+# Subtest: first-time email defaults to Owner + QA and fails closed for recipients without an account
+ok 53 - first-time email defaults to Owner + QA and fails closed for recipients without an account
+  ---
+  duration_ms: 2.325729
+  type: 'test'
+  ...
+# Subtest: task writer Sonnet pin is an Owner + QA feature and respects OFF
+ok 54 - task writer Sonnet pin is an Owner + QA feature and respects OFF
+  ---
+  duration_ms: 2.082226
+  type: 'test'
+  ...
+# Subtest: Haiku default is an Owner + QA feature, including system ID zero only after release
+ok 55 - Haiku default is an Owner + QA feature, including system ID zero only after release
+  ---
+  duration_ms: 1.457322
+  type: 'test'
+  ...
+# Subtest: Haiku 5.5 is an Owner + QA feature and respects OFF
+ok 56 - Haiku 5.5 is an Owner + QA feature and respects OFF
+  ---
+  duration_ms: 1.481097
+  type: 'test'
+  ...
+# Subtest: invite email bugfix defaults to Everyone and respects OFF
+ok 57 - invite email bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 1.664649
+  type: 'test'
+  ...
+# Subtest: phone New Task title fix defaults to Everyone as a bugfix
+ok 58 - phone New Task title fix defaults to Everyone as a bugfix
+  ---
+  duration_ms: 1.545747
+  type: 'test'
+  ...
+# Subtest: quick-add view context defaults to Everyone as a bugfix and respects OFF
+ok 59 - quick-add view context defaults to Everyone as a bugfix and respects OFF
+  ---
+  duration_ms: 1.620757
+  type: 'test'
+  ...
+# Subtest: new-task window view context defaults to Everyone as a bugfix and respects OFF
+ok 60 - new-task window view context defaults to Everyone as a bugfix and respects OFF
+  ---
+  duration_ms: 1.692039
+  type: 'test'
+  ...
+# Subtest: Ctrl+J view context defaults to Everyone as a bugfix and respects OFF
+ok 61 - Ctrl+J view context defaults to Everyone as a bugfix and respects OFF
+  ---
+  duration_ms: 1.870613
+  type: 'test'
+  ...
+# Subtest: Inbox E first press defaults to Everyone as a bugfix and respects OFF
+ok 62 - Inbox E first press defaults to Everyone as a bugfix and respects OFF
+  ---
+  duration_ms: 1.350785
+  type: 'test'
+  ...
+# Subtest: phone board cold-start bugfix defaults to Everyone and respects OFF
+ok 63 - phone board cold-start bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 1.930975
+  type: 'test'
+  ...
+# Subtest: demo login own-board bugfix defaults to Everyone and respects OFF
+ok 64 - demo login own-board bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 1.844744
+  type: 'test'
+  ...
+# Subtest: Ctrl+K column-delete bugfix defaults to Everyone and respects OFF
+ok 65 - Ctrl+K column-delete bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 1.86365
+  type: 'test'
+  ...
+# Subtest: double-click editing bugfix defaults to Everyone and respects OFF
+ok 66 - double-click editing bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 1.952264
+  type: 'test'
+  ...
+# Subtest: last-column delete message bugfix defaults to Everyone and respects OFF
+ok 67 - last-column delete message bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 2.010682
+  type: 'test'
+  ...
+# Subtest: last-column no-empty-board-flash bugfix defaults to Everyone and respects OFF
+ok 68 - last-column no-empty-board-flash bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 2.042582
+  type: 'test'
+  ...
+# Subtest: email signup demo-board bugfix defaults to Everyone and respects OFF
+ok 69 - email signup demo-board bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 1.9452
+  type: 'test'
+  ...
+# Subtest: admin access requires the signed, active owner
+ok 70 - admin access requires the signed, active owner
+  ---
+  duration_ms: 52.738108
+  type: 'test'
+  ...
+# Subtest: owner access requires both the approved id and login identity
+ok 71 - owner access requires both the approved id and login identity
+  ---
+  duration_ms: 2.546119
+  type: 'test'
+  ...
+# Subtest: QA access requires both the approved id and login identity
+ok 72 - QA access requires both the approved id and login identity
+  ---
+  duration_ms: 0.490162
+  type: 'test'
+  ...
+# Subtest: feature flag modes enforce owner, QA, everyone, and off access
+ok 73 - feature flag modes enforce owner, QA, everyone, and off access
+  ---
+  duration_ms: 0.217545
+  type: 'test'
+  ...
+# Subtest: declared flags default to Owner + QA, except Everyone-default bugfix flags
+ok 74 - declared flags default to Owner + QA, except Everyone-default bugfix flags
+  ---
+  duration_ms: 22.423159
+  type: 'test'
+  ...
+# Subtest: an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wrapper starts Off)
+ok 75 - an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wrapper starts Off)
+  ---
+  duration_ms: 1.958827
+  type: 'test'
+  ...
+# Subtest: keep-assignee bugfix defaults to Everyone for plain QA and respects OFF
+ok 76 - keep-assignee bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.717156
+  type: 'test'
+  ...
+# Subtest: back-first-open bugfix defaults to Everyone for plain QA and respects OFF
+ok 77 - back-first-open bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.87002
+  type: 'test'
+  ...
+# Subtest: board-back bugfix defaults to Everyone for plain QA and respects OFF
+ok 78 - board-back bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.741944
+  type: 'test'
+  ...
+# Subtest: no-loading-flash bugfix defaults to Everyone for plain QA and respects OFF
+ok 79 - no-loading-flash bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.728837
+  type: 'test'
+  ...
+# Subtest: phone-first-load-js bugfix defaults to Everyone for plain QA and respects OFF
+ok 80 - phone-first-load-js bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.74615
+  type: 'test'
+  ...
+# Subtest: phone-first-paint bugfix defaults to Everyone for plain QA and respects OFF
+ok 81 - phone-first-paint bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.722697
+  type: 'test'
+  ...
+# Subtest: subtask-link bugfix defaults to Everyone for plain QA and respects OFF
+ok 82 - subtask-link bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.684195
+  type: 'test'
+  ...
+# Subtest: inbox-next-open bugfix defaults to Everyone for plain QA and respects OFF
+ok 83 - inbox-next-open bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.705765
+  type: 'test'
+  ...
+# Subtest: size-label-click bugfix defaults to Everyone and respects OFF
+ok 84 - size-label-click bugfix defaults to Everyone and respects OFF
+  ---
+  duration_ms: 2.156194
+  type: 'test'
+  ...
+# Subtest: server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation
+ok 85 - server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation
+  ---
+  duration_ms: 8.718238
+  type: 'test'
+  ...
+# Subtest: stable layout has its own dated Owner + QA flag and respects OFF
+ok 86 - stable layout has its own dated Owner + QA flag and respects OFF
+  ---
+  duration_ms: 10.210397
+  type: 'test'
+  ...
+# Subtest: typed settings API client defaults to Owner + QA and respects OFF
+ok 87 - typed settings API client defaults to Owner + QA and respects OFF
+  ---
+  duration_ms: 2.113634
+  type: 'test'
+  ...
+# Subtest: typed task reads have their own dated Owner + QA flag and respect OFF independently of settings
+ok 88 - typed task reads have their own dated Owner + QA flag and respect OFF independently of settings
+  ---
+  duration_ms: 5.486754
+  type: 'test'
+  ...
+# Subtest: search Ask AI fullscreen has its own Owner + QA flag and respects OFF
+ok 89 - search Ask AI fullscreen has its own Owner + QA flag and respects OFF
+  ---
+  duration_ms: 2.326541
+  type: 'test'
+  ...
+# Subtest: per-user flag responses distinguish QA from normal members
+ok 90 - per-user flag responses distinguish QA from normal members
+  ---
+  duration_ms: 23.365884
+  type: 'test'
+  ...
+# Subtest: stored owner-only flags stay unavailable to QA until changed
+ok 91 - stored owner-only flags stay unavailable to QA until changed
+  ---
+  duration_ms: 1.748946
+  type: 'test'
+  ...
+# Subtest: database failures fail closed instead of becoming the default
+ok 92 - database failures fail closed instead of becoming the default
+  ---
+  duration_ms: 0.504388
+  type: 'test'
+  ...
+# Subtest: declared flags remain listed with ticket details and can be changed
+ok 93 - declared flags remain listed with ticket details and can be changed
+  ---
+  duration_ms: 6.006321
+  type: 'test'
+  ...
+# Subtest: switching to Everyone starts a fresh removal countdown
+ok 94 - switching to Everyone starts a fresh removal countdown
+  ---
+  duration_ms: 1.520681
+  type: 'test'
+  ...
+# Subtest: Keep pauses removal without moving the release date
+ok 95 - Keep pauses removal without moving the release date
+  ---
+  duration_ms: 1.376251
+  type: 'test'
+  ...
+# Subtest: legacy database flags stay visible, safe, and updateable
+ok 96 - legacy database flags stay visible, safe, and updateable
+  ---
+  duration_ms: 1.819848
+  type: 'test'
+  ...
+# Subtest: the retired factory flag remains off for old deployments but disappears from this app
+ok 97 - the retired factory flag remains off for old deployments but disappears from this app
+  ---
+  duration_ms: 2.555536
+  type: 'test'
+  ...
+# Subtest: the retired infra board-check flag is hidden and not editable
+ok 98 - the retired infra board-check flag is hidden and not editable
+  ---
+  duration_ms: 1.859642
+  type: 'test'
+  ...
+# Subtest: the retired core-actions smoke flag is hidden and not editable
+ok 99 - the retired core-actions smoke flag is hidden and not editable
+  ---
+  duration_ms: 1.936314
+  type: 'test'
+  ...
+# Subtest: the retired infra flag-pages key is hidden and cannot be re-enabled
+ok 100 - the retired infra flag-pages key is hidden and cannot be re-enabled
+  ---
+  duration_ms: 16.813557
+  type: 'test'
+  ...
+# Subtest: the retired htpr-6072-shallow-board-switch stays on in client payloads but is not editable
+ok 101 - the retired htpr-6072-shallow-board-switch stays on in client payloads but is not editable
+  ---
+  duration_ms: 9.584471
+  type: 'test'
+  ...
+# Subtest: the retired htpr-6254-heic-heif-attachments stays on in client payloads but is not editable
+ok 102 - the retired htpr-6254-heic-heif-attachments stays on in client payloads but is not editable
+  ---
+  duration_ms: 5.539091
+  type: 'test'
+  ...
+# Subtest: the retired htpr-6035-agent-chat-skills stays on in client payloads but is not editable
+ok 103 - the retired htpr-6035-agent-chat-skills stays on in client payloads but is not editable
+  ---
+  duration_ms: 17.628885
+  type: 'test'
+  ...
+# Subtest: the retired mobile Agent Chat viewport flag is hidden, immutable and enabled for old tabs
+ok 104 - the retired mobile Agent Chat viewport flag is hidden, immutable and enabled for old tabs
+  ---
+  duration_ms: 40.310444
+  type: 'test'
+  ...
+# Subtest: the retired lazy emoji list flag is hidden, immutable and enabled for old tabs
+ok 105 - the retired lazy emoji list flag is hidden, immutable and enabled for old tabs
+  ---
+  duration_ms: 23.209963
+  type: 'test'
+  ...
+# Subtest: the retired comment shortcuts flag is hidden, immutable and enabled for old tabs
+ok 106 - the retired comment shortcuts flag is hidden, immutable and enabled for old tabs
+  ---
+  duration_ms: 19.730336
+  type: 'test'
+  ...
+# Subtest: ticket titles are only fetched when requested, and cover undeclared stored keys too
+ok 107 - ticket titles are only fetched when requested, and cover undeclared stored keys too
+  ---
+  duration_ms: 3.32046
+  type: 'test'
+  ...
+# Subtest: unknown flags fail closed and cannot create rows
+ok 108 - unknown flags fail closed and cannot create rows
+  ---
+  duration_ms: 0.715733
+  type: 'test'
+  ...
+# Subtest: the 19 retired infra flags are hidden, immutable and enabled for old tabs
+ok 109 - the 19 retired infra flags are hidden, immutable and enabled for old tabs
+  ---
+  duration_ms: 8.078557
+  type: 'test'
+  ...
+# Subtest: the retired scoped refetch flag is hidden, immutable and enabled for old tabs
+ok 110 - the retired scoped refetch flag is hidden, immutable and enabled for old tabs
+  ---
+  duration_ms: 5.664183
+  type: 'test'
+  ...
+# Subtest: the removed inbox archive flag is hidden, disabled and cannot be restored
+ok 111 - the removed inbox archive flag is hidden, disabled and cannot be restored
+  ---
+  duration_ms: 25.858874
+  type: 'test'
+  ...
+# Subtest: the removed new-task draft flag is hidden, disabled and cannot be restored
+ok 112 - the removed new-task draft flag is hidden, disabled and cannot be restored
+  ---
+  duration_ms: 5.120391
+  type: 'test'
+  ...
+# Subtest: bugfix defaults enable everyone, respect stored Off and list the same runtime mode
+ok 113 - bugfix defaults enable everyone, respect stored Off and list the same runtime mode
+  ---
+  duration_ms: 911.530172
+  type: 'test'
+  ...
+# Subtest: explicit defaults beat bugfix classification in runtime and local seeds
+ok 114 - explicit defaults beat bugfix classification in runtime and local seeds
+  ---
+  duration_ms: 1440.217252
+  type: 'test'
+  ...
+# Subtest: historical Bug labels are display-only and preserve Owner + QA defaults and stored modes
+ok 115 - historical Bug labels are display-only and preserve Owner + QA defaults and stored modes
+  ---
+  duration_ms: 42.93989
+  type: 'test'
+  ...
+# Subtest: listed related keys cannot mutate registered flag metadata
+ok 116 - listed related keys cannot mutate registered flag metadata
+  ---
+  duration_ms: 3.992201
+  type: 'test'
+  ...
+# Subtest: every registered flag has a valid kind and only registered explicit related keys
+ok 117 - every registered flag has a valid kind and only registered explicit related keys
+  ---
+  duration_ms: 2.421238
+  type: 'test'
+  ...
+# Subtest: typed property writes default Owner + QA and respect OFF
+ok 118 - typed property writes default Owner + QA and respect OFF
+  ---
+  duration_ms: 2.1592
+  type: 'test'
+  ...
+# Subtest: typed section and notification writes are a feature defaulting Owner + QA
+ok 119 - typed section and notification writes are a feature defaulting Owner + QA
+  ---
+  duration_ms: 2.136396
+  type: 'test'
+  ...
+# Subtest: saved view deletion is an Everyone-default bugfix and respects OFF
+ok 120 - saved view deletion is an Everyone-default bugfix and respects OFF
+  ---
+  duration_ms: 2.832683
+  type: 'test'
+  ...
+# Subtest: bulk inbox archive undo is an Everyone-default bugfix and respects OFF
+ok 121 - bulk inbox archive undo is an Everyone-default bugfix and respects OFF
+  ---
+  duration_ms: 2.468826
+  type: 'test'
+  ...
+# Subtest: instant column deletion is an Everyone-default bugfix and respects OFF
+ok 122 - instant column deletion is an Everyone-default bugfix and respects OFF
+  ---
+  duration_ms: 2.758956
+  type: 'test'
+  ...
+# Subtest: board scroll restoration is an Everyone-default bugfix and respects OFF
+ok 123 - board scroll restoration is an Everyone-default bugfix and respects OFF
+  ---
+  duration_ms: 2.379299
+  type: 'test'
+  ...
+# Subtest: ticket page CLS fix is an Everyone-default bugfix and respects OFF
+ok 124 - ticket page CLS fix is an Everyone-default bugfix and respects OFF
+  ---
+  duration_ms: 2.193253
+  type: 'test'
+  ...
+# Subtest: narrow sidebar width is an Everyone-default bugfix and respects OFF
+ok 125 - narrow sidebar width is an Everyone-default bugfix and respects OFF
+  ---
+  duration_ms: 2.316422
+  type: 'test'
+  ...
+# Subtest: inbox-next-cached bugfix defaults to Everyone for plain QA and respects OFF
+ok 126 - inbox-next-cached bugfix defaults to Everyone for plain QA and respects OFF
+  ---
+  duration_ms: 1.619705
+  type: 'test'
+  ...
+# Subtest: Ctrl+J chat lease fix defaults to Everyone as a bugfix and respects OFF
+ok 127 - Ctrl+J chat lease fix defaults to Everyone as a bugfix and respects OFF
+  ---
+  duration_ms: 1.964887
+  type: 'test'
+  ...
+# Subtest: flags page URL filters are an Owner + QA feature and respect Off
+ok 128 - flags page URL filters are an Owner + QA feature and respect Off
+  ---
+  duration_ms: 2.197661
+  type: 'test'
+  ...
+# Subtest: saved-choice reset is an Owner + QA feature and respects OFF
+ok 129 - saved-choice reset is an Owner + QA feature and respects OFF
+  ---
+  duration_ms: 2.209833
+  type: 'test'
+  ...
+# Subtest: owner userId check requires both the owner id and registered email
+ok 130 - owner userId check requires both the owner id and registered email
+  ---
+  duration_ms: 0.343319
+  type: 'test'
+  ...
+# Subtest: actor mode changes are audited inside the locked transaction, including an unstored default
+ok 131 - actor mode changes are audited inside the locked transaction, including an unstored default
+  ---
+  duration_ms: 1.353229
+  type: 'test'
+  ...
+# Subtest: page audits use the user display name and retain the release countdown semantics
+ok 132 - page audits use the user display name and retain the release countdown semantics
+  ---
+  duration_ms: 0.689915
+  type: 'test'
+  ...
+# Subtest: audit failure prevents the mode write
+ok 133 - audit failure prevents the mode write
+  ---
+  duration_ms: 0.449486
+  type: 'test'
+  ...
+# Subtest: listing uses one latest-per-key audit query with agent, display name and email fallback
+ok 134 - listing uses one latest-per-key audit query with agent, display name and email fallback
+  ---
+  duration_ms: 3.103146
+  type: 'test'
+  ...
+# Subtest: listing skips audit queries unless lastChange is explicitly requested
+ok 135 - listing skips audit queries unless lastChange is explicitly requested
+  ---
+  duration_ms: 6.479261
+  type: 'test'
+  ...
+# [agent-first-task-email] Email work failed { userId: 985 }
+# [agent-first-task-email] Email work failed { userId: 985 }
+# [agent-first-task-email] Email work failed { userId: 985 }
+# [agent-first-task-email] Email work failed { userId: 985 }
+# Subtest: agent completion sends once to the board and agent owner
+ok 136 - agent completion sends once to the board and agent owner
+  ---
+  duration_ms: 426.319651
+  type: 'test'
+  ...
+# Subtest: second agent completion and a fresh process reuse the durable marker
+ok 137 - second agent completion and a fresh process reuse the durable marker
+  ---
+  duration_ms: 223.72127
+  type: 'test'
+  ...
+# Subtest: concurrent agent completions across boards claim once per user
+ok 138 - concurrent agent completions across boards claim once per user
+  ---
+  duration_ms: 108.851388
+  type: 'test'
+  ...
+# Subtest: human completion never starts email work even on an agent-created task
+ok 139 - human completion never starts email work even on an agent-created task
+  ---
+  duration_ms: 145.842906
+  type: 'test'
+  ...
+# Subtest: flag off sends nothing and does not consume the marker
+ok 140 - flag off sends nothing and does not consume the marker
+  ---
+  duration_ms: 200.45957
+  type: 'test'
+  ...
+# Subtest: non-owner board and mismatched agent owner email neither user
+ok 141 - non-owner board and mismatched agent owner email neither user
+  ---
+  duration_ms: 348.194346
+  type: 'test'
+  ...
+# Subtest: different owners have independent lifetime markers
+ok 142 - different owners have independent lifetime markers
+  ---
+  duration_ms: 201.615812
+  type: 'test'
+  ...
+# Subtest: email failure does not throw and retains marker against ambiguous delivery
+ok 143 - email failure does not throw and retains marker against ambiguous delivery
+  ---
+  duration_ms: 146.711342
+  type: 'test'
+  ...
+# Subtest: flag, marker and scheduling failures never reject the task-side work
+ok 144 - flag, marker and scheduling failures never reject the task-side work
+  ---
+  duration_ms: 343.67274
+  type: 'test'
+  ...
+# Subtest: transition requires entering a done section, respects explicit isDone and legacy names
+ok 145 - transition requires entering a done section, respects explicit isDone and legacy names
+  ---
+  duration_ms: 421.162371
+  type: 'test'
+  ...
+# Subtest: async scheduling returns while the provider is still pending
+ok 146 - async scheduling returns while the provider is still pending
+  ---
+  duration_ms: 138.691454
+  type: 'test'
+  ...
+# Subtest: integration uses committed fenced task state and excludes trusted background writes
+ok 147 - integration uses committed fenced task state and excludes trusted background writes
+  ---
+  duration_ms: 2.045117
+  type: 'test'
+  ...
+# Subtest: email models stay unchanged and flag defaults to Owner + QA
+ok 148 - email models stay unchanged and flag defaults to Owner + QA
+  ---
+  duration_ms: 94.022776
+  type: 'test'
+  ...
+# Subtest: changed-file typecheck has no diagnostics in feature code
+ok 149 - changed-file typecheck has no diagnostics in feature code # SKIP
+  ---
+  duration_ms: 0.166331
+  type: 'test'
+  ...
+# Subtest: invite param opens existing dialog once only with flag on and keeps board URL state
+ok 150 - invite param opens existing dialog once only with flag on and keeps board URL state
+  ---
+  duration_ms: 110.254479
+  type: 'test'
+  ...
+# Subtest: template escapes task title and names, preserves copy, and uses absolute CTA URLs
+ok 151 - template escapes task title and names, preserves copy, and uses absolute CTA URLs
+  ---
+  duration_ms: 47.680092
+  type: 'test'
+  ...
+# Subtest: template button hierarchy has one primary and a borderless muted secondary link
+ok 152 - template button hierarchy has one primary and a borderless muted secondary link
+  ---
+  duration_ms: 37.882795
+  type: 'test'
+  ...
+# Subtest: commit scope preserves the requested worktree, trailers and forbidden-file constraints
+ok 153 - commit scope preserves the requested worktree, trailers and forbidden-file constraints # SKIP
+  ---
+  duration_ms: 0.224669
+  type: 'test'
+  ...
+# Subtest: screenshot renders the actual email HTML locally without sending
+ok 154 - screenshot renders the actual email HTML locally without sending # SKIP
+  ---
+  duration_ms: 0.251348
+  type: 'test'
+  ...
+# Subtest: every declared flag first shipped from 2026-10-11 has a release-risk entry
+ok 155 - every declared flag first shipped from 2026-10-11 has a release-risk entry
+  ---
+  duration_ms: 44.781949
+  type: 'test'
+  ...
+# Subtest: required-entry check rejects a new flag without metadata, not an older flag
+ok 156 - required-entry check rejects a new flag without metadata, not an older flag
+  ---
+  duration_ms: 0.675548
+  type: 'test'
+  ...
+# Subtest: release-risk metadata uses declared keys, the three labels and plain one-line reasons
+ok 157 - release-risk metadata uses declared keys, the three labels and plain one-line reasons
+  ---
+  duration_ms: 4.669782
+  type: 'test'
+  ...
+# Subtest: fake Lua semantics are pinned to the exact production script source
+ok 158 - fake Lua semantics are pinned to the exact production script source
+  ---
+  duration_ms: 4.692474
+  type: 'test'
+  ...
+# Subtest: in-memory Redis preserves NX, EX, PX, deletion, counters and expiry at exact clock boundaries
+ok 159 - in-memory Redis preserves NX, EX, PX, deletion, counters and expiry at exact clock boundaries
+  ---
+  duration_ms: 3.487061
+  type: 'test'
+  ...
+# Subtest: fake Lua cache fill honors the writer fence and generation even after fence expiry
+ok 160 - fake Lua cache fill honors the writer fence and generation even after fence expiry
+  ---
+  duration_ms: 2.401811
+  type: 'test'
+  ...
+# Subtest: registry and uncached flag reads and writes do not load optional cache plumbing
+ok 161 - registry and uncached flag reads and writes do not load optional cache plumbing
+  ---
+  duration_ms: 2987.560381
+  type: 'test'
+  ...
+# Subtest: flag cache miss, hit, TTL and per-tick single-flight preserve raw modes and authorization
+ok 162 - flag cache miss, hit, TTL and per-tick single-flight preserve raw modes and authorization
+  ---
+  duration_ms: 1244.149317
+  type: 'test'
+  ...
+# Subtest: flag off uses original single-key reads and Redis errors fall back to DB
+ok 163 - flag off uses original single-key reads and Redis errors fall back to DB
+  ---
+  duration_ms: 851.556114
+  type: 'test'
+  ...
+# Subtest: admin mode and Keep writes invalidate before returning, including the optimization flag itself
+ok 164 - admin mode and Keep writes invalidate before returning, including the optimization flag itself
+  ---
+  duration_ms: 965.90244
+  type: 'test'
+  ...
+# Subtest: flag cache generation prevents an in-flight stale refill after an admin write
+ok 165 - flag cache generation prevents an in-flight stale refill after an admin write
+  ---
+  duration_ms: 594.731176
+  type: 'test'
+  ...
+# Subtest: Redis down during admin mode and Keep writes returns success and logs invalidation errors
+ok 166 - Redis down during admin mode and Keep writes returns success and logs invalidation errors
+  ---
+  duration_ms: 1480.77166
+  type: 'test'
+  ...
+# Subtest: invalidation timeout bounds Redis acquisition and commands after the DB commit
+ok 167 - invalidation timeout bounds Redis acquisition and commands after the DB commit
+  ---
+  duration_ms: 3161.837352
+  type: 'test'
+  ...
+# Subtest: post-commit writer fence expires without cleanup and caching resumes after a crash
+ok 168 - post-commit writer fence expires without cleanup and caching resumes after a crash
+  ---
+  duration_ms: 900.324547
+  type: 'test'
+  ...
+# Subtest: Redis read command errors and corrupt cached data fall back to DB
+ok 169 - Redis read command errors and corrupt cached data fall back to DB
+  ---
+  duration_ms: 851.734576
+  type: 'test'
+  ...
+# Subtest: failed invalidation leaves only a TTL-bounded stale cache
+ok 170 - failed invalidation leaves only a TTL-bounded stale cache
+  ---
+  duration_ms: 704.311993
+  type: 'test'
+  ...
+# Subtest: flag Redis read timeout and cache-fill error fall back without delaying through reconnects
+ok 171 - flag Redis read timeout and cache-fill error fall back without delaying through reconnects
+  ---
+  duration_ms: 858.192929
+  type: 'test'
+  ...
+# Subtest: browser smoke rejects nonlocal Redis before any seed or invalidation writes
+ok 172 - browser smoke rejects nonlocal Redis before any seed or invalidation writes
+  ---
+  duration_ms: 12.458941
+  type: 'test'
+  ...
+# Subtest: browser smoke reseeding invalidates cached raw modes before publishing all-flags fixtures
+ok 173 - browser smoke reseeding invalidates cached raw modes before publishing all-flags fixtures
+  ---
+  duration_ms: 1078.217226
+  type: 'test'
+  ...
+# Subtest: flag user snapshots are byte-equivalent and transaction clients bypass the cache
+ok 174 - flag user snapshots are byte-equivalent and transaction clients bypass the cache
+  ---
+  duration_ms: 1020.560514
+  type: 'test'
+  ...
+# Subtest: DB commits before invalidation and concurrent writers invalidate their own committed snapshots
+ok 175 - DB commits before invalidation and concurrent writers invalidate their own committed snapshots
+  ---
+  duration_ms: 1036.026302
+  type: 'test'
+  ...
+# Subtest: DB write errors are still thrown without contacting Redis
+ok 176 - DB write errors are still thrown without contacting Redis
+  ---
+  duration_ms: 885.525244
+  type: 'test'
+  ...
+# Subtest: sweep cycle gate skips empty heavy scans for 10 minutes and runs at the exact UTC day boundary
+ok 177 - sweep cycle gate skips empty heavy scans for 10 minutes and runs at the exact UTC day boundary
+  ---
+  duration_ms: 171.531455
+  type: 'test'
+  ...
+# Subtest: sweep Redis error, scan failure, backlog and flag off retain the original scan cadence
+ok 178 - sweep Redis error, scan failure, backlog and flag off retain the original scan cadence
+  ---
+  duration_ms: 250.978297
+  type: 'test'
+  ...
+# Subtest: sweep minute deadlines and timestamp-granularity sources are never gated; flag off has identical work calls
+ok 179 - sweep minute deadlines and timestamp-granularity sources are never gated; flag off has identical work calls
+  ---
+  duration_ms: 352.147775
+  type: 'test'
+  ...
+# Subtest: granularity and retention exclusions are grounded in exact predicates and visible history
+ok 180 - granularity and retention exclusions are grounded in exact predicates and visible history
+  ---
+  duration_ms: 4.359435
+  type: 'test'
+  ...
+# Subtest: calendar zero accounts already performs one cheap query and no graph, flags or remote work
+ok 181 - calendar zero accounts already performs one cheap query and no graph, flags or remote work
+  ---
+  duration_ms: 102.252092
+  type: 'test'
+  ...
+# Subtest: slack where-clause rewrite is excluded: float predicates and the original top-50 window are not interchangeable
+ok 182 - slack where-clause rewrite is excluded: float predicates and the original top-50 window are not interchangeable
+  ---
+  duration_ms: 10.767293
+  type: 'test'
+  ...
+# Subtest: heartbeat quiet probe skips the graph but preserves recovery, heartbeat update and the cursor fence
+ok 183 - heartbeat quiet probe skips the graph but preserves recovery, heartbeat update and the cursor fence
+  ---
+  duration_ms: 100.413905
+  type: 'test'
+  ...
+# Subtest: heartbeat visible probe, probe error and flag off load the original graph; missing agents do not advance
+ok 184 - heartbeat visible probe, probe error and flag off load the original graph; missing agents do not advance
+  ---
+  duration_ms: 566.266451
+  type: 'test'
+  ...
+# Subtest: agent list excludes all token material
+ok 185 - agent list excludes all token material
+  ---
+  duration_ms: 30.712076
+  type: 'test'
+  ...
+# Subtest: collapsed agent rows do not mount token-bearing connection panels
+ok 186 - collapsed agent rows do not mount token-bearing connection panels
+  ---
+  duration_ms: 3.299782
+  type: 'test'
+  ...
+# Subtest: agent list returns only agents owned by the authenticated user
+ok 187 - agent list returns only agents owned by the authenticated user
+  ---
+  duration_ms: 0.837458
+  type: 'test'
+  ...
+# Subtest: team-scoped agent list applies the exact-team predicate
+ok 188 - team-scoped agent list applies the exact-team predicate
+  ---
+  duration_ms: 0.643719
+  type: 'test'
+  ...
+# Subtest: agent list hides archived owned agents
+ok 189 - agent list hides archived owned agents
+  ---
+  duration_ms: 0.465997
+  type: 'test'
+  ...
+# Subtest: delete refuses an unowned agent without changing related rows
+ok 190 - delete refuses an unowned agent without changing related rows
+  ---
+  duration_ms: 1.545487
+  type: 'test'
+  ...
+# Subtest: delete stays successful when post-commit runtime cleanup fails
+ok 191 - delete stays successful when post-commit runtime cleanup fails
+  ---
+  duration_ms: 1.359621
+  type: 'test'
+  ...
+# Subtest: delete clears task assignments and board memberships before the agent
+ok 192 - delete clears task assignments and board memberships before the agent
+  ---
+  duration_ms: 0.877283
+  type: 'test'
+  ...
+# Subtest: archive and delete schemas are strict and MCP tools call owned-agent routes
+ok 193 - archive and delete schemas are strict and MCP tools call owned-agent routes
+  ---
+  duration_ms: 5.061091
+  type: 'test'
+  ...
+# Subtest: createAgent uses the personal-sign-in route only when asked (HTPR-7118)
+ok 194 - createAgent uses the personal-sign-in route only when asked (HTPR-7118)
+  ---
+  duration_ms: 3.857501
+  type: 'test'
+  ...
+# Subtest: /mcp/agents/create is routed before the agent id route (HTPR-7118)
+ok 195 - /mcp/agents/create is routed before the agent id route (HTPR-7118)
+  ---
+  duration_ms: 0.704651
+  type: 'test'
+  ...
+# Subtest: creating an agent refuses a board the person cannot access (HTPR-7118)
+ok 196 - creating an agent refuses a board the person cannot access (HTPR-7118)
+  ---
+  duration_ms: 185.585753
+  type: 'test'
+  ...
+# Subtest: list_agents has a strict empty schema and is registered in MCP_TOOLS
+ok 197 - list_agents has a strict empty schema and is registered in MCP_TOOLS
+  ---
+  duration_ms: 2.478633
+  type: 'test'
+  ...
+# Subtest: token rotation reactivates a revoked agent owned by the caller
+ok 198 - token rotation reactivates a revoked agent owned by the caller
+  ---
+  duration_ms: 1.365682
+  type: 'test'
+  ...
+# Subtest: creating a duplicate live agent name returns 409 with recovery details
+ok 199 - creating a duplicate live agent name returns 409 with recovery details
+  ---
+  duration_ms: 0.635121
+  type: 'test'
+  ...
+# Subtest: creating an agent can reuse a revoked display name
+ok 200 - creating an agent can reuse a revoked display name
+  ---
+  duration_ms: 0.426163
+  type: 'test'
+  ...
+# Subtest: a visibility-only patch updates visibility and describes the agent
+ok 201 - a visibility-only patch updates visibility and describes the agent
+  ---
+  duration_ms: 591.256177
+  type: 'test'
+  ...
+# Subtest: a team visibility warning passes through with the successful update
+ok 202 - a team visibility warning passes through with the successful update
+  ---
+  duration_ms: 253.716865
+  type: 'test'
+  ...
+# Subtest: a visibility misspelling is a 400 field error
+ok 203 - a visibility misspelling is a 400 field error
+  ---
+  duration_ms: 126.601098
+  type: 'test'
+  ...
+# Subtest: visibility cannot hide extra fields, recognized or not
+ok 204 - visibility cannot hide extra fields, recognized or not
+  ---
+  duration_ms: 125.444476
+  type: 'test'
+  ...
+# Subtest: an agent credential may not manage agents
+ok 205 - an agent credential may not manage agents
+  ---
+  duration_ms: 92.160339
+  type: 'test'
+  ...
+# Subtest: a visibility change for an agent the user does not own is 404
+ok 206 - a visibility change for an agent the user does not own is 404
+  ---
+  duration_ms: 108.119525
+  type: 'test'
+  ...
+# Subtest: plain text gets wrapped in an escaped <p>
+ok 207 - plain text gets wrapped in an escaped <p>
+  ---
+  duration_ms: 3.54021
+  type: 'test'
+  ...
+# Subtest: text that already has HTML tags is left alone
+ok 208 - text that already has HTML tags is left alone
+  ---
+  duration_ms: 0.880028
+  type: 'test'
+  ...
+# Subtest: stray angle brackets in prose are not mistaken for HTML
+ok 209 - stray angle brackets in prose are not mistaken for HTML
+  ---
+  duration_ms: 0.409973
+  type: 'test'
+  ...
+# Subtest: schema rejects an unknown command
+ok 210 - schema rejects an unknown command
+  ---
+  duration_ms: 6.455617
+  type: 'test'
+  ...
+# Subtest: schema accepts Translate:<Language>
+ok 211 - schema accepts Translate:<Language>
+  ---
+  duration_ms: 0.646214
+  type: 'test'
+  ...
+# Subtest: schema rejects a Translate command with junk after the language
+ok 212 - schema rejects a Translate command with junk after the language
+  ---
+  duration_ms: 0.491385
+  type: 'test'
+  ...
+# Subtest: schema rejects an unknown key
+ok 213 - schema rejects an unknown key
+  ---
+  duration_ms: 0.860431
+  type: 'test'
+  ...
+# Subtest: schema defaults command to ImproveReadability
+ok 214 - schema defaults command to ImproveReadability
+  ---
+  duration_ms: 0.647014
+  type: 'test'
+  ...
+# Subtest: schema requires project_id
+ok 215 - schema requires project_id
+  ---
+  duration_ms: 1.843351
+  type: 'test'
+  ...
+# [mcp/ai/task-writer] error Error: A dedicated team AI Gateway key or direct BYOK key is required for openai text inference.
+#     at TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-ai-task-writer-key.test.cjs:200:22)
+#     at Test.runInAsyncScope (node:async_hooks:227:14)
+#     at Test.run (node:internal/test_runner/test:1402:25)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# [ai/task-writer] fatal error Error: A dedicated team AI Gateway key or direct BYOK key is required for openai text inference.
+#     at TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-ai-task-writer-key.test.cjs:200:22)
+#     at Test.runInAsyncScope (node:async_hooks:227:14)
+#     at Test.run (node:internal/test_runner/test:1402:25)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# Subtest: 09:58 regression: paid team without a provisioned key fails identically before inference on MCP and web
+ok 216 - 09:58 regression: paid team without a provisioned key fails identically before inference on MCP and web
+  ---
+  duration_ms: 82.642151
+  type: 'test'
+  ...
+# Subtest: agent-bound MCP requests return the same missing-key access error without filing production errors
+ok 217 - agent-bound MCP requests return the same missing-key access error without filing production errors
+  ---
+  duration_ms: 11.210618
+  type: 'test'
+  ...
+# Subtest: authorized Free and BYOK teams resolve the shared included allowance instead of needing a dedicated key
+ok 218 - authorized Free and BYOK teams resolve the shared included allowance instead of needing a dedicated key
+  ---
+  duration_ms: 1.164818
+  type: 'test'
+  ...
+# Subtest: paid teams still resolve their managed gateway or direct BYOK key, never the shared pool
+ok 219 - paid teams still resolve their managed gateway or direct BYOK key, never the shared pool
+  ---
+  duration_ms: 49.925933
+  type: 'test'
+  ...
+# Subtest: both writers classify typed plan and key access errors consistently, including the gateway resolver
+ok 220 - both writers classify typed plan and key access errors consistently, including the gateway resolver
+  ---
+  duration_ms: 6.104103
+  type: 'test'
+  ...
+# Subtest: unexpected errors, even with the same key-error message, remain 500 and are reported once
+ok 221 - unexpected errors, even with the same key-error message, remain 500 and are reported once
+  ---
+  duration_ms: 7.838881
+  type: 'test'
+  ...
+# assign still requires Normal
+# Subtest: assignee lookup status filter: unassign allows any status, assign stays Normal (HTPR-6428)
+ok 222 - assignee lookup status filter: unassign allows any status, assign stays Normal (HTPR-6428)
+  ---
+  duration_ms: 134.619214
+  type: 'test'
+  ...
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'firebase-owner',
+#   iss: 'hypertask',
+#   aud: 'http://localhost:3001',
+#   exp: '2027-01-10T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] JWT verified as OAuth access token
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'firebase-owner',
+#   iss: 'hypertask',
+#   aud: 'http://localhost:3001',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] JWT verified as OAuth access token
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-10-12T04:49:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] Current format failed: jwt expired
+# [MCP Auth] Legacy format failed: jwt expired
+# [MCP Auth] OAuth format failed: jwt expired
+# [MCP Auth] Token has an unsupported audience: mcp-api
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] Current format failed: invalid signature
+# [MCP Auth] Legacy format failed: invalid signature
+# [MCP Auth] OAuth format failed: invalid signature
+# [MCP Auth] Token has an unsupported audience: mcp-api
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: null,
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: null,
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: null,
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: '2026-11-11T04:50:56.000Z',
+#   iat: '2026-10-12T04:50:56.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# Subtest: a token revoked by its own jti is named as revoked, not as a bad request
+ok 223 - a token revoked by its own jti is named as revoked, not as a bad request
+  ---
+  duration_ms: 24.759378
+  type: 'test'
+  ...
+# Subtest: a token revoked through the administrative namespaced jti is still named as revoked
+ok 224 - a token revoked through the administrative namespaced jti is still named as revoked
+  ---
+  duration_ms: 5.271713
+  type: 'test'
+  ...
+# Subtest: a removed OAuth client is named as revoked
+ok 225 - a removed OAuth client is named as revoked
+  ---
+  duration_ms: 15.059653
+  type: 'test'
+  ...
+# Subtest: the legacy OAuth cutoff is named as revoked without a client lookup
+ok 226 - the legacy OAuth cutoff is named as revoked without a client lookup
+  ---
+  duration_ms: 5.289205
+  type: 'test'
+  ...
+# Subtest: legacy revocation identifies one exact bearer without affecting another user token
+ok 227 - legacy revocation identifies one exact bearer without affecting another user token
+  ---
+  duration_ms: 6.662283
+  type: 'test'
+  ...
+# Subtest: a token minted before the owner revoked every token is named as revoked
+ok 228 - a token minted before the owner revoked every token is named as revoked
+  ---
+  duration_ms: 2.743326
+  type: 'test'
+  ...
+# Subtest: a still-valid token minted after that revocation is not called revoked
+ok 229 - a still-valid token minted after that revocation is not called revoked
+  ---
+  duration_ms: 2.346849
+  type: 'test'
+  ...
+# Subtest: an expired token is named as expired
+ok 230 - an expired token is named as expired
+  ---
+  duration_ms: 2.826131
+  type: 'test'
+  ...
+# Subtest: a missing Authorization header is named as missing, not invalid
+ok 231 - a missing Authorization header is named as missing, not invalid
+  ---
+  duration_ms: 32.267884
+  type: 'test'
+  ...
+# Subtest: a forged token cannot probe whether a jti has been revoked
+ok 232 - a forged token cannot probe whether a jti has been revoked
+  ---
+  duration_ms: 5.177618
+  type: 'test'
+  ...
+# Subtest: an opaque API key is rejected without disclosing whether it exists
+ok 233 - an opaque API key is rejected without disclosing whether it exists
+  ---
+  duration_ms: 1.567047
+  type: 'test'
+  ...
+# Subtest: the 401 body carries the reason and message the CLI prints, and keeps the old error string
+ok 234 - the 401 body carries the reason and message the CLI prints, and keeps the old error string
+  ---
+  duration_ms: 12.723474
+  type: 'test'
+  ...
+# Subtest: the routes the ticket names answer through the shared helper
+ok 235 - the routes the ticket names answer through the shared helper
+  ---
+  duration_ms: 2.033244
+  type: 'test'
+  ...
+# Subtest: a revoked agent is named as revoked, not as a bad request
+ok 236 - a revoked agent is named as revoked, not as a bad request
+  ---
+  duration_ms: 4.445726
+  type: 'test'
+  ...
+# Subtest: an agent token replaced by a newer one is named as superseded
+ok 237 - an agent token replaced by a newer one is named as superseded
+  ---
+  duration_ms: 3.300474
+  type: 'test'
+  ...
+# Subtest: an agent belonging to another account is indistinguishable from one that does not exist
+ok 238 - an agent belonging to another account is indistinguishable from one that does not exist
+  ---
+  duration_ms: 2.325729
+  type: 'test'
+  ...
+# Subtest: a plain user token never triggers an agent lookup
+ok 239 - a plain user token never triggers an agent lookup
+  ---
+  duration_ms: 2.156565
+  type: 'test'
+  ...
+# Subtest: a management key that verifies but lacks data permission is named as under-scoped
+ok 240 - a management key that verifies but lacks data permission is named as under-scoped
+  ---
+  duration_ms: 0.94505
+  type: 'test'
+  ...
+# Subtest: a management key that does not verify stays a generic rejection
+ok 241 - a management key that does not verify stays a generic rejection
+  ---
+  duration_ms: 0.384585
+  type: 'test'
+  ...
+# Subtest: only exact versioned Hypertask CLI user agents are identified
+ok 242 - only exact versioned Hypertask CLI user agents are identified
+  ---
+  duration_ms: 2.974106
+  type: 'test'
+  ...
+# Subtest: CLI usage logs a stable fingerprint and authenticated principal without the bearer token
+ok 243 - CLI usage logs a stable fingerprint and authenticated principal without the bearer token
+  ---
+  duration_ms: 85.977241
+  type: 'test'
+  ...
+# Subtest: unknown clients do not create CLI usage logs
+ok 244 - unknown clients do not create CLI usage logs
+  ---
+  duration_ms: 0.525268
+  type: 'test'
+  ...
+# Subtest: catalog has 20 unique Hypertask tasks with MCP, CLI, and outcome assertions
+ok 245 - catalog has 20 unique Hypertask tasks with MCP, CLI, and outcome assertions
+  ---
+  duration_ms: 4.617204
+  type: 'test'
+  ...
+# Subtest: copying the expected plan without outcomes fails grading
+ok 246 - copying the expected plan without outcomes fails grading
+  ---
+  duration_ms: 2.263112
+  type: 'test'
+  ...
+# Subtest: wrong MCP tool, extra call, or wrong stdout fails
+ok 247 - wrong MCP tool, extra call, or wrong stdout fails
+  ---
+  duration_ms: 1.127358
+  type: 'test'
+  ...
+# {"timestamp":"2026-10-12T04:51:08.969Z","level":"info","message":"Sections listed","correlationId":"1791780668965-da57f77a","projectId":99}
+# {"timestamp":"2026-10-12T04:51:09.239Z","level":"info","message":"User assignment updated successfully","correlationId":"1791780669235-01be6801","assignStatus":"Assigned","assigneeCount":1}
+# Subtest: fixture mode measures surfaces and does not fabricate client rows
+ok 248 - fixture mode measures surfaces and does not fabricate client rows
+  ---
+  duration_ms: 14132.114199
+  type: 'test'
+  ...
+# Subtest: weekly surface publication preserves live client measurements
+ok 249 - weekly surface publication preserves live client measurements
+  ---
+  duration_ms: 11.300035
+  type: 'test'
+  ...
+# Subtest: weekly surface publication replaces a report without client rows
+ok 250 - weekly surface publication replaces a report without client rows
+  ---
+  duration_ms: 0.35418
+  type: 'test'
+  ...
+# Subtest: live mode omits unavailable clients instead of replaying a pass
+ok 251 - live mode omits unavailable clients instead of replaying a pass
+  ---
+  duration_ms: 24.204314
+  type: 'test'
+  ...
+# Subtest: an attempted live client failure is a failed live row
+ok 252 - an attempted live client failure is a failed live row
+  ---
+  duration_ms: 37.721676
+  type: 'test'
+  ...
+# Subtest: native client JSONL keeps each event separate
+ok 253 - native client JSONL keeps each event separate
+  ---
+  duration_ms: 2.775166
+  type: 'test'
+  ...
+# Subtest: live metrics count observed calls and exclude verification time
+ok 254 - live metrics count observed calls and exclude verification time
+  ---
+  duration_ms: 709.442631
+  type: 'test'
+  ...
+# Subtest: live writes fail closed without explicit isolation identifiers
+ok 255 - live writes fail closed without explicit isolation identifiers
+  ---
+  duration_ms: 864.695723
+  type: 'test'
+  ...
+# Subtest: unavailable provider usage stays null
+ok 256 - unavailable provider usage stays null
+  ---
+  duration_ms: 0.377202
+  type: 'test'
+  ...
+# Subtest: live writes rewrite catalog targets onto EVAL_PROJECT_ID
+ok 257 - live writes rewrite catalog targets onto EVAL_PROJECT_ID
+  ---
+  duration_ms: 4.309542
+  type: 'test'
+  ...
+# Subtest: a broken fixture CLI fails the surface check
+ok 258 - a broken fixture CLI fails the surface check
+  ---
+  duration_ms: 198.568177
+  type: 'test'
+  ...
+# Subtest: CLIENTS stay the three named product clients
+ok 259 - CLIENTS stay the three named product clients
+  ---
+  duration_ms: 0.658937
+  type: 'test'
+  ...
+# Subtest: live state grading requires explicit isolation and expands --self
+ok 260 - live state grading requires explicit isolation and expands --self
+  ---
+  duration_ms: 0.570972
+  type: 'test'
+  ...
+# Subtest: comments query excludes activity by default
+ok 261 - comments query excludes activity by default
+  ---
+  duration_ms: 7.52156
+  type: 'test'
+  ...
+# Subtest: include_activity=true drops the DbNull filter and passes through the MCP client
+ok 262 - include_activity=true drops the DbNull filter and passes through the MCP client
+  ---
+  duration_ms: 1.009679
+  type: 'test'
+  ...
+# Subtest: comment agent identities are filtered for the task board
+ok 263 - comment agent identities are filtered for the task board
+  ---
+  duration_ms: 0.51016
+  type: 'test'
+  ...
+# Subtest: activity serialization preserves TaskLabel status and label payload
+ok 264 - activity serialization preserves TaskLabel status and label payload
+  ---
+  duration_ms: 0.435421
+  type: 'test'
+  ...
+# Subtest: comment reaction reads select active reactions and reactor identity
+ok 265 - comment reaction reads select active reactions and reactor identity
+  ---
+  duration_ms: 3.297519
+  type: 'test'
+  ...
+# Subtest: comment reaction mapping keeps the stable user ID when no display name exists
+ok 266 - comment reaction mapping keeps the stable user ID when no display name exists
+  ---
+  duration_ms: 0.532112
+  type: 'test'
+  ...
+# Subtest: comment creation links to the current task index after a board move
+ok 267 - comment creation links to the current task index after a board move
+  ---
+  duration_ms: 543.993542
+  type: 'test'
+  ...
+# Subtest: MCP comments response includes mapped active reactions
+ok 268 - MCP comments response includes mapped active reactions
+  ---
+  duration_ms: 202.419639
+  type: 'test'
+  ...
+# Subtest: MCP comments keeps private agent identity for its owner
+ok 269 - MCP comments keeps private agent identity for its owner
+  ---
+  duration_ms: 173.790648
+  type: 'test'
+  ...
+# Subtest: MCP comments only exposes a team agent when the caller shares a board
+ok 270 - MCP comments only exposes a team agent when the caller shares a board
+  ---
+  duration_ms: 166.660455
+  type: 'test'
+  ...
+# Subtest: MCP comments GET rejects unauthenticated callers
+ok 271 - MCP comments GET rejects unauthenticated callers
+  ---
+  duration_ms: 139.679331
+  type: 'test'
+  ...
+# Subtest: MCP comments GET applies comment pagination to the scoped result
+ok 272 - MCP comments GET applies comment pagination to the scoped result
+  ---
+  duration_ms: 86.045098
+  type: 'test'
+  ...
+# Subtest: MCP comments GET returns not found when task access is denied
+ok 273 - MCP comments GET returns not found when task access is denied
+  ---
+  duration_ms: 77.894545
+  type: 'test'
+  ...
+# Subtest: comments GET keeps a same-team agent visible but hides a different team's agent
+ok 274 - comments GET keeps a same-team agent visible but hides a different team's agent
+  ---
+  duration_ms: 742.447388
+  type: 'test'
+  ...
+# {"timestamp":"2026-10-12T04:51:14.160Z","level":"error","message":"Failed to update task","correlationId":"1791780674156-6e9577d0","error":"[\\n  {\\n    \\"code\\": \\"custom\\",\\n    \\"path\\": [\\n      \\"task_id\\",\\n      \\"ticket_number\\",\\n      \\"unique_index\\"\\n    ],\\n    \\"message\\": \\"Either task_id, ticket_number, or (project_id + unique_index) must be provided\\"\\n  },\\n  {\\n    \\"code\\": \\"custom\\",\\n    \\"path\\": [\\n      \\"project_id\\"\\n    ],\\n    \\"message\\": \\"project_id is required when using unique_index\\"\\n  }\\n]"}
+# Subtest: catalog flag off preserves the entire current deferred list exactly
+ok 275 - catalog flag off preserves the entire current deferred list exactly
+  ---
+  duration_ms: 20.10851
+  type: 'test'
+  ...
+# Subtest: catalog flag on advertises 15 to 25 consolidated tools, with no duplicate names
+ok 276 - catalog flag on advertises 15 to 25 consolidated tools, with no duplicate names
+  ---
+  duration_ms: 129.739319
+  type: 'test'
+  ...
+# Subtest: server flag defaults to Owner + QA and evaluates the authenticated user
+ok 277 - server flag defaults to Owner + QA and evaluates the authenticated user
+  ---
+  duration_ms: 255.363671
+  type: 'test'
+  ...
+# Subtest: scope filtering advertises only callable actions for management, agent and team credentials
+ok 278 - scope filtering advertises only callable actions for management, agent and team credentials
+  ---
+  duration_ms: 97.593994
+  type: 'test'
+  ...
+# Subtest: legacy dispatch keeps every existing name callable and forwards credentials and invocation identity
+ok 279 - legacy dispatch keeps every existing name callable and forwards credentials and invocation identity
+  ---
+  duration_ms: 246.377553
+  type: 'test'
+  ...
+# Subtest: action dispatch covers every consolidated operation with action-specific parameters
+ok 280 - action dispatch covers every consolidated operation with action-specific parameters
+  ---
+  duration_ms: 183.465477
+  type: 'test'
+  ...
+# Subtest: description schemas document every parameter and keep four reviewable prose parts
+ok 281 - description schemas document every parameter and keep four reviewable prose parts
+  ---
+  duration_ms: 52.41704
+  type: 'test'
+  ...
+# Subtest: nested examples satisfy the advertised schema and dispatch without real mutations
+ok 282 - nested examples satisfy the advertised schema and dispatch without real mutations
+  ---
+  duration_ms: 361.197159
+  type: 'test'
+  ...
+# Subtest: concise response has stable ticket fields; detailed response retains full detail
+ok 283 - concise response has stable ticket fields; detailed response retains full detail
+  ---
+  duration_ms: 151.687033
+  type: 'test'
+  ...
+# Subtest: detailed reads preserve complete JSON documents independently of collection limits and offsets
+ok 284 - detailed reads preserve complete JSON documents independently of collection limits and offsets
+  ---
+  duration_ms: 66.530711
+  type: 'test'
+  ...
+# Subtest: detailed page dispatch bounds result collections without truncating their document nodes
+ok 285 - detailed page dispatch bounds result collections without truncating their document nodes
+  ---
+  duration_ms: 156.664337
+  type: 'test'
+  ...
+# Subtest: read limits preserve non-collection arrays such as decision options and view filter payloads
+ok 286 - read limits preserve non-collection arrays such as decision options and view filter payloads
+  ---
+  duration_ms: 2.740562
+  type: 'test'
+  ...
+# Subtest: concise response retains semantic evidence, source identifiers and ticket tree relationships
+ok 287 - concise response retains semantic evidence, source identifiers and ticket tree relationships
+  ---
+  duration_ms: 3.19073
+  type: 'test'
+  ...
+# Subtest: response dispatcher forwards filters, renamed parameters and supported pagination without exceeding endpoint limits
+ok 288 - response dispatcher forwards filters, renamed parameters and supported pagination without exceeding endpoint limits
+  ---
+  duration_ms: 96.543128
+  type: 'test'
+  ...
+# Subtest: limit-only reads fetch the prefix needed for subsequent local pages without exceeding endpoint caps
+ok 289 - limit-only reads fetch the prefix needed for subsequent local pages without exceeding endpoint caps
+  ---
+  duration_ms: 61.784166
+  type: 'test'
+  ...
+# Subtest: lookahead advertises subsequent local windows and discloses limit-only endpoint caps
+ok 290 - lookahead advertises subsequent local windows and discloses limit-only endpoint caps
+  ---
+  duration_ms: 65.495395
+  type: 'test'
+  ...
+# Subtest: cursor-backed reads never overfetch or reapply a local offset to a supplied cursor
+ok 291 - cursor-backed reads never overfetch or reapply a local offset to a supplied cursor
+  ---
+  duration_ms: 87.745642
+  type: 'test'
+  ...
+# Subtest: nested limits validate before fetch-budget rewrites and reject invalid values without execution
+ok 292 - nested limits validate before fetch-budget rewrites and reject invalid values without execution
+  ---
+  duration_ms: 109.776449
+  type: 'test'
+  ...
+# Subtest: both cursor spellings imply continuation even without an upstream has_more field
+ok 293 - both cursor spellings imply continuation even without an upstream has_more field
+  ---
+  duration_ms: 1.444469
+  type: 'test'
+  ...
+# Subtest: read limits still bound resource collections and nested ticket relationships in both formats
+ok 294 - read limits still bound resource collections and nested ticket relationships in both formats
+  ---
+  duration_ms: 3.225233
+  type: 'test'
+  ...
+# Subtest: pagination bounds reads, preserves cursor continuation and guides targeted searches
+ok 295 - pagination bounds reads, preserves cursor continuation and guides targeted searches
+  ---
+  duration_ms: 0.836808
+  type: 'test'
+  ...
+# Subtest: validation and execution errors are actionable tool errors, not protocol errors or tracebacks
+ok 296 - validation and execution errors are actionable tool errors, not protocol errors or tracebacks
+  ---
+  duration_ms: 77.69797
+  type: 'test'
+  ...
+# Subtest: response errors preserve partial upload receipts without echoing internal failure text
+ok 297 - response errors preserve partial upload receipts without echoing internal failure text
+  ---
+  duration_ms: 88.277131
+  type: 'test'
+  ...
+# Subtest: shared SSE RPC responses preserve hidden aliases, output schemas, session identity and actionable errors
+ok 298 - shared SSE RPC responses preserve hidden aliases, output schemas, session identity and actionable errors
+  ---
+  duration_ms: 98.98889
+  type: 'test'
+  ...
+# Subtest: golden tasks are 20 to 30 realistic data-only tasks with valid consolidated calls
+ok 299 - golden tasks are 20 to 30 realistic data-only tasks with valid consolidated calls
+  ---
+  duration_ms: 816.813163
+  type: 'test'
+  ...
+# Subtest: inventory documentation covers every legacy tool and explains missing usage data and ownership
+ok 300 - inventory documentation covers every legacy tool and explains missing usage data and ownership
+  ---
+  duration_ms: 0.848078
+  type: 'test'
+  ...
+# Subtest: both custom-field tools are registered in MCP_TOOLS
+ok 301 - both custom-field tools are registered in MCP_TOOLS
+  ---
+  duration_ms: 1.676059
+  type: 'test'
+  ...
+# Subtest: list custom fields requires a board identifier
+ok 302 - list custom fields requires a board identifier
+  ---
+  duration_ms: 4.40542
+  type: 'test'
+  ...
+# Subtest: set custom field value requires task, field, and value identifiers
+ok 303 - set custom field value requires task, field, and value identifiers
+  ---
+  duration_ms: 3.891995
+  type: 'test'
+  ...
+# Subtest: set response type mirrors the route customField plus customFieldValue shape
+ok 304 - set response type mirrors the route customField plus customFieldValue shape
+  ---
+  duration_ms: 0.973673
+  type: 'test'
+  ...
+# Subtest: shared route preserves agent board access and auto-create-on-set
+ok 305 - shared route preserves agent board access and auto-create-on-set
+  ---
+  duration_ms: 0.481126
+  type: 'test'
+  ...
+# Subtest: includes the stable code and offending field
+ok 306 - includes the stable code and offending field
+  ---
+  duration_ms: 1.338541
+  type: 'test'
+  ...
+# Subtest: includes allowed_values only when provided
+ok 307 - includes allowed_values only when provided
+  ---
+  duration_ms: 1.216334
+  type: 'test'
+  ...
+# Subtest: preserves the human-readable error message
+ok 308 - preserves the human-readable error message
+  ---
+  duration_ms: 0.205733
+  type: 'test'
+  ...
+# Subtest: builds a flagged escalation comment with reason and attempts
+ok 309 - builds a flagged escalation comment with reason and attempts
+  ---
+  duration_ms: 1.780114
+  type: 'test'
+  ...
+# Subtest: omits the attempts block when not provided
+ok 310 - omits the attempts block when not provided
+  ---
+  duration_ms: 0.470166
+  type: 'test'
+  ...
+# Subtest: escapes hostile reason/summary text (untrusted agent input)
+ok 311 - escapes hostile reason/summary text (untrusted agent input)
+  ---
+  duration_ms: 0.387562
+  type: 'test'
+  ...
+# Subtest: normalizes evidence type from enum name or loose forms
+ok 312 - normalizes evidence type from enum name or loose forms
+  ---
+  duration_ms: 2.227537
+  type: 'test'
+  ...
+# Subtest: accepts a valid evidence payload and trims
+ok 313 - accepts a valid evidence payload and trims
+  ---
+  duration_ms: 0.624072
+  type: 'test'
+  ...
+# Subtest: requires at least one of title/url/summary
+ok 314 - requires at least one of title/url/summary
+  ---
+  duration_ms: 0.244676
+  type: 'test'
+  ...
+# Subtest: rejects a non-http(s) or malformed url
+ok 315 - rejects a non-http(s) or malformed url
+  ---
+  duration_ms: 0.481587
+  type: 'test'
+  ...
+# Subtest: rejects an unknown type
+ok 316 - rejects an unknown type
+  ---
+  duration_ms: 0.264392
+  type: 'test'
+  ...
+# Subtest: GET returns 401 without auth and never reads flags
+ok 317 - GET returns 401 without auth and never reads flags
+  ---
+  duration_ms: 48.615355
+  type: 'test'
+  ...
+# Subtest: GET refuses plain user
+ok 318 - GET refuses plain user
+  ---
+  duration_ms: 3.227637
+  type: 'test'
+  ...
+# Subtest: GET refuses management key
+ok 319 - GET refuses management key
+  ---
+  duration_ms: 1.609827
+  type: 'test'
+  ...
+# Subtest: GET refuses non-owner agent
+ok 320 - GET refuses non-owner agent
+  ---
+  duration_ms: 1.143218
+  type: 'test'
+  ...
+# Subtest: GET refuses mismatched owner identity
+ok 321 - GET refuses mismatched owner identity
+  ---
+  duration_ms: 1.285102
+  type: 'test'
+  ...
+# Subtest: GET checks rate limit before authentication
+ok 322 - GET checks rate limit before authentication
+  ---
+  duration_ms: 1.751491
+  type: 'test'
+  ...
+# Subtest: PATCH returns 401 without auth and never reads flags
+ok 323 - PATCH returns 401 without auth and never reads flags
+  ---
+  duration_ms: 2.756592
+  type: 'test'
+  ...
+# Subtest: PATCH refuses plain user
+ok 324 - PATCH refuses plain user
+  ---
+  duration_ms: 2.12716
+  type: 'test'
+  ...
+# Subtest: PATCH refuses management key
+ok 325 - PATCH refuses management key
+  ---
+  duration_ms: 1.994543
+  type: 'test'
+  ...
+# Subtest: PATCH refuses non-owner agent
+ok 326 - PATCH refuses non-owner agent
+  ---
+  duration_ms: 1.487599
+  type: 'test'
+  ...
+# Subtest: PATCH refuses mismatched owner identity
+ok 327 - PATCH refuses mismatched owner identity
+  ---
+  duration_ms: 1.092303
+  type: 'test'
+  ...
+# Subtest: PATCH checks rate limit before authentication
+ok 328 - PATCH checks rate limit before authentication
+  ---
+  duration_ms: 1.250827
+  type: 'test'
+  ...
+# Subtest: GET returns all flags or a single flag and 404 for an unknown key
+ok 329 - GET returns all flags or a single flag and 404 for an unknown key
+  ---
+  duration_ms: 4.327185
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215"
+ok 330 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215"
+  ---
+  duration_ms: 1.456472
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/page/approval\#comment-123"
+ok 331 - PATCH rejects invalid reason "https://app.hypertask.ai/page/approval\#comment-123"
+  ---
+  duration_ms: 0.766137
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://evil.test/detail/project-4060/215\#comment-123"
+ok 332 - PATCH rejects invalid reason "https://evil.test/detail/project-4060/215\#comment-123"
+  ---
+  duration_ms: 0.860002
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai.evil.test/detail/project-4060/215\#comment-123"
+ok 333 - PATCH rejects invalid reason "https://app.hypertask.ai.evil.test/detail/project-4060/215\#comment-123"
+  ---
+  duration_ms: 0.986936
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai@evil.test/detail/project-4060/215\#comment-123"
+ok 334 - PATCH rejects invalid reason "https://app.hypertask.ai@evil.test/detail/project-4060/215\#comment-123"
+  ---
+  duration_ms: 0.735439
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-123junk"
+ok 335 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-123junk"
+  ---
+  duration_ms: 0.739025
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-123?extra=1"
+ok 336 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-123?extra=1"
+  ---
+  duration_ms: 1.582235
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-123/extra"
+ok 337 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-123/extra"
+  ---
+  duration_ms: 0.996595
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-123\#extra"
+ok 338 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-123\#extra"
+  ---
+  duration_ms: 0.730409
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215?extra=1\#comment-123"
+ok 339 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215?extra=1\#comment-123"
+  ---
+  duration_ms: 0.792576
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-0"
+ok 340 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-0"
+  ---
+  duration_ms: 0.744656
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-1000000000"
+ok 341 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215\#comment-1000000000"
+  ---
+  duration_ms: 0.709982
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason undefined
+ok 342 - PATCH rejects invalid reason undefined
+  ---
+  duration_ms: 0.619463
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason null
+ok 343 - PATCH rejects invalid reason null
+  ---
+  duration_ms: 0.664318
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason ""
+ok 344 - PATCH rejects invalid reason ""
+  ---
+  duration_ms: 0.789389
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "not a URL"
+ok 345 - PATCH rejects invalid reason "not a URL"
+  ---
+  duration_ms: 1.205545
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "http://app.hypertask.ai/detail/project-4060/215"
+ok 346 - PATCH rejects invalid reason "http://app.hypertask.ai/detail/project-4060/215"
+  ---
+  duration_ms: 0.69249
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://evil.test/detail/approval"
+ok 347 - PATCH rejects invalid reason "https://evil.test/detail/approval"
+  ---
+  duration_ms: 0.834453
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai.evil.test/page/approval"
+ok 348 - PATCH rejects invalid reason "https://app.hypertask.ai.evil.test/page/approval"
+  ---
+  duration_ms: 1.718409
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai@evil.test/page/approval"
+ok 349 - PATCH rejects invalid reason "https://app.hypertask.ai@evil.test/page/approval"
+  ---
+  duration_ms: 2.800242
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/admin/flags"
+ok 350 - PATCH rejects invalid reason "https://app.hypertask.ai/admin/flags"
+  ---
+  duration_ms: 1.480617
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/page/approval"
+ok 351 - PATCH rejects invalid reason "https://app.hypertask.ai/page/approval"
+  ---
+  duration_ms: 1.006675
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215/extra"
+ok 352 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/215/extra"
+  ---
+  duration_ms: 4.985891
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/2147483648"
+ok 353 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/project-4060/2147483648"
+  ---
+  duration_ms: 1.490836
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/detail/../admin/flags"
+ok 354 - PATCH rejects invalid reason "https://app.hypertask.ai/detail/../admin/flags"
+  ---
+  duration_ms: 0.600107
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid reason "https://app.hypertask.ai/page/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ok 355 - PATCH rejects invalid reason "https://app.hypertask.ai/page/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ---
+  duration_ms: 0.615516
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid body null
+ok 356 - PATCH rejects invalid body null
+  ---
+  duration_ms: 1.135574
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid body []
+ok 357 - PATCH rejects invalid body []
+  ---
+  duration_ms: 1.054493
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid body {"key":"htpr-6136-figma-connect","reason":"https://app.hypertask.ai/detail/project-4060/215\#comment-123"}
+ok 358 - PATCH rejects invalid body {"key":"htpr-6136-figma-connect","reason":"https://app.hypertask.ai/detail/project-4060/215\#comment-123"}
+  ---
+  duration_ms: 0.490553
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid body {"key":"htpr-6136-figma-connect","mode":"off","reason":"https://app.hypertask.ai/detail/project-4060/215\#comment-123"}
+ok 359 - PATCH rejects invalid body {"key":"htpr-6136-figma-connect","mode":"off","reason":"https://app.hypertask.ai/detail/project-4060/215\#comment-123"}
+  ---
+  duration_ms: 0.485113
+  type: 'test'
+  ...
+# Subtest: PATCH rejects invalid body {"key":123,"mode":"OFF","reason":"https://app.hypertask.ai/detail/project-4060/215\#comment-123"}
+ok 360 - PATCH rejects invalid body {"key":123,"mode":"OFF","reason":"https://app.hypertask.ai/detail/project-4060/215\#comment-123"}
+  ---
+  duration_ms: 0.508647
+  type: 'test'
+  ...
+# Subtest: PATCH enforces JSON, malformed JSON and the admin body limit
+ok 361 - PATCH enforces JSON, malformed JSON and the admin body limit
+  ---
+  duration_ms: 1.483401
+  type: 'test'
+  ...
+# Subtest: PATCH passes the authenticated actor, returns previous mode and broadcasts
+ok 362 - PATCH passes the authenticated actor, returns previous mode and broadcasts
+  ---
+  duration_ms: 2.054084
+  type: 'test'
+  ...
+# Subtest: PATCH handles an unstored default or unchanged mode
+ok 363 - PATCH handles an unstored default or unchanged mode
+  ---
+  duration_ms: 5.21612
+  type: 'test'
+  ...
+# Subtest: PATCH returns input errors and tolerates a failed realtime broadcast
+ok 364 - PATCH returns input errors and tolerates a failed realtime broadcast
+  ---
+  duration_ms: 3.182624
+  type: 'test'
+  ...
+# Subtest: PATCH hides internal errors
+ok 365 - PATCH hides internal errors
+  ---
+  duration_ms: 0.830716
+  type: 'test'
+  ...
+# Subtest: PATCH accepts owner thumbs up on a comment naming the flag and Off
+ok 366 - PATCH accepts owner thumbs up on a comment naming the flag and Off
+  ---
+  duration_ms: 23.244055
+  type: 'test'
+  ...
+# Subtest: PATCH accepts owner thumbs up on a comment naming the flag and Everyone
+ok 367 - PATCH accepts owner thumbs up on a comment naming the flag and Everyone
+  ---
+  duration_ms: 1.115286
+  type: 'test'
+  ...
+# Subtest: PATCH accepts owner thumbs up on a comment naming the flag and Owner + QA
+ok 368 - PATCH accepts owner thumbs up on a comment naming the flag and Owner + QA
+  ---
+  duration_ms: 1.537643
+  type: 'test'
+  ...
+# Subtest: PATCH accepts owner thumbs up on a comment naming the flag and Only me
+ok 369 - PATCH accepts owner thumbs up on a comment naming the flag and Only me
+  ---
+  duration_ms: 1.126606
+  type: 'test'
+  ...
+# Subtest: PATCH accepts thumbs up with a skin tone and falls back to text
+ok 370 - PATCH accepts thumbs up with a skin tone and falls back to text
+  ---
+  duration_ms: 0.991766
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from missing key
+ok 371 - PATCH refuses approval from missing key
+  ---
+  duration_ms: 1.290613
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from wrong mode
+ok 372 - PATCH refuses approval from wrong mode
+  ---
+  duration_ms: 0.760506
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from empty comment
+ok 373 - PATCH refuses approval from empty comment
+  ---
+  duration_ms: 0.728015
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from text overridden by commentText
+ok 374 - PATCH refuses approval from text overridden by commentText
+  ---
+  duration_ms: 0.692569
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from no reaction
+ok 375 - PATCH refuses approval from no reaction
+  ---
+  duration_ms: 0.765876
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from agent reaction
+ok 376 - PATCH refuses approval from agent reaction
+  ---
+  duration_ms: 0.78952
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from deleted agent reaction
+ok 377 - PATCH refuses approval from deleted agent reaction
+  ---
+  duration_ms: 0.680187
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from non-thumbs emoji
+ok 378 - PATCH refuses approval from non-thumbs emoji
+  ---
+  duration_ms: 0.676168
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from old reaction
+ok 379 - PATCH refuses approval from old reaction
+  ---
+  duration_ms: 2.044085
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from other user reaction
+ok 380 - PATCH refuses approval from other user reaction
+  ---
+  duration_ms: 0.759173
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from deleted reaction
+ok 381 - PATCH refuses approval from deleted reaction
+  ---
+  duration_ms: 1.171801
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from unknown comment
+ok 382 - PATCH refuses approval from unknown comment
+  ---
+  duration_ms: 0.629902
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from different comment
+ok 383 - PATCH refuses approval from different comment
+  ---
+  duration_ms: 0.925122
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from wrong project
+ok 384 - PATCH refuses approval from wrong project
+  ---
+  duration_ms: 0.61166
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from wrong ticket
+ok 385 - PATCH refuses approval from wrong ticket
+  ---
+  duration_ms: 0.969435
+  type: 'test'
+  ...
+# Subtest: PATCH refuses approval from deleted ticket
+ok 386 - PATCH refuses approval from deleted ticket
+  ---
+  duration_ms: 0.618932
+  type: 'test'
+  ...
+# Subtest: normalizes idempotency keys
+ok 387 - normalizes idempotency keys
+  ---
+  duration_ms: 652.309721
+  type: 'test'
+  ...
+# Subtest: creates stable, operation-scoped Redis keys
+ok 388 - creates stable, operation-scoped Redis keys
+  ---
+  duration_ms: 91.011782
+  type: 'test'
+  ...
+# Subtest: caches a successful response for 24 hours and flags replays
+ok 389 - caches a successful response for 24 hours and flags replays
+  ---
+  duration_ms: 68.068866
+  type: 'test'
+  ...
+# Subtest: concurrent same-key requests run the producer exactly once
+ok 390 - concurrent same-key requests run the producer exactly once
+  ---
+  duration_ms: 246.091961
+  type: 'test'
+  ...
+# Subtest: runs without caching when Redis is unavailable
+ok 391 - runs without caching when Redis is unavailable
+  ---
+  duration_ms: 53.191963
+  type: 'test'
+  ...
+# {"timestamp":"2026-10-12T04:51:08.298Z","level":"info","message":"Files attached successfully","correlationId":"1791780668295-2c3c0c5a","count":1}
+# {"timestamp":"2026-10-12T04:51:08.319Z","level":"info","message":"Files attached successfully","correlationId":"1791780668318-092146fa","count":1}
+# {"timestamp":"2026-10-12T04:51:08.328Z","level":"error","message":"Failed to attach files","correlationId":"1791780668327-68a8cccc","error":"attachment request timed out"}
+# {"timestamp":"2026-10-12T04:51:08.336Z","level":"info","message":"Files attached successfully","correlationId":"1791780668334-daa148db","count":1}
+# {"timestamp":"2026-10-12T04:51:08.343Z","level":"error","message":"Failed to attach files","correlationId":"1791780668342-f897e13d","error":"upload unavailable"}
+# {"timestamp":"2026-10-12T04:51:08.345Z","level":"info","message":"Files attached successfully","correlationId":"1791780668345-9437ab8e","count":0}
+# {"timestamp":"2026-10-12T04:51:08.368Z","level":"error","message":"Failed to attach files","correlationId":"1791780668367-f9a339db","error":"Failed to store attachment(s)"}
+# {"timestamp":"2026-10-12T04:51:08.369Z","level":"info","message":"Files attached successfully","correlationId":"1791780668369-397e285a","count":1}
+# Subtest: create_task accepts inline attachments and returns their public URLs
+ok 392 - create_task accepts inline attachments and returns their public URLs
+  ---
+  duration_ms: 23.880011
+  type: 'test'
+  ...
+# Subtest: update_task permits an attachment-only update
+ok 393 - update_task permits an attachment-only update
+  ---
+  duration_ms: 13.396025
+  type: 'test'
+  ...
+# Subtest: an attachment-only update returns a usable failed result
+ok 394 - an attachment-only update returns a usable failed result
+  ---
+  duration_ms: 4.789815
+  type: 'test'
+  ...
+# Subtest: an attachment-only update returns task context after a transport error
+ok 395 - an attachment-only update returns task context after a transport error
+  ---
+  duration_ms: 3.562921
+  type: 'test'
+  ...
+# Subtest: add_comment attaches files to the comment returned by the mutation
+ok 396 - add_comment attaches files to the comment returned by the mutation
+  ---
+  duration_ms: 8.071584
+  type: 'test'
+  ...
+# Subtest: a post-create upload failure reports partial success without inviting duplicates
+ok 397 - a post-create upload failure reports partial success without inviting duplicates
+  ---
+  duration_ms: 5.879976
+  type: 'test'
+  ...
+# Subtest: an attachment error response may omit the attachments array
+ok 398 - an attachment error response may omit the attachments array
+  ---
+  duration_ms: 2.156624
+  type: 'test'
+  ...
+# Subtest: the attachment endpoint accepts and forwards project_id + unique_index
+ok 399 - the attachment endpoint accepts and forwards project_id + unique_index
+  ---
+  duration_ms: 2.070244
+  type: 'test'
+  ...
+# Subtest: the attachment endpoint delegates persistence to the atomic batch path
+ok 400 - the attachment endpoint delegates persistence to the atomic batch path
+  ---
+  duration_ms: 2.152247
+  type: 'test'
+  ...
+# Subtest: the attachment HTTP body is bounded before JSON parsing
+ok 401 - the attachment HTTP body is bounded before JSON parsing
+  ---
+  duration_ms: 13.483619
+  type: 'test'
+  ...
+# Subtest: the attachment endpoint requires write scope for managed agents
+ok 402 - the attachment endpoint requires write scope for managed agents
+  ---
+  duration_ms: 1.017404
+  type: 'test'
+  ...
+# Subtest: inline mutations preserve cleanup uncertainty from attachment failures
+ok 403 - inline mutations preserve cleanup uncertainty from attachment failures
+  ---
+  duration_ms: 1.903583
+  type: 'test'
+  ...
+# Subtest: partial attachment responses preserve cleanup uncertainty
+ok 404 - partial attachment responses preserve cleanup uncertainty
+  ---
+  duration_ms: 1.492168
+  type: 'test'
+  ...
+# Subtest: an unknown S3 outcome persists a durable deterministic identity
+ok 405 - an unknown S3 outcome persists a durable deterministic identity
+  ---
+  duration_ms: 2.721506
+  type: 'test'
+  ...
+# Subtest: lock loss before upload cannot persist a phantom attachment
+ok 406 - lock loss before upload cannot persist a phantom attachment
+  ---
+  duration_ms: 1.242002
+  type: 'test'
+  ...
+# (node:3675438) NOTE: The AWS SDK for JavaScript (v2) has reached end-of-support.
+# It will no longer receive updates or releases.
+# Please migrate your code to use AWS SDK for JavaScript (v3).
+# For more information, check the blog post at https://a.co/cUPnyil
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# {"timestamp":"2026-10-12T04:51:08.450Z","level":"info","message":"Files attached successfully","correlationId":"1791780668450-fef0c9c9","count":1}
+# {"timestamp":"2026-10-12T04:51:08.900Z","level":"error","message":"Failed to create task","correlationId":"1791780668899-97732ffd","error":"[\\n  {\\n    \\"code\\": \\"custom\\",\\n    \\"path\\": [\\n      \\"attachments\\",\\n      0,\\n      \\"content_type\\"\\n    ],\\n    \\"message\\": \\"content_type is not supported for attachments\\"\\n  },\\n  {\\n    \\"code\\": \\"custom\\",\\n    \\"message\\": \\"data does not match content_type\\",\\n    \\"path\\": [\\n      \\"attachments\\",\\n      0,\\n      \\"data\\"\\n    ]\\n  }\\n]"}
+# {"timestamp":"2026-10-12T04:51:08.900Z","level":"error","message":"Failed to create task","correlationId":"1791780668900-fec77a35","error":"[\\n  {\\n    \\"code\\": \\"custom\\",\\n    \\"message\\": \\"files[0].data is not valid base64\\",\\n    \\"path\\": [\\n      \\"attachments\\",\\n      0,\\n      \\"data\\"\\n    ]\\n  }\\n]"}
+# {"timestamp":"2026-10-12T04:51:08.937Z","level":"error","message":"Failed to create task","correlationId":"1791780668900-74da1826","error":"[\\n  {\\n    \\"code\\": \\"custom\\",\\n    \\"message\\": \\"files[0] exceeds inline decoded limit (3145728 bytes); use url for larger files\\",\\n    \\"path\\": [\\n      \\"attachments\\",\\n      0,\\n      \\"data\\"\\n    ]\\n  }\\n]"}
+# Subtest: a batch timeout waits for in-flight persistence to settle
+ok 407 - a batch timeout waits for in-flight persistence to settle
+  ---
+  duration_ms: 31.602585
+  type: 'test'
+  ...
+# Subtest: preparation failures report every file that was not attempted
+ok 408 - preparation failures report every file that was not attempted
+  ---
+  duration_ms: 1.846497
+  type: 'test'
+  ...
+# Subtest: a database transaction failure retains bounded deterministic objects
+ok 409 - a database transaction failure retains bounded deterministic objects
+  ---
+  duration_ms: 25.279055
+  type: 'test'
+  ...
+# Subtest: a lost commit acknowledgement reconciles rows instead of deleting their objects
+ok 410 - a lost commit acknowledgement reconciles rows instead of deleting their objects
+  ---
+  duration_ms: 2.549496
+  type: 'test'
+  ...
+# Subtest: an unavailable commit reconciliation leaves deterministic objects intact
+ok 411 - an unavailable commit reconciliation leaves deterministic objects intact
+  ---
+  duration_ms: 1.18197
+  type: 'test'
+  ...
+# Subtest: cleanup failure is observable and retries reuse the same storage key
+ok 412 - cleanup failure is observable and retries reuse the same storage key
+  ---
+  duration_ms: 1.651455
+  type: 'test'
+  ...
+# Subtest: storage identity preserves distinct valid filenames after sanitizing
+ok 413 - storage identity preserves distinct valid filenames after sanitizing
+  ---
+  duration_ms: 0.447232
+  type: 'test'
+  ...
+# Subtest: concurrent same-target retries wait through failure and persistence
+ok 414 - concurrent same-target retries wait through failure and persistence
+  ---
+  duration_ms: 2.102313
+  type: 'test'
+  ...
+# Subtest: lost lock ownership fences persistence and cleanup
+ok 415 - lost lock ownership fences persistence and cleanup
+  ---
+  duration_ms: 0.712336
+  type: 'test'
+  ...
+# Subtest: the transaction advisory lock fences row creation after lease overlap
+ok 416 - the transaction advisory lock fences row creation after lease overlap
+  ---
+  duration_ms: 1.457564
+  type: 'test'
+  ...
+# Subtest: a failed retry never deletes a deterministic object
+ok 417 - a failed retry never deletes a deterministic object
+  ---
+  duration_ms: 0.875569
+  type: 'test'
+  ...
+# Subtest: a retry returns the committed attachment row instead of creating a duplicate
+ok 418 - a retry returns the committed attachment row instead of creating a duplicate
+  ---
+  duration_ms: 0.387983
+  type: 'test'
+  ...
+# Subtest: ticket-number comment attachments preserve project scoping
+ok 419 - ticket-number comment attachments preserve project scoping
+  ---
+  duration_ms: 1.411908
+  type: 'test'
+  ...
+# Subtest: task-id comment attachments omit the optional project scope
+ok 420 - task-id comment attachments omit the optional project scope
+  ---
+  duration_ms: 1.382263
+  type: 'test'
+  ...
+# Subtest: MCP file validation matches the API filename and identifier constraints
+ok 421 - MCP file validation matches the API filename and identifier constraints
+  ---
+  duration_ms: 13.125562
+  type: 'test'
+  ...
+# Subtest: all three schemas share strict file validation
+ok 422 - all three schemas share strict file validation
+  ---
+  duration_ms: 19.581861
+  type: 'test'
+  ...
+# Subtest: remote preparation rejects duplicate content before storage writes
+ok 423 - remote preparation rejects duplicate content before storage writes
+  ---
+  duration_ms: 2.136797
+  type: 'test'
+  ...
+# Subtest: remote preparation caps aggregate retained bytes before storage writes
+ok 424 - remote preparation caps aggregate retained bytes before storage writes
+  ---
+  duration_ms: 200.745381
+  type: 'test'
+  ...
+# Subtest: base64 validation accepts standard line wrapping
+ok 425 - base64 validation accepts standard line wrapping
+  ---
+  duration_ms: 1.048983
+  type: 'test'
+  ...
+# Subtest: inline data stays within the aggregate transport body budget
+ok 426 - inline data stays within the aggregate transport body budget
+  ---
+  duration_ms: 210.581751
+  type: 'test'
+  ...
+# Subtest: invalid inline file data is rejected before the primary mutation
+ok 427 - invalid inline file data is rejected before the primary mutation
+  ---
+  duration_ms: 38.824379
+  type: 'test'
+  ...
+# Subtest: URL attachments reject hexadecimal IPv4-mapped private IPv6 addresses
+ok 428 - URL attachments reject hexadecimal IPv4-mapped private IPv6 addresses
+  ---
+  duration_ms: 18.712142
+  type: 'test'
+  ...
+# Subtest: oversized remote response bodies cancel their reader
+ok 429 - oversized remote response bodies cancel their reader
+  ---
+  duration_ms: 4.36804
+  type: 'test'
+  ...
+# Subtest: the MCP handler forwards transport identity and attachment writes rebroadcast
+ok 430 - the MCP handler forwards transport identity and attachment writes rebroadcast
+  ---
+  duration_ms: 2.232345
+  type: 'test'
+  ...
+# Subtest: stateless invocation keys are stable and scoped by token and operation
+ok 431 - stateless invocation keys are stable and scoped by token and operation
+  ---
+  duration_ms: 0.722686
+  type: 'test'
+  ...
+# [MCP Auth] Token decoded (unverified): {
+#   userId: undefined,
+#   sub: 'mcp-audience@example.test',
+#   iss: 'hypertask',
+#   aud: 'email-link',
+#   exp: '2026-10-12T05:06:15.000Z',
+#   iat: '2026-10-12T04:51:15.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] OAuth format failed: jwt audience invalid. expected: https://mcp.hypertask.ai or http://localhost:3001
+# [MCP Auth] Token has an unsupported audience: email-link
+# [MCP Auth] JWT token validation failed
+# [MCP Auth] Token decoded (unverified): {
+#   userId: undefined,
+#   sub: 'mcp-audience@example.test',
+#   iss: 'hypertask',
+#   aud: 'email-link',
+#   exp: '2026-10-12T05:06:15.000Z',
+#   iat: '2026-10-12T04:51:15.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] OAuth format failed: jwt audience invalid. expected: https://mcp.hypertask.ai or http://localhost:3001
+# [MCP Auth] Token has an unsupported audience: email-link
+# [MCP Auth] JWT token validation failed
+# [MCP Auth] Token decoded (unverified): {
+#   userId: undefined,
+#   sub: 'mcp-audience@example.test',
+#   iss: 'hypertask',
+#   aud: 'email-verification',
+#   exp: '2026-10-12T05:06:15.000Z',
+#   iat: '2026-10-12T04:51:15.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] OAuth format failed: jwt audience invalid. expected: https://mcp.hypertask.ai or http://localhost:3001
+# [MCP Auth] Token has an unsupported audience: email-verification
+# [MCP Auth] JWT token validation failed
+# [MCP Auth] Token decoded (unverified): {
+#   userId: undefined,
+#   sub: 'mcp-audience@example.test',
+#   iss: 'hypertask',
+#   aud: 'email-verification',
+#   exp: '2026-10-12T05:06:15.000Z',
+#   iat: '2026-10-12T04:51:15.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] OAuth format failed: jwt audience invalid. expected: https://mcp.hypertask.ai or http://localhost:3001
+# [MCP Auth] Token has an unsupported audience: email-verification
+# [MCP Auth] JWT token validation failed
+# [MCP Auth] Token decoded (unverified): {
+#   userId: undefined,
+#   sub: 'mcp-audience@example.test',
+#   iss: 'hypertask',
+#   aud: 'unrelated-security-test',
+#   exp: '2026-10-12T05:06:15.000Z',
+#   iat: '2026-10-12T04:51:15.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] OAuth format failed: jwt audience invalid. expected: https://mcp.hypertask.ai or http://localhost:3001
+# [MCP Auth] Token has an unsupported audience: unrelated-security-test
+# [MCP Auth] JWT token validation failed
+# [MCP Auth] Token decoded (unverified): {
+#   userId: undefined,
+#   sub: 'mcp-audience@example.test',
+#   iss: 'hypertask',
+#   aud: 'unrelated-security-test',
+#   exp: '2026-10-12T05:06:15.000Z',
+#   iat: '2026-10-12T04:51:15.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] OAuth format failed: jwt audience invalid. expected: https://mcp.hypertask.ai or http://localhost:3001
+# [MCP Auth] Token has an unsupported audience: unrelated-security-test
+# [MCP Auth] JWT token validation failed
+# [MCP Auth] Token decoded (unverified): {
+#   userId: undefined,
+#   sub: 'mcp-audience@example.test',
+#   iss: 'hypertask',
+#   aud: undefined,
+#   exp: '2026-10-12T05:06:15.000Z',
+#   iat: '2026-10-12T04:51:15.000Z'
+# }
+# [MCP Auth] Current format failed: jwt audience invalid. expected: mcp-api
+# [MCP Auth] Legacy format failed: jwt audience invalid. expected: hypertasks-mcp
+# [MCP Auth] OAuth format failed: jwt audience invalid. expected: https://mcp.hypertask.ai or http://localhost:3001
+# [MCP Auth] Legacy audience-less JWT verified
+# Subtest: HTTP MCP rejects a signed email-link token
+ok 432 - HTTP MCP rejects a signed email-link token
+  ---
+  duration_ms: 52.97054
+  type: 'test'
+  ...
+# Subtest: JSON-RPC MCP rejects a signed email-link token
+ok 433 - JSON-RPC MCP rejects a signed email-link token
+  ---
+  duration_ms: 7.097302
+  type: 'test'
+  ...
+# Subtest: HTTP MCP rejects a signed email-verification token
+ok 434 - HTTP MCP rejects a signed email-verification token
+  ---
+  duration_ms: 21.120364
+  type: 'test'
+  ...
+# Subtest: JSON-RPC MCP rejects a signed email-verification token
+ok 435 - JSON-RPC MCP rejects a signed email-verification token
+  ---
+  duration_ms: 3.909428
+  type: 'test'
+  ...
+# Subtest: HTTP MCP rejects a signed unrelated-security-test token
+ok 436 - HTTP MCP rejects a signed unrelated-security-test token
+  ---
+  duration_ms: 3.916852
+  type: 'test'
+  ...
+# Subtest: JSON-RPC MCP rejects a signed unrelated-security-test token
+ok 437 - JSON-RPC MCP rejects a signed unrelated-security-test token
+  ---
+  duration_ms: 3.541653
+  type: 'test'
+  ...
+# Subtest: an audience-less legacy MCP token remains valid
+ok 438 - an audience-less legacy MCP token remains valid
+  ---
+  duration_ms: 2.540098
+  type: 'test'
+  ...
+# Subtest: list query fields are always merged without an infra flag
+ok 439 - list query fields are always merged without an infra flag
+  ---
+  duration_ms: 2.566458
+  type: 'test'
+  ...
+# Subtest: routes return nextCursor and project after building link
+ok 440 - routes return nextCursor and project after building link
+  ---
+  duration_ms: 3.673017
+  type: 'test'
+  ...
+# Subtest: label and agent schemas include list fields and keep validation
+ok 441 - label and agent schemas include list fields and keep validation
+  ---
+  duration_ms: 0.616838
+  type: 'test'
+  ...
+# Subtest: the exact malformed payload from production answers 400, not a crash
+ok 442 - the exact malformed payload from production answers 400, not a crash
+  ---
+  duration_ms: 10.49175
+  type: 'test'
+  ...
+# Subtest: an empty body is a caller error, not a server error
+ok 443 - an empty body is a caller error, not a server error
+  ---
+  duration_ms: 2.018557
+  type: 'test'
+  ...
+# Subtest: a JSON scalar or array is rejected: write routes read named fields
+ok 444 - a JSON scalar or array is rejected: write routes read named fields
+  ---
+  duration_ms: 3.483044
+  type: 'test'
+  ...
+# Subtest: a well-formed object still reaches the route unchanged
+ok 445 - a well-formed object still reaches the route unchanged
+  ---
+  duration_ms: 2.103916
+  type: 'test'
+  ...
+# Subtest: every MCP route body parse is guarded, and every guard is returned
+ok 446 - every MCP route body parse is guarded, and every guard is returned
+  ---
+  duration_ms: 946.602485
+  type: 'test'
+  ...
+# {"timestamp":"2026-10-12T04:51:12.954Z","level":"info","message":"Comment updated successfully","correlationId":"1791780672952-df917972","commentId":42}
+# Subtest: comment service accepts inferred markdown without adding a format hint
+ok 447 - comment service accepts inferred markdown without adding a format hint
+  ---
+  duration_ms: 6.932014
+  type: 'test'
+  ...
+# Subtest: comment updates forward an explicit markdown format hint
+ok 448 - comment updates forward an explicit markdown format hint
+  ---
+  duration_ms: 3.950093
+  type: 'test'
+  ...
+# Subtest: page_id alone is accepted and normalized to id
+ok 449 - page_id alone is accepted and normalized to id
+  ---
+  duration_ms: 10.061058
+  type: 'test'
+  ...
+# Subtest: id alone remains accepted
+ok 450 - id alone remains accepted
+  ---
+  duration_ms: 1.375621
+  type: 'test'
+  ...
+# Subtest: agreeing page_id and id values are accepted
+ok 451 - agreeing page_id and id values are accepted
+  ---
+  duration_ms: 1.737024
+  type: 'test'
+  ...
+# Subtest: disagreeing page_id and id values are rejected clearly
+ok 452 - disagreeing page_id and id values are rejected clearly
+  ---
+  duration_ms: 2.51397
+  type: 'test'
+  ...
+# Subtest: a missing page identifier names both accepted field names
+ok 453 - a missing page identifier names both accepted field names
+  ---
+  duration_ms: 0.684424
+  type: 'test'
+  ...
+# Subtest: affected tool descriptions prefer page_id and retain id compatibility
+ok 454 - affected tool descriptions prefer page_id and retain id compatibility
+  ---
+  duration_ms: 0.568308
+  type: 'test'
+  ...
+# Subtest: update_page accepts title-only renames and still requires a mutation
+ok 455 - update_page accepts title-only renames and still requires a mutation
+  ---
+  duration_ms: 0.549814
+  type: 'test'
+  ...
+# Subtest: a body route accepts page_id
+ok 456 - a body route accepts page_id
+  ---
+  duration_ms: 24.477073
+  type: 'test'
+  ...
+# Subtest: a query route accepts page_id
+ok 457 - a query route accepts page_id
+  ---
+  duration_ms: 0.787195
+  type: 'test'
+  ...
+# Subtest: id remains accepted by body and query routes
+ok 458 - id remains accepted by body and query routes
+  ---
+  duration_ms: 0.460236
+  type: 'test'
+  ...
+# Subtest: different id and page_id values are rejected
+ok 459 - different id and page_id values are rejected
+  ---
+  duration_ms: 0.336506
+  type: 'test'
+  ...
+# Subtest: identical id and page_id values are accepted
+ok 460 - identical id and page_id values are accepted
+  ---
+  duration_ms: 0.350733
+  type: 'test'
+  ...
+# Subtest: a missing identifier names both accepted fields
+ok 461 - a missing identifier names both accepted fields
+  ---
+  duration_ms: 0.241679
+  type: 'test'
+  ...
+# Subtest: an unparseable identifier keeps the existing invalid-field error
+ok 462 - an unparseable identifier keeps the existing invalid-field error
+  ---
+  duration_ms: 0.224348
+  type: 'test'
+  ...
+# Subtest: all five page identifier routes use the shared alias resolver
+ok 463 - all five page identifier routes use the shared alias resolver
+  ---
+  duration_ms: 0.919933
+  type: 'test'
+  ...
+# Subtest: page access consolidation leaves MCP reads unscoped and filters browser reads only
+ok 464 - page access consolidation leaves MCP reads unscoped and filters browser reads only
+  ---
+  duration_ms: 912.19062
+  type: 'test'
+  ...
+# Subtest: route: omitted type preserves a canvas and its exact raw payload
+ok 465 - route: omitted type preserves a canvas and its exact raw payload
+  ---
+  duration_ms: 345.046895
+  type: 'test'
+  ...
+# Subtest: route: omitted type keeps Markdown conversion for ordinary pages
+ok 466 - route: omitted type keeps Markdown conversion for ordinary pages
+  ---
+  duration_ms: 356.642052
+  type: 'test'
+  ...
+# Subtest: route: explicit markdown wins over the existing canvas
+ok 467 - route: explicit markdown wins over the existing canvas
+  ---
+  duration_ms: 318.048262
+  type: 'test'
+  ...
+# Subtest: route: explicit html wins over the existing canvas
+ok 468 - route: explicit html wins over the existing canvas
+  ---
+  duration_ms: 289.608995
+  type: 'test'
+  ...
+# Subtest: route: explicit html_canvas wins over the existing canvas
+ok 469 - route: explicit html_canvas wins over the existing canvas
+  ---
+  duration_ms: 229.548416
+  type: 'test'
+  ...
+# Subtest: service: omitted type preserves a canvas and its exact raw payload
+ok 470 - service: omitted type preserves a canvas and its exact raw payload
+  ---
+  duration_ms: 243.291765
+  type: 'test'
+  ...
+# Subtest: service: omitted type keeps Markdown conversion for ordinary pages
+ok 471 - service: omitted type keeps Markdown conversion for ordinary pages
+  ---
+  duration_ms: 225.721886
+  type: 'test'
+  ...
+# Subtest: service: explicit markdown wins over the existing canvas
+ok 472 - service: explicit markdown wins over the existing canvas
+  ---
+  duration_ms: 211.786694
+  type: 'test'
+  ...
+# Subtest: service: explicit html wins over the existing canvas
+ok 473 - service: explicit html wins over the existing canvas
+  ---
+  duration_ms: 312.505003
+  type: 'test'
+  ...
+# Subtest: service: explicit html_canvas wins over the existing canvas
+ok 474 - service: explicit html_canvas wins over the existing canvas
+  ---
+  duration_ms: 184.197719
+  type: 'test'
+  ...
+# Subtest: omitted canvas type uses the existing append block ordering
+ok 475 - omitted canvas type uses the existing append block ordering
+  ---
+  duration_ms: 267.340112
+  type: 'test'
+  ...
+# Subtest: omitted canvas type uses the existing prepend block ordering
+ok 476 - omitted canvas type uses the existing prepend block ordering
+  ---
+  duration_ms: 136.206668
+  type: 'test'
+  ...
+# Subtest: title-only updates leave the canvas untouched
+ok 477 - title-only updates leave the canvas untouched
+  ---
+  duration_ms: 123.124347
+  type: 'test'
+  ...
+# Subtest: invalid explicit types and modes are rejected without mutations
+ok 478 - invalid explicit types and modes are rejected without mutations
+  ---
+  duration_ms: 104.683661
+  type: 'test'
+  ...
+# Subtest: version conflicts and access failures do not mutate a canvas
+ok 479 - version conflicts and access failures do not mutate a canvas
+  ---
+  duration_ms: 386.626344
+  type: 'test'
+  ...
+# Subtest: task cursor round-trips its task id
+ok 480 - task cursor round-trips its task id
+  ---
+  duration_ms: 2.108104
+  type: 'test'
+  ...
+# Subtest: task cursor rejects malformed base64
+ok 481 - task cursor rejects malformed base64
+  ---
+  duration_ms: 0.628791
+  type: 'test'
+  ...
+# Subtest: task cursor rejects an empty value
+ok 482 - task cursor rejects an empty value
+  ---
+  duration_ms: 0.226452
+  type: 'test'
+  ...
+# Subtest: accepts a well-formed playbook and trims/normalizes it
+ok 483 - accepts a well-formed playbook and trims/normalizes it
+  ---
+  duration_ms: 3.7182
+  type: 'test'
+  ...
+# Subtest: rejects the wrong shape
+ok 484 - rejects the wrong shape
+  ---
+  duration_ms: 0.422546
+  type: 'test'
+  ...
+# Subtest: enforces size caps
+ok 485 - enforces size caps
+  ---
+  duration_ms: 0.290491
+  type: 'test'
+  ...
+# Subtest: an empty object is valid (clears the playbook)
+ok 486 - an empty object is valid (clears the playbook)
+  ---
+  duration_ms: 0.37066
+  type: 'test'
+  ...
+# Subtest: project deletion is unavailable while its feature flag is off
+ok 487 - project deletion is unavailable while its feature flag is off
+  ---
+  duration_ms: 941.914449
+  type: 'test'
+  ...
+# Subtest: project deletion requires MCP authentication
+ok 488 - project deletion requires MCP authentication
+  ---
+  duration_ms: 281.805589
+  type: 'test'
+  ...
+# Subtest: project deletion rejects an invalid project id
+ok 489 - project deletion rejects an invalid project id
+  ---
+  duration_ms: 207.934424
+  type: 'test'
+  ...
+# Subtest: project deletion uses the web UI deletion controller for the authenticated user
+ok 490 - project deletion uses the web UI deletion controller for the authenticated user
+  ---
+  duration_ms: 172.922591
+  type: 'test'
+  ...
+# Subtest: project deletion preserves authorization failures from the web UI controller
+ok 491 - project deletion preserves authorization failures from the web UI controller
+  ---
+  duration_ms: 236.258627
+  type: 'test'
+  ...
+# Subtest: project listings expose the ticket prefix needed by CLI show
+ok 492 - project listings expose the ticket prefix needed by CLI show
+  ---
+  duration_ms: 1.338161
+  type: 'test'
+  ...
+# Subtest: rag_retrieval schema requires a query
+ok 493 - rag_retrieval schema requires a query
+  ---
+  duration_ms: 6.816599
+  type: 'test'
+  ...
+# Subtest: rag_retrieval is registered in MCP_TOOLS
+ok 494 - rag_retrieval is registered in MCP_TOOLS
+  ---
+  duration_ms: 0.409271
+  type: 'test'
+  ...
+# Subtest: chat and MCP import the shared board-knowledge retrieval
+ok 495 - chat and MCP import the shared board-knowledge retrieval
+  ---
+  duration_ms: 847.909645
+  type: 'test'
+  ...
+# Subtest: first call awaits plain INCR and sets expiry before returning
+ok 496 - first call awaits plain INCR and sets expiry before returning
+  ---
+  duration_ms: 202.887889
+  type: 'test'
+  ...
+# Subtest: second call awaits INCRBY 10, nine prepaid calls skip Redis, then exhaustion awaits again
+ok 497 - second call awaits INCRBY 10, nine prepaid calls skip Redis, then exhaustion awaits again
+  ---
+  duration_ms: 102.394128
+  type: 'test'
+  ...
+# Subtest: five concurrent calls preserve one lease and nine reservations with lease reply first
+ok 498 - five concurrent calls preserve one lease and nine reservations with lease reply first
+  ---
+  duration_ms: 134.330716
+  type: 'test'
+  ...
+# Subtest: five concurrent calls preserve one lease and nine reservations with lease reply last
+ok 499 - five concurrent calls preserve one lease and nine reservations with lease reply last
+  ---
+  duration_ms: 38.751252
+  type: 'test'
+  ...
+# Subtest: a call delayed on the Redis connection uses an existing prepaid slot instead of leasing again
+ok 500 - a call delayed on the Redis connection uses an existing prepaid slot instead of leasing again
+  ---
+  duration_ms: 44.219581
+  type: 'test'
+  ...
+# Subtest: known count over 50 uses plain INCR and awaits near the limit
+ok 501 - known count over 50 uses plain INCR and awaits near the limit
+  ---
+  duration_ms: 98.22608
+  type: 'test'
+  ...
+# Subtest: known count exactly 50 can reserve through half the anonymous limit
+ok 502 - known count exactly 50 can reserve through half the anonymous limit
+  ---
+  duration_ms: 25.370385
+  type: 'test'
+  ...
+# Subtest: shared jump to 699 blocks the lease and every later call synchronously with unchanged 429
+ok 503 - shared jump to 699 blocks the lease and every later call synchronously with unchanged 429
+  ---
+  duration_ms: 94.628783
+  type: 'test'
+  ...
+# Subtest: two instances sharing Redis admit at most 120 of 130 interleaved anonymous calls, never overshooting
+ok 504 - two instances sharing Redis admit at most 120 of 130 interleaved anonymous calls, never overshooting
+  ---
+  duration_ms: 117.963441
+  type: 'test'
+  ...
+# Subtest: raced lease above half-limit hands its slots back and decides exactly like a plain INCR
+ok 505 - raced lease above half-limit hands its slots back and decides exactly like a plain INCR
+  ---
+  duration_ms: 65.391292
+  type: 'test'
+  ...
+# Subtest: new window clears prepaid reservations and awaits its first plain INCR
+ok 506 - new window clears prepaid reservations and awaits its first plain INCR
+  ---
+  duration_ms: 25.535572
+  type: 'test'
+  ...
+# Subtest: old-window lease replies cannot repopulate reservations in the new window
+ok 507 - old-window lease replies cannot repopulate reservations in the new window
+  ---
+  duration_ms: 65.589289
+  type: 'test'
+  ...
+# Subtest: a request delayed across the window boundary cannot reinsert an expired entry
+ok 508 - a request delayed across the window boundary cannot reinsert an expired entry
+  ---
+  duration_ms: 34.754843
+  type: 'test'
+  ...
+# Subtest: awaited Redis and first-write expiry errors clear entries and fail open
+ok 509 - awaited Redis and first-write expiry errors clear entries and fail open
+  ---
+  duration_ms: 138.248759
+  type: 'test'
+  ...
+# Subtest: a failed concurrent INCR deletes the entry and an old lease cannot reserve on its replacement
+ok 510 - a failed concurrent INCR deletes the entry and an old lease cannot reserve on its replacement
+  ---
+  duration_ms: 29.259775
+  type: 'test'
+  ...
+# Subtest: connection errors clear known entries and fail open
+ok 511 - connection errors clear known entries and fail open
+  ---
+  duration_ms: 27.825504
+  type: 'test'
+  ...
+# Subtest: a lease recreating an expired Redis key sets expiry when returned count equals increment
+ok 512 - a lease recreating an expired Redis key sets expiry when returned count equals increment
+  ---
+  duration_ms: 54.425918
+  type: 'test'
+  ...
+# Subtest: OFF uses the legacy always-await plain INCR path without reservations
+ok 513 - OFF uses the legacy always-await plain INCR path without reservations
+  ---
+  duration_ms: 16.758655
+  type: 'test'
+  ...
+# Subtest: OWNER_ONLY uses the legacy always-await plain INCR path without reservations
+ok 514 - OWNER_ONLY uses the legacy always-await plain INCR path without reservations
+  ---
+  duration_ms: 31.957097
+  type: 'test'
+  ...
+# Subtest: OWNER_AND_QA uses the legacy always-await plain INCR path without reservations
+ok 515 - OWNER_AND_QA uses the legacy always-await plain INCR path without reservations
+  ---
+  duration_ms: 46.001889
+  type: 'test'
+  ...
+# Subtest: flag lookup failure uses always-await and rechecks after the cache expires
+ok 516 - flag lookup failure uses always-await and rechecks after the cache expires
+  ---
+  duration_ms: 21.930933
+  type: 'test'
+  ...
+# Subtest: turning the flag off clears reservations and turning it on awaits a fresh count
+ok 517 - turning the flag off clears reservations and turning it on awaits a fresh count
+  ---
+  duration_ms: 21.412999
+  type: 'test'
+  ...
+# Subtest: turning the flag off during an awaited connection prevents old calls repopulating the cache
+ok 518 - turning the flag off during an awaited connection prevents old calls repopulating the cache
+  ---
+  duration_ms: 52.778664
+  type: 'test'
+  ...
+# Subtest: turning the flag off during an awaited increment prevents old calls repopulating the cache
+ok 519 - turning the flag off during an awaited increment prevents old calls repopulating the cache
+  ---
+  duration_ms: 18.602257
+  type: 'test'
+  ...
+# Subtest: a full map never evicts prepaid entries and never stores raw tokens
+ok 520 - a full map never evicts prepaid entries and never stores raw tokens
+  ---
+  duration_ms: 226.382805
+  type: 'test'
+  ...
+# Subtest: an untracked key on a full map always counts singly and never leases
+ok 521 - an untracked key on a full map always counts singly and never leases
+  ---
+  duration_ms: 223.021286
+  type: 'test'
+  ...
+# Subtest: custom anonymous limit controls whether a ten-slot lease fits below half-limit
+ok 522 - custom anonymous limit controls whether a ten-slot lease fits below half-limit
+  ---
+  duration_ms: 93.073459
+  type: 'test'
+  ...
+# Subtest: anonymous-tier counts still resolve auth and enforce 120, while agents can reach 600
+ok 523 - anonymous-tier counts still resolve auth and enforce 120, while agents can reach 600
+  ---
+  duration_ms: 45.047391
+  type: 'test'
+  ...
+# Subtest: missing tokens and internally checked calls retain the existing no-increment exemption
+ok 524 - missing tokens and internally checked calls retain the existing no-increment exemption
+  ---
+  duration_ms: 22.780354
+  type: 'test'
+  ...
+# Subtest: flag registry defaults to Owner + QA (off for this global gate) and the global helper evaluates without a user
+ok 525 - flag registry defaults to Owner + QA (off for this global gate) and the global helper evaluates without a user
+  ---
+  duration_ms: 106.92332
+  type: 'test'
+  ...
+# Subtest: under the limit is not limited
+ok 526 - under the limit is not limited
+  ---
+  duration_ms: 1.731784
+  type: 'test'
+  ...
+# Subtest: exactly at the limit is not limited (limit is inclusive)
+ok 527 - exactly at the limit is not limited (limit is inclusive)
+  ---
+  duration_ms: 0.311039
+  type: 'test'
+  ...
+# Subtest: one over the limit is limited
+ok 528 - one over the limit is limited
+  ---
+  duration_ms: 0.188811
+  type: 'test'
+  ...
+# Subtest: retryAfterSeconds counts down to the window boundary
+ok 529 - retryAfterSeconds counts down to the window boundary
+  ---
+  duration_ms: 0.198689
+  type: 'test'
+  ...
+# Subtest: retryAfterSeconds never reports zero or negative even at the window edge
+ok 530 - retryAfterSeconds never reports zero or negative even at the window edge
+  ---
+  duration_ms: 0.422396
+  type: 'test'
+  ...
+# Subtest: normalizes supported MCP task relation types
+ok 531 - normalizes supported MCP task relation types
+  ---
+  duration_ms: 1.603546
+  type: 'test'
+  ...
+# Subtest: rejects unsupported MCP task relation types
+ok 532 - rejects unsupported MCP task relation types
+  ---
+  duration_ms: 0.261707
+  type: 'test'
+  ...
+# Subtest: defaults a missing or null MCP task relation type to RelatedTo
+ok 533 - defaults a missing or null MCP task relation type to RelatedTo
+  ---
+  duration_ms: 0.180125
+  type: 'test'
+  ...
+# Subtest: a blocker blocks only while genuinely open
+ok 534 - a blocker blocks only while genuinely open
+  ---
+  duration_ms: 0.550405
+  type: 'test'
+  ...
+# Subtest: help-doc schema accepts a query and constrains limit to 1..6
+ok 535 - help-doc schema accepts a query and constrains limit to 1..6
+  ---
+  duration_ms: 8.726013
+  type: 'test'
+  ...
+# Subtest: search_help_docs is registered in MCP_TOOLS
+ok 536 - search_help_docs is registered in MCP_TOOLS
+  ---
+  duration_ms: 0.579669
+  type: 'test'
+  ...
+# Subtest: fetched help article HTML is stripped, collapsed, and truncated
+ok 537 - fetched help article HTML is stripped, collapsed, and truncated
+  ---
+  duration_ms: 39.174671
+  type: 'test'
+  ...
+# Subtest: MCP section updates store and return a user auto-assignee
+ok 538 - MCP section updates store and return a user auto-assignee
+  ---
+  duration_ms: 287.782825
+  type: 'test'
+  ...
+# Subtest: MCP section updates store and return an agent auto-assignee
+ok 539 - MCP section updates store and return an agent auto-assignee
+  ---
+  duration_ms: 83.166828
+  type: 'test'
+  ...
+# Subtest: MCP section updates clear both auto-assignee fields
+ok 540 - MCP section updates clear both auto-assignee fields
+  ---
+  duration_ms: 61.137693
+  type: 'test'
+  ...
+# Subtest: MCP section updates reject auto-assignees outside the board
+ok 541 - MCP section updates reject auto-assignees outside the board
+  ---
+  duration_ms: 107.572298
+  type: 'test'
+  ...
+# Subtest: MCP section list and update routes expose autoAssign
+ok 542 - MCP section list and update routes expose autoAssign
+  ---
+  duration_ms: 28.449767
+  type: 'test'
+  ...
+# Subtest: normalizes session status from enum name or lowercase
+ok 543 - normalizes session status from enum name or lowercase
+  ---
+  duration_ms: 1.593195
+  type: 'test'
+  ...
+# Subtest: defaults absent/null status to Active
+ok 544 - defaults absent/null status to Active
+  ---
+  duration_ms: 0.611758
+  type: 'test'
+  ...
+# Subtest: rejects an unknown status
+ok 545 - rejects an unknown status
+  ---
+  duration_ms: 0.388152
+  type: 'test'
+  ...
+# [mcp-sse-analytics] PostHog capture failed
+# [mcp-sse-analytics] PostHog capture could not be scheduled
+# Subtest: each legacy route and supported method captures verified identity and request metadata once without changing the response
+ok 546 - each legacy route and supported method captures verified identity and request metadata once without changing the response
+  ---
+  duration_ms: 26.632163
+  type: 'test'
+  ...
+# Subtest: transport analytics evaluates the catalog flag through an isolated fixture for the verified user
+ok 547 - transport analytics evaluates the catalog flag through an isolated fixture for the verified user
+  ---
+  duration_ms: 9.174246
+  type: 'test'
+  ...
+# Subtest: unauthenticated attempts are counted but never attributed to a verified user
+ok 548 - unauthenticated attempts are counted but never attributed to a verified user
+  ---
+  duration_ms: 1.386161
+  type: 'test'
+  ...
+# Subtest: oversized legacy requests are still counted and preserve the rejection
+ok 549 - oversized legacy requests are still counted and preserve the rejection
+  ---
+  duration_ms: 3.505836
+  type: 'test'
+  ...
+# Subtest: the current /mcp transport does not contribute to the legacy counter
+ok 550 - the current /mcp transport does not contribute to the legacy counter
+  ---
+  duration_ms: 1.753333
+  type: 'test'
+  ...
+# Subtest: analytics rejection, unavailable configuration and scheduling failure never alter client responses
+ok 551 - analytics rejection, unavailable configuration and scheduling failure never alter client responses
+  ---
+  duration_ms: 2.956113
+  type: 'test'
+  ...
+# Subtest: unauthenticated, rate-limited and inaccessible requests never read activity
+ok 552 - unauthenticated, rate-limited and inaccessible requests never read activity
+  ---
+  duration_ms: 9.169398
+  type: 'test'
+  ...
+# Subtest: agent read uses task permission helper, not caller run ownership; returns all requested fields
+ok 553 - agent read uses task permission helper, not caller run ownership; returns all requested fields
+  ---
+  duration_ms: 2.655614
+  type: 'test'
+  ...
+# Subtest: user tokens use the same task permission helper and empty history succeeds
+ok 554 - user tokens use the same task permission helper and empty history succeeds
+  ---
+  duration_ms: 0.744065
+  type: 'test'
+  ...
+# Subtest: ticket identifiers resolve with task access; limits default to 20 and cap at 100
+ok 555 - ticket identifiers resolve with task access; limits default to 20 and cap at 100
+  ---
+  duration_ms: 3.092407
+  type: 'test'
+  ...
+# Subtest: optional claimant filter keeps task access and reads only that agent across its runs
+ok 556 - optional claimant filter keeps task access and reads only that agent across its runs
+  ---
+  duration_ms: 1.399195
+  type: 'test'
+  ...
+# Subtest: invalid ids and limits are rejected without permission or activity queries
+ok 557 - invalid ids and limits are rejected without permission or activity queries
+  ---
+  duration_ms: 7.49422
+  type: 'test'
+  ...
+# Subtest: storage failures return no private data
+ok 558 - storage failures return no private data
+  ---
+  duration_ms: 0.819245
+  type: 'test'
+  ...
+# [MCP] tasks {
+#   user: { id: 6, email: 'owner@example.test' },
+#   query: {
+#     project_id: '15',
+#     status: 'Archive',
+#     section: 'Done',
+#     sort_by: 'updatedAt',
+#     sort_order: 'desc',
+#     limit: '10'
+#   }
+# }
+# Subtest: archived task lists sort missing update timestamps after recent tasks
+ok 559 - archived task lists sort missing update timestamps after recent tasks
+  ---
+  duration_ms: 408.336586
+  type: 'test'
+  ...
+# Subtest: task context redacts deleted, private, and unshared team agent names
+ok 560 - task context redacts deleted, private, and unshared team agent names
+  ---
+  duration_ms: 944.116458
+  type: 'test'
+  ...
+# Subtest: mapTaskToMcpGetResponse reports assigneeCount matching the assignee list
+ok 561 - mapTaskToMcpGetResponse reports assigneeCount matching the assignee list
+  ---
+  duration_ms: 6.414671
+  type: 'test'
+  ...
+# Subtest: an agent assignment lists the agent name, not the owner's
+ok 562 - an agent assignment lists the agent name, not the owner's
+  ---
+  duration_ms: 0.78454
+  type: 'test'
+  ...
+# Subtest: assigneeCount counts only the assignees the response actually lists
+ok 563 - assigneeCount counts only the assignees the response actually lists
+  ---
+  duration_ms: 0.325866
+  type: 'test'
+  ...
+# Subtest: the MCP task list applies the shared query, filter, fields contract
+ok 564 - the MCP task list applies the shared query, filter, fields contract
+  ---
+  duration_ms: 2.331029
+  type: 'test'
+  ...
+# Subtest: the MCP task list selects labels in the paginated task query
+ok 565 - the MCP task list selects labels in the paginated task query
+  ---
+  duration_ms: 0.825968
+  type: 'test'
+  ...
+# Subtest: task list counts only assignees visible to the task board
+ok 566 - task list counts only assignees visible to the task board
+  ---
+  duration_ms: 0.411135
+  type: 'test'
+  ...
+# Subtest: list and detail labels share the exact id/name mapping
+ok 567 - list and detail labels share the exact id/name mapping
+  ---
+  duration_ms: 482.630599
+  type: 'test'
+  ...
+# Subtest: task responses redact agents that are not visible to the viewer
+ok 568 - task responses redact agents that are not visible to the viewer
+  ---
+  duration_ms: 84.17766
+  type: 'test'
+  ...
+# Subtest: task responses expose the permanent-delete deadline
+ok 569 - task responses expose the permanent-delete deadline
+  ---
+  duration_ms: 109.060127
+  type: 'test'
+  ...
+# Subtest: the paginated task list selects and serializes the permanent-delete deadline
+ok 570 - the paginated task list selects and serializes the permanent-delete deadline
+  ---
+  duration_ms: 0.702957
+  type: 'test'
+  ...
+# Subtest: task get returns linked pull requests in selected order
+ok 571 - task get returns linked pull requests in selected order
+  ---
+  duration_ms: 76.934428
+  type: 'test'
+  ...
+# Subtest: MCP task list accepts project as a project_id alias
+ok 572 - MCP task list accepts project as a project_id alias
+  ---
+  duration_ms: 214.404738
+  type: 'test'
+  ...
+# Subtest: canonical project_id wins over compatibility aliases
+ok 573 - canonical project_id wins over compatibility aliases
+  ---
+  duration_ms: 70.731127
+  type: 'test'
+  ...
+# Subtest: an invalid project alias fails instead of dropping the filter
+ok 574 - an invalid project alias fails instead of dropping the filter
+  ---
+  duration_ms: 14.140001
+  type: 'test'
+  ...
+# Subtest: MCP task updates wait for board and task realtime delivery attempts
+ok 575 - MCP task updates wait for board and task realtime delivery attempts
+  ---
+  duration_ms: 7.074109
+  type: 'test'
+  ...
+# Subtest: realtime delivery failures do not fail a persisted MCP task update
+ok 576 - realtime delivery failures do not fail a persisted MCP task update
+  ---
+  duration_ms: 2.259326
+  type: 'test'
+  ...
+# Subtest: priority numbers from the CLI resolve to the stored index
+ok 577 - priority numbers from the CLI resolve to the stored index
+  ---
+  duration_ms: 2.47646
+  type: 'test'
+  ...
+# Subtest: priority names resolve case-insensitively
+ok 578 - priority names resolve case-insensitively
+  ---
+  duration_ms: 0.473441
+  type: 'test'
+  ...
+# Subtest: no priority param means no filter
+ok 579 - no priority param means no filter
+  ---
+  duration_ms: 0.223426
+  type: 'test'
+  ...
+# Subtest: unknown priorities are rejected
+ok 580 - unknown priorities are rejected
+  ---
+  duration_ms: 0.281173
+  type: 'test'
+  ...
+# Subtest: create stores note and date with the same local-noon semantics as update
+ok 581 - create stores note and date with the same local-noon semantics as update
+  ---
+  duration_ms: 717.148365
+  type: 'test'
+  ...
+# Subtest: create without date keeps the existing now-ending interval
+ok 582 - create without date keeps the existing now-ending interval
+  ---
+  duration_ms: 312.978996
+  type: 'test'
+  ...
+# Subtest: create defaults note to null and normalizes notes like update
+ok 583 - create defaults note to null and normalizes notes like update
+  ---
+  duration_ms: 850.525506
+  type: 'test'
+  ...
+# Subtest: update note only preserves timestamps and response shape
+ok 584 - update note only preserves timestamps and response shape
+  ---
+  duration_ms: 147.255515
+  type: 'test'
+  ...
+# Subtest: update date only preserves exact duration, including timer seconds
+ok 585 - update date only preserves exact duration, including timer seconds
+  ---
+  duration_ms: 231.91496
+  type: 'test'
+  ...
+# Subtest: update note and date together without minutes
+ok 586 - update note and date together without minutes
+  ---
+  duration_ms: 127.906076
+  type: 'test'
+  ...
+# Subtest: update supplied minutes retains old behavior and numeric-string compatibility
+ok 587 - update supplied minutes retains old behavior and numeric-string compatibility
+  ---
+  duration_ms: 484.270017
+  type: 'test'
+  ...
+# Subtest: create and update combined fields use identical date and timezone semantics
+ok 588 - create and update combined fields use identical date and timezone semantics
+  ---
+  duration_ms: 519.646101
+  type: 'test'
+  ...
+# Subtest: invalid supplied minutes answer 400 without writing
+ok 589 - invalid supplied minutes answer 400 without writing
+  ---
+  duration_ms: 933.084462
+  type: 'test'
+  ...
+# Subtest: invalid date or note answers 400 on both endpoints
+ok 590 - invalid date or note answers 400 on both endpoints
+  ---
+  duration_ms: 771.737437
+  type: 'test'
+  ...
+# Subtest: update with no changeable field, including timezone alone, answers a clear 400
+ok 591 - update with no changeable field, including timezone alone, answers a clear 400
+  ---
+  duration_ms: 241.671531
+  type: 'test'
+  ...
+# Subtest: authentication, rate limits, access checks and disabled-board responses are preserved
+ok 592 - authentication, rate limits, access checks and disabled-board responses are preserved
+  ---
+  duration_ms: 403.451242
+  type: 'test'
+  ...
+# Subtest: MCP tool schema and service forward optional log fields end to end
+ok 593 - MCP tool schema and service forward optional log fields end to end
+  ---
+  duration_ms: 257.960823
+  type: 'test'
+  ...
+# Subtest: both routes exist and are POST, matching the other time endpoints
+ok 594 - both routes exist and are POST, matching the other time endpoints
+  ---
+  duration_ms: 1.765116
+  type: 'test'
+  ...
+# Subtest: both routes authenticate before touching anything
+ok 595 - both routes authenticate before touching anything
+  ---
+  duration_ms: 0.359849
+  type: 'test'
+  ...
+# Subtest: both routes preserve the authenticated agent scope
+ok 596 - both routes preserve the authenticated agent scope
+  ---
+  duration_ms: 0.561275
+  type: 'test'
+  ...
+# Subtest: the shared auth helper still rate limits
+ok 597 - the shared auth helper still rate limits
+  ---
+  duration_ms: 0.276735
+  type: 'test'
+  ...
+# Subtest: missing or forbidden entries answer identically
+ok 598 - missing or forbidden entries answer identically
+  ---
+  duration_ms: 0.347417
+  type: 'test'
+  ...
+# Subtest: update validates minutes against the same bounds as the library
+ok 599 - update validates minutes against the same bounds as the library
+  ---
+  duration_ms: 3.127853
+  type: 'test'
+  ...
+# Subtest: entry_id is validated as a positive integer
+ok 600 - entry_id is validated as a positive integer
+  ---
+  duration_ms: 0.395216
+  type: 'test'
+  ...
+# Subtest: pause on a running timer sets pausedAt and reports success
+ok 601 - pause on a running timer sets pausedAt and reports success
+  ---
+  duration_ms: 1.99874
+  type: 'test'
+  ...
+# Subtest: pause with no running timer returns a 404 failure
+ok 602 - pause with no running timer returns a 404 failure
+  ---
+  duration_ms: 0.53714
+  type: 'test'
+  ...
+# Subtest: resume on a paused timer clears pausedAt
+ok 603 - resume on a paused timer clears pausedAt
+  ---
+  duration_ms: 0.536648
+  type: 'test'
+  ...
+# Subtest: resume with no paused timer returns a 404 failure
+ok 604 - resume with no paused timer returns a 404 failure
+  ---
+  duration_ms: 0.352125
+  type: 'test'
+  ...
+# Subtest: both routes use the shared MCP task resolver
+ok 605 - both routes use the shared MCP task resolver
+  ---
+  duration_ms: 0.310367
+  type: 'test'
+  ...
+# Subtest: stopping a paused timer still ends it at pausedAt
+ok 606 - stopping a paused timer still ends it at pausedAt
+  ---
+  duration_ms: 0.546698
+  type: 'test'
+  ...
+# Subtest: pause and resume are registered for MCP and AI chat
+ok 607 - pause and resume are registered for MCP and AI chat
+  ---
+  duration_ms: 793.10931
+  type: 'test'
+  ...
+# Subtest: masked MCP token is not a usable Authorization bearer
+ok 608 - masked MCP token is not a usable Authorization bearer
+  ---
+  duration_ms: 3.283261
+  type: 'test'
+  ...
+# Subtest: mcp_token cookie parse keeps JWT padding after equals signs
+ok 609 - mcp_token cookie parse keeps JWT padding after equals signs
+  ---
+  duration_ms: 0.643789
+  type: 'test'
+  ...
+# Subtest: useMcpToken reads cookies through readMcpTokenCookieValue
+ok 610 - useMcpToken reads cookies through readMcpTokenCookieValue
+  ---
+  duration_ms: 1.102693
+  type: 'test'
+  ...
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: null,
+#   iat: '2026-10-12T04:51:34.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: null,
+#   iat: '2026-10-12T04:51:34.000Z'
+# }
+# [MCP Auth] JWT verified with current format (mcp-api)
+# [MCP Auth] Token decoded (unverified): {
+#   userId: 6,
+#   sub: 'valentin@hypertask.ai',
+#   iss: 'hypertask',
+#   aud: 'mcp-api',
+#   exp: null,
+#   iat: '2026-10-12T04:51:34.000Z'
+# }
+# [MCP Auth] Current format failed: invalid signature
+# [MCP Auth] Legacy format failed: invalid signature
+# [MCP Auth] OAuth format failed: invalid signature
+# [MCP Auth] Token has an unsupported audience: mcp-api
+# [MCP Auth] Token decode returned null
+# Subtest: a superseded agent token returns agent_token_superseded
+ok 611 - a superseded agent token returns agent_token_superseded
+  ---
+  duration_ms: 23.358762
+  type: 'test'
+  ...
+# Subtest: a revoked agent token returns agent_revoked
+ok 612 - a revoked agent token returns agent_revoked
+  ---
+  duration_ms: 3.842403
+  type: 'test'
+  ...
+# Subtest: an agent token with a bad signature does not disclose agent state
+ok 613 - an agent token with a bad signature does not disclose agent state
+  ---
+  duration_ms: 37.139752
+  type: 'test'
+  ...
+# Subtest: a valid agent token points to owner-authorized token rotation
+ok 614 - a valid agent token points to owner-authorized token rotation
+  ---
+  duration_ms: 2.242565
+  type: 'test'
+  ...
+# Subtest: a valid pre-cutoff legacy token migrates to a refreshable token
+ok 615 - a valid pre-cutoff legacy token migrates to a refreshable token
+  ---
+  duration_ms: 4.446176
+  type: 'test'
+  ...
+# Subtest: a legacy token issued after the migration cutoff is not refreshable
+ok 616 - a legacy token issued after the migration cutoff is not refreshable
+  ---
+  duration_ms: 2.073079
+  type: 'test'
+  ...
+# Subtest: a same-secret non-MCP token cannot use legacy migration
+ok 617 - a same-secret non-MCP token cannot use legacy migration
+  ---
+  duration_ms: 1.684846
+  type: 'test'
+  ...
+# Subtest: a valid token with jti refreshes through a unique revocation claim
+ok 618 - a valid token with jti refreshes through a unique revocation claim
+  ---
+  duration_ms: 5.992204
+  type: 'test'
+  ...
+# Subtest: concurrent legacy refreshes return exactly one replacement
+ok 619 - concurrent legacy refreshes return exactly one replacement
+  ---
+  duration_ms: 6.412266
+  type: 'test'
+  ...
+# Subtest: an audit-log failure does not strand a successfully claimed refresh
+ok 620 - an audit-log failure does not strand a successfully claimed refresh
+  ---
+  duration_ms: 2.743077
+  type: 'test'
+  ...
+# Subtest: an invalid token keeps the generic invalid_token response
+ok 621 - an invalid token keeps the generic invalid_token response
+  ---
+  duration_ms: 1.421676
+  type: 'test'
+  ...
+# Subtest: an anonymous caller cannot distinguish an unknown MCP path from a real one
+ok 622 - an anonymous caller cannot distinguish an unknown MCP path from a real one
+  ---
+  duration_ms: 132.449536
+  type: 'test'
+  ...
+# Subtest: an authenticated caller still receives not found for an unknown MCP path
+ok 623 - an authenticated caller still receives not found for an unknown MCP path
+  ---
+  duration_ms: 56.297814
+  type: 'test'
+  ...
+# [MCP Auth] Management API key validated for user: 6
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Failed to verify management API key: Error: verifier unavailable
+#     at Object.verifyApiKey (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-auth.test.cjs:85:17)
+#     at validateManagementApiKey (/home/valentin/projects/hypertask-yper4-215/src/lib/mcp/auth/session.ts:288:35)
+#     at async validateManagementAuth (/home/valentin/projects/hypertask-yper4-215/src/lib/mcp/auth/session.ts:183:92)
+#     at async TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-auth.test.cjs:318:5)
+#     at async Test.run (node:internal/test_runner/test:1409:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# [MCP Auth] Management API key lacks required management permission { requiredAction: 'usage:read' }
+# Subtest: the shared bearer parser keeps rate limiting aligned with auth
+ok 624 - the shared bearer parser keeps rate limiting aligned with auth
+  ---
+  duration_ms: 10.356708
+  type: 'test'
+  ...
+# Subtest: management-key classification accepts account and team prefixes
+ok 625 - management-key classification accepts account and team prefixes
+  ---
+  duration_ms: 0.741982
+  type: 'test'
+  ...
+# Subtest: successful MCP auth records a recognized CLI after credential validation
+ok 626 - successful MCP auth records a recognized CLI after credential validation
+  ---
+  duration_ms: 5.598511
+  type: 'test'
+  ...
+# Subtest: usage auth accepts usage-scoped and legacy data-management keys
+ok 627 - usage auth accepts usage-scoped and legacy data-management keys
+  ---
+  duration_ms: 14.471166
+  type: 'test'
+  ...
+# Subtest: team keys are disabled after access loss or a new membership
+ok 628 - team keys are disabled after access loss or a new membership
+  ---
+  duration_ms: 5.839088
+  type: 'test'
+  ...
+# Subtest: usage auth rejects non-management bearer tokens
+ok 629 - usage auth rejects non-management bearer tokens
+  ---
+  duration_ms: 5.665706
+  type: 'test'
+  ...
+# [MCP Auth] Management API key validated for user: 6
+# [MCP Auth] Management API key validated for user: 6
+# [MCP Auth] Management API key validated for user: 6
+# [MCP Auth] Management API key validation failed
+# [MCP Auth] JWT_SECRET not configured
+# [MCP Auth] JWT token validation failed
+# [MCP Auth] Management API key validated for user: 6
+# [MCP Auth] No Authorization header or invalid format
+# [MCP Auth] No Authorization header or invalid format
+# [MCP Auth] Management API key validated for user: 6
+# [MCP Auth] Management API key validated for user: 6
+# [MCP Auth] Management API key validated for user: 6
+# [error-reporter] skip-env {}
+# [MCP AI Usage] Owned-team lookup unavailable: Error: team list unavailable
+#     at Object.findMany (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:218:38)
+#     at getTeamUsage (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:84:47)
+#     at /home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:294:18
+#     at async TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:962:24)
+#     at async Test.run (node:internal/test_runner/test:1409:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# [error-reporter] skip-env {}
+# [MCP AI Usage] Team usage snapshot unavailable: Error: team lookup unavailable
+#     at Object.findFirst (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:224:39)
+#     at _prisma.default.$transaction.isolationLevel (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:128:36)
+#     at fixture.$transaction (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:274:28)
+#     at getTeamUsage (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:126:44)
+#     at /home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:294:18
+#     at async TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:962:24)
+#     at async Test.run (node:internal/test_runner/test:1409:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# [error-reporter] skip-env {}
+# [MCP AI Usage] Team usage snapshot unavailable: Error: aggregate unavailable
+#     at Object.aggregate (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:250:35)
+#     at _prisma.default.$transaction.isolationLevel (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:139:41)
+#     at async fixture.$transaction (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:274:22)
+#     at async getTeamUsage (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:126:22)
+# [error-reporter] skip-env {}
+# [MCP AI Usage] Failed to load AI spend: Error: AI Gateway report returned 503
+#     at getTeamUsage (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:203:15)
+#     at async TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:1048:24)
+#     at async Test.run (node:internal/test_runner/test:1409:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# [error-reporter] skip-env {}
+# [MCP AI Usage] Failed to load AI spend: Error: malformed gateway payload
+#     at aggregateGatewayUsage (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:1014:15)
+#     at getTeamUsage (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:206:72)
+#     at async TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:1048:24)
+#     at async Test.run (node:internal/test_runner/test:1409:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# [error-reporter] skip-env {}
+# [MCP AI Usage] Failed to load AI spend: Error: funding lookup unavailable
+#     at onFunding (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:1020:15)
+#     at getTeamGatewayFunding (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:126:18)
+#     at getTeamUsage (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:184:63)
+#     at async TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:1048:24)
+#     at async Test.run (node:internal/test_runner/test:1409:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# [error-reporter] skip-env {}
+# [MCP AI Usage] Failed to load AI spend: Error: AI Gateway funding key unavailable
+#     at getTeamUsage (/home/valentin/projects/hypertask-yper4-215/src/app/api/mcp/ai/usage/route.ts:188:15)
+#     at async TestContext.<anonymous> (/home/valentin/projects/hypertask-yper4-215/tests/mcp-usage-route.test.cjs:1048:24)
+#     at async Test.run (node:internal/test_runner/test:1409:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+# Subtest: usage route returns only owner-scoped counts and spend
+ok 630 - usage route returns only owner-scoped counts and spend
+  ---
+  duration_ms: 6709.28772
+  type: 'test'
+  ...
+# Subtest: usage route rejects ownership changes before returning usage
+ok 631 - usage route rejects ownership changes before returning usage
+  ---
+  duration_ms: 3761.590266
+  type: 'test'
+  ...
+# Subtest: full keys can read team-wide usage without a project id
+ok 632 - full keys can read team-wide usage without a project id
+  ---
+  duration_ms: 3892.494573
+  type: 'test'
+  ...
+# Subtest: legacy full keys can read team-wide usage at the auth boundary
+ok 633 - legacy full keys can read team-wide usage at the auth boundary
+  ---
+  duration_ms: 3770.663112
+  type: 'test'
+  ...
+# Subtest: usage route stops before ownership and funding when rate limited
+ok 634 - usage route stops before ownership and funding when rate limited
+  ---
+  duration_ms: 3449.606651
+  type: 'test'
+  ...
+# Subtest: usage route rejects a non-owner before loading spend
+ok 635 - usage route rejects a non-owner before loading spend
+  ---
+  duration_ms: 4618.740877
+  type: 'test'
+  ...
+# Subtest: usage route rejects callers without a usage-key context
+ok 636 - usage route rejects callers without a usage-key context
+  ---
+  duration_ms: 3421.725132
+  type: 'test'
+  ...
+# Subtest: usage route enforces management-key auth at the route boundary
+ok 637 - usage route enforces management-key auth at the route boundary
+  ---
+  duration_ms: 25664.455918
+  type: 'test'
+  ...
+# Subtest: data-capable management keys retain the project-scoped route
+ok 638 - data-capable management keys retain the project-scoped route
+  ---
+  duration_ms: 3446.497598
+  type: 'test'
+  ...
+# Subtest: HTPR-7076: cache token totals appear only with the prompt cache flag
+ok 639 - HTPR-7076: cache token totals appear only with the prompt cache flag
+  ---
+  duration_ms: 4123.973873
+  type: 'test'
+  ...
+# Subtest: data-capable management keys cannot read another user's project
+ok 640 - data-capable management keys cannot read another user's project
+  ---
+  duration_ms: 3594.49477
+  type: 'test'
+  ...
+# Subtest: usage route binds ownership to the authenticated key identity
+ok 641 - usage route binds ownership to the authenticated key identity
+  ---
+  duration_ms: 3072.66493
+  type: 'test'
+  ...
+# Subtest: team-scoped usage keys reject another team before querying usage
+ok 642 - team-scoped usage keys reject another team before querying usage
+  ---
+  duration_ms: 3846.779737
+  type: 'test'
+  ...
+# Subtest: usage route resolves a single owned team when team_id is omitted
+ok 643 - usage route resolves a single owned team when team_id is omitted
+  ---
+  duration_ms: 4252.122348
+  type: 'test'
+  ...
+# Subtest: usage route requires team_id when the owner has multiple teams
+ok 644 - usage route requires team_id when the owner has multiple teams
+  ---
+  duration_ms: 4895.484461
+  type: 'test'
+  ...
+# Subtest: usage route rejects an owner with no teams before loading spend
+ok 645 - usage route rejects an owner with no teams before loading spend
+  ---
+  duration_ms: 3473.438721
+  type: 'test'
+  ...
+# Subtest: usage route validates team_id before querying Prisma
+ok 646 - usage route validates team_id before querying Prisma
+  ---
+  duration_ms: 3099.565068
+  type: 'test'
+  ...
+# Subtest: usage route returns 404 for an unknown team
+ok 647 - usage route returns 404 for an unknown team
+  ---
+  duration_ms: 3886.141702
+  type: 'test'
+  ...
+# Subtest: usage route fails closed when team ownership lookup fails
+ok 648 - usage route fails closed when team ownership lookup fails
+  ---
+  duration_ms: 6831.219423
+  type: 'test'
+  ...
+# Subtest: usage route fails closed when token totals are unavailable
+ok 649 - usage route fails closed when token totals are unavailable
+  ---
+  duration_ms: 4238.281698
+  type: 'test'
+  ...
+# Subtest: usage route returns 502 for gateway HTTP and payload failures
+ok 650 - usage route returns 502 for gateway HTTP and payload failures
+  ---
+  duration_ms: 14239.992257
+  type: 'test'
+  ...
+# Subtest: gateway totals provide the usage counts and spend basis
+ok 651 - gateway totals provide the usage counts and spend basis
+  ---
+  duration_ms: 2.863059
+  type: 'test'
+  ...
+# Subtest: gateway totals default omitted fields to zero
+ok 652 - gateway totals default omitted fields to zero
+  ---
+  duration_ms: 0.354821
+  type: 'test'
+  ...
+# Subtest: gateway totals reject malformed rows and non-finite numbers
+ok 653 - gateway totals reject malformed rows and non-finite numbers
+  ---
+  duration_ms: 2.924694
+  type: 'test'
+  ...
+# Subtest: gateway response limits reject unsafe allocations
+ok 654 - gateway response limits reject unsafe allocations
+  ---
+  duration_ms: 1.839704
+  type: 'test'
+  ...
+# Subtest: gateway response limits reject oversized bodies
+ok 655 - gateway response limits reject oversized bodies
+  ---
+  duration_ms: 73.19233
+  type: 'test'
+  ...
+# Subtest: gateway response limits count UTF-8 bytes and allow exact limits
+ok 656 - gateway response limits count UTF-8 bytes and allow exact limits
+  ---
+  duration_ms: 4.661847
+  type: 'test'
+  ...
+# Subtest: credential inventory labels each management-key scope
+ok 657 - credential inventory labels each management-key scope
+  ---
+  duration_ms: 1.274192
+  type: 'test'
+  ...
+# Subtest: lease heartbeat and release isolate sibling agents
+ok 658 - lease heartbeat and release isolate sibling agents
+  ---
+  duration_ms: 7.217786
+  type: 'test'
+  ...
+# Subtest: session heartbeats do not treat sibling agents as the same owner
+ok 659 - session heartbeats do not treat sibling agents as the same owner
+  ---
+  duration_ms: 21.990433
+  type: 'test'
+  ...
+# Subtest: only the creating agent or an authorized human may cancel a decision
+ok 660 - only the creating agent or an authorized human may cancel a decision
+  ---
+  duration_ms: 0.96686
+  type: 'test'
+  ...
+1..660
+# tests 660
+# suites 0
+# pass 657
+# fail 0
+# cancelled 0
+# skipped 3
+# todo 0
+# duration_ms 171149.709354
