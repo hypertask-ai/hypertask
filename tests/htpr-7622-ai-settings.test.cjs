@@ -16,7 +16,7 @@ function harness() {
     records: new Map(), writes: 0, beforeRoleWrite: null,
   };
   const db = {
-    chatSession: { findFirst: async ({ where }) => where.id === ({ 6: sessionId, 42: memberSessionId, 17: adminSessionId })[where.userId] ? { id: where.id } : null },
+    chatSession: { findFirst: async ({ where }) => where.id === ({ 6: sessionId, 42: memberSessionId, 17: adminSessionId, 99: outsiderSessionId })[where.userId] ? { id: where.id } : null },
     project: {
       findUnique: async ({ where }) => where.id === 15 ? { id: 15, ownerId: state.ownerId } : null,
       findFirst: async ({ where }) => {
@@ -73,6 +73,7 @@ function harness() {
 const sessionId = "00000000-0000-4000-8000-000000000001";
 const memberSessionId = "00000000-0000-4000-8000-000000000042";
 const adminSessionId = "00000000-0000-4000-8000-000000000017";
+const outsiderSessionId = "00000000-0000-4000-8000-000000000099";
 const boardScope = { section: "board-members", projectId: 15 };
 const roleChange = { kind: "board-role", targetUserId: 42, value: "Admin" };
 const themeScope = { section: "appearance", theme: "porcelain" };
@@ -89,6 +90,16 @@ test("now refused: a member and an admin cannot ask AI to promote another board 
   await assert.rejects(h.proposals.createSettingProposal(17, adminSessionId, boardScope, roleChange), /Only the board owner/);
   assert.equal(h.state.members[0].role, "Member");
   assert.equal(h.state.writes, 0);
+  const allowed = await h.proposals.createSettingProposal(6, sessionId, boardScope, roleChange);
+  assert.deepEqual([allowed.before, allowed.after, allowed.status, allowed.accessChange], ["Member", "Admin", "pending", true]);
+});
+
+test("now refused: an outsider with their own valid chat cannot change this board's roles; still allowed: the owner", async () => {
+  const h = harness();
+  await assert.rejects(h.proposals.createSettingProposal(99, outsiderSessionId, boardScope, roleChange), /Board not found or access denied/);
+  assert.deepEqual(h.state.members.map((member) => member.role), ["Member", "Admin"]);
+  assert.equal(h.state.writes, 0);
+  assert.equal(h.state.records.size, 0);
   const allowed = await h.proposals.createSettingProposal(6, sessionId, boardScope, roleChange);
   assert.deepEqual([allowed.before, allowed.after, allowed.status, allowed.accessChange], ["Member", "Admin", "pending", true]);
 });
@@ -222,6 +233,73 @@ test("now refused: cross-origin, unsigned, agent, disabled-flag and forged Apply
   const forged = await h.route.POST(request({ ...body, id: "00000000-0000-4000-8000-000000000099" }));
   assert.match((await forged.json()).error, /not yours/);
   assert.equal((await h.route.POST(request(body))).status, 200);
+});
+
+test("now refused: an agent acting for a non-owner cannot propose a board-role change; still allowed: the human owner", async () => {
+  const h = harness();
+  const agentTool = h.tool.createSettingsTool({ user: { id: 42 }, actingAgentId: "agent-id", body: { session_id: memberSessionId, settings_context: boardScope }, sendStatus() {}, send() {} }).hypertask_settings;
+  await assert.rejects(agentTool.execute(agentTool.inputSchema.parse({ action: "propose", change: roleChange })), /AI settings changes are not available/);
+  assert.deepEqual(h.state.members.map((member) => member.role), ["Member", "Admin"]);
+  assert.equal(h.state.writes, 0);
+  assert.equal(h.state.records.size, 0);
+  const ownerTool = h.tool.createSettingsTool({ user: { id: 6 }, actingAgentId: null, body: { session_id: sessionId, settings_context: boardScope }, sendStatus() {}, send() {} }).hypertask_settings;
+  const allowed = await ownerTool.execute(ownerTool.inputSchema.parse({ action: "propose", change: roleChange }));
+  assert.equal(allowed.success, true);
+  assert.deepEqual([allowed.proposal.before, allowed.proposal.after, allowed.proposal.status, allowed.proposal.accessChange], ["Member", "Admin", "pending", true]);
+  assert.equal(h.state.writes, 0);
+});
+
+test("now refused: invalid board-role inputs and actor/board overrides fail real schemas; still allowed: valid owner input", async () => {
+  const h = harness();
+  const { settingChangeSchema, settingsScopeSchema } = load("src/lib/ai/settings/catalog.ts", {});
+  const ownerTool = h.tool.createSettingsTool({ user: { id: 6 }, actingAgentId: null, body: { session_id: sessionId, settings_context: boardScope }, sendStatus() {}, send() {} }).hypertask_settings;
+  const input = { action: "propose", change: roleChange };
+  for (const value of ["Owner", "admin", "", null]) {
+    const change = { ...roleChange, value };
+    assert.equal(settingChangeSchema.safeParse(change).success, false);
+    assert.equal(ownerTool.inputSchema.safeParse({ ...input, change }).success, false);
+  }
+  for (const targetUserId of [0, -1, 1.5, "42", null, undefined]) {
+    const change = { ...roleChange, targetUserId };
+    assert.equal(settingChangeSchema.safeParse(change).success, false);
+    assert.equal(ownerTool.inputSchema.safeParse({ ...input, change }).success, false);
+  }
+  for (const override of [{ userId: 6 }, { actorId: 6 }, { projectId: 16 }, { boardId: 16 }]) {
+    const change = { ...roleChange, ...override };
+    assert.equal(settingChangeSchema.safeParse(change).success, false);
+    assert.equal(ownerTool.inputSchema.safeParse({ ...input, change }).success, false);
+    assert.equal(ownerTool.inputSchema.safeParse({ ...input, ...override }).success, false);
+  }
+  assert.equal(ownerTool.inputSchema.safeParse({ ...input, settings_context: { ...boardScope, projectId: 16 } }).success, false);
+  assert.equal(h.state.writes, 0);
+  assert.equal(h.state.records.size, 0);
+  const scope = settingsScopeSchema.parse(boardScope);
+  const allowed = await ownerTool.execute(ownerTool.inputSchema.parse(input));
+  assert.equal(allowed.success, true);
+  assert.deepEqual([allowed.proposal.before, allowed.proposal.after, allowed.proposal.status], ["Member", "Admin", "pending"]);
+  const body = { id: allowed.proposal.id, action: "apply", scope };
+  for (const projectId of [0, -1, 1.5, "15", null]) {
+    const invalidScope = { ...scope, projectId };
+    assert.equal(settingsScopeSchema.safeParse(invalidScope).success, false);
+    const refused = await h.route.POST(request({ ...body, scope: invalidScope }));
+    assert.equal(refused.status, 400);
+    assert.match((await refused.json()).error, /Invalid setting action/);
+  }
+  for (const override of [{ userId: 6 }, { actorId: 6 }, { boardId: 16 }]) {
+    const invalidScope = { ...scope, ...override };
+    assert.equal(settingsScopeSchema.safeParse(invalidScope).success, false);
+    assert.equal((await h.route.POST(request({ ...body, scope: invalidScope }))).status, 400);
+  }
+  for (const override of [{ userId: 6 }, { actorId: 6 }, { projectId: 16 }, { boardId: 16 }]) {
+    assert.equal((await h.route.POST(request({ ...body, ...override }))).status, 400);
+  }
+  assert.equal(h.state.members[0].role, "Member");
+  assert.equal(h.state.writes, 0);
+  const applied = await h.route.POST(request(body));
+  assert.equal(applied.status, 200);
+  assert.equal((await applied.json()).proposal.status, "applied");
+  assert.equal(h.state.members[0].role, "Admin");
+  assert.equal(h.state.writes, 1);
 });
 
 test("now refused: billing, deletion, keys and off-page mutation are not settings tool actions", async () => {
