@@ -228,6 +228,10 @@ jobs:
             description=$(head -1 "$reason_file" | cut -c1-130)
           elif [ "$result" -eq 3 ]; then
             echo "feature-flag-gate is waiting for the run on the newer production commit"
+            if ! publish_error_status "feature-flag-gate deferred; waiting for the run on the newer production commit"; then
+              echo "::error::Cannot prepare the deferred feature-flag-gate status."
+              exit 2
+            fi
             exit 0
           else
             state=error
@@ -528,6 +532,10 @@ jobs:
               description=$(head -1 "$reason_file" | cut -c1-130)
             elif [ "$result" -eq 3 ]; then
               echo "feature-flag-gate is waiting for the run on the newer production commit"
+              if ! publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate deferred; waiting for the run on the newer production commit"; then
+                echo "::error::Cannot prepare the deferred feature-flag-gate status for #$number."
+                failures=$((failures + 1))
+              fi
               continue
             else
               state=error

@@ -85,7 +85,7 @@ test("reconciliation fails closed when mktemp cannot create private scratch", (t
 });
 
 const singlePullRequest = workflowJob("feature-flag-gate");
-const waitingDescription = "feature-flag-gate is waiting for the run on the newer production commit";
+const waitingDescription = "feature-flag-gate deferred; waiting for the run on the newer production commit";
 
 function featureFlagStatus(pull, overrides = {}, headCount = 1) {
   const labels = JSON.stringify((pull.labels ?? []).map((label) => label.name).sort());
@@ -433,10 +433,13 @@ test("per-PR: final verdict posts the current base/title fingerprint and unchang
     "https://example.invalid/actions/runs/1" + new URL(featureFlagStatus(pull).target_url).hash);
 });
 
-test("reconcile drift: production moved mid-run leaves the context unpublished and exits 0", (t) => {
-  const { result, output, posts } = runWorkflow(t, { drift: true });
+test("reconcile drift: production moved mid-run publishes a deferred error and exits 0", (t) => {
+  const { result, output, posts, records, pull } = runWorkflow(t, { drift: true });
   assert.equal(result.status, 0, output);
-  assert.deepEqual(posts, []);
+  assert.deepEqual(posts.map((post) => post.state), ["error"]);
+  assert.equal(posts[0].description, waitingDescription);
+  assert.equal(records[0].fingerprint, new URL(featureFlagStatus(pull).target_url).hash.slice(1));
+  assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
   assert.match(output, /waiting for the run on the newer production commit/);
   assert.doesNotMatch(output, /infrastructure failure/);
   assert.doesNotMatch(output, /::error::/);
@@ -444,10 +447,13 @@ test("reconcile drift: production moved mid-run leaves the context unpublished a
   assert.ok(posts.every((post) => post.state !== "success"));
 });
 
-test("single-PR drift: production moved mid-run leaves the context unpublished and exits 0", (t) => {
-  const { result, output, posts } = runWorkflow(t, { job: singlePullRequest, drift: true });
+test("single-PR drift: production moved mid-run publishes a deferred error and exits 0", (t) => {
+  const { result, output, posts, records, pull } = runWorkflow(t, { job: singlePullRequest, drift: true });
   assert.equal(result.status, 0, output);
-  assert.deepEqual(posts, []);
+  assert.deepEqual(posts.map((post) => post.state), ["error"]);
+  assert.equal(posts[0].description, waitingDescription);
+  assert.equal(records[0].fingerprint, new URL(featureFlagStatus(pull).target_url).hash.slice(1));
+  assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
   assert.match(output, /waiting for the run on the newer production commit/);
   assert.doesNotMatch(output, /::error::/);
   assert.match(output, /Trusted production checkout drifted; a later event will re-evaluate with current policy\./);
@@ -568,6 +574,12 @@ test('publishers serialize trusted final-only code with error recovery and minim
     assert.ok(evaluation.indexOf('id: started') < evaluation.indexOf('uses: actions/checkout'));
     assert.match(evaluation, /\.heads=\$evaluated_head_pr_count/);
     assert.match(evaluation, /evaluated_head_pr_count=\$fresh_head_pr_count/);
+    const deferred = evaluation.match(/elif \[ "\$result" -eq 3 \]; then([\s\S]*?)\n\s+else/)[1];
+    if (evaluation === singlePullRequest) {
+      assert.match(deferred, /if ! publish_error_status "feature-flag-gate deferred; waiting for the run on the newer production commit"; then[\s\S]*exit 2\s+fi\s+exit 0/);
+    } else {
+      assert.match(deferred, /if ! publish_reconciliation_error "\$head_sha" "\$payload" "feature-flag-gate deferred; waiting for the run on the newer production commit"; then[\s\S]*failures=\$\(\(failures \+ 1\)\)\s+fi\s+continue/);
+    }
   }
   for (const publisher of [perPrPublisher, reconcilePublisher]) {
     assert.match(publisher, /strategy:\s+fail-fast: false\s+matrix:\s+head_sha: \$\{\{ fromJSON\(needs\.[a-z-]+\.outputs\.heads\) \}\}/);
@@ -590,10 +602,10 @@ test('publishers serialize trusted final-only code with error recovery and minim
   assert.match(publisherScript, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\$current\.state == \$state and/);
   assert.doesNotMatch(publisherScript, /\$current\.state == "error"/);
   assert.doesNotMatch(publisherScript, /fingerprint=""/);
-  assert.match(publisherScript, /if \[ -z "\$evaluated_fingerprint" \] && \[ "\$state" = "error" \]; then\s+newer_final=/);
+  assert.match(publisherScript, /if \[ "\$state" = "error" \]; then\s+newer_final=/);
   assert.match(publisherScript, /--arg target_url "\$RUN_URL\$\{fingerprint:\+#\$fingerprint\}"/);
   assert.ok(publisherScript.indexOf('.head.sha == $sha') < publisherScript.indexOf('fingerprint="ffg='));
-  assert.ok(publisherScript.indexOf('fingerprint="ffg=') < publisherScript.indexOf('if [ -z "$evaluated_fingerprint" ]'));
+  assert.ok(publisherScript.indexOf('fingerprint="ffg=') < publisherScript.indexOf('if [ "$state" = "error" ]'));
   assert.doesNotMatch(publisherScript, /job_started_at|deduplicate|state[=:]\s*["']?pending/);
   assert.doesNotMatch(workflow, /group: feature-flag-gate-publish\s*$/m);
   assert.match(publisherScript, /--arg head_sha "\$PUBLISH_HEAD_SHA" '\.\[\] \| select\(\.head_sha == \$head_sha\)'/);
@@ -613,6 +625,71 @@ test('publishers serialize trusted final-only code with error recovery and minim
 
 for (const job of [singlePullRequest, reconciliation]) {
   const name = job === singlePullRequest ? "per-PR" : "reconcile";
+  test(`${name}: a deferred evaluation replaces an earlier success with a current-fingerprint error`, (t) => {
+    const { result, output, posts, records, pull } = runWorkflow(t, {
+      job, drift: true,
+      statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, {
+        created_at: "2000-01-01T00:00:00Z", updated_at: "2000-01-01T00:00:00Z",
+      })] }),
+    });
+    assert.equal(result.status, 0, output);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].fingerprint, new URL(featureFlagStatus(pull).target_url).hash.slice(1));
+    assert.equal(records[0].payload.state, "error");
+    assert.deepEqual(posts.map((post) => post.state), ["error"]);
+    assert.equal(posts[0].description, waitingDescription);
+    assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
+    assert.doesNotMatch(output, /::error::|infrastructure failure/);
+  });
+
+  for (const deferred of [false, true]) {
+    const kind = deferred ? "deferred evaluation" : "infrastructure error";
+    for (const state of ["success", "failure", "error"]) {
+      for (const timing of ["equal", "newer"]) {
+        test(`${name}: a prepared ${kind} with a non-empty fingerprint cannot overwrite a ${timing} ${state}`, (t) => {
+          const evaluatedAt = "2026-01-01T00:00:00Z";
+          const { result, output, posts, records, pull } = runWorkflow(t, {
+            job, drift: deferred, gateScript: 'process.exit(2);\n',
+            prepareStatuses: (records) => records.map((record) => ({ ...record, evaluated_at: evaluatedAt })),
+            statusesBeforePublish: (pull) => ({ [pull.head.sha]: [
+              featureFlagStatus(pull, { state: "pending", created_at: "2099-01-02T00:00:00Z" }),
+              featureFlagStatus(pull, { state, created_at: timing === "equal" ? evaluatedAt : "2099-01-01T00:00:00Z" }),
+            ] }),
+          });
+          assert.equal(result.status, deferred ? 0 : 2, output);
+          assert.equal(records.length, 1);
+          assert.equal(records[0].fingerprint, new URL(featureFlagStatus(pull).target_url).hash.slice(1));
+          assert.equal(records[0].payload.state, "error");
+          assert.equal(records[0].evaluated_at, evaluatedAt);
+          assert.deepEqual(posts, []);
+          assert.match(output, /final with the current fingerprint was created after evaluation started/);
+        });
+      }
+    }
+
+    test(`${name}: a prepared ${kind} still replaces a newer success for obsolete inputs`, (t) => {
+      const { result, output, posts, pull } = runWorkflow(t, {
+        job, drift: deferred, gateScript: 'process.exit(2);\n',
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus({ ...pull, title: pull.title + " old" }, {
+          created_at: "2099-01-01T00:00:00Z",
+        })] }),
+      });
+      assert.equal(result.status, deferred ? 0 : 2, output);
+      assert.deepEqual(posts.map((post) => post.state), ["error"]);
+      assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
+    });
+  }
+
+  test(`${name}: a deferred evaluation queued before its metadata changes cannot publish`, (t) => {
+    const { result, output, posts } = runWorkflow(t, {
+      job, drift: true,
+      pullBeforePublish: (pull) => ({ ...pull, title: pull.title + " changed while queued" }),
+    });
+    assert.equal(result.status, 0, output);
+    assert.deepEqual(posts, []);
+    assert.match(output, /evaluation inputs changed before status publication/);
+  });
+
   for (const state of ["success", "failure"]) {
     test(`${name}: newer equal-state final with the same fingerprint protects against a queued ${state}`, (t) => {
       const { result, output, posts } = runWorkflow(t, {
@@ -804,11 +881,11 @@ for (const job of [singlePullRequest, reconciliation]) {
   });
 
   for (const state of ["success", "failure", "error"]) {
-    test(`${name}: an existing error with the same fingerprint can recover to ${state}`, (t) => {
+    test(`${name}: an older existing error with the same fingerprint can recover to ${state}`, (t) => {
       const { result, output, posts } = runWorkflow(t, {
         job,
         prepareStatuses: (records) => records.map((record) => ({ ...record, payload: { ...record.payload, state } })),
-        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state: "error" })] }),
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state: "error", created_at: "2000-01-01T00:00:00Z" })] }),
       });
       assert.equal(result.status, 0, output);
       assert.deepEqual(posts.map((post) => post.state), [state]);
@@ -816,10 +893,10 @@ for (const job of [singlePullRequest, reconciliation]) {
   }
 
   for (const state of ["success", "failure"]) {
-    test(`${name}: a prepared error replaces an existing ${state} with the same fingerprint`, (t) => {
+    test(`${name}: a prepared error replaces an older ${state} with the same fingerprint`, (t) => {
       const { result, output, posts } = runWorkflow(t, {
         job, gateScript: 'process.exit(2);\n',
-        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state })] }),
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state, created_at: "2000-01-01T00:00:00Z" })] }),
       });
       assert.equal(result.status, 2, output);
       assert.deepEqual(posts.map((post) => post.state), ["error"]);

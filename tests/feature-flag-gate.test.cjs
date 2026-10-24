@@ -1252,10 +1252,10 @@ test("trusted publishers serialize final-only membership-aware verdicts and allo
   assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\$current\.state == \$state and/);
   assert.doesNotMatch(publisher, /\$current\.state == "error"/);
   assert.doesNotMatch(publisher, /fingerprint=""/);
-  assert.match(publisher, /if \[ -z "\$evaluated_fingerprint" \] && \[ "\$state" = "error" \]; then\s+newer_final=/);
+  assert.match(publisher, /if \[ "\$state" = "error" \]; then\s+newer_final=/);
   assert.match(publisher, /--arg target_url "\$RUN_URL\$\{fingerprint:\+#\$fingerprint\}"/);
   assert.ok(publisher.indexOf('.head.sha == $sha') < publisher.indexOf('fingerprint="ffg='));
-  assert.ok(publisher.indexOf('fingerprint="ffg=') < publisher.indexOf('if [ -z "$evaluated_fingerprint" ]'));
+  assert.ok(publisher.indexOf('fingerprint="ffg=') < publisher.indexOf('if [ "$state" = "error" ]'));
   assert.doesNotMatch(publisher, /job_started_at|deduplicate|state[=:]\s*["']?pending/);
   assert.doesNotMatch(workflow, /group: feature-flag-gate-publish\s*$/m);
   assert.match(publisher, /--arg head_sha "\$PUBLISH_HEAD_SHA" '\.\[\] \| select\(\.head_sha == \$head_sha\)'/);
@@ -1278,8 +1278,8 @@ test("trusted publishers serialize final-only membership-aware verdicts and allo
   assert.ok(read < skip && skip < post);
   assert.equal((publisher.match(/gh_api -X POST/g) || []).length, 1);
   assert.match(publisher, /while IFS= read -r record; do\s+if ! publish_status_if_current "\$record"/);
-  assert.match(job("feature-flag-gate"), /elif \[ "\$result" -eq 3 \]; then\s+echo [^\n]+\n\s+exit 0/);
-  assert.match(job("reconcile-open-pull-requests"), /elif \[ "\$result" -eq 3 \]; then\s+echo [^\n]+\n\s+continue/);
+  assert.match(job("feature-flag-gate"), /elif \[ "\$result" -eq 3 \]; then\s+echo [^\n]+\n\s+if ! publish_error_status "feature-flag-gate deferred; waiting for the run on the newer production commit"; then\s+echo [^\n]+\n\s+exit 2\s+fi\s+exit 0/);
+  assert.match(job("reconcile-open-pull-requests"), /elif \[ "\$result" -eq 3 \]; then\s+echo [^\n]+\n\s+if ! publish_reconciliation_error "\$head_sha" "\$payload" "feature-flag-gate deferred; waiting for the run on the newer production commit"; then\s+echo [^\n]+\n\s+failures=\$\(\(failures \+ 1\)\)\s+fi\s+continue/);
   assert.match(job("feature-flag-gate"), /publish_error_status\(\) \{[\s\S]*?queue_status "\$payload"/);
   assert.match(job("reconcile-open-pull-requests"), /publish_reconciliation_error\(\) \{[\s\S]*?queue_status "\$1" "\$2"/);
 });

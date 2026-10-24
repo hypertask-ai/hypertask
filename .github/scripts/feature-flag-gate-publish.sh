@@ -41,7 +41,7 @@ publish_status_if_current() {
   fi
   jq --arg target_url "$RUN_URL${fingerprint:+#$fingerprint}" '.payload | .target_url = $target_url' <<<"$record" >"$gate_tmp/payload.json" || return 1
   gh_api --paginate --slurp "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$gate_tmp/latest-statuses.json" || return 1
-  if [ -z "$evaluated_fingerprint" ] && [ "$state" = "error" ]; then
+  if [ "$state" = "error" ]; then
     newer_final=$(jq -r --arg evaluated_at "$evaluated_at" --arg fingerprint "$fingerprint" '
       any(flatten[];
         .context == "feature-flag-gate" and
