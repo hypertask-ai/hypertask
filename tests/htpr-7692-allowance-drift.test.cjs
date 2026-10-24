@@ -25,6 +25,7 @@ let reporterFails;
 let gatewayUsd;
 let systemUsd;
 let reportCalls;
+let reportPeriods;
 let duringReport;
 let funding;
 let alerts;
@@ -57,7 +58,7 @@ const originalCronSecret = process.env.CRON_SECRET;
 function fakeRedis() {
   const values = new Map();
   const sets = new Map();
-  const lists = new Map();
+  const hashes = new Map();
   const sorted = new Map();
   const ttls = new Map();
   const getNumber = (key) => Number(values.get(key) ?? 0);
@@ -67,7 +68,7 @@ function fakeRedis() {
   };
   const held = (key) => [...zset(key).keys()].reduce((sum, member) => sum + Number(member.split("|").at(-1)), 0);
   const client = {
-    values, sets, lists, sorted, ttls, failRecording: false, failIndex: false, calls: 0,
+    values, sets, hashes, sorted, ttls, snapshotKeys: [], failRecording: false, failIndex: false, calls: 0,
     get: async (key) => { client.calls++; return values.get(key) ?? null; },
     exists: async (key) => Number(values.has(key)),
     set: async (key, value, ...options) => {
@@ -84,21 +85,35 @@ function fakeRedis() {
       const end = Math.min(Number(cursor) + Number(count), members.length);
       return [end === members.length ? "0" : String(end), members.slice(Number(cursor), end)];
     },
-    lrange: async (key, start, end) => (lists.get(key) ?? []).slice(start, end + 1),
+    hvals: async (key) => [...(hashes.get(key)?.values() ?? [])],
     zadd: async (key, score, member) => { zset(key).set(member, Number(score)); return 1; },
-    zrange: async (key) => [...zset(key).keys()],
+    zrange: async (key) => [...zset(key)].sort(([a, sa], [b, sb]) => sa - sb || a.localeCompare(b)).map(([member]) => member),
     eval: async (script, count, ...all) => {
       client.calls++;
       const keys = all.slice(0, count);
       const args = all.slice(count);
       if (script.includes('redis.call("SADD"')) {
-        if (script.includes('redis.call("LPUSH"') ? client.failRecording : client.failIndex) throw new Error("observation storage unavailable");
+        if (script.includes('redis.call("HSET"') ? client.failRecording : client.failIndex) throw new Error("observation storage unavailable");
         if (!sets.has(keys[0])) sets.set(keys[0], new Set());
         if (args[0]) sets.get(keys[0]).add(args[0]);
         ttls.set(keys[0], Number(args[2]));
         ttls.set(keys[1], Number(args[2]));
-        if (script.includes('redis.call("LPUSH"')) lists.set(keys[1], [args[1], ...(lists.get(keys[1]) ?? [])].slice(0, 100));
-        else {
+        if (script.includes('redis.call("HSET"')) {
+          if (!sets.has(keys[3])) sets.set(keys[3], new Set());
+          if (args[0]) sets.get(keys[3]).add(args[0]);
+          ttls.set(keys[2], Number(args[2])); ttls.set(keys[3], Number(args[2]));
+          if (!hashes.has(keys[2])) hashes.set(keys[2], new Map());
+          const event = JSON.parse(args[1]);
+          const saved = hashes.get(keys[2]).get(args[3]);
+          const bucket = saved ? JSON.parse(saved) : { count: 0, event };
+          bucket.count++;
+          const used = (entry) => entry.committed + entry.liveHolds + entry.requestedHold;
+          if (used(event) < used(bucket.event) || (used(event) === used(bucket.event) && event.time < bucket.event.time)) bucket.event = event;
+          if (bucket.time === undefined || event.time >= bucket.time) { bucket.committed = event.committed; bucket.time = event.time; }
+          hashes.get(keys[2]).set(args[3], JSON.stringify(bucket));
+          zset(keys[1]).set(args[1], event.time);
+          if (zset(keys[1]).size > 500) zset(keys[1]).delete((await client.zrange(keys[1])).at(-1));
+        } else {
           const context = JSON.parse(args[1]);
           const previous = values.has(keys[1]) ? JSON.parse(values.get(keys[1])) : null;
           if (previous && (previous.fundingChanged || previous.fundingSource !== context.fundingSource)) context.fundingChanged = true;
@@ -107,6 +122,7 @@ function fakeRedis() {
         return 1;
       }
       if (script.includes('local visible =')) {
+        client.snapshotKeys.push(keys);
         if (!values.has(keys[0]) && !values.has(keys[1])) return null;
         return keys.map((key) => values.get(key) ?? "0");
       }
@@ -165,13 +181,16 @@ const plan = (amountUsd = 0.2, policy = {}) => allowance.reservePlanAllowance({
   teamId: TEAM, gatewayApiKey: funding.apiKey, fundingSource: funding.source, amountUsd,
   policy: { mode: "plan", monthlyUsd: 5, dailyUsd: null, demoGlobal: false, ...policy },
 });
-const refusalEvents = async () => (await redis.lrange(`${OBS}:refusals`, 0, 99)).map(JSON.parse);
+const refusalEvents = async () => (await redis.zrange(`${OBS}:refusal-events`, 0, -1)).map(JSON.parse);
+const refusalBuckets = async () => (await redis.hvals(`${OBS}:refusal-buckets`)).map(JSON.parse);
 const age = () => { now += 31 * 60 * 1000; };
 
 function installFetch() {
   global.fetch = async (url) => {
     if (String(url).endsWith("/models")) return Response.json({ data: [{ id: "test/model", pricing: { input: "0.000001", output: "0.00005" } }] });
     reportCalls++;
+    const params = new URL(String(url)).searchParams;
+    reportPeriods.push([params.get("start_date"), params.get("end_date")]);
     if (duringReport) await duringReport();
     if (reportFails) throw new Error("private provider response must not leak");
     return Response.json({ results: [{ tag: new URL(String(url)).searchParams.get("tags"), total_cost: gatewayUsd }, { tag: "included-with-hypertask", total_cost: systemUsd }] });
@@ -185,7 +204,7 @@ test.beforeEach(() => {
     static now() { return now; }
   };
   redis = fakeRedis(); enabled = true; flagReads = 0; reportFails = false; reporterFails = false;
-  gatewayUsd = 2; systemUsd = 0; reportCalls = 0; duringReport = null; resyncEnabled = false;
+  gatewayUsd = 2; systemUsd = 0; reportCalls = 0; reportPeriods = []; duringReport = null; resyncEnabled = false;
   funding = { source: "managed", apiKey: "fixture-platform-credential" };
   alerts = []; deliveries = 0; teamTitle = "Acme <script> token_abcdefghijklmnop";
   process.env.NODE_ENV = "production"; process.env.VERCEL_ENV = "production"; process.env.CRON_SECRET = "fixture-cron-authority";
@@ -262,7 +281,7 @@ test("day/demo evidence is labeled, never judged using monthly headroom", async 
   await assert.rejects(plan(0.2, { demoGlobal: true }), (error) => error.reason === "demo");
   age();
   assert.equal((await check()).refusalAlerts, 0);
-  assert.deepEqual((await refusalEvents()).map((event) => event.reason), ["demo", "day"]);
+  assert.deepEqual((await refusalEvents()).map((event) => event.reason).sort(), ["day", "demo"]);
   assert.equal(alerts.length, 0);
 });
 
@@ -279,7 +298,7 @@ test("legacy and daily prebound refusals capture one event each without calling 
   await redis.set(`${day}:seeded`, "1"); await redis.set(`${day}:committed`, "250000");
   await assert.rejects(invoke(async () => ({ mode: "plan", monthlyUsd: 5, dailyUsd: 0.25, demoGlobal: false })), (error) => error.reason === "day");
   assert.equal(generated, 0);
-  assert.deepEqual((await refusalEvents()).map((event) => [event.reason, event.policyMode]), [["day", "plan"], ["month", "legacy"]]);
+  assert.deepEqual((await refusalEvents()).map((event) => [event.reason, event.policyMode]).sort(), [["day", "plan"], ["month", "legacy"]]);
 });
 
 test("final refusal only: successful resync retry records nothing", async () => {
@@ -353,22 +372,24 @@ test("cron rejects missing authority before work, preview skips, production resp
   assert.deepEqual(Object.keys(await response.json()).sort(), ["checked", "drift", "inconclusive", "refusalAlerts", "unknown"]);
 });
 
-test("bounded list, month-end plus seven days TTL, cursor resumes at most 200 teams, lock excludes another run", async () => {
+test("bounded sorted evidence, month-end plus seven days TTL, cursor resumes at most 200 teams, lock excludes another run", async () => {
   await fresh();
-  for (let i = 0; i < 105; i++) await assert.rejects(plan(), (error) => error.reason === "month");
-  assert.equal((await refusalEvents()).length, 100);
+  for (let i = 0; i < 505; i++) await assert.rejects(plan(), (error) => error.reason === "month");
+  assert.equal((await refusalEvents()).length, 500);
   const expectedTtl = (new NativeDate("2026-11-08T00:00:00Z").getTime() - now) / 1000;
   assert.equal(redis.ttls.get(`${ROOT}:active`), expectedTtl);
-  assert.equal(redis.ttls.get(`${OBS}:refusals`), expectedTtl);
-  await redis.set(`${ROOT}:lock`, "another-owner");
+  assert.equal(redis.ttls.get(`${OBS}:refusal-events`), expectedTtl);
+  assert.equal(redis.ttls.get(`${OBS}:refusal-buckets`), expectedTtl);
+  assert.equal((await refusalBuckets())[0].count, 505);
+  await redis.set("ai-allowance-drift:lock", "another-owner");
   assert.equal((await check()).checked, 0);
-  await redis.del(`${ROOT}:lock`);
+  await redis.del("ai-allowance-drift:lock");
   redis.sets.set(`${ROOT}:active`, new Set(Array.from({ length: 205 }, (_, i) => `team-${i}`)));
   assert.equal((await check()).checked, 200);
   assert.equal((await check()).checked, 5);
 });
 
-test("real Redis executes observation/refusal Lua, TTL/list bounds and consistent snapshot", async (t) => {
+test("real Redis executes observation/refusal Lua, TTL/sorted-set bounds and consistent snapshot", async (t) => {
   if (spawnSync("redis-server", ["--version"]).status !== 0) { t.skip("redis-server unavailable"); return; }
   const port = await new Promise((resolve) => {
     const probe = createServer();
@@ -385,15 +406,24 @@ test("real Redis executes observation/refusal Lua, TTL/list bounds and consisten
   redis = new Redis({ host: "127.0.0.1", port });
   t.after(() => redis.disconnect());
   await fresh();
+  const start = now;
   await assert.rejects(plan(), (error) => error.reason === "month");
-  for (let i = 0; i < 104; i++) await assert.rejects(plan(), (error) => error.reason === "month");
-  assert.equal((await refusalEvents()).length, 100);
+  const earliest = (await refusalEvents())[0];
+  for (let i = 1; i < 1000; i++) {
+    now = start + i * 600;
+    await assert.rejects(plan(), (error) => error.reason === "month");
+  }
+  assert.equal((await refusalEvents()).length, 500);
   assert.equal((await refusalEvents())[0].committed, 5_000_000);
+  assert.equal((await refusalBuckets()).reduce((sum, bucket) => sum + bucket.count, 0), 1000);
+  assert.ok((await refusalBuckets()).some((bucket) => bucket.event.id === earliest.id));
   assert.equal(await redis.sismember(`${ROOT}:active`, TEAM), 1);
-  assert.ok(await redis.ttl(`${OBS}:refusals`) > 0);
+  assert.ok(await redis.ttl(`${OBS}:refusal-events`) > 0);
+  assert.ok(await redis.ttl(`${OBS}:refusal-buckets`) > 0);
   await check(); age();
   const result = await check();
   assert.equal(result.drift, 1); assert.equal(result.refusalAlerts, 1);
+  assert.ok(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen.includes(earliest.id));
   assert.equal(alerts.length, 2);
   await check(); assert.equal(alerts.length, 2);
   assert.equal(await redis.get(`${PREFIX}:committed`), "5000000");
@@ -430,7 +460,7 @@ test("teamless demo final refusals retain evidence without inventing an active t
   await redis.set(`ai-allowance:demo:${MONTH}:committed`, "15000000");
   await assert.rejects(allowance.reservePlanAllowance({ gatewayApiKey: funding.apiKey, amountUsd: 0.2,
     policy: { mode: "plan", monthlyUsd: 0, dailyUsd: null, demoGlobal: true } }), (error) => error.reason === "demo");
-  const events = (await redis.lrange(`${ROOT}:teamless:demo:refusals`, 0, 99)).map(JSON.parse);
+  const events = (await redis.zrange(`${ROOT}:teamless:demo:refusal-events`, 0, -1)).map(JSON.parse);
   assert.equal(events.length, 1); assert.equal(events[0].teamId, null); assert.equal(events[0].reason, "demo");
   assert.equal(events[0].fundingSource, "demo");
   assert.equal(redis.sets.get(`${ROOT}:active`).size, 0);
@@ -494,8 +524,8 @@ test("UUID team episodes remain distinct through the real downstream fingerprint
 test("manifest registers only this five-minute observer and flag is generated from its definition", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
   assert.deepEqual(manifest.crons.filter((entry) => entry.path === "/api/cron/ai-allowance-drift"), [{ path: "/api/cron/ai-allowance-drift", schedule: "*/5 * * * *" }]);
-  const module = load(path.join(root, "src/lib/flags/definitions/htpr-7692-allowance-drift-check.ts"));
-  const definition = module.default ?? module;
+  const flagModule = load(path.join(root, "src/lib/flags/definitions/htpr-7692-allowance-drift-check.ts"));
+  const definition = flagModule.default ?? flagModule;
   assert.equal(definition.key, FLAG); assert.equal(definition.defaultMode, "EVERYONE"); assert.equal(definition.releaseRisk.risk, "small");
 });
 
@@ -510,7 +540,7 @@ test("stored Redis values and alert text contain neither the test credential nor
   const stored = [
     ...redis.values.values(),
     ...[...redis.sets.values()].flatMap((set) => [...set]),
-    ...[...redis.lists.values()].flat(),
+    ...[...redis.hashes.values()].flatMap((hash) => [...hash.values()]),
     ...[...redis.sorted.values()].flatMap((set) => [...set].flat()),
     ...redis.ttls.values(),
     ...alerts.map((alert) => JSON.stringify(alert)),
@@ -559,7 +589,8 @@ test("refusal evidence from an unknown or different funding label is not compare
   await fresh();
   await assert.rejects(plan(), (error) => error.reason === "month");
   const event = (await refusalEvents())[0];
-  redis.lists.set(`${OBS}:refusals`, ["unknown", "shared"].map((fundingSource) => JSON.stringify({ ...event, fundingSource })));
+  redis.hashes.set(`${OBS}:refusal-buckets`, new Map(["unknown", "shared"].map((fundingSource) => [fundingSource,
+    JSON.stringify({ count: 1, event: { ...event, fundingSource }, committed: event.committed, time: event.time })])));
   age();
   assert.equal((await check()).refusalAlerts, 0);
   assert.equal(alerts.length, 0);
@@ -580,4 +611,185 @@ test("image middleware carries shared funding into reservation and refusal conte
   assert.equal(generated, 0);
   assert.equal(JSON.parse(await redis.get(`${OBS}:context`)).fundingSource, "shared");
   assert.equal((await refusalEvents())[0].fundingSource, "shared");
+});
+
+
+for (const [billedAtRefusal, expectedAlerts] of [[2, 1], [5, 0]]) {
+  test(`later $20 spend does not change a refusal judged at $${billedAtRefusal} billed`, async () => {
+    await fresh();
+    await assert.rejects(plan(), (error) => error.reason === "month");
+    age();
+    await redis.set(`${PREFIX}:committed`, "25000000");
+    gatewayUsd = billedAtRefusal + 20;
+    const result = await check();
+    assert.equal(result.unknown, 0);
+    assert.equal(result.refusalAlerts, expectedAlerts);
+    assert.equal(alerts.length, expectedAlerts);
+    assert.equal(await redis.get(`${PREFIX}:committed`), "25000000");
+  });
+}
+
+test("a repaired counter below refusal commitment is inconclusive, not a wrong-refusal alert", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  await redis.set(`${PREFIX}:committed`, "4000000");
+  const result = await check();
+  assert.ok(result.inconclusive > 0); assert.equal(result.unknown, 0);
+  assert.equal(result.refusalAlerts, 0); assert.equal(alerts.length, 0);
+  assert.deepEqual(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen, []);
+});
+
+test("refusal-time billing clamps to zero when later counter growth exceeds the report", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  await redis.set(`${PREFIX}:committed`, "25000000");
+  gatewayUsd = 2;
+  assert.equal((await check()).refusalAlerts, 1);
+});
+
+for (const lane of ["visible", "system"]) {
+  test(`legacy ${lane} refusal ignores growth and billing in the other lane`, async () => {
+    await fresh(lane === "visible" ? 5_000_000 : 0, "legacy");
+    if (lane === "system") await redis.set(`${PREFIX}:system:committed`, "50000000");
+    const middleware = allowance.createSharedAllowanceMiddleware({ allowanceUsd: 5, gatewayApiKey: funding.apiKey,
+      fundingSource: funding.source, modelSlug: "test/model" });
+    await assert.rejects(middleware.wrapGenerate({
+      params: { prompt: [], maxOutputTokens: 256, providerOptions: { gateway: { tags: [`team:${TEAM}`, ...(lane === "system" ? ["included-with-hypertask"] : [])] } } },
+      model: {}, doGenerate: async () => { throw new Error("must not infer"); },
+    }), (error) => error.reason === "month");
+    const event = (await refusalEvents())[0];
+    assert.equal(event.lane, lane); assert.equal(event.committed, lane === "visible" ? 5_000_000 : 50_000_000);
+    age();
+    if (lane === "visible") {
+      await redis.set(`${PREFIX}:system:committed`, "20000000");
+      gatewayUsd = 25; systemUsd = 20;
+    } else {
+      await redis.set(`${PREFIX}:committed`, "20000000");
+      gatewayUsd = 70; systemUsd = 50;
+    }
+    assert.equal((await check()).refusalAlerts, 0);
+    assert.equal(alerts.length, 0);
+  });
+}
+
+test("plan refusal attribution includes system and pending commitment growth", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  await redis.set(`${PREFIX}:system:committed`, "15000000");
+  await redis.set(`${PREFIX}:legacy-pending`, "5000000");
+  gatewayUsd = 22; systemUsd = 15;
+  assert.equal((await check()).refusalAlerts, 1);
+});
+
+test("1000 retries in ten minutes keep the earliest minimum-headroom refusal judgeable at maturity", async () => {
+  await fresh();
+  const start = now;
+  await assert.rejects(plan(), (error) => error.reason === "month");
+  const earliest = (await refusalEvents())[0];
+  await redis.set(`${PREFIX}:committed`, "6000000");
+  for (let i = 1; i < 1000; i++) {
+    now = start + i * 600;
+    await assert.rejects(plan(), (error) => error.reason === "month");
+  }
+  assert.equal((await refusalEvents()).length, 500);
+  const buckets = await refusalBuckets();
+  assert.equal(buckets.length, 2);
+  assert.equal(buckets.reduce((sum, bucket) => sum + bucket.count, 0), 1000);
+  assert.ok(buckets.some((bucket) => bucket.event.id === earliest.id));
+  now = start + 30 * 60 * 1000 - 1;
+  gatewayUsd = 3;
+  assert.equal((await check()).refusalAlerts, 0);
+  now++;
+  assert.equal((await check()).refusalAlerts, 1);
+  assert.ok(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen.includes(earliest.id));
+  assert.match(alerts.at(-1).message, /refusals month 1000\/day 0\/demo 0/);
+});
+
+test("bucket representative changes to the smallest committed plus holds plus request, not the newest retry", async () => {
+  await fresh();
+  await redis.zadd(`${PREFIX}:reservations`, now + 600_000, "live|1000000");
+  await assert.rejects(plan(), (error) => error.reason === "month");
+  const first = (await refusalBuckets())[0].event;
+  now++;
+  redis.sorted.get(`${PREFIX}:reservations`).clear();
+  await assert.rejects(plan(), (error) => error.reason === "month");
+  const minimum = (await refusalBuckets())[0].event;
+  assert.notEqual(first.id, minimum.id);
+  assert.equal(minimum.liveHolds, 0);
+  now++;
+  await redis.zadd(`${PREFIX}:reservations`, now + 600_000, "live|2000000");
+  await assert.rejects(plan(), (error) => error.reason === "month");
+  const bucket = (await refusalBuckets())[0];
+  assert.equal(bucket.count, 3); assert.equal(bucket.event.id, minimum.id);
+});
+
+for (const savedSnapshot of [false, true]) {
+  test(`October 31 refusal drains November 1 using stored ${savedSnapshot ? "observer snapshot" : "refusal commitment"}, without old live counters`, async () => {
+    now = new NativeDate("2026-10-31T23:50:00Z").getTime();
+    await fresh();
+    await assert.rejects(plan(), (error) => error.reason === "month");
+    if (savedSnapshot) {
+      now = new NativeDate("2026-10-31T23:55:00Z").getTime();
+      await redis.set(`${PREFIX}:committed`, "25000000");
+      gatewayUsd = 22;
+      assert.equal((await check()).refusalAlerts, 0);
+    }
+    for (const suffix of ["committed", "system:committed", "legacy-pending"]) await redis.del(`${PREFIX}:${suffix}`);
+    now = new NativeDate("2026-11-01T00:30:00Z").getTime();
+    const currentRoot = "ai-allowance-drift:2026-11";
+    const currentPrefix = `ai-allowance:2026-11:${TEAM}`;
+    await redis.set(`${currentRoot}:${TEAM}:context`, JSON.stringify({ mode: "plan", monthlyUsd: 5, fundingSource: funding.source }));
+    await redis.set(`${currentPrefix}:committed`, String(gatewayUsd * 1_000_000));
+    redis.sets.set(`${currentRoot}:active`, new Set([TEAM]));
+    redis.snapshotKeys.length = 0; reportPeriods.length = 0;
+    const result = await check();
+    assert.equal(result.checked, 2); assert.equal(result.unknown, 0);
+    assert.equal(result.refusalAlerts, 1); assert.equal(result.drift, 0);
+    assert.deepEqual(reportPeriods, [["2026-10-01", "2026-10-31"], ["2026-11-01", "2026-11-01"]]);
+    assert.ok(redis.snapshotKeys.length > 0);
+    assert.ok(redis.snapshotKeys.every((keys) => keys.every((key) => key.startsWith(currentPrefix))));
+    assert.match(alerts[0].message, /month 2026-10; stored refusal-scope counter/);
+    assert.ok(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen.length > 0);
+    assert.equal((await check()).refusalAlerts, 0);
+    assert.equal(alerts.length, 1);
+    now = new NativeDate("2026-11-03T00:00:00Z").getTime();
+    await redis.del(`${OBS}:observation`);
+    reportPeriods.length = 0;
+    assert.equal((await check()).checked, 1);
+    assert.deepEqual(reportPeriods, [["2026-11-01", "2026-11-03"]]);
+  });
+}
+
+
+test("checker judges a summarized bucket even after its raw event is evicted", async () => {
+  await fresh();
+  const start = now;
+  await redis.zadd(`${PREFIX}:reservations`, now + 600_000, "live|2900000");
+  for (let i = 0; i < 500; i++) {
+    now = start + i;
+    await assert.rejects(plan(), (error) => error.reason === "month");
+  }
+  now = start + 5 * 60 * 1000;
+  redis.sorted.get(`${PREFIX}:reservations`).clear();
+  await assert.rejects(plan(), (error) => error.reason === "month");
+  const representative = (await refusalBuckets()).find((bucket) => bucket.event.liveHolds === 0).event;
+  assert.ok(!(await refusalEvents()).some((event) => event.id === representative.id));
+  now += 30 * 60 * 1000;
+  assert.equal((await check()).refusalAlerts, 1);
+  assert.ok(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen.includes(representative.id));
+});
+
+
+test("second-day drain subtracts later usage using the newest stored refusal commitment", async () => {
+  now = new NativeDate("2026-10-31T23:50:00Z").getTime();
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month");
+  const earliest = (await refusalEvents())[0];
+  now = new NativeDate("2026-10-31T23:55:00Z").getTime();
+  await redis.set(`${PREFIX}:committed`, "25000000");
+  await assert.rejects(plan(), (error) => error.reason === "month");
+  gatewayUsd = 22;
+  await redis.del(`${PREFIX}:committed`); await redis.del(`${PREFIX}:system:committed`);
+  now = new NativeDate("2026-11-02T00:30:00Z").getTime();
+  const result = await check();
+  assert.equal(result.unknown, 0); assert.equal(result.drift, 0); assert.equal(result.refusalAlerts, 1);
+  assert.equal(redis.snapshotKeys.length, 0);
+  assert.deepEqual(reportPeriods, [["2026-10-01", "2026-10-31"]]);
+  assert.deepEqual(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen, [earliest.id]);
 });

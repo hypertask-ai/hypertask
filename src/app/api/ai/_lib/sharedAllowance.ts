@@ -58,6 +58,13 @@ export type AllowanceRefusal = {
   fundingSource: AllowanceDriftContext["fundingSource"];
 };
 
+export type AllowanceRefusalBucket = {
+  count: number;
+  event: AllowanceRefusal;
+  committed: number;
+  time: number;
+};
+
 export function allowanceDriftTtl(now = new Date(), periodKey = aiAllowancePeriod(now).key) {
   const [year, month] = periodKey.split("-").map(Number);
   return Math.max(60, Math.ceil((Date.UTC(year, month, 8) - now.getTime()) / 1000));
@@ -100,15 +107,35 @@ async function recordAllowanceRefusal(event: Omit<AllowanceRefusal, "id" | "time
   try {
     const redis = await getRedis();
     const value: AllowanceRefusal = { ...event, id: randomUUID(), time: Date.now() };
+    const prefix = `ai-allowance-drift:${month}:${event.teamId ?? "teamless:demo"}`;
+    const bucket = [Math.floor(value.time / 300_000), event.reason, event.policyMode, event.lane, event.fundingSource, event.cap].join(":");
     await redis.eval(`
-if ARGV[1] ~= "" then redis.call("SADD", KEYS[1], ARGV[1]) end
+if ARGV[1] ~= "" then
+  redis.call("SADD", KEYS[1], ARGV[1])
+  redis.call("SADD", KEYS[4], ARGV[1])
+end
 redis.call("EXPIRE", KEYS[1], ARGV[3])
-redis.call("LPUSH", KEYS[2], ARGV[2])
-redis.call("LTRIM", KEYS[2], 0, 99)
+redis.call("EXPIRE", KEYS[4], ARGV[3])
+local event = cjson.decode(ARGV[2])
+local saved = redis.call("HGET", KEYS[3], ARGV[4])
+local bucket = saved and cjson.decode(saved) or {count = 0, event = event}
+bucket.count = bucket.count + 1
+local headroomUsed = event.committed + event.liveHolds + event.requestedHold
+local previous = bucket.event
+local previousUsed = previous.committed + previous.liveHolds + previous.requestedHold
+if headroomUsed < previousUsed or (headroomUsed == previousUsed and event.time < previous.time) then bucket.event = event end
+if not bucket.time or event.time >= bucket.time then
+  bucket.committed = event.committed
+  bucket.time = event.time
+end
+redis.call("HSET", KEYS[3], ARGV[4], cjson.encode(bucket))
+redis.call("EXPIRE", KEYS[3], ARGV[3])
+redis.call("ZADD", KEYS[2], event.time, ARGV[2])
+if redis.call("ZCARD", KEYS[2]) > 500 then redis.call("ZPOPMAX", KEYS[2]) end
 redis.call("EXPIRE", KEYS[2], ARGV[3])
 return 1
-`, 2, `ai-allowance-drift:${month}:active`, `ai-allowance-drift:${month}:${event.teamId ?? "teamless:demo"}:refusals`,
-      event.teamId ?? "", JSON.stringify(value), String(allowanceDriftTtl(new Date(), month)));
+`, 4, `ai-allowance-drift:${month}:active`, `${prefix}:refusal-events`, `${prefix}:refusal-buckets`, `ai-allowance-drift:${month}:refusal-active`,
+      event.teamId ?? "", JSON.stringify(value), String(allowanceDriftTtl(new Date(), month)), bucket);
   } catch {}
 }
 
