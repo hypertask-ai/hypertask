@@ -246,7 +246,7 @@ export async function getOwnerBoardAccessNotifications(principal: Pick<SessionUs
       if (state.invalid || (row.resolvedAt && row.resolvedAt.getTime() + 30 * DAY <= now.getTime())) continue;
       visible.push({ ...notification, task: null, isDecision: true, boardAccessRequest: { ...receipt(row, state), agentId: state.agent!.id,
         agentName: state.agent!.displayName, agentPhotoURL: state.agent!.photoURL, projectId: state.board!.id,
-        boardName: state.board!.name ?? state.board!.title ?? "Board", sameTeam: Boolean(state.canApprove), reason: row.reason } });
+        boardName: state.board!.title ?? state.board!.name ?? "Board", sameTeam: Boolean(state.canApprove), reason: row.reason } });
     }
     await boardAccessAudit(db, actor, "list", "allowed", "owner_requests");
     return visible;

@@ -54,7 +54,7 @@ test('live owner/team/access/deletion checks hide stale cards and prevent metada
 test('live owner with unchanged board sees card, reason as plain text and no token state', async () => {
   const f = fixture(); await f.create({ reason: '<img onerror=bad>' });
   const [row] = await f.service.getOwnerBoardAccessNotifications(session(), 'Normal', NOW);
-  assert.equal(row.boardAccessRequest.reason, '<img onerror=bad>'); assert.equal(row.boardAccessRequest.agentName, 'Grok Bot');
+  assert.equal(row.boardAccessRequest.reason, '<img onerror=bad>'); assert.equal(row.boardAccessRequest.agentName, 'Grok Bot'); assert.equal(row.boardAccessRequest.boardName, 'Software Factory');
   assert.equal(row.boardAccessRequest.tokenGeneration, undefined); assert.equal(row.boardAccessRequest.ownerUserIdAtRequest, undefined);
 });
 test('expired requests remain visible as terminal and cannot expose live action buttons', async () => {

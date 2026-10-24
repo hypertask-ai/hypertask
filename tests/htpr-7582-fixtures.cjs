@@ -32,7 +32,7 @@ function fixture(overrides = {}) {
     agent: { id: 'agent-1', userId: 6, displayName: 'Grok Bot', photoURL: null, revokedAt: null, archivedAt: null,
       credentialTeamId: null, credentialTeamAccessBinding: null, mcpTokenJti: 'generation-1', runtimeGeneration: 1,
       permissions: { role: 'write' }, members: [] },
-    board: { id: 15, ownerId: 6, teamId: 'team-1', name: 'Software Factory', title: 'Software Factory', status: 'Normal' },
+    board: { id: 15, ownerId: 6, teamId: 'team-1', name: 'project-15', title: 'Software Factory', status: 'Normal' },
     requests: [], notifications: [], members: [], logs: [], flag: true, grants: 0, broadcasts: 0, locks: 0,
     ...overrides,
   };
