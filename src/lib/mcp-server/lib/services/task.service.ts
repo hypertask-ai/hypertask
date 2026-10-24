@@ -9,6 +9,7 @@ import {
   UpdateTaskInputSchema,
   CreateTaskInputSchema,
   MoveTaskBetweenBoardsInputSchema,
+  SetTaskWaitingOnInputSchema,
   AssignUserInputSchema,
   LinkTasksInputSchema,
   NextTasksInputSchema,
@@ -968,6 +969,17 @@ export class TaskService {
       });
       throw error;
     }
+  }
+
+  async setTaskWaitingOn(params: unknown) {
+    const body = SetTaskWaitingOnInputSchema.parse(params);
+    return this.apiClient.makeRequest<{
+      success: true;
+      task: { id: number; waitingOnUserId: number | null; waitingOnSetById: number | null; waitingOnSetAt: string | null };
+    }>('/mcp/tasks/waiting-on', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, generateCorrelationId());
   }
 
   async moveTaskBetweenBoards(params: unknown): Promise<UpdateTaskResponse | (ReturnType<typeof planLimitResponse>["body"] & { status: 402 })> {

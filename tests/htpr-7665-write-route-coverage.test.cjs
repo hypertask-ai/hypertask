@@ -28,6 +28,7 @@ const NEWLY_GUARDED = [
   `POST ${API}/tasks/escalate/route.ts`,
   `POST ${API}/tasks/evidence/route.ts`,
   `POST ${OPS}/tasks/move/operation.ts`,
+  `POST ${OPS}/tasks/waiting-on/operation.ts`,
   `POST ${OPS}/tasks/relations/operation.ts`,
   `DELETE ${OPS}/tasks/relations/operation.ts`,
   `POST ${API}/time/delete/route.ts`,
@@ -130,7 +131,7 @@ test("every non-GET MCP handler is guarded, allowlisted with a reason, or refuse
   assert.deepEqual(unclassified.map((handler) => handler.key), [], "call requireAgentWriteRole after authentication, or add the row to an explicit list with a reason");
 });
 
-test("the 46 handlers this fix guards still call requireAgentWriteRole", () => {
+test("the 47 handlers this fix guards still call requireAgentWriteRole", () => {
   assert.equal(new Set(NEWLY_GUARDED).size, NEWLY_GUARDED.length);
   for (const key of NEWLY_GUARDED) {
     const handler = byKey.get(key);

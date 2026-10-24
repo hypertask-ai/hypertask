@@ -75,6 +75,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/tasks/session',
   '/api/mcp/tasks/tree',
   '/api/mcp/tasks/update',
+  '/api/mcp/tasks/waiting-on',
   '/api/mcp/time/delete',
   '/api/mcp/time/log',
   '/api/mcp/time/pause',

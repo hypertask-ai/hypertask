@@ -203,11 +203,11 @@
       "id": "tasks.mutate",
       "title": "Create, update, move, batch, or escalate tasks",
       "matches": {
-        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate)$", "^POST /api/mcp/tasks/card-actions$"],
-        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
+        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate|waiting-on)$", "^POST /api/mcp/tasks/card-actions$"],
+        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards|set_task_waiting_on)$"],
         "cli": ["^task (create|update|move|move-board)$", "^agent move$"],
         "ai_chat": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
-        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$"]
+        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards|set_task_waiting_on)$"]
       }
     },
     {

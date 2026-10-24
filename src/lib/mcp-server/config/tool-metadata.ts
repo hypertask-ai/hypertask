@@ -415,6 +415,12 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
       'Creates a new task in a project. Requires project_id and title. Optionally set description, section (by section_id), priority (0=None, 1=Urgent, 2=High, 3=Medium, 4=Low), estimate, due_date (ISO 8601, e.g. "2026-03-10"), labels, and attachments[]. Each attachment needs filename, content_type, and exactly one of data=base64 bytes or url=https; uploaded public URLs are returned. Use hypertask_section with action=list to find the correct section_id for the target column, parent_task_id to create task as a sub-task. IMPORTANT: If the user requests to create a task but does not specify which project or section, you MUST ask them to clarify before creating the task. Do not assume or pick a project/section automatically. First call get_user_context or list_projects to show available options, then ask the user to choose. Description may be HTML or markdown; set content_type to "markdown" for markdown. The created task includes a "link" field with the task URL: https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex}. The task keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat create.',
   },
 
+  SET_TASK_WAITING_ON: {
+    name: buildToolName('set_task_waiting_on'),
+    description:
+      'Sets the person blocking a task, using the same write as the app Blocked by person modal. Requires taskId (database ID) and userId (board member ID); pass userId null to clear. Use list_project_members to resolve the person. Does not change task assignees or task-to-task blocking relations.',
+  },
+
   MOVE_TASK_BETWEEN_BOARDS: {
     name: buildToolName('move_task_between_boards'),
     description:
