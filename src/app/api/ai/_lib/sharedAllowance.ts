@@ -38,6 +38,7 @@ import {
   usdToMicroUsd,
   type BilledCall,
   type EffectiveAccountingSource,
+  type GatewaySpendBreakdown,
   type HoldReleaseReason,
 } from "./billedAllowance";
 

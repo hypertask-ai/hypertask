@@ -21,7 +21,7 @@ export function usdToMicroUsd(value: number): number {
   return Math.max(0, Math.ceil(value * MICRO_USD_PER_USD));
 }
 
-type GatewaySpendBreakdown = {
+export type GatewaySpendBreakdown = {
   legacySystemMicroUsd: number;
   systemMicroUsd: number;
   totalMicroUsd: number;
