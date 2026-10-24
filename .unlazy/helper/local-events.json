@@ -1,0 +1,184 @@
+[
+  {
+    "distinctId": "123",
+    "event": "board_created",
+    "properties": {
+      "source": "manual"
+    },
+    "timestamp": "2026-10-20T10:28:51.375Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "board_created",
+    "properties": {
+      "source": "seeded"
+    },
+    "timestamp": "2026-10-20T10:28:51.584Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "board_created",
+    "properties": {
+      "source": "adopted_demo"
+    },
+    "timestamp": "2026-10-20T10:28:51.727Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "agent_connected",
+    "properties": {
+      "client": "other",
+      "transport": "cli",
+      "is_first": true
+    },
+    "timestamp": "2026-10-20T10:28:51.992Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "agent_task_completed",
+    "properties": {
+      "taskId": 9,
+      "projectId": 15,
+      "is_first": true
+    },
+    "timestamp": "2026-10-20T10:28:53.271Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "agent_task_completed",
+    "properties": {
+      "taskId": 10,
+      "projectId": 15,
+      "is_first": false
+    },
+    "timestamp": "2026-10-20T10:28:53.317Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "invite_sent",
+    "properties": {
+      "user_id": "123",
+      "workspace_id": "team",
+      "board_id": "15",
+      "source": "server",
+      "event_id": "invite_sent:2143f1f359dfdfa321b67d3de3fb68e3",
+      "occurred_at": "2026-10-20T10:28:53.896Z",
+      "environment": "unknown",
+      "utm_source": null,
+      "utm_medium": null,
+      "utm_campaign": null,
+      "initial_referrer": null,
+      "is_seeded": null,
+      "account_category": null,
+      "attribution_status": "unknown",
+      "invitation_id": "2143f1f359dfdfa321b67d3de3fb68e3",
+      "invite_method": "link",
+      "role": "Member"
+    },
+    "timestamp": "2026-10-20T10:28:53.896Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "invite_sent",
+    "properties": {
+      "user_id": "123",
+      "workspace_id": "team",
+      "board_id": "15",
+      "source": "server",
+      "event_id": "invite_sent:2143f1f359dfdfa321b67d3de3fb68e3",
+      "occurred_at": "2026-10-20T10:28:54.005Z",
+      "environment": "unknown",
+      "utm_source": null,
+      "utm_medium": null,
+      "utm_campaign": null,
+      "initial_referrer": null,
+      "is_seeded": null,
+      "account_category": null,
+      "attribution_status": "unknown",
+      "invitation_id": "2143f1f359dfdfa321b67d3de3fb68e3",
+      "invite_method": "email",
+      "role": "Member"
+    },
+    "timestamp": "2026-10-20T10:28:54.005Z"
+  },
+  {
+    "distinctId": "234",
+    "event": "member_joined",
+    "properties": {
+      "user_id": "234",
+      "workspace_id": "team",
+      "board_id": "15",
+      "source": "server",
+      "event_id": "member_joined:1",
+      "occurred_at": "2026-10-20T10:28:54.227Z",
+      "environment": "unknown",
+      "utm_source": null,
+      "utm_medium": null,
+      "utm_campaign": null,
+      "initial_referrer": null,
+      "is_seeded": null,
+      "account_category": null,
+      "attribution_status": "unknown",
+      "membership_id": "1",
+      "invitation_id": "559bd3222627cb94cad462a8adc1a425",
+      "inviter_user_id": "123",
+      "role": "Member",
+      "member_count": 2
+    },
+    "timestamp": "2026-10-20T10:28:54.227Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "agent_task_completed",
+    "properties": {
+      "taskId": 9,
+      "projectId": 15,
+      "is_first": true
+    },
+    "timestamp": "2026-10-20T10:28:54.728Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "agent_task_completed",
+    "properties": {
+      "taskId": 10,
+      "projectId": 15,
+      "is_first": true
+    },
+    "timestamp": "2026-10-20T10:28:54.728Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "agent_task_completed",
+    "properties": {
+      "taskId": 9,
+      "projectId": 15,
+      "is_first": true
+    },
+    "timestamp": "2026-10-20T10:28:54.861Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "agent_task_completed",
+    "properties": {
+      "taskId": 10,
+      "projectId": 15,
+      "is_first": true
+    },
+    "timestamp": "2026-10-20T10:28:54.861Z"
+  },
+  {
+    "distinctId": "123",
+    "event": "lifecycle_email_sent",
+    "properties": {
+      "type": "agent_first_task"
+    }
+  },
+  {
+    "distinctId": "123",
+    "event": "lifecycle_email_sent",
+    "properties": {
+      "type": "agent_nudge"
+    }
+  }
+]

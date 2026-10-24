@@ -1,0 +1,1591 @@
+▲ Next.js 16.4.0
+- Local:         http://127.0.0.1:42585
+- Network:       http://127.0.0.1:42585
+✓ Ready in 402ms
+✓ Running next.config.js took 2.3s
+❌ USER NOT AUTHENTICATED
+[SecretCipher] BYOK_CIPHER_SECRET is not set. Secret encryption and decryption will fail at runtime. Generate one with: openssl rand -hex 32
+❌ USER NOT AUTHENTICATED
+❌ USER NOT AUTHENTICATED
+❌ USER NOT AUTHENTICATED
+[SecretCipher] BYOK_CIPHER_SECRET is not set. Secret encryption and decryption will fail at runtime. Generate one with: openssl rand -hex 32
+[Middleware] MCP API route without Authorization header - allowing through (API will handle auth)
+[Middleware] MCP API route without Authorization header - allowing through (API will handle auth)
+No sessions found, creating new session
+[premerge-ai] {"modelId":"anthropic/claude-haiku-5.5","systemPromptSha256":"ae52f69f6c1780706380cb11192958d7ea1616c69f4f8a6e1eb91e1c73816c2b"}
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+🚀 ~ file: createLog.ts:12 ~ createLog ~ data.log: mcp_connected
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+Agent connection email failed
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+🚀 ~ file: createLog.ts:12 ~ createLog ~ data.log: mcp_connected
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP] tasks {
+  user: { id: 985, email: 'valentin@hypertask.ai' },
+  query: { ticket_number: 'BOARD-1', project_id: '1' }
+}
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+🤔 ~ updateTaskSingle ~ oldTask: {
+  id: 1,
+  uniqueIndex: 1,
+  ticketNumber: 'BOARD-1',
+  ranking: 'A0100',
+  section: 'To do',
+  title: 'Browser smoke board fixture',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:25:59.633Z,
+  sectionChangedAt: 2026-10-20T15:25:59.633Z,
+  lastCommentAt: null,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:25:59.626Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 0,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: null,
+  description_: {
+    content: '<p>This seeded ticket must open from its board card.</p>'
+  }
+}
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateCommentSummaryQueue","jobId":"ai-summary-for-commentId:13","notBefore":1792511533,"messageId":"premerge-6f3980d2-1877-462c-a164-1e3c0a59546b"}
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511533,"messageId":"premerge-a7edbc06-e814-4f26-8ff1-eefb36ce7bc1"}
+turbopuffer comment upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at H (.next/server/chunks/94510.js:1:12011)
+    at u (.next/server/chunks/94510.js:1:6870)
+    at t (.next/server/chunks/94510.js:1:6711)
+turbopuffer comment upsert skipped: embeddings unavailable for 1 row(s)
+[Middleware] MCP API route with Authorization header - allowing through
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateCommentSummaryQueue","jobId":"ai-summary-for-commentId:13","notBefore":1792511533,"messageId":"premerge-4f11e59b-97a8-4380-a7c1-4c513206269f"}
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511533,"messageId":"premerge-c5e7859f-d24e-4546-a196-98556cac4817"}
+turbopuffer comment upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at H (.next/server/chunks/94510.js:1:12011)
+    at u (.next/server/chunks/94510.js:1:6870)
+    at t (.next/server/chunks/94510.js:1:6711)
+turbopuffer comment upsert skipped: embeddings unavailable for 1 row(s)
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+[Middleware] MCP API route without Authorization header - allowing through (API will handle auth)
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateCommentSummaryQueue","jobId":"ai-summary-for-commentId:14","notBefore":1792511546,"messageId":"premerge-d937fa81-b22d-44f4-915f-4702212d52cb"}
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511546,"messageId":"premerge-e5f69b02-bb98-4761-ae6d-52c410e71738"}
+turbopuffer comment upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at H (.next/server/chunks/94510.js:1:12011)
+    at u (.next/server/chunks/94510.js:1:6870)
+    at t (.next/server/chunks/94510.js:1:6711)
+turbopuffer comment upsert skipped: embeddings unavailable for 1 row(s)
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+🤔 ~ updateTaskSingle ~ oldTask: {
+  id: 1,
+  uniqueIndex: 1,
+  ticketNumber: 'BOARD-1',
+  ranking: 'A0100',
+  section: 'To do',
+  title: 'Browser smoke board fixture',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:25:59.633Z,
+  sectionChangedAt: 2026-10-20T15:25:59.633Z,
+  lastCommentAt: 2026-10-20T15:47:26.792Z,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:47:26.792Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 2,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [ 985 ],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: null,
+  description_: {
+    content: '<p>This seeded ticket must open from its board card.</p>'
+  }
+}
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511571,"messageId":"premerge-5011bb23-c6bf-4133-ab5f-76205eee8dbe"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511572,"messageId":"premerge-0dec5cd4-9786-4bbc-957e-a082bcd1529c"}
+🤔 ~ updateTaskSingle ~ oldTask: {
+  id: 1,
+  uniqueIndex: 1,
+  ticketNumber: 'BOARD-1',
+  ranking: 'A0100',
+  section: 'To do',
+  title: '7146 new-head UI edited fixture',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:25:59.633Z,
+  sectionChangedAt: 2026-10-20T15:25:59.633Z,
+  lastCommentAt: 2026-10-20T15:47:26.792Z,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:47:51.925Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 2,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [ 985 ],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: null,
+  description_: {
+    content: '<p>This seeded ticket must open from its board card.</p>'
+  }
+}
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511572,"messageId":"premerge-cdf2adf5-ad9a-4cdf-bf00-da7473fe1dcf"}
+[premerge-queue] cancelled {"path":"/api/queues/duedateQueue","jobId":"duedate-for-task-1-1"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+🤔 ~ updateTaskSingle ~ oldTask: {
+  id: 1,
+  uniqueIndex: 1,
+  ticketNumber: 'BOARD-1',
+  ranking: 'A0100',
+  section: 'To do',
+  title: '7146 new-head UI edited fixture',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:25:59.633Z,
+  sectionChangedAt: 2026-10-20T15:25:59.633Z,
+  lastCommentAt: 2026-10-20T15:47:26.792Z,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:47:52.585Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 2,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [ 985 ],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: null,
+  description_: {
+    content: '<p>This seeded ticket must open from its board card.</p>'
+  }
+}
+{ slug: [ 'project-1', '1' ] }
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511573,"messageId":"premerge-d2458895-72fb-4814-b327-87e9166a64fc"}
+[premerge-queue] cancelled {"path":"/api/queues/duedateQueue","jobId":"duedate-for-task-1-1"}
+[premerge-queue] scheduled {"path":"/api/queues/duedateQueue","jobId":"duedate-for-task-1-1","notBefore":1793174400,"messageId":"premerge-e8729d2a-4122-40f8-bce0-e354c5e1d6fe"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+🤔 ~ updateTaskSingle ~ oldTask: {
+  id: 1,
+  uniqueIndex: 1,
+  ticketNumber: 'BOARD-1',
+  ranking: 'A0100',
+  section: 'To do',
+  title: '7146 new-head UI edited fixture',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:25:59.633Z,
+  sectionChangedAt: 2026-10-20T15:25:59.633Z,
+  lastCommentAt: 2026-10-20T15:47:26.792Z,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: 2026-10-28T08:00:00.000Z,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:47:52.855Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 2,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [ 985 ],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: null,
+  description_: {
+    content: '<p>This seeded ticket must open from its board card.</p>'
+  }
+}
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511573,"messageId":"premerge-f19fe66f-2173-48ba-b88e-dee1e3e894cd"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+{ slug: [ 'project-1', '1' ] }
+[Middleware] MCP API route without Authorization header - allowing through (API will handle auth)
+No sessions found, creating new session
+[Middleware] MCP API route without Authorization header - allowing through (API will handle auth)
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at H (.next/server/chunks/94510.js:1:12011)
+    at s (.next/server/chunks/94510.js:1:6285)
+    at r (.next/server/chunks/94510.js:1:5821)
+    at async (.next/server/chunks/12840.js:19:7093)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+{ slug: [ 'project-1', '2' ] }
+🚀 ~ consthandler:NextApiHandler= ~ section: {
+  id: 2,
+  section_title: 'To do',
+  projectId: 1,
+  visibility: true,
+  deleted: false,
+  ranking: 'A0100',
+  isDone: false,
+  autoAssignUserId: null,
+  autoAssignAgentId: null
+}
+🚀 ~ consthandler:NextApiHandler= ~ task: {
+  id: 4,
+  uniqueIndex: 2,
+  ticketNumber: 'BOARD-2',
+  ranking: 'A0100',
+  section: 'To do',
+  title: '7146 new-head confirmed proposal',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:48:38.463Z,
+  sectionChangedAt: 2026-10-20T15:48:38.471Z,
+  lastCommentAt: null,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:48:38.463Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 0,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: 2026-10-20T15:48:38.575Z
+}
+🚀 ~ consthandler:NextApiHandler= ~ ranking: A0041.906475460134288
+🚀 ~ consthandler:NextApiHandler= ~ body: { section: 'To do', ranking: 'A0041.906475460134288', sectionId: 2 }
+🚀 ~ consthandler:NextApiHandler= ~ section: {
+  id: 2,
+  section_title: 'To do',
+  projectId: 1,
+  visibility: true,
+  deleted: false,
+  ranking: 'A0100',
+  isDone: false,
+  autoAssignUserId: null,
+  autoAssignAgentId: null
+}
+🚀 ~ consthandler:NextApiHandler= ~ task: {
+  id: 4,
+  uniqueIndex: 2,
+  ticketNumber: 'BOARD-2',
+  ranking: 'A0100',
+  section: 'To do',
+  title: '7146 new-head confirmed proposal',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:48:38.463Z,
+  sectionChangedAt: 2026-10-20T15:48:38.471Z,
+  lastCommentAt: null,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:48:38.463Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 0,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: 2026-10-20T15:48:38.575Z
+}
+🚀 ~ consthandler:NextApiHandler= ~ ranking: A0054.696577273781763
+🚀 ~ consthandler:NextApiHandler= ~ body: { section: 'To do', ranking: 'A0054.696577273781763', sectionId: 2 }
+🤔 ~ creating task ~ body: {
+  userId: 985,
+  projectId: 1,
+  projectIdentifier: 'BOARD',
+  title: '7146 new-head window task',
+  ranking: 'A0054.696577273781763',
+  sectionId: 2,
+  section_title: 'To do',
+  assignees: [],
+  description: '<html><head></head><body><p>7146 new-head window description</p></body></html>',
+  urlsToAdd: [],
+  relationsToAdd: [],
+  fullScreenTask: true
+}
+🚀 ~ consthandler:NextApiHandler= ~ tagsCreated: null
+🚀 ~ consthandler:NextApiHandler= ~ description: <html><head></head><body><p>7146 new-head window description</p></body></html>
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:5","notBefore":1792511621,"messageId":"premerge-378d6644-7028-4266-842f-eba892b54338"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+[premerge-ai] {"modelId":"anthropic/claude-haiku-5.5","systemPromptSha256":"ae52f69f6c1780706380cb11192958d7ea1616c69f4f8a6e1eb91e1c73816c2b"}
+🚀 ~ invite: null
+🚀 ~ consthandler:NextApiHandler= ~ section: {
+  id: 2,
+  section_title: 'To do',
+  projectId: 1,
+  visibility: true,
+  deleted: false,
+  ranking: 'A0100',
+  isDone: false,
+  autoAssignUserId: null,
+  autoAssignAgentId: null
+}
+🚀 ~ consthandler:NextApiHandler= ~ task: {
+  id: 5,
+  uniqueIndex: 3,
+  ticketNumber: 'BOARD-3',
+  ranking: 'A0054.696577273781763',
+  section: 'To do',
+  title: '7146 new-head window task',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:48:41.715Z,
+  sectionChangedAt: 2026-10-20T15:48:41.715Z,
+  lastCommentAt: null,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:48:41.700Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 0,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: 2026-10-20T15:48:41.852Z
+}
+🚀 ~ consthandler:NextApiHandler= ~ ranking: A0024.883666776993962
+🚀 ~ consthandler:NextApiHandler= ~ body: { section: 'To do', ranking: 'A0024.883666776993962', sectionId: 2 }
+turbopuffer searchTasks embedding error, using BM25 only: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at q (.next/server/chunks/94510.js:1:5630)
+    at I (.next/server/chunks/94510.js:1:12246)
+    at D (.next/server/chunks/94510.js:1:9483)
+    at W (.next/server/chunks/16181.js:4:11855)
+    at B (.next/server/app/api/mcp/ai/improve/route.js:1:4646)
+    at async r (.next/server/app/api/ai/task-writer/route.js:1:3968)
+turbopuffer searchComments embedding error, using BM25 only: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at q (.next/server/chunks/94510.js:1:5630)
+    at I (.next/server/chunks/94510.js:1:12246)
+    at E (.next/server/chunks/94510.js:1:10205)
+    at W (.next/server/chunks/16181.js:4:11909)
+    at B (.next/server/app/api/mcp/ai/improve/route.js:1:4646)
+    at async r (.next/server/app/api/ai/task-writer/route.js:1:3968)
+turbopuffer searchTasks embedding error, using BM25 only: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at q (.next/server/chunks/94510.js:1:5630)
+    at I (.next/server/chunks/94510.js:1:12246)
+    at D (.next/server/chunks/94510.js:1:9483)
+    at B (.next/server/app/api/mcp/ai/improve/route.js:1:4747)
+    at async r (.next/server/app/api/ai/task-writer/route.js:1:3968)
+    at async Z (.next/server/app/api/ai/task-writer/route.js:1:11898)
+turbopuffer listCustomInstructionFileRows error: Error: 404 {"error":"Fixture search supports task/comment queries only"}
+    at j.generate (.next/server/chunks/40752.js:1:1840)
+    at av.makeStatusError (.next/server/chunks/40752.js:4:8938)
+    at av.makeRequest (.next/server/chunks/40752.js:4:12117)
+    at async G (.next/server/chunks/94510.js:1:11661)
+    at async t (.next/server/app/api/mcp/ai/task-writer/route.js:1:10668)
+    at async W (.next/server/chunks/16181.js:4:11829)
+    at async B (.next/server/app/api/mcp/ai/improve/route.js:1:4524) {
+  status: 404,
+  headers: Headers {
+    'content-type': 'application/json',
+    date: 'Tue, 20 Oct 2026 15:48:48 GMT',
+    connection: 'keep-alive',
+    'keep-alive': 'timeout=5',
+    'transfer-encoding': 'chunked'
+  },
+  error: { error: 'Fixture search supports task/comment queries only' }
+}
+turbopuffer searchCustomInstructionFiles embedding error, using BM25 only: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at q (.next/server/chunks/94510.js:1:5630)
+    at I (.next/server/chunks/94510.js:1:12246)
+    at F (.next/server/chunks/94510.js:1:10864)
+    at t (.next/server/app/api/mcp/ai/task-writer/route.js:1:10782)
+    at async W (.next/server/chunks/16181.js:4:11829)
+    at async B (.next/server/app/api/mcp/ai/improve/route.js:1:4524)
+turbopuffer searchCustomInstructionFiles error: Error: 404 {"error":"Fixture search supports task/comment queries only"}
+    at j.generate (.next/server/chunks/40752.js:1:1840)
+    at av.makeStatusError (.next/server/chunks/40752.js:4:8938)
+    at av.makeRequest (.next/server/chunks/40752.js:4:12117)
+    at async F (.next/server/chunks/94510.js:1:11315)
+    at async t (.next/server/app/api/mcp/ai/task-writer/route.js:1:10768)
+    at async W (.next/server/chunks/16181.js:4:11829)
+    at async B (.next/server/app/api/mcp/ai/improve/route.js:1:4524) {
+  status: 404,
+  headers: Headers {
+    'content-type': 'application/json',
+    date: 'Tue, 20 Oct 2026 15:48:48 GMT',
+    connection: 'keep-alive',
+    'keep-alive': 'timeout=5',
+    'transfer-encoding': 'chunked'
+  },
+  error: { error: 'Fixture search supports task/comment queries only' }
+}
+[premerge-ai] {"modelId":"claude-sonnet-5.5","systemPromptSha256":"7f67a7860d87466b4cd0a13dbcdb2eb3e666552c929d538a89ddf4b881070429"}
+🤔 ~ creating task ~ body: {
+  userId: 985,
+  projectId: 1,
+  projectIdentifier: 'BOARD',
+  title: 'Local premerge fixture',
+  description: 'Local premerge fixture',
+  sectionId: 2,
+  section_title: 'To do',
+  ranking: 'A0024.883666776993962',
+  assignees: [],
+  requestKind: 'compose-task',
+  fullScreenTask: true
+}
+🚀 ~ consthandler:NextApiHandler= ~ tagsCreated: null
+🚀 ~ consthandler:NextApiHandler= ~ description: Local premerge fixture
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:6","notBefore":1792511628,"messageId":"premerge-30148407-c589-47e3-840d-259ab5f32683"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+{ slug: [ 'project-1', '4' ] }
+[premerge-ai] {"modelId":"anthropic/claude-haiku-5.5","systemPromptSha256":"ae52f69f6c1780706380cb11192958d7ea1616c69f4f8a6e1eb91e1c73816c2b"}
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+🚀 ~ invite: {
+  id: 'd2ae433e-588f-42a5-b10d-752df9b3bbb7',
+  key: 'public',
+  userId: 985,
+  invitedAt: 2026-10-20T15:48:48.521Z,
+  expiresAt: null,
+  projectId: 1,
+  teamId: null,
+  uses: -1,
+  emails: [],
+  expired: false,
+  project: {
+    name: 'browser-smoke-board-938795-1-cd5b4c37-f9f9-4fa4-a91b-5fd08b4a86e9'
+  }
+}
+🚀 ~ consthandler:NextApiHandler= ~ section: {
+  id: 2,
+  section_title: 'To do',
+  projectId: 1,
+  visibility: true,
+  deleted: false,
+  ranking: 'A0100',
+  isDone: false,
+  autoAssignUserId: null,
+  autoAssignAgentId: null
+}
+🚀 ~ consthandler:NextApiHandler= ~ task: {
+  id: 6,
+  uniqueIndex: 4,
+  ticketNumber: 'BOARD-4',
+  ranking: 'A0024.883666776993962',
+  section: 'To do',
+  title: 'Local premerge fixture',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:48:48.942Z,
+  sectionChangedAt: 2026-10-20T15:48:48.942Z,
+  lastCommentAt: null,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:48:48.937Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 0,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: 2026-10-20T15:48:49.040Z
+}
+🚀 ~ consthandler:NextApiHandler= ~ ranking: A0017.541638302231309
+🚀 ~ consthandler:NextApiHandler= ~ body: { section: 'To do', ranking: 'A0017.541638302231309', sectionId: 2 }
+turbopuffer searchTasks embedding error, using BM25 only: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at q (.next/server/chunks/94510.js:1:5630)
+    at I (.next/server/chunks/94510.js:1:12246)
+    at D (.next/server/chunks/94510.js:1:9483)
+    at W (.next/server/chunks/16181.js:4:11855)
+    at B (.next/server/app/api/mcp/ai/improve/route.js:1:4646)
+    at async r (.next/server/app/api/ai/task-writer/route.js:1:3968)
+turbopuffer searchComments embedding error, using BM25 only: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at q (.next/server/chunks/94510.js:1:5630)
+    at I (.next/server/chunks/94510.js:1:12246)
+    at E (.next/server/chunks/94510.js:1:10205)
+    at W (.next/server/chunks/16181.js:4:11909)
+    at B (.next/server/app/api/mcp/ai/improve/route.js:1:4646)
+    at async r (.next/server/app/api/ai/task-writer/route.js:1:3968)
+turbopuffer searchTasks embedding error, using BM25 only: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at q (.next/server/chunks/94510.js:1:5630)
+    at I (.next/server/chunks/94510.js:1:12246)
+    at D (.next/server/chunks/94510.js:1:9483)
+    at B (.next/server/app/api/mcp/ai/improve/route.js:1:4747)
+    at async r (.next/server/app/api/ai/task-writer/route.js:1:3968)
+    at async Z (.next/server/app/api/ai/task-writer/route.js:1:11898)
+turbopuffer listCustomInstructionFileRows error: Error: 404 {"error":"Fixture search supports task/comment queries only"}
+    at j.generate (.next/server/chunks/40752.js:1:1840)
+    at av.makeStatusError (.next/server/chunks/40752.js:4:8938)
+    at av.makeRequest (.next/server/chunks/40752.js:4:12117)
+    at async G (.next/server/chunks/94510.js:1:11661)
+    at async t (.next/server/app/api/mcp/ai/task-writer/route.js:1:10668)
+    at async W (.next/server/chunks/16181.js:4:11829)
+    at async B (.next/server/app/api/mcp/ai/improve/route.js:1:4524) {
+  status: 404,
+  headers: Headers {
+    'content-type': 'application/json',
+    date: 'Tue, 20 Oct 2026 15:48:52 GMT',
+    connection: 'keep-alive',
+    'keep-alive': 'timeout=5',
+    'transfer-encoding': 'chunked'
+  },
+  error: { error: 'Fixture search supports task/comment queries only' }
+}
+turbopuffer searchCustomInstructionFiles embedding error, using BM25 only: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at n (.next/server/chunks/94510.js:1:4459)
+    at q (.next/server/chunks/94510.js:1:5630)
+    at I (.next/server/chunks/94510.js:1:12246)
+    at F (.next/server/chunks/94510.js:1:10864)
+    at t (.next/server/app/api/mcp/ai/task-writer/route.js:1:10782)
+    at async W (.next/server/chunks/16181.js:4:11829)
+    at async B (.next/server/app/api/mcp/ai/improve/route.js:1:4524)
+turbopuffer searchCustomInstructionFiles error: Error: 404 {"error":"Fixture search supports task/comment queries only"}
+    at j.generate (.next/server/chunks/40752.js:1:1840)
+    at av.makeStatusError (.next/server/chunks/40752.js:4:8938)
+    at av.makeRequest (.next/server/chunks/40752.js:4:12117)
+    at async F (.next/server/chunks/94510.js:1:11315)
+    at async t (.next/server/app/api/mcp/ai/task-writer/route.js:1:10768)
+    at async W (.next/server/chunks/16181.js:4:11829)
+    at async B (.next/server/app/api/mcp/ai/improve/route.js:1:4524) {
+  status: 404,
+  headers: Headers {
+    'content-type': 'application/json',
+    date: 'Tue, 20 Oct 2026 15:48:52 GMT',
+    connection: 'keep-alive',
+    'keep-alive': 'timeout=5',
+    'transfer-encoding': 'chunked'
+  },
+  error: { error: 'Fixture search supports task/comment queries only' }
+}
+[premerge-ai] {"modelId":"claude-sonnet-5.5","systemPromptSha256":"7f67a7860d87466b4cd0a13dbcdb2eb3e666552c929d538a89ddf4b881070429"}
+🤔 ~ creating task ~ body: {
+  userId: 985,
+  projectId: 1,
+  projectIdentifier: 'BOARD',
+  title: 'Local premerge fixture',
+  description: 'Local premerge fixture',
+  sectionId: 2,
+  section_title: 'To do',
+  ranking: 'A0017.541638302231309',
+  assignees: [],
+  requestKind: 'compose-task',
+  fullScreenTask: true
+}
+🚀 ~ consthandler:NextApiHandler= ~ tagsCreated: null
+🚀 ~ consthandler:NextApiHandler= ~ description: Local premerge fixture
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:7","notBefore":1792511633,"messageId":"premerge-665a94a3-5e0c-4e5a-90e1-6698eb1baf5b"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+{ slug: [ 'project-1', '5' ] }
+[premerge-ai] {"modelId":"anthropic/claude-haiku-5.5","systemPromptSha256":"ae52f69f6c1780706380cb11192958d7ea1616c69f4f8a6e1eb91e1c73816c2b"}
+{ slug: [ 'project-1', '5' ] }
+🚀 ~ consthandler:NextApiHandler= ~ section: {
+  id: 2,
+  section_title: 'To do',
+  projectId: 1,
+  visibility: true,
+  deleted: false,
+  ranking: 'A0100',
+  isDone: false,
+  autoAssignUserId: null,
+  autoAssignAgentId: null
+}
+🚀 ~ consthandler:NextApiHandler= ~ task: {
+  id: 7,
+  uniqueIndex: 5,
+  ticketNumber: 'BOARD-5',
+  ranking: 'A0017.541638302231309',
+  section: 'To do',
+  title: 'Local premerge fixture',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:48:53.025Z,
+  sectionChangedAt: 2026-10-20T15:48:53.025Z,
+  lastCommentAt: null,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: null,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:48:53.023Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 0,
+  sectionId: 2,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: 2026-10-20T15:48:53.118Z
+}
+🚀 ~ consthandler:NextApiHandler= ~ ranking: A0005.663000435343955
+🚀 ~ consthandler:NextApiHandler= ~ body: { section: 'To do', ranking: 'A0005.663000435343955', sectionId: 2 }
+🤔 ~ creating task ~ body: {
+  userId: 985,
+  projectId: 1,
+  projectIdentifier: 'BOARD',
+  title: '7146 due-date write-route control',
+  description: 'Explicit writerDueDate exercises save independently of structured AI fixture.',
+  sectionId: 2,
+  section_title: 'To do',
+  ranking: 'A0005.663000435343955',
+  assignees: [],
+  requestKind: 'compose-task',
+  writerDueDate: '2026-11-05',
+  writerTimeZone: 'Europe/Berlin',
+  customFields: [ { fieldId: '001e8365-1f76-4e9f-8d59-b398e677c413', value: 19 } ],
+  fullScreenTask: true
+}
+[premerge-queue] scheduled {"path":"/api/queues/duedateQueue","jobId":"duedate-for-task-8-1","notBefore":1793865600,"messageId":"premerge-d68dcc5c-ece7-4a47-9a2f-ab05f20c25ce"}
+🚀 ~ consthandler:NextApiHandler= ~ tagsCreated: null
+🚀 ~ consthandler:NextApiHandler= ~ description: Explicit writerDueDate exercises save independently of structured AI fixture.
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:8","notBefore":1792511649,"messageId":"premerge-d9ee7d68-b6b2-4291-ad76-a102d2ddbd91"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+{ slug: [ 'project-1', '6' ] }
+{ slug: [ 'project-1', '6' ] }
+[premerge-ai] {"modelId":"anthropic/claude-haiku-5.5","systemPromptSha256":"ae52f69f6c1780706380cb11192958d7ea1616c69f4f8a6e1eb91e1c73816c2b"}
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+{ slug: [ 'project-1', '1' ] }
+🤔 ~ updateTaskSingle ~ oldTask: {
+  id: 1,
+  uniqueIndex: 1,
+  ticketNumber: 'BOARD-1',
+  ranking: 'A0100',
+  section: 'Done',
+  title: '7146 new-head UI edited fixture',
+  description: '',
+  projectId: 1,
+  cycleId: null,
+  status: 'Normal',
+  userId: 985,
+  createdAt: 2026-10-20T15:25:59.633Z,
+  sectionChangedAt: 2026-10-20T15:47:53.486Z,
+  lastCommentAt: 2026-10-20T15:47:26.792Z,
+  staleNudgedAt: null,
+  waitingOnUserId: null,
+  waitingOnSetById: null,
+  waitingOnSetAt: null,
+  dueDate: 2026-10-28T08:00:00.000Z,
+  startDate: null,
+  recurrence: null,
+  riskLevel: null,
+  acceptanceCriteria: null,
+  verifyCommand: null,
+  dueDateNotifiedAt: null,
+  deletedAt: null,
+  archivedAt: null,
+  updatedAt: 2026-10-20T15:47:53.486Z,
+  permanentlyDeleteAt: null,
+  hardDeleteProcessingAt: null,
+  totalComments: 2,
+  sectionId: 1,
+  descriptionJson: { type: '', content: [] },
+  descriptionId: null,
+  parentTaskId: null,
+  updatedByUserIds: [ 985 ],
+  agentId: null,
+  agentTaskCreatedPendingAt: null,
+  agentTaskCreatedReadyAt: null,
+  agentTaskCreatedEmittedAt: null,
+  description_: {
+    content: '<p>This seeded ticket must open from its board card.</p>'
+  }
+}
+[premerge-queue] scheduled {"path":"/api/queues/FAST/generateSummaryQueue","jobId":"ai-summary-for-taskId:1","notBefore":1792511728,"messageId":"premerge-3709a6f9-8f88-4487-927a-90f309ab6e3d"}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+🚀 ~ inboxReminder {
+  type: 'Reminder',
+  taskId: 1,
+  userId: 985,
+  projectId: 1,
+  remindAt: '2026-10-21T07:00:00.000Z',
+  reminderOption: 'DurationComplete'
+}
+[premerge-queue] cancelled {"path":"/api/queues/inboxQueue","jobId":"notifications-for-user-985-task-1"}
+[premerge-queue] cancelled {"path":"/api/queues/inboxQueue","jobId":"notifications-for-task-1"}
+[premerge-queue] scheduled {"path":"/api/queues/inboxQueue","jobId":"notifications-for-user-985-task-1-revision-1792511434719","notBefore":1792566000,"messageId":"premerge-36670106-859d-46b5-808a-0598a5de1937"}
+🚀 ~ consthandler:NextApiHandler= ~ notification_: {
+  id: 2,
+  type: 'Comment',
+  userId: 985,
+  agentId: null,
+  archivedAt: 2026-10-20T15:50:34.727Z,
+  returnedFromReminders: null,
+  directReply: false,
+  agentReplyConsumedAt: null,
+  agentReplyCommentId: null,
+  createdAt: 2026-10-20T15:47:10.070Z,
+  seen: true,
+  status: 'Archive',
+  fromUserId: 1,
+  fromAgentId: null,
+  reactionId: null,
+  projectId: 1,
+  memberId: null,
+  assignId: null,
+  commentId: 1,
+  member_team_Id: null,
+  taskId: 1,
+  notification_inviteId: null,
+  message: null
+}
+🚀 ~ invite: null
+============================= DELETING PROJECT ==================
+🚀 ~ file: delete.ts:28 ~ addSection ~ updatedProject: {
+  id: 4,
+  name: 'pr5-disposable-delete',
+  title: '7146 disposable deletion board',
+  description: null,
+  ownerId: 985,
+  createdAt: 2026-10-20T15:47:11.107Z,
+  seeded: false,
+  sections: [ 'To do', 'Done' ],
+  status: 'Deleted',
+  googleAccountId: '09065348-4e35-4495-8816-d7081cf37dfa',
+  teamId: '6993bf84-1482-4a38-b5b9-aefc8c1d3546',
+  sorting_mode: 'Priority',
+  uniqueIdentifier: 'DEL',
+  timeTrackingEnabled: false,
+  showTimeTotals: false,
+  stalenessEnabled: false,
+  staleWarnDays: null,
+  staleHotDays: null,
+  staleNudgeEnabled: false,
+  autoArchiveAfterDays: null,
+  cyclesEnabled: false,
+  playbook: null,
+  targetDate: null
+}
+============================= DELETING ALL TASKS ==================
+🚀 ~ file: delete.ts:32 ~ addSection ~ deleted_tasks: { count: 0 }
+============================= DELETING ALL NOTIFICATIONS ==================
+🚀 ~ file: delete.ts:43 ~ addSection ~ deleted_notis: { count: 0 }
+============================= FIND ALL MEMBERS OF THAT PROJECT ==================
+count of all members :  1
+============================= DELETING ALL MEMBERS ==================
+ ----------  member:  6
+🚀 ~ file: delete.ts:84 ~ addSection ~ deleted_members: { count: 1 }
+teams that user is still a part of:  [
+  {
+    id: 1,
+    projectId: 1,
+    userId: 985,
+    agentId: null,
+    status: 'Accepted',
+    role: 'Member',
+    invitedAt: null,
+    acceptedAt: null
+  },
+  {
+    id: 4,
+    projectId: 1,
+    userId: 985,
+    agentId: 'b13a1abb-22fe-49eb-9be4-e9bc27ec6001',
+    status: 'Accepted',
+    role: 'Member',
+    invitedAt: null,
+    acceptedAt: null
+  },
+  {
+    id: 5,
+    projectId: 1,
+    userId: 1,
+    agentId: null,
+    status: 'Accepted',
+    role: 'Member',
+    invitedAt: null,
+    acceptedAt: null
+  },
+  {
+    id: 2,
+    projectId: 2,
+    userId: 985,
+    agentId: null,
+    status: 'Accepted',
+    role: 'Member',
+    invitedAt: null,
+    acceptedAt: null
+  },
+  {
+    id: 3,
+    projectId: 3,
+    userId: 985,
+    agentId: null,
+    status: 'Accepted',
+    role: 'Member',
+    invitedAt: null,
+    acceptedAt: null
+  }
+]
+🚀 ~ getFirst ~ project: {
+  id: 1,
+  name: 'browser-smoke-board-938795-1-cd5b4c37-f9f9-4fa4-a91b-5fd08b4a86e9',
+  title: 'Browser smoke board',
+  description: null,
+  ownerId: 985,
+  createdAt: 2026-10-20T15:25:59.599Z,
+  seeded: false,
+  sections: [ 'To do', 'Done' ],
+  status: 'Normal',
+  googleAccountId: '09065348-4e35-4495-8816-d7081cf37dfa',
+  teamId: '6993bf84-1482-4a38-b5b9-aefc8c1d3546',
+  sorting_mode: 'Priority',
+  uniqueIdentifier: 'BOARD',
+  timeTrackingEnabled: false,
+  showTimeTotals: false,
+  stalenessEnabled: false,
+  staleWarnDays: null,
+  staleHotDays: null,
+  staleNudgeEnabled: false,
+  autoArchiveAfterDays: null,
+  cyclesEnabled: false,
+  playbook: null,
+  targetDate: null,
+  tasks: [
+    {
+      id: 1,
+      uniqueIndex: 1,
+      ticketNumber: 'BOARD-1',
+      ranking: 'A0100',
+      section: 'To do',
+      title: '7146 new-head UI edited fixture',
+      description: '',
+      projectId: 1,
+      cycleId: null,
+      status: 'Normal',
+      userId: 985,
+      createdAt: 2026-10-20T15:25:59.633Z,
+      sectionChangedAt: 2026-10-20T15:50:28.814Z,
+      lastCommentAt: 2026-10-20T15:47:26.792Z,
+      staleNudgedAt: null,
+      waitingOnUserId: null,
+      waitingOnSetById: null,
+      waitingOnSetAt: null,
+      dueDate: 2026-10-28T08:00:00.000Z,
+      startDate: null,
+      recurrence: null,
+      riskLevel: null,
+      acceptanceCriteria: null,
+      verifyCommand: null,
+      dueDateNotifiedAt: null,
+      deletedAt: null,
+      archivedAt: null,
+      updatedAt: 2026-10-20T15:50:28.814Z,
+      permanentlyDeleteAt: null,
+      hardDeleteProcessingAt: null,
+      totalComments: 2,
+      sectionId: 2,
+      descriptionJson: [Object],
+      descriptionId: null,
+      parentTaskId: null,
+      updatedByUserIds: [Array],
+      agentId: null,
+      agentTaskCreatedPendingAt: null,
+      agentTaskCreatedReadyAt: null,
+      agentTaskCreatedEmittedAt: null
+    },
+    {
+      id: 4,
+      uniqueIndex: 2,
+      ticketNumber: 'BOARD-2',
+      ranking: 'A0100',
+      section: 'To do',
+      title: '7146 new-head confirmed proposal',
+      description: '',
+      projectId: 1,
+      cycleId: null,
+      status: 'Normal',
+      userId: 985,
+      createdAt: 2026-10-20T15:48:38.463Z,
+      sectionChangedAt: 2026-10-20T15:48:38.471Z,
+      lastCommentAt: null,
+      staleNudgedAt: null,
+      waitingOnUserId: null,
+      waitingOnSetById: null,
+      waitingOnSetAt: null,
+      dueDate: null,
+      startDate: null,
+      recurrence: null,
+      riskLevel: null,
+      acceptanceCriteria: null,
+      verifyCommand: null,
+      dueDateNotifiedAt: null,
+      deletedAt: null,
+      archivedAt: null,
+      updatedAt: 2026-10-20T15:48:38.463Z,
+      permanentlyDeleteAt: null,
+      hardDeleteProcessingAt: null,
+      totalComments: 0,
+      sectionId: 2,
+      descriptionJson: [Object],
+      descriptionId: null,
+      parentTaskId: null,
+      updatedByUserIds: [],
+      agentId: null,
+      agentTaskCreatedPendingAt: null,
+      agentTaskCreatedReadyAt: null,
+      agentTaskCreatedEmittedAt: 2026-10-20T15:48:38.575Z
+    },
+    {
+      id: 5,
+      uniqueIndex: 3,
+      ticketNumber: 'BOARD-3',
+      ranking: 'A0054.696577273781763',
+      section: 'To do',
+      title: '7146 new-head window task',
+      description: '',
+      projectId: 1,
+      cycleId: null,
+      status: 'Normal',
+      userId: 985,
+      createdAt: 2026-10-20T15:48:41.715Z,
+      sectionChangedAt: 2026-10-20T15:48:41.715Z,
+      lastCommentAt: null,
+      staleNudgedAt: null,
+      waitingOnUserId: null,
+      waitingOnSetById: null,
+      waitingOnSetAt: null,
+      dueDate: null,
+      startDate: null,
+      recurrence: null,
+      riskLevel: null,
+      acceptanceCriteria: null,
+      verifyCommand: null,
+      dueDateNotifiedAt: null,
+      deletedAt: null,
+      archivedAt: null,
+      updatedAt: 2026-10-20T15:48:41.700Z,
+      permanentlyDeleteAt: null,
+      hardDeleteProcessingAt: null,
+      totalComments: 0,
+      sectionId: 2,
+      descriptionJson: [Object],
+      descriptionId: null,
+      parentTaskId: null,
+      updatedByUserIds: [],
+      agentId: null,
+      agentTaskCreatedPendingAt: null,
+      agentTaskCreatedReadyAt: null,
+      agentTaskCreatedEmittedAt: 2026-10-20T15:48:41.852Z
+    },
+    {
+      id: 6,
+      uniqueIndex: 4,
+      ticketNumber: 'BOARD-4',
+      ranking: 'A0024.883666776993962',
+      section: 'To do',
+      title: 'Local premerge fixture',
+      description: '',
+      projectId: 1,
+      cycleId: null,
+      status: 'Normal',
+      userId: 985,
+      createdAt: 2026-10-20T15:48:48.942Z,
+      sectionChangedAt: 2026-10-20T15:48:48.942Z,
+      lastCommentAt: null,
+      staleNudgedAt: null,
+      waitingOnUserId: null,
+      waitingOnSetById: null,
+      waitingOnSetAt: null,
+      dueDate: null,
+      startDate: null,
+      recurrence: null,
+      riskLevel: null,
+      acceptanceCriteria: null,
+      verifyCommand: null,
+      dueDateNotifiedAt: null,
+      deletedAt: null,
+      archivedAt: null,
+      updatedAt: 2026-10-20T15:48:48.937Z,
+      permanentlyDeleteAt: null,
+      hardDeleteProcessingAt: null,
+      totalComments: 0,
+      sectionId: 2,
+      descriptionJson: [Object],
+      descriptionId: null,
+      parentTaskId: null,
+      updatedByUserIds: [],
+      agentId: null,
+      agentTaskCreatedPendingAt: null,
+      agentTaskCreatedReadyAt: null,
+      agentTaskCreatedEmittedAt: 2026-10-20T15:48:49.040Z
+    },
+    {
+      id: 7,
+      uniqueIndex: 5,
+      ticketNumber: 'BOARD-5',
+      ranking: 'A0017.541638302231309',
+      section: 'To do',
+      title: 'Local premerge fixture',
+      description: '',
+      projectId: 1,
+      cycleId: null,
+      status: 'Normal',
+      userId: 985,
+      createdAt: 2026-10-20T15:48:53.025Z,
+      sectionChangedAt: 2026-10-20T15:48:53.025Z,
+      lastCommentAt: null,
+      staleNudgedAt: null,
+      waitingOnUserId: null,
+      waitingOnSetById: null,
+      waitingOnSetAt: null,
+      dueDate: null,
+      startDate: null,
+      recurrence: null,
+      riskLevel: null,
+      acceptanceCriteria: null,
+      verifyCommand: null,
+      dueDateNotifiedAt: null,
+      deletedAt: null,
+      archivedAt: null,
+      updatedAt: 2026-10-20T15:48:53.023Z,
+      permanentlyDeleteAt: null,
+      hardDeleteProcessingAt: null,
+      totalComments: 0,
+      sectionId: 2,
+      descriptionJson: [Object],
+      descriptionId: null,
+      parentTaskId: null,
+      updatedByUserIds: [],
+      agentId: null,
+      agentTaskCreatedPendingAt: null,
+      agentTaskCreatedReadyAt: null,
+      agentTaskCreatedEmittedAt: 2026-10-20T15:48:53.118Z
+    },
+    {
+      id: 8,
+      uniqueIndex: 6,
+      ticketNumber: 'BOARD-6',
+      ranking: 'A0005.663000435343955',
+      section: 'To do',
+      title: '7146 due-date write-route control',
+      description: '',
+      projectId: 1,
+      cycleId: null,
+      status: 'Normal',
+      userId: 985,
+      createdAt: 2026-10-20T15:49:09.491Z,
+      sectionChangedAt: 2026-10-20T15:49:09.491Z,
+      lastCommentAt: null,
+      staleNudgedAt: null,
+      waitingOnUserId: null,
+      waitingOnSetById: null,
+      waitingOnSetAt: null,
+      dueDate: 2026-11-05T08:00:00.000Z,
+      startDate: null,
+      recurrence: null,
+      riskLevel: null,
+      acceptanceCriteria: null,
+      verifyCommand: null,
+      dueDateNotifiedAt: null,
+      deletedAt: null,
+      archivedAt: null,
+      updatedAt: 2026-10-20T15:49:09.485Z,
+      permanentlyDeleteAt: null,
+      hardDeleteProcessingAt: null,
+      totalComments: 0,
+      sectionId: 2,
+      descriptionJson: [Object],
+      descriptionId: null,
+      parentTaskId: null,
+      updatedByUserIds: [],
+      agentId: null,
+      agentTaskCreatedPendingAt: null,
+      agentTaskCreatedReadyAt: null,
+      agentTaskCreatedEmittedAt: 2026-10-20T15:49:09.639Z
+    }
+  ],
+  section: [
+    {
+      id: 2,
+      section_title: 'To do',
+      projectId: 1,
+      visibility: true,
+      deleted: false,
+      ranking: 'A0100',
+      isDone: false,
+      autoAssignUserId: null,
+      autoAssignAgentId: null
+    },
+    {
+      id: 1,
+      section_title: 'Done',
+      projectId: 1,
+      visibility: true,
+      deleted: false,
+      ranking: 'A0200',
+      isDone: true,
+      autoAssignUserId: null,
+      autoAssignAgentId: null
+    }
+  ],
+  ai_custom_instructions: [
+    {
+      id: 1,
+      visibility: 'Public',
+      projectId: 1,
+      customInstruction: 'Use short Outcome and Verification sections. Preserve the board ticket format and fill 7146 Format Score only when explicit.',
+      source_selected: null,
+      model_selected: null,
+      lastUpdatedAt: 2026-10-20T15:47:11.139Z
+    }
+  ],
+  project_view: null
+}
+🔄 Root route access - restoring previous board
+🚀 ~ file: resetRanks.ts:14 ~ consthandler:NextApiHandler= ~ taskIds: [ 8, 7, 6, 5, 1, 4 ]
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+🚀 ~ consthandler:NextApiHandler= ~ notification_: {
+  id: 4,
+  type: 'TaskMoved',
+  userId: 985,
+  agentId: null,
+  archivedAt: null,
+  returnedFromReminders: null,
+  directReply: false,
+  agentReplyConsumedAt: null,
+  agentReplyCommentId: null,
+  createdAt: 2026-10-20T15:50:44.712Z,
+  seen: false,
+  status: 'Normal',
+  fromUserId: 2,
+  fromAgentId: null,
+  reactionId: null,
+  projectId: 1,
+  memberId: null,
+  assignId: null,
+  commentId: null,
+  member_team_Id: null,
+  taskId: 8,
+  notification_inviteId: null,
+  message: null
+}
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+[Middleware] MCP API route with Authorization header - allowing through
+🚀 ~ create ~ sectionExists: {
+  id: 2,
+  section_title: 'To do',
+  projectId: 1,
+  visibility: true,
+  deleted: false,
+  ranking: 'A0100',
+  isDone: false,
+  autoAssignUserId: null,
+  autoAssignAgentId: null
+}
+🚀 ~ create ~ body: {
+  title: '7146 continuation index path uniqueprobe',
+  description: '',
+  section: 'To do',
+  userId: 985,
+  ranking: 'A0055.587340267849029',
+  projectId: 1,
+  sectionId: 2,
+  updatedAt: 2026-10-20T15:50:55.735Z
+}
+turbopuffer task upsert embedding error, upserting without vectors: Error: TURBOPUFFER_EMBEDDINGS_API_KEY is not set
+    at p (.next/server/chunks/592.js:1:7107)
+    at N (.next/server/chunks/592.js:1:15666)
+    at u (.next/server/chunks/592.js:1:8592)
+    at t (.next/server/chunks/592.js:1:8433)
+    at async (.next/server/chunks/60045.js:1:3343)
+turbopuffer task upsert skipped: embeddings unavailable for 1 row(s)
+{ slug: [ 'project-1', '7' ] }
+{ slug: [ 'project-1', '7' ] }
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
+[Middleware] MCP API route with Authorization header - allowing through
+[MCP Auth] Token decoded (unverified): {
+  userId: 985,
+  sub: 'valentin@hypertask.ai',
+  iss: 'hypertask',
+  aud: 'mcp-api',
+  exp: null,
+  iat: '2026-10-20T15:47:08.000Z'
+}
+[MCP Auth] JWT verified with current format (mcp-api)
+[MCP Auth] JWT validated for user: 985 agentId: b13a1abb-22fe-49eb-9be4-e9bc27ec6001
