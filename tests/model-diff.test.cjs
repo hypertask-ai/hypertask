@@ -122,6 +122,88 @@ test("watcher creates one board-15 ticket, then deduplicates by stable title eve
   assert.equal(ticketFor(finding).title, ticketFor({ ...finding, action: "changed", current: [], model: "claude-sonnet-5-6-20261024" }).title);
 });
 
+test("watcher finds an exact title on the second page without creating", async () => {
+  const finding = report().findings[0];
+  const ticket = ticketFor(finding);
+  const cursors = [];
+  const results = await fileFindings({ sourcesUsed: ["gateway"], findings: [finding] }, { token: "fixture",
+    fetchImpl: async (url, options) => {
+      assert.equal(options.method, "GET", "An existing ticket must never be recreated");
+      const query = new URL(url).searchParams;
+      assert.equal(query.get("q"), ticket.marker);
+      assert.equal(query.get("project_id"), "15");
+      assert.equal(query.get("status"), "open");
+      assert.equal(query.get("limit"), "50");
+      cursors.push(query.get("cursor"));
+      return response(cursors.length === 1
+        ? { success: true, tasks: Array.from({ length: 50 }, () => ({ title: `Fuzzy match ${ticket.marker}` })), total: 83, nextCursor: "66709" }
+        : { success: true, tasks: [{ title: ticket.title }], total: 83, nextCursor: "66710" });
+    } });
+  assert.deepEqual(cursors, [null, "66709"]);
+  assert.deepEqual(results, [{ title: ticket.title, action: "exists" }]);
+});
+
+test("watcher exhausts pages before creating once with the stable marker idempotency key", async () => {
+  const finding = report().findings[0];
+  const ticket = ticketFor(finding);
+  const calls = [];
+  const results = await fileFindings({ sourcesUsed: ["gateway"], findings: [finding] }, { token: "fixture",
+    fetchImpl: async (url, options) => {
+      const cursor = new URL(url).searchParams.get("cursor");
+      calls.push([options.method, cursor]);
+      if (options.method === "GET") return response(cursor === null
+        ? { success: true, tasks: Array.from({ length: 50 }, () => ({ title: `Fuzzy match ${ticket.marker}` })), total: 83, nextCursor: "66709" }
+        : { success: true, tasks: Array.from({ length: 33 }, () => ({ title: "Another fuzzy match" })), total: 83, nextCursor: null });
+      assert.equal(options.headers["Idempotency-Key"], ticket.marker);
+      assert.equal(JSON.parse(options.body).title, ticket.title);
+      return response({ success: true, task: { ticketNumber: "HTPR-fixture" } });
+    } });
+  assert.deepEqual(calls, [["GET", null], ["GET", "66709"], ["POST", null]]);
+  assert.deepEqual(results, [{ title: ticket.title, action: "created", ticket: "HTPR-fixture" }]);
+});
+
+test("watcher CLI refuses incomplete or failing later pages with non-zero exit and the real error", () => {
+  const directory = fs.mkdtempSync(path.join(root, ".model-watch-test-"));
+  try {
+    const reportPath = path.join(directory, "report.json");
+    const stubPath = path.join(directory, "fetch.cjs");
+    fs.writeFileSync(reportPath, JSON.stringify({ sourcesUsed: ["gateway"], findings: [report().findings[0]] }));
+    for (const [page, status, message] of [
+      [{ success: true, tasks: [{ title: "Other" }], total: 3, nextCursor: null }, 200, "Ticket search is incomplete"],
+      [{}, 503, "Hypertask ticket API returned HTTP 503"],
+      [{ success: true, tasks: [], total: 3, nextCursor: "66710" }, 200, "Ticket search is incomplete"],
+      [{ success: true, tasks: [{ title: "Other" }], total: 2, nextCursor: null }, 200, "Ticket search is incomplete"],
+      [{ success: true, tasks: [{ title: "Other" }], total: 3, nextCursor: 66710 }, 200, "Ticket search is incomplete"],
+      [{ success: true, tasks: [{ title: "Other" }], total: 3, nextCursor: "66709" }, 200, "Ticket search is incomplete"],
+      [{ success: true, tasks: [{ title: "Other" }], total: 3, nextCursor: null, partial: true }, 200, "Ticket search is incomplete"],
+    ]) {
+      fs.writeFileSync(stubPath, `
+        let calls = 0;
+        global.fetch = async (url, options) => {
+          if (options.method !== "GET") {
+            console.error("UNEXPECTED CREATE");
+            throw new Error("Unexpected create");
+          }
+          const cursor = new URL(url).searchParams.get("cursor");
+          if (calls++ > 1 || cursor !== (calls === 1 ? null : "66709")) throw new Error("Unexpected cursor");
+          const body = calls === 1
+            ? { success: true, tasks: [{ title: "Fuzzy match" }], total: 3, nextCursor: "66709" }
+            : ${JSON.stringify(page)};
+          const status = calls === 1 ? 200 : ${status};
+          return { ok: status < 400, status, json: async () => body };
+        };
+      `);
+      const result = spawnSync(process.execPath, ["--require", stubPath, ".github/scripts/ai-model-watch.cjs", reportPath],
+        { cwd: root, encoding: "utf8", env: { ...process.env, HYPERTASK_MCP_TOKEN: "fixture" } });
+      assert.equal(result.status, 1, result.stderr);
+      assert.equal(result.stderr.trim(), `AI model ticket filing failed: ${message}${message.startsWith("Ticket search") ? "; refusing duplicate creation" : ""}`);
+      assert.ok(!result.stderr.includes("UNEXPECTED CREATE"));
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("watcher refuses writes on failed, partial, malformed or truncated searches, and with no discovery sources", async () => {
   for (const page of [response({}, 500), response({ success: false }), response({ success: true }),
     response({ success: true, tasks: [], total: 1 }), response({ success: true, tasks: [], total: 0, partial: true }),

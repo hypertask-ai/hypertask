@@ -1,0 +1,1 @@
+{"sourcesUsed":["gateway"],"findings":[{"kind":"new-class","model":"anthropic/claude-fable-5.1","provider":"anthropic","modelClass":"claude-fable","current":[],"inputPerMillion":3,"action":"ask Valentin before shipping","reason":"not in the current catalog"}]}
