@@ -1,5 +1,12 @@
 import axios from "axios";
 
+export class PlanLimitRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlanLimitRefusal";
+  }
+}
+
 export function planLimitRefusalMessage(error: unknown): string | null {
   if (
     !axios.isAxiosError(error) ||

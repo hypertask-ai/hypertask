@@ -1,3 +1,4 @@
+import { PlanLimitRefusal } from "@/lib/planLimitsClient";
 import { useContextCreateTaskModal } from '@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskModal'
 import { ReactNode, useEffect, useContext, useCallback, useRef, useState } from 'react'
 import DescriptionCreateTaskModal from './DescriptionCreateTaskModal'
@@ -60,9 +61,9 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                 if (closeBeforeNavigation) await closeBackDismissBeforeNavigation(window, "createTaskModal", () => closeHandler(true))
                 router.push(`${taskUrl}?newTaskAi=1`)
                 if (!closeBeforeNavigation) closeHandler(true)
-            } catch {
+            } catch (error) {
                 sidebarHandoffPending.current = false
-                toast.error("Could not open AI chat. Your task draft is still here.")
+                toast.error(error instanceof PlanLimitRefusal ? error.message : "Could not open AI chat. Your task draft is still here.")
             } finally {
                 setUploadInProgress(false)
             }

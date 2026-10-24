@@ -1,4 +1,4 @@
-import { planLimitRefusalMessage } from "@/lib/planLimitsClient";
+import { PlanLimitRefusal, planLimitRefusalMessage } from "@/lib/planLimitsClient";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import toast from "react-hot-toast";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
@@ -626,7 +626,7 @@ const useCreateTaskModalGlobalStates = () => {
       if (res?.error) {
         if (showPlanLimitToast) {
           const message = planLimitRefusalMessage(res.ErrorMessage);
-          if (message) toast.error(message);
+          if (message) throw new PlanLimitRefusal(message);
         }
         return;
       }

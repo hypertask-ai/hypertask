@@ -290,7 +290,7 @@ test("both inline create branches toast only flagged plan refusals without inser
       for (const [status, code] of [[402, "PLAN_LIMIT_REACHED"], [500, "PLAN_LIMIT_REACHED"], [402, "OTHER_ERROR"]]) {
         const error = { isAxiosError: true, response: { status, data: { code, message } } };
         const result = await create({ activeFilters, error, planToastEnabled });
-        assert.equal(result.success, false);
+        assert.equal(result.success, planToastEnabled && status === 402 && code === "PLAN_LIMIT_REACHED" ? "plan-limit" : false);
         assert.equal(result.posts.length, 1);
         assert.equal(result.inserted, undefined);
         assert.equal(result.cached.size, 0);

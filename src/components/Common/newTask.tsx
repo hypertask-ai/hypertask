@@ -9,7 +9,7 @@ type Props = {
     title: string;
     onTitleChange: (title: string) => void;
     onCancelCreate: () => void;
-    invokeCreateItem: (title: string, createAnother:boolean) => Promise<boolean>;
+    invokeCreateItem: (title: string, createAnother:boolean) => Promise<boolean | "plan-limit">;
     inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
 }
 
@@ -54,7 +54,7 @@ const NewTask = ({
         if (submittingRef.current) return
         submittingRef.current = true
         setIsSubmitting(true)
-        let created = false
+        let created: boolean | "plan-limit" = false
         try {
           created = await invokeCreateItem(res, true);
         } catch {
@@ -63,8 +63,8 @@ const NewTask = ({
           submittingRef.current = false
           setIsSubmitting(false)
         }
-        if (created) onTitleChange('')
-        else toast("Could not create the task, try again")
+        if (created === true) onTitleChange('')
+        else if (created !== "plan-limit") toast("Could not create the task, try again")
     }
 
     const schemaCheck = ()=>{

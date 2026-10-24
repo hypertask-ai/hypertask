@@ -1,3 +1,4 @@
+import { PlanLimitRefusal } from "@/lib/planLimitsClient";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
@@ -164,12 +165,12 @@ const TiptapCreateTaskModal = () => {
       });
     }).catch(() => undefined);
   };
-  const onUploadFailed = (fileName: string) => {
+  const onUploadFailed = (fileName: string, error?: Error) => {
     if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
     const pending = pendingAttachmentUploadsRef.current.get(fileName);
     if (!pending) return;
     pending.failed = true;
-    pending.reject(new Error(`Could not upload "${fileName}". Please try again.`));
+    pending.reject(error ?? new Error(`Could not upload "${fileName}". Please try again.`));
   };
   const createTaskAttachmentsRef = useRef(newCommentAttachments);
   useEffect(() => {
@@ -480,7 +481,7 @@ const TiptapCreateTaskModal = () => {
         });
         setUploadInProgress(false);
         createSubmissionRef.current = false;
-        toast.error((error as Error).message);
+        if (!(error instanceof PlanLimitRefusal)) toast.error((error as Error).message);
         return;
       }
       if (saveEpochRef.current !== epochBeforeUploads) {
@@ -595,7 +596,7 @@ const TiptapCreateTaskModal = () => {
         console.log("🚀 ~ CreateTaskAndDescription ~ error:", error);
         setUploadInProgress(false);
         releaseSubmission();
-        toast.error("Error when creating");
+        toast.error(error instanceof PlanLimitRefusal ? error.message : "Error when creating");
         return;
       }
     } else if (param === "SaveAndClose") {
@@ -626,7 +627,7 @@ const TiptapCreateTaskModal = () => {
           console.log("🚀 ~ toast.promise ~ error:", error);
           setUploadInProgress(false);
           releaseSubmission();
-          return "error when creating";
+          return error instanceof PlanLimitRefusal ? error.message : "error when creating";
         },
       });
     } else if (param === "SaveAndNew") {
@@ -655,7 +656,7 @@ const TiptapCreateTaskModal = () => {
           console.log("🚀 ~ toast.promise ~ error:", error);
           setUploadInProgress(false);
           releaseSubmission();
-          return "error when creating";
+          return error instanceof PlanLimitRefusal ? error.message : "error when creating";
         },
       });
     }
