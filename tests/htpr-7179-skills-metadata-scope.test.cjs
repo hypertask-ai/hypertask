@@ -42,8 +42,8 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         if (!allowed) assert.doesNotMatch(await instructions.text(), /B1-instructions/);
       }
       const allSkills = await route.GET(request('skills'));
-      assert.equal(allSkills.status, 200);
-      assert.deepEqual((await allSkills.json()).skills.map(skill => skill.id), actor === 'bound' ? [15] : [1]);
+      assert.equal(allSkills.status, actor === 'bound' ? 403 : 200);
+      if (actor !== 'bound') assert.deepEqual((await allSkills.json()).skills.map(skill => skill.id), [1]);
       assert.equal((await item.GET(request('skills/1'), { params: Promise.resolve({ skill_id: '1' }) })).status, actor === 'bound' ? 403 : 200);
       const beforePatch = f.writes.length;
       const patched = await item.PATCH(request('skills/1', 'PATCH', { body: 'global-sentinel' }), { params: Promise.resolve({ skill_id: '1' }) });

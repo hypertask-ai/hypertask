@@ -30,7 +30,7 @@ HTTP and existing legacy SSE share catalog selection and the flagged output/erro
 
 ## Scope-limited agent skills
 
-A team-bound agent sees only skills on boards readable within its credential's team. Skill lists without `project_id` return those readable board skills; a supplied `project_id` narrows the list and must be accessible. Account-wide personal skills remain unavailable for reads, writes, imports and prompt resolution. App chat applies the same scope to skill discovery and slash-skill resolution. Human sessions and credentials without a team binding retain personal-skill access. Built-in formatting skills remain available.
+A team-bound agent sees only skills on boards readable within its credential's team. With `htpr-7663-scoped-agent-skills` enabled server-side (Owner + QA by default), MCP and app-chat skill lists without `project_id` return those readable board skills; flag off or a flag lookup failure refuses unfiltered team-bound discovery without weakening scope restrictions. With either flag state, a supplied `project_id` narrows the list and must be accessible. Account-wide personal skills remain unavailable for reads, writes, imports and prompt resolution. App chat applies the same scope to skill discovery and slash-skill resolution. Human sessions and credentials without a team binding retain personal-skill access. Built-in formatting skills remain available.
 
 ## Comment timestamps
 

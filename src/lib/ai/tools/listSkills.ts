@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
 import prisma from "@/lib/prisma";
+import { HTPR_7663_SCOPED_AGENT_SKILLS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { withToolErrors } from "@/lib/ai/tools/execution";
 import { sanitizeForJson } from "@/lib/ai/tools/helpers";
@@ -19,6 +20,10 @@ export function createListSkillsTool(context: ToolContext) {
       }),
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_list_skills");
+        if (!input.project_id && teamScope != null
+          && !await isFeatureEnabled(HTPR_7663_SCOPED_AGENT_SKILLS_FLAG, user.id).catch(() => false)) {
+          throw new Error("Account-global skills access denied");
+        }
         if (input.project_id) {
           await assertProjectAccess(user.id, input.project_id, actingAgentId, teamScope);
         }

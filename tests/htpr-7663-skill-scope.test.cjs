@@ -3,9 +3,10 @@ const assert = require('node:assert/strict');
 const { NextRequest } = require('next/server');
 const { teamFixture } = require('./helpers/htpr-7179-team.cjs');
 
+const scopedSkillsFlag = 'htpr-7663-scoped-agent-skills';
 const request = path => new NextRequest(`http://localhost/api/mcp/${path}`);
 
-function fixture(mode, actor = 'bound') {
+function fixture(mode, actor = 'bound', discovery = 'ON') {
   const f = teamFixture(mode, actor);
   if (f.state.ctx.teamScope) f.state.ctx.teamScope = { ...f.state.ctx.teamScope };
   const skills = [
@@ -16,6 +17,15 @@ function fixture(mode, actor = 'bound') {
   for (const skill of skills) Object.defineProperty(skill, 'project', { enumerable: false });
   f.prisma.aI_Skill = f.model(skills, 'skill');
   Object.assign(f.mocks, {
+    '@/lib/flags': {
+      HTPR_7663_SCOPED_AGENT_SKILLS_FLAG: scopedSkillsFlag,
+      isFeatureEnabled: async (key, userId) => {
+        if (key !== scopedSkillsFlag) return false;
+        assert.equal(userId, f.user.id);
+        if (discovery === 'ERROR') throw new Error('discovery flag lookup failed');
+        return discovery === 'ON';
+      },
+    },
     '@/app/api/ai/_lib/modelProvider': {},
     '@/app/api/ai/_lib/byokKeys': {},
     '@/lib/ai/tools/execution': { withToolErrors: execute => execute },
@@ -72,20 +82,47 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
   });
 }
 
-for (const actor of ['unbound', 'human']) {
-  test(`${actor}: personal skills and authorized project skills remain available through both list boundaries`, async () => {
-    const f = fixture('ENFORCE', actor);
-    const route = f.load('src/lib/mcp/operations/skills/operation.ts');
-    for (const projectId of [undefined, 15, 25]) {
-      const req = request(`skills${projectId ? `?project_id=${projectId}` : ''}`);
-      const response = await route.GET(req);
-      assert.equal(response.status, 200);
-      const expected = projectId ? [1, projectId] : [1];
-      assert.deepEqual((await response.json()).skills.map(skill => skill.id), expected);
-      const chat = await f.run(req, () => f.tool.execute(projectId ? { project_id: projectId } : {}));
-      assert.deepEqual(chat.skills.map(skill => skill.id), expected);
-    }
-  });
+for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
+  for (const discovery of ['OFF', 'ERROR']) {
+    test(`${mode} ${discovery}: unfiltered discovery is refused while readable project skills stay available and scope restrictions remain enforced`, async () => {
+      const f = fixture(mode, 'bound', discovery);
+      const route = f.load('src/lib/mcp/operations/skills/operation.ts');
+      let reads = 0;
+      const findMany = f.prisma.aI_Skill.findMany;
+      f.prisma.aI_Skill.findMany = async args => { reads++; return findMany(args); };
+      const response = await route.GET(request('skills'));
+      assert.equal(response.status, 403);
+      assert.doesNotMatch(await response.text(), /global-sentinel|A1-skill|B1-skill/);
+      await assert.rejects(f.run(request('skills'), () => f.tool.execute({})), /access denied/);
+      assert.equal(reads, 0);
+      const allowed = await route.GET(request('skills?project_id=15'));
+      assert.equal(allowed.status, 200);
+      assert.deepEqual((await allowed.json()).skills.map(skill => skill.id), [15]);
+      const chat = await f.run(request('skills'), () => f.tool.execute({ project_id: 15 }));
+      assert.deepEqual(chat.skills.map(skill => skill.id), [15]);
+      assert.equal((await route.GET(request('skills?project_id=25'))).status, 403);
+      await assert.rejects(f.run(request('skills'), () => f.tool.execute({ project_id: 25 })), /access denied/);
+      assert.deepEqual(f.writes, []);
+    });
+  }
+}
+
+for (const discovery of ['ON', 'OFF', 'ERROR']) {
+  for (const actor of ['unbound', 'human']) {
+    test(`${discovery} ${actor}: personal skills and authorized project skills remain available through both list boundaries`, async () => {
+      const f = fixture('ENFORCE', actor, discovery);
+      const route = f.load('src/lib/mcp/operations/skills/operation.ts');
+      for (const projectId of [undefined, 15, 25]) {
+        const req = request(`skills${projectId ? `?project_id=${projectId}` : ''}`);
+        const response = await route.GET(req);
+        assert.equal(response.status, 200);
+        const expected = projectId ? [1, projectId] : [1];
+        assert.deepEqual((await response.json()).skills.map(skill => skill.id), expected);
+        const chat = await f.run(req, () => f.tool.execute(projectId ? { project_id: projectId } : {}));
+        assert.deepEqual(chat.skills.map(skill => skill.id), expected);
+      }
+    });
+  }
 }
 
 function streamHarness(f, text, projectId) {
@@ -129,31 +166,33 @@ function streamHarness(f, text, projectId) {
   return { turns, errors, run: () => f.run(request('ai/chat/stream'), () => runChatStream(controller, state)) };
 }
 
-for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
-  test(`${mode}: the real chat stream refuses account-wide skill bodies but still resolves readable board and built-in skills`, async () => {
-    const f = fixture(mode);
-    for (const projectId of [undefined, 15]) {
-      const denied = streamHarness(f, '/personal Draft', projectId);
-      await denied.run();
-      assert.equal(denied.turns.length, 0);
-      assert.equal(denied.errors.length, 1);
-      assert.equal(denied.errors[0].status, 403);
-    }
-    const allowed = streamHarness(f, '/review /i Draft', 15);
-    await allowed.run();
-    assert.deepEqual(allowed.errors, []);
-    assert.equal(allowed.turns.length, 1);
-    assert.deepEqual(allowed.turns[0].resolution.skills.map(skill => skill.id), [15, -1]);
-    assert.match(allowed.turns[0].resolution.systemPromptAddition, /A1-skill/);
-    assert.doesNotMatch(allowed.turns[0].resolution.systemPromptAddition, /global-sentinel|B1-skill/);
-    assert.equal(allowed.turns[0].body.message, 'Draft');
-    const foreign = streamHarness(f, '/review Draft', 25);
-    await foreign.run();
-    assert.deepEqual(foreign.errors, []);
-    assert.equal(foreign.turns[0].resolution.systemPromptAddition, '');
-    assert.equal(foreign.turns[0].body.message, '/review Draft');
-    assert.deepEqual(f.writes, []);
-  });
+for (const discovery of ['ON', 'OFF', 'ERROR']) {
+  for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
+    test(`${discovery} ${mode}: the real chat stream refuses account-wide skill bodies but still resolves readable board and built-in skills`, async () => {
+      const f = fixture(mode, 'bound', discovery);
+      for (const projectId of [undefined, 15]) {
+        const denied = streamHarness(f, '/personal Draft', projectId);
+        await denied.run();
+        assert.equal(denied.turns.length, 0);
+        assert.equal(denied.errors.length, 1);
+        assert.equal(denied.errors[0].status, 403);
+      }
+      const allowed = streamHarness(f, '/review /i Draft', 15);
+      await allowed.run();
+      assert.deepEqual(allowed.errors, []);
+      assert.equal(allowed.turns.length, 1);
+      assert.deepEqual(allowed.turns[0].resolution.skills.map(skill => skill.id), [15, -1]);
+      assert.match(allowed.turns[0].resolution.systemPromptAddition, /A1-skill/);
+      assert.doesNotMatch(allowed.turns[0].resolution.systemPromptAddition, /global-sentinel|B1-skill/);
+      assert.equal(allowed.turns[0].body.message, 'Draft');
+      const foreign = streamHarness(f, '/review Draft', 25);
+      await foreign.run();
+      assert.deepEqual(foreign.errors, []);
+      assert.equal(foreign.turns[0].resolution.systemPromptAddition, '');
+      assert.equal(foreign.turns[0].body.message, '/review Draft');
+      assert.deepEqual(f.writes, []);
+    });
+  }
 }
 
 for (const actor of ['unbound', 'human']) {
@@ -184,3 +223,22 @@ for (const scenario of ['no-board-grants', 'invalid-team-scope', 'revoked']) {
     assert.deepEqual(f.writes, []);
   });
 }
+
+test('scoped discovery is an access-risk feature restricted to Owner + QA by default and can be switched off', async () => {
+  const f = fixture('ENFORCE');
+  const { default: definition } = f.load('src/lib/flags/definitions/htpr-7663-scoped-agent-skills.ts');
+  assert.equal(definition.key, scopedSkillsFlag);
+  assert.equal(definition.kind, 'feature');
+  assert.equal(definition.releaseRisk.highRisk, 'access');
+  const { defaultFeatureFlagMode, isFeatureEnabled } = f.load('src/lib/flags.ts');
+  assert.equal(defaultFeatureFlagMode(scopedSkillsFlag), 'OWNER_AND_QA');
+  for (const mode of [null, 'OFF', 'EVERYONE']) {
+    for (const [userId, email, ownerOrQa] of [[6, 'valentin.yeo@gmail.com', true], [985, 'valentin@hypertask.ai', true], [7, 'member@example.invalid', false], [6, 'not-owner@example.invalid', false]]) {
+      const db = {
+        featureFlag: { findUnique: async () => mode ? { mode } : null },
+        user: { findUnique: async () => ({ email }) },
+      };
+      assert.equal(await isFeatureEnabled(scopedSkillsFlag, userId, db), mode === 'EVERYONE' || mode === null && ownerOrQa);
+    }
+  }
+});
