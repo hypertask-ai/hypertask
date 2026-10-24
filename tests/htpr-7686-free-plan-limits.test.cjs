@@ -1061,3 +1061,209 @@ test("ticket admission re-resolves a personal destination owner after locking it
   });
   assert.equal(h.logs.length, 1);
 });
+
+function uiAttachmentFixture(options = {}) {
+  const h = fixture(options);
+  const key = options.key ?? "tasks/attachments/composer.bin";
+  const source = `https://files.invalid/${key}`;
+  const saved = [];
+  let heads = 0;
+  const comment = { id: 44, creatorId: 985, taskId: 900, text: "Old text", task: { projectId: 15 } };
+  h.db.task.findFirst = async () => options.denied ? null : { id: 900, projectId: 15 };
+  h.db.comment = {
+    findFirst: async () => options.denied ? null : comment,
+    updateMany: async () => ({ count: 1 }),
+    update: async ({ data }) => { saved.push({ kind: "comment", ...plain(data) }); return { ...comment, ...data }; },
+  };
+  h.db.attachment = {
+    findFirst: async () => options.existing ? { id: 1 } : null,
+    findMany: async () => [],
+    create: async ({ data }) => { saved.push({ kind: "attachment", ...plain(data) }); return data; },
+    createMany: async ({ data }) => { saved.push(...data.map(row => ({ kind: "attachment", ...plain(row) }))); return { count: data.length }; },
+    deleteMany: async () => { saved.push({ kind: "delete" }); return { count: 0 }; },
+  };
+  h.db.description = { findFirst: async () => ({ id: "description" }) };
+  h.db.url = {
+    findMany: async () => [],
+    create: async ({ data }) => { saved.push({ kind: "url", ...plain(data) }); return data; },
+  };
+  const tx = { ...h.db };
+  h.db.$transaction = async callback => {
+    const before = saved.length;
+    try { return await callback(tx); }
+    catch (error) { saved.splice(before); throw error; }
+  };
+  Object.assign(h.stubs, {
+    "@/utils/controllers/projects/getAllIncludes": {
+      taskWriteAccessWhere: userId => ({ authorizedUserId: userId }),
+      projectContentAccessWhere: userId => ({ authorizedUserId: userId }),
+    },
+    "@/lib/storage/hypertasksS3": { parseHypertasksStorageKeyFromUrl: url => url.startsWith("https://files.invalid/") ? url.slice("https://files.invalid/".length).split("?")[0] : null },
+    "@/lib/storage/uploadTaskAttachmentToS3": {
+      getHypertasksObjectSize: async measuredKey => { heads++; assert.equal(measuredKey, key); return options.unverified ? null : options.bytes ?? 11 * MiB; },
+    },
+    "@/lib/storage/linkTaskAttachment": {
+      TaskAttachmentLinkError: class extends Error { constructor(message, status) { super(message); this.status = status; } },
+      lockAttachmentReceipt: async () => {},
+      discardUnlinkedTaskAttachment: async () => assert.fail("unproven uploads must not be deleted"),
+    },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
+    "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async text => text },
+    "@/lib/realtime/server": { broadcastTaskComment: async () => {} },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": { upsertCommentToTurbopuffer() {} },
+    "@/pages/api/queues/FAST/generateSummary": { default() {} },
+    "@/pages/api/queues/FAST/generateCommentSummary": { default: async () => {} },
+    "./processMentions": { processMentionsFromCommentText: async () => {} },
+    "./readReceipts": { omitCommentSeen: value => value },
+    "@/lib/ai/hyperAiConfirmation": { invalidateHyperAiCommentOrigin: async () => {} },
+    "@/lib/agents/publicAgent": { publicAgentSelect: {} },
+    "@/lib/mcp/normalizeBlockHtml": { normalizeBlockHtml: text => text },
+  });
+  h.stubs["@/lib/storage/verifyTaskAttachmentLinks"] = h.load("src/lib/storage/verifyTaskAttachmentLinks.ts");
+  for (const file of ["measuredSize", "urlRowData"]) {
+    h.stubs[`@/lib/attachments/${file}`] = h.load(`src/lib/attachments/${file}.ts`);
+  }
+  h.stubs["@/utils/controllers/urls/addIntoTask"] = h.load("src/utils/controllers/urls/addIntoTask.ts");
+  h.stubs["@/utils/controllers/urls/addIntoTaskDesc"] = h.load("src/utils/controllers/urls/addIntoTaskDesc.ts");
+  h.stubs["@/utils/controllers/comments/updateCommentService"] = h.load("src/utils/controllers/comments/updateCommentService.ts");
+  const url = { TaskId: 900, urlString: source, Attachment: true, title: "composer.bin", fileSize: 1 };
+  async function request(kind) {
+    const routes = {
+      comment: ["src/pages/api/urls/addIntoTask.ts", "POST", { commentId: 44, urlsToAdd: [url] }],
+      description: ["src/pages/api/urls/addIntoTaskDesc.ts", "PUT", { taskId: 900, urlsToAdd: [url] }],
+      edit: ["src/pages/api/comments/updateComment.ts", "PUT", {
+        commentId: 44, creatorId: 985, taskId: 900, text: "Edited text", replaceAttachments: true,
+        attachments: [{ fileSource: source, fileType: "application/octet-stream", fileName: "composer.bin", fileSize: "1" }],
+      }],
+    };
+    const [file, method, body] = routes[kind];
+    let status = 200, result;
+    const res = { status(value) { status = value; return this; }, json(value) { result = value; return this; } };
+    await h.load(file).default({ method, headers: {}, body }, res);
+    return { status, body: plain(result) };
+  }
+  return { ...h, key, source, saved, request, heads: () => heads, verify: h.stubs["@/lib/storage/verifyTaskAttachmentLinks"].verifyTaskAttachmentLinks };
+}
+
+for (const kind of ["comment", "edit", "description"]) {
+  for (const key of ["tasks/attachments/composer.bin", "ai-chat/attachments/session/composer.bin", "tasks/legacy-composer.bin"]) {
+    test(`${kind} persistence refuses Free 11 MiB from ${key} before writes, ignoring a forged 1-byte size`, async () => {
+      const h = uiAttachmentFixture({ key });
+      const response = await h.request(kind);
+      assert.equal(response.status, 402);
+      assert.deepEqual(response.body, responseBody("file_size"));
+      assert.deepEqual(h.saved, []);
+      assert.equal(h.heads(), 1);
+    });
+    for (const options of [{ bytes: 10 * MiB }, { bytes: MiB }, { entitlement: "paid" }, { enabled: false }]) {
+      test(`${kind} persistence still saves ${key} with ${JSON.stringify(options)}`, async () => {
+        const h = uiAttachmentFixture({ key, ...options });
+        const response = await h.request(kind);
+        assert.equal(response.status, 200);
+        const attachment = h.saved.find(row => row.kind === "attachment");
+        assert.ok(attachment);
+        assert.equal(attachment.fileSize, String(options.enabled === false ? 1 : options.bytes ?? 11 * MiB));
+        assert.equal(h.heads(), options.enabled === false ? 0 : 1);
+      });
+    }
+  }
+  test(`${kind} persistence preserves access denial and never reads object size`, async () => {
+    const h = uiAttachmentFixture({ denied: true });
+    const response = await h.request(kind);
+    assert.equal(response.status, 404);
+    assert.deepEqual(h.saved, []);
+    assert.equal(h.heads(), 0);
+  });
+}
+
+function verificationRoute(h) {
+  routeStubs(h);
+  Object.assign(h.stubs, {
+    "@/lib/media/heicPreview": { isHeicPreviewUrl: () => false },
+    "@/lib/storage/directUpload": { DIRECT_UPLOAD_MAX_FILES: 10 },
+    "@/lib/storage/uploadGrant": {},
+    "@/lib/realtime/server": {},
+  });
+  return h.load("src/lib/api/task-writes/upload-finalize.ts").POST;
+}
+
+for (const existing of [false, true]) {
+  test(`comment preflight refuses Free 11 MiB, including an existing description source (${existing})`, async () => {
+    const h = uiAttachmentFixture({ existing });
+    const POST = verificationRoute(h);
+    const response = await POST({ headers: new Headers(), json: async () => ({ action: "verify-task-attachments", taskId: 900, sources: [h.source], projectId: 20, fileSize: 1 }) });
+    assert.equal(response.status, 402);
+    assert.deepEqual(await response.json(), responseBody("file_size"));
+    assert.equal(h.heads(), 1);
+    assert.deepEqual(h.saved, []);
+  });
+  for (const options of [{ bytes: 10 * MiB }, { entitlement: "paid" }, { enabled: false }]) {
+    test(`comment preflight allows ${JSON.stringify(options)} (${existing})`, async () => {
+      const h = uiAttachmentFixture({ existing, ...options });
+      const POST = verificationRoute(h);
+      const response = await POST({ headers: new Headers(), json: async () => ({ action: "verify-task-attachments", taskId: 900, sources: [h.source] }) });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { success: true });
+      assert.deepEqual(h.saved, []);
+    });
+  }
+}
+
+for (const options of [{ denied: true, status: 404 }, { unverified: true, status: 409 }]) {
+  test(`comment preflight fails closed with ${JSON.stringify(options)}`, async () => {
+    const h = uiAttachmentFixture(options);
+    const POST = verificationRoute(h);
+    const response = await POST({ headers: new Headers(), json: async () => ({ action: "verify-task-attachments", taskId: 900, sources: [h.source] }) });
+    assert.equal(response.status, options.status);
+    assert.deepEqual(h.saved, []);
+  });
+}
+
+for (const options of [{ bytes: 10 * MiB }, { entitlement: "paid" }]) {
+  test(`create-modal receipt bind HTTP route still links ${JSON.stringify(options)}`, async () => {
+    const h = attachmentFixture(options);
+    routeStubs(h);
+    Object.assign(h.stubs, {
+      "@/lib/media/heicPreview": { isHeicPreviewUrl: () => false },
+      "@/lib/storage/directUpload": {},
+      "@/lib/storage/uploadGrant": { verifyTaskAttachmentLinkReceipt: () => h.receipt },
+      "@/lib/storage/linkTaskAttachment": h.controller,
+      "@/lib/realtime/server": { broadcastTaskChange: async () => {} },
+    });
+    const { POST } = h.load("src/lib/api/task-writes/upload-finalize.ts");
+    const response = await POST({ headers: new Headers(), json: async () => ({ action: "link-task-attachment", taskId: 900, receipt: "signed" }) });
+    assert.equal(response.status, 200);
+    assert.equal(h.stored.length, 1);
+    assert.equal(h.stored[0].fileSize, options.bytes ?? 11 * MiB);
+  });
+}
+
+for (const options of [{}, { bytes: 10 * MiB }, { entitlement: "paid" }, { enabled: false }]) {
+  test(`create-global project-scoped upload precheck: ${JSON.stringify(options)}`, async () => {
+    const h = uiAttachmentFixture({ key: "ai-chat/attachments/session/composer.bin", ...options });
+    const check = h.verify(h.db, [h.source], { projectId: 15 }, actor);
+    if (options.bytes === undefined && options.entitlement !== "paid" && options.enabled !== false) {
+      await assert.rejects(check, error => {
+        assert.deepEqual(plain(h.policy.planLimitResponse(error)), { status: 402, body: responseBody("file_size") });
+        return true;
+      });
+    } else {
+      const sizes = await check;
+      assert.equal(sizes.get(h.source), options.enabled === false ? undefined : options.bytes ?? 11 * MiB);
+    }
+    assert.deepEqual(h.saved, []);
+  });
+}
+
+for (const body of [
+  { taskId: 0, sources: [] }, { taskId: 900, sources: "file" }, { taskId: 900, sources: [123] },
+]) {
+  test(`comment preflight validates its request shape ${JSON.stringify(body)}`, async () => {
+    const h = uiAttachmentFixture();
+    const POST = verificationRoute(h);
+    const response = await POST({ headers: new Headers(), json: async () => ({ action: "verify-task-attachments", ...body }) });
+    assert.equal(response.status, 400);
+    assert.equal(h.heads(), 0);
+    assert.deepEqual(h.saved, []);
+  });
+}

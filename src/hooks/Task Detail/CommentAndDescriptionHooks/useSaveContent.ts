@@ -1,4 +1,4 @@
-import { planLimitRefusalMessage } from "@/lib/planLimitsClient";
+import { PlanLimitRefusal, planLimitRefusalMessage } from "@/lib/planLimitsClient";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useFlag } from "@/hooks/useFlag";
@@ -1066,10 +1066,12 @@ export default function useSaveContent() {
     const totalAttachments = imgTags.length + attachments.length;
 
     if (mode === "create-comment") {
-      if (showPlanLimitToast) {
-        for (const attachment of attachments) {
-          if (attachment.file.source) continue;
-          try {
+      if (showPlanLimitToast && attachments.length > 0) {
+        let uploadingName = attachments[0].file.name;
+        try {
+          for (const attachment of attachments) {
+            uploadingName = attachment.file.name;
+            if (attachment.file.source) continue;
             const source = await uploadSingleFileViaApi(attachment.file as File);
             attachment.file = {
               name: attachment.file.name,
@@ -1077,13 +1079,22 @@ export default function useSaveContent() {
               type: attachment.file.type,
               source,
             };
-          } catch (error) {
-            const message = error instanceof UploadTooLargeError
-              ? error.message
-              : `Could not upload "${attachment.file.name}". Please try again.`;
-            toast.error(planLimitRefusalMessage(error) ?? message);
-            return false;
           }
+          await axios.post("/api/tasks/uploadFinalize", {
+            action: "verify-task-attachments",
+            taskId: currentTask?.id,
+            sources: attachments.map((attachment) => attachment.file.source),
+          }).catch((error: unknown) => {
+            const message = planLimitRefusalMessage(error);
+            if (message) throw new PlanLimitRefusal(message);
+            throw error;
+          });
+        } catch (error) {
+          const message = error instanceof UploadTooLargeError || error instanceof PlanLimitRefusal
+            ? error.message
+            : planLimitRefusalMessage(error) ?? `Could not upload "${uploadingName}". Please try again.`;
+          toast.error(message);
+          return false;
         }
       }
       let navigateToNextParams: NavigateToNextTaskParams = {

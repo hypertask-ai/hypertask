@@ -195,9 +195,10 @@ test("a pending create save does not duplicate the attachment refusal already to
   assert.deepEqual(toasts, [fileMessage]);
 });
 
-function commentRedirect(enabled, upload, queued, toasts) {
+function commentRedirect(enabled, upload, queued, toasts, verify = async () => ({ data: { success: true } })) {
   return evaluate(initializer(saveHook, "redirectAPI"), {
-    showPlanLimitToast: enabled, planLimitRefusalMessage, UploadTooLargeError, uploadSingleFileViaApi: upload,
+    showPlanLimitToast: enabled, PlanLimitRefusal, planLimitRefusalMessage, UploadTooLargeError, uploadSingleFileViaApi: upload,
+    axios: { post: verify },
     DOMParser: class { parseFromString() { return { querySelectorAll: () => [] }; } },
     currentTask: { id: 42 }, currentProject: { id: 15 }, currentBoardBilling: null,
     improveWritingSource: "fixture", improveWritingModel: "fixture", description: "Description",
@@ -297,4 +298,47 @@ test("comment Send retains the pre-existing readable 413 upload message", async 
   assert.equal(await redirect({ content: "Draft", mode: "create-comment", attachments_: [file] }), false);
   assert.deepEqual(toasts, ["File exceeds the upload cap"]);
   assert.deepEqual(queued, []);
+});
+
+for (const sourced of [false, true]) {
+  test(`comment Send receives the task-scoped 402 before queueing or clearing (${sourced})`, async () => {
+    const queued = [], toasts = [], requests = [];
+    const attachment = sourced ? { ...file, source: "https://storage/file" } : file;
+    const redirect = commentRedirect(true, async () => "https://storage/file", queued, toasts, async (url, body) => {
+      requests.push({ url, body });
+      throw fileRefusal();
+    });
+    const state = { text: "Keep my comment draft", attachments: [attachment] };
+    const send = editorSend(args => redirect({ ...args, attachments_: [attachment] }), state, toasts);
+    assert.equal(await send(), false);
+    assert.deepEqual(requests, [{ url: "/api/tasks/uploadFinalize", body: { action: "verify-task-attachments", taskId: 42, sources: ["https://storage/file"] } }]);
+    assert.equal(state.text, "Keep my comment draft");
+    assert.deepEqual(state.attachments, [attachment]);
+    assert.deepEqual(queued, [], "no Sending placeholder may be created");
+    assert.deepEqual(toasts, [fileMessage]);
+  });
+
+  for (const allowed of [{ size: 10 * 1024 * 1024, scope: "Free" }, { size: 11 * 1024 * 1024, scope: "paid" }]) {
+    test(`comment Send still queues after successful verification: ${allowed.scope}, ${allowed.size} bytes (${sourced})`, async () => {
+      const queued = [], toasts = [], requests = [];
+      const attachment = { ...file, size: allowed.size, ...(sourced ? { source: "https://storage/file" } : {}) };
+      const redirect = commentRedirect(true, async () => "https://storage/file", queued, toasts, async (url, body) => { requests.push({ url, body }); });
+      const state = { text: "Allowed comment", attachments: [attachment] };
+      assert.equal(await editorSend(args => redirect({ ...args, attachments_: [attachment] }), state, toasts)(), true);
+      assert.equal(requests.length, 1);
+      assert.equal(queued.length, 1);
+      assert.equal(queued[0].attachments[0].file.source, "https://storage/file");
+      assert.equal(state.text, "");
+      assert.deepEqual(state.attachments, []);
+      assert.deepEqual(toasts, []);
+    });
+  }
+}
+
+test("flag Off leaves sourced comment attachment queueing unchanged without verification", async () => {
+  const queued = [], toasts = [];
+  const redirect = commentRedirect(false, noChange, queued, toasts, noChange);
+  assert.equal(await redirect({ content: "Legacy", mode: "create-comment", attachments_: [{ ...file, source: "https://storage/file" }] }), true);
+  assert.equal(queued.length, 1);
+  assert.deepEqual(toasts, []);
 });
