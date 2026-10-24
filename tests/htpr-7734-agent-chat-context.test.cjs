@@ -279,7 +279,8 @@ for (const webhook of [false, true]) {
     assert.equal(human.status, 200);
     const humanMessages = (await human.json()).messages;
     assert.deepEqual(humanMessages.map(({ content }) => content), ["Which ticket?"]);
-    assert.equal(Object.hasOwn(humanMessages[0], "context"), false);
+    assert.deepEqual(humanMessages[0].context, { scope: "ticket", project_id: 15, task_id: 42 });
+    for (const key of ["title", "ticket_number", "surface_path"]) assert.equal(Object.hasOwn(humanMessages[0].context, key), false);
     const humanHistory = (await h.history(false)).session.messages[0];
     assert.equal(humanHistory.content, "Which ticket?");
     assert.equal(Object.hasOwn(humanHistory, "context"), false);
@@ -367,7 +368,7 @@ test("flag off, standalone sends, and old clients still send and store today's p
   }
 });
 
-test("switching the flag off hides already-stored context from every agent read path", async () => {
+test("switching the flag off hides already-stored context from every agent and human read path", async () => {
   const h = server();
   assert.equal((await h.send({ project_id: 15, task_id: 42, scope: "ticket" })).status, 200);
   assert.ok(h.rows[0].context);
@@ -378,7 +379,11 @@ test("switching the flag off hides already-stored context from every agent read 
   assert.equal(pending.text, "Which ticket?");
   assert.equal(transcript.content, "Which ticket?");
   assert.equal(history.content, "Which ticket?");
-  for (const message of [pending, transcript, history]) assert.equal(Object.hasOwn(message, "context"), false);
+  const humanResponse = await h.humanTranscript();
+  assert.equal(humanResponse.status, 200);
+  const human = (await humanResponse.json()).messages[0];
+  assert.equal(human.content, "Which ticket?");
+  for (const message of [pending, transcript, history, human]) assert.equal(Object.hasOwn(message, "context"), false);
 });
 
 test("agent replies are never rendered with human context and old contextless human messages stay plain", async () => {

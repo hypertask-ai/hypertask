@@ -20,6 +20,7 @@ import {
 } from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
 import { agentChatDeliveryMode } from "@/lib/agents/chatAvailability";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
 
 export const runtime = "nodejs";
 
@@ -107,6 +108,10 @@ export async function GET(
       AGENT_CHAT_TICKET_CONFIRM_FLAG,
       userId,
     );
+    const contextEnabled = await isFeatureEnabled(
+      HTPR_7734_AGENT_CHAT_CONTEXT_FLAG,
+      userId,
+    );
     await readAgentChatTurn(
       { userId, agentId: null, displayName: "Hypertask user", source: "browser" },
       session.id,
@@ -182,7 +187,7 @@ export async function GET(
         role: isAgentChatSystemMessage(message) ? "system" : message.role,
         content: message.content,
         createdAt: message.createdAt,
-        ...sentContextIds(message.context),
+        ...(contextEnabled ? sentContextIds(message.context) : {}),
       })).map((message, index) => ({
         ...message,
         proposal: serializeChatTicketProposal(
