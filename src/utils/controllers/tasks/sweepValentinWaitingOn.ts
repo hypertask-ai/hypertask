@@ -25,9 +25,10 @@ export async function sweepValentinWaitingOn(): Promise<number> {
         waitingOnSetById: true,
         waitingOnSetAt: true,
         sectionEvents: {
+          where: { from: { in: WAITING_COLUMNS } },
           orderBy: [{ timestamp: "desc" }, { id: "desc" }],
           take: 1,
-          select: { from: true },
+          select: { timestamp: true },
         },
         comments: {
           where: {
@@ -90,8 +91,9 @@ export async function sweepValentinWaitingOn(): Promise<number> {
       );
       const shouldWait = inWaitingColumn && !answered;
       if (shouldWait === (task.waitingOnUserId === VALENTIN_USER_ID)) continue;
+      const departure = task.sectionEvents[0];
       if (!inWaitingColumn && !answered && task.waitingOnSetById !== null &&
-        !WAITING_COLUMNS.includes(task.sectionEvents[0]?.from ?? "")) continue;
+        (!departure || (explicitWaitSetAt && departure.timestamp < explicitWaitSetAt))) continue;
       await tx.task.update({
         where: { id: task.id },
         data: shouldWait

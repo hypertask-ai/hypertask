@@ -36,6 +36,8 @@ function fixture(tasks) {
         assert.equal(args.select.comments.where.activity.equals, Prisma.DbNull);
         return tasks.filter((row) => matches(row, args.where)).map((row) => hydrate({
           ...row,
+          sectionEvents: row.sectionEvents.filter((event) => matches(event, args.select.sectionEvents.where))
+            .sort((a, b) => b.timestamp - a.timestamp || b.id - a.id).slice(0, args.select.sectionEvents.take),
           comments: row.comments.filter((comment) => comment.activity === Prisma.DbNull)
             .sort((a, b) => b.createdAt - a.createdAt || b.id - a.id),
         }, args));
@@ -142,10 +144,35 @@ for (const section of ["Valentin Review", "UX Sign-off", "Flags"]) {
   });
 
   test(`leaving ${section} clears the previously backfilled Valentin mark`, async () => {
-    const row = task({ section: "AI Review", sectionEvents: [{ from: section }] }), f = fixture([row]);
+    const row = task({ section: "AI Review", sectionEvents: [{ id: 1, from: section, timestamp: at(20) }] }), f = fixture([row]);
     assert.equal(await f.sweep(), 1);
     assert.deepEqual([row.waitingOnUserId, row.waitingOnSetById, row.waitingOnSetAt], [null, null, null]);
   });
+
+  for (const [moves, sectionEvents] of [
+    ["one move", [{ id: 1, from: section, timestamp: at(20) }]],
+    ["two moves", [
+      { id: 1, from: section, timestamp: at(20) },
+      { id: 2, from: "AI Review", timestamp: at(40) },
+    ]],
+  ]) {
+    for (const [timing, waitingOnSetAt, clears] of [
+      ["after", at(30), false],
+      ["at", at(20), true],
+      ["before", at(15), true],
+    ]) {
+      test(`an explicit wait set ${timing} departure from ${section} ${clears ? "still clears" : "is preserved"} after ${moves}`, async () => {
+        const row = task({ section: "In Progress", waitingOnSetAt, sectionEvents }), f = fixture([row]);
+        assert.equal(await f.sweep(), clears ? 1 : 0);
+        assert.deepEqual(
+          [row.waitingOnUserId, row.waitingOnSetById, row.waitingOnSetAt],
+          clears ? [null, null, null] : [6, 7, waitingOnSetAt],
+        );
+        assert.deepEqual([f.boards, f.inboxes, f.tickets], clears ? [[15], [6], [42]] : [[], [], []]);
+        if (!clears) assert.deepEqual(f.writes, []);
+      });
+    }
+  }
 }
 
 test("a new agent Question after a reply reinstates the waiting-on mark", async () => {
