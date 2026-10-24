@@ -148,30 +148,36 @@ for (const cleared of [false, true, "blocked"]) {
   });
 }
 
-for (const otherAccount of [false, true]) {
-  test(`existing Sign out clears the browser with ${otherAccount ? "multiple" : "one"} remembered account`, async () => {
-    const view = mount();
-    let signouts = 0;
-    const current = { id: 182, name: "Account 182" };
-    const accounts = [current, ...(otherAccount ? [{ id: 6, name: "Account 6", sessionToken: "fixture" }] : [])];
-    const load = loader({
-      "@/components/Common/CommonModalComponents": { ModalContainerCustom: ({ children }) => React.createElement("div", null, children), ModalHeaderComp: () => null },
-      reactstrap: { ModalBody: ({ children }) => React.createElement("div", null, children) },
-      "@/hooks/MultiPages/HTC/useSignout": { useSignout: () => ({ handleHardReset: async () => { signouts++; return true; } }) },
-      "@/lib/auth/accounts": {
-        getActiveAccountId: () => current.id, getCurrentAccount: () => current,
-        listAccountsWithStatus: async () => ({ accounts, ok: true }), mergeCurrentAccount: list => list,
-      },
+for (const enabled of [false, true]) {
+  for (const otherAccount of [false, true]) {
+    test(`Sign out respects flag ${enabled} with ${otherAccount ? "multiple" : "one"} remembered account`, async () => {
+      const view = mount();
+      let signouts = 0;
+      let switches = 0;
+      const current = { id: 182, name: "Account 182" };
+      const accounts = [current, ...(otherAccount ? [{ id: 6, name: "Account 6", sessionToken: "fixture" }] : [])];
+      const load = loader({
+        "@/components/Common/CommonModalComponents": { ModalContainerCustom: ({ children }) => React.createElement("div", null, children), ModalHeaderComp: () => null },
+        reactstrap: { ModalBody: ({ children }) => React.createElement("div", null, children) },
+        "@/hooks/useFlag": { useFlag: () => enabled },
+        "@/hooks/MultiPages/HTC/useSignout": { useSignout: () => ({ handleHardReset: async () => { signouts++; return true; } }) },
+        "@/lib/auth/accounts": {
+          getActiveAccountId: () => current.id, getCurrentAccount: () => current,
+          listAccountsWithStatus: async () => ({ accounts, ok: true }), mergeCurrentAccount: list => list,
+          signOutCurrentAccount: async () => { switches++; return true; },
+        },
+      });
+      try {
+        await React.act(async () => view.render(React.createElement(load("src/components/Modals/SignOut/SignOutModal.tsx").default, { closeHandler: () => {} })));
+        const primary = Array.from(view.container.querySelectorAll("button")).find(button => button.textContent === "Sign out Account 182");
+        assert.ok(primary);
+        await React.act(async () => primary.click());
+        assert.equal(signouts, !enabled && otherAccount ? 0 : 1);
+        assert.equal(switches, !enabled && otherAccount ? 1 : 0);
+        assert.equal(view.container.textContent.includes("You’ll switch to"), !enabled && otherAccount);
+      } finally { view.close(); }
     });
-    try {
-      await React.act(async () => view.render(React.createElement(load("src/components/Modals/SignOut/SignOutModal.tsx").default, { closeHandler: () => {} })));
-      const primary = Array.from(view.container.querySelectorAll("button")).find(button => button.textContent === "Sign out Account 182");
-      assert.ok(primary);
-      await React.act(async () => primary.click());
-      assert.equal(signouts, 1);
-      assert.equal(view.container.textContent.includes("You’ll switch to"), false);
-    } finally { view.close(); }
-  });
+  }
 }
 
 test("failed browser sign-out leaves local account data intact for retry", async () => {
@@ -196,14 +202,17 @@ test("failed browser sign-out leaves local account data intact for retry", async
   } finally { global.localStorage = oldStorage; view.close(); }
 });
 
-test("forced sign-out still clears every remembered browser cookie when Better Auth is unavailable", async () => {
-  const load = loader({
-    "next/server": { NextResponse }, "better-auth/cookies": cookieHelpers,
-    "@/lib/auth/sessionRevocation": { revokeSessionToken: async () => {} },
-    "@/lib/auth/betterAuth": { auth: { api: { signOut: async () => { throw new Error("fixture outage"); } } } },
-  });
-  const names = ["better-auth.session_token", "__Secure-better-auth.session_token_multi-fixture", "better-auth.session_data.0", "ht_session", "nookies_user"];
-  const response = await load("src/app/api/auth/force-signout/route.ts").POST(new Request("http://localhost/api/auth/force-signout", { method: "POST", headers: { cookie: names.map(name => `${name}=fixture`).join("; ") } }));
-  assert.equal(response.status, 200);
-  for (const name of names) assert.equal(response.cookies.get(name)?.maxAge, 0);
+for (const failure of ["throw", "http-error"]) {
+  test(`forced sign-out clears cookies but reports failure when Better Auth fails: ${failure}`, async () => {
+    const load = loader({
+      "next/server": { NextResponse }, "better-auth/cookies": cookieHelpers,
+      "@/lib/auth/sessionRevocation": { revokeSessionToken: async () => {} },
+      "@/lib/auth/betterAuth": { auth: { api: { signOut: async () => { if (failure === "throw") throw new Error("fixture outage"); return NextResponse.json({ success: false }, { status: 500 }); } } } },
+    });
+    const names = ["better-auth.session_token", "__Secure-better-auth.session_token_multi-fixture", "better-auth.session_data.0", "ht_session", "nookies_user"];
+    const response = await load("src/app/api/auth/force-signout/route.ts").POST(new Request("http://localhost/api/auth/force-signout", { method: "POST", headers: { cookie: names.map(name => `${name}=fixture`).join("; ") } }));
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false });
+    for (const name of names) assert.equal(response.cookies.get(name)?.maxAge, 0);
 });
+}

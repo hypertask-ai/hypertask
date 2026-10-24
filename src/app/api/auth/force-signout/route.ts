@@ -11,7 +11,10 @@ export async function POST(request: Request) {
   const cookieHeader = request.headers.get("cookie") ?? "";
   await revokeSessionToken(parseCookies(cookieHeader).get(SESSION_COOKIE));
   const signedOut = await auth.api.signOut({ headers: request.headers, asResponse: true }).catch(() => null);
-  const response = NextResponse.json({ ok: true }, { headers: signedOut?.headers });
+  const response = NextResponse.json({ ok: signedOut?.ok === true }, {
+    status: signedOut?.ok ? 200 : 503,
+    headers: signedOut?.headers,
+  });
   const secure = process.env.NODE_ENV === "production";
 
   response.cookies.set(SESSION_COOKIE, "", {

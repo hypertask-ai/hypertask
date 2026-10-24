@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { loader } = require("./helpers/htpr-7260-ui.cjs");
+const { NextResponse } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 const signoutSource = fs.readFileSync(
@@ -33,12 +35,22 @@ test("hard reset uses the browser cookie cleanup endpoint even when Better Auth 
   assert.ok(serverCleanup !== -1 && serverCleanup < redirect);
 });
 
-test("force-signout expires every browser authentication cookie", () => {
-  assert.match(forceSignoutSource, /NextResponse\.json\(\{ ok: true \}\)/);
-  assert.match(forceSignoutSource, /response\.cookies\.set\(SESSION_COOKIE/);
-  assert.match(forceSignoutSource, /response\.cookies\.set\("nookies_user"/);
-  assert.match(forceSignoutSource, /clearBetterAuthSessionCookies\(response, cookieHeader\)/);
-  assert.equal(forceSignoutSource.match(/maxAge: 0/g)?.length, 2);
+test("force-signout expires every browser authentication cookie", async () => {
+  const load = loader({
+    "next/server": { NextResponse },
+    "@/lib/auth/sessionRevocation": { revokeSessionToken: async () => {} },
+    "@/lib/auth/betterAuth": { auth: { api: { signOut: async () => NextResponse.json({ success: true }) } } },
+  });
+  const names = ["ht_session", "nookies_user", "better-auth.session_token", "__Secure-better-auth.session_token_multi-fixture", "better-auth.session_data.0"];
+  const response = await load("src/app/api/auth/force-signout/route.ts").POST(new Request("http://localhost/api/auth/force-signout", {
+    method: "POST", headers: { cookie: names.map(name => `${name}=fixture`).join("; ") },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  for (const name of names) {
+    assert.equal(response.cookies.get(name)?.value, "");
+    assert.equal(response.cookies.get(name)?.maxAge, 0);
+  }
 });
 
 test("paywall account switcher uses the non-revoking activation path", () => {

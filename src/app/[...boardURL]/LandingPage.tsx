@@ -1167,7 +1167,7 @@ return (
     ) : <></>}>
       <FirstScreenMobileChrome currentUser={user} />
 
-      {projectEntryEnabled && (projectsError || projectLookupFailed || currentBoardAccessStatus === "denied" || (!dataFetching && fetchedData && !data)) ? (
+      {projectEntryEnabled && (projectLookupFailed || currentBoardAccessStatus === "denied" || (!data && !boardRender && (projectsError || (!dataFetching && fetchedData)))) ? (
         <Unauthorized />
       ) : data &&
       Array.isArray(data.updatedProjects) &&

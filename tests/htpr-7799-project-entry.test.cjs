@@ -117,7 +117,7 @@ function renderBoardContent(overrides) {
     ...overrides,
   };
   const js = ts.transpileModule(statements.at(-1).getText(tree), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
-  return new Function("require", ...Object.keys(values), js)(require, ...Object.values(values));
+  return new Function("require", "exports", ...Object.keys(values), js)(require, {}, ...Object.values(values));
 }
 
 test("board denial, request failure and missing-account data render existing unavailable UI, never black", () => {
@@ -128,20 +128,24 @@ test("board denial, request failure and missing-account data render existing una
       { projectsError: true },
       { projectLookupFailed: true },
       { fetchedData: { accountId: 6, updatedProjects: [boards[1]] } },
-      { projectsError: true, boardRender: { projects: [boards[1]], projectIndex: 0 } },
+      { projectsError: true, currentBoardAccessStatus: "denied", boardRender: { projects: [boards[1]], projectIndex: 0 } },
     ]) {
       view.render(renderBoardContent(state));
       assert.equal(view.container.textContent, "unavailable");
     }
     view.render(renderBoardContent({ data: { updatedProjects: [] } }));
     assert.equal(view.container.textContent, "no-boards");
+    view.render(renderBoardContent({ projectsError: true, currentBoardAccessStatus: "authorized", data: { updatedProjects: [boards[1]], dataOrigin: "indexeddb" }, projectIndex: 0 }));
+    assert.equal(view.container.textContent.trim(), "Loading board…");
     view.render(renderBoardContent({ dataFetching: true }));
     assert.equal(view.container.textContent.trim(), "Loading board…");
     view.render(renderBoardContent({ projectEntryEnabled: false, projectsError: true }));
     assert.equal(view.container.textContent, "");
     for (const board of boards.slice(1)) {
-      view.render(renderBoardContent({ currentBoardAccessStatus: "authorized", boardRender: { projects: [board], projectIndex: 0 } }));
-      assert.equal(view.container.textContent, `board ${board.id}`);
+      for (const projectsError of [false, true]) {
+        view.render(renderBoardContent({ projectsError, currentBoardAccessStatus: "authorized", boardRender: { projects: [board], projectIndex: 0 } }));
+        assert.equal(view.container.textContent, `board ${board.id}`);
+      }
     }
   } finally { view.close(); }
 });
