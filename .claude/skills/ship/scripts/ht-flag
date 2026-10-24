@@ -2,7 +2,7 @@
 set -euo pipefail
 
 fail() { printf 'ht-flag: %s\n' "$*" >&2; exit 1; }
-usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE (--reason URL | --review ID | --failure URL) [--dry-run] | ht-flag review KEY everyone --ai-review URL --independent TEXT --live-qa URL [--dry-run]; reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>)'; }
+usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE (--reason URL | --review ID | --failure URL) [--dry-run] | ht-flag review KEY everyone --ai-review URL --independent TEXT --live-qa URL [--dry-run]; reason must link to a clear yes from Valentin within 7 days: his thumbs up on a switch question, his own ticket yes after exactly one switch question, or an in-chat record of his exact words from HT Product Lead (#comment-<id>); questions name Switch <flag-key> to <mode>'; }
 
 dry_run=false
 args=()
@@ -41,7 +41,7 @@ case "$command" in
         node -e '
           const value = process.argv[1];
           if (value.length > 500 || !/^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.test(value)) process.exit(1);
-        ' "$reason" || fail 'reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>) (max 500 characters)'
+        ' "$reason" || fail 'reason must link to a clear yes from Valentin within 7 days: his thumbs up on a switch question, his own ticket yes after exactly one switch question, or an in-chat record of his exact words from HT Product Lead (#comment-<id>); questions name Switch <flag-key> to <mode> (max 500 characters)'
         body=$(jq -nc --arg key "$key" --arg mode "$mode" --arg reason "$reason" '{key:$key,mode:$mode,reason:$reason}')
         ;;
       --review)
