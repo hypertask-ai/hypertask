@@ -1386,3 +1386,13 @@ test("search layout is permanent and no longer registered", async () => {
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
+
+test("agent nudge is permanent and no longer registered", async () => {
+  const key = ["htpr", "7027", "agent", "nudge", "email"].join("-");
+  const identifier = ["HTPR", "7027", "AGENT", "NUDGE", "EMAIL", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some(definition => definition.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
