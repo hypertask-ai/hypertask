@@ -150,7 +150,7 @@ for (const cleared of [false, true, "blocked"]) {
 
 for (const enabled of [false, true]) {
   for (const otherAccount of [false, true]) {
-    test(`Sign out respects flag ${enabled} with ${otherAccount ? "multiple" : "one"} remembered account`, async () => {
+    test(`Sign out clears every remembered account with flag ${enabled} and ${otherAccount ? "multiple" : "one"} account`, async () => {
       const view = mount();
       let signouts = 0;
       let switches = 0;
@@ -172,9 +172,9 @@ for (const enabled of [false, true]) {
         const primary = Array.from(view.container.querySelectorAll("button")).find(button => button.textContent === "Sign out Account 182");
         assert.ok(primary);
         await React.act(async () => primary.click());
-        assert.equal(signouts, !enabled && otherAccount ? 0 : 1);
-        assert.equal(switches, !enabled && otherAccount ? 1 : 0);
-        assert.equal(view.container.textContent.includes("You’ll switch to"), !enabled && otherAccount);
+        assert.equal(signouts, 1);
+        assert.equal(switches, 0);
+        assert.equal(view.container.textContent.includes("You’ll switch to"), false);
       } finally { view.close(); }
     });
   }
