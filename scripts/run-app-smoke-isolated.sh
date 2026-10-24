@@ -208,7 +208,7 @@ if [ "$use_trusted_dependencies" = false ]; then
     -e HOME=/tmp \
     -w /app \
     "$runtime_image" bash -euo pipefail -c '
-      timeout --signal=KILL 2m env DATABASE_URL=postgresql://core_smoke:core_smoke@database:5432/hypertask_smoke ./node_modules/.bin/prisma generate
+      timeout --signal=KILL 2m env DATABASE_URL=postgresql://core_smoke:core_smoke@database:5432/hypertask_smoke ./node_modules/.bin/prisma generate # trufflehog:ignore
     '
 fi
 
@@ -238,6 +238,20 @@ trusted_runtime=(
   -w /trusted
 )
 
+database_client_mounts=()
+if [ "$dependencies_mount" != "$trusted_root/node_modules" ]; then
+  for generated_client in "$dependencies_mount/.prisma" "$dependencies_mount/@prisma"; do
+    [ -d "$generated_client" ] || {
+      echo "Generated Prisma client missing from the candidate dependencies: $generated_client" >&2
+      exit 1
+    }
+  done
+  database_client_mounts=(
+    -v "$dependencies_mount/.prisma:/trusted/node_modules/.prisma:ro"
+    -v "$dependencies_mount/@prisma:/trusted/node_modules/@prisma:ro"
+  )
+fi
+
 postgres_admin_password=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 docker run -d --name "$database" --network "$network" \
   --pids-limit 256 \
@@ -264,7 +278,7 @@ docker exec "$database" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "CREATE DATABASE hypertask_smoke OWNER core_smoke"
 
 common_env=(
-  -e DATABASE_URL=postgresql://core_smoke:core_smoke@"$database":5432/hypertask_smoke
+  -e DATABASE_URL=postgresql://core_smoke:core_smoke@"$database":5432/hypertask_smoke # trufflehog:ignore
   -e SESSION_SECRET=core-actions-"$run_key"
   -e NEXT_TELEMETRY_DISABLED=1
   -e GITHUB_ACTIONS="${GITHUB_ACTIONS:-false}"
@@ -278,6 +292,7 @@ docker run --rm --name "$prepare" --network "$network" "${runtime[@]}" "${common
   "$runtime_image" timeout --signal=KILL 2m ./node_modules/.bin/prisma migrate deploy
 
 docker run --rm --name "$seed" --network "$network" "${trusted_runtime[@]}" "${common_env[@]}" \
+  "${database_client_mounts[@]}" \
   -e CORE_SMOKE_APP_ROOT=/trusted \
   -e CORE_SMOKE_ENV_FILE=/state/smoke.env \
   -v "$state:/state" \

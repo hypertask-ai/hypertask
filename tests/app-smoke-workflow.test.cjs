@@ -264,6 +264,23 @@ test("app smoke validates the head before isolated build and route checks", asyn
     /--tmpfs \/var\/lib\/postgresql\/data:rw,nosuid,nodev,size=1g/,
   );
   assert.match(isolated, /--name "\$seed"[\s\S]*CORE_SMOKE_APP_ROOT=\/trusted/);
+  assert.match(
+    isolated,
+    /--name "\$seed"[\s\S]*"\$\{database_client_mounts\[@\]\}"/,
+  );
+  assert.match(
+    isolated,
+    /-v "\$dependencies_mount\/\.prisma:\/trusted\/node_modules\/\.prisma:ro"/,
+  );
+  assert.match(
+    isolated,
+    /-v "\$dependencies_mount\/@prisma:\/trusted\/node_modules\/@prisma:ro"/,
+  );
+  assert.match(isolated, /\[ "\$dependencies_mount" != "\$trusted_root\/node_modules" \]/);
+  assert.match(
+    isolated,
+    /Generated Prisma client missing from the candidate dependencies/,
+  );
   assert.match(seed, /writeFile\(/);
   assert.match(seed, /flag: "wx"/);
   assert.match(seed, /sections: \["Baseline", "Alternate"\]/);
