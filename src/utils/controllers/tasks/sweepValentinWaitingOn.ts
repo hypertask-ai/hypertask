@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { isQuestionComment } from "@/lib/inboxDecisions";
+import { isQuestionComment, toLines } from "@/lib/inboxDecisions";
 import { broadcastBoardChange, broadcastInboxChange, broadcastTaskChange } from "@/lib/realtime/server";
 
 const VALENTIN_USER_ID = 6;
@@ -75,11 +75,7 @@ export async function sweepValentinWaitingOn(): Promise<number> {
       const question = task.comments.find((comment) =>
         (comment.agentId || comment.agentDisplayName) &&
         [comment.text, comment.commentText].some((text) =>
-          isQuestionComment(text) || isQuestionComment((text ?? "")
-            .replace(/<\/(p|div|li|h[1-6]|blockquote)>|<br\s*\/?>/gi, "\n")
-            .replace(/<[^<>]*>/g, "")
-            .replace(/&nbsp;/g, " ")
-            .replace(/^\s*@?Valentin(?:\s+Yeo)?\s+(?=Question:)/gim, "")),
+          isQuestionComment(text) || toLines(text ?? "").some((line) => /^@?Valentin(?:\s+Yeo)?\s+question:/i.test(line)),
         ),
       );
       const explicitWaitSetAt = task.waitingOnSetById !== null ? task.waitingOnSetAt : null;

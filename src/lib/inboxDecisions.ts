@@ -1,6 +1,6 @@
 import { inboxConfig } from "@/lib/configs/inbox.config";
 
-const toLines = (html: string) => {
+export const toLines = (html: string) => {
   let text = html.replace(/<\/(p|div|li|h[1-6]|blockquote)>|<br\s*\/?>/gi, "\n");
   let previous;
   do {
