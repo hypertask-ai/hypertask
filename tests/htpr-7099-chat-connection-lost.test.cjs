@@ -22,6 +22,7 @@ async function runTurn({ enabled, responses, stopAfterFirstFailure = false }) {
   const payloads = [];
   const delays = [];
   const context = {
+    sessionIntentGenerationRef: { current: 0 },
     isByokBlocked: false, isTyping: false, editor: { getHTML: () => "<p>Hi</p>", getText: () => "Hi", commands: { clearContent() {} } },
     fileUpload: { fileItems: [], clearFiles() {} },
     messageQueueRef: { current: [] }, setQueuedMessages() {}, sendInFlightRef: { current: false },

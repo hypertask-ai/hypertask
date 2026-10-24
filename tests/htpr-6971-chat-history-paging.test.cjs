@@ -1024,6 +1024,7 @@ test('paged send rejects a changed or deleted displayed session during attachmen
     const preparation = deferred(); let displayed = session(9), writes = 0, cleared = 0;
     let draft = 'question', html = '<p>question</p>';
     const { handleSendMessage } = createAiChatSend({
+      sessionIntentGenerationRef: { current: 0 },
       sessionPagingEnabled: true, getDisplayedSession: () => displayed,
       waitForChatSession: async () => session(9), processAttachments: () => preparation.promise,
       editor: {
@@ -1047,8 +1048,8 @@ test('paged send rejects a changed or deleted displayed session during attachmen
     assert.equal(await sending, false);
     assert.equal(writes, 0);
     assert.equal(cleared, 1, 'detach the active draft before session preparation');
-    assert.equal(draft, 'question', 'restore the detached draft when its conversation changed');
-    assert.equal(html, '<p>question</p>');
+    assert.equal(draft, '', 'never restore the detached draft into a changed conversation');
+    assert.equal(html, '');
   } } finally { global.fetch = originalFetch; }
 });
 

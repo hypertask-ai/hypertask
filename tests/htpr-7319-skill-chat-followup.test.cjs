@@ -614,6 +614,7 @@ async function sendAfterIntro(session, question) {
   global.fetch = async (_url, init) => { payload = JSON.parse(init.body); return { ok: true, body: {} }; };
   try {
     const sender = createAiChatSend({
+      sessionIntentGenerationRef: { current: 0 },
       sessionPagingEnabled: true, getDisplayedSession: () => session, isByokBlocked: false, isTyping: false,
       fileUpload: { fileItems: [], clearFiles: noop }, messageQueueRef: { current: [] }, sendInFlightRef: { current: false },
       surface: "task_detail", inViewObject: { taskId: 43 }, waitForChatSession: async () => session,

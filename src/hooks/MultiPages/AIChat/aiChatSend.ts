@@ -366,8 +366,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         console.log("Message has been completed");
       }
     } finally {
+      const activeSessionId = getDisplayedSession?.()?.id ?? persistentQueue?.sessionId;
+      const canRestoreComposer = activeSessionId === originatingSessionId && sessionIntentGenerationRef.current === originatingIntentGeneration;
       if (restoreMessage) {
-        if (consumesComposer && editor?.isEmpty) {
+        if (canRestoreComposer && consumesComposer && editor?.isEmpty) {
           editor.commands.setContent(composerHtml);
         } else {
           const message = {
@@ -377,17 +379,16 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             html: editorHtmlForAttachments,
             files,
           };
-          const activeSessionId = getDisplayedSession?.()?.id ?? persistentQueue?.sessionId;
-          if (activeSessionId === originatingSessionId && sessionIntentGenerationRef.current === originatingIntentGeneration) {
+          if (persistentQueue && originatingSessionId) {
+            persistentQueue.set(originatingSessionId, [message, ...persistentQueue.get(originatingSessionId)]);
+          } else if (!persistentQueue && canRestoreComposer) {
             messageQueueRef.current = [message, ...messageQueueRef.current];
             setQueuedMessages(messageQueueRef.current);
-          } else if (persistentQueue && originatingSessionId) {
-            persistentQueue.set(originatingSessionId, [...persistentQueue.get(originatingSessionId), message]);
           }
           restoreFiles = false;
         }
       }
-      if (restoreFiles) {
+      if (restoreFiles && canRestoreComposer) {
         fileUpload.setFileItems((current) => [
           ...files,
           ...current.filter((item) => !files.includes(item)),

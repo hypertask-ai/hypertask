@@ -26,6 +26,7 @@ async function runTurn({ attachments = [], enabled = true, preserveEditorContent
   global.document = { visibilityState: "visible", addEventListener() {}, removeEventListener() {} };
   console.log = () => {};
   const context = {
+    sessionIntentGenerationRef: { current: 0 },
     isByokBlocked: false, isTyping: false, editor: { getHTML: () => "<p>Edit this task</p>", getText: () => "Edit this task", commands: { clearContent() {} } },
     fileUpload: { fileItems: attachments.map((file) => ({ file })), clearFiles() {} },
     messageQueueRef: { current: [] }, setQueuedMessages() {}, sendInFlightRef: { current: false },

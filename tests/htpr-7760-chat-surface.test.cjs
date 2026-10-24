@@ -37,6 +37,7 @@ async function send({ fullscreen = false, userAgent = "Browser", screenContext =
   const ref = () => ({ current: null });
   try {
     const context = {
+      sessionIntentGenerationRef: { current: 0 },
       editor: { getText: () => "Which chat are you? Which ticket am I on?", getHTML: () => "<p>Which chat?</p>", commands: { clearContent() {} } },
       fileUpload: { fileItems: [], clearFiles() {} }, messageQueueRef: { current: [] },
       sendInFlightRef: { current: false }, surface: screenContext.surface,
