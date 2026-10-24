@@ -25,7 +25,7 @@ function loadLayout(board, inbox = null) {
     "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { bodyLayout: "body-layout" } },
     "@/lib/fonts/inter": { inter: font, INTER_LATIN_FONT_HREF: assets[0] },
     "@/lib/fonts/newsreader": { newsreader: font, NEWSREADER_LATIN_FONT_HREFS: assets.slice(1) },
-    "@/lib/fonts/ibmPlexSans": { ibmPlexSans: font, IBM_PLEX_SANS_LATIN_FONT_HREF: plex },
+    "@/lib/fonts/ibmPlexSans": { ibmPlexSans: font },
     "@/lib/flags/keys": { HTPR_7278_MEMORY_ONLY_TRACKING_FLAG: "htpr-7278-memory-only-tracking", HTPR_7627_TICKET_FIRST_SCREEN_FLAG: "htpr-7627-ticket-first-screen" },
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/themePreferences": { normalizeThemePreference: x => x, resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain", resolvedThemeDomMetadata: { porcelain: { classes: ["light", "porcelain"], themeColor: "#ffffff" } } },
@@ -59,7 +59,7 @@ for (const theme of ["porcelain", "graphite", "amoled", "dia"]) {
       const html = renderToStaticMarkup(await loadLayout(board, inbox)({ children: React.createElement("a", { href: "/detail/project-15/1" }, "Real card") }));
       for (const asset of assets) assert.equal(html.includes(`href="${asset}"`), !deferred, JSON.stringify({ board, inbox, asset }));
       assert.ok(html.includes("Real card"));
-      assert.equal(html.includes(`href="${plex}"`), Boolean((board || inbox) && theme !== "dia"));
+      assert.equal(html.includes(plex), false, JSON.stringify({ board, inbox, theme }));
     }
   });
 }

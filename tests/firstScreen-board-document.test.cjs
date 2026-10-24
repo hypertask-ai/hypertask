@@ -134,13 +134,13 @@ test('display cookie is account scoped, validated and rejects unsupported open d
     assert.equal(parseBoardDisplay(value, 985), null);
 });
 
-test('only a seeded Plex-theme document preloads the existing critical font; OFF keeps automatic preload disabled', () => {
+test('Plex loads only through its stylesheet, so a deploy-tagged font URL is fetched once', () => {
   const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
-  assert.match(layout, /firstScreen && \["amoled", "graphite", "porcelain"\]\.includes\(firstScreen.display.theme\)/);
-  assert.match(layout, /href=\{IBM_PLEX_SANS_LATIN_FONT_HREF\} as="font"/);
+  assert.doesNotMatch(layout, /IBM_PLEX_SANS_LATIN_FONT_HREF/);
+  assert.match(layout, /\$\{ibmPlexSans\.variable\}/);
   const font = fs.readFileSync(path.join(root, 'src/lib/fonts/ibmPlexSans.ts'), 'utf8');
   assert.match(font, /preload: false/);
-  assert.match(font, /IBM_PLEX_SANS_LATIN_FONT_HREF = "\/_next\/static\/media\/[a-f0-9]+-s\.woff2"/);
+  assert.doesNotMatch(font, /\.woff2/);
 });
 
 test('personalized HTML and Flight are dynamic and explicitly private no-store; proxy overwrites route spoofing', () => {

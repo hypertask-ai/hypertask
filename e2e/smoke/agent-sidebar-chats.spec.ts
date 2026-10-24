@@ -331,6 +331,7 @@ test('switching chats does not move the ticket, its comments or its comment comp
   await expect(page.getByTestId('comment-composer')).toBeAttached()
   await expect(page.getByTestId('ticket-comment')).toHaveCount(2)
   await waitForTicketInitialScroll(page)
+  await page.evaluate(() => document.fonts.ready)
   const selectors = ['#title-input', '[data-testid="ticket-description"]', '[data-testid="ticket-comment"]', '[data-testid="comment-composer"]']
   const measure = () => Promise.all(selectors.map((selector) => page.locator(selector).first().boundingBox()))
   let settled = await measure()
@@ -343,6 +344,7 @@ test('switching chats does not move the ticket, its comments or its comment comp
   const before = settled
   for (const box of before) expect(box).not.toBeNull()
   await choose(page, fixture.lanes[info.project.name][0].name)
+  await page.evaluate(() => document.fonts.ready)
   const after = await Promise.all(selectors.map((selector) => page.locator(selector).first().boundingBox()))
   expect(after).toEqual(before)
   if (info.project.name === 'Mobile') {
