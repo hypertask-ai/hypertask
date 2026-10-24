@@ -4,7 +4,7 @@ trap 'printf "sweep test failed at line %s\n" "$LINENO" >&2' ERR
 here=$(cd "$(dirname "$0")" && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-export HOME="$tmp" SWEEP_TEST_DIR="$tmp"
+export HOME="$tmp" SWEEP_TEST_DIR="$tmp" VCC_EVIDENCE_DIR="$tmp/evidence"
 mkdir -p "$tmp/bin"
 cat > "$tmp/bin/vcc" <<'SH'
 #!/usr/bin/env bash
@@ -15,6 +15,10 @@ case "$1:$2" in
     [ "$*" = 'task list --project 15 --section Flags --limit 100 --json' ] || exit 90
     cat "$SWEEP_TEST_DIR/tasks" ;;
   task:get)
+    if [ "${SWEEP_MODE_OFF_AFTER_LIST:-0}" = 1 ]; then
+      jq '.flags |= map(if .key == "htpr-1-a" then .mode="OFF" else . end)' "$SWEEP_TEST_DIR/flags" > "$SWEEP_TEST_DIR/new" # gitleaks:allow
+      mv "$SWEEP_TEST_DIR/new" "$SWEEP_TEST_DIR/flags"
+    fi
     section=${SWEEP_SECTION:-Flags}
     if [ "${SWEEP_REOPEN:-0}" = 1 ]; then
       section=$(cat "$SWEEP_TEST_DIR/section")
@@ -33,6 +37,16 @@ set -euo pipefail
 printf 'flags\n' >> "$SWEEP_TEST_DIR/calls"
 [ "${FLAGS_ERROR:-0}" = 0 ] || exit 1
 cat "$SWEEP_TEST_DIR/flags"
+SH
+cat > "$tmp/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1:$2" in
+  pr:list) echo '[{"number":10,"title":"HTPR-1 [FEATURE] Example","createdAt":"2026-10-24"}]' ;;
+  pr:view) printf '%s\n' "${SWEEP_PR_BODY:-}" ;;
+  api:*) [ "${SWEEP_PR_ERROR:-0}" = 0 ] || exit 1; printf '%s\n' "${SWEEP_PR_FILES:-[[]]}" ;;
+  *) exit 95 ;;
+esac
 SH
 cat > "$tmp/bin/curl" <<'SH'
 #!/usr/bin/env bash
@@ -63,8 +77,36 @@ run() {
   : > "$tmp/calls"
   "$here/ht-flags-sweep" "$@" > "$tmp/output" 2>&1
   [ "$(grep -c '^task list ' "$tmp/calls")" = 1 ]
-  [ "$(grep -c '^flags$' "$tmp/calls")" = 1 ]
 }
+regression_stale_modes() {
+  SWEEP_MODE_OFF_AFTER_LIST=1 run --go
+  if grep -q '^task move ' "$tmp/calls"; then echo 'FAIL: stale Everyone mode completed ticket'; exit 1; fi
+  grep -q 'htpr-1-a=OFF' "$tmp/output"
+  echo 'ok fresh flag modes before each completion'
+}
+regression_pr_flags() {
+  for source in body definition code; do
+    local body='' files='[[]]'
+    case "$source" in
+      body) body='Flag: htpr-50-shared' ;;
+      definition) files='[[{"filename":"src/lib/flags/definitions/htpr-50-shared.ts","status":"added"}]]' ;;
+      code) files='[[{"filename":"src/page.tsx","patch":"+useFlag(\"htpr-50-shared\")"}]]' ;;
+    esac
+    SWEEP_PR_BODY="$body" SWEEP_PR_FILES="$files" run --go
+    if grep -q '^task move ' "$tmp/calls"; then echo "FAIL: PR-only $source flag ignored"; exit 1; fi
+    grep -q 'htpr-50-shared=OWNER_ONLY' "$tmp/output"
+    cp "$tmp/flags" "$tmp/saved-flags"
+    jq '.flags |= map(if .key == "htpr-50-shared" then .mode="EVERYONE" else . end)' "$tmp/flags" > "$tmp/new"; mv "$tmp/new" "$tmp/flags" # gitleaks:allow
+    SWEEP_PR_BODY="$body" SWEEP_PR_FILES="$files" run --go
+    grep -q '^task move HTPR-1 --section Done$' "$tmp/calls"
+    mv "$tmp/saved-flags" "$tmp/flags"
+  done
+  echo 'ok sweep enforces PR-only body, definition and code flags'
+}
+case "${1:-}" in
+  --stale-only) regression_stale_modes; exit ;;
+  --pr-only) regression_pr_flags; exit ;;
+esac
 run
 ! grep -q '^task move ' "$tmp/calls"
 grep -q 'would move HTPR-1 from Flags to Done' "$tmp/output"
@@ -90,9 +132,15 @@ if grep -q '^task move ' "$tmp/calls"; then exit 1; fi
 : > "$tmp/calls"
 if FLAGS_ERROR=1 "$here/ht-flags-sweep" --go > "$tmp/output" 2>&1; then exit 1; fi
 ! grep -q '^task move ' "$tmp/calls"
-echo '{"flags":[{"key":"htpr-1-a","mode":"UNKNOWN"}]}' > "$tmp/flags"
-if "$here/ht-flags-sweep" --go > "$tmp/output" 2>&1; then exit 1; fi
+regression_pr_flags
+: > "$tmp/calls"
+if SWEEP_PR_ERROR=1 "$here/ht-flags-sweep" --go > "$tmp/output" 2>&1; then exit 1; fi
 ! grep -q '^task move ' "$tmp/calls"
+regression_stale_modes
+echo '{"flags":[{"key":"htpr-1-a","mode":"UNKNOWN"}]}'  > "$tmp/flags"
+run --go
+! grep -q '^task move ' "$tmp/calls"
+grep -q 'invalid live flag list' "$tmp/output"
 jq '.total=101' "$tmp/tasks" > "$tmp/new"; mv "$tmp/new" "$tmp/tasks"
 : > "$tmp/calls"
 if "$here/ht-flags-sweep" --go > "$tmp/output" 2>&1; then exit 1; fi

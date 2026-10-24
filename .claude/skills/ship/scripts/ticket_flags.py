@@ -44,30 +44,22 @@ def ticket_flags(ticket, flags, references=""):
     return [by_key[key] for key in sorted(keys)]
 
 
+class PendingFlags(ValueError):
+    """A valid rollout is not yet ready to complete its ticket."""
+
+
 def require_everyone(ticket, flags, references="", require_flags=False):
     matched = ticket_flags(ticket, flags, references)
     if require_flags and not matched:
         raise ValueError(f"{ticket} has no identifiable flags; leave it in Flags")
     pending = [f'{f["key"]}={f["mode"]}' for f in matched if f["mode"] != "EVERYONE"]
     if pending:
-        raise ValueError("flags are not Everyone: " + ", ".join(pending) + "; move to Flags after live QA")
+        raise PendingFlags("flags are not Everyone: " + ", ".join(pending) + "; move to Flags after live QA")
     return matched
 
 
-def main():
-    ticket, repo, pr = sys.argv[1:]
-    try:
-        current = json.loads(subprocess.check_output([
-            "hypertask", "tasks", "get", ticket, "--json"], text=True))
-        if current.get("success") is not True or len(current["tasks"]) != 1:
-            raise ValueError("invalid ticket response")
-        references = current["tasks"][0].get("description", "")
-        if references is None:
-            references = ""
-        if not isinstance(references, str):
-            raise ValueError("invalid ticket description")
-    except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.SubprocessError) as error:
-        raise ValueError(f"cannot read current ticket {ticket}") from error
+def pr_references(repo, pr):
+    references = ""
     if pr:
         body = subprocess.check_output([
             "gh", "pr", "view", pr, "-R", repo, "--json", "body", "--jq", ".body"], text=True)
@@ -96,6 +88,46 @@ def main():
                         r"\s*\(\s*['\"]([a-z0-9-]+)['\"]", added))
                     references += "\n" + "\n".join(re.findall(
                         r"\b(?:from|import)\s*['\"][^'\"]*lib/flags/definitions/([^'\"]+)['\"]", added))
+    return references
+
+
+def completion_flags(ticket, task):
+    repo = os.environ.get("SHIP_REPO", "hypertask-ai/hypertask")
+    evidence = Path(os.environ.get("VCC_EVIDENCE_DIR", str(Path.home() / ".local/state/vcc-evidence")))
+    bound = evidence / ticket / "pr"
+    if bound.is_file():
+        pr = bound.read_text().strip()
+        if not re.fullmatch(r"[1-9]\d*", pr):
+            raise ValueError("invalid bound PR")
+    else:
+        prs = json.loads(subprocess.check_output([
+            "gh", "pr", "list", "-R", repo, "--state", "merged", "--base",
+            os.environ.get("SHIP_BASE", "production"), "--search", ticket + " in:title",
+            "--limit", "50", "--json", "number,title,createdAt"], text=True))
+        if not isinstance(prs, list) or len(prs) >= 50:
+            raise ValueError("cannot read complete ticket PR list")
+        matches = [pr for pr in prs if pr["title"].startswith(ticket + " ")]
+        pr = str(max(matches, key=lambda row: row["createdAt"])["number"]) if matches else ""
+    references = json.dumps(task) + pr_references(repo, pr)
+    # Fetch modes after PR discovery, not once at the start of a board sweep.
+    return require_everyone(ticket, read_flags(), references, require_flags=True)
+
+
+def main():
+    ticket, repo, pr = sys.argv[1:]
+    try:
+        current = json.loads(subprocess.check_output([
+            "hypertask", "tasks", "get", ticket, "--json"], text=True))
+        if current.get("success") is not True or len(current["tasks"]) != 1:
+            raise ValueError("invalid ticket response")
+        references = current["tasks"][0].get("description", "")
+        if references is None:
+            references = ""
+        if not isinstance(references, str):
+            raise ValueError("invalid ticket description")
+    except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.SubprocessError) as error:
+        raise ValueError(f"cannot read current ticket {ticket}") from error
+    references += pr_references(repo, pr)
     require_everyone(ticket, read_flags(), references)
     print("flags ok (Everyone or no ticket flag)")
 

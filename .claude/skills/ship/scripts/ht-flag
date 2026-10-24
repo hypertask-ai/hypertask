@@ -137,19 +137,26 @@ if [ "$command" = set ] && [ "$mode" = EVERYONE ]; then
       jq -er '.tasks[0].section' <<<"$task") || fail "flag is Everyone, but cannot read $owner section"
     if [ "$section" = Flags ]; then
       # A ticket can own several flags: switching one must not finish the others.
-      flags=$(SHIP_SESSION_NAME="$IDENTITY" "$0" get) || fail "flag is Everyone, but cannot check all flags of $owner; leave it in Flags"
-      printf '%s\n%s\n' "$(jq -c . <<<"$task")" "$(jq -c . <<<"$flags")" | SHIP_SESSION_NAME="$IDENTITY" python3 -c '
-import json, sys
+      completion_status=0
+      printf '%s\n' "$task" | SHIP_SESSION_NAME="$IDENTITY" python3 -c '
+import json, subprocess, sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, sys.argv[1])
-from ticket_flags import require_everyone
+from ticket_flags import completion_flags, PendingFlags
 try:
-    task, flags = [json.loads(line) for line in sys.stdin]
-    require_everyone(sys.argv[2], flags["flags"], json.dumps(task), require_flags=True)
-except (ValueError, KeyError, TypeError) as error:
+    completion_flags(sys.argv[2], json.load(sys.stdin))
+except PendingFlags as error:
+    print("ht-flag: " + str(error), file=sys.stderr)
+    sys.exit(2)
+except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
     print("ht-flag: " + str(error), file=sys.stderr)
     sys.exit(1)
-' "$(dirname "$(readlink -f "$0")")" "$owner" || fail "flag is Everyone; $owner remains in Flags"
+' "$(dirname "$(readlink -f "$0")")" "$owner" || completion_status=$?
+      case "$completion_status" in
+        0) ;;
+        2) printf 'ht-flag: flag is Everyone; %s remains in Flags pending other flags\n' "$owner" >&2; exit 0 ;;
+        *) fail "flag is Everyone; $owner remains in Flags" ;;
+      esac
       task=$(SHIP_SESSION_NAME="$IDENTITY" vcc task get "$owner" --json) \
         || fail "flag is Everyone, but cannot reread $owner; no ticket moved"
       section=$(jq -er '.success == true and (.tasks | length == 1)' <<<"$task" >/dev/null &&

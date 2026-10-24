@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 sys.dont_write_bytecode = True
-from ticket_flags import read_flags, require_everyone
+from ticket_flags import completion_flags
 
 
 def main():
@@ -19,7 +19,6 @@ def main():
     tasks = board["tasks"]
     if board.get("success") is not True or not isinstance(tasks, list) or len(tasks) != board["total"]:
         raise ValueError("Flags list is incomplete or invalid; no tickets moved (limit 100)")
-    flags = read_flags()
     for task in tasks:
         ticket = task["ticketNumber"]
         if task["section"] != "Flags":
@@ -33,7 +32,7 @@ def main():
                 print(f"ht-flags-sweep: leave {ticket}: no longer in Flags")
                 continue
         try:
-            require_everyone(ticket, flags, json.dumps(task), require_flags=True)
+            completion_flags(ticket, task)
         except ValueError as error:
             print(f"ht-flags-sweep: leave {ticket} in Flags: {error}")
             continue

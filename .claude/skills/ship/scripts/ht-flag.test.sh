@@ -4,7 +4,7 @@ trap 'printf "ht-flag test failed at line %s\n" "$LINENO" >&2' ERR
 script="$(cd "$(dirname "$0")" && pwd)/ht-flag"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-export HOME="$tmp"
+export HOME="$tmp" VCC_EVIDENCE_DIR="$tmp/evidence"
 mkdir -p "$HOME/.agents/skills/ship/scripts"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'SH'
 #!/usr/bin/env bash
@@ -154,9 +154,49 @@ case "$1:$2" in
   *) exit 94 ;;
 esac
 SH
-chmod +x "$tmp/bin/vcc"
+cat > "$tmp/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[ "$SHIP_SESSION_NAME" = 'Runner 3' ] || exit 95
+case "$1:$2" in
+  pr:list) echo '[{"number":10,"title":"HTPR-6136 [FEATURE] Example","createdAt":"2026-10-24"}]' ;;
+  pr:view) printf '%s\n' "${TEST_PR_BODY:-}" ;;
+  api:*) [ "${TEST_PR_ERROR:-0}" = 0 ] || exit 1; printf '%s\n' "${TEST_PR_FILES:-[[]]}" ;;
+  *) exit 96 ;;
+esac
+SH
+chmod +x "$tmp/bin/vcc" "$tmp/bin/gh"
 export TEST_RESPONSE='{"flag":{"key":"htpr-6136-figma-connect","mode":"EVERYONE","ticketId":"HTPR-6136"}}'
 export TEST_FLAGS='{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"}]}'
+regression_pending() {
+  : > "$HOME/vcc-log"
+  TEST_FLAGS='{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"},{"key":"htpr-6136-another","mode":"OWNER_AND_QA"}]}' "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1 # gitleaks:allow
+  if grep -q '^task move ' "$HOME/vcc-log"; then echo 'FAIL: pending sibling completed'; exit 1; fi
+  grep -q 'htpr-6136-another=OWNER_AND_QA' "$tmp/output"
+  echo 'ok successful switch with pending sibling returns success'
+}
+regression_pr_flags() {
+  for source in body definition code; do
+    local body='' files='[[]]'
+    case "$source" in
+      body) body='Flag: htpr-50-shared' ;;
+      definition) files='[[{"filename":"src/lib/flags/definitions/htpr-50-shared.ts","status":"added"}]]' ;;
+      code) files='[[{"filename":"src/page.tsx","patch":"+useFlag(\"htpr-50-shared\")"}]]' ;;
+    esac
+    : > "$HOME/vcc-log"
+    TEST_PR_BODY="$body" TEST_PR_FILES="$files" TEST_FLAGS='{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"},{"key":"htpr-50-shared","mode":"OFF"}]}' "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1 # gitleaks:allow
+    if grep -q '^task move ' "$HOME/vcc-log"; then echo "FAIL: PR-only $source flag ignored"; exit 1; fi
+    grep -q 'htpr-50-shared=OFF' "$tmp/output"
+    : > "$HOME/vcc-log"
+    TEST_PR_BODY="$body" TEST_PR_FILES="$files" TEST_FLAGS='{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"},{"key":"htpr-50-shared","mode":"EVERYONE"}]}' "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1 # gitleaks:allow
+    grep -q '^task move HTPR-6136 --section Done$' "$HOME/vcc-log"
+  done
+  echo 'ok ht-flag enforces PR-only body, definition and code flags'
+}
+case "${1:-}" in
+  --pending-only) regression_pending; exit ;;
+  --pr-only) regression_pr_flags; exit ;;
+esac
 : > "$HOME/vcc-log"
 "$script" set "$key" everyone --reason "$reason" > "$tmp/output" 2>&1
 [ "$(cat "$HOME/vcc-log")" = $'task get HTPR-6136 --json\ntask get HTPR-6136 --json\ntask move HTPR-6136 --section Done' ]
@@ -181,8 +221,12 @@ for section in 'In Progress' 'Valentin Review' Done; do
   TEST_SECTION="$section" "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1
   [ "$(cat "$HOME/vcc-log")" = 'task get HTPR-6136 --json' ]
 done
+regression_pending
+regression_pr_flags
+: > "$HOME/vcc-log"
+if TEST_PR_ERROR=1 "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1; then exit 1; fi
+! grep -q '^task move ' "$HOME/vcc-log"
 for flags in \
-  '{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"},{"key":"htpr-6136-another","mode":"OWNER_AND_QA"}]}' \
   '{"flags":[]}' '{"flags":null}'; do
   : > "$HOME/vcc-log"
   if TEST_FLAGS="$flags" "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1; then
