@@ -22,13 +22,18 @@ function matches(flag, where) {
     if (field in where && flag[field] !== where[field]) return false;
   }
   if (where.releasedAt instanceof Date) return flag.releasedAt.getTime() === where.releasedAt.getTime();
-  if (where.releasedAt) return flag.releasedAt !== null && flag.releasedAt <= where.releasedAt.lte;
+  if (where.releasedAt) {
+    if (flag.releasedAt == null) return false;
+    if (where.releasedAt.lte && flag.releasedAt > where.releasedAt.lte) return false;
+    return true;
+  }
   return true;
 }
 const prisma = {
   featureFlag: {
     findUnique: async () => { throw new Error("retired countdown must not be read"); },
     updateMany: async ({ where, data }) => {
+      assert.deepEqual(Object.keys(data).sort(), ["removalTaskId"]);
       const matched = dueFlags.filter((flag) => matches(flag, where));
       for (const flag of matched) {
         writes.push(flag.key);
@@ -117,6 +122,93 @@ test("the removal sweep leaves overdue unregistered rows unchanged and tickets a
   assert.deepEqual([removed, pending], before);
   assert.deepEqual(writes, [registeredKey, registeredKey, registeredKey]);
   assert.equal(dueFlags.find(({ key }) => key === registeredKey).removalTaskId, 99);
+});
+
+test("bugfix flags are due after 7 days while money and data-deletion stay at 14, and Keep files nothing", async () => {
+  const daysAgo = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  dueFlags = [
+    { key: "htpr-3533-google-calendar", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
+    { key: "htpr-7324-plan-ai-caps", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
+    { key: "htpr-7350-card-title-wrap", mode: "EVERYONE", keep: true, removalTaskId: null, releasedAt: daysAgo(30) },
+    { key: "htpr-7702-phone-chat-list", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
+    { key: "htpr-7755-bulk-preview-confirmation", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
+    { key: "yper4-651-self-follow-quiet", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
+  ];
+  const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", {
+    headers: { authorization: "Bearer test-cron-secret" },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    filed: 2,
+    keys: ["htpr-7702-phone-chat-list", "yper4-651-self-follow-quiet"],
+    failed: [],
+  });
+  assert.deepEqual(filed.map(({ title }) => title), [
+    "Remove feature flag htpr-7702-phone-chat-list",
+    "Remove feature flag yper4-651-self-follow-quiet",
+  ]);
+  assert.ok(filed.every((ticket) => ticket.description.includes("more than 7 days")));
+  assert.ok(filed.every((ticket) => ticket.mode === undefined));
+});
+
+test("money and data-deletion flags file after 14 days and a 6 day bugfix does not", async () => {
+  const daysAgo = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  dueFlags = [
+    { key: "htpr-3533-google-calendar", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(15) },
+    { key: "htpr-7324-plan-ai-caps", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(15) },
+    { key: "htpr-7702-phone-chat-list", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(6) },
+    { key: "htpr-7755-bulk-preview-confirmation", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(15) },
+  ];
+  const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", {
+    headers: { authorization: "Bearer test-cron-secret" },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).keys, [
+    "htpr-3533-google-calendar",
+    "htpr-7324-plan-ai-caps",
+    "htpr-7755-bulk-preview-confirmation",
+  ]);
+  assert.ok(filed.every((ticket) => ticket.description.includes("more than 14 days")));
+  assert.equal(filed.some((ticket) => ticket.title.includes("htpr-7702-phone-chat-list")), false);
+});
+
+test("a recorded removal ticket is not filed again", async () => {
+  dueFlags = [{
+    key: "htpr-7702-phone-chat-list",
+    mode: "EVERYONE",
+    keep: false,
+    removalTaskId: 99,
+    releasedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+  }];
+  const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", {
+    headers: { authorization: "Bearer test-cron-secret" },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { filed: 0, failed: [] });
+  assert.deepEqual(filed, []);
+});
+
+test("an existing open removal ticket is reused and no second task is created", async () => {
+  const original = prisma.task.findFirst;
+  prisma.task.findFirst = async () => ({ id: 42 });
+  try {
+    dueFlags = [{
+      key: registeredKey,
+      mode: "EVERYONE",
+      keep: false,
+      removalTaskId: null,
+      releasedAt: new Date(Date.now() - (FEATURE_FLAG_REMOVAL_DAYS + 1) * 24 * 60 * 60 * 1000),
+    }];
+    const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", {
+      headers: { authorization: "Bearer test-cron-secret" },
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [] });
+    assert.deepEqual(filed, []);
+    assert.equal(dueFlags[0].removalTaskId, 42);
+  } finally {
+    prisma.task.findFirst = original;
+  }
 });
 
 test("the conditional claim rejects an unregistered key returned in the candidate list", async () => {
