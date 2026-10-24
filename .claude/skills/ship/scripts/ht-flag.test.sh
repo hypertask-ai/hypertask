@@ -51,7 +51,7 @@ for bad_reason in \
   'https://app.hypertask.ai/detail/project-4060/1000000000#comment-123' \
   "${reason}junk" "${reason}?extra=1" "${reason}/extra" "${reason}#extra"; do
   reject set "$key" off --reason "$bad_reason"
-  grep -qE 'Question comment.*flag key and target mode.*#comment-<id>' "$tmp/output"
+  grep -qE 'clear yes from Valentin within 7 days:.*thumbs up on a switch question.*ticket yes after exactly one switch question.*in-chat record.*HT Product Lead.*#comment-<id>.*questions name Switch <flag-key> to <mode>' "$tmp/output"
 done
 reject set "$key" off --reason 'https://app.hypertask.ai/page/approval'
 reject set "$key" off --reason 'https://app.hypertask.ai/detail/project-4060/215/extra'

@@ -21,6 +21,7 @@ function matches(row, where = {}) {
     if (key === 'not') return !matchesValue(row, value);
     if (key === 'equals') return String(row).toLowerCase() === String(value).toLowerCase();
     if (key === 'contains') return String(row).toLowerCase().includes(value.toLowerCase());
+    if (key === 'startsWith') return row.startsWith(value);
     if (key === 'gt') return row > value;
     if (key === 'gte') return row >= value;
     if (key === 'lte') return row <= value;

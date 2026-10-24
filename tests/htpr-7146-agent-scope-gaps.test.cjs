@@ -73,11 +73,22 @@ for (const [mode, kind] of cases) {
       upsert: async () => { f.writes.push('flag'); return { key, mode: 'OFF', updatedAt: null, releasedAt: null, keep: false, removalTaskId: null }; },
     };
     f.prisma.featureFlagChange = { findMany: async () => [] };
-    const comment = { id: 123, taskId: 150, editedAt: null, text: `Question: Switch ${key} to Off?`, task: f.tasks[0] };
-    f.prisma.comment = { findFirst: async args => matches(comment, { ...args.where, reactions: undefined }) ? hydrate(comment, args) : null };
+    const comment = {
+      id: 123, taskId: 150, creatorId: f.user.id, agentId: f.agent.id, agentDisplayName: null,
+      editedAt: null, editedByUserId: null, editedByAgentId: null, createdAt: new Date(),
+      text: `Question: Switch ${key} to Off?`, commentText: null, task: f.tasks[0],
+      reactions: [{ userId: f.user.id, agentId: null, agentDisplayName: null, isDeleted: false, unified: '1f44d', createdAt: new Date() }],
+    };
+    f.prisma.comment = {
+      findFirst: async args => matches(comment, args.where) ? hydrate(comment, args) : null,
+      findMany: async args => [comment].filter(row => matches(row, args.where)).map(row => hydrate(row, args)),
+    };
     const flags = f.load('src/lib/flags.ts', { '@/lib/flags/modeCache': { withFlagModeInvalidation: run => run() } });
     const route = f.load('src/app/api/mcp/flags/route.ts', {
-      '@/lib/flags': { ...flags, isFeatureFlagOwnerUserId: async () => true, isFeatureEnabled: async () => false },
+      '@/lib/flags': { ...flags, isFeatureFlagOwnerUserId: async () => true, isFeatureEnabled: async flagKey => {
+        assert.ok(['htpr-7364-batch-flag-approval', 'htpr-7727-plain-yes-flag-approval'].includes(flagKey));
+        return false;
+      } },
       '@/lib/realtime/server': { broadcastFeatureFlagsChange: async () => {} },
     });
     const get = await route.GET(request(`/api/mcp/flags?key=${key}`));
