@@ -14,6 +14,7 @@ function workflowJob(name) {
 const reconciliation = workflowJob("reconcile-open-pull-requests");
 const perPrPublisher = workflowJob("publish-pull-request");
 const reconcilePublisher = workflowJob("publish-reconciliation");
+const initialPublisher = workflowJob("mark-pull-request-pending");
 
 function shellScript(job) {
   return job.match(/        run: \|\n(          set -uo pipefail[\s\S]*)/)[1].replace(/^          /gm, "");
@@ -96,7 +97,7 @@ function runWorkflow(t, {
   job = reconciliation, drift = false, missingHead = false, apiFailure,
   gateScript = 'console.log("ok");\n', statuses = () => ({}), sharedHead = false,
   refreshedPull = (pull) => pull, freshSharedHead = false, forkHead = false,
-  statusesBeforePublish, prepareStatuses = (records) => records,
+  statusesBeforePublish, pullBeforePublish, prepareStatuses = (records) => records,
 } = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -257,6 +258,9 @@ exit 1
   const records = prepareStatuses(JSON.parse(outputs.statuses || "[]"), pull);
   if (statusesBeforePublish) {
     fs.writeFileSync(env.FIXTURE_STATUSES, JSON.stringify(statusesBeforePublish(pull)));
+  }
+  if (pullBeforePublish) {
+    fs.writeFileSync(env.FIXTURE_CURRENT_PR, JSON.stringify(pullBeforePublish(pull)));
   }
   let publication = { status: 0, stdout: "", stderr: "" };
   if (records.length) {
@@ -525,7 +529,7 @@ for (const endpoint of ['/commits/', '/pulls/42', '/statuses/']) {
 
 test('both status writers share a fixed publish-only lock without cancelling active jobs', () => {
   assert.doesNotMatch(workflow, /\bgh api\b|\$\(gh_api\b/);
-  assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 4);
+  assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 5);
   assert.match(singlePullRequest, /group: feature-flag-gate-pr-\$\{\{ github\.event\.pull_request\.number \}\}/);
   assert.match(reconciliation, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
   for (const evaluation of [singlePullRequest, reconciliation]) {
@@ -533,10 +537,10 @@ test('both status writers share a fixed publish-only lock without cancelling act
     assert.match(evaluation, /elif node \.github\/scripts\/feature-flag-gate\.mjs/);
     assert.match(evaluation, /steps\.evaluate\.outputs\.statuses/);
   }
-  for (const publisher of [perPrPublisher, reconcilePublisher]) {
+  for (const publisher of [perPrPublisher, reconcilePublisher, initialPublisher]) {
     assert.match(publisher, /group: feature-flag-gate-publish\s*cancel-in-progress: false/);
     assert.doesNotMatch(publisher, /npm ci|git fetch|feature-flag-gate\.mjs/);
-    assert.match(publisher, /if: always\(\) && needs\./);
+    if (publisher !== initialPublisher) assert.match(publisher, /if: always\(\) && needs\./);
     assert.equal((publisher.match(/gh_api -X POST/g) || []).length, 1);
     assert.match(publisher, /publish_status_if_current "\$record"/);
     assert.match(publisher, /--arg job_started_at "\$job_started_at" --arg fingerprint "\$fingerprint"/);
@@ -546,6 +550,8 @@ test('both status writers share a fixed publish-only lock without cancelling act
     assert.ok(publisher.indexOf('/commits/$head_sha/statuses') < publisher.indexOf('gh_api -X POST'));
   }
   assert.equal(shellScript(perPrPublisher), shellScript(reconcilePublisher));
+  assert.equal(shellScript(initialPublisher), shellScript(perPrPublisher));
+  assert.match(singlePullRequest, /needs: mark-pull-request-pending/);
 });
 
 for (const job of [singlePullRequest, reconciliation]) {
@@ -580,10 +586,22 @@ for (const job of [singlePullRequest, reconciliation]) {
       assert.equal(posts.at(-1).state, "failure");
     });
   }
+  test(`${name}: a newer failure also protects against a queued pending status`, (t) => {
+    const { result, output, posts } = runWorkflow(t, {
+      job,
+      prepareStatuses: (records) => records.map((record) => ({ ...record, payload: { ...record.payload, state: "pending" } })),
+      statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, {
+        state: "failure", created_at: "2099-01-01T00:00:00Z",
+      })] }),
+    });
+    assert.equal(result.status, 0, output);
+    assert.deepEqual(posts, []);
+    assert.match(output, /newer final feature-flag-gate status has the same fingerprint/);
+  });
   test(`${name}: metadata changing while waiting for the publish lock cannot publish an obsolete verdict`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
       job,
-      prepareStatuses: (records) => records.map((record) => ({ ...record, fingerprint: "ffg=obsolete" })),
+      pullBeforePublish: (pull) => ({ ...pull, title: pull.title + " changed while queued" }),
     });
     assert.equal(result.status, 0, output);
     assert.deepEqual(posts, []);
@@ -606,6 +624,19 @@ test('the shared lock excludes GET -> success POST -> pending POST, and queued p
   const publication = calls.filter((call) => call.endpoint.includes('/commits/') || call.args.includes('POST'));
   assert.deepEqual(publication.map((call) => call.args.includes('POST') ? 'POST' : 'GET'), ['GET', 'POST', 'GET']);
   assert.match(output, /newer final feature-flag-gate status has the same fingerprint/);
+});
+
+test('pending followed by the serialized final publisher leaves the context successful', (t) => {
+  const { result, output, posts } = runWorkflow(t, {
+    job: reconciliation,
+    prepareStatuses: (records) => [
+      { ...records[0], job_started_at: "2000-01-01T00:00:00Z", payload: { ...records[0].payload, state: "pending" } },
+      { ...records[0], job_started_at: "2000-01-01T00:00:00Z", payload: { ...records[0].payload, state: "success" } },
+    ],
+  });
+  assert.equal(result.status, 0, output);
+  assert.deepEqual(posts.map((post) => post.state), ["pending", "success"]);
+  assert.equal(posts.at(-1).context, "feature-flag-gate");
 });
 
 test('a genuine evaluation error is not hidden by rate limiting its error-status post', (t) => {

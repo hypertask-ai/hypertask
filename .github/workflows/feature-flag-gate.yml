@@ -13,8 +13,112 @@ permissions:
   contents: read
 
 jobs:
-  feature-flag-gate:
+  mark-pull-request-pending:
     if: github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
+    name: mark-feature-flag-gate-pending
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: feature-flag-gate-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Prepare initial pending status
+        id: pending
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          jq -cnr --argjson number "$PR_NUMBER" --arg head_sha "$HEAD_SHA" \
+            --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+            [{pr_number: $number, head_sha: $head_sha, job_started_at: $started_at,
+              fingerprint: "", deduplicate: false, payload: {
+                state: "pending", context: "feature-flag-gate",
+                description: "feature-flag-gate is evaluating this pull request"
+              }}] | "statuses=\(.)"' >>"$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+
+      - name: Publish prepared feature-flag statuses
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PREPARED_STATUSES: ${{ steps.pending.outputs.statuses }}
+          EVALUATION_FAILED: "0"
+        run: |
+          set -uo pipefail
+          gate_tmp=$(mkdir -p "${RUNNER_TEMP:-/tmp}" && mktemp -d "${RUNNER_TEMP:-/tmp}/feature-flag-publish.XXXXXX") || exit 2
+          trap 'rm -rf "$gate_tmp"' EXIT
+          export GH_API_NO_WAIT=1
+          source .github/scripts/github-api-retry.sh
+          gh_api_failed=${EVALUATION_FAILED:-0}
+          failures=0
+          jq -c '.[]' <<<"$PREPARED_STATUSES" >"$gate_tmp/statuses.jsonl" || exit 2
+
+          publish_status_if_current() {
+            local record="$1"
+            local number head_sha job_started_at evaluated_fingerprint fingerprint title base_sha labels
+            number=$(jq -er '.pr_number' <<<"$record") || return 1
+            head_sha=$(jq -er '.head_sha' <<<"$record") || return 1
+            job_started_at=$(jq -er '.job_started_at' <<<"$record") || return 1
+            evaluated_fingerprint=$(jq -r '.fingerprint' <<<"$record") || return 1
+            gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || return 1
+            if ! jq -e --arg sha "$head_sha" '
+              .state == "open" and .base.ref == "production" and .head.sha == $sha
+            ' "$gate_tmp/current.json" >/dev/null; then
+              echo "skip #$number: pull request head or base moved before status publication"
+              return 0
+            fi
+            title=$(jq -er '.title' "$gate_tmp/current.json") || return 1
+            base_sha=$(jq -er '.base.sha' "$gate_tmp/current.json") || return 1
+            labels=$(jq -c '[.labels[]?.name // empty] | sort' "$gate_tmp/current.json") || return 1
+            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$labels" | sha256sum | cut -c1-16)"
+            if [ -n "$evaluated_fingerprint" ] && [ "$evaluated_fingerprint" != "$fingerprint" ]; then
+              echo "skip #$number: evaluation inputs changed before status publication"
+              return 0
+            fi
+            jq --arg target_url "$RUN_URL#$fingerprint" '.payload | .target_url = $target_url' <<<"$record" >"$gate_tmp/payload.json" || return 1
+            gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$gate_tmp/latest-statuses.json" || return 1
+            if jq -e --arg job_started_at "$job_started_at" --arg fingerprint "$fingerprint" '
+              map(select(.context == "feature-flag-gate"))[0] as $current |
+              ($current.state == "success" or $current.state == "failure") and
+              ($current.created_at // "") > $job_started_at and
+              ($current.target_url // "" | split("#")[1:] | join("#")) == $fingerprint
+            ' "$gate_tmp/latest-statuses.json" >/dev/null; then
+              echo "skip #$number: newer final feature-flag-gate status has the same fingerprint"
+              return 0
+            fi
+            if jq -e '.deduplicate' <<<"$record" >/dev/null && jq -e --slurpfile payload "$gate_tmp/payload.json" '
+              map(select(.context == "feature-flag-gate"))[0] as $current |
+              $payload[0] as $status |
+              $current.state == $status.state and $current.description == $status.description and
+              ($current.target_url // "" | split("#")[1:] | join("#")) ==
+                ($status.target_url | split("#")[1:] | join("#"))
+            ' "$gate_tmp/latest-statuses.json" >/dev/null; then
+              return 0
+            fi
+            gh_api -X POST "repos/$REPO/statuses/$head_sha" --input "$gate_tmp/payload.json" >/dev/null
+          }
+
+          while IFS= read -r record; do
+            if ! publish_status_if_current "$record"; then
+              echo "::error::Cannot publish prepared feature-flag-gate status."
+              failures=$((failures + 1))
+            fi
+          done <"$gate_tmp/statuses.jsonl"
+          if [ "$failures" -gt 0 ]; then exit 2; fi
+
+  feature-flag-gate:
+    needs: mark-pull-request-pending
+    if: always() && github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
     name: feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -465,6 +569,7 @@ jobs:
           export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
 
           while IFS= read -r pull; do
+            number=""
             fingerprint=""
             if ! jq -e '
               (.number | type == "number") and (.title | type == "string") and

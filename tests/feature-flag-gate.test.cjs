@@ -1168,7 +1168,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   const parserLock = JSON.parse(fs.readFileSync(path.join(root, ".github/scripts/feature-flag-parser/package-lock.json"), "utf8"));
   assert.equal(parserLock.packages["node_modules/typescript"].version, "6.0.3");
   assert.match(parserLock.packages["node_modules/typescript"].integrity, /^sha512-/);
-  assert.equal((workflow.match(/ref: production/g) || []).length, 4);
+  assert.equal((workflow.match(/ref: production/g) || []).length, 5);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
   assert.match(workflow, /git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production "refs\/pull\/\$PR_NUMBER\/head"/);
@@ -1215,10 +1215,10 @@ test("both writers lock fresh fingerprint checks through POST, excluding success
     assert.match(evaluation, /elif node \.github\/scripts\/feature-flag-gate\.mjs/);
     assert.doesNotMatch(evaluation, /gh_api -X POST|statuses: write|group: feature-flag-gate-publish/);
   }
-  for (const name of ["publish-pull-request", "publish-reconciliation"]) {
+  for (const name of ["mark-pull-request-pending", "publish-pull-request", "publish-reconciliation"]) {
     const publisher = job(name);
     assert.match(publisher, /group: feature-flag-gate-publish\s+cancel-in-progress: false/);
-    assert.match(publisher, /if: always\(\) && needs\./);
+    if (name !== "mark-pull-request-pending") assert.match(publisher, /if: always\(\) && needs\./);
     assert.doesNotMatch(publisher, /git fetch|npm ci|feature-flag-gate\.mjs/);
     assert.match(publisher, /--arg job_started_at "\$job_started_at" --arg fingerprint "\$fingerprint"/);
     assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure"\) and/);
@@ -1233,6 +1233,8 @@ test("both writers lock fresh fingerprint checks through POST, excluding success
     assert.equal((publisher.match(/gh_api -X POST/g) || []).length, 1);
     assert.match(publisher, /while IFS= read -r record; do\s+if ! publish_status_if_current "\$record"/);
   }
+  assert.match(job("feature-flag-gate"), /needs: mark-pull-request-pending/);
+  assert.match(job("mark-pull-request-pending"), /state: "pending", context: "feature-flag-gate"/);
   for (const evaluation of [job("feature-flag-gate"), job("reconcile-open-pull-requests")]) {
     assert.match(evaluation, /elif \[ "\$result" -eq 3 \]; then\s+state=pending/);
     assert.match(evaluation, /if ! queue_status/);
