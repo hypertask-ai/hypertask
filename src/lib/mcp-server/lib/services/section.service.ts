@@ -2,6 +2,7 @@ import type { IApiClient } from '../../types/index';
 import { logger } from '../../utils/logger';
 import { generateCorrelationId } from '../../utils/correlation';
 import { SectionCrudInputSchema } from '../../validations/project.validation';
+import { columnRoleFor, type BoardColumnRole } from '@/lib/mcp/boards/columnRole';
 import type {
   SectionListItem,
   ListSectionsResponse,
@@ -57,6 +58,7 @@ export class SectionService {
           include_tasks: validatedInput.include_tasks,
           limit: validatedInput.limit,
           offset: validatedInput.offset,
+          role: validatedInput.role,
         });
       case 'create':
         return this.createSection({
@@ -94,6 +96,7 @@ export class SectionService {
     fields?: string | string[];
     limit?: number;
     cursor?: string;
+    role?: BoardColumnRole;
   }): Promise<ListSectionsResponse> {
     const correlationId = generateCorrelationId();
     const queryParams = new URLSearchParams();
@@ -108,8 +111,13 @@ export class SectionService {
       correlationId
     );
 
-    logger.info('Sections listed', { correlationId, projectId: params.project_id });
-    return response;
+    const sections = response.sections.map(withRole);
+    logger.info('Sections listed', { correlationId, projectId: params.project_id, role: params.role });
+
+    if (params.role === undefined) {
+      return { ...response, sections };
+    }
+    return { ...response, sections: sections.filter((section) => section.role === params.role) };
   }
 
   private async getSectionWithTasks(params: {
@@ -118,6 +126,7 @@ export class SectionService {
     include_tasks?: boolean;
     limit?: number;
     offset?: number;
+    role?: BoardColumnRole;
   }): Promise<GetSectionResponse> {
     const correlationId = generateCorrelationId();
     const includeTasks = params.include_tasks !== false;
@@ -133,9 +142,16 @@ export class SectionService {
       throw new Error(`Section ${params.section_id} not found in project ${params.project_id}`);
     }
 
+    const resolved = withRole(section);
+    if (params.role !== undefined && resolved.role !== params.role) {
+      throw new Error(
+        `Section ${params.section_id} has role ${resolved.role}, not ${params.role}. Roles follow the column title; use action list with role to find the column.`
+      );
+    }
+
     const result: GetSectionResponse = {
       success: true,
-      section,
+      section: resolved,
     };
 
     if (!includeTasks) {
@@ -197,8 +213,7 @@ export class SectionService {
       correlationId
     );
 
-
-    return response;
+    return { ...response, section: withRole(response.section) };
   }
 
   private async updateSection(params: {
@@ -222,8 +237,7 @@ export class SectionService {
       correlationId
     );
 
-
-    return response;
+    return { ...response, section: withRole(response.section) };
   }
 
   private async deleteSection(params: {
@@ -245,4 +259,8 @@ export class SectionService {
 
     return response;
   }
+}
+
+function withRole(section: SectionListItem): SectionListItem {
+  return { ...section, role: columnRoleFor(section) };
 }
