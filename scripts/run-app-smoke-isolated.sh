@@ -240,15 +240,28 @@ trusted_runtime=(
 
 database_client_mounts=()
 if [ "$dependencies_mount" != "$trusted_root/node_modules" ]; then
-  for generated_client in "$dependencies_mount/.prisma" "$dependencies_mount/@prisma"; do
-    [ -d "$generated_client" ] || {
-      echo "Generated Prisma client missing from the candidate dependencies: $generated_client" >&2
-      exit 1
-    }
-  done
+  mkdir -p "$scratch/candidate-client"
+  docker run --rm --name "${generate}-client" \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --read-only \
+    --pids-limit 64 \
+    --memory 256m \
+    --tmpfs /tmp:rw,nosuid,nodev,size=64m \
+    -v "$dependencies_mount:/dependencies:ro" \
+    -v "$scratch/candidate-client:/out" \
+    "$runtime_image" bash -euo pipefail -c '
+      for generated_client in .prisma @prisma; do
+        [ -d "/dependencies/$generated_client" ]
+        cp -a "/dependencies/$generated_client" /out/
+      done
+    ' || {
+    echo "Generated Prisma client missing from the candidate dependencies." >&2
+    exit 1
+  }
   database_client_mounts=(
-    -v "$dependencies_mount/.prisma:/trusted/node_modules/.prisma:ro"
-    -v "$dependencies_mount/@prisma:/trusted/node_modules/@prisma:ro"
+    -v "$scratch/candidate-client/.prisma:/trusted/node_modules/.prisma:ro"
+    -v "$scratch/candidate-client/@prisma:/trusted/node_modules/@prisma:ro"
   )
 fi
 

@@ -270,16 +270,21 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.match(
     isolated,
-    /-v "\$dependencies_mount\/\.prisma:\/trusted\/node_modules\/\.prisma:ro"/,
+    /-v "\$scratch\/candidate-client\/\.prisma:\/trusted\/node_modules\/\.prisma:ro"/,
   );
   assert.match(
     isolated,
-    /-v "\$dependencies_mount\/@prisma:\/trusted\/node_modules\/@prisma:ro"/,
+    /-v "\$scratch\/candidate-client\/@prisma:\/trusted\/node_modules\/@prisma:ro"/,
   );
   assert.match(isolated, /\[ "\$dependencies_mount" != "\$trusted_root\/node_modules" \]/);
+  assert.match(isolated, /-v "\$dependencies_mount:\/dependencies:ro"/);
   assert.match(
     isolated,
-    /Generated Prisma client missing from the candidate dependencies/,
+    /for generated_client in \.prisma @prisma; do/,
+  );
+  assert.match(
+    isolated,
+    /Generated Prisma client missing from the candidate dependencies\./,
   );
   assert.match(seed, /writeFile\(/);
   assert.match(seed, /flag: "wx"/);
