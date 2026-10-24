@@ -1159,6 +1159,8 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /timeout-minutes: 5/);
   assert.match(workflow, /Every event reconciles all open PRs/);
   assert.match(workflow, /group: feature-flag-gate-production/);
+  assert.match(workflow, /group: feature-flag-gate-pr-\$\{\{ github\.event\.pull_request\.number \}\}/);
+  assert.doesNotMatch(workflow, /^concurrency:/m);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal((workflow.match(/cache: npm/g) || []).length, 2);
   assert.equal((workflow.match(/cache-dependency-path: \.github\/scripts\/feature-flag-parser\/package-lock\.json/g) || []).length, 2);

@@ -12,17 +12,15 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  # Every event reconciles all open PRs, so replacing an older pending run is safe.
-  group: feature-flag-gate-production
-  cancel-in-progress: false
-
 jobs:
   feature-flag-gate:
     if: github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
     name: feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: feature-flag-gate-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     permissions:
       contents: read
       pull-requests: read
@@ -248,6 +246,10 @@ jobs:
     name: reconcile-feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      # Every event reconciles all open PRs, so replacing an older pending run is safe.
+      group: feature-flag-gate-production
+      cancel-in-progress: false
     permissions:
       contents: read
       pull-requests: read
