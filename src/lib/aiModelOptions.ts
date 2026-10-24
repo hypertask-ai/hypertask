@@ -442,6 +442,7 @@ export const aiModelOptions: TAiModelOption[] = [
     source: "gateway",
     title: "DeepSeek V4.1 Flash",
     model: "deepseek/deepseek-v4.1-flash",
+    directModel: "deepseek-flash",
     desc: "Cheapest general model",
     reasoning: "instant",
     modelKey: "deepseek-v4.1-flash",
