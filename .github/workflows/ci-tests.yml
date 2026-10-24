@@ -202,6 +202,10 @@ jobs:
         if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         run: npx prisma generate
 
+      - name: Board filter and sort contracts
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        run: node --test tests/board-filters/*.test.cjs
+
       - name: Restore TypeScript cache
         id: restore-tsc-cache
         # A stale tsbuildinfo is safe: tsc validates it against file hashes and
