@@ -179,8 +179,6 @@ const Commands = (props: Props) => {
     ? `${buildTime.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${buildTime.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}`
     : "";
   const basetenByokEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
-  let hiddenBasetenCommandKey: string | undefined;
-  if (!basetenByokEnabled) hiddenBasetenCommandKey = "settingsApiKeysBasetenApiKey";
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -268,7 +266,7 @@ const Commands = (props: Props) => {
           (command) =>
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
-            command.key !== hiddenBasetenCommandKey &&
+            (basetenByokEnabled ? true : command.key !== "settingsApiKeysBasetenApiKey") &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -414,7 +412,7 @@ const Commands = (props: Props) => {
     pinCommentActions,
     pageActions,
     googleCalendarSettingsEnabled,
-    hiddenBasetenCommandKey,
+    basetenByokEnabled,
     autoTaskDescriptionsEnabled,
     currentProject,
     frequentlyUsed,
