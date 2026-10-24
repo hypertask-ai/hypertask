@@ -281,3 +281,74 @@ export function createUserContent(
   if (fileParts.length === 0) return prompt;
   return [{ type: "text", text: prompt }, ...fileParts];
 }
+
+export async function createImageAwareUserContent(
+  body: ChatRequest,
+  authedUser: AuthedUser,
+  currentTaskContext: string,
+  modelId: string,
+  signal: AbortSignal,
+  promptCachingEnabled = false
+): Promise<UserContent> {
+  const supportsImages = /^(?:[^/]+\/)?(?:gpt-|claude-|gemini-|kimi-)/i.test(modelId);
+  const textOnly = /^(?:[^/]+\/)?deepseek-/i.test(modelId);
+  const imageUrls = new Set<string>();
+  for (const match of body.message.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
+    const candidate = match[0].replace(/[),.;!?\]}]+$/, "");
+    try {
+      const url = new URL(candidate);
+      if (/\.(?:png|jpe?g|gif|webp)$/i.test(url.pathname)) imageUrls.add(url.href);
+    } catch {
+    }
+  }
+
+  const content = createUserContent(
+    supportsImages ? body : { ...body, images64: [] },
+    authedUser,
+    currentTaskContext,
+    promptCachingEnabled,
+  );
+  const parts: Exclude<UserContent, string> = typeof content === "string"
+    ? [{ type: "text", text: content }]
+    : [...content];
+  const status: string[] = [];
+  if (supportsImages) {
+    status.push("IMAGE CAPABILITY: The selected model accepts images. Describe supplied image content; do not claim you cannot read images.");
+  } else if (textOnly) {
+    status.push("IMAGE CAPABILITY: The selected model is text-only. If images were supplied, explain that this selected model cannot see them and ask the user to select a vision-capable model.");
+  } else {
+    status.push("IMAGE CAPABILITY: Image support is unknown for the selected model. Image inputs were not sent; do not claim that all chat models lack vision.");
+  }
+
+  const attachedUrls = new Set((body.images64 ?? []).map((image) => image.url));
+  const candidates = [...imageUrls].filter((url) => !supportsImages || !attachedUrls.has(url));
+  if (supportsImages && candidates.length) {
+    const { safeFetchAttachmentUrl } = await import("@/lib/mcp/attachments/safeFetch");
+    const images = await Promise.all(candidates.slice(0, 4).map(async (url) => {
+      try {
+        const result = await safeFetchAttachmentUrl(url, signal);
+        if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(result.contentType)) {
+          status.push(`Image URL ${url}: did not return a supported image. Ask for a direct image or upload.`);
+          return null;
+        }
+        return {
+          type: "file" as const,
+          mediaType: result.contentType,
+          data: { type: "data" as const, data: new Uint8Array(result.buffer) },
+        };
+      } catch (error) {
+        if (signal.aborted) throw error;
+        status.push(`Image URL ${url}: could not be downloaded safely. Explain that the link could not be read, not that the model lacks vision; ask for an upload.`);
+        return null;
+      }
+    }));
+    for (const image of images) {
+      if (image) parts.push(image);
+    }
+    if (candidates.length > 4) status.push("Only the first four new image links were loaded. Ask the user to send the remaining images separately if needed.");
+  } else if (!supportsImages && (imageUrls.size || body.images64?.length)) {
+    status.push("Images were supplied by the user but were not sent as image content to this selected model.");
+  }
+  parts.push({ type: "text", text: status.join("\n") });
+  return parts;
+}

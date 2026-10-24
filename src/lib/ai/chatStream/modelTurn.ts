@@ -1,7 +1,7 @@
 
 
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/keys";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, HTPR_7761_CHAT_IMAGE_URLS_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
@@ -21,7 +21,7 @@ import { ToolExecution } from "@/lib/ai/chatStream/types";
 
 import { AGENT_SYSTEM_PROMPT, chatSurfacePrompt } from "@/lib/ai/chatStream/prompt";
 import { aiPromptCachingEnabled, configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { createUserContent } from "@/lib/ai/chatStream/content";
+import { createUserContent, createImageAwareUserContent } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
 import { generateConversationTitle } from "@/lib/ai/chatStream/title";
 import { buildTools } from "@/lib/ai/tools";
@@ -71,7 +71,9 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const messages: ModelMessage[] = [
     {
       role: "user",
-      content: createUserContent(resolvedBody, dbUser, currentTaskContext, promptCachingEnabled),
+      content: await isFeatureEnabled(HTPR_7761_CHAT_IMAGE_URLS_FLAG, dbUser.id)
+        ? await createImageAwareUserContent(resolvedBody, dbUser, currentTaskContext, state.selected.resolvedModelId, state.providerAbort.signal, promptCachingEnabled)
+        : createUserContent(resolvedBody, dbUser, currentTaskContext, promptCachingEnabled),
     },
   ];
   const toolExecutions: ToolExecution[] = [];
