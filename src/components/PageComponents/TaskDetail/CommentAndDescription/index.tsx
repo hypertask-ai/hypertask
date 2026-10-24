@@ -83,8 +83,8 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = useTaskContext();
   const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
-  const ticketChatSessionsReminder = ticketChatReminder && secondaryPanelsReady !== false && currentTask ? (
-    <TicketChatSessionsReminder taskId={currentTask.id} />
+  const ticketChatSessionsReminder = ticketChatReminder ? (
+    secondaryPanelsReady !== false && currentTask ? <TicketChatSessionsReminder taskId={currentTask.id} /> : null
   ) : null;
   const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
 
