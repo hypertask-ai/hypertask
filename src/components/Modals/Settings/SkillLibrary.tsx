@@ -50,6 +50,7 @@ export default function SkillLibrary({
   const [preview, setPreview] = useState<PreviewSkill[]>([]);
   const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
+  const [name, setName] = useState("");
 
   const params = useMemo(
     () => ({ ...(projectId ? { projectId } : {}), ...(teamId ? { teamId } : {}) }),
@@ -96,12 +97,14 @@ export default function SkillLibrary({
       } else {
         await axios.post("/api/ai/skills", {
           markdown,
+          name,
           projectId,
           scope,
           teamId,
         });
       }
       setMarkdown("");
+      setName("");
       setEditing(null);
       await loadSkills();
     } catch (requestError) {
@@ -297,6 +300,16 @@ export default function SkillLibrary({
       </SettingsCard>
 
       <SettingsCard title={editing ? "Edit skill" : "New skill"}>
+        {!editing && (
+          <input
+            aria-label="Skill name"
+            className={inputClass}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Skill name (optional with SKILL.md frontmatter)"
+            type="text"
+            value={name}
+          />
+        )}
         <textarea
           className={`${inputClass} min-h-[220px] resize-y font-mono`}
           onChange={(event) => setMarkdown(event.target.value)}

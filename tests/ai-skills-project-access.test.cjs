@@ -110,3 +110,90 @@ for (const teamScope of [undefined, null, { teamId: "team-1" }]) {
     assert.equal(skillErrorResponse(new Error("Database unavailable"), principal).status, 400);
   });
 }
+
+const manualSkillBody = "Review Done tickets.\n```html\n<ticket>Keep the evidence</ticket>\n```\n" + "Long instructions. ".repeat(2000).trimEnd();
+
+for (const [name, markdown, expectedName, expectedBody, description] of [
+  ["Done column triage", manualSkillBody, "Done column triage", manualSkillBody, null],
+  ["", "---\nname: Markdown review\ndescription: Check the board.\n---\nReview changes.", "Markdown review", "Review changes.", "Check the board."],
+  ["Fallback name", "---\nname: Frontmatter name\n---\nReview changes.", "Frontmatter name", "Review changes.", null],
+]) {
+  test(`Settings markdown persists, reloads and resolves for chat: ${expectedName}`, async () => {
+    const h = harness({ denied: false });
+    const saved = [];
+    h.prisma.aI_Skill.create = async ({ data }) => {
+      const skill = { id: 17, sourceUrl: null, ...data };
+      saved.push(skill);
+      return skill;
+    };
+    h.prisma.aI_Skill.findMany = async ({ where }) => {
+      assert.ok(where.OR.some(scope => scope.projectId === 15 && scope.userId === null));
+      return saved.filter(skill => !where.slug || where.slug.in.includes(skill.slug));
+    };
+    const response = await h.route.POST(new NextRequest("https://app.hypertask.ai/api/ai/skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "project", projectId: 15, name, markdown }),
+    }));
+    assert.equal(response.status, 201);
+    const { skill } = await response.json();
+    assert.equal(skill.name, expectedName);
+    assert.equal(skill.body, expectedBody);
+    assert.equal(skill.description, description);
+    assert.equal(skill.projectId, 15);
+    assert.equal(skill.userId, null);
+    assert.equal(skill.enabled, true);
+    const reloaded = await h.route.GET(request("GET"));
+    assert.equal(reloaded.status, 200);
+    assert.deepEqual((await reloaded.json()).skills, [skill]);
+    const { resolveSkillsForAiRequest } = load("src/app/api/ai/_lib/chatSkillResolution.ts", h.mocks);
+    const resolved = await resolveSkillsForAiRequest(`/${skill.slug} Review this board`, { userId: 2343, projectId: 15 });
+    assert.equal(resolved.cleanedText, "Review this board");
+    assert.deepEqual(resolved.skills, [skill]);
+    assert.ok(resolved.systemPromptAddition.includes(expectedBody));
+  });
+}
+
+test("a board member does not need an administrator role to save a manually named skill", async () => {
+  const h = harness({ denied: false });
+  const response = await h.route.POST(new NextRequest("https://app.hypertask.ai/api/ai/skills", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scope: "project", projectId: 15, name: "Member skill", markdown: "Review changes." }),
+  }));
+  assert.equal(response.status, 201);
+  assert.deepEqual(h.calls[0][1].where, { id: 15, members: { some: { userId: 2343 } } });
+  assert.equal(h.calls.find(([kind]) => kind === "create")[1].data.body, "Review changes.");
+});
+
+for (const [name, markdown, expectedError] of [
+  ["", "Review changes.", "Skill name is required"],
+  ["Large skill", "x".repeat(64 * 1024 + 1), 'Skill "Large skill" exceeds the 64KB body limit'],
+]) {
+  test(`manual skill validation returns a specific error without persisting: ${expectedError}`, async () => {
+    const h = harness({ denied: false });
+    const response = await h.route.POST(new NextRequest("https://app.hypertask.ai/api/ai/skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "project", projectId: 15, name, markdown }),
+    }));
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: expectedError });
+    assert.deepEqual(h.calls.map(([kind]) => kind), ["access", "report"]);
+  });
+}
+
+test("duplicate manual skill names return a specific conflict instead of success", async () => {
+  const { Prisma } = require("@prisma/client");
+  const h = harness({ denied: false });
+  h.prisma.aI_Skill.create = async () => {
+    throw new Prisma.PrismaClientKnownRequestError("Duplicate skill", { code: "P2002", clientVersion: "test" });
+  };
+  const response = await h.route.POST(new NextRequest("https://app.hypertask.ai/api/ai/skills", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scope: "project", projectId: 15, name: "Done column triage", markdown: "Review changes." }),
+  }));
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "A skill with this slug already exists in this scope" });
+});

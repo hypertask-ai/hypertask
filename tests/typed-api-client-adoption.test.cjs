@@ -32,7 +32,7 @@ function harness(name, flag, options = {}) {
     useEffect: (callback, dependencies) => effects.push({ callback, dependencies }),
   };
   const mocks = {
-    axios: { default: { isAxiosError: (error) => Boolean(error?.response), get: (...args) => respond("old", ...args), patch: (...args) => respond("patch", ...args), delete: (...args) => respond("delete", ...args) } },
+    axios: { default: { isAxiosError: (error) => Boolean(error?.response), get: (...args) => respond("old", ...args), post: (...args) => respond("post", ...args), patch: (...args) => respond("patch", ...args), delete: (...args) => respond("delete", ...args) } },
     react,
     "@/hooks/useFlag": { useFlag: (requested) => { assert.equal(requested, key); return flag; } },
     "@/lib/flags/keys": { HTPR_6925_TYPED_API_CLIENT_FLAG: key },
@@ -119,3 +119,49 @@ for (const flag of [false, undefined, true]) {
     assert.match(text(loading.render()), /Loading memory/);
   });
 }
+
+function elements(node) {
+  if (node == null || typeof node !== "object") return [];
+  if (Array.isArray(node)) return node.flatMap(elements);
+  return [node, ...elements(node.props?.children)];
+}
+
+for (const flag of [false, true]) {
+  test(`Board skills saves a named pasted body and refreshes the list with typed transport ${flag}`, async () => {
+    const skill = { id: 4, userId: null, projectId: 15, name: "Done column triage", slug: "done-column-triage", enabled: true };
+    const h = harness("SkillLibrary", flag, { data: { skills: [skill] } });
+    const props = { scope: "project", projectId: 15 };
+    const body = "Review Done tickets.\n```html\n<ticket>Keep the evidence</ticket>\n```";
+    const inputs = elements(h.render(props));
+    inputs.find(node => node.type === "input" && node.props["aria-label"] === "Skill name").props.onChange({ target: { value: "Done column triage" } });
+    inputs.find(node => node.type === "textarea").props.onChange({ target: { value: body } });
+    const create = elements(h.render(props)).find(node => node.type === "button" && text(node) === "Create skill");
+    assert.equal(create.props.disabled, false);
+    create.props.onClick();
+    await new Promise(setImmediate);
+    assert.deepEqual(h.calls, [
+      ["post", "/api/ai/skills", { markdown: body, name: "Done column triage", projectId: 15, scope: "project", teamId: undefined }],
+      flag ? ["typed-skills", { projectId: 15 }] : ["old", "/api/ai/skills", { params: { projectId: 15 } }],
+    ]);
+    const saved = h.render(props);
+    assert.match(text(saved), /Done column triage/);
+    assert.match(text(saved), /\/done-column-triage/);
+    assert.equal(elements(saved).find(node => node.type === "textarea").props.value, "");
+    assert.equal(elements(saved).find(node => node.props?.["aria-label"] === "Skill name").props.value, "");
+  });
+}
+
+test("Board skills keeps the draft and displays the specific save error", async () => {
+  const h = harness("SkillLibrary", false, { error: { response: { data: { error: "A skill with this slug already exists in this scope" } } } });
+  const props = { scope: "project", projectId: 15 };
+  const inputs = elements(h.render(props));
+  inputs.find(node => node.props?.["aria-label"] === "Skill name").props.onChange({ target: { value: "Done column triage" } });
+  inputs.find(node => node.type === "textarea").props.onChange({ target: { value: "Keep this draft" } });
+  elements(h.render(props)).find(node => node.type === "button" && text(node) === "Create skill").props.onClick();
+  await new Promise(setImmediate);
+  const failed = h.render(props);
+  assert.match(text(failed), /A skill with this slug already exists in this scope/);
+  assert.equal(elements(failed).find(node => node.type === "textarea").props.value, "Keep this draft");
+  assert.equal(elements(failed).find(node => node.props?.["aria-label"] === "Skill name").props.value, "Done column triage");
+  assert.deepEqual(h.calls.map(([kind]) => kind), ["post"]);
+});
