@@ -5,6 +5,7 @@ import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
 import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7079_FAILED_AI_ALLOWANCE_FLAG } from "@/lib/flags/definitions/htpr-7079-failed-ai-allowance";
+import { HTPR_7692_ALLOWANCE_DRIFT_CHECK_FLAG } from "@/lib/flags/definitions/htpr-7692-allowance-drift-check";
 import { HTPR_7687_ALLOWANCE_RESYNC_FLAG } from "@/lib/flags/definitions/htpr-7687-allowance-resync";
 import { isHaiku55Model } from "@/lib/aiModelOptions";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
@@ -35,6 +36,81 @@ const GATEWAY_REPORT_DELAY_WINDOW_MS = 15 * 60 * 1000;
 export const SYSTEM_AI_ALLOWANCE_MULTIPLIER = 10;
 
 type AllowanceLane = "visible" | "system";
+
+export type AllowanceDriftContext = {
+  mode: "legacy" | "plan";
+  monthlyUsd: number;
+  fundingSource: "managed" | "shared" | "demo" | "unknown";
+  fundingChanged?: boolean;
+};
+
+export type AllowanceRefusal = {
+  id: string;
+  time: number;
+  teamId: string | null;
+  reason: "month" | "day" | "demo";
+  lane: AllowanceLane;
+  cap: number;
+  committed: number;
+  liveHolds: number;
+  requestedHold: number;
+  policyMode: "legacy" | "plan";
+  fundingSource: AllowanceDriftContext["fundingSource"];
+};
+
+export function allowanceDriftTtl(now = new Date(), periodKey = aiAllowancePeriod(now).key) {
+  const [year, month] = periodKey.split("-").map(Number);
+  return Math.max(60, Math.ceil((Date.UTC(year, month, 8) - now.getTime()) / 1000));
+}
+
+async function observeAllowanceAttempt(args: {
+  teamId?: string;
+  fundingSource?: AllowanceDriftContext["fundingSource"];
+  policy: { mode: "legacy" | "plan"; monthlyUsd: number; demoGlobal?: boolean };
+}): Promise<boolean> {
+  try {
+    if (!await isFeatureEnabled(HTPR_7692_ALLOWANCE_DRIFT_CHECK_FLAG, 0)) return false;
+    if (!args.teamId) return Boolean(args.policy.demoGlobal);
+    const redis = await getRedis();
+    const month = aiAllowancePeriod().key;
+    const context: AllowanceDriftContext = {
+      mode: args.policy.mode, monthlyUsd: args.policy.monthlyUsd,
+      fundingSource: args.fundingSource ?? "unknown",
+    };
+    await redis.eval(`
+redis.call("SADD", KEYS[1], ARGV[1])
+redis.call("EXPIRE", KEYS[1], ARGV[3])
+local context = cjson.decode(ARGV[2])
+local previous = redis.call("GET", KEYS[2])
+if previous then
+  local saved = cjson.decode(previous)
+  if saved.fundingChanged or saved.fundingSource ~= context.fundingSource then context.fundingChanged = true end
+end
+redis.call("SET", KEYS[2], cjson.encode(context), "EX", ARGV[3])
+return 1
+`, 2, `ai-allowance-drift:${month}:active`, `ai-allowance-drift:${month}:${args.teamId}:context`,
+      args.teamId, JSON.stringify(context), String(allowanceDriftTtl()));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function recordAllowanceRefusal(event: Omit<AllowanceRefusal, "id" | "time">, month: string) {
+  try {
+    const redis = await getRedis();
+    const value: AllowanceRefusal = { ...event, id: randomUUID(), time: Date.now() };
+    await redis.eval(`
+if ARGV[1] ~= "" then redis.call("SADD", KEYS[1], ARGV[1]) end
+redis.call("EXPIRE", KEYS[1], ARGV[3])
+redis.call("LPUSH", KEYS[2], ARGV[2])
+redis.call("LTRIM", KEYS[2], 0, 99)
+redis.call("EXPIRE", KEYS[2], ARGV[3])
+return 1
+`, 2, `ai-allowance-drift:${month}:active`, `ai-allowance-drift:${month}:${event.teamId ?? "teamless:demo"}:refusals`,
+      event.teamId ?? "", JSON.stringify(value), String(allowanceDriftTtl(new Date(), month)));
+  } catch {}
+}
 
 export async function teamAllowanceSnapshot(
   teamId: string,
@@ -366,11 +442,12 @@ type GatewaySpendBreakdown = {
   visibleMicroUsd: number;
 };
 
-async function gatewaySpendBreakdownMicroUsd(
+export async function gatewaySpendBreakdownMicroUsd(
   gatewayApiKey: string,
   teamId: string,
   startDate: string,
   endDate: string,
+  signal?: AbortSignal,
 ): Promise<GatewaySpendBreakdown> {
   const params = new URLSearchParams({
     start_date: startDate,
@@ -379,6 +456,7 @@ async function gatewaySpendBreakdownMicroUsd(
     tags: `team:${teamId}`,
   });
   const response = await fetch(`${GATEWAY_BASE_URL}/report?${params}`, {
+    signal,
     cache: "no-store",
     headers: { Authorization: `Bearer ${gatewayApiKey}` },
   });
@@ -515,7 +593,10 @@ end
 local requested = tonumber(ARGV[2])
 local cap = tonumber(ARGV[3])
 local pending = ARGV[7] == "1" and tonumber(redis.call("GET", KEYS[3]) or "0") or 0
-if committed + reserved + pending + requested > cap then return 0 end
+if committed + reserved + pending + requested > cap then
+  if ARGV[8] == "1" then return {0, committed + pending, reserved} end
+  return 0
+end
 redis.call("ZADD", KEYS[2], ARGV[4], ARGV[5])
 redis.call("EXPIRE", KEYS[1], ARGV[6])
 redis.call("EXPIRE", KEYS[2], ARGV[6])
@@ -722,27 +803,41 @@ async function initializeTeamMonth(args: { teamId: string; gatewayApiKey: string
 async function boundDailyOutputTokens(args: {
   dailyUsd: number;
   gatewayApiKey: string;
+  fundingSource?: AllowanceDriftContext["fundingSource"];
   maxOutputTokens?: number;
   pricing: ModelPricing;
   prompt: unknown;
   teamId: string;
+  lane: AllowanceLane;
+  observe: boolean;
 }): Promise<number> {
   const { month, redis } = await initializeTeamMonth(args);
   const prefix = `ai-allowance:day:${month.endDate}:${args.teamId}`;
   await seedAllowanceScope(prefix, 2 * 86_400, async () =>
     (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId, month.endDate, month.endDate)).totalMicroUsd);
-  const remaining = Number(await redis.eval(`
+  const dailySnapshot = await redis.eval(`
 ${EXPIRE_RESERVATION_SCRIPT}
-local remaining = tonumber(ARGV[1]) - tonumber(redis.call("GET", KEYS[1]) or "0")
+local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
+local remaining = tonumber(ARGV[1]) - committed
 for _, member in ipairs(redis.call("ZRANGE", KEYS[2], 0, -1)) do
   remaining = remaining - reservationHeldAmount(member, KEYS[2])
 end
+if ARGV[2] == "1" then return {remaining, committed, tonumber(ARGV[1]) - committed - remaining} end
 return remaining
-`, 2, `${prefix}:committed`, `${prefix}:reservations`, String(usdToMicroUsd(args.dailyUsd))));
+`, 2, `${prefix}:committed`, `${prefix}:reservations`, String(usdToMicroUsd(args.dailyUsd)), ...(args.observe ? ["1"] : []));
+  const remaining = Number(Array.isArray(dailySnapshot) ? dailySnapshot[0] : dailySnapshot);
   let upper = Math.max(1, Math.floor(Math.min(args.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS)));
   let lower = Math.min(MIN_DAILY_OUTPUT_TOKENS, upper);
   const estimate = (maxOutputTokens: number) => estimateReservationMicroUsd({ ...args, maxOutputTokens });
-  if (estimate(MIN_DAILY_OUTPUT_TOKENS) > remaining) throw new SharedAiAllowanceExceededError(month.key, "day");
+  if (estimate(MIN_DAILY_OUTPUT_TOKENS) > remaining) {
+    if (args.observe && Array.isArray(dailySnapshot)) await recordAllowanceRefusal({
+      teamId: args.teamId, reason: "day", lane: args.lane, cap: usdToMicroUsd(args.dailyUsd),
+      committed: Number(dailySnapshot[1]), liveHolds: Number(dailySnapshot[2]),
+      requestedHold: estimate(MIN_DAILY_OUTPUT_TOKENS), policyMode: "plan",
+      fundingSource: args.fundingSource ?? "unknown",
+    }, month.key);
+    throw new SharedAiAllowanceExceededError(month.key, "day");
+  }
   while (lower < upper) {
     const middle = Math.ceil((lower + upper) / 2);
     if (estimate(middle) <= remaining) lower = middle;
@@ -754,6 +849,7 @@ return remaining
 async function reserveSharedAllowance(args: {
   allowanceUsd: number;
   gatewayApiKey: string;
+  fundingSource?: AllowanceDriftContext["fundingSource"];
   lane: AllowanceLane;
   languageModelParams?: { maxOutputTokens?: number };
   maxOutputTokens?: number;
@@ -764,11 +860,12 @@ async function reserveSharedAllowance(args: {
   resolvePolicy?: (teamId: string) => Promise<TeamAllowancePolicy>;
 }): Promise<AllowanceReservation> {
   const policy = await args.resolvePolicy?.(args.teamId);
+  const observe = await observeAllowanceAttempt({ ...args, policy: policy ?? { mode: "legacy", monthlyUsd: args.allowanceUsd } });
   const legacy = policy?.mode === "plan" ? null : await initializeTeamMonth(args);
   const pricing = await modelPricing(args.modelSlug);
   let maxOutputTokens = args.maxOutputTokens;
   if (policy?.mode === "plan" && policy.dailyUsd !== null && args.languageModelParams) {
-    maxOutputTokens = await boundDailyOutputTokens({ ...args, dailyUsd: policy.dailyUsd, pricing });
+    maxOutputTokens = await boundDailyOutputTokens({ ...args, dailyUsd: policy.dailyUsd, pricing, observe });
     args.languageModelParams.maxOutputTokens = maxOutputTokens;
   }
   const amountMicroUsd = estimateReservationMicroUsd({
@@ -781,8 +878,8 @@ async function reserveSharedAllowance(args: {
     : null;
   if (policy?.mode === "plan") {
     const scopes = await reservePlanAllowance({
-      teamId: args.teamId, policy, gatewayApiKey: args.gatewayApiKey,
-      amountUsd: amountMicroUsd / MICRO_USD_PER_USD, amountMicroUsd, lane: args.lane, userId: args.userId,
+      teamId: args.teamId, policy, gatewayApiKey: args.gatewayApiKey, fundingSource: args.fundingSource,
+      amountUsd: amountMicroUsd / MICRO_USD_PER_USD, amountMicroUsd, lane: args.lane, userId: args.userId, observe,
     });
     const scope = scopes.scopes[0];
     return { amountMicroUsd, committedKey: scope.committedKey, id: scopes.id, inputOnlyMicroUsd: inputOnly, pricing, recentSettledKey: scope.committedKey.replace(/:committed$/, ":recent-settled"), reservationsKey: scope.reservationsKey, ttlSeconds: scope.ttlSeconds, scopes };
@@ -816,8 +913,10 @@ async function reserveSharedAllowance(args: {
     member,
     String(month.ttlSeconds),
     args.lane === "visible" ? "1" : "0",
+    ...(observe ? ["1"] : []),
   );
-  let accepted = Number(await reserve()) === 1;
+  let decision = await reserve();
+  let accepted = Number(Array.isArray(decision) ? decision[0] : decision) === 1;
   if (
     !accepted &&
     followsRealSpend &&
@@ -834,9 +933,16 @@ async function reserveSharedAllowance(args: {
       teamId: args.teamId,
     }))
   ) {
-    accepted = Number(await reserve()) === 1;
+    decision = await reserve();
+    accepted = Number(Array.isArray(decision) ? decision[0] : decision) === 1;
   }
   if (!accepted) {
+    if (observe && Array.isArray(decision)) await recordAllowanceRefusal({
+      teamId: args.teamId, reason: "month", lane: args.lane,
+      cap: usdToMicroUsd(args.allowanceUsd * (args.lane === "system" ? SYSTEM_AI_ALLOWANCE_MULTIPLIER : 1)),
+      committed: Number(decision[1]), liveHolds: Number(decision[2]), requestedHold: amountMicroUsd, policyMode: "legacy",
+      fundingSource: args.fundingSource ?? "unknown",
+    }, month.key);
     throw new SharedAiAllowanceExceededError(month.key);
   }
 
@@ -915,6 +1021,7 @@ async function settleAfterInference(
 export function createSharedAllowanceMiddleware(args: {
   allowanceUsd: number;
   gatewayApiKey: string;
+  fundingSource?: AllowanceDriftContext["fundingSource"];
   modelSlug: string;
   resolvePolicy?: (teamId: string) => Promise<TeamAllowancePolicy>;
 }): LanguageModelMiddleware {
@@ -933,6 +1040,7 @@ export function createSharedAllowanceMiddleware(args: {
       allowanceUsd: args.allowanceUsd,
       resolvePolicy: args.resolvePolicy,
       gatewayApiKey: args.gatewayApiKey,
+      fundingSource: args.fundingSource,
       lane: allowanceLaneFromProviderOptions(params.providerOptions),
       languageModelParams: params,
       maxOutputTokens: params.maxOutputTokens,
@@ -1037,6 +1145,7 @@ export function createSharedAllowanceMiddleware(args: {
 export function createImageAllowanceMiddleware(args: {
   allowanceUsd: number;
   gatewayApiKey: string;
+  fundingSource?: AllowanceDriftContext["fundingSource"];
   modelSlug: string;
   resolvePolicy?: (teamId: string) => Promise<TeamAllowancePolicy>;
 }): ImageModelMiddleware {
@@ -1053,6 +1162,7 @@ export function createImageAllowanceMiddleware(args: {
         allowanceUsd: args.allowanceUsd,
         resolvePolicy: args.resolvePolicy,
         gatewayApiKey: args.gatewayApiKey,
+        fundingSource: args.fundingSource,
         lane: allowanceLaneFromProviderOptions(params.providerOptions),
         maxOutputTokens:
           DEFAULT_MAX_OUTPUT_TOKENS * Math.max(1, Math.ceil(params.n)),
@@ -1102,6 +1212,7 @@ local now = tonumber(ARGV[2])
 local amount = tonumber(ARGV[3])
 for index, scope in ipairs(scopes) do
   local total = 0
+  local held = 0
   for _, pair in ipairs(scope.pairs) do
     local expired = redis.call("ZRANGEBYSCORE", KEYS[pair[2]], "-inf", now)
     for _, member in ipairs(expired) do
@@ -1109,11 +1220,14 @@ for index, scope in ipairs(scopes) do
     end
     total = total + tonumber(redis.call("GET", KEYS[pair[1]]) or "0")
     for _, member in ipairs(redis.call("ZRANGE", KEYS[pair[2]], 0, -1)) do
-      total = total + reservationHeldAmount(member, KEYS[pair[2]])
+      held = held + reservationHeldAmount(member, KEYS[pair[2]])
     end
   end
   if scope.pending then total = total + tonumber(redis.call("GET", KEYS[scope.pending]) or "0") end
-  if total + amount > scope.cap then return -index end
+  if total + held + amount > scope.cap then
+    if ARGV[6] == "1" then return {-index, total, held} end
+    return -index
+  end
 end
 for _, scope in ipairs(scopes) do
   local pair = scope.pairs[scope.writeIndex]
@@ -1184,16 +1298,20 @@ export async function reservePlanAllowance(args: {
   teamId?: string;
   policy: TeamAllowancePolicy;
   gatewayApiKey: string;
+  fundingSource?: AllowanceDriftContext["fundingSource"];
   amountUsd: number;
   amountMicroUsd?: number;
   lane?: AllowanceLane;
   userId?: number | null;
+  observe?: boolean;
 }): Promise<PlanAllowanceReservation> {
   if (args.policy.mode !== "plan" || !Number.isFinite(args.amountUsd) || args.amountUsd < 0 ||
     (args.amountMicroUsd !== undefined && (!Number.isSafeInteger(args.amountMicroUsd) || args.amountMicroUsd < 0))) {
     throw new Error("Plan AI allowance reservation requires a plan policy and a valid amount");
   }
   if (!args.teamId && !args.policy.demoGlobal) throw new Error("AI allowance reservation requires an owning team or demo scope");
+  const fundingSource = args.fundingSource ?? (!args.teamId && args.policy.demoGlobal ? "demo" : "unknown");
+  const observe = args.observe ?? await observeAllowanceAttempt({ ...args, fundingSource });
   const now = new Date();
   const month = aiAllowancePeriod(now);
   const scopes: AllowanceScope[] = [];
@@ -1227,8 +1345,9 @@ export async function reservePlanAllowance(args: {
   const redis = await getRedis();
   const followsRealSpend = await allowanceFollowsRealSpend(args.userId ?? null);
   const reserve = () => redis.eval(RESERVE_SCOPES_SCRIPT, keys.length, ...keys,
-    JSON.stringify(encoded), String(Date.now()), String(amount), String(Date.now() + RESERVATION_TTL_MS), id);
-  let accepted = Number(await reserve());
+    JSON.stringify(encoded), String(Date.now()), String(amount), String(Date.now() + RESERVATION_TTL_MS), id, ...(observe ? ["1"] : []));
+  let decision = await reserve();
+  let accepted = Number(Array.isArray(decision) ? decision[0] : decision);
   if (accepted !== 1 && scopes[-accepted - 1]?.reason === "month" && args.teamId && followsRealSpend) {
     const scope = scopes[-accepted - 1];
     let resynced = false;
@@ -1242,11 +1361,19 @@ export async function reservePlanAllowance(args: {
       });
       resynced = changed || resynced;
     }
-    if (resynced) accepted = Number(await reserve());
+    if (resynced) {
+      decision = await reserve();
+      accepted = Number(Array.isArray(decision) ? decision[0] : decision);
+    }
   }
   if (accepted !== 1) {
     const refused = scopes[-accepted - 1];
     if (!refused) throw new Error("Invalid AI allowance reservation response");
+    if (observe && Array.isArray(decision)) await recordAllowanceRefusal({
+      teamId: args.teamId ?? null, reason: refused.reason, lane: args.lane ?? "visible", cap: refused.cap,
+      committed: Number(decision[1]), liveHolds: Number(decision[2]), requestedHold: amount, policyMode: "plan",
+      fundingSource,
+    }, month.key);
     throw new SharedAiAllowanceExceededError(month.key, refused.reason);
   }
   return { id, scopes: originalScopes };

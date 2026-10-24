@@ -133,6 +133,7 @@ function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
     providerId: "gateway",
     middleware: createSharedAllowanceMiddleware({
       allowanceUsd,
+      fundingSource,
       resolvePolicy: async (teamId) => {
         const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
         return resolveTeamAllowancePolicy(teamId, fundingSource);
@@ -155,6 +156,7 @@ function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
         model,
         providerId: "gateway",
         middleware: createImageAllowanceMiddleware({
+          fundingSource,
           resolvePolicy: async (teamId) => {
             const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
             return resolveTeamAllowancePolicy(teamId, fundingSource);
