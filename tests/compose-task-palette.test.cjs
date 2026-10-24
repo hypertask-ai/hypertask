@@ -54,9 +54,9 @@ async function withPalette(t, config, check) {
   const stubbed = new Set();
   const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
+  const flags = { 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const TaskContext = React.createContext(undefined);
-  const atomNames = ['keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
+  const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
   const values = new Map(Object.entries({
@@ -1714,4 +1714,21 @@ test('HTPR-7547 queued Compose Enter submits once when mobile focus lands in a l
       });
     }
   }
+});
+
+test('three-switch creation marks the new ticket and leaves opening to its page policy', async (t) => {
+  await withPalette(t, { open: false, newWindow: true, autoOpenSwitches: true }, async ({ press, type, finish, values, set, navigations }) => {
+    await React.act(async () => {
+      set('showAIChatInterfaceAtom', false);
+      set('aiChatAutoOpenSuppressedAtom', true);
+    });
+    await press('j', { ctrlKey: true }, document.body);
+    await type('Create a ticket with page-specific chat preferences');
+    await press('Enter');
+    await finish();
+    assert.deepEqual(navigations, ['/detail/project-7/44']);
+    assert.equal(values.get('aiChatNewTicketPathAtom'), '/detail/project-7/44');
+    assert.equal(values.get('showAIChatInterfaceAtom'), false);
+    assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), true);
+  });
 });

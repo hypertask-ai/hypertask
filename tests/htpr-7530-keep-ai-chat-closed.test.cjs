@@ -7,7 +7,7 @@ const React = require("react");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-7530-keep-ai-chat-closed";
-const flagModule = { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: flagKey };
+const flagModule = { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: flagKey, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: "htpr-7650-ai-chat-open-switches" };
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, mocks) {
   const loadedModule = { exports: {} };
@@ -55,16 +55,17 @@ test("Task Page reuses the adjacent SettingsToggle row, preserves the other sett
     for (const saved of [false, true]) {
       const values = { open: true, closed: saved };
       const { default: Section } = load("src/components/Modals/Settings/TaskPageSection.tsx", {
+        "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false }) },
         "@/components/sidebars/RightSidebar/UserPreference": inert,
         "@/lib/state": { useRecoilState: (key) => [values[key], (next) => { values[key] = next(values[key]); }] },
         "@/store": { openAiChatByDefaultAtom: "open", keepAiChatClosedAtom: "closed" },
-        "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flagKey); return enabled; } },
+        "@/hooks/useFlag": { useFlag: (key) => { if (key === flagModule.HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG) return false; assert.equal(key, flagKey); return enabled; } },
         "@/lib/flags/keys": flagModule,
         "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert,
         "./SettingsToggle": { __esModule: true, default: Toggle },
       });
       const card = Section().props.children;
-      const children = React.Children.toArray(card.props.children);
+      const children = React.Children.toArray(card.props.children).flatMap((child) => child.type === React.Fragment ? React.Children.toArray(child.props.children) : [child]);
       const toggles = children.filter((child) => child.type === Toggle);
       assert.equal(toggles.length, enabled ? 2 : 1);
       assert.equal(toggles[0].props.label, "Open AI chat by default");
@@ -92,6 +93,8 @@ test("closed automatic chat reserves no empty column, but manually opened chat s
   for (const keepAiChatClosed of [false, true]) {
     for (const ready of [false, true]) {
       const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
+        "@/hooks/useFlag": { useFlag: () => false },
+        "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: "htpr-7650-ai-chat-open-switches" },
         "@/hooks/General/useKeepAiChatClosed": { useKeepAiChatClosed: () => ({ keepAiChatClosed, ready }) },
         "@/lib/state": { useRecoilValue: (key) => ({ pinned: true, open: true, sidebar: true, width: 517 })[key] },
         "@/store": { aiChatPinnedAtom: "pinned", openAiChatByDefaultAtom: "open", isAiChatSidebarModeAtom: "sidebar", aiChatSidebarWidthPxAtom: "width" },
