@@ -15,6 +15,8 @@ import {
   slugifySkill,
 } from "@/app/api/ai/_lib/skillMarkdown";
 import prisma from "@/lib/prisma";
+import { HTPR_7663_SCOPED_AGENT_SKILLS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,14 +48,21 @@ export async function GET(request: NextRequest) {
     if (projectIdValue && (!Number.isInteger(projectId) || Number(projectId) <= 0)) {
       throw new Error("project_id must be a positive integer");
     }
-    if (!projectId && ctx.teamScope != null) throw new Error("Account-global skills access denied");
+    if (!projectId && ctx.teamScope != null
+      && !await isFeatureEnabled(HTPR_7663_SCOPED_AGENT_SKILLS_FLAG, userId).catch(() => false)) {
+      throw new Error("Account-global skills access denied");
+    }
     if (projectId) await assertProjectAccess(userId, projectId, ctx.agentId, ctx.teamScope);
 
     const skills = await prisma.aI_Skill.findMany({
       where: {
         OR: [
           ...(ctx.teamScope != null ? [] : [{ userId, projectId: null }]),
-          ...(projectId ? [{ projectId, userId: null }] : []),
+          ...(projectId || ctx.teamScope != null ? [{
+            ...(projectId ? { projectId } : {}),
+            userId: null,
+            project: { is: getProjectWhere(userId, ctx.agentId, ctx.teamScope) },
+          }] : []),
         ],
       },
       orderBy: [{ name: "asc" }, { id: "asc" }],
