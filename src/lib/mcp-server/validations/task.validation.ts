@@ -350,7 +350,7 @@ export function getFindRelatedTasksInputSchema() {
     .refine(
       (data) => {
         const methodCount = [
-          data.task_id,
+          data.task_id ?? data.id,
           data.ticket_number,
           data.unique_index,
         ].filter((value) => value !== undefined).length;
@@ -420,7 +420,7 @@ export function getUpdateTaskInputSchema() {
   return baseSchema
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
         return hasTaskId || hasTicketNumber || hasUniqueIndex;
@@ -432,7 +432,7 @@ export function getUpdateTaskInputSchema() {
     )
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
@@ -518,7 +518,7 @@ export function getAssignUserInputSchema() {
   return baseSchema
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
         return hasTaskId || hasTicketNumber || hasUniqueIndex;
@@ -530,7 +530,7 @@ export function getAssignUserInputSchema() {
     )
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
@@ -652,7 +652,7 @@ export function getMoveTaskBetweenBoardsInputSchema() {
   return getMoveTaskBetweenBoardsBaseSchema()
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
         return hasTaskId || hasTicketNumber || hasUniqueIndex;
@@ -664,7 +664,7 @@ export function getMoveTaskBetweenBoardsInputSchema() {
     )
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
