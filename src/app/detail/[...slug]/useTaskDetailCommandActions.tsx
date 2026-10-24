@@ -262,7 +262,9 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext, blo
 }
 
 export function useTaskDetailCommandActions(getContext: () => TaskDetailContext) {
-  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  let blockerCommentEnabled = false;
+  if (blockerCommentFlag) blockerCommentEnabled = true;
   const actions = createTaskDetailCommandActions(getContext, blockerCommentEnabled);
   const { getCurrentCommentIndex } = actions;
   const { currentId, comments, toggleEmojiPicker, replyToCommentHandler } = getContext();
