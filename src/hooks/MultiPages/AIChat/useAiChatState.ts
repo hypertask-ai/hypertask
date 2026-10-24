@@ -202,7 +202,7 @@ export function useAiChatState() {
     deleteSession: deleteSessionInHistory,
   } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
   const keepDrafts = useFlag(HTPR_7770_AI_CHAT_DRAFTS_FLAG);
-  useAiChatDraft(editor, currentUser?.id, activeSession ?? currentSession?.id, keepDrafts,
+  const captureDraftSubmission = useAiChatDraft(editor, currentUser?.id, activeSession ?? currentSession?.id, keepDrafts,
     !activeSession || currentSession?.id === activeSession ? currentSession?.agentId : undefined);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -264,6 +264,6 @@ export function useAiChatState() {
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
-  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, keepDrafts,
+  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, keepDrafts, captureDraftSubmission,
   };
 }

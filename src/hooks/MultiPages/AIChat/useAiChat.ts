@@ -44,7 +44,7 @@ export function useAiChat() {
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
-  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, keepDrafts,
+  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, keepDrafts, captureDraftSubmission,
   } = useAiChatState();
   useEffect(editWithAiEnabled ? () => {
     if (editTaskId === null) return;
@@ -81,7 +81,7 @@ export function useAiChat() {
   const {
   handleSendMessage,
   } = createAiChatSend({
-    sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession, keepDrafts,
+    sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession, keepDrafts, captureDraftSubmission,
     isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,

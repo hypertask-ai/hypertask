@@ -11,6 +11,7 @@ export function useAiChatDraft(
 ) {
   const drafts = useRef(new Map<string, string>());
   const previousBinding = useRef<{ key: string; editor: Editor } | null>(null);
+  const submission = useRef<(() => () => void) | null>(null);
 
   useLayoutEffect(() => {
     if (!enabled || !editor || userId === undefined || !sessionId) return;
@@ -18,9 +19,14 @@ export function useAiChatDraft(
     const cached = drafts.current.get(key);
     let revision = cached || null;
     let stored = cached;
+    let recovery: string | null = null;
     try {
       revision = window.localStorage.getItem(key);
       stored = revision ?? undefined;
+    } catch {}
+    try {
+      recovery = window.sessionStorage.getItem(key);
+      if (recovery !== null) stored = recovery;
     } catch {}
     const sameBinding = previousBinding.current?.key === key && previousBinding.current.editor === editor;
     const hasInitialText = previousBinding.current === null && !editor.isEmpty;
@@ -45,7 +51,19 @@ export function useAiChatDraft(
       if (html === lastHtml) return;
       drafts.current.set(key, html);
       try {
-        if (window.localStorage.getItem(key) !== revision) return;
+        const currentRevision = window.localStorage.getItem(key);
+        if (currentRevision !== revision || recovery !== null) {
+          if (html === (currentRevision ?? "")) {
+            window.sessionStorage.removeItem(key);
+            recovery = null;
+            revision = currentRevision;
+          } else {
+            window.sessionStorage.setItem(key, html);
+            recovery = html;
+          }
+          lastHtml = html;
+          return;
+        }
         if (html) window.localStorage.setItem(key, html);
         else window.localStorage.removeItem(key);
         revision = html || null;
@@ -53,6 +71,10 @@ export function useAiChatDraft(
         lastHtml = html;
         window.dispatchEvent(new window.Event("aiChatDraftChanged"));
       } catch {
+        try {
+          window.sessionStorage.setItem(key, html);
+          recovery = html;
+        } catch {}
         lastHtml = html;
       }
     };
@@ -61,22 +83,52 @@ export function useAiChatDraft(
       if ((editor.isEmpty ? "" : editor.getHTML()) !== lastHtml) return;
       try {
         const next = window.localStorage.getItem(key);
-        if (next === revision) return;
-        editor.commands.setContent(next ?? "", { emitUpdate: false });
+        const nextRecovery = window.sessionStorage.getItem(key);
+        if (recovery !== null && nextRecovery === recovery) return;
+        if (next === revision && nextRecovery === recovery) return;
+        editor.commands.setContent(nextRecovery ?? next ?? "", { emitUpdate: false });
         revision = next;
+        recovery = nextRecovery;
         lastHtml = editor.isEmpty ? "" : editor.getHTML();
         drafts.current.set(key, lastHtml);
       } catch {}
     };
     save();
     drafts.current.set(key, editor.isEmpty ? "" : editor.getHTML());
+    const captureSubmission = () => {
+      const html = editor.isEmpty ? "" : editor.getHTML();
+      const document = editor.state.doc;
+      const binding = previousBinding.current;
+      const savedRevision = revision;
+      const savedRecovery = recovery;
+      return () => {
+        if (drafts.current.get(key) !== html) return;
+        if (previousBinding.current === binding && editor.state.doc !== document) return;
+        drafts.current.set(key, "");
+        try {
+          if (savedRevision === html && window.localStorage.getItem(key) === savedRevision) {
+            window.localStorage.removeItem(key);
+          }
+        } catch {}
+        try {
+          if (savedRecovery === html && window.sessionStorage.getItem(key) === savedRecovery) {
+            window.sessionStorage.removeItem(key);
+          }
+        } catch {}
+        window.dispatchEvent(new window.Event("aiChatDraftChanged"));
+      };
+    };
+    submission.current = captureSubmission;
     editor.on("update", save);
     window.addEventListener("storage", synchronize);
     window.addEventListener("aiChatDraftChanged", synchronize);
     return () => {
+      submission.current = null;
       editor.off("update", save);
       window.removeEventListener("storage", synchronize);
       window.removeEventListener("aiChatDraftChanged", synchronize);
     };
   }, [editor, userId, sessionId, enabled, agentId]);
+
+  return () => submission.current?.();
 }

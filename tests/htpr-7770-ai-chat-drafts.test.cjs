@@ -19,6 +19,8 @@ const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
   "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
 });
 
+const draftSubmissions = new WeakMap();
+
 async function withComposer(run, enabled = true, initialProps = {}) {
   const dom = new JSDOM("<!doctype html><body><input id='workspace'><div id='root'></div></body>", {
     url: "https://app.hypertask.ai/chat/session-a",
@@ -38,7 +40,7 @@ async function withComposer(run, enabled = true, initialProps = {}) {
   let props = { userId: 985, sessionId: "session-a", enabled, ...initialProps };
   const companions = [];
   function DraftOwner() {
-    useAiChatDraft(editor, props.userId, props.sessionId, props.enabled, props.agentId);
+    draftSubmissions.set(editor, useAiChatDraft(editor, props.userId, props.sessionId, props.enabled, props.agentId));
     return null;
   }
   const render = async (next = {}) => {
@@ -93,6 +95,7 @@ function turnContext(editor, overrides = {}) {
   const session = { id: "session-a", messages: [] };
   return {
     sent, keepDrafts: true, isByokBlocked: false, isTyping: false, editor,
+    captureDraftSubmission: () => draftSubmissions.get(editor)(),
     fileUpload: { fileItems: [], clearFiles() {} },
     messageQueueRef: { current: [] }, setQueuedMessages() {}, sendInFlightRef: { current: false },
     surface: "chat", inViewObject: {}, waitForChatSession: async () => session,
@@ -217,7 +220,7 @@ for (const outcome of ["error", "cancelled", "transport failure"]) {
 }
 
 test("edits made while session or attachment preparation waits are not cleared", async () => {
-  for (const during of ["session", "attachments", "same-text session switch"]) {
+  for (const during of ["session", "attachments", "same-text edit", "same-text session switch"]) {
     await withComposer(async (h) => {
       h.editor.commands.setContent("<p>Original question</p>");
       const context = turnContext(h.editor, {
@@ -227,6 +230,10 @@ test("edits made while session or attachment preparation waits are not cleared",
         },
         async processAttachments() {
           if (during === "attachments") h.editor.commands.setContent("<p>New draft</p>");
+          if (during === "same-text edit") {
+            h.editor.commands.setContent("<p>Temporary edit</p>");
+            h.editor.commands.setContent("<p>Original question</p>");
+          }
           if (during === "same-text session switch") {
             await h.render({ sessionId: "session-b" });
             h.editor.commands.setContent("<p>Original question</p>");
@@ -237,10 +244,48 @@ test("edits made while session or attachment preparation waits are not cleared",
       global.fetch = async () => streamReply();
       assert.equal(await createAiChatSend(context).handleSendMessage(), true);
       assert.equal(context.sent.find((message) => message.role === "human").content, "Original question");
-      assert.equal(h.editor.getText(), during === "same-text session switch" ? "Original question" : "New draft");
+      assert.equal(h.editor.getText(), during.startsWith("same-text") ? "Original question" : "New draft");
+      if (during === "same-text session switch") {
+        assert.equal(h.storage.getItem("aiChat.draft.985.session-a"), null);
+        assert.equal(h.storage.getItem("aiChat.draft.985.session-b"), "<p>Original question</p>");
+        await h.render({ sessionId: "session-a" });
+        assert.equal(h.editor.getText(), "");
+        await h.render({ sessionId: "session-b" });
+        assert.equal(h.editor.getText(), "Original question");
+      } else {
+        const expected = during === "same-text edit" ? "Original question" : "New draft";
+        assert.equal(h.storage.getItem("aiChat.draft.985.session-a"), `<p>${expected}</p>`);
+        await h.reload();
+        assert.equal(h.editor.getText(), expected);
+      }
     });
   }
 });
+
+for (const changed of ["remote", "local", "neither"]) {
+  test(`submission cleanup after a session round trip preserves ${changed === "neither" ? "no submitted draft" : `a newer ${changed} draft`}`, async () => {
+    await withComposer(async (h) => {
+      const key = "aiChat.draft.985.session-a";
+      h.editor.commands.setContent("<p>Submitted question</p>");
+      const context = turnContext(h.editor, {
+        async processAttachments() {
+          await h.render({ sessionId: "session-b" });
+          if (changed === "remote") h.storage.setItem(key, "<p>New remote draft</p>");
+          await h.render({ sessionId: "session-a" });
+          if (changed === "local") h.editor.commands.setContent("<p>New local draft</p>");
+          return [];
+        },
+      });
+      global.fetch = async () => streamReply();
+      assert.equal(await createAiChatSend(context).handleSendMessage(), true);
+      const expected = changed === "neither" ? "" : `New ${changed} draft`;
+      assert.equal(h.editor.getText(), expected);
+      assert.equal(h.storage.getItem(key), expected ? `<p>${expected}</p>` : null);
+      await h.reload();
+      assert.equal(h.editor.getText(), expected);
+    });
+  });
+}
 
 test("typing before initial session hydration is kept, and storage failure still permits chat switches", async () => {
   await withComposer(async (h) => {
@@ -338,16 +383,70 @@ test("storage notifications synchronize clean composers, including remote deleti
   });
 });
 
-test("local edits based on a stale storage revision cannot overwrite a newer draft", async () => {
+test("conflicted local edits survive continued typing, switches and reload without overwriting the remote draft", async () => {
   await withComposer(async (h) => {
+    const key = "aiChat.draft.985.session-a";
     h.editor.commands.setContent("<p>Original draft</p>");
-    h.storage.setItem("aiChat.draft.985.session-a", "<p>Newer draft</p>");
+    h.storage.setItem(key, "<p>Newer draft</p>");
     h.editor.commands.setContent("<p>Stale local edit</p>");
-    assert.equal(h.storage.getItem("aiChat.draft.985.session-a"), "<p>Newer draft</p>");
-    window.dispatchEvent(new window.StorageEvent("storage", { key: "aiChat.draft.985.session-a" }));
+    assert.equal(h.storage.getItem(key), "<p>Newer draft</p>");
+    assert.equal(window.sessionStorage.getItem(key), "<p>Stale local edit</p>");
+    window.dispatchEvent(new window.StorageEvent("storage", { key }));
     assert.equal(h.editor.getText(), "Stale local edit");
+    h.editor.commands.setContent("<p>Continued local edit</p>");
+    await h.render({ sessionId: "session-b" });
+    assert.equal(h.editor.getText(), "");
+    h.editor.commands.setContent("<p>Draft B</p>");
+    await h.render({ sessionId: "session-a" });
+    assert.equal(h.editor.getText(), "Continued local edit");
     await h.reload();
-    assert.equal(h.editor.getText(), "Newer draft");
+    assert.equal(h.editor.getText(), "Continued local edit");
+    h.editor.commands.setContent("<p>Typed after recovery</p>");
+    await h.reload();
+    assert.equal(h.editor.getText(), "Typed after recovery");
+    assert.equal(h.storage.getItem(key), "<p>Newer draft</p>");
+    await h.render({ userId: 986 });
+    assert.equal(h.editor.getText(), "");
+    await h.render({ userId: 985 });
+    assert.equal(h.editor.getText(), "Typed after recovery");
+  });
+});
+
+for (const reload of [false, true]) {
+  test(`sending a recovered local draft preserves the remote draft${reload ? " after reload" : ""}`, async () => {
+    await withComposer(async (h) => {
+      const key = "aiChat.draft.985.session-a";
+      h.editor.commands.setContent("<p>Original draft</p>");
+      h.storage.setItem(key, "<p>Remote draft</p>");
+      h.editor.commands.setContent("<p>Recovered local draft</p>");
+      if (reload) await h.reload();
+      global.fetch = async () => streamReply();
+      const context = turnContext(h.editor);
+      assert.equal(await createAiChatSend(context).handleSendMessage(), true);
+      assert.equal(context.sent.find((message) => message.role === "human").content, "Recovered local draft");
+      assert.equal(h.storage.getItem(key), "<p>Remote draft</p>");
+      assert.equal(window.sessionStorage.getItem(key), null);
+      assert.equal(h.editor.getText(), "Remote draft");
+      await h.reload();
+      assert.equal(h.editor.getText(), "Remote draft");
+      h.editor.commands.setContent("<p>Resumed shared saving</p>");
+      assert.equal(h.storage.getItem(key), "<p>Resumed shared saving</p>");
+    });
+  });
+}
+
+test("matching the remote revision resolves local recovery and resumes shared saves", async () => {
+  await withComposer(async (h) => {
+    const key = "aiChat.draft.985.session-a";
+    h.editor.commands.setContent("<p>Original draft</p>");
+    h.storage.setItem(key, "<p>Remote draft</p>");
+    h.editor.commands.setContent("<p>Local edit</p>");
+    h.editor.commands.setContent("<p>Remote draft</p>");
+    assert.equal(window.sessionStorage.getItem(key), null);
+    h.editor.commands.setContent("<p>Shared edit</p>");
+    assert.equal(h.storage.getItem(key), "<p>Shared edit</p>");
+    await h.reload();
+    assert.equal(h.editor.getText(), "Shared edit");
   });
 });
 

@@ -266,7 +266,9 @@ test("browser smoke retries its build once, only after a Google font download fa
 n=$(( $(cat "${dir}/calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/calls"
 case "$(sed -n "\${n}p" "${dir}/outcomes")" in
   ok) echo built; exit 0;;
-  font) echo "TypeError at node_modules/next/dist/compiled/@next/font/dist/google/loader.js" >&2; echo "next/font/google failed" >&2; exit 1;;
+  font) echo "An error occurred in next/font. TypeError: Cannot read properties of null (reading '1') at node_modules/next/dist/compiled/@next/font/dist/google/loader.js:122:78" >&2; exit 1;;
+  font-google) echo "next/font/google failed" >&2; exit 1;;
+  font-local) echo "TypeError at next/font/local failed" >&2; exit 1;;
   *) echo "Type error: something else" >&2; exit 1;;
 esac
 `, { mode: 0o755 });
@@ -277,6 +279,8 @@ esac
   assert.deepEqual(run(["ok"]), { status: 0, calls: 1 });
   assert.deepEqual(run(["font", "ok"]), { status: 0, calls: 2 });
   assert.deepEqual(run(["font", "font"]), { status: 1, calls: 2 });
+  assert.deepEqual(run(["font-google", "ok"]), { status: 0, calls: 2 });
+  assert.deepEqual(run(["font-local", "ok"]), { status: 1, calls: 1 });
   assert.deepEqual(run(["other", "ok"]), { status: 1, calls: 1 });
 });
 
