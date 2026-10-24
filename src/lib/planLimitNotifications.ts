@@ -22,7 +22,7 @@ export async function notifyPlanLimitOwner({
   try {
     const key = `plan-limit-notification:${projectId}:${taskId ?? sourceKey ?? title}:${error.limit}`;
     const digest = createHash("sha256").update(key).digest("hex").slice(0, 32);
-    const markerId = `plan-limit-${digest.slice(0, 26)}`;
+    const markerId = `plan-limit-${digest.slice(0, 25)}`;
     const message = encodeAgentMessage(markerId, `Could not create the next ticket for "${title}": ${error.message}`);
     const notifiedOwner = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${digest}))`;
