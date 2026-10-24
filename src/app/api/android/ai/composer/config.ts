@@ -17,6 +17,7 @@ import {
   resolveUserFacingModelOption,
 } from "@/lib/systemModelLadder";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
+import { modelOptionsForKeyOnlyTeam } from "@/lib/ai/teamAiFunding";
 
 export type ComposerModel = {
   id: string;
@@ -35,6 +36,7 @@ type ComposerConfigInput = {
   grokGemini4Enabled?: boolean;
   haikuDefaultEnabled?: boolean;
   defaultContext?: AiDefaultModelContext;
+  keyOnlySavedProviders?: readonly string[] | null;
 };
 
 function canUseModelForPlan(
@@ -62,7 +64,7 @@ function toComposerModel(option: TAiModelOption): ComposerModel {
 
 export function buildComposerConfig(input: ComposerConfigInput) {
   const enabled = isAiFeatureEnabled("aiChat", input.settings);
-  const allowedOptions = enabled
+  const matchedOptions = enabled
     ? aiModelOptions.filter(
         (option) =>
           isAiModelOptionVisible(option, Boolean(input.haiku55Enabled), false, Boolean(input.grokGemini4Enabled)) &&
@@ -79,6 +81,12 @@ export function buildComposerConfig(input: ComposerConfigInput) {
           ),
       )
     : [];
+  const allowedOptions = input.keyOnlySavedProviders
+    ? modelOptionsForKeyOnlyTeam(matchedOptions, input.keyOnlySavedProviders, (modelKey) => {
+        const definition = getAiModelDefinition(modelKey as TAiModelOption["modelKey"]);
+        return definition ? { provider: definition.provider } : undefined;
+      })
+    : matchedOptions;
   const defaultContext = { ...input.defaultContext, haikuDefaultEnabled: input.haikuDefaultEnabled, plan: input.storePlanId, hasByok: hasHaikuByokProvider(input.providersWithByok) };
   const boardDefault = resolveUserFacingModelOption(
     "aiChat",

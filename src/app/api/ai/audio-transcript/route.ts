@@ -28,6 +28,7 @@ import {
   MAX_DICTATION_AUDIO_BYTES,
   transcribeAudioFile,
 } from "@/lib/services/dictation/transcriptionProviders";
+import { TeamKeyOnlyRefusal } from "@/lib/ai/teamAiFunding";
 import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
@@ -71,10 +72,14 @@ async function transcribeAudio(
     : null;
   const language = resolveDictationLanguage(prefs?.dictationLanguage);
 
+<<<<<<< HEAD
   return transcribeAudioFile(provider, file, {
     language, tags,
     usage: { userId: context.userId, teamId: context.teamId, projectId: context.projectId },
   });
+=======
+  return transcribeAudioFile(provider, file, { language, tags, teamId: context.teamId });
+>>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
 }
 
 async function improveTranscript(
@@ -201,6 +206,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof DictationAudioTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
+    }
+    if (error instanceof TeamKeyOnlyRefusal) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
     const allowanceMessage = warnIfAllowanceRefused(error, "ai/audio-transcript");
     if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });

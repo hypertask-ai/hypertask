@@ -1,7 +1,7 @@
 import { isPlanLimitReachedError } from "@/lib/planLimits";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
-import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, keyOnlySideCallModel, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, Output } from "ai";
 import { z } from "zod";
@@ -206,7 +206,9 @@ export async function createSlackTaskFromThread(
       botToken,
       event.channelId,
       event.threadTs,
-      "I couldn't create the ticket. Please try again in a moment.",
+      error instanceof Error && error.name === "TeamKeyOnlyRefusal"
+        ? error.message
+        : "I couldn't create the ticket. Please try again in a moment.",
     );
   }
 }
@@ -222,14 +224,17 @@ async function writeSlackTaskDraft(input: {
   const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: input.teamId, userId: input.actorUserId }) : { haiku55Enabled: false, byok: undefined };
   const systemModel = resolveSystemModel("summaries", input.aiProviderSettings, defaultContext.haiku55Enabled, defaultContext);
   if (!systemModel) throw new Error("No Slack task-writing model is configured");
-  const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: input.teamId });
+  const funded = typeof keyOnlySideCallModel === "function"
+    ? await keyOnlySideCallModel({ trustedTeamId: input.teamId, userId: input.actorUserId }, systemModel.provider)
+    : null;
+  const gatewayApiKey = funded ? undefined : await getTeamGatewayApiKey({ trustedTeamId: input.teamId });
   const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-  const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: input.teamId, projectId: input.projectId, userId: input.actorUserId }, feature: "summary" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
+  const model = funded?.model ?? (defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: input.teamId, projectId: input.projectId, userId: input.actorUserId }, feature: "summary" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey));
   configureAiModelUsage(model, {
     userId: input.actorUserId,
     teamId: input.teamId,
     projectId: input.projectId,
-    provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
+    provider: funded?.usageProvider ?? (haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider),
     feature: "summary",
   });
   const result = await generateText({

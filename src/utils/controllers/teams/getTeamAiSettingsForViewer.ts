@@ -23,11 +23,23 @@ export async function getTeamAiSettingsForViewer(
 ) {
   const team = await prisma.team.findFirst({
     where: teamAiSettingsViewerWhere(userId, accountId, teamId),
-    select: { aiProviderSettings: true },
+    select: {
+      aiProviderSettings: true,
+      aiKeyOnly: true,
+      byokApiKeys: {
+        where: { enabled: true },
+        select: { provider: true },
+      },
+    },
   });
 
   if (team) {
-    return { ok: true as const, settings: team.aiProviderSettings };
+    return {
+      ok: true as const,
+      settings: team.aiProviderSettings,
+      aiKeyOnly: team.aiKeyOnly,
+      savedByokProviders: team.byokApiKeys.map((row) => row.provider),
+    };
   }
 
   const exists = await prisma.team.findUnique({

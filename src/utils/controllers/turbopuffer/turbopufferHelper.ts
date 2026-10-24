@@ -3,7 +3,11 @@ import { createHash } from "crypto";
 import { TextNode } from "node-html-parser";
 
 import prisma from "@/lib/prisma";
+<<<<<<< HEAD
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
+=======
+import { embeddingAuthorization, resolveTeamAiFunding } from "@/lib/ai/teamAiFunding";
+>>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   parseTicketSearchQuery,
@@ -385,13 +389,13 @@ export function buildCustomInstructionFileRows(args: {
   }));
 }
 
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+export async function embedTexts(texts: string[], teamId?: string | null): Promise<number[][]> {
   if (texts.length === 0) return [];
 
-  const apiKey = process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
-  if (!apiKey) {
-    throw new Error("TURBOPUFFER_EMBEDDINGS_API_KEY is not set");
-  }
+  const decision = teamId
+    ? await resolveTeamAiFunding(teamId, { provider: "openai", feature: "embeddings" })
+    : { mode: "unrestricted" as const };
+  const auth = embeddingAuthorization(decision, process.env.TURBOPUFFER_EMBEDDINGS_API_KEY);
 
   const inputs = texts.map(toEmbeddingInput);
   if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], apiKey);
@@ -413,7 +417,7 @@ async function embedInputs(inputs: string[], apiKey: string) {
 
   for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
     const batch = inputs.slice(i, i + EMBEDDING_BATCH_SIZE);
-    embeddings.push(...(await embedBatchWithRetry(batch, apiKey)));
+    embeddings.push(...(await embedBatchWithRetry(batch, auth.apiKey, auth.endpoint, auth.model)));
   }
 
   return embeddings;
@@ -428,7 +432,9 @@ export function toEmbeddingInput(text: string): string {
 
 async function embedBatchWithRetry(
   batch: string[],
-  apiKey: string
+  apiKey: string,
+  endpoint = EMBEDDINGS_ENDPOINT,
+  model = EMBEDDING_MODEL,
 ): Promise<number[][]> {
   let lastError: unknown;
 
@@ -443,6 +449,7 @@ async function embedBatchWithRetry(
     let usage: OpenAIEmbeddingResponse["usage"];
     let succeeded = false;
     try {
+<<<<<<< HEAD
       let response: Response;
       try {
         response = await fetch(EMBEDDINGS_ENDPOINT, {
@@ -458,6 +465,33 @@ async function embedBatchWithRetry(
         });
       } catch (networkError) {
         lastError = networkError;
+=======
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          input: batch,
+        }),
+      });
+    } catch (networkError) {
+      lastError = networkError;
+      continue;
+    }
+
+    if (!response.ok) {
+      const responseText = await response
+        .text()
+        .catch(() => response.statusText);
+      const error = new Error(
+        `OpenAI embeddings request failed (${response.status}): ${responseText}`
+      );
+      if (response.status === 429 || response.status >= 500) {
+        lastError = error;
+>>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
         continue;
       }
 
@@ -513,8 +547,8 @@ async function embedBatchWithRetry(
     : new Error("OpenAI embeddings request failed after retries");
 }
 
-export async function embedText(text: string): Promise<number[]> {
-  const [embedding] = await embedTexts([text]);
+export async function embedText(text: string, teamId?: string | null): Promise<number[]> {
+  const [embedding] = await embedTexts([text], teamId);
   if (!embedding) {
     throw new Error("OpenAI embeddings returned no embedding");
   }
@@ -821,7 +855,7 @@ export async function searchTasks({
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks");
+    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks", projectId ?? projectIds?.[0]);
 
   if (queryVector) {
     try {
@@ -892,7 +926,7 @@ export async function searchComments({
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchComments");
+    : await embedQueryForSearch(query, "turbopuffer searchComments", projectIds?.[0]);
 
   if (queryVector) {
     try {
@@ -952,7 +986,7 @@ export async function searchCustomInstructionFiles({
   );
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles");
+    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles", projectId);
 
   if (queryVector) {
     try {
@@ -1132,12 +1166,26 @@ async function ensureNamespaceSchema(
   });
 }
 
-async function embedRowsForWrite<T extends { searchText: string }>(
+async function teamIdForEmbedding(
+  rows: Array<{ teamId?: string; projectId?: number }>,
+): Promise<string | null> {
+  const direct = rows.find((row) => typeof row.teamId === "string" && row.teamId && row.teamId !== "__schema__")?.teamId;
+  if (direct) return direct;
+  const projectId = rows.find((row) => typeof row.projectId === "number" && row.projectId > 0)?.projectId;
+  if (!projectId) return null;
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { teamId: true },
+  });
+  return project?.teamId ?? null;
+}
+
+async function embedRowsForWrite<T extends { searchText: string; teamId?: string; projectId?: number }>(
   rows: T[],
   context: string
 ): Promise<{ rows: Array<TurbopufferVectorRow<T>>; hasVectors: boolean }> {
   try {
-    const embeddings = await embedTexts(rows.map((row) => row.searchText));
+    const embeddings = await embedTexts(rows.map((row) => row.searchText), await teamIdForEmbedding(rows));
     return {
       rows: rows.map((row, index) => ({
         ...row,
@@ -1156,10 +1204,14 @@ async function embedRowsForWrite<T extends { searchText: string }>(
 
 async function embedQueryForSearch(
   query: string,
-  context: string
+  context: string,
+  projectId?: number | null,
 ): Promise<number[] | null> {
   try {
-    return await embedText(query);
+    const teamId = projectId
+      ? (await prisma.project.findUnique({ where: { id: projectId }, select: { teamId: true } }))?.teamId
+      : null;
+    return await embedText(query, teamId);
   } catch (error) {
     console.error(`${context} embedding error, using BM25 only:`, error);
     return null;

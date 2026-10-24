@@ -15,6 +15,12 @@ import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/update
 import prisma from "@/lib/prisma";
 import { getOpenAiOnlyDefaultContext } from "@/app/api/ai/_lib/byokKeys";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7844_TEAM_AI_KEY_ONLY_FLAG } from "@/lib/flags/definitions/htpr-7844-team-ai-key-only";
+import {
+  aiProvidersForSavedByokKeys,
+  applyKeyOnlyProviderVisibility,
+} from "@/lib/ai/teamAiFunding";
 
 class ProviderSettingsError extends Error {}
 
@@ -86,10 +92,13 @@ const handler: NextApiHandler = async (
     }
 
     const { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute } = await getOpenAiOnlyDefaultContext({ trustedTeamId: teamId, userId: user.id }).catch(() => ({ openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false }));
+    const keyOnly = Boolean(lookup.aiKeyOnly) && await isFeatureEnabled(HTPR_7844_TEAM_AI_KEY_ONLY_FLAG, user.id).catch(() => false);
+    const savedProviders = aiProvidersForSavedByokKeys(lookup.savedByokProviders ?? []);
     return res.status(200).json({
       defaultModelContext: { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute },
       gdprSafeMode: isGdprSafeModeEnabled(lookup.settings),
-      providers: providerRows(lookup.settings),
+      providers: applyKeyOnlyProviderVisibility(providerRows(lookup.settings), savedProviders, keyOnly),
+      aiKeyOnly: keyOnly,
     });
   }
 

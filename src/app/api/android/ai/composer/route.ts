@@ -12,6 +12,9 @@ import {
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { buildComposerConfig, providersRequiringByokCheck } from "./config";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7844_TEAM_AI_KEY_ONLY_FLAG } from "@/lib/flags/definitions/htpr-7844-team-ai-key-only";
+import { aiProvidersForSavedByokKeys } from "@/lib/ai/teamAiFunding";
 
 function error(message: string, status: number) {
   return NextResponse.json({ success: false, error: message }, { status });
@@ -79,9 +82,13 @@ async function getComposer(request: NextRequest) {
         defaultContext.byok.provider === "openrouter" ? "openrouter" : "anthropic",
       );
     }
+<<<<<<< HEAD
     const grokGemini4Enabled = await import("@/lib/flags")
       .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7939_GROK_GEMINI4_MODELS_FLAG, ctx.user.id))
       .catch(() => false);
+=======
+    const keyOnly = Boolean(lookup.aiKeyOnly) && await isFeatureEnabled(HTPR_7844_TEAM_AI_KEY_ONLY_FLAG, ctx.user.id).catch(() => false);
+>>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
     return NextResponse.json({
       success: true,
       projectId: project.id,
@@ -94,6 +101,7 @@ async function getComposer(request: NextRequest) {
         grokGemini4Enabled,
         haikuDefaultEnabled: defaultContext.haikuDefaultEnabled,
         defaultContext,
+        keyOnlySavedProviders: keyOnly ? aiProvidersForSavedByokKeys(lookup.savedByokProviders ?? []) : null,
       }),
     });
   } catch (cause) {

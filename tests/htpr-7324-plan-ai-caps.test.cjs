@@ -849,7 +849,9 @@ test("BYOK titles use shared or customer credentials", async () => {
     "@/app/api/ai/_lib/byokKeys": {
       resolveAiFallbackCredential: byok.resolveAiFallbackCredential,
       getAiDefaultModelContext: async () => ({ haiku55Enabled: false, plan: "BYOK" }),
+      keyOnlySideCallModel: async () => null,
     },
+    "@/lib/ai/teamAiFunding": { TeamKeyOnlyRefusal: class TeamKeyOnlyRefusal extends Error {} },
     "@/app/api/ai/_lib/modelProvider": {
       isAiGatewayEnabled: () => true, resolveAiModel: (_provider, _model, credential) => { credentials.push(credential); return {}; },
       providerOptionsForAiModel: () => ({}),

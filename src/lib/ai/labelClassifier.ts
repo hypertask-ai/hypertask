@@ -9,13 +9,23 @@ import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
 
 import { getTeamGatewayApiKey, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+<<<<<<< HEAD
 import { batchBackgroundAiEnabled } from "@/app/api/ai/_lib/planGate";
+=======
+import { resolveTeamAiFunding } from "@/lib/ai/teamAiFunding";
+import { batchBackgroundAiEnabled, haikuDefaultModelEnabled } from "@/app/api/ai/_lib/planGate";
+>>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import { batchEligibleFunding, batchEligibleModel, labelTaskContentHash } from "@/lib/ai/batch/batchJobs";
 import { submitSmartLabelBatch } from "@/lib/ai/labelClassifierBatch";
 import {
   gatewayFundingSourceForApiKey,
   gatewayProviderOptionsForModel,
+<<<<<<< HEAD
+=======
+  resolveAiModel,
+  resolveGatewayModel,
+>>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
 } from "@/app/api/ai/_lib/modelProvider";
 import { convertHtmlToText } from "@/app/api/ai/_lib/taskContent";
 import { generalConfig } from "@/lib/configs/general.config";
@@ -65,6 +75,7 @@ export async function classifyTaskAgainstLabels(
     return null;
   }
 
+<<<<<<< HEAD
   let gatewayApiKey: string | undefined;
   try {
     gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: tags.teamId });
@@ -90,13 +101,59 @@ export async function classifyTaskAgainstLabels(
     lookup: { trustedTeamId: tags.teamId, projectId: tags.projectId, userId: tags.userId ?? 0 },
     feature: "smart-label",
   });
+=======
+  const keyOnly = await resolveTeamAiFunding(tags.teamId, { provider: "anthropic", feature: "labels" });
+  if (keyOnly.mode === "refused") {
+    console.error(`[labelClassifier] ${keyOnly.message}`);
+    return null;
+  }
+
+  let gatewayApiKey: string | undefined;
+  let fundedModel: ReturnType<typeof resolveAiModel> | undefined;
+  if (keyOnly.mode === "byok" && keyOnly.provider !== "gateway") {
+    fundedModel = resolveAiModel("claude", "claude-haiku-4-5", keyOnly.apiKey);
+  } else if (keyOnly.mode === "byok") {
+    gatewayApiKey = keyOnly.apiKey;
+  } else {
+    try {
+      gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: tags.teamId });
+    } catch (error) {
+      console.error(
+        `[labelClassifier] Skipping inference: team gateway key lookup failed for ${tags.teamId}`,
+        error,
+      );
+      return null;
+    }
+    if (!gatewayApiKey) {
+      console.error(
+        `[labelClassifier] Skipping inference: no dedicated gateway key for team ${tags.teamId}`,
+      );
+      return null;
+    }
+  }
+
+  const haikuDefaultEnabled = await haikuDefaultModelEnabled(tags?.userId);
+  const model = fundedModel
+    ? fundedModel
+    : haikuDefaultEnabled
+    ? resolveAutomaticAiModel("gateway", "anthropic/claude-haiku-5.5", gatewayApiKey, {
+        haiku55Enabled: true,
+        lookup: { trustedTeamId: tags.teamId, projectId: tags.projectId, userId: tags.userId ?? 0 },
+        feature: "smart-label",
+      })
+    : resolveGatewayModel(MODEL, gatewayApiKey);
+>>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
   configureAiModelUsage(model, {
     userId: tags?.userId ?? 0,
     teamId: tags?.teamId,
     projectId: tags?.projectId,
     taskId: tags?.taskId,
     agentId: tags?.agentId,
+<<<<<<< HEAD
     provider: "anthropic",
+=======
+    provider: fundedModel ? "byok:claude" : haikuDefaultEnabled ? "anthropic" : "google",
+>>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
     feature: "smart-label",
     reasoningFeature: "labels",
   });

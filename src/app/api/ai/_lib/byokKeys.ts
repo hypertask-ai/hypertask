@@ -39,6 +39,12 @@ import {
 import { MANAGED_TEAM_GATEWAY_PROVIDER } from "@/app/api/ai/_lib/managedGatewayKeys";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
+import {
+  isPlatformAiCredential,
+  resolveSideCallFunding,
+  resolveTeamAiFunding,
+  TeamKeyOnlyRefusal,
+} from "@/lib/ai/teamAiFunding";
 
 export type ByokProviderFlag = {
   provider?: string | null;
@@ -331,6 +337,13 @@ export async function getTeamGatewayApiKeyForProvider(
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
 
+  const fundingTeamId = await resolveLookupTeamId(lookup);
+  if (fundingTeamId) {
+    const decision = await resolveTeamAiFunding(fundingTeamId, { provider, feature: "gateway" });
+    if (decision.mode === "byok") return decision.apiKey;
+    if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
+  }
+
   if (plan !== "Free") {
     const gatewayKey = await resolveTeamByokApiKey("gateway", lookup);
     if (isVercelAiGatewayKey(gatewayKey)) return gatewayKey;
@@ -361,6 +374,13 @@ export async function getTeamGatewayFunding(
 ): Promise<TeamGatewayFunding | undefined> {
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
+
+  const fundingTeamId = await resolveLookupTeamId(lookup);
+  if (fundingTeamId) {
+    const decision = await resolveTeamAiFunding(fundingTeamId, { provider: "gateway", feature: "gateway" });
+    if (decision.mode === "byok") return { apiKey: decision.apiKey, source: "customer" };
+    if (decision.mode === "refused") return undefined;
+  }
 
   if (plan !== "Free") {
     const gatewayKey = await resolveTeamByokApiKey("gateway", lookup);
@@ -400,7 +420,31 @@ export async function getTeamGatewayFunding(
 }
 
 export async function getTeamGatewayApiKey(lookup?: ByokLookupContext) {
-  return (await getTeamGatewayFunding(lookup))?.apiKey;
+  const funding = await getTeamGatewayFunding(lookup);
+  if (funding?.apiKey) return funding.apiKey;
+  const teamId = await resolveLookupTeamId(lookup);
+  if (teamId) {
+    const decision = await resolveTeamAiFunding(teamId, { provider: "gateway", feature: "gateway" });
+    if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
+  }
+  return undefined;
+}
+
+export async function keyOnlySideCallModel(
+  lookup: ByokLookupContext | undefined,
+  requestedProvider: string,
+): Promise<{ model: LanguageModel; usageProvider: string } | null> {
+  const teamId = await resolveLookupTeamId(lookup);
+  if (!teamId) return null;
+  const decision = await resolveSideCallFunding(teamId, requestedProvider);
+  if (decision.mode === "unrestricted") return null;
+  if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
+  const modelProvider = decision.provider === "openai" ? "openai" : "claude";
+  const modelId = modelProvider === "openai" ? "gpt-6-luna" : "claude-haiku-4-5";
+  return {
+    model: resolveAiModel(modelProvider, modelId, decision.apiKey),
+    usageProvider: aiUsageProviderForCredential(modelProvider, decision.apiKey),
+  };
 }
 
 export async function getByokOrTeamGatewayApiKeyForProvider(
@@ -429,7 +473,7 @@ export async function getByokOrTeamGatewayApiKey(
 
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
-  const byokApiKey =
+  let byokApiKey =
     plan === "Free"
       ? undefined
       : await getByokApiKeyForProvider(
@@ -438,11 +482,29 @@ export async function getByokOrTeamGatewayApiKey(
           lookup,
           { ...options, resolveWithoutFlag: true }
         );
+  if (
+    byokApiKey &&
+    isPlatformAiCredential(byokApiKey) &&
+    (await resolveTeamAiFunding(
+      (await resolveLookupTeamId(lookup)) ?? "",
+      { provider, feature: "chat" },
+    )).mode !== "unrestricted"
+  ) {
+    byokApiKey = undefined;
+  }
+
   if (byokApiKey && !isVercelAiGatewayKey(byokApiKey)) return byokApiKey;
 
   if (provider === "openrouter" || provider === "custom") return undefined;
 
-  if (isVercelAiGatewayKey(byokApiKey)) return byokApiKey;
+  if (isVercelAiGatewayKey(byokApiKey) && !isPlatformAiCredential(byokApiKey)) return byokApiKey;
+
+  const keyOnlyTeamId = await resolveLookupTeamId(lookup);
+  if (keyOnlyTeamId) {
+    const decision = await resolveTeamAiFunding(keyOnlyTeamId, { provider, feature: "chat" });
+    if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
+    if (decision.mode === "byok") return decision.apiKey;
+  }
 
   return getTeamGatewayApiKey(lookup);
 }
@@ -560,10 +622,15 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
   if (enabled && storePlanId && storePlanId !== "Free") {
     for (const provider of ["claude", "gateway", "openrouter"] as const) {
       const credential = await getByokApiKeyForProvider(provider, undefined, lookup, { resolveWithoutFlag: true });
-      if (credential) {
-        byok = { provider, credential };
-        break;
+      if (!credential) continue;
+      if (isPlatformAiCredential(credential)) {
+        const teamId = await resolveLookupTeamId(lookup);
+        if (teamId && (await resolveTeamAiFunding(teamId, { provider, feature: "side-call" })).mode !== "unrestricted") {
+          continue;
+        }
       }
+      byok = { provider, credential };
+      break;
     }
   }
   const openAiOnlyContext = await getOpenAiOnlyDefaultContext(lookup, storePlanId, suppliedFlags);
