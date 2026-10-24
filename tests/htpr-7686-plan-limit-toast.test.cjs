@@ -43,6 +43,7 @@ const modal = "src/components/RTE/TiptapCreateTaskModal.tsx";
 const saveHook = "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts";
 const preview = "src/components/Common/AttachmentsUpload/SingleFileInputPreview.tsx";
 const quietConsole = { log() {}, error() {} };
+class UploadTooLargeError extends Error {}
 
 function nodes(file, predicate) {
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -196,7 +197,7 @@ test("a pending create save does not duplicate the attachment refusal already to
 
 function commentRedirect(enabled, upload, queued, toasts) {
   return evaluate(initializer(saveHook, "redirectAPI"), {
-    showPlanLimitToast: enabled, planLimitRefusalMessage, uploadSingleFileViaApi: upload,
+    showPlanLimitToast: enabled, planLimitRefusalMessage, UploadTooLargeError, uploadSingleFileViaApi: upload,
     DOMParser: class { parseFromString() { return { querySelectorAll: () => [] }; } },
     currentTask: { id: 42 }, currentProject: { id: 15 }, currentBoardBilling: null,
     improveWritingSource: "fixture", improveWritingModel: "fixture", description: "Description",
@@ -287,4 +288,13 @@ test("uploadUrl, uploadFinalize and buffered fallback preserve raw 402 refusals 
     assert.deepEqual(previewFailure(true, error), [fileMessage]);
     assert.deepEqual(previewFailure(false, error), [`Could not upload "${file.name}". Please try again.`]);
   }
+});
+
+
+test("comment Send retains the pre-existing readable 413 upload message", async () => {
+  const queued = [], toasts = [];
+  const redirect = commentRedirect(true, async () => { throw new UploadTooLargeError("File exceeds the upload cap"); }, queued, toasts);
+  assert.equal(await redirect({ content: "Draft", mode: "create-comment", attachments_: [file] }), false);
+  assert.deepEqual(toasts, ["File exceeds the upload cap"]);
+  assert.deepEqual(queued, []);
 });

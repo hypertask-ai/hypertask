@@ -52,6 +52,7 @@ import {
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
 import { LEARN_TUTORIAL_COMMENT_SAVED_EVENT } from "@/lib/tutorial/learnTutorialState";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
+import { UploadTooLargeError } from "@/lib/storage/uploadLimits";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
@@ -1077,7 +1078,10 @@ export default function useSaveContent() {
               source,
             };
           } catch (error) {
-            toast.error(planLimitRefusalMessage(error) ?? `Could not upload "${attachment.file.name}". Please try again.`);
+            const message = error instanceof UploadTooLargeError
+              ? error.message
+              : `Could not upload "${attachment.file.name}". Please try again.`;
+            toast.error(planLimitRefusalMessage(error) ?? message);
             return false;
           }
         }
