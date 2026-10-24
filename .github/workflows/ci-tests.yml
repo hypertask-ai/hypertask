@@ -83,11 +83,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          set +e
           STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '
             [.statuses[] | select(.context == "ai-review" or .context == "claude-review") | {context, state}]
             | group_by(.context) | map(.[0])
             | if any(.[]; .state == "success") then "success"
-              elif any(.[]; .state == "failure") then "failure" else "none" end')
+              elif any(.[]; .state == "failure") then "failure" else "none" end' 2>/tmp/review-status.err)
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ] && grep -q "rate limit" /tmp/review-status.err; then
+            echo "::warning::Review status read was rate limited. Building anyway; only an existing red verdict skips the build."
+            cat /tmp/review-status.err
+            exit 0
+          fi
+          if [ "$STATUS" -ne 0 ]; then
+            cat /tmp/review-status.err
+            exit "$STATUS"
+          fi
           [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
       - name: Runner dispatcher and selfupdate fixtures
         run: |
