@@ -8,18 +8,21 @@ import { waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 const FLAG = 'htpr-7518-agent-sidebar-chats'
 const PAST_CHATS_FLAG = 'htpr-7688-past-chats-first'
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
-test.use({ storageState: stateFile })
+const readFixture = (): Fixture => JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'agent-sidebar-fixture.json'), 'utf8'))
+test.use({ storageState: async ({}, applyState, info) => {
+  await applyState(readFixture().storageStates[info.project.name])
+} })
 test.describe.configure({ mode: 'serial' })
 test.skip(!process.env.BROWSER_SMOKE_PR, 'Writes only to GitHub disposable loopback fixtures')
 
 type Agent = { id: string; name: string; sessionId: string; token: string }
-type PersonalChat = { id: string; title: string; updatedAt: string; message: string }
-type Fixture = { projectId: number; lanes: Record<string, Agent[]>; personalChats: PersonalChat[] }
+type PersonalChat = { lane: string; id: string; title: string; updatedAt: string; message: string }
+type Fixture = { projectId: number; lanes: Record<string, Agent[]>; personalChats: PersonalChat[]; storageStates: Record<string, string> }
 let fixture: Fixture
 
 test.beforeAll(() => {
   expect(['127.0.0.1', 'localhost']).toContain(new URL(process.env.BASE_URL!).hostname)
-  fixture = JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'agent-sidebar-fixture.json'), 'utf8'))
+  fixture = readFixture()
 })
 
 test.beforeEach(async ({ page }) => {
@@ -60,15 +63,16 @@ async function heartbeat(request: APIRequestContext, agent: Agent) {
   expect(response.status()).toBe(200)
 }
 
-async function open(page: Page) {
+async function open(page: Page, lane: string) {
+  const flags = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board&agentSidebar=1`))
   await expect(page.getByTestId('ai-sidebar')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toBeVisible()
-  const flags = await page.request.get('/api/flags')
-  expect(flags.status()).toBe(200)
-  const enabledFlags = (await flags.json()).flags
+  const enabledFlags = (await (await flags).json()).flags
   expect(enabledFlags[FLAG], 'server sidebar flag in disposable fixture').toBe(true)
   expect(enabledFlags[PAST_CHATS_FLAG], 'past chats flag in disposable fixture').toBe(true)
+  await expect(page.getByTestId('agent-sidebar-conversations')).toBeVisible()
+  await choose(page, fixture.personalChats.find(chat => chat.lane === lane)!.title)
 }
 async function settledBox(locator: ReturnType<Page['locator']>) {
   let previous = await locator.boundingBox()
@@ -88,21 +92,34 @@ async function reveal(list: Locator, row: Locator) {
     return false
   }, { timeout: 15_000 }).toBe(true)
 }
-async function choose(page: Page, name: string) {
+async function choose(page: Page, name: string, error?: string) {
   const list = page.getByTestId('agent-sidebar-conversations')
   if (!await list.isVisible()) await page.getByRole('button', { name: 'Switch conversation', exact: true }).click()
-  const row = list.locator('li').filter({ hasText: name }).first()
+  const agent = Object.values(fixture.lanes).flat().find(agent => agent.name === name)
+  const chat = fixture.personalChats.find(chat => chat.title === name)
+  const key = agent?.id ?? (chat ? `session:${chat.id}` : 'ai')
+  const row = list.locator(`[data-command-key="${key}"]`)
   await reveal(list, row)
   await row.click()
   await expect(list).toBeHidden()
+  if (error) {
+    await expect(page.getByText(error, { exact: true })).toBeVisible()
+    return
+  }
+  await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toHaveText(agent?.name ?? 'AI chat')
+  if (agent) await expect(page.getByTestId('ai-sidebar').getByText(`${agent.name} history 1`, { exact: true })).toBeVisible()
+  else if (chat) await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
+  await expect(agent && !agent.name.endsWith('Native')
+    ? page.getByRole('textbox', { name: `Message ${agent.name}`, exact: true })
+    : page.locator('[data-ai-chat-composer-root]:not([inert]) #ai-chat-tiptap-editor .ProseMirror:visible')).toBeVisible()
 }
 
 test('past chats are listed newest first above agents and reopen', async ({ page }, info) => {
-  await open(page)
+  await open(page, info.project.name)
   const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
   const list = page.getByTestId('agent-sidebar-conversations')
   if (!await list.isVisible()) await title.click()
-  const chats = [...fixture.personalChats].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+  const chats = fixture.personalChats.filter(chat => chat.lane === info.project.name).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
   await expect(list.locator('li').first()).toHaveText('AI chat')
   for (const chat of chats) {
     const row = list.locator(`[data-command-key="session:${chat.id}"]`)
@@ -112,7 +129,7 @@ test('past chats are listed newest first above agents and reopen', async ({ page
   const keys = await list.locator('li').evaluateAll(rows => rows.map(row => row.getAttribute('data-command-key')))
   const positions = chats.map(chat => keys.indexOf(`session:${chat.id}`))
   expect(positions).toEqual([...positions].sort((a, b) => a - b))
-  const agentPositions = Object.values(fixture.lanes).flat().map(agent => keys.indexOf(agent.id))
+  const agentPositions = fixture.lanes[info.project.name].map(agent => keys.indexOf(agent.id))
   for (const position of positions) {
     expect(position).toBeGreaterThan(0)
     for (const agentPosition of agentPositions) expect(position).toBeLessThan(agentPosition)
@@ -138,9 +155,13 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     page.on('response', (response) => {
       if (/^\/api\/agent-chat\/[^/]+$/.test(new URL(response.url()).pathname) && response.request().method() === 'GET') historyResponses.push(response)
     })
+    const clearedDraft = await request.patch(`/api/agent-chat/${b.sessionId}/participant`, {
+      headers: { 'x-hypertask-sidebar-project': String(fixture.projectId) }, data: { draft: '' },
+    })
+    expect(clearedDraft.status()).toBe(200)
     await heartbeat(request, a)
     await page.context().addCookies([{ name: 'theme', value: theme, url: process.env.BASE_URL! }])
-    await open(page)
+    await open(page, info.project.name)
     const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
     const list = page.getByTestId('agent-sidebar-conversations')
     if (!await list.isVisible()) await title.click()
@@ -239,7 +260,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     expect(Math.abs(aiAfter.height - aiComposer.height)).toBeLessThan(2)
     expect(await boardCard.boundingBox()).toEqual(boardBefore)
     await page.getByRole('button', { name: 'Chat history', exact: true }).click()
-    await expect(page.locator('#ai-chat-session-history')).toBeVisible()
+    await expect(page.locator('#ai-chat-session-history').getByRole('button', { name: fixture.personalChats.find(chat => chat.lane === info.project.name)!.title, exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
     if (info.project.name === 'Desktop') {
       const resize = page.getByTestId('ai-sidebar').getByRole('separator')
@@ -260,7 +281,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
 
 test('open error retries the same selected agent; outside click and native transport preserve the board', async ({ page }, info) => {
   const [a, , native] = fixture.lanes[info.project.name]
-  await open(page)
+  await open(page, info.project.name)
   await choose(page, 'AI chat')
   const aiDraft = `General draft ${randomUUID()}`
   await page.locator('#ai-chat-tiptap-editor .ProseMirror:visible').fill(aiDraft)
@@ -271,7 +292,7 @@ test('open error retries the same selected agent; outside click and native trans
       await route.fulfill({ status: 503, json: { error: 'Runtime unavailable' } })
     } else await route.continue()
   })
-  await choose(page, a.name)
+  await choose(page, a.name, 'Runtime unavailable')
   await expect(page.getByText('Runtime unavailable', { exact: true })).toBeVisible()
   await choose(page, a.name)
   await expect(page.getByRole('textbox', { name: `Message ${a.name}` })).toBeVisible()
@@ -362,7 +383,7 @@ test('new flag On works with parked room, mobile composer and activity flags Off
       'htpr-6407-mobile-agent-chat-layout': false, 'htpr-6094-agent-activity-rows': false,
     } } })
   })
-  await open(page)
+  await open(page, info.project.name)
   const agent = fixture.lanes[info.project.name][1]
   await choose(page, agent.name)
   await expect(page.getByRole('textbox', { name: `Message ${agent.name}` })).toBeVisible()
