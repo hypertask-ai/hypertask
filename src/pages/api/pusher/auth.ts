@@ -5,6 +5,9 @@ import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { getRealtimeServer } from "@/lib/realtime/server";
 import { featureFlagsChannel } from "@/lib/realtime/shared";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { extractBearerToken } from "@/lib/mcp/auth/session";
+import { validateJwtToken } from "@/lib/mcp/auth/verifyJwt";
+import { HTPR_7381_REALTIME_TOKEN_AUTH_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 
 async function userMayAccess(
@@ -68,10 +71,23 @@ async function authorizeChannel(
     const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>)
     );
-    if (!session) {
-      return res.status(403).json({ error: "Not authenticated" });
+    let userId: number;
+    if (session) {
+      userId = session.userId;
+    } else {
+      const token = extractBearerToken(
+        typeof req.headers.authorization === "string" ? req.headers.authorization : null
+      );
+      const ctx = token ? await validateJwtToken(token) : null;
+      if (
+        !ctx ||
+        ctx.management ||
+        !(await isFeatureEnabled(HTPR_7381_REALTIME_TOKEN_AUTH_FLAG, ctx.user.id))
+      ) {
+        return res.status(403).json({ error: "Not authenticated" });
+      }
+      userId = ctx.user.id;
     }
-    const userId = session.userId;
 
     const allowed = await userMayAccess(channel, userId, session.agentId ?? null);
     if (!allowed) {
