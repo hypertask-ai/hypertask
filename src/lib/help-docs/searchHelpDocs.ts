@@ -1,6 +1,13 @@
+import { HTPR_7825_WHOLE_HELP_ARTICLES_FLAG } from "@/lib/flags/definitions/htpr-7825-whole-help-articles";
+import { isFeatureEnabled } from "@/lib/flags";
+
 export const HELP_DOCS_BASE_URL = "https://help.hypertask.ai";
 
 const HELP_DOCS_FETCH_TIMEOUT_MS = 8000;
+const HELP_DOCS_CONTENT_LIMIT = 1500;
+const HELP_DOCS_FLAG_USER_ID = 0;
+
+type HelpDocsFlagDb = Parameters<typeof isFeatureEnabled>[2];
 
 export interface HelpDocsSearchInput {
   query: string;
@@ -43,11 +50,26 @@ function helpDocsErrorMessage(error: unknown) {
   return "Sorry, an error occurred while processing your request.";
 }
 
+function helpArticleText(html: string, wholeArticle: boolean) {
+  const text = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return wholeArticle ? text : text.slice(0, HELP_DOCS_CONTENT_LIMIT);
+}
+
 export async function searchHelpDocs(
   input: HelpDocsSearchInput,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  db?: HelpDocsFlagDb,
 ): Promise<HelpDocsSearchResponse> {
   try {
+    const wholeArticle = await isFeatureEnabled(
+      HTPR_7825_WHOLE_HELP_ARTICLES_FLAG,
+      HELP_DOCS_FLAG_USER_ID,
+      db,
+    ).catch(() => true);
     const res = await fetchImpl(
       `${HELP_DOCS_BASE_URL}/api/articles/search/${encodeURIComponent(input.query)}`,
       { signal: AbortSignal.timeout(HELP_DOCS_FETCH_TIMEOUT_MS) }
@@ -70,13 +92,7 @@ export async function searchHelpDocs(
             if (full.ok) {
               const doc = (await full.json()) as HelpDocsArticleResponse;
               const html = doc.content ?? doc.article?.content;
-              if (html) {
-                content = html
-                  .replace(/<[^>]+>/g, " ")
-                  .replace(/&nbsp;/g, " ")
-                  .replace(/\s+/g, " ")
-                  .trim();
-              }
+              if (html) content = helpArticleText(html, wholeArticle);
             }
           } catch {
           }
