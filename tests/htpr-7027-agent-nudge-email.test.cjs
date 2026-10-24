@@ -7,7 +7,6 @@ const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const key = "htpr-7027-agent-nudge-email";
 const modulePath = "src/lib/onboarding/emails/agentNudge.ts";
 const queuePath = "src/pages/api/queues/agentNudgeEmailQueue.ts";
 const delay = 24 * 60 * 60 * 1000;
@@ -16,9 +15,9 @@ test.beforeEach((context) => context.mock.timers.enable({ apis: ["Date"], now: n
 
 function harness() {
   const user = { id: 3001, uid: "email_test", email: "new@yopmail.com", joinedAt: new Date("2026-10-09T00:00:00Z"), emailVerified: true, UserSetting: { notification: true, notificationPreference: "all", isVerified: true } };
-  const state = { user, connection: null, enabled: true, qaEnabled: true, failSend: false, failPublish: false, failAudit: false, failMarker: false, failFlag: false, failUser: false, failConnection: false, now: 0 };
+  const state = { user, connection: null, failSend: false, failPublish: false, failAudit: false, failMarker: false, failUser: false, failConnection: false, now: 0 };
   const values = new Map(), expiries = new Map();
-  const sends = [], jobs = [], logs = [], queries = [], connectionReads = [], redisCalls = [], flagReads = [], errors = [], events = [];
+  const sends = [], jobs = [], logs = [], queries = [], connectionReads = [], redisCalls = [], errors = [], events = [];
   const expire = (key_) => {
     if (expiries.has(key_) && expiries.get(key_) <= state.now) { values.delete(key_); expiries.delete(key_); }
   };
@@ -56,7 +55,7 @@ function harness() {
     "@/lib/onboarding/agentConnection": { getFirstAgentConnection: async (...args) => { connectionReads.push(args); if (state.failConnection) throw new Error("Connection unavailable"); return state.connection; } },
     "@/lib/redis": { getRedis: async () => redis },
     "@/lib/auth/requestBaseUrl": { fallbackBaseUrl: () => "https://app.hypertask.ai/" },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, isFeatureEnabled: async (flag, id) => { flagReads.push([flag, id]); if (state.failFlag) throw new Error("Flag unavailable"); return id === 985 ? state.qaEnabled : state.enabled; } },
+    "@/lib/flags": { isFeatureEnabled: () => { throw new Error("Agent nudge must not read feature flags"); } },
     "@/lib/email/sendEmail": { sendEmail: async (options) => { sends.push(options); if (state.failSend) throw new Error("Provider unavailable"); return { id: "mail-1" }; } },
     "@/lib/qstash": { publishJob: async (job) => { events.push("publish"); jobs.push(job); if (state.failPublish) throw new Error("QStash unavailable"); return { messageId: "job-1" }; }, withQstashSignature: (fn) => fn },
   };
@@ -72,11 +71,10 @@ function harness() {
     await quiet(() => queue.default({ method, body }, response));
     return response;
   }
-  return { state, values, expiries, sends, jobs, logs, queries, connectionReads, redisCalls, flagReads, errors, events, mocks, receive, schedule: () => quiet(() => nudge.maybeScheduleAgentNudge(3001)) };
+  return { state, values, expiries, sends, jobs, logs, queries, connectionReads, redisCalls, errors, events, mocks, receive, schedule: () => quiet(() => nudge.maybeScheduleAgentNudge(3001)) };
 }
 
 for (const [name, change, reason] of [
-  ["flag off", (h) => { h.state.enabled = false; }, "flag_off"],
   ["pre-cohort", (h) => { h.state.user.joinedAt = new Date("2026-10-08T23:59:59Z"); }, "pre_cohort"],
   ["guest", (h) => { h.state.user.uid = "guest_test"; }, "guest"],
   ["service", (h) => { h.state.user.uid = "service_test"; }, "service_identity"],
@@ -105,7 +103,6 @@ test("schedule: normal signup uses joinedAt plus 24h, expiring lease then durabl
   h.state.now = 600;
   assert.equal(await h.schedule(), "already_scheduled");
   assert.equal(h.jobs.length, 1);
-  assert.deepEqual(h.flagReads, [[key, 3001], [key, 3001], [key, 3001]]);
 });
 
 test("schedule: durable marker stays absent while publication is in flight", async () => {
@@ -141,19 +138,15 @@ test("schedule: a crash before publication leaves only a lease that lets a later
   assert.equal(h.expiries.has("onboarding:nudge-scheduled:3001"), false);
 });
 
-for (const qaEnabled of [true, false]) {
-  test(`schedule: armed QA uses its own ${qaEnabled ? "enabled" : "disabled"} flag and 120s delay`, async () => {
-    const h = harness(); h.state.enabled = false; h.state.qaEnabled = qaEnabled; h.state.user.email = " NEW@MAIL.TM ";
-    h.values.set("onboarding:qa-armed:new@mail.tm", "1");
-    const before = Date.now();
-    assert.equal(await h.schedule(), qaEnabled ? "scheduled" : "flag_off");
-    assert.deepEqual(h.flagReads, [[key, 985]]);
-    if (qaEnabled) {
-      assert.ok(h.jobs[0].notBefore >= (before + 120000) / 1000);
-      assert.ok(h.jobs[0].notBefore <= Math.ceil((Date.now() + 120000) / 1000));
-    } else assert.equal(h.jobs.length, 0);
-  });
-}
+test("schedule: armed QA uses the 120s delay without reading a flag", async () => {
+  const h = harness(); h.state.user.email = " NEW@MAIL.TM ";
+  h.values.set("onboarding:qa-armed:new@mail.tm", "1");
+  const before = Date.now();
+  assert.equal(await h.schedule(), "scheduled");
+  assert.equal(h.jobs.length, 1);
+  assert.ok(h.jobs[0].notBefore >= (before + 120000) / 1000);
+  assert.ok(h.jobs[0].notBefore <= Math.ceil((Date.now() + 120000) / 1000));
+});
 
 test("schedule: publish failure releases lease for a later sign-in and never writes a durable marker", async () => {
   const h = harness(); h.state.failPublish = true;
@@ -165,15 +158,12 @@ test("schedule: publish failure releases lease for a later sign-in and never wri
   assert.equal(await h.schedule(), "scheduled");
 });
 
-for (const failure of ["failUser", "failFlag"]) {
-  test(`schedule: ${failure} cannot break auth or publish`, async () => {
-    const h = harness(); h.state[failure] = true;
-    assert.equal(await h.schedule(), "failed"); assert.equal(h.jobs.length, 0); assert.equal(h.sends.length, 0);
-  });
-}
+test("schedule: user lookup failure cannot break auth or publish", async () => {
+  const h = harness(); h.state.failUser = true;
+  assert.equal(await h.schedule(), "failed"); assert.equal(h.jobs.length, 0); assert.equal(h.sends.length, 0);
+});
 
 for (const [name, change, reason] of [
-  ["flag off", (h) => { h.state.enabled = false; }, "flag_off"],
   ["pre-cohort", (h) => { h.state.user.joinedAt = new Date("2026-10-08T23:59:59Z"); }, "pre_cohort"],
   ["guest", (h) => { h.state.user.uid = "guest_test"; }, "guest"],
   ["service", (h) => { h.state.user.uid = "service_test"; }, "service_identity"],
@@ -215,16 +205,14 @@ test("receiver: early non-armed delivery republishes at signup plus 24h and neve
   assert.equal((await h.receive()).code, 500);
 });
 
-for (const qaEnabled of [true, false]) {
-  test(`receiver: armed QA rechecks nudge flag ${qaEnabled ? "on" : "off"} and can bypass 24h only when on`, async () => {
-    const h = harness(); h.state.enabled = false; h.state.qaEnabled = qaEnabled;
-    h.state.user.joinedAt = new Date(); h.state.user.email = " NEW@MAIL.TM ";
-    h.values.set("onboarding:qa-armed:new@mail.tm", "1");
-    const result = await h.receive();
-    assert.equal(result.code, 200); assert.equal(result.body.reason, qaEnabled ? "sent" : "flag_off");
-    assert.deepEqual(h.flagReads, [[key, 985]]); assert.equal(h.sends.length, Number(qaEnabled));
-  });
-}
+test("receiver: armed QA bypasses 24h without reading a flag", async () => {
+  const h = harness();
+  h.state.user.joinedAt = new Date(); h.state.user.email = " NEW@MAIL.TM ";
+  h.values.set("onboarding:qa-armed:new@mail.tm", "1");
+  const result = await h.receive();
+  assert.equal(result.code, 200); assert.equal(result.body.reason, "sent");
+  assert.equal(h.sends.length, 1); assert.equal(h.jobs.length, 0);
+});
 
 test("QA arming never overrides consent, cohort, connection, sent audit or marker", async () => {
   for (const change of [
@@ -234,7 +222,7 @@ test("QA arming never overrides consent, cohort, connection, sent audit or marke
     (h) => { h.logs.push({ LoggedById: 3001, log: "agent_nudge_email_sent" }); },
     (h) => { h.values.set("onboarding:nudge-sent:3001", "sent"); },
   ]) {
-    const h = harness(); h.state.enabled = false; h.values.set("onboarding:qa-armed:new@yopmail.com", "1"); change(h);
+    const h = harness(); h.values.set("onboarding:qa-armed:new@yopmail.com", "1"); change(h);
     assert.notEqual((await h.receive()).body.reason, "sent"); assert.equal(h.sends.length, 0);
   }
 });
@@ -282,7 +270,6 @@ test("receiver: reloads consent and connections after scheduling, and expired QA
   for (const [change, reason] of [
     [(h) => { h.state.user.UserSetting.notification = false; }, "notifications_off"],
     [(h) => { h.state.connection = { at: new Date(), client: "Your MCP agent" }; }, "agent_connected"],
-    [(h) => { h.state.enabled = false; }, "flag_off"],
   ]) {
     const h = harness(); assert.equal(await h.schedule(), "scheduled"); change(h);
     assert.equal((await h.receive()).body.reason, reason); assert.equal(h.sends.length, 0);
@@ -291,7 +278,6 @@ test("receiver: reloads consent and connections after scheduling, and expired QA
   h.values.set("onboarding:qa-armed:new@yopmail.com", "1"); assert.equal(await h.schedule(), "scheduled");
   h.values.delete("onboarding:qa-armed:new@yopmail.com");
   assert.equal((await h.receive()).body.reason, "too_early"); assert.equal(h.sends.length, 0);
-  assert.deepEqual(h.flagReads, [[key, 985], [key, 3001]]);
 });
 
 test("receiver: concurrent jobs send once", async () => {
@@ -347,7 +333,7 @@ test("receiver: abandoned in-flight claim expires after 600 seconds", async () =
 test("receiver: missing user skips, infrastructure failures retry and malformed jobs never send", async () => {
   const missing = harness(); missing.state.user = null;
   assert.equal((await missing.receive()).body.reason, "missing_user"); assert.equal(missing.sends.length, 0);
-  for (const failure of ["failUser", "failFlag", "failConnection"]) { const h = harness(); h.state[failure] = true; assert.equal((await h.receive()).code, 500); assert.equal(h.sends.length, 0); }
+  for (const failure of ["failUser", "failConnection"]) { const h = harness(); h.state[failure] = true; assert.equal((await h.receive()).code, 500); assert.equal(h.sends.length, 0); }
   const h = harness();
   for (const body of [null, {}, { userId: "3001" }, { userId: -1 }, { userId: 0 }, { userId: 1.5 }, { userId: Infinity }, { userId: Number.MAX_SAFE_INTEGER + 1 }]) assert.equal((await h.receive(body)).code, 400);
   const get = await h.receive({ userId: 3001 }, "GET"); assert.equal(get.code, 405); assert.equal(get.headers.Allow, "POST");
@@ -431,9 +417,9 @@ test("native auth schedules only real successful sign-ins after cookies, not bri
   }
 });
 
-test("QA arm reuses endpoint with nudge flag independently of welcome, maintaining identity/origin/new inbox guards", async () => {
+test("QA arm accepts nudge without flags, gates welcome and maintains identity/origin/new inbox guards", async () => {
   const values = [], flags = [], userQueries = [];
-  const state = { id: 985, email: "valentin@hypertask.ai", enabled: true, existingEmail: "Existing@MAIL.TM" };
+  const state = { id: 985, email: "valentin@hypertask.ai", welcomeEnabled: false, existingEmail: "Existing@MAIL.TM" };
   const { POST } = load("src/app/api/onboarding/emails/qa-arm/route.ts", {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => state.id ? { userId: state.id } : null },
     "@/lib/prisma": { __esModule: true, default: { user: {
@@ -444,13 +430,13 @@ test("QA arm reuses endpoint with nudge flag independently of welcome, maintaini
         return query.where.email.equals.toLowerCase() === state.existingEmail.toLowerCase() ? { id: 3001 } : null;
       },
     } } },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER: { userId: 985, email: "valentin@hypertask.ai" }, isFeatureEnabled: async (flag, id) => { flags.push([flag, id]); return flag === key && state.enabled; } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER: { userId: 985, email: "valentin@hypertask.ai" }, isFeatureEnabled: async (flag, id) => { flags.push([flag, id]); assert.equal(flag, "htpr-7025-welcome-email"); return state.welcomeEnabled; } },
     "@/lib/redis": { getRedis: async () => ({ set: async (...args) => values.push(args) }) },
   });
   const request = (email = "qa@yopmail.com", type = "agent_nudge", origin = "https://app.hypertask.ai") => new NextRequest("https://app.hypertask.ai/api/onboarding/emails/qa-arm", { method: "POST", headers: { host: "app.hypertask.ai", ...(origin ? { origin } : {}), "Content-Type": "application/json" }, body: JSON.stringify({ email, type }) });
   for (const id of [null, 6, 3001]) { state.id = id; assert.equal((await POST(request())).status, 403); }
   state.id = 985; state.email = "other@example.test"; assert.equal((await POST(request())).status, 403);
-  state.email = "valentin@hypertask.ai"; state.enabled = false; assert.equal((await POST(request())).status, 403); state.enabled = true;
+  state.email = "valentin@hypertask.ai";
   for (const origin of [null, "https://evil.test", "http://app.hypertask.ai"]) assert.equal((await POST(request(undefined, undefined, origin))).status, 403);
   for (const email of ["a@b@mail.tm", "@mail.tm", "a b@mail.tm", "qa@localhost", "a".repeat(313) + "@mail.tm", null]) assert.equal((await POST(request(email))).status, 400);
   assert.equal((await POST(request(undefined, "anything"))).status, 400); assert.deepEqual(values, []);
@@ -462,21 +448,19 @@ test("QA arm reuses endpoint with nudge flag independently of welcome, maintaini
     assert.equal((await POST(request(email))).status, 200);
     assert.deepEqual(values.at(-1), [`onboarding:qa-armed:${email.trim().toLowerCase()}`, "1", "EX", 7200]);
   }
-  assert.ok(flags.every(([flag, id]) => flag === key && id === 985));
+  assert.deepEqual(flags, []);
+  const armedCount = values.length;
+  assert.equal((await POST(request(undefined, "welcome"))).status, 403);
+  assert.equal(values.length, armedCount);
+  state.welcomeEnabled = true;
+  assert.equal((await POST(request(undefined, "welcome"))).status, 200);
+  assert.deepEqual(values.at(-1), ["onboarding:qa-armed:qa@yopmail.com", "1", "EX", 7200]);
+  assert.deepEqual(flags, [["htpr-7025-welcome-email", 985], ["htpr-7025-welcome-email", 985]]);
 });
 
-test("nudge is registered as a feature with Owner + QA default, server-gated with OFF respected and successful-delivery analytics", async () => {
-  let row = null;
-  const registry = load("src/lib/flags.ts", {
-    "@/lib/prisma": { __esModule: true, default: { featureFlag: { findUnique: async () => row, findMany: async () => [] }, user: { findUnique: async ({ where }) => ({ email: where.id === 985 ? "valentin@hypertask.ai" : "new@yopmail.com" }) } } },
-    "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": {},
-  });
-  assert.equal(registry.HTPR_7027_AGENT_NUDGE_EMAIL_FLAG, key); assert.equal(registry.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  assert.equal((await registry.listFeatureFlagModes()).find((entry) => entry.key === key).kind, "feature");
-  assert.equal(await registry.isFeatureEnabled(key, 3001), false); assert.equal(await registry.isFeatureEnabled(key, 985), true);
-  row = { mode: "OFF" }; assert.equal(await registry.isFeatureEnabled(key, 985), false);
+test("permanent nudge uses shared connection eligibility and successful-delivery analytics", () => {
   const source = read(modulePath);
+  assert.doesNotMatch(source, /isFeatureEnabled|flag_off|FEATURE_FLAG_QA_USER_ID/);
   assert.match(source, /import \{ getFirstAgentConnection \} from "@\/lib\/onboarding\/agentConnection";/);
   assert.doesNotMatch(source, /function getFirstAgentConnection|HTPR-7026: replace/);
   assert.equal(source.split('void trackActivation(userId, "lifecycle_email_sent", { type: "agent_nudge" });').length, 2);
