@@ -46,6 +46,7 @@ import {
   recentChatBoardIdsAtom,
 } from "@/store";
 import { useDockedChatScope } from "@/hooks/MultiPages/AIChat/useDockedChatScope";
+import { isDockedChatTicketScope } from "@/hooks/MultiPages/AIChat/dockedChatScope";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
@@ -571,7 +572,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
       ? { kind: "boards", label: "All boards", title: "All boards" }
       : typeof dockedScope === "number"
         ? { kind: "board", label: pickedBoardName, title: pickedBoardName }
-        : onTask && (!ticketScopeEnabled || dockedScope === "ticket") && inViewObject.taskTicketNumber
+        : isDockedChatTicketScope(dockedScope, onTask, ticketScopeEnabled) && inViewObject.taskTicketNumber
           ? {
               kind: "task",
               label: inViewObject.taskTicketNumber,

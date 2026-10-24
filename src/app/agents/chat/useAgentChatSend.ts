@@ -6,8 +6,9 @@ import { usePathname } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
 import { currentProjectAtom, inViewObjectAtom } from "@/store";
 import { useDockedChatScope } from "@/hooks/MultiPages/AIChat/useDockedChatScope";
+import { isDockedChatTicketScope } from "@/hooks/MultiPages/AIChat/dockedChatScope";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import type { AgentChatContext } from "@/lib/agents/chatContext";
 import toast from "react-hot-toast";
 import { MAX_MESSAGE_LENGTH, TChatMessage } from "./agentChatTypes";
@@ -75,15 +76,17 @@ export function useAgentChatSend({
   composerLocked, roster, selectedId, selectAgent, messages, projectIdForPrefix,
 }: Props) {
   const contextEnabled = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
+  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const [scope] = useDockedChatScope();
   const currentProject = useRecoilValue(currentProjectAtom);
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const pathname = usePathname();
-  const ticketSelected = scope === "ticket" && pathname?.startsWith("/detail") && !!inViewObject?.taskId;
+  const onTask = !!pathname?.startsWith("/detail") && inViewObject?.taskId != null;
+  const selectedTaskId = isDockedChatTicketScope(scope, onTask, ticketScopeEnabled) ? inViewObject.taskId : null;
   const context: AgentChatContext | undefined = contextEnabled && embedded ? {
-    project_id: ticketSelected ? inViewObject.taskProjectId ?? currentProject?.id ?? embedded.projectId
+    project_id: selectedTaskId != null ? inViewObject.taskProjectId ?? currentProject?.id ?? embedded.projectId
       : typeof scope === "number" ? scope : scope === "all" ? undefined : currentProject?.id ?? embedded.projectId,
-    ...(ticketSelected ? { task_id: inViewObject.taskId, scope: "ticket" } : {}),
+    ...(selectedTaskId != null ? { task_id: selectedTaskId, scope: "ticket" } : {}),
     surface_path: pathname ?? undefined,
   } : undefined;
   const sendMessageText = useCallback(async (text: string, queuedId?: string, messageContext?: AgentChatContext) => {

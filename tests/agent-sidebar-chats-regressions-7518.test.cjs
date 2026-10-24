@@ -758,7 +758,7 @@ test("switching away cancels the recorder and clears retained recording state be
   const { AgentChatPane } = loadChatComponent("src/app/agents/chat/AgentChatPane.tsx", {
     react: React,
     "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/definitions/htpr-7734-agent-chat-context": { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG: "htpr-7734-agent-chat-context" },
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "@/components/Agents/AgentAvatar": { default: () => null },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: Composer },
     "@/components/AI_CHAT/TypingIndicator": { TypingIndicator: () => null },
@@ -872,7 +872,6 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     "./AiComposerTextarea", "@/lib/flags/keys", "./ChatScopeChip", "./SendMessageButton",
     "@/components/Common/QueuedMessagesStrip", "react-hot-toast", "@/utils/aiChat/focusRequestWindow",
     "@/hooks/MultiPages/AIChat/useDockedChatScope",
-    "@/lib/flags/definitions/htpr-7734-agent-chat-context",
   ].map((specifier) => [specifier, {}]));
   const chat = {
     editor: { getHTML: () => "", getText: () => "" }, isTyping: false, isRecording: false,
@@ -881,6 +880,8 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
   };
   const { AI_Tiptap_Container } = loadChatComponent("src/components/AI_CHAT/AI_Tiptap_Container.tsx", {
     ...composerMocks,
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
+    "@/hooks/MultiPages/AIChat/dockedChatScope": load("src/hooks/MultiPages/AIChat/dockedChatScope.ts", {}),
     react: { ...hooks, useContext: () => false, useMemo: (callback) => callback(), useState: (value) => [value, noop], useId: () => "general" },
     "@tiptap/react": { useEditorState: () => true },
     "@/styles/tiptap.module.scss": { default: {} },

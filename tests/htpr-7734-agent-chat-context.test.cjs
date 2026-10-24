@@ -9,12 +9,12 @@ const flag = "htpr-7734-agent-chat-context";
 const noop = () => {};
 const hooks = { useCallback: (fn) => fn, useRef: (current) => ({ current }) };
 
-function ui({ enabled = true, mobile = false, external = true, embedded = true } = {}) {
-  let scope = null;
+function ui({ enabled = true, mobile = false, external = true, embedded = true, ticketScopeEnabled = true, scope: initialScope = null } = {}) {
+  let scope = initialScope;
   const atoms = { currentProjectAtom: "board", currentUserAtom: "user", inViewObjectAtom: "ticket", recentChatBoardIdsAtom: "recent" };
   const source = loader({
     "next/navigation": { usePathname: () => "/detail/project-15/42" },
-    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === "htpr-7316-chat-scope-ticket" },
+    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === "htpr-7316-chat-scope-ticket" && ticketScopeEnabled },
     "@/store": atoms,
     "@/lib/state": {
       useRecoilValue: (key) => key === "board" ? { id: 15, title: "Current board name" } : key === "user" ? { id: 7 } : { taskId: 42, taskTicketNumber: "HTPR-42", taskTitle: "Ticket title" },
@@ -81,7 +81,7 @@ test("native composer keeps the same picker and standalone external chat gets no
   }
 });
 
-function externalSender({ enabled = true, embedded = true, scope = "ticket", taskId = 42, taskProjectId = 15, pathname = "/detail/project-15/42" } = {}) {
+function externalSender({ enabled = true, embedded = true, scope = "ticket", ticketScopeEnabled = true, taskId = 42, taskProjectId = 15, pathname = "/detail/project-15/42" } = {}) {
   const props = {
     embedded: embedded ? { projectId: 15 } : undefined,
     session: { id: "session" }, sessionIdRef: { current: "session" }, selectedIdRef: { current: "agent" },
@@ -93,7 +93,7 @@ function externalSender({ enabled = true, embedded = true, scope = "ticket", tas
   };
   const { useAgentChatSend } = load("src/app/agents/chat/useAgentChatSend.ts", {
     react: hooks, "react-hot-toast": { default: { error: assert.fail } },
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flag); return enabled; } },
+    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === "htpr-7316-chat-scope-ticket" && ticketScopeEnabled },
     "@/hooks/MultiPages/AIChat/useDockedChatScope": { useDockedChatScope: () => [scope, noop] },
     "@/lib/state": { useRecoilValue: (key) => key === "board" ? { id: 15 } : { taskId, taskProjectId } },
     "@/store": { currentProjectAtom: "board", inViewObjectAtom: "ticket" },
@@ -122,6 +122,26 @@ for (const [scope, project, ticket] of [["ticket", 15, 42], [null, 15, undefined
       }
     } finally { global.fetch = originalFetch; }
   });
+}
+
+for (const ticketScopeEnabled of [false, true]) {
+  for (const scope of [null, "ticket", 22, "all"]) {
+    test(`external dropdown label matches sent context with ticket picker ${ticketScopeEnabled} and scope ${scope}`, async () => {
+      const h = ui({ ticketScopeEnabled, scope });
+      const originalFetch = global.fetch;
+      let payload;
+      global.fetch = async (_url, options) => { payload = JSON.parse(options.body); return { ok: true, json: async () => ({ success: true, message: { id: "sent" } }) }; };
+      try {
+        const ticket = scope === "ticket" || (scope === null && !ticketScopeEnabled);
+        assert.equal(h.trigger().textContent, ticket ? "HTPR-42" : scope === 22 ? "Pinned board" : scope === "all" ? "All boards" : "Current board name");
+        await externalSender({ ticketScopeEnabled, scope }).render().handleSend();
+        assert.deepEqual(payload.default_context, ticket
+          ? { project_id: 15, task_id: 42, scope: "ticket", surface_path: "/detail/project-15/42" }
+          : scope === "all" ? { surface_path: "/detail/project-15/42" }
+            : { project_id: scope === 22 ? 22 : 15, surface_path: "/detail/project-15/42" });
+      } finally { global.fetch = originalFetch; h.close(); }
+    });
+  }
 }
 
 test("current ticket uses its own board and drops a stale ticket after leaving the detail page", async () => {
@@ -155,14 +175,20 @@ test("queued messages keep their picked ticket after navigation and flag off str
   } finally { global.fetch = originalFetch; }
 });
 
-function server({ enabled = true, readable = true, sidebar = true, webhook = false } = {}) {
+function server({ enabled = true, readable = true, agentReadable = true, validBinding = true, sidebar = true, webhook = false } = {}) {
   const rows = [], webhooks = [], queries = [];
   const session = { id: "11111111-1111-4111-8111-111111111111", userId: 7, agentId: "agent", user: { displayName: "Sender" }, createdAt: new Date(), updatedAt: new Date() };
   const access = { OR: [{ ownerId: 7 }, { members: { some: { userId: 7 } } }] };
+  const recipientAccess = { members: { some: { agentId: "agent", status: "Accepted", agent: { userId: 9, revokedAt: null } } }, teamId: "agent-team" };
+  const contextAccess = { AND: [access, recipientAccess] };
+  const canRead = (where) => {
+    if (where.AND) return where.AND.every(canRead);
+    return where.OR ? readable : where.members ? agentReadable : true;
+  };
   const prisma = {
     user: { findUnique: async () => ({ displayName: "Sender" }) },
-    task: { findFirst: async (query) => { queries.push(query); return (!query.where.project || readable) && query.where.id === 42 && query.where.projectId === 15 ? { id: 42, projectId: 15, ticketNumber: "HTPR-42", title: "Ticket title" } : null; } },
-    project: { findMany: async () => [{ id: 15 }], findFirst: async (query) => { queries.push(query); return !query.where.OR || readable ? { id: query.where.id, title: "Board title" } : null; } },
+    task: { findFirst: async (query) => { queries.push(query); return (!query.where.project || canRead(query.where.project)) && query.where.id === 42 && query.where.projectId === 15 ? { id: 42, projectId: 15, ticketNumber: "HTPR-42", title: "Ticket title" } : null; } },
+    project: { findMany: async () => [{ id: 15 }], findFirst: async (query) => { queries.push(query); return canRead(query.where) ? { id: query.where.id, title: "Board title" } : null; } },
     chatSession: { update: async () => ({}), findMany: async () => [], findFirst: async () => session },
     chatSessionParticipant: { updateMany: async () => ({ count: 1 }) },
     chatMessage: { create: async ({ data }) => { const row = { id: "message", createdAt: new Date(), attachments: [], ...data }; rows.push(row); return row; }, update: async () => ({}), findMany: async () => [...rows].reverse(), count: async () => rows.length },
@@ -173,14 +199,27 @@ function server({ enabled = true, readable = true, sidebar = true, webhook = fal
   const mocks = {
     "@/lib/prisma": { default: prisma },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
+    "@/lib/auth/agentTeamScope": { resolveAgentTeamScope: async (userId, agent) => {
+      assert.equal(userId, 9);
+      assert.equal(agent.credentialTeamId, "agent-team");
+      assert.equal(agent.credentialTeamAccessBinding, "binding");
+      if (!validBinding) throw new Error("Agent credential team grant is no longer valid");
+      return { teamId: "agent-team", accessBinding: "binding" };
+    } },
     "@/lib/agents/chatAccess": {
       sidebarChatProjectId: (headers) => headers.has("x-hypertask-sidebar-project") ? 15 : undefined,
       ensureChatParticipant: async () => null,
-      loadUserAgentChatSession: async () => ({ ok: true, agentId: "agent", session: { ...session, agent: { runtimeType: "EXTERNAL" } } }),
+      loadUserAgentChatSession: async () => ({ ok: true, agentId: "agent", session: { ...session, agent: { runtimeType: "EXTERNAL", userId: 9, credentialTeamId: "agent-team", credentialTeamAccessBinding: "binding" } } }),
       loadAgentTokenChatSession: async () => ({ ok: true, session }),
     },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { assert.equal(userId, 7); return key === flag && enabled; } },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => access, projectContentAccessWhere: (userId) => { assert.equal(userId, 7); return access; } },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => access, projectContentAccessWhere: (userId, agentId, teamScope) => {
+      if (!agentId) { assert.equal(userId, 7); return access; }
+      assert.equal(userId, 9);
+      assert.equal(agentId, "agent");
+      assert.deepEqual(teamScope, { teamId: "agent-team", accessBinding: "binding" });
+      return recipientAccess;
+    } },
     "@/lib/agents/chatBrief": {}, "@/lib/agents/chatBroadcast": { broadcastChatSession: async () => {} },
     "@/lib/agentWebhooks/outbox": { persistAgentRunTriggerWebhooks: async (_tx, data) => { webhooks.push(data); return webhook ? ["delivery"] : []; }, publishAgentWebhookDeliveries: async () => {} },
     "@/lib/mcp/routeWrapper": { wrapMcpRoute: (fn) => fn, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => ({ user: { id: 7 }, agentId: "agent" }) },
@@ -193,7 +232,7 @@ function server({ enabled = true, readable = true, sidebar = true, webhook = fal
     "@/lib/mcp/tasks/services": {}, "@/lib/agents/chatTicketProposal": { serializeChatTicketProposal: () => null },
   };
   const { POST } = load("src/app/api/agent-chat/[sessionId]/messages/route.ts", mocks);
-  return { rows, webhooks, queries, access, disable() { enabled = false; },
+  return { rows, webhooks, queries, access, contextAccess, disable() { enabled = false; },
     send: (context) => POST(new Request("https://app.hypertask.ai/api/agent-chat/session/messages", {
       method: "POST", headers: sidebar ? { "x-hypertask-sidebar-project": "15" } : {},
       body: JSON.stringify({ text: "Which ticket?", ...(context !== undefined ? { default_context: context } : {}) }),
@@ -215,7 +254,7 @@ for (const webhook of [false, true]) {
     const text = 'Context: HTPR-42 "Ticket title" on board 15\n\nWhich ticket?';
     assert.equal(h.rows[0].content, "Which ticket?");
     assert.deepEqual(h.rows[0].context, context);
-    assert.deepEqual(h.queries[0].where, { id: 42, projectId: 15, project: h.access });
+    assert.deepEqual(h.queries[0].where, { id: 42, projectId: 15, project: h.contextAccess });
     assert.equal(h.webhooks[0].chat.text, text);
     assert.deepEqual(h.webhooks[0].chat.context, context);
     const sent = await response.json();
@@ -255,7 +294,7 @@ for (const context of [{ project_id: 15 }, { project_id: 22 }, {}]) {
     assert.equal(h.rows[0].content, "Which ticket?");
     assert.equal(selected.scope, context.project_id ? "board" : "all");
     assert.equal(selected.project_id, context.project_id);
-    if (context.project_id) assert.deepEqual(h.queries[0].where, { id: context.project_id, ...h.access });
+    if (context.project_id) assert.deepEqual(h.queries[0].where, { id: context.project_id, ...h.contextAccess });
     const text = context.project_id ? `Context: board ${context.project_id} "Board title"\n\nWhich ticket?` : "Context: all boards\n\nWhich ticket?";
     assert.equal(h.webhooks[0].chat.text, text);
     assert.deepEqual(h.webhooks[0].chat.context, selected);
@@ -275,7 +314,7 @@ test("unreadable and mismatched context is refused before message persistence or
   for (const context of [{ project_id: 15, task_id: 42, scope: "ticket" }, { project_id: 22 }]) {
     const h = server({ readable: false });
     assert.equal((await h.send(context)).status, 404);
-    assert.deepEqual(h.queries[0].where, context.scope === "ticket" ? { id: 42, projectId: 15, project: h.access } : { id: 22, ...h.access });
+    assert.deepEqual(h.queries[0].where, context.scope === "ticket" ? { id: 42, projectId: 15, project: h.contextAccess } : { id: 22, ...h.contextAccess });
     assert.deepEqual(h.rows, []); assert.deepEqual(h.webhooks, []);
   }
   const mismatch = server();
@@ -288,9 +327,30 @@ test("unreadable and mismatched context is refused before message persistence or
   const allowed = server();
   assert.equal((await allowed.send({ project_id: 15, task_id: 42, scope: "ticket" })).status, 200);
   assert.equal(allowed.rows.length, 1);
-  assert.deepEqual(allowed.queries[0].where.project, allowed.access);
+  assert.deepEqual(allowed.queries[0].where.project, allowed.contextAccess);
   assert.equal(allowed.rows[0].context.ticket_number, "HTPR-42");
 });
+
+for (const context of [{ project_id: 15, task_id: 42, scope: "ticket" }, { project_id: 22 }]) {
+  test(`destination agent's inaccessible context is now refused and accessible context is still allowed: ${JSON.stringify(context)}`, async () => {
+    for (const options of [{ agentReadable: false }, { validBinding: false }]) {
+      const refused = server(options);
+      const response = await refused.send(context);
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { success: false, error: context.scope === "ticket" ? "Ticket not found" : "Board not found" });
+      assert.deepEqual(refused.rows, []);
+      assert.deepEqual(refused.webhooks, []);
+    }
+    const allowed = server();
+    const response = await allowed.send(context);
+    assert.equal(response.status, 200);
+    assert.equal(allowed.rows[0].content, "Which ticket?");
+    assert.deepEqual(allowed.rows[0].context, context.scope === "ticket"
+      ? { scope: "ticket", project_id: 15, task_id: 42, ticket_number: "HTPR-42", title: "Ticket title" }
+      : { scope: "board", project_id: 22, title: "Board title" });
+    assert.deepEqual(allowed.webhooks[0].chat.context, allowed.rows[0].context);
+  });
+}
 
 test("flag off, standalone sends, and old clients still send and store today's plain message", async () => {
   for (const options of [{ enabled: false }, { sidebar: false }, {}]) {

@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { agentChatContextPayload } from "@/lib/agents/chatContext";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { resolveAgentTeamScope } from "@/lib/auth/agentTeamScope";
 import {
   persistAgentRunTriggerWebhooks,
   publishAgentWebhookDeliveries,
@@ -59,7 +60,7 @@ export async function POST(
       sidebarProjectId: sidebarChatProjectId(request.headers),
       actingAgentId: sessionUser?.agentId,
       select: {
-        agent: { select: { runtimeType: true } },
+        agent: { select: { runtimeType: true, userId: true, credentialTeamId: true, credentialTeamAccessBinding: true } },
       },
     });
     if (!access.ok) {
@@ -85,20 +86,32 @@ export async function POST(
         return NextResponse.json({ success: false, error: "Invalid chat context" }, { status: 400 });
       }
       const context = parsed.data;
+      let contextAccess = projectContentAccessWhere(userId);
+      if (context.project_id) {
+        const notFound = { success: false, error: context.scope === "ticket" ? "Ticket not found" : "Board not found" };
+        if (!session.agent) return NextResponse.json(notFound, { status: 404 });
+        let teamScope;
+        try {
+          teamScope = await resolveAgentTeamScope(session.agent.userId, session.agent);
+        } catch {
+          return NextResponse.json(notFound, { status: 404 });
+        }
+        contextAccess = { AND: [contextAccess, projectContentAccessWhere(session.agent.userId, agentId, teamScope)] };
+      }
       let selected: Prisma.JsonObject = { scope: "all" };
       if (context.scope === "ticket") {
         if (!context.task_id || !context.project_id) {
           return NextResponse.json({ success: false, error: "Ticket context requires a ticket and board" }, { status: 400 });
         }
         const task = await prisma.task.findFirst({
-          where: { id: context.task_id, projectId: context.project_id, project: projectContentAccessWhere(userId) },
+          where: { id: context.task_id, projectId: context.project_id, project: contextAccess },
           select: { id: true, projectId: true, ticketNumber: true, title: true },
         });
         if (!task) return NextResponse.json({ success: false, error: "Ticket not found" }, { status: 404 });
         selected = { scope: "ticket", task_id: task.id, project_id: task.projectId, ticket_number: task.ticketNumber, title: task.title };
       } else if (context.project_id) {
         const board = await prisma.project.findFirst({
-          where: { id: context.project_id, ...projectContentAccessWhere(userId) },
+          where: { id: context.project_id, ...contextAccess },
           select: { id: true, title: true },
         });
         if (!board) return NextResponse.json({ success: false, error: "Board not found" }, { status: 404 });
