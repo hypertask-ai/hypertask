@@ -69,6 +69,8 @@ class DispatchTests(unittest.TestCase):
         self.commands = patch.object(m, "command", side_effect=AssertionError("Unmocked external command")).start()
         self.addCleanup(patch.stopall)
         self.sleep = patch.object(m.time, "sleep").start()
+        self.metrics_reader = m.session_metrics
+        self.metrics = patch.object(m, "session_metrics", return_value=None).start()
 
     def dispatch(self, rows=None, load=1, go=False):
         return m.dispatch(self.rows if rows is None else rows, self.boards, self.comments,
@@ -86,6 +88,295 @@ class DispatchTests(unittest.TestCase):
         patch.object(m.time, "time", return_value=self.now).start()
         self.commands.side_effect = None
         self.commands.return_value = "status save 123k"
+
+    def safe_runner(self, context=90_000, state="waiting_bg", runner="RUNNER 8"):
+        row = dict(runner=runner, pane="%8", state=state, input_box="empty", spinner=False)
+        for task in self.boards[15][:3]:
+            task["section"] = "In Progress"
+            ticket = task["ticketNumber"]
+            at = m.datetime.fromtimestamp(self.now - 10, m.timezone.utc).isoformat()
+            note = "Next: finish QA\nHelpers: helper-123\nBranch/PR: yper4-448 / PR 123\nOutputs: /tmp/helper-123.txt"
+            self.comments[ticket] = [claim(runner), claim(runner, at, note)]
+        self.metrics.return_value = dict(session="session-1", context=context, activity=self.now - 20,
+                                         usage_at=self.now - 15, cleared=0, started=self.now - 60)
+        self.ready_go([row])
+        return row
+
+    def sent_texts(self):
+        return [c.args[-1] for c in self.commands.call_args_list if "-l" in c.args]
+
+    def clear_records(self):
+        return json.loads((self.loop / "runner-clear.json").read_text())
+
+    def test_three_held_waiting_bg_90k_fresh_state_clears_and_resumes_all(self):
+        row = self.safe_runner()
+        with contextlib.redirect_stderr(io.StringIO()) as log:
+            result = self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, HTPR-2, HTPR-3"])
+        self.assertEqual(result[0]["action"], "cleared")
+        self.assertEqual(self.clear_records()[row["runner"]]["last_clear"], self.now)
+        self.assertEqual(log.getvalue().count("cleared RUNNER 8 reason=context_80k context=90000"), 1)
+        self.assertFalse((self.loop / "last-dispatch.json").exists())
+
+    def test_one_held_ticket_without_fresh_state_prevents_clear(self):
+        row = self.safe_runner()
+        for invalid in ([], [claim(row["runner"])],
+                        [claim("RUNNER 2", m.datetime.fromtimestamp(self.now, m.timezone.utc).isoformat(),
+                               "Next: QA\nHelpers: none\nBranch/PR: none\nOutputs: none")]):
+            with self.subTest(invalid=invalid):
+                self.comments["HTPR-2"] = invalid
+                # Keep the claim: only the checkpoint is absent or stale.
+                self.comments["HTPR-2"].insert(0, claim(row["runner"]))
+                self.dispatch([row], go=True)
+                self.assertEqual(self.sent_texts(), [])
+
+    def test_unsent_input_never_clears_even_at_high_context(self):
+        row = self.safe_runner()
+        for box in ("typed", None):
+            for fresh_only in (False, True):
+                with self.subTest(box=box, fresh_only=fresh_only):
+                    typed = dict(row, input_box=box)
+                    with patch.object(m, "snapshots", return_value=[typed]):
+                        self.dispatch([row if fresh_only else typed], go=True)
+                    self.assertEqual(self.sent_texts(), [])
+
+    def test_never_cleared_six_hours_alarm_fires_once_per_six_hours(self):
+        row = self.safe_runner(context=50_000, state="busy")
+        self.metrics.return_value["started"] = self.now - m.ALARM_EVERY
+        with contextlib.redirect_stderr(io.StringIO()) as log:
+            self.dispatch([row], go=True)
+            self.now += m.ALARM_EVERY - 1
+            self.dispatch([row], go=True)
+            inbox = self.state / "runner-inbox/infra-manager.events.jsonl"
+            self.assertEqual(len(inbox.read_text().splitlines()), 1)
+            self.now += 1
+            self.dispatch([row], go=True)
+        events = [json.loads(line) for line in inbox.read_text().splitlines()]
+        self.assertEqual(len(events), 2)
+        self.assertTrue(all(not e["delivered"] and "no_clear_6h" in e["text"] for e in events))
+        self.assertIn('"delivered":false', inbox.read_text())
+        self.assertEqual(log.getvalue().count("alarm RUNNER 8"), 2)
+        self.assertEqual(self.sent_texts(), [])
+
+    def test_160k_context_alarms_without_waiting_six_hours(self):
+        row = self.safe_runner(context=160_000, state="busy")
+        with contextlib.redirect_stderr(io.StringIO()) as log:
+            self.dispatch([row], go=True)
+            self.dispatch([row], go=True)
+        events = (self.state / "runner-inbox/infra-manager.events.jsonl").read_text().splitlines()
+        self.assertEqual(len(events), 1)
+        self.assertIn("alarm RUNNER 8 reason=context_150k context=160000", log.getvalue())
+        self.assertEqual(self.clear_records()[row["runner"]]["last_alarm"], self.now)
+
+    def test_self_pulled_ticket_clears_without_dispatch_history_or_claim_file(self):
+        row = self.safe_runner(context=30_000)
+        self.assertFalse(self.claim_dir.exists())
+        self.assertFalse(self.loop.exists())
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts()[0], "/clear")
+        self.assertFalse(self.claim_dir.exists())
+        self.assertFalse((self.loop / "last-dispatch.json").exists())
+
+    def test_maintenance_dry_run_has_no_reads_writes_or_sends(self):
+        row = self.safe_runner()
+        self.dispatch([row])
+        self.metrics.assert_not_called()
+        self.commands.assert_not_called()
+        self.assertEqual(list(self.state.iterdir()), [])
+
+    def test_checkpoint_requires_all_fields_external_outputs_and_current_runner(self):
+        row = self.safe_runner()
+        good = self.comments["HTPR-1"][-1]
+        for text in ("Next: QA", good["text"].replace("/tmp/helper-123.txt", "only in context"),
+                     good["text"].replace("Helpers: helper-123", "Helpers:")):
+            with self.subTest(text=text):
+                self.assertFalse(m.current_checkpoint("HTPR-1", row["runner"],
+                                 {"HTPR-1": [dict(good, text=text)]}, self.now - 20))
+        self.assertTrue(m.current_checkpoint("HTPR-1", row["runner"], self.comments, self.now - 20))
+        self.assertFalse(m.current_checkpoint("HTPR-1", row["runner"], self.comments, self.now))
+
+    def test_checkpoint_html_inline_labels_and_newer_comment_invalidate_old_state(self):
+        row = self.safe_runner()
+        good = dict(self.comments["HTPR-1"][-1])
+        good["text"] = "".join(f"<p><strong>{line.split(':', 1)[0]}:</strong>{line.split(':', 1)[1]}</p>"
+                               for line in good["text"].splitlines())
+        comments = {"HTPR-1": [good]}
+        self.assertTrue(m.current_checkpoint("HTPR-1", row["runner"], comments, self.now - 20))
+        later = claim(row["runner"], m.datetime.fromtimestamp(self.now - 5, m.timezone.utc).isoformat(),
+                      "Helper output was lost; state above is no longer current")
+        comments["HTPR-1"].append(later)
+        self.assertFalse(m.current_checkpoint("HTPR-1", row["runner"], comments, self.now - 20))
+
+    def test_changed_tool_activity_or_busy_pane_prevents_clear(self):
+        row = self.safe_runner()
+        with patch.object(m, "snapshots", return_value=[dict(row, state="busy")]):
+            self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), [])
+        self.metrics.side_effect = [self.metrics.return_value, dict(self.metrics.return_value, activity=self.now)]
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), [])
+
+    def test_clear_does_not_repeat_on_same_checkpoint_or_clear_on_finished_ticket(self):
+        row = self.safe_runner()
+        self.dispatch([row], go=True)
+        self.now += 900
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts().count("/clear"), 1)
+        self.metrics.return_value = None
+        self.commands.reset_mock()
+        self.ready_go()
+        self.dispatch(self.rows[:1], go=True)
+        self.assertNotIn("/clear", self.sent_texts())
+
+    def test_resume_guard_preserves_input_typed_after_clear(self):
+        row = self.safe_runner()
+        with patch.object(m, "snapshots", side_effect=[[row], [dict(row, state="typed", input_box="typed")]]):
+            with contextlib.redirect_stderr(io.StringIO()) as log:
+                self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), ["/clear"])
+        self.assertIn("resume withheld", log.getvalue())
+        self.assertEqual(self.clear_records()[row["runner"]]["last_clear"], self.now)
+
+    def transcript_fixture(self, events):
+        home = self.state / "home"
+        registry = home / ".claude/sessions"
+        registry.mkdir(parents=True, exist_ok=True)
+        session = dict(sessionId="session-1", cwd="/repo.example", startedAt=(self.now - 100) * 1000,
+                       tmux="hypertask:@1.%8", name="RUNNER 8 | tickets")
+        (registry / "123.json").write_text(json.dumps(session))
+        project = home / ".claude/projects/-repo-example"
+        project.mkdir(parents=True, exist_ok=True)
+        path = project / "session-1.jsonl"
+        path.write_text("".join(json.dumps(e) + "\n" for e in events))
+        return home, path
+
+    def event(self, seconds, kind="assistant", content=None, **extra):
+        return dict(type=kind, timestamp=m.datetime.fromtimestamp(self.now + seconds, m.timezone.utc).isoformat(),
+                    sessionId="session-1", message=dict(content=content or []), **extra)
+
+    def test_local_transcript_uses_latest_input_and_caches_not_cumulative_or_helpers(self):
+        first = self.event(-30)
+        first["message"]["usage"] = dict(input_tokens=10, cache_creation_input_tokens=100_000)
+        latest = self.event(-10, content=[dict(type="tool_use", id="t1", name="Read", input={})])
+        latest["message"]["usage"] = dict(input_tokens=1000, cache_creation_input_tokens=9000,
+                                          cache_read_input_tokens=80_000, output_tokens=5000)
+        helper = self.event(-5, isSidechain=True)
+        helper["message"]["usage"] = dict(input_tokens=200_000)
+        result = self.event(-9, "user", [dict(type="tool_result", tool_use_id="t1")])
+        home, path = self.transcript_fixture([first, latest, result, helper])
+        metrics = self.metrics_reader(dict(runner="RUNNER 8", pane="%8"), home)
+        self.assertEqual(metrics["context"], 90_000)
+        self.assertEqual(metrics["activity"], self.now - 9)
+        self.assertEqual(metrics["started"], self.now - 100)
+        self.assertEqual(metrics["cleared"], 0)
+
+    def test_local_transcript_comment_only_writes_allow_multi_ticket_checkpoints(self):
+        events = [self.event(-40, content=[dict(type="tool_use", name="Write", id="work", input={})]),
+                  self.event(-39, "user", [dict(type="tool_result", tool_use_id="work")])]
+        for n in range(3):
+            events.extend([self.event(-30 + n * 2, content=[dict(type="tool_use", name="Bash", id=f"c{n}",
+                           input=dict(command=f"vcc comment add HTPR-{n} --text 'Next: QA'"))]),
+                           self.event(-29 + n * 2, "user", [dict(type="tool_result", tool_use_id=f"c{n}")])])
+        home, path = self.transcript_fixture(events)
+        row = dict(runner="RUNNER 8", pane="%8")
+        self.assertEqual(self.metrics_reader(row, home)["activity"], self.now - 39)
+        events.append(self.event(-10, content=[dict(type="tool_use", name="Bash", id="batch",
+                      input=dict(command="vcc comment add HTPR-1 --text note; touch /tmp/result"))]))
+        self.transcript_fixture(events)
+        self.assertEqual(self.metrics_reader(row, home)["activity"], self.now - 10)
+
+    def test_local_transcript_clear_and_compaction_reset_stale_usage(self):
+        usage = self.event(-40)
+        usage["message"]["usage"] = dict(input_tokens=160_000)
+        clear = self.event(-20, "user")
+        clear["message"]["content"] = "<command-name>/clear</command-name>"
+        row = dict(runner="RUNNER 8", pane="%8")
+        for boundary in (clear, self.event(-20, "system", subtype="compact_boundary")):
+            with self.subTest(boundary=boundary):
+                home, path = self.transcript_fixture([usage, boundary])
+                metrics = self.metrics_reader(row, home)
+                self.assertIsNone(metrics["context"])
+                self.assertEqual(metrics["usage_at"], 0)
+                self.assertEqual(metrics["cleared"], self.now - 20 if boundary is clear else 0)
+
+    def test_local_transcript_bounded_tail_unknown_or_malformed_fails_closed(self):
+        event = self.event(-10)
+        event["message"]["usage"] = dict(input_tokens=90_000)
+        home, path = self.transcript_fixture([event])
+        # A long invalid prefix must never be parsed or read as a complete transcript.
+        path.write_bytes(b"x" * (m.SESSION_TAIL + 100) + b"\n" + path.read_bytes())
+        row = dict(runner="RUNNER 8", pane="%8")
+        self.assertEqual(self.metrics_reader(row, home)["context"], 90_000)
+        self.assertEqual(self.metrics_reader(row, home)["activity"], 0)
+        self.assertIsNone(self.metrics_reader(dict(row, pane="%9"), home))
+        path.write_text('{"partial":')
+        self.assertIsNone(self.metrics_reader(row, home)["context"])
+        self.assertEqual(self.metrics_reader(row, home)["activity"], 0)
+        path.unlink()
+        self.assertEqual(self.metrics_reader(row, home)["started"], self.now - 100)
+        self.assertIsNone(self.metrics_reader(row, home)["context"])
+
+    def test_observed_manual_clear_persists_and_suppresses_old_age_alarm(self):
+        row = self.safe_runner(context=50_000, state="busy")
+        self.metrics.return_value.update(started=self.now - 100_000, cleared=self.now - 10)
+        self.dispatch([row], go=True)
+        self.assertEqual(self.clear_records()[row["runner"]]["last_clear"], self.now - 10)
+        self.assertFalse((self.state / "runner-inbox").exists())
+        self.metrics.return_value["cleared"] = 0  # Boundary fell outside bounded tail.
+        self.dispatch([row], go=True)
+        self.assertEqual(self.clear_records()[row["runner"]]["last_clear"], self.now - 10)
+
+    def test_alarm_queue_preserves_existing_events_and_deduplicates_retry(self):
+        inbox = self.state / "runner-inbox"
+        inbox.mkdir()
+        path = inbox / "infra-manager.events.jsonl"
+        existing = dict(id="old", ts=self.now - 1, text="existing", delivered=False)
+        path.write_text(json.dumps(existing) + "\n")
+        for unused in range(2):
+            m.queue_clear_alarm(self.state, "RUNNER 8", "alarm RUNNER 8", self.now)
+        events = [json.loads(line) for line in path.read_text().splitlines()]
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0], existing)
+        self.assertEqual(events[1]["text"], "alarm RUNNER 8")
+        self.assertEqual(list(inbox.glob("*.tmp.*")), [])
+
+    def test_alarm_inbox_throttle_survives_lost_state_and_time_bucket_change(self):
+        row = self.safe_runner(context=160_000, state="busy")
+        self.now = (self.now // m.ALARM_EVERY + 1) * m.ALARM_EVERY - 10
+        with contextlib.redirect_stderr(io.StringIO()) as log:
+            self.dispatch([row], go=True)
+            (self.loop / "runner-clear.json").unlink()
+            self.now += 20
+            self.dispatch([row], go=True)
+        inbox = self.state / "runner-inbox/infra-manager.events.jsonl"
+        self.assertEqual(len(inbox.read_text().splitlines()), 1)
+        self.assertEqual(log.getvalue().count("alarm RUNNER 8"), 1)
+
+    def test_missing_transcript_still_allows_age_alarm_not_clear(self):
+        home, path = self.transcript_fixture([])
+        path.unlink()
+        metrics = self.metrics_reader(dict(runner="RUNNER 8", pane="%8"), home)
+        metrics["started"] = self.now - m.ALARM_EVERY
+        self.metrics.return_value = metrics
+        row = dict(runner="RUNNER 8", pane="%8", state="idle", input_box="empty")
+        self.ready_go([row])
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), [])
+        event = json.loads((self.state / "runner-inbox/infra-manager.events.jsonl").read_text())
+        self.assertIn("no_clear_6h", event["text"])
+
+    def test_corrupt_clear_state_blocks_clear_and_alarm_without_overwrite(self):
+        row = self.safe_runner(context=160_000)
+        self.loop.mkdir()
+        path = self.loop / "runner-clear.json"
+        for raw in ('{"broken":', '[]', '{"RUNNER 8":{"last_alarm":"bad"}}'):
+            with self.subTest(raw=raw), contextlib.redirect_stderr(io.StringIO()) as log:
+                path.write_text(raw)
+                self.dispatch([row], go=True)
+                self.assertEqual(path.read_text(), raw)
+                self.assertEqual(self.sent_texts(), [])
+                self.assertIn("maintenance skipped", log.getvalue())
+                self.assertFalse((self.state / "runner-inbox").exists())
 
     def test_done_gets_top_bug_and_dry_run_writes_nothing(self):
         self.assertEqual(self.dispatch()[0]["ticket"], "HTPR-1")
@@ -330,11 +621,13 @@ class DispatchTests(unittest.TestCase):
              'fresh[0]["state"] not in SPEED_STATES', "test_fresh_active_holds_abort_and_release_unsent_claim", 1),
             ("fresh_normal_hold", 'fresh[0]["state"] not in {"done", "idle"}\n                            or (fresh[0]["state"] != "done" and holding)',
              'fresh[0]["state"] not in {"done", "idle"}', "test_fresh_active_holds_abort_and_release_unsent_claim", 1),
-            ("malformed_state", "except ValueError:", "except json.JSONDecodeError as error:\n        raise error",
+            ("malformed_state", 'except ValueError:\n        print("runner-dispatch: malformed last-dispatch.json',
+             'except json.JSONDecodeError as error:\n        raise error\n        print("runner-dispatch: malformed last-dispatch.json',
              "test_malformed_dispatch_state_is_empty_with_one_log_line", 1),
             ("state_validation", 'raise ValueError("invalid dispatch timestamps")', 'return data',
              "test_malformed_dispatch_state_is_empty_with_one_log_line", 1),
-            ("non_atomic_state", "os.replace(temporary, path)", "path.write_text(temporary.read_text())",
+            ("non_atomic_state", 'os.replace(temporary, path)\n    finally:\n        temporary.unlink(missing_ok=True)\n\n\ndef acquire_claim',
+             'path.write_text(temporary.read_text())\n    finally:\n        temporary.unlink(missing_ok=True)\n\n\ndef acquire_claim',
              "test_dispatch_state_replaced_atomically_for_normal_speed_and_research", 1),
             ("temp_cleanup", "temporary.unlink(missing_ok=True)\n\n\ndef acquire_claim",
              "pass\n\n\ndef acquire_claim", "test_dispatch_state_write_failure_preserves_old_state_and_cleans_temp", 1),
@@ -395,7 +688,7 @@ class DispatchTests(unittest.TestCase):
                 def check_replace(source, target):
                     if target == path:
                         sent = [c.args for c in self.commands.call_args_list if "send-keys" in c.args]
-                        self.assertEqual(len(sent), 4)
+                        self.assertEqual(len(sent), 2)
                         self.assertEqual(sent[-1], ("tmux", "send-keys", "-t", row["pane"], "Enter"))
                         before = json.loads(path.read_text())
                         self.assertEqual(before.pop("pending_until"), self.now + m.PENDING_DELIVERY_TTL)
@@ -573,7 +866,7 @@ class DispatchTests(unittest.TestCase):
     def test_partial_delivery_keeps_claim_until_expiry_then_retries(self):
         self.add_speed_ticket()
         for row, ticket in ((self.rows[0], "HTPR-1"), (self.rows[8], "HTPR-9")):
-            for failed_send in (1, 2, 3, 4):
+            for failed_send in (1, 2):
                 with self.subTest(runner=row["runner"], failed_send=failed_send):
                     self.ready_go()
                     attempts = []
@@ -632,11 +925,9 @@ class DispatchTests(unittest.TestCase):
         result = self.dispatch(self.rows[:1], go=True)
         self.assertEqual(result[0]["action"], "sent")
         sent = [c.args for c in self.commands.call_args_list if "send-keys" in c.args]
-        self.assertEqual(sent, [("tmux", "send-keys", "-t", "%1", "-l", "/clear"),
-                               ("tmux", "send-keys", "-t", "%1", "Enter"),
-                               ("tmux", "send-keys", "-t", "%1", "-l", "/ship HTPR-1"),
+        self.assertEqual(sent, [("tmux", "send-keys", "-t", "%1", "-l", "/ship HTPR-1"),
                                ("tmux", "send-keys", "-t", "%1", "Enter")])
-        self.assertEqual([c.args for c in self.sleep.call_args_list], [(3,), (1,)])
+        self.assertEqual([c.args for c in self.sleep.call_args_list], [(1,)])
         self.assertIn("RUNNER 1 before=123k HTPR-1 auto\n", (self.state / "fresh-session-trial.log").read_text())
         entry = json.loads((self.loop / "dispatch.log").read_text())
         self.assertEqual((entry["ticket"], entry["before"]), ("HTPR-1", "123k"))
