@@ -205,7 +205,7 @@ export default function Provider({
         }}
       >
         <DeviceProvider initialIsApple={initialIsApple}>
-          <MobileViewProvider initialIsMobile={shell?.display.isMobile ?? initialIsMobile}>
+          <MobileViewProvider initialIsMobile={initialIsMobile}>
             <StateRoot key={`state-account-${authenticatedUserId ?? "guest"}`} initialValues={initialValues}>
               <UndoProvider>
                 <MobileBlockingProvider>
