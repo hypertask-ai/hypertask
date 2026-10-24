@@ -97,10 +97,11 @@ Never use Valentin's account, password, or cookies. If the shot is a login page,
    ```
 
    A PASS verdict requires no `FAIL` bullets. `UNREACHABLE` is allowed when the reason and the closest real path are both in that bullet.
-8. **Report on the ticket with `vcc`, then move it with `vcc`.** One comment. Never assign anyone. Never assign userId 6 (Valentin) for any reason, including escalation. Only Valentin assigns himself. If he assigned himself or moved the ticket by hand, leave assignees and column as he left them.
-   - **PASS** (no FAIL bullets): attach `proof.md` and the key screenshots, say what changed in plain language, then move to Done.
+8. **Report on the ticket with `vcc`, then move it with `vcc`.** One QA comment; a pending rollout also needs the separate exact approval comment below. Never assign anyone. Never assign userId 6 (Valentin) for any reason, including escalation. Only Valentin assigns himself. If he assigned himself or moved the ticket by hand, leave assignees and column as he left them.
+   - **PASS** (no FAIL bullets): attach `proof.md` and the key screenshots, say what changed in plain language. Move to **Flags** if any ticket flag is not Everyone. Put the recommendation and why in that QA comment, then post the last comment as exactly the bare line `Question: Switch <flag-key> to Everyone?` (no mention, markup or footer). A separate open question for Valentin goes to **Valentin Review**. Move to **Done** only when all flags are Everyone and nothing remains.
      ```
      vcc comment add HTPR-NNNN --kind qa --attach ~/.local/state/vcc-evidence/HTPR-NNNN/proof.md --attach ~/.local/state/vcc-evidence/HTPR-NNNN/<shot>.png --text "<p><strong>PASS: verified on production.</strong></p><p>What you checked, in plain language, and what the user will notice.</p>"
+     # Only when every flag is Everyone and nothing remains; otherwise use Flags as above.
      vcc task move HTPR-NNNN --section "Done"
      ```
    - **FAIL:** name the failing case, attach the evidence, move back to In Progress, fix, and ship again. Then run this skill from step 1.

@@ -92,6 +92,8 @@ question_comment() {
   if [ -n "$file" ]; then
     text=$(cat -- "$file" 2>/dev/null) || question_refuse 'cannot read --file'
   fi
+  # Flag approvals are parsed by the API as an exact, standalone sentence.
+  [[ $text =~ ^Question:\ Switch\ [a-z0-9]+(-[a-z0-9]+)*\ to\ (Everyone|Only\ me|Owner\ \+\ QA|Off)\?$ ]] && return 0
   reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
   [ -z "$reason" ] || question_refuse "$reason"
 }

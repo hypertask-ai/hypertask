@@ -322,3 +322,12 @@ fixture "$rewrite_7508_303933"
 allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 printf 'ok verbatim old Question refuses and real rewrite passes comment add and newest review\n'
 printf 'vcc helper guard tests passed\n'
+
+for mode in Everyone 'Only me' 'Owner + QA' Off; do
+  allowed bash "$vcc" comment add HTPR-1 --kind question --text "Question: Switch htpr-1-test to $mode?"
+done
+question_refused 'Question:' comment add HTPR-1 --kind question --text 'Question: Switch htpr-1-test to Everyone? Why: ready.'
+question_refused 'Question:' comment add HTPR-1 --kind question --text 'Question: Switch htpr-1-test to Everyone? Extra?'
+fixture 'Question: Switch htpr-1-test to Everyone?'
+review_refused '' task move HTPR-1 --section 'Valentin Review'
+printf 'All tests passed: exact flag approvals accepted only for comments\n'

@@ -1,0 +1,10 @@
+[Unit]
+Description=Move fully released board 15 tickets from Flags to Done
+
+[Service]
+Type=oneshot
+UMask=0077
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/ht-flags-sweep
+ExecStart=/usr/bin/flock --nonblock %h/.local/state/ht-flags-sweep/timer.lock %h/.agents/skills/ship/scripts/ht-flags-sweep --go
+TimeoutStartSec=10m

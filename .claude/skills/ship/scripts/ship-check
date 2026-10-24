@@ -20,7 +20,8 @@
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
 #   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
-#   ship-check done <T>          ticket is in Done
+#   ship-check flags <T>         ticket flags are Everyone (unreadable modes fail closed)
+#   ship-check done <T>          ticket is in Done and its flags are Everyone
 #   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
 # CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...; non-releasing repos can opt in with SHIP_DEPLOY=none.
@@ -528,9 +529,21 @@ check_proof() {
   echo "proof ok"
 }
 
+check_flags() {
+  local n; n=$(bound_pr "$1")
+  if [ -s "$EVID/$1/dropped" ]; then
+    dropped_ok flags "$1" >/dev/null || return 1
+    # The closed, unmerged PR never shipped; live ticket flags still apply.
+    n=''
+  fi
+  python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ticket_flags.py" "$1" "$REPO" "$n" \
+    || fail "cannot mark $1 Done until every ticket flag is Everyone; use Flags after live QA (mode read failures block Done only)"
+}
+
 check_done() {
   local s; s=$(hypertask tasks get "$1" --json 2>/dev/null | jq -r '.tasks[0].section // empty')
   [ "$s" = Done ] || fail "$1 is in \"$s\", not Done"
+  check_flags "$1" || return 1
   echo "done ok"
 }
 
@@ -711,7 +724,7 @@ PY
     # Move to Done: needs merge, deploy and docs (FEATURE/IMPROVE); app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then
       [[ $rest =~ (HTPR|HYFA|YPER4)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
-      checks="merged deployed docs"; [[ $t == HTPR-* ]] && checks="merged deployed proof docs"
+      checks="merged deployed docs flags"; [[ $t == HTPR-* ]] && checks="merged deployed proof docs flags"
       for c in $checks; do
         if [ "$c" = docs ]; then
           out=$(check_docs "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Merge a docs PR titled with $t or post a No user-visible change: <reason> ticket comment." >&2; exit 2; }
@@ -725,7 +738,7 @@ PY
 }
 
 case "${1:-}" in
-  pr|merged|deployed|docs|proof|done|cleaned)
+  pr|merged|deployed|docs|proof|done|cleaned|flags)
     if [ "${SHIP_REPO+x}" != x ] && [ -s "$EVID/${2:-}/repo" ]; then
       REPO=$(cat "$EVID/$2/repo") || fail "could not read bound repo for $2"
     fi
@@ -752,6 +765,7 @@ case "${1:-}" in
   docs) check_docs "$2" ;;
   proof) check_proof "$2" ;;
   done) check_done "$2" ;;
+  flags) check_flags "$2" ;;
   cleaned) check_cleaned "$2" ;;
   guard) guard ;;
   *) sed -n '2,25p' "$0"; exit 1 ;;
