@@ -436,6 +436,7 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
     './AgentSidebarChatCommands': { AgentSidebarChatCommands: () => null },
     '@/lib/configs/general.config': { MOBILE_TARGET: 'min-h-[44px] min-w-[44px]' },
     '@/utils/undoActions/helperFuncs': { cn: (...values) => values.filter(Boolean).join(' ') },
+    '@/lib/flags/definitions/htpr-7773-chat-header-name': { HTPR_7773_CHAT_HEADER_NAME_FLAG: 'htpr-7773-chat-header-name' },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
     '../Common/Tooltip': { __esModule: true, default: () => null },
