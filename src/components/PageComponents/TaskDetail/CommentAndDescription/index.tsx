@@ -196,12 +196,12 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = (
+            contentToRender = ticketChatReminder ? (
               <>
                 <div id="bottom-description" className="h-0" />
                 {ticketChatSessionsReminder}
               </>
-            );
+            ) : <div id="bottom-description" className="h-0" />;
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments
