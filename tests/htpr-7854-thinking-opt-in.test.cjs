@@ -85,9 +85,11 @@ test("each provider gets its own option shape for every feature effort", () => {
       } else if (provider === "openrouter") {
         assert.equal(sent.providerOptions.openrouter.reasoning.effort, level);
       } else if (provider === "deepseek") {
+        assert.equal(String(sent.modelId ?? "").includes("-fast"), false, feature);
         if (level === "none") {
-          assert.equal(sent.modelId, "deepseek/deepseek-v4.1-flash-1017-fast");
-          assert.equal(sent.providerOptions.deepseek.thinking.type, "disabled");
+          assert.equal(sent.modelId, "deepseek/deepseek-v4.1-flash-1017");
+          assert.equal(sent.providerOptions, undefined);
+          assert.equal(sent.note, reasoning.DEEPSEEK_NONE_UNCHANGED_NOTE);
         } else {
           assert.equal(sent.modelId, "deepseek/deepseek-v4.1-flash-1017");
           assert.equal(sent.providerOptions.deepseek.reasoningEffort, level);
@@ -109,6 +111,26 @@ test("each provider gets its own option shape for every feature effort", () => {
   const low = reasoning.translateReasoning({ feature: "chat", provider: "deepseek", modelId: "deepseek/deepseek-v4-pro" });
   assert.equal(low.providerOptions.deepseek.reasoningEffort, "low");
   assert.equal(low.providerOptions.deepseek.thinking.type, "enabled");
+  const deepseekModels = [
+    "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-v4.1-flash-1017-fast",
+    "deepseek-v4.1-flash-fast",
+  ];
+  for (const feature of Object.keys(EXPECTED)) {
+    for (const explicit of [undefined, "none", "low", "medium", "high"]) {
+      for (const modelId of deepseekModels) {
+        const sent = reasoning.translateReasoning({ feature, provider: "deepseek", modelId, explicit });
+        assert.equal(String(sent.modelId ?? "").includes("-fast"), false, `${feature} ${explicit ?? "map"} ${modelId}`);
+        if (explicit === "none" || (!explicit && EXPECTED[feature] === "none")) {
+          assert.equal(sent.providerOptions, undefined);
+          assert.equal(sent.modelId, modelId.includes("-fast") ? undefined : modelId);
+        }
+      }
+    }
+  }
   const kept = reasoning.translateReasoning({ feature: "chat-title", provider: "anthropic", explicit: "high" });
   assert.equal(kept.providerOptions.anthropic.effort, "high");
   assert.equal(kept.providerOptions.anthropic.thinking.type, "adaptive");

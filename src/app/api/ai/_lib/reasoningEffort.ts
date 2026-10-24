@@ -5,7 +5,7 @@ export { HTPR_7854_AI_THINKING_OPT_IN_FLAG };
 export const CHAT_TITLE_MAX_OUTPUT_TOKENS = 64;
 
 export const DEEPSEEK_NONE_UNCHANGED_NOTE =
-  "DeepSeek V4 Pro has no non-reasoning variant in the catalog; the model id is unchanged.";
+  "DeepSeek keeps the selected model id and sends no thinking option.";
 
 export const DEEPSEEK_MEDIUM_NOTE =
   "DeepSeek reasoningEffort accepts low, high, or max; medium is sent as high.";
@@ -55,17 +55,6 @@ const USAGE_FEATURE_TO_REASONING: Record<string, keyof typeof FEATURE_REASONING_
   "hyper-mentioned": "hyper-mentioned",
   "task-writer": "task-writer",
 };
-
-const DEEPSEEK_NONE_MODEL: Record<string, string> = {
-  "deepseek/deepseek-v4.1-flash-1017": "deepseek/deepseek-v4.1-flash-1017-fast",
-  "deepseek-v4.1-flash": "deepseek-v4.1-flash-fast",
-  "deepseek/deepseek-v4.1-flash": "deepseek/deepseek-v4.1-flash-1017-fast",
-};
-
-const DEEPSEEK_ALREADY_NONE = new Set([
-  "deepseek/deepseek-v4.1-flash-1017-fast",
-  "deepseek-v4.1-flash-fast",
-]);
 
 const PROVIDERS_WITHOUT_KNOB = new Set<ReasoningProvider>([
   "gateway",
@@ -136,33 +125,27 @@ export function translateReasoning(args: {
   return deepseekTranslation(level, args.modelId);
 }
 
+function deepseekModelId(modelId?: string): string | undefined {
+  if (!modelId || modelId.includes("-fast")) return undefined;
+  return modelId;
+}
+
 function deepseekTranslation(level: ReasoningEffort, modelId?: string): ReasoningTranslation {
+  const kept = deepseekModelId(modelId);
   if (level === "none") {
-    const swapped = modelId ? DEEPSEEK_NONE_MODEL[modelId] : undefined;
-    if (swapped || (modelId && DEEPSEEK_ALREADY_NONE.has(modelId))) {
-      return {
-        level,
-        modelId: swapped ?? modelId,
-        providerOptions: { deepseek: { thinking: { type: "disabled" } } },
-      };
-    }
-    return {
-      level,
-      modelId,
-      note: DEEPSEEK_NONE_UNCHANGED_NOTE,
-    };
+    return { level, modelId: kept, note: DEEPSEEK_NONE_UNCHANGED_NOTE };
   }
   if (level === "medium") {
     return {
       level,
-      modelId,
+      modelId: kept,
       note: DEEPSEEK_MEDIUM_NOTE,
       providerOptions: { deepseek: { thinking: { type: "enabled" }, reasoningEffort: "high" } },
     };
   }
   return {
     level,
-    modelId,
+    modelId: kept,
     providerOptions: { deepseek: { thinking: { type: "enabled" }, reasoningEffort: level } },
   };
 }
