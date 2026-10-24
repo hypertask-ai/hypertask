@@ -638,6 +638,7 @@ export async function GET(request: NextRequest) {
       where,
       select: {
         id: true,
+        blockerCommentId: true,
         ticketNumber: true,
         uniqueIndex: true,
         title: true,

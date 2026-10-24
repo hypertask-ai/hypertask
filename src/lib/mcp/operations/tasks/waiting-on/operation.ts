@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       } catch {
         return NextResponse.json({ success: false, error: "Invalid request body", message: "Request body must be valid JSON" }, { status: 400 });
       }
-      if (body?.blockerCommentId === undefined && !(await isFeatureEnabled(HTPR_7723_TASK_WAITING_ON_FLAG, ctx.user.id))) {
+      if (body?.userId !== undefined && !(await isFeatureEnabled(HTPR_7723_TASK_WAITING_ON_FLAG, ctx.user.id))) {
         return NextResponse.json({ success: false, error: "Task waiting-on is not enabled" }, { status: 404 });
       }
       if (!body || Array.isArray(body) || typeof body.taskId !== "number" || !Number.isInteger(body.taskId)

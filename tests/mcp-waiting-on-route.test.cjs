@@ -280,13 +280,31 @@ test("app session and Pages callers can mark and unmark without changing the wai
 });
 
 for (const method of ["post", "session", "pages"]) {
-  test(`blocker flag off refuses ${method} setting and clearing before content reads or writes`, async () => {
+  test(`now refused: blocker flag off refuses ${method} marker-only and combined setting and clearing before content reads or writes`, async () => {
     const f = fixture({ blockerFlagEnabled: false });
-    for (const blockerCommentId of [101, null]) {
-      const response = await f[method]({ taskId: 42, userId: 9, blockerCommentId });
-      assert.equal(response.status, 404);
+    for (const userId of [undefined, 9, null]) {
+      for (const blockerCommentId of [101, null]) {
+        const response = await f[method]({ taskId: 42, userId, blockerCommentId });
+        assert.equal(response.status, 404);
+      }
     }
     for (const calls of [f.access, f.commentReads, f.writes, f.members, f.activities, f.boards, f.inboxes, f.taskChanges]) assert.deepEqual(calls, []);
+  });
+
+  test(`still allowed: blocker flag off permits ${method} person-only setting and clearing`, async () => {
+    const f = fixture({ blockerFlagEnabled: false });
+    f.task.blockerCommentId = 101;
+    for (const userId of [9, null]) {
+      const response = await f[method]({ taskId: 42, userId });
+      assert.equal(response.status, 200);
+      assert.equal(f.task.waitingOnUserId, userId);
+      assert.equal(f.task.blockerCommentId, 101);
+    }
+    assert.equal(f.writes.length, 2);
+    for (const write of f.writes) assert.equal(Object.hasOwn(write.data, "blockerCommentId"), false);
+    assert.deepEqual(f.commentReads, []);
+    assert.deepEqual(f.taskChanges, []);
+    assert.ok(f.flags.every(({ key }) => key !== "htpr-7724-blocker-comment"));
   });
 }
 
@@ -324,8 +342,49 @@ for (const blockerCommentId of ["101", 0, -1, 1.5, 2 ** 40, false, {}]) {
   });
 }
 
-test("blocker flag is independent of the older agent waiting-on switch", async () => {
-  const f = fixture({ flagEnabled: false });
-  assert.equal((await f.post({ taskId: 42, userId: 9, blockerCommentId: 101 })).status, 200);
-  assert.deepEqual(f.flags, [{ key: "htpr-7724-blocker-comment", userId: 7 }]);
-});
+for (const userId of [9, null]) {
+  for (const blockerCommentId of [101, null]) {
+    test(`now refused: waiting-on flag off blocks combined userId=${userId} and blockerCommentId=${blockerCommentId}`, async () => {
+      const f = fixture({ flagEnabled: false });
+      const response = await f.post({ taskId: 42, userId, blockerCommentId });
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { success: false, error: "Task waiting-on is not enabled" });
+      assert.deepEqual(f.flags, [{ key: "htpr-7723-task-waiting-on", userId: 7 }]);
+      assert.equal(f.task.waitingOnUserId, 8);
+      assert.equal(f.task.blockerCommentId, null);
+      for (const calls of [f.access, f.commentReads, f.members, f.writes, f.activities, f.boards, f.inboxes, f.taskChanges, f.leases]) assert.deepEqual(calls, []);
+    });
+
+    test(`still allowed: both flags on permit combined userId=${userId} and blockerCommentId=${blockerCommentId}`, async () => {
+      const f = fixture();
+      const response = await f.post({ taskId: 42, userId, blockerCommentId });
+      assert.equal(response.status, 200);
+      const receipt = (await response.json()).task;
+      assert.equal(receipt.waitingOnUserId, userId);
+      assert.equal(receipt.blockerCommentId, blockerCommentId);
+      assert.equal(f.writes.length, 1);
+      assert.equal(f.writes[0].data.waitingOnUserId, userId);
+      assert.equal(f.writes[0].data.blockerCommentId, blockerCommentId);
+      assert.deepEqual(f.flags, [
+        { key: "htpr-7723-task-waiting-on", userId: 7 },
+        { key: "htpr-7724-blocker-comment", userId: 7 },
+      ]);
+    });
+  }
+}
+
+for (const blockerCommentId of [101, null]) {
+  test(`still allowed: waiting-on flag off permits marker-only blockerCommentId=${blockerCommentId}`, async () => {
+    const f = fixture({ flagEnabled: false });
+    f.task.blockerCommentId = 102;
+    const response = await f.post({ taskId: 42, blockerCommentId });
+    assert.equal(response.status, 200);
+    const receipt = (await response.json()).task;
+    assert.equal(receipt.blockerCommentId, blockerCommentId);
+    assert.equal(receipt.waitingOnUserId, 8);
+    assert.equal(receipt.waitingOnSetById, 7);
+    assert.deepEqual(f.writes.map(({ data }) => data), [{ blockerCommentId }]);
+    assert.deepEqual(f.flags, [{ key: "htpr-7724-blocker-comment", userId: 7 }]);
+    for (const calls of [f.members, f.activities, f.inboxes]) assert.deepEqual(calls, []);
+  });
+}
