@@ -7,14 +7,24 @@ const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 
 const workflow = fs.readFileSync(path.join(__dirname, "../.github/workflows/feature-flag-gate.yml"), "utf8");
-const reconciliation = workflow.split("  reconcile-open-pull-requests:")[1];
+function workflowJob(name) {
+  return workflow.split(`  ${name}:\n`)[1].split(/\n  [a-z][a-z-]*:\n/)[0];
+}
+
+const reconciliation = workflowJob("reconcile-open-pull-requests");
+const perPrPublisher = workflowJob("publish-pull-request");
+const reconcilePublisher = workflowJob("publish-reconciliation");
+
+function shellScript(job) {
+  return job.match(/        run: \|\n(          set -uo pipefail[\s\S]*)/)[1].replace(/^          /gm, "");
+}
 const startup = reconciliation.match(/        run: \|\n(          set -uo pipefail[\s\S]*?)          pages=/)[1]
   .replace(/^          /gm, "");
 
 function runStartup(t, runnerTemp) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-reconcile-test-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
-  const env = { ...process.env };
+  const env = { ...process.env, GITHUB_OUTPUT: path.join(fixture, "outputs") };
   delete env.RUNNER_TEMP;
   if (runnerTemp !== undefined) env.RUNNER_TEMP = runnerTemp(fixture);
   const result = spawnSync("bash", ["-e", "-c", `${startup}
@@ -69,7 +79,7 @@ test("reconciliation fails closed when mktemp cannot create private scratch", (t
   assert.match(result.stdout, /::error::Cannot create private feature-flag reconciliation scratch space\./);
 });
 
-const singlePullRequest = workflow.split("  reconcile-open-pull-requests:")[0];
+const singlePullRequest = workflowJob("feature-flag-gate");
 const waitingDescription = "feature-flag-gate is waiting for the run on the newer production commit";
 
 function featureFlagStatus(pull, overrides = {}) {
@@ -86,6 +96,7 @@ function runWorkflow(t, {
   job = reconciliation, drift = false, missingHead = false, apiFailure,
   gateScript = 'console.log("ok");\n', statuses = () => ({}), sharedHead = false,
   refreshedPull = (pull) => pull, freshSharedHead = false, forkHead = false,
+  statusesBeforePublish, prepareStatuses = (records) => records,
 } = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -114,6 +125,7 @@ function runWorkflow(t, {
     JOB_STARTED_AT: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
     PR_NUMBER: "42",
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
+    GITHUB_OUTPUT: path.join(fixture, "outputs"),
     FIXTURE_PR: path.join(fixture, "pull.json"),
     FIXTURE_STATUSES: path.join(fixture, "statuses.json"),
     FIXTURE_CURRENT_PR: path.join(fixture, "current-pull.json"),
@@ -124,6 +136,7 @@ function runWorkflow(t, {
     FIXTURE_API_CALLS: path.join(fixture, "api-calls.jsonl"),
   });
   fs.writeFileSync(env.GITHUB_STEP_SUMMARY, "");
+  fs.writeFileSync(env.GITHUB_OUTPUT, "");
   fs.writeFileSync(env.FIXTURE_POSTS, "");
   fs.writeFileSync(env.FIXTURE_API_CALLS, "");
 
@@ -204,6 +217,9 @@ if (args.includes("POST")) {
   assert.equal(endpoint, repo + "/statuses/" + pull.head.sha);
   const payload = JSON.parse(fs.readFileSync(args[args.indexOf("--input") + 1], "utf8"));
   fs.appendFileSync(process.env.FIXTURE_POSTS, JSON.stringify({ endpoint, payload }) + "\\n");
+  const statuses = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATUSES, "utf8"));
+  statuses[pull.head.sha] = [{ ...payload, created_at: new Date().toISOString() }, ...(statuses[pull.head.sha] || [])];
+  fs.writeFileSync(process.env.FIXTURE_STATUSES, JSON.stringify(statuses));
   console.log("{}");
 } else if (endpoint === repo + "/pulls?state=open&base=production&per_page=100") {
   assert.ok(args.includes("--paginate") && args.includes("--slurp"));
@@ -232,15 +248,27 @@ done
 exit 1
 `, { mode: 0o755 });
 
-  const script = job.match(/        run: \|\n(          set -uo pipefail[\s\S]*)/)[1].replace(/^          /gm, "");
-  const result = spawnSync("bash", ["-e", "-c", script], {
-    cwd: checkout,
-    env,
-    encoding: "utf8",
-    timeout: 30_000,
+  const evaluation = spawnSync("bash", ["-e", "-c", shellScript(job)], {
+    cwd: checkout, env, encoding: "utf8", timeout: 30_000,
   });
-  assert.ifError(result.error);
-  const output = result.stdout + result.stderr;
+  assert.ifError(evaluation.error);
+  const outputs = Object.fromEntries(fs.readFileSync(env.GITHUB_OUTPUT, "utf8").trim().split("\n")
+    .filter(Boolean).map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
+  const records = prepareStatuses(JSON.parse(outputs.statuses || "[]"), pull);
+  if (statusesBeforePublish) {
+    fs.writeFileSync(env.FIXTURE_STATUSES, JSON.stringify(statusesBeforePublish(pull)));
+  }
+  let publication = { status: 0, stdout: "", stderr: "" };
+  if (records.length) {
+    publication = spawnSync("bash", ["-e", "-c", shellScript(job === reconciliation ? reconcilePublisher : perPrPublisher)], {
+      cwd: checkout,
+      env: { ...env, PREPARED_STATUSES: JSON.stringify(records), EVALUATION_FAILED: outputs.evaluation_failed },
+      encoding: "utf8", timeout: 30_000,
+    });
+    assert.ifError(publication.error);
+  }
+  const result = { status: evaluation.status || publication.status };
+  const output = evaluation.stdout + evaluation.stderr + publication.stdout + publication.stderr;
   const posts = fs.readFileSync(env.FIXTURE_POSTS, "utf8").trim().split("\n").filter(Boolean)
     .map((line) => JSON.parse(line).payload);
   const calls = fs.readFileSync(env.FIXTURE_API_CALLS, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
@@ -280,7 +308,7 @@ test("reconcile: a fork PR with a matching recent success is still judged and re
 });
 
 for (const change of ["base", "title", "head", "error", "pending", "missing fingerprint", "old format", "red older than 30 minutes", "labels"]) {
-  test(`reconcile: ${change} still evaluates and refreshes the fingerprint without another status read`, (t) => {
+  test(`reconcile: ${change} still evaluates and refreshes the fingerprint using a fresh locked status read`, (t) => {
     const { result, output, posts, calls, pull } = runWorkflow(t, {
       statuses: (pull) => {
         const prior = structuredClone(pull);
@@ -306,8 +334,8 @@ for (const change of ["base", "title", "head", "error", "pending", "missing fing
     assert.equal(posts[0].state, "success");
     assert.equal(posts[0].description, "ok");
     assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
-    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 1);
-    assert.equal(calls.filter((call) => call.endpoint.endsWith("/pulls/42")).length, 1);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 2);
+    assert.equal(calls.filter((call) => call.endpoint.endsWith("/pulls/42")).length, 2);
     assert.equal(calls.filter((call) => call.endpoint.includes("/pulls?")).length, 2);
   });
 }
@@ -331,9 +359,9 @@ for (const state of ["success", "failure"]) {
     });
     assert.equal(result.status, 0, output);
     assert.match(output, /evaluated 2, skipped 0/);
-    assert.equal(posts.length, 2);
+    assert.equal(posts.length, 1);
     assert.ok(posts.every((post) => post.state === "failure" && /shared by multiple/.test(post.description)));
-    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 2);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 4);
   });
 }
 
@@ -356,9 +384,8 @@ test("reconcile: evaluated PR still rechecks current metadata before publishing"
   });
   assert.equal(result.status, 0, output);
   assert.match(output, /changed during reconciliation/);
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].state, "error");
-  assert.match(posts[0].description, /waiting for the updated pull request/);
+  assert.deepEqual(posts, []);
+  assert.match(output, /evaluation inputs changed before status publication/);
 });
 
 test("reconcile: evaluated PR still rechecks fresh shared heads before publishing", (t) => {
@@ -372,7 +399,7 @@ test("reconcile: evaluated PR still rechecks fresh shared heads before publishin
 test("per-PR: final verdict posts the current base/title fingerprint and unchanged description", (t) => {
   const { result, output, posts, pull } = runWorkflow(t, { job: singlePullRequest });
   assert.equal(result.status, 0, output);
-  assert.equal(posts.length, 2);
+  assert.equal(posts.length, 1);
   assert.equal(posts.at(-1).state, "success");
   assert.equal(posts.at(-1).description, "ok");
   assert.equal(posts.at(-1).target_url,
@@ -394,7 +421,7 @@ test("reconcile drift: production moved mid-run posts pending and exits 0", (t) 
 test("single-PR drift: production moved mid-run posts pending and exits 0", (t) => {
   const { result, output, posts } = runWorkflow(t, { job: singlePullRequest, drift: true });
   assert.equal(result.status, 0, output);
-  assert.equal(posts.length, 2);
+  assert.equal(posts.length, 1);
   assert.equal(posts.at(-1).state, "pending");
   assert.equal(posts.at(-1).description, waitingDescription);
   assert.doesNotMatch(output, /::error::/);
@@ -452,25 +479,25 @@ for (const job of [reconciliation, singlePullRequest]) {
 
   test(`${name}: rate-limited verdict POST skips immediately without a second POST`, (t) => {
     const { result, output, posts, calls } = runWorkflow(t, {
-      job, apiFailure: { method: 'POST', status: 429, rate: true, reset: 0, after: job === singlePullRequest ? 1 : 0 },
+      job, apiFailure: { method: 'POST', status: 429, rate: true, reset: 0, after: 0 },
     });
     assert.equal(result.status, 0, output);
     assert.match(output, /::warning::skipped: GitHub rate limited until/);
     assert.doesNotMatch(output, /waiting .*until reset|::error::/);
-    assert.equal(calls.filter((call) => call.args.includes('POST')).length, job === singlePullRequest ? 2 : 1);
-    assert.ok(posts.every((post) => post.state === 'pending'), 'no stale verdict published');
+    assert.equal(calls.filter((call) => call.args.includes('POST')).length, 1);
+    assert.deepEqual(posts, [], 'no stale verdict published');
   });
 
   for (const endpoint of ['/pulls/42', '/pulls?', '/statuses/']) {
     test(`${name}: evaluation exit 2 before rate limit at ${endpoint} remains exit 2`, (t) => {
-      const after = job === singlePullRequest || endpoint === '/pulls?' ? 1 : 0;
+      const after = endpoint === '/pulls?' || (job === singlePullRequest && endpoint === '/pulls/42') ? 1 : 0;
       const { result, output, posts } = runWorkflow(t, {
         job, gateScript: 'process.exit(2);\n',
         apiFailure: { endpoint, after, status: 403, rate: true, reset: 3600 },
       });
       assert.equal(result.status, 2, output);
       assert.match(output, /::warning::skipped: GitHub rate limited until/);
-      assert.ok(posts.every((post) => post.state === 'pending'), 'evaluation error precedes the skip, not an error-status post');
+      assert.deepEqual(posts, [], 'evaluation error precedes the skip, not an error-status post');
     });
   }
 
@@ -496,32 +523,89 @@ for (const endpoint of ['/commits/', '/pulls/42', '/statuses/']) {
   });
 }
 
-test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
+test('both status writers share a fixed publish-only lock without cancelling active jobs', () => {
   assert.doesNotMatch(workflow, /\bgh api\b|\$\(gh_api\b/);
-  assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
-  assert.match(workflow, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
-  assert.doesNotMatch(singlePullRequest, /cancel-in-progress: true/);
+  assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 4);
+  assert.match(singlePullRequest, /group: feature-flag-gate-pr-\$\{\{ github\.event\.pull_request\.number \}\}/);
+  assert.match(reconciliation, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
+  for (const evaluation of [singlePullRequest, reconciliation]) {
+    assert.doesNotMatch(evaluation, /group: feature-flag-gate-publish|statuses: write|gh_api -X POST/);
+    assert.match(evaluation, /elif node \.github\/scripts\/feature-flag-gate\.mjs/);
+    assert.match(evaluation, /steps\.evaluate\.outputs\.statuses/);
+  }
+  for (const publisher of [perPrPublisher, reconcilePublisher]) {
+    assert.match(publisher, /group: feature-flag-gate-publish\s*cancel-in-progress: false/);
+    assert.doesNotMatch(publisher, /npm ci|git fetch|feature-flag-gate\.mjs/);
+    assert.match(publisher, /if: always\(\) && needs\./);
+    assert.equal((publisher.match(/gh_api -X POST/g) || []).length, 1);
+    assert.match(publisher, /publish_status_if_current "\$record"/);
+    assert.match(publisher, /--arg job_started_at "\$job_started_at" --arg fingerprint "\$fingerprint"/);
+    assert.match(publisher, /\(\$current\.created_at \/\/ ""\) > \$job_started_at and/);
+    assert.match(publisher, /\(\$current\.target_url \/\/ "" \| split\("#"\)\[1:\] \| join\("#"\)\) == \$fingerprint/);
+    assert.ok(publisher.indexOf('/pulls/$number') < publisher.indexOf('/commits/$head_sha/statuses'));
+    assert.ok(publisher.indexOf('/commits/$head_sha/statuses') < publisher.indexOf('gh_api -X POST'));
+  }
+  assert.equal(shellScript(perPrPublisher), shellScript(reconcilePublisher));
 });
 
-test('initial and drift pending publications use newest-wins guards in both jobs', () => {
-  const perPrPublisher = singlePullRequest.split('          publish_status_if_current() {')[1]
-    .split('          publish_error_status() {')[0];
-  const reconcilePublisher = reconciliation.split('          publish_status_if_changed() {')[1]
-    .split('          publish_reconciliation_error() {')[0];
-  for (const publisher of [perPrPublisher, reconcilePublisher]) {
-    assert.match(publisher, /GH_API_NO_WAIT=1 gh_api "repos\/\$REPO\/commits\/\$head_sha\/statuses\?per_page=100"/);
-    assert.match(publisher, /--arg job_started_at "\$JOB_STARTED_AT"/);
-    assert.match(publisher, /map\(select\(\.context == "feature-flag-gate"\)\)\[0\] as \$current \|/);
-    assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure"\) and\s+\(\$current\.created_at \/\/ ""\) > \$job_started_at/);
-    assert.match(publisher, /newer final feature-flag-gate status exists"\s+return 0/);
-    assert.ok(publisher.indexOf('--arg job_started_at') < publisher.indexOf('gh_api -X POST'));
+for (const job of [singlePullRequest, reconciliation]) {
+  const name = job === singlePullRequest ? "per-PR" : "reconcile";
+  for (const state of ["pending", "error", "success", "failure"]) {
+    test(`${name}: newer final with the same fingerprint protects against a queued ${state}`, (t) => {
+      const { result, output, posts } = runWorkflow(t, {
+        job,
+        prepareStatuses: (records) => records.map((record) => ({ ...record, payload: { ...record.payload, state } })),
+        statusesBeforePublish: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, {
+          created_at: "2099-01-01T00:00:00Z",
+        })] }),
+      });
+      assert.equal(result.status, 0, output);
+      assert.deepEqual(posts, []);
+      assert.match(output, /newer final feature-flag-gate status has the same fingerprint/);
+    });
   }
-  assert.match(singlePullRequest, /if ! publish_status_if_current "\$pending_payload"; then/);
-  assert.match(singlePullRequest, /elif \[ "\$result" -eq 3 \]; then\s+state=pending[\s\S]*?if ! publish_status_if_current "\$payload"; then/);
-  assert.match(reconciliation, /elif \[ "\$result" -eq 3 \]; then\s+state=pending[\s\S]*?if ! publish_status_if_changed "\$head_sha" "\$payload" "\$statuses_file"; then/);
-  assert.match(reconcilePublisher, /if \[ "\$state" = "pending" \]; then\s+statuses_file="\$gate_tmp\/pending-latest-statuses\.json"[\s\S]*?gh_api[^\n]*>"\$statuses_file" \|\| return 1/);
-  assert.match(perPrPublisher, /gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER"[^\n]*\|\| return 1/);
-  assert.match(perPrPublisher, /'\.head\.sha' "\$gate_tmp\/status-pr\.json"\)" != "\$head_sha"[\s\S]*?return 0/);
+  for (const change of ["base", "title", "labels"]) {
+    test(`${name}: a newer success with obsolete ${change} inputs cannot suppress a current failure`, (t) => {
+      const { result, output, posts } = runWorkflow(t, {
+        job, gateScript: 'console.log("current verdict"); process.exit(1);\n',
+        statusesBeforePublish: (pull) => {
+          const previous = structuredClone(pull);
+          if (change === "base") previous.base.sha = "a".repeat(40);
+          if (change === "title") previous.title += " old";
+          if (change === "labels") previous.labels = [{ name: "old-label" }];
+          return { [pull.head.sha]: [featureFlagStatus(previous, { created_at: "2099-01-01T00:00:00Z" })] };
+        },
+      });
+      assert.equal(result.status, job === singlePullRequest ? 1 : 0, output);
+      assert.equal(posts.at(-1).state, "failure");
+    });
+  }
+  test(`${name}: metadata changing while waiting for the publish lock cannot publish an obsolete verdict`, (t) => {
+    const { result, output, posts } = runWorkflow(t, {
+      job,
+      prepareStatuses: (records) => records.map((record) => ({ ...record, fingerprint: "ffg=obsolete" })),
+    });
+    assert.equal(result.status, 0, output);
+    assert.deepEqual(posts, []);
+    assert.match(output, /evaluation inputs changed before status publication/);
+  });
+}
+
+test('the shared lock excludes GET -> success POST -> pending POST, and queued pending rereads the final verdict', (t) => {
+  assert.match(perPrPublisher, /group: feature-flag-gate-publish\s*cancel-in-progress: false/);
+  assert.match(reconcilePublisher, /group: feature-flag-gate-publish\s*cancel-in-progress: false/);
+  const { result, output, posts, calls } = runWorkflow(t, {
+    job: singlePullRequest,
+    prepareStatuses: (records) => [
+      { ...records[0], job_started_at: "2000-01-01T00:00:00Z", payload: { ...records[0].payload, state: "success" } },
+      { ...records[0], job_started_at: "2000-01-01T00:00:00Z", payload: { ...records[0].payload, state: "pending" } },
+    ],
+  });
+  assert.equal(result.status, 0, output);
+  assert.deepEqual(posts.map((post) => post.state), ["success"]);
+  const publication = calls.filter((call) => call.endpoint.includes('/commits/') || call.args.includes('POST'));
+  assert.deepEqual(publication.map((call) => call.args.includes('POST') ? 'POST' : 'GET'), ['GET', 'POST', 'GET']);
+  assert.match(output, /newer final feature-flag-gate status has the same fingerprint/);
 });
 
 test('a genuine evaluation error is not hidden by rate limiting its error-status post', (t) => {
