@@ -145,6 +145,39 @@ test("all named inbox routines use the UI paths and clean up their notification"
   assert.match(fs.readFileSync("src/app/detail/[...slug]/page.tsx", "utf8"), /fetchTaskDetail\(params.slug\[0\], params.slug\[1\], userObj.id\)/);
 });
 
+test("smoke requests mention only the agent and keep inbox coverage without follower or email writes", async () => {
+  const app = fakeApp();
+  const result = await app.run();
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const assertSafe = (calls) => {
+    for (const call of calls) {
+      assert.doesNotMatch(call.path, /follower|email/i);
+      assert.equal(call.body.agentId, undefined, "mutations must act as the user, not an agent");
+      if (call.body.text) {
+        assert.doesNotMatch(call.body.text, /data-label=["']name-/);
+        assert.match(call.body.text, /data-label="agent-smoke-agent"/);
+      }
+      if (call.body.userId !== undefined) assert.equal(call.body.userId, fixture.userId);
+      if (call.body.creatorId !== undefined) assert.equal(call.body.creatorId, fixture.userId);
+      if (call.body.ownerId !== undefined) assert.equal(call.body.ownerId, fixture.userId);
+    }
+  };
+  assertSafe(app.state.calls);
+  assert.ok(app.state.calls.some((call) => call.path === "/api/comments/create"));
+  assert.ok(app.state.calls.some((call) => call.path === "/api/comments/updateComment"));
+  assert.ok(result.steps.includes("post comment and mention agent"));
+  assert.ok(result.steps.includes("move task"));
+  assert.ok(result.steps.includes("assign and unassign"));
+  assert.ok(result.steps.includes("search"));
+  assert.deepEqual(result.steps.filter((step) => step.startsWith("inbox ")), inboxSteps);
+  assert.throws(() => assertSafe([{ path: "/api/comments/create", body: {
+    text: '<span data-label="name-6">Valentin</span><span data-label="agent-smoke-agent">Agent</span>',
+  } }]));
+  assert.throws(() => assertSafe([{ path: "/api/follower/createFollower", body: { userId: 6 } }]));
+  assert.throws(() => assertSafe([{ path: "/api/notifications/sendEmailToFollower", body: { receiver: 6 } }]));
+  assertClean(app);
+});
+
 for (const [toggle, action] of [[1, "inbox task-page remove"], [2, "inbox undo task-page removal"],
   [3, "inbox row archive"], [4, "inbox undo row archive"]]) {
   for (const status of [400, 200]) {
