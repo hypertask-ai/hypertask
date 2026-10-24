@@ -44,6 +44,9 @@ stubSourceModule("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: () => false,
 });
+stubSourceModule("src/lib/flags/definitions/htpr-7575-phone-chat-delete.ts", {
+  HTPR_7575_PHONE_CHAT_DELETE_FLAG: "htpr-7575-phone-chat-delete",
+});
 stubModule(require.resolve("react-hot-toast"), {
   default: { error: (message) => toastErrors.push(message) },
 });
