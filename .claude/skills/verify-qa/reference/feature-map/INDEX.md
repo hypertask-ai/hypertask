@@ -35,6 +35,7 @@ each ticket only needs the one or two areas it touches.
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
 | AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |
+| Board skills | [board-skills.md](board-skills.md) | no smoke id; create one skill from the textarea, prove POST /api/ai/skills 201 and the reload, delete it |
 | Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | no smoke id; no-login 401 checks on the three admin routes |
 | Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | no smoke id; agent `ht-flag get` and a refused `ht-flag set` |
 | Task share links | [task-share-links.md](task-share-links.md) | no smoke id; no-login 401 and signed-in join checks on `/api/members/share` |
