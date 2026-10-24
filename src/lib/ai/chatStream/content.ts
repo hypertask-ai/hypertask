@@ -295,8 +295,9 @@ export async function createImageAwareUserContent(
   const imageUrls = new Set<string>();
   for (const match of body.message.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
     const markdownLink = body.message.slice(Math.max(0, (match.index ?? 0) - 2), match.index) === "](";
-    const candidate = markdownLink
-      ? match[0].replace(/\)+$/, "")
+    const markdownTarget = markdownLink ? match[0].match(/^(.*\))[.,;!?]*$/) : null;
+    const candidate = markdownTarget
+      ? markdownTarget[1].slice(0, -1)
       : /[?#]/.test(match[0])
         ? match[0]
         : match[0].replace(/[),.;!?\]}]+$/, "");
