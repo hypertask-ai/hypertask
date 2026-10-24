@@ -253,6 +253,51 @@ function underlined(editor: Editor) {
   return editor.view.dom.querySelectorAll("span[style*='underline']").length;
 }
 
+test("HTPR-6906: delete-and-retype at a sentence start stays lowercase with undo enabled", (t) => {
+  const editor = makeUndoEditor(t, { undo: true });
+  editor.commands.setContent("<p>hello. World</p>", { emitUpdate: false });
+  editor.commands.setTextSelection(9);
+  assert.equal(pressKey(editor, { key: "Backspace" }), false);
+  editor.commands.deleteRange({ from: 8, to: 9 });
+  assert.equal(editor.getText(), "hello. orld");
+  assert.equal(dispatchTextInput(editor, "w"), false);
+  editor.commands.insertContent("w");
+  assert.equal(editor.getText(), "hello. world");
+  assert.equal(underlined(editor), 0);
+});
+
+test("HTPR-6906: select-and-retype at a sentence start stays lowercase with undo enabled", (t) => {
+  const editor = makeUndoEditor(t, { undo: true });
+  editor.commands.setContent("<p>hello. World</p>", { emitUpdate: false });
+  editor.commands.setTextSelection({ from: 8, to: 9 });
+  assert.equal(dispatchTextInput(editor, "w"), false);
+  editor.commands.insertContent("w");
+  assert.equal(editor.getText(), "hello. world");
+  assert.equal(underlined(editor), 0);
+});
+
+test("HTPR-6906: delete-and-retype still capitalizes with only local capitalization enabled", (t) => {
+  const editor = makeUndoEditor(t, { undo: false });
+  editor.commands.setContent("<p>hello. World</p>", { emitUpdate: false });
+  editor.commands.setTextSelection(9);
+  assert.equal(pressKey(editor, { key: "Backspace" }), false);
+  editor.commands.deleteRange({ from: 8, to: 9 });
+  assert.equal(editor.getText(), "hello. orld");
+  assert.equal(dispatchTextInput(editor, "w"), true);
+  assert.equal(editor.getText(), "hello. World");
+  assert.equal(underlined(editor), 0);
+});
+
+test("HTPR-6906: forward typing at a sentence start still capitalizes with undo enabled", (t) => {
+  const editor = makeUndoEditor(t, { undo: true });
+  assert.equal(dispatchTextInput(editor, "w"), true);
+  assert.equal(editor.getText(), "hello. W");
+  assert.equal(underlined(editor), 1);
+  assert.equal(dispatchTextInput(editor, "o"), false);
+  editor.commands.insertContent("orld");
+  assert.equal(editor.getText(), "hello. World");
+});
+
 test("HTPR-6906: Backspace right after an auto-capital restores lowercase and it stays lowercase", (t) => {
   const editor = makeUndoEditor(t, { undo: true });
   assert.equal(dispatchTextInput(editor, "w"), true);
