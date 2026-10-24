@@ -557,10 +557,9 @@ test("stored Redis values and alert text contain neither the test credential nor
     ...redis.ttls.values(),
     ...alerts.map((alert) => JSON.stringify(alert)),
   ].map(String);
-  const digest = require("node:crypto").createHash("sha256").update(funding.apiKey).digest("hex");
   for (const value of stored) {
     assert.equal(value.includes(funding.apiKey), false, "credential leaked into stored value or alert");
-    assert.equal(value.includes(digest), false, "credential hash leaked into stored value or alert");
+    assert.doesNotMatch(value, /\b[0-9a-f]{40,}\b/i, "hash-shaped value stored or alerted");
   }
 });
 
