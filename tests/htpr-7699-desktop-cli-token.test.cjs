@@ -301,13 +301,14 @@ for (const area of ["writer", "defaults", "private", "public", "mentions"]) {
 
   test(`${area}: pre-rollout token and post-revocation token still allowed`, async () => {
     const h = harness();
+    const toggleOffStatus = area === "private" || area === "public" ? 201 : 200;
     const old = Date.now() - 7 * 86400_000;
     const token = h.sign({ iat: Math.floor(old / 1000), mcpIssuedAtMs: old });
     assert.equal((await h.call(area, token)).statusCode, 200);
-    assert.equal((await h.call(area, h.sign({ mcpIssuedAtMs: undefined }))).statusCode, 200);
+    assert.equal((await h.call(area, h.sign({ mcpIssuedAtMs: undefined }))).statusCode, toggleOffStatus);
     assert.equal((await h.call(area, h.sign({}, { noTimestamp: true }))).statusCode, 200);
     h.users[0].mcpTokensRevokedAt = new Date(old - 1000);
-    assert.equal((await h.call(area, token)).statusCode, 200);
+    assert.equal((await h.call(area, token)).statusCode, toggleOffStatus);
   });
 }
 
