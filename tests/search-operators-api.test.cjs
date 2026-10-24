@@ -11,7 +11,7 @@ function eligible(row, where) {
   if (where.section && where.section !== row.section) return false
   if (where.user && !eligible(row.user, where.user)) return false
   if (where.assignees?.some && !row.assignees?.some((assignee) => eligible(assignee, where.assignees.some))) return false
-  if (where.userId && where.userId !== row.userId) return false
+  if (where.userId && !(where.userId.in ?? [where.userId]).includes(row.userId)) return false
   if (where.displayName?.equals && row.displayName?.toLowerCase() !== where.displayName.equals.toLowerCase()) return false
   if (where.email?.equals && row.email?.toLowerCase() !== where.email.equals.toLowerCase()) return false
   if (where.AND && !where.AND.every((group) => eligible(row, group))) return false
@@ -27,7 +27,7 @@ const db = {
   project: { findMany: async ({ select }) => select.title
     ? [{ title: 'Visible board' }] : state.boards.map((id) => ({ id })) },
   label: { findMany: async () => { state.labelQueries++; return state.labels ?? [{ id: 'bug', value: 'bug' }] } },
-  user: { findMany: async () => [{ displayName: 'Kamil Grzegorzewicz' }] },
+  user: { findMany: async () => [{ id: 6, displayName: 'Kamil Grzegorzewicz', email: 'kamil@example.com' }] },
   section: { findMany: async ({ where }) => (state.sections ?? [{ projectId: 7, section_title: 'Done', isDone: true }])
     .filter((section) => where.deleted !== false || !section.deleted) },
   task: { findMany: async ({ where, select, take }) => {
@@ -41,8 +41,7 @@ const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
-    HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    isFeatureEnabled: async (key) => key !== 'htpr-6881-search-fuzzy-person',
+    isFeatureEnabled: async () => true,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
