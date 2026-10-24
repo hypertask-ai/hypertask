@@ -18,12 +18,14 @@ concurrency:
 
 jobs:
   pr-guards:
-    # Dependabot/fork PR tokens are read-only. Only their completed scan needs a
-    # trusted status-only pass; a completion of that pass cannot recurse.
+    # Dependabot/fork PR tokens are read-only, and a maintainer push to a Dependabot
+    # branch skips direct publication too. Those completed scans get a trusted
+    # status-only pass; a completion of that pass cannot recurse.
     if: >-
       github.event_name == 'pull_request' ||
       (github.event.workflow_run.event == 'pull_request' &&
        (github.event.workflow_run.actor.login == 'dependabot[bot]' ||
+        startsWith(github.event.workflow_run.head_branch, 'dependabot/') ||
         github.event.workflow_run.head_repository.full_name != github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 15
