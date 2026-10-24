@@ -19,6 +19,7 @@ Screenshots: ~/.local/state/vcc-evidence/<TICKET>/wireframe/ at 1440x900.
 import argparse, html, importlib.machinery, importlib.util, json, os, shutil, subprocess, sys
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse
 
 HOME = Path(os.environ.get("WIREFRAME_HOME") or "~/.local/share/hypertask-wireframes").expanduser()
 BASE = HOME / "base"
@@ -53,6 +54,68 @@ def ux_signoff(project_id):
         return any(s["section_title"] == "UX Sign-off" for s in sections)
     except (subprocess.CalledProcessError, ValueError, KeyError, TypeError):
         return project_id == 15
+
+
+def publish_guard(file, turl):
+    playwright = shutil.which("playwright")
+    if not playwright:
+        raise SystemExit("publish refused: install Playwright and Chromium locally to check the visible ticket link")
+    result = run(["node", "-e", r"""
+const { chromium } = require(process.argv[1]);
+(async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, javaScriptEnabled: false, serviceWorkers: 'block', offline: true });
+        await page.route('**/*', route => route.abort());
+        await page.setContent(require('fs').readFileSync(process.argv[2], 'utf8'), { waitUntil: 'domcontentloaded' });
+        const found = await page.evaluate(url => [...document.querySelectorAll('body a[href]')].some(a => {
+            const r = a.getBoundingClientRect();
+            const frame = document.querySelector('main, [role="main"], iframe');
+            if (a.getAttribute('href') !== url || !a.innerText.trim() || !a.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
+            if (r.width <= 0 || r.height <= 0 || r.top < 0 || r.bottom > 200 || r.left < 0 || r.right > innerWidth) return false;
+            if (frame && !(a.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING)) return false;
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return hit === a || a.contains(hit);
+        }), process.argv[3]);
+        console.log(found ? 'linked' : 'missing');
+    } finally {
+        await browser.close();
+    }
+})().catch(error => { console.error(error); process.exit(1); });
+""", str(Path(playwright).resolve().parent), str(file), turl])
+    if result.stdout.strip() != "linked":
+        raise SystemExit(f"publish refused: add a visible link to {turl} at the top of <body>, before the main wireframe frame (within the first 200px)")
+    record = file.with_name("live-styles.json")
+    def invalid_constant(value):
+        raise ValueError(value)
+    try:
+        data = json.loads(record.read_text(), parse_constant=invalid_constant)
+        if isinstance(data, dict) and "themes" in data:
+            source = data.get("sourceTicket")
+            themes = data["themes"]
+            if not isinstance(themes, dict) or not themes:
+                raise ValueError("empty themes")
+            entries = []
+            for theme in themes.values():
+                if not isinstance(theme, dict):
+                    raise ValueError("invalid theme")
+                elements = [v for k, v in theme.items() if k not in ("htmlClass", "destructive")]
+                if not elements or not all(isinstance(v, dict) for v in elements):
+                    raise ValueError("missing elements")
+                entries.extend({"sourceUrl": v.get("sourceUrl", source), "styles": v.get("styles")} for v in elements)
+        else:
+            entries = data
+        if not isinstance(entries, list) or not entries:
+            raise ValueError("empty entries")
+        for entry in entries:
+            source = urlparse(entry.get("sourceUrl", ""))
+            styles = entry.get("styles")
+            if source.scheme != "https" or source.netloc != "app.hypertask.ai" or not isinstance(styles, dict) or not styles:
+                raise ValueError("missing source or computed styles")
+            if not all(isinstance(k, str) and k.strip() and isinstance(v, str) and v.strip() for k, v in styles.items()):
+                raise ValueError("empty computed style values")
+    except (OSError, ValueError, TypeError, AttributeError):
+        raise SystemExit(f"publish refused: create {record} beside index.html using headless Playwright getComputedStyle on every existing live element as QA user 985; save non-empty JSON entries with sourceUrl on https://app.hypertask.ai and styles (or the HTPR-7724 sourceTicket/themes format)")
 
 
 def screenshot(ticket, file):
@@ -154,6 +217,8 @@ def main():
         if cmd == "publish" and not f.is_file():
             raise SystemExit(f"local file missing: {f}; run: wireframe new {t}")
         title, turl, project_id = ("Base kit: full app", "https://app.hypertask.ai/detail/project-4060/255", 4060) if base else ticket_info(t)
+        if cmd == "publish" and not base:
+            publish_guard(f, turl)
         sh = share()
         # status keeps the published bytes, so an answer never ships unreviewed local edits
         body = fetch(sh, t) if cmd == "status" else f.read_bytes()
