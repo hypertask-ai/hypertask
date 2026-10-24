@@ -1,3 +1,4 @@
+import { boardAccessNotificationWrite } from "./board-access";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
@@ -17,6 +18,8 @@ const route = taskWriteRoute({
       return NextResponse.json({ message: "Missing Required Information" }, { status: 400 })
     }
 
+    const accessResponse = await boardAccessNotificationWrite(session, notificationId, body.taskId, { status: "Normal" });
+    if (accessResponse) return accessResponse;
     const { count } = await prisma.notification.updateMany({
       where: { id: notificationId, userId },
       data: {

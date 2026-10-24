@@ -1,3 +1,4 @@
+import { boardAccessNotificationWrite } from "./board-access";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
@@ -11,6 +12,8 @@ const route = taskWriteRoute({
   allowNullBody: true,
   operation: async (body, session) => {
     const { notificationId, taskId, seen } = body;
+    const accessResponse = await boardAccessNotificationWrite(session, notificationId, taskId, { seen: seen !== "1" });
+    if (accessResponse) return accessResponse;
     if (!notificationId && !taskId && !seen) {
       return NextResponse.json({ message: "Notification id and type are required" }, { status: 400 });
     }

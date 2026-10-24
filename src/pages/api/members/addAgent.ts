@@ -17,6 +17,7 @@ const handler: NextApiHandler = async (
   if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
+  if (session.agentId) return res.status(403).json({ message: "Agents cannot approve board access" });
   const userId = session.userId;
 
   try {

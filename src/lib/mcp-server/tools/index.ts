@@ -1,3 +1,4 @@
+import { requestBoardAccessTool, getBoardAccessRequestTool } from "./board-access-request.tool";
 
 import { reportFeedbackTool } from './report-feedback.tool';
 import { helloTool } from './hello.tool';
@@ -78,6 +79,8 @@ import { deleteViewTool } from './delete-view.tool';
 import { switchViewTool } from './switch-view.tool';
 
 export const MCP_TOOLS = [
+  requestBoardAccessTool,
+  getBoardAccessRequestTool,
   reportFeedbackTool,
   helloTool,
   listFeaturesTool,

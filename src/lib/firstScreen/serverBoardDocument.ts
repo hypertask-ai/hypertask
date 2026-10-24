@@ -1,3 +1,4 @@
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import "server-only";
 import { cache } from "react";
@@ -11,7 +12,7 @@ import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { featureFlagsForUser } from "@/lib/flags";
 import getBoardTasks from "@/utils/controllers/projects/getBoardTasks";
 import getFirst from "@/utils/controllers/projects/getFirst";
-import notificationGetCount from "@/utils/controllers/notifications/getCount";
+import notificationGetCount from "@/utils/controllers/notifications/getCountWithBoardAccessRequests";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
 import { BOARD_DOCUMENT_ROUTE_HEADER, BOARD_DOCUMENT_TIMEOUT_MS, BOARD_FIRST_SCREEN_FLAG,
   projectBoardDocumentPayload, projectBoardDocumentUser, type BoardDocument } from "./boardDocument";
@@ -23,6 +24,8 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   if (url.pathname !== "/project") return null;
   const user = await getServerCookieUser();
   if (!user || performance.now() > deadline) return null;
+  const principal = await getSessionUser(await headers());
+  if (!principal || principal.userId !== user.id) return null;
   const display = parseBoardDisplay(displayCookie, user.id, { desktopChat: true });
   if (!display) return null;
   const flags = await featureFlagsForUser(user.id);
@@ -41,7 +44,7 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   }
   if (!Number.isSafeInteger(projectId) || projectId <= 0 || performance.now() > deadline) return null;
   const [response, counts] = await Promise.all([
-    getBoardTasks(projectId, user.id, user.id), notificationGetCount(user.id),
+    getBoardTasks(projectId, user.id, user.id), notificationGetCount(user.id, principal),
   ]);
   if (performance.now() > deadline || response.status !== 200 || !("tasks" in response.json) ||
       counts.status !== 200 || !("all" in counts.json) || !("unseen" in counts.json)) return null;

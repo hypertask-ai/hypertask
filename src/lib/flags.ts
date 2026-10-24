@@ -1,3 +1,4 @@
+import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 import type {
   FeatureFlagMode as PrismaFeatureFlagMode,
   PrismaClient,
@@ -457,6 +458,17 @@ export async function setFeatureFlagMode(
       : null;
 
     if (change) await recordChange?.(tx, change.id);
+    if (key === HTPR_7582_AGENT_ACCESS_REQUEST_FLAG && mode === "OFF") {
+      await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: actor?.userId ?? null, log: "agent_board_access_requests_disabled" } });
+      const pending = await tx.agentBoardAccessRequest.findMany({ where: { status: "pending" } });
+      for (const request of pending) {
+        await tx.agentBoardAccessRequest.update({ where: { id: request.id }, data: { status: "cancelled", resolvedAt: new Date(), resolutionReason: "feature_disabled" } });
+        await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: actor?.userId ?? request.ownerUserIdAtRequest,
+          log: JSON.stringify({ event: "agent_board_access_request", operation: "cancelled", outcome: "terminal", reason: "feature_disabled", requestId: request.id,
+            agentId: request.agentIdAtRequest, ownerId: request.ownerUserIdAtRequest, projectId: request.projectIdAtRequest, credential: "flag_transition" }) } });
+      }
+    }
+
 
     const entersEveryone = mode === "EVERYONE" && (stored?.mode !== "EVERYONE" || !stored.releasedAt);
     const release = entersEveryone ? { releasedAt: new Date(), removalTaskId: null } : {};

@@ -1,3 +1,4 @@
+import { boardAccessNotificationWrite } from "./board-access";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
@@ -17,6 +18,8 @@ const route = taskWriteRoute({
   allowNullBody: true,
   operation: async (body, session, request) => {
     const { id, taskId, tutorial, intent } = body;
+    const accessResponse = await boardAccessNotificationWrite(session, id, taskId, { status: "Archive" });
+    if (accessResponse) return accessResponse;
     const userId = session.userId;
     const excludeSocketId = socketIdFromHeader(request.rawHeaders ? request.rawHeaders["x-socket-id"] : request.headers.get("x-socket-id"));
     if (!taskId && !id) {

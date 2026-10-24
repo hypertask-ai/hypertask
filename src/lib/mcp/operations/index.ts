@@ -11,6 +11,8 @@ type OperationDefinition = {
 }
 
 const operations: OperationDefinition[] = [
+  { pattern: /^\/mcp\/agents\/board-access-requests$/, params: [], methods: ["POST"], load: () => import('./agents/board-access-requests/operation') },
+  { pattern: /^\/mcp\/agents\/board-access-requests\/([^\/]+)$/, params: ["requestId"], methods: ["GET"], load: () => import('./agents/board-access-requests/[requestId]/operation') },
   { pattern: /^\/mcp\/features$/, params: [], methods: ["GET"], load: () => import('./features/operation') },
   { pattern: /^\/mcp\/tasks\/description-versions$/, params: [], methods: ["GET"], load: () => import('./tasks/description-versions/operation') },
   { pattern: /^\/mcp\/tasks\/description-restore$/, params: [], methods: ["POST"], load: () => import('./tasks/description-restore/operation') },

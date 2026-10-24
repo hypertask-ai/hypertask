@@ -1,3 +1,4 @@
+import type { BoardAccessSummary } from "@/lib/agents/boardAccessRequests/contracts";
 import type { JSONContent } from "@tiptap/react";
 import type {
   DraftType,
@@ -681,7 +682,15 @@ export interface ISection {
   items: ITask[];
 }
 
+export interface IBoardAccessRequestNotification extends Omit<INotification, "type" | "task" | "taskId"> {
+  type: "AgentBoardAccessRequest";
+  task: null;
+  taskId: null;
+  boardAccessRequest: BoardAccessSummary;
+}
+
 export interface INotification {
+  boardAccessRequest?: BoardAccessSummary;
   id: string;
   waitingOnSynthetic?: boolean;
   type: NotificationType;
