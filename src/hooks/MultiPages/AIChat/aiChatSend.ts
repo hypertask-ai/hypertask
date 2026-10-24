@@ -7,6 +7,7 @@ import { extractStreamRefusalMessage } from "@/lib/aiChat/streamRefusal";
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild";
 import { CHAT_TRANSPORT_RETRY_DELAYS_MS, ChatRequestRefusedError, shouldRetryChatTransport } from "@/lib/aiChat/transportRetry";
 import { chatModelRequestFields } from "@/lib/aiModelOptions";
+import type { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 
 
 import type { useAiChatSessions } from "./useAiChatSessions";
@@ -34,17 +35,18 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
   const handleSendMessage = async (
     retryContent?: string,
-    options?: { htmlForAttachments?: string; preserveComposer?: boolean }
+    options?: { htmlForAttachments?: string; filesForAttachments?: FileItem[]; preserveComposer?: boolean }
   ): Promise<boolean> => {
     if (isByokBlocked) return false;
     if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     const preserveComposer = options?.preserveComposer;
     if (preserveComposer && sendInFlightRef.current) return false;
+    const consumesComposer = !preserveComposer && options?.filesForAttachments === undefined;
 
     if (sendInFlightRef.current || (retryContent === undefined && isTyping)) {
       const content = (retryContent ?? editor?.getText() ?? "").trim();
       if (!content) return false;
-      const files = [...fileUpload.fileItems];
+      const files = [...(options?.filesForAttachments ?? fileUpload.fileItems)];
       const queued = {
         id: crypto.randomUUID(),
         content,
@@ -55,8 +57,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       };
       messageQueueRef.current = [...messageQueueRef.current, queued];
       setQueuedMessages(messageQueueRef.current);
-      editor?.commands.clearContent();
-      fileUpload.clearFiles();
+      if (consumesComposer) {
+        editor?.commands.clearContent();
+        fileUpload.clearFiles();
+      }
       return true;
     }
 
@@ -72,6 +76,9 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
     if (!content.trim()) return false;
     sendInFlightRef.current = true;
+    const files = preserveComposer ? [] : [...(options?.filesForAttachments ?? fileUpload.fileItems)];
+    if (consumesComposer) fileUpload.clearFiles();
+    let restoreFiles = files.length > 0;
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
     const streamTaskId =
@@ -95,7 +102,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     const sidebarHeaders = sidebarChatHeaders(session.id);
     const processedAttachments = preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
-      fileUpload.fileItems
+      files
     );
 
     if (sessionPagingEnabled && !isDemo && getDisplayedSession()?.id !== session.id) return false;
@@ -112,7 +119,8 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
 
-    if (!preserveComposer) editor?.commands.clearContent();
+    restoreFiles = false;
+    if (consumesComposer) editor?.commands.clearContent();
 
     setIsTyping(true);
 
@@ -246,8 +254,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             );
           }
 
-          if (!preserveComposer) fileUpload.clearFiles();
-
           if (!assistantPlaceholderAdded) {
             const initialAssistantMessage: IChatMessage = {
               id: assistantMessageId,
@@ -315,6 +321,12 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         console.log("Message has been completed");
       }
     } finally {
+      if (restoreFiles) {
+        fileUpload.setFileItems((current) => [
+          ...files,
+          ...current.filter((item) => !files.includes(item)),
+        ]);
+      }
       sendInFlightRef.current = false;
       searchHandoff?.onSettled();
       queueMicrotask(() => {

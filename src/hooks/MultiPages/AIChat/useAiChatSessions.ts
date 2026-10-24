@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from "react";
 import globalConstants from "@/lib/constants";
 import { IChatSession } from "@/models/model";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import { useFileUpload } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
+import { useFileUpload, type FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
@@ -63,12 +63,10 @@ export function useAiChatSessions(context: Context) {
   }, [deleteSessionInHistory]);
 
   const fileUpload = useFileUpload();
-  const fileUploadRef = useRef(fileUpload);
-  fileUploadRef.current = fileUpload;
   const handleSendMessageRef = useRef<
     (
       retryContent?: string,
-      options?: { htmlForAttachments?: string }
+      options?: { htmlForAttachments?: string; filesForAttachments?: FileItem[] }
     ) => Promise<boolean>
   >(async () => false);
 
@@ -86,13 +84,9 @@ export function useAiChatSessions(context: Context) {
     const [next, ...rest] = queue;
     messageQueueRef.current = rest;
     setQueuedMessages(rest);
-    if (next.files.length > 0) {
-      fileUploadRef.current.resetFiles(next.files);
-    } else {
-      fileUploadRef.current.clearFiles();
-    }
     void handleSendMessageRef.current(next.content, {
       htmlForAttachments: next.html,
+      filesForAttachments: next.files,
     });
   }, []);
   const billing = modelBilling;

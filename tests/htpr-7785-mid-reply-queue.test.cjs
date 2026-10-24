@@ -12,12 +12,13 @@ function deferred() {
 }
 
 function chatFixture(fullScreen) {
-  const state = { draft: "first", html: "<p>first</p>", queued: [], payloads: [], created: [], messages: [] };
+  const state = { draft: "first", html: "<p>first</p>", queued: [], payloads: [], created: [], messages: [], processed: [] };
   const session = { id: "active-chat", userId: 985, agentId: null, taskId: null, messages: [] };
   const fileUpload = {
     fileItems: [],
-    clearFiles() { this.fileItems = []; },
-    resetFiles(files) { this.fileItems = files; },
+    clearFiles() { fileUpload.fileItems = []; },
+    resetFiles(files) { fileUpload.fileItems = files; },
+    setFileItems(update) { fileUpload.fileItems = update(fileUpload.fileItems); },
   };
   const context = {
     isByokBlocked: false, isTyping: false, isFullScreenChat: fullScreen,
@@ -33,7 +34,11 @@ function chatFixture(fullScreen) {
     handleSendMessageRef: { current: null },
     streamingSessionRef: { current: null }, streamingAssistantMessageRef: { current: null },
     streamingRequestRef: { current: null }, setCurrentStreamingSession: noop,
-    processAttachments: async () => [], setIsTyping: noop, setAgentStatus: noop,
+    processAttachments: async (html, files) => {
+      state.processed.push({ html, files });
+      return files.map(({ file }) => ({ fileName: file.name, mimeType: file.type, url: `data:${file.name}` }));
+    },
+    setIsTyping: noop, setAgentStatus: noop,
     setAiChatBoardSessionMap: noop, updateSessionTitle: noop,
     addMessageToSessionQuery(id, message) { state.messages.push({ id, message }); },
     appendMessageToSessionCache: assert.fail, updateLastMessageInSessionCache: assert.fail,
@@ -73,7 +78,10 @@ function chatFixture(fullScreen) {
     "@/lib/mcp/bearerAuth": { mcpAuthorizationHeaders: () => ({}) },
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
   });
-  const renderSender = () => createAiChatSend(context, { preserveComposer: true, onSettled: noop });
+  const renderSender = () => createAiChatSend({
+    ...context,
+    fileUpload: { ...fileUpload, fileItems: [...fileUpload.fileItems] },
+  }, { preserveComposer: true, onSettled: noop });
   const sender = renderSender();
   return { state, context, streams, queues, sender, renderSender };
 }
@@ -138,6 +146,110 @@ for (const fullScreen of [false, true]) {
       await settle();
       assert.deepEqual(state.queued, []);
       assert.deepEqual(state.created, []);
+      assert.equal(context.sendInFlightRef.current, false);
+    });
+  });
+
+  for (const withQueuedFile of [false, true]) {
+    test(`${surface}: setup-time queue owns only its files (${withQueuedFile ? "attached" : "text only"})`, async () => {
+      await withChat(fullScreen, async ({ state, context, streams, queues, renderSender }) => {
+        const setup = deferred();
+        const activeFile = { id: 1, file: { name: "first.pdf", type: "application/pdf" } };
+        const queuedFile = { id: 2, file: { name: "second.png", type: "image/png" } };
+        context.fileUpload.resetFiles([activeFile]);
+        context.waitForChatSession = () => setup.promise;
+        const first = renderSender().handleSendMessage();
+        assert.equal(context.sendInFlightRef.current, true);
+        assert.deepEqual(context.fileUpload.fileItems, []);
+        assert.deepEqual(state.processed, []);
+        state.draft = "second";
+        state.html = "<p>second</p>";
+        const queuedFiles = withQueuedFile ? [queuedFile] : [];
+        context.fileUpload.resetFiles(queuedFiles);
+        assert.equal(await renderSender().handleSendMessage(), true);
+        assert.deepEqual(state.queued.map(({ content, files }) => ({ content, files })), [
+          { content: "second", files: queuedFiles },
+        ]);
+        setup.resolve(await queues.ensureSessionForCurrentBoard());
+        await settle();
+        assert.deepEqual(state.processed, [{ html: "<p>first</p>", files: [activeFile] }]);
+        assert.deepEqual(state.payloads[0].attachments.map(({ fileName }) => fileName), ["first.pdf"]);
+        assert.deepEqual(state.messages[0].message.attachments.map(({ fileName }) => fileName), ["first.pdf"]);
+        assert.deepEqual(state.payloads[0].pdfs64.map(({ fileName }) => fileName), ["first.pdf"]);
+        assert.deepEqual(state.payloads[0].images64, []);
+        const draftFile = { id: 3, file: { name: "draft.pdf", type: "application/pdf" } };
+        state.draft = "unsent third";
+        state.html = "<p>unsent third</p>";
+        context.fileUpload.resetFiles([draftFile]);
+        renderSender();
+        streams[0].resolve();
+        assert.equal(await first, true);
+        await settle();
+        assert.deepEqual(state.processed[1], { html: "<p>second</p>", files: queuedFiles });
+        assert.deepEqual(state.payloads.map(({ message, session_id }) => [message, session_id]), [
+          ["first", "active-chat"], ["second", "active-chat"],
+        ]);
+        assert.deepEqual(state.payloads[1].attachments.map(({ fileName }) => fileName), withQueuedFile ? ["second.png"] : []);
+        assert.deepEqual(state.payloads[1].pdfs64, []);
+        assert.deepEqual(state.payloads[1].images64.map(({ fileName }) => fileName), withQueuedFile ? ["second.png"] : []);
+        assert.equal(state.draft, "unsent third");
+        assert.deepEqual(context.fileUpload.fileItems, [draftFile]);
+        streams[1].resolve();
+        await settle();
+        assert.deepEqual(state.queued, []);
+        assert.deepEqual(state.created, []);
+      });
+    });
+  }
+
+  test(`${surface}: an active request does not clear files added to the next draft`, async () => {
+    await withChat(fullScreen, async ({ state, context, streams, renderSender }) => {
+      const response = deferred();
+      const fetchFixture = global.fetch;
+      global.fetch = async (...args) => {
+        const result = await fetchFixture(...args);
+        await response.promise;
+        return result;
+      };
+      const activeFile = { id: 1, file: { name: "first.pdf", type: "application/pdf" } };
+      const draftFile = { id: 2, file: { name: "draft.pdf", type: "application/pdf" } };
+      context.fileUpload.resetFiles([activeFile]);
+      const first = renderSender().handleSendMessage();
+      await settle();
+      assert.equal(state.payloads.length, 1);
+      context.fileUpload.resetFiles([draftFile]);
+      response.resolve();
+      await settle();
+      assert.deepEqual(context.fileUpload.fileItems, [draftFile]);
+      assert.deepEqual(state.payloads[0].attachments.map(({ fileName }) => fileName), ["first.pdf"]);
+      streams[0].resolve();
+      assert.equal(await first, true);
+      assert.deepEqual(context.fileUpload.fileItems, [draftFile]);
+    });
+  });
+
+  test(`${surface}: failed attachment preparation restores its files without losing newly added files`, async () => {
+    await withChat(fullScreen, async ({ state, context, renderSender }) => {
+      const preparation = deferred();
+      const activeFile = { id: 1, file: { name: "first.pdf", type: "application/pdf" } };
+      const draftFile = { id: 2, file: { name: "draft.pdf", type: "application/pdf" } };
+      context.fileUpload.resetFiles([activeFile]);
+      context.processAttachments = async (html, files) => {
+        state.processed.push({ html, files });
+        await preparation.promise;
+        throw new Error("attachment unavailable");
+      };
+      const first = renderSender().handleSendMessage();
+      await settle();
+      assert.deepEqual(state.processed, [{ html: "<p>first</p>", files: [activeFile] }]);
+      assert.deepEqual(context.fileUpload.fileItems, []);
+      context.fileUpload.resetFiles([draftFile]);
+      const rejected = assert.rejects(first, /attachment unavailable/);
+      preparation.resolve();
+      await rejected;
+      assert.deepEqual(context.fileUpload.fileItems, [activeFile, draftFile]);
+      assert.equal(state.draft, "first");
+      assert.deepEqual(state.payloads, []);
       assert.equal(context.sendInFlightRef.current, false);
     });
   });
