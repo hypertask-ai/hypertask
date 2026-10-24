@@ -40,25 +40,6 @@ export const taskSessionQueryOptions = (taskId: number | null | undefined, userI
   refetchOnWindowFocus: false,
 });
 
-export const renderTaskSessionRows = (
-  sessions: TaskSessionSummary[],
-  onSelect: (sessionId: string) => void
-) => sessions.map((session) => (
-  <button
-    key={session.id}
-    type="button"
-    className="flex w-full items-center gap-3 rounded p-2 text-left text-xs text-text-light-gray hover:bg-hover-active hover:text-white-black"
-    onClick={() => onSelect(session.id)}
-  >
-    <span className="min-w-0 flex-1 truncate">
-      {session.title}
-    </span>
-    <span className="shrink-0 text-[11px]">
-      {formatDateDifference(session.updatedAt)}
-    </span>
-  </button>
-));
-
 const TICKET_QUERIES = (ref: string) => [
   `Summarize ${ref}`,
   `Write my next reply on ${ref}`,
@@ -324,7 +305,20 @@ export const WelcomeScreen = () => {
               <p className="px-2 text-[11px] text-text-light-gray">
                 Previous threads
               </p>
-              {renderTaskSessionRows(taskSessions.data, selectSession)}
+              {taskSessions.data.map((session) => (
+                <button
+                  key={session.id}
+                  className="flex w-full items-center gap-3 rounded p-2 text-left text-xs text-text-light-gray hover:bg-hover-active hover:text-white-black"
+                  onClick={() => selectSession(session.id)}
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {session.title}
+                  </span>
+                  <span className="shrink-0 text-[11px]">
+                    {formatDateDifference(session.updatedAt)}
+                  </span>
+                </button>
+              ))}
             </div>
           )}
         </div>

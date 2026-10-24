@@ -97,13 +97,13 @@ async function withReminder(options, check) {
   Object.assign(global, { window: dom.window, document: dom.window.document, CustomEvent: dom.window.CustomEvent, IS_REACT_ACT_ENVIRONMENT: true });
   const atoms = Object.fromEntries(["currentUserAtom", "showAIChatInterfaceAtom", "aiChatAutoOpenSuppressedAtom", "aiChatExplicitOpenAtAtom", "isAiChatSidebarModeAtom", "aiChatEditTaskIdAtom", "currentProjectAtom", "aiChatSidebarWidthPxAtom"].map(name => [name, name]));
   const values = { currentUserAtom: { id: options.viewer ?? 985 }, showAIChatInterfaceAtom: false, aiChatAutoOpenSuppressedAtom: true, aiChatEditTaskIdAtom: 43, currentProjectAtom: { id: 15 } };
-  const requests = [], selected = [], resumedEvents = [];
+  const requests = [], selected = [], resumedEvents = [], openWrites = [];
   let enabled = options.enabled !== false;
   let taskId = 43;
   let restored = 0;
   let chat = options.cold ? undefined : { chatHistoryReady: true };
   let nativeTarget = null;
-  const runtime = () => ({ chatHistoryReady: true, currentSession: { id: "active", messages: [] },
+  const runtime = () => ({ chatHistoryReady: options.historyReady !== false, currentSession: { id: "active", messages: [] },
     selectSession: id => selected.push(id), restoreChat: () => { restored++; }, fileItems: [],
     editor: { getHTML: () => "", getText: () => "", commands: { setContent: noop } }, resetFiles: noop,
     startNewSession: () => assert.fail("Resume must not create a session"),
@@ -114,7 +114,7 @@ async function withReminder(options, check) {
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: flag },
     "@/lib/contexts/Multipages/AI_Agent/chatContext": { useOptionalAiChatContext: () => chat },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => chat },
-    "@/lib/state": { useRecoilValue: atom => values[atom], useSetRecoilState: atom => value => { values[atom] = value; }, useRecoilState: () => [360, noop] },
+    "@/lib/state": { useRecoilValue: atom => values[atom], useSetRecoilState: atom => value => { openWrites.push({ atom, value }); values[atom] = value; }, useRecoilState: () => [360, noop] },
     "@/store": atoms,
     "next/navigation": { usePathname: () => "/detail/project-15/43", useSearchParams: () => new URLSearchParams() },
     "@/lib/demo/isGuestClient": { isGuestCookieUser: () => false },
@@ -163,9 +163,9 @@ async function withReminder(options, check) {
       await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     };
     await render();
-    await check({ requests, selected, values, resumedEvents, client, render,
+    await check({ requests, selected, values, resumedEvents, openWrites, client, render,
       get restored() { return restored; },
-      ready: async () => { chat = runtime(); await render(); },
+      ready: async () => { chat = { ...runtime(), chatHistoryReady: true }; await render(); },
       settled: async () => { chat = { ...chat, sendSettledVersion: (chat.sendSettledVersion ?? 0) + 1 }; await render(); },
       disable: async () => { enabled = false; await render(); },
       viewer: async id => { values.currentUserAtom = { id }; await render(); },
@@ -191,7 +191,14 @@ test("reminder shows only the viewer's latest three threads, newest first, and r
     assert.equal(block().querySelector("p").textContent, "Only you see this");
     assert.deepEqual(rows().map(row => row.querySelector("span").textContent), ["Latest conversation", "Second conversation", "Older conversation"]);
     assert.deepEqual(view.requests, [{ url: "/api/ai-chat/task-sessions?taskId=43", credentials: "include" }]);
-    await React.act(async () => rows()[2].click());
+    await React.act(async () => {
+      rows()[2].click();
+      assert.deepEqual(view.openWrites, []);
+      assert.deepEqual(view.selected, []);
+    });
+    assert.deepEqual(view.openWrites.map(write => write.atom), [
+      "aiChatEditTaskIdAtom", "isAiChatSidebarModeAtom", "aiChatAutoOpenSuppressedAtom", "aiChatExplicitOpenAtAtom", "showAIChatInterfaceAtom",
+    ]);
     assert.deepEqual(view.selected, ["old"]);
     assert.deepEqual(view.resumedEvents, ["old"]);
     assert.equal(view.restored, 1);
@@ -250,8 +257,26 @@ test("a cold chat runtime resumes once it becomes ready, without losing the clic
     await view.ready();
     assert.deepEqual(view.selected, ["second"]);
     assert.equal(view.restored, 1);
+    assert.equal(view.openWrites.length, 5);
     await view.render();
     assert.equal(view.restored, 1);
+    assert.equal(view.openWrites.length, 5);
+  });
+});
+
+test("a mounted chat waits for history before dispatching resume and opens only once", async () => {
+  await withReminder({ historyReady: false }, async view => {
+    await React.act(async () => rows()[0].click());
+    assert.equal(view.values.showAIChatInterfaceAtom, true);
+    assert.equal(view.openWrites.length, 5);
+    assert.deepEqual(view.resumedEvents, []);
+    assert.deepEqual(view.selected, []);
+    assert.equal(view.restored, 0);
+    await view.ready();
+    assert.deepEqual(view.resumedEvents, ["newest"]);
+    assert.deepEqual(view.selected, ["newest"]);
+    assert.equal(view.restored, 1);
+    assert.equal(view.openWrites.length, 5);
   });
 });
 
@@ -275,6 +300,21 @@ test("resuming a ticket thread replaces an open external agent panel with the AI
     assert.equal(document.querySelector("[data-external-chat]")?.parentElement.classList.contains("hidden"), true);
     assert.ok(document.querySelector("[data-ai-chat]"));
   });
+});
+
+test("flag off leaves the sidebar resume event unhandled and does not open chat", async () => {
+  for (const enabled of [false, true]) {
+    await withReminder({ enabled, sidebar: true }, async view => {
+      if (enabled) await view.disable();
+      const event = new CustomEvent("ht-ticket-chat-resume", { cancelable: true, detail: { sessionId: "newest" } });
+      assert.equal(window.dispatchEvent(event), true);
+      assert.equal(event.defaultPrevented, false);
+      assert.equal(block(), null);
+      assert.deepEqual(view.selected, []);
+      assert.deepEqual(view.openWrites, []);
+      assert.equal(view.restored, 0);
+    });
+  }
 });
 
 test("feature flag defaults to Everyone and is discovered by the generated registry", () => {

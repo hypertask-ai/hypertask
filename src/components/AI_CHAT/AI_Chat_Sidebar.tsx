@@ -140,8 +140,7 @@ export const AI_Chat_Sidebar = ({
   const selectTargetRef = useRef(selectTarget);
   selectTargetRef.current = selectTarget;
 
-  useEffect(() => {
-    if (!ticketChatReminder) return;
+  useEffect(ticketChatReminder ? () => {
     const resumeTicketChat = (event: Event) => {
       event.preventDefault();
       const sessionId = (event as CustomEvent<{ sessionId: string }>).detail.sessionId;
@@ -149,7 +148,7 @@ export const AI_Chat_Sidebar = ({
     };
     window.addEventListener("ht-ticket-chat-resume", resumeTicketChat);
     return () => window.removeEventListener("ht-ticket-chat-resume", resumeTicketChat);
-  }, [ticketChatReminder]);
+  } : () => {}, [ticketChatReminder]);
 
   useEffect(() => {
     if (!generalChatPending || resolvingGeneralChat.current) return;
