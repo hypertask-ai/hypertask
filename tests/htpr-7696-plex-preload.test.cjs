@@ -164,7 +164,7 @@ for (const [assetPrefix, deploymentId] of [["", ""], ["", "deploy-test"], ["/ass
   });
 }
 
-test("only the shared Plex invocation gets URL metadata; ambiguous Latin output fails closed", () => {
+test("only the shared Plex invocation gets URL metadata; missing or ambiguous Latin output skips the preload without failing the build", () => {
   const loader = require(loaderPath);
   for (const other of [{ ...request, import: "Inter" }, { ...request, path: "src/other-font.ts" }]) {
     let called = false;
@@ -173,12 +173,15 @@ test("only the shared Plex invocation gets URL metadata; ambiguous Latin output 
     } }, "unchanged", null, null);
     assert.equal(called, true);
   }
-  for (const css of ["", "/* latin */\n@font-face { src: url(/one.woff2); }\n@font-face { src: url(/two.woff2); }"]) {
-    assert.throws(() => loader.call({ resourceQuery: `?${JSON.stringify(request)}`, mode: "production" }, css, null,
-      { ast: { root: postcss.parse(css) }, exports: [] }), /exactly one emitted Latin font URL/);
+  for (const mode of ["production", "development"]) {
+    for (const css of ["", "/* latin */\n@font-face { src: url(/one.woff2); }\n@font-face { src: url(/two.woff2); }"]) {
+      const meta = { ast: { root: postcss.parse(css) }, exports: [] };
+      let passedOn = false;
+      loader.call({ resourceQuery: `?${JSON.stringify(request)}`, mode, callback: (error, output) => {
+        assert.ifError(error); assert.equal(output, css); passedOn = true;
+      } }, css, null, meta);
+      assert.equal(passedOn, true, `${mode} build continues`);
+      assert.deepEqual(meta.exports, [], `${mode} emits no preload`);
+    }
   }
-  let fallback = false;
-  loader.call({ resourceQuery: `?${JSON.stringify(request)}`, mode: "development", callback: () => { fallback = true; } }, "", null,
-    { ast: { root: postcss.parse("") }, exports: [] });
-  assert.equal(fallback, true);
 });

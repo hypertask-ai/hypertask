@@ -10,9 +10,7 @@ module.exports = function plexPreloadLoader(css, map, meta) {
       const href = /^url\((['"]?)([^'"()]+)\1\)/.exec(src ?? "")?.[2];
       if (href) hrefs.add(href);
     }
-    if (!hrefs.size && this.mode === "development") return this.callback(null, css, map, meta);
-    if (hrefs.size !== 1) throw new Error("Plex preload requires exactly one emitted Latin font URL");
-    meta.exports.push({ name: "preloadHref", value: [...hrefs][0] });
+    if (hrefs.size === 1) meta.exports.push({ name: "preloadHref", value: [...hrefs][0] });
   }
   this.callback(null, css, map, meta);
 };
