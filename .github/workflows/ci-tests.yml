@@ -541,7 +541,7 @@ jobs:
     timeout-minutes: 25
     outputs:
       contract: ${{ steps.smoke.outputs.contract }}
-      docs_only: ${{ steps.scope.outputs.build_needed == 'false' }}
+      docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
     permissions:
       contents: read
       packages: read
@@ -603,12 +603,12 @@ jobs:
         run: |
           # A missing/broken detector must never suppress correctness checks.
           if ! node .github/scripts/ci-change-scope.cjs; then
-            echo "build_needed=true" >> "$GITHUB_OUTPUT"
+            echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
             : > "$RUNNER_TEMP/changed-files.txt"
           fi
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         with:
           node-version: ^24.22.1
           check-latest: true
@@ -623,7 +623,7 @@ jobs:
           git fetch --depth=1 origin "$BASE_SHA"
           node .github/scripts/layout-lock-approval.mjs
       - name: Install dependencies and Chromium
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
           npm ci --prefer-offline --no-audit --no-fund
           npx prisma generate
@@ -631,7 +631,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y strace
       - name: Prepare disposable local credentials
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -670,7 +670,7 @@ jobs:
             printf '%s\n' 'PUSHER_CLUSTER=mt1'
           } >> "$GITHUB_ENV"
       - name: Create isolated database and logged-in fixtures
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: fixtures
         env:
           BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
@@ -679,7 +679,7 @@ jobs:
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs
       - name: Download checksum-verified pinned native CLI
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         env:
           TRUSTED_CLI_BINARY_VERSION: "0.2.15"
           TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
@@ -693,7 +693,7 @@ jobs:
           chmod 755 "$CLI_BINARY"
           printf 'MCP_CONTRACT_CLI=%s\n' "$CLI_BINARY" >> "$GITHUB_ENV"
       - name: Build the local app (no migrations)
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         # YPER4-363: next/font downloads Google fonts at build time and about
         # 6% of builds lost that download. Retry once, only for that failure.
         run: |
@@ -705,7 +705,7 @@ jobs:
           done
           exit 1
       - name: Serve and check logged-in pages and layout lock
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: smoke
         env:
           BASE_URL: http://127.0.0.1:3100
@@ -763,7 +763,7 @@ jobs:
           fi
       # Failing parts are listed in the job log; their "after" screenshots (baseline boxes outlined) are here.
       - name: Upload layout lock screenshots
-        if: failure() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')
+        if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: layout-lock-matrix
