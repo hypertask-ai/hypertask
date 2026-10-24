@@ -13,12 +13,15 @@ export const POST = taskWriteRoute({
     const req = { body };
     try {
       const taskId = Number(req.body.taskId);
-      const userId = req.body.userId === null ? null : Number(req.body.userId);
-      if (!Number.isInteger(taskId) || (userId !== null && !Number.isInteger(userId))) {
+      const userId = req.body.userId == null ? req.body.userId : Number(req.body.userId);
+      const blockerCommentId = req.body.blockerCommentId;
+      if (!Number.isInteger(taskId) || (userId !== undefined && userId !== null && !Number.isInteger(userId))
+        || (blockerCommentId !== undefined && blockerCommentId !== null && (!Number.isInteger(blockerCommentId) || blockerCommentId <= 0 || blockerCommentId > 2_147_483_647))
+        || (userId === undefined && blockerCommentId === undefined)) {
         return NextResponse.json({ message: "Bad request" }, { status: 400 });
       }
 
-      const result = await setTaskWaitingOn({ taskId, userId, currentUser });
+      const result = await setTaskWaitingOn({ taskId, userId, blockerCommentId, currentUser });
       return NextResponse.json(result.body, { status: result.status });
     } catch (error) {
       console.error("/api/tasks/waiting-on", error);

@@ -17,7 +17,7 @@ function eligible(row, where) {
   if (where.section && where.section !== row.section) return false
   if (where.user && !eligible(row.user, where.user)) return false
   if (where.assignees?.some && !row.assignees?.some((assignee) => eligible(assignee, where.assignees.some))) return false
-  if (where.userId && where.userId !== row.userId) return false
+  if (where.userId && !(where.userId.in ?? [where.userId]).includes(row.userId)) return false
   if (where.displayName?.equals && row.displayName?.toLowerCase() !== where.displayName.equals.toLowerCase()) return false
   if (where.email?.equals && row.email?.toLowerCase() !== where.email.equals.toLowerCase()) return false
   if (where.AND && !where.AND.every((group) => eligible(row, group))) return false
@@ -34,7 +34,10 @@ const db = {
   project: { findMany: async ({ select }) => select.title
     ? [{ title: 'Visible board' }] : state.boards.map((id) => ({ id })) },
   label: { findMany: async ({ where }) => { state.labelQueries++; return [{ id: 'bug', value: 'bug' }, { id: 'needs design', value: 'needs design' }].filter(({ value }) => !where.value || value.startsWith(where.value.startsWith.toLowerCase())) } },
-  user: { findMany: async () => [{ displayName: 'Kamil Grzegorzewicz' }] },
+  user: { findMany: async () => [
+    { id: 6, displayName: 'Kamil Grzegorzewicz', email: 'kamil@example.com' },
+    { id: 4, displayName: null, email: 'kamila@example.com' },
+  ] },
   section: { findMany: async ({ where }) => (state.sections ?? [{ projectId: 7, section_title: 'Done', isDone: true }])
     .filter((section) => where.deleted !== false || !section.deleted) },
   task: { findMany: async ({ where, select, take }) => {
@@ -47,8 +50,7 @@ const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
-    HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    isFeatureEnabled: async (key) => key !== 'htpr-6881-search-fuzzy-person',
+    isFeatureEnabled: async () => true,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
@@ -140,8 +142,10 @@ test('from and assignee match the email shown for a user without a display name'
   const person = { displayName: null, email: 'kamila@example.com' }
   const task = { ...row(123), userId: 4, user: person, assignees: [{ userId: 4, user: person }] }
   for (const operator of ['from', 'assignee']) {
-    const { res } = await search(`${operator}:kamila@example.com`, { rows: [task] })
+    const { res, state } = await search(`${operator}:kamila@example.com`, { rows: [task] })
     assert.equal(res.statusCode, 200)
+    const predicate = state.where.AND[0].OR[0]
+    assert.deepEqual(operator === 'from' ? predicate.userId : predicate.assignees.some.userId, { in: [4] })
     assert.deepEqual(res.body.processedData.All.map((item) => item.taskId), [123])
   }
 })

@@ -2,31 +2,41 @@ import { tool } from "ai";
 import { z } from "zod";
 import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
 import prisma from "@/lib/prisma";
+import { HTPR_7663_SCOPED_AGENT_SKILLS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { withToolErrors } from "@/lib/ai/tools/execution";
 import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 
 import type { ToolContext } from "./context";
 
 export function createListSkillsTool(context: ToolContext) {
-  const { sendStatus, user } = context;
+  const { sendStatus, user, actingAgentId, teamScope } = context;
   return {
     hypertask_list_skills: tool({
       description:
-        "List personal skills, plus project skills when project_id is provided.",
+        "List skills available in your scope, optionally for a specific project.",
       inputSchema: z.object({
         project_id: z.coerce.number().int().positive().optional(),
       }),
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_list_skills");
+        if (!input.project_id && teamScope != null
+          && !await isFeatureEnabled(HTPR_7663_SCOPED_AGENT_SKILLS_FLAG, user.id).catch(() => false)) {
+          throw new Error("Account-global skills access denied");
+        }
         if (input.project_id) {
-          await assertProjectAccess(user.id, input.project_id);
+          await assertProjectAccess(user.id, input.project_id, actingAgentId, teamScope);
         }
         const skills = await prisma.aI_Skill.findMany({
           where: {
             OR: [
-              { userId: user.id, projectId: null },
-              ...(input.project_id
-                ? [{ projectId: input.project_id, userId: null }]
+              ...(teamScope != null ? [] : [{ userId: user.id, projectId: null }]),
+              ...(input.project_id || teamScope != null
+                ? [{
+                    ...(input.project_id ? { projectId: input.project_id } : {}),
+                    userId: null,
+                    project: { is: getProjectWhere(user.id, actingAgentId, teamScope) },
+                  }]
                 : []),
             ],
           },
