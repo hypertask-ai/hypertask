@@ -4,6 +4,28 @@ _Last updated: 2026-10-22._
 
 **Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), uses a provider-neutral AI review gate, and deploys production directly from the `production` branch.** The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
 
+## PR job budget (YPER4-663)
+
+The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jobs.
+Small guards share runners, not verdicts:
+
+- `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
+- `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code.
+- Dependabot/fork scans use a trusted completion pass to publish statuses because their PR tokens are read-only. It reads GitHub step conclusions only; it never checks out candidate code. Ordinary same-repo PRs need no extra runner.
+- Each folded guard context is still published through commit statuses. Independent steps continue after a failure; the original context and aggregate job both fail. Trusted publishers skip cancellation, re-read the current head before each status, and also compare the evaluated title for `pr-title`.
+- Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
+- Feature-flag evaluation and all-open reconciliation stay in the original two-job `feature-flag-gate.yml`, globally serialized by `feature-flag-gate-production` with cancellation off. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group. Their original semantic statuses and flag fingerprints are unchanged.
+- Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
+
+Static normal non-draft app PR budget: **17 → 15 jobs** per synchronize event
+(18 → 15 on opening, when the old outside guard also ran). Path-specific evals,
+visual checks, preview deployments and external review are extra. Docs-only PRs start 14 jobs; Dependabot/fork app PRs add one trusted scan-publication job (16 total). Snapshot actual
+head check runs, including reruns but excluding skipped/unstarted runs, with
+`scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
+runs stay attached to their old commit; record both snapshots for comparison.
+CodeQL uses GitHub default setup; path filtering would require advanced setup,
+which this change does not introduce.
+
 ## Review gate
 
 - The private `valentinyeo/hypertask-reviewer` workflow fails over subscription-first between its configured backends (currently the ChatGPT/Codex subscription and the Claude Code subscription); the reviewer repository owns the provider order, models, and failover details, so they are not duplicated here.
@@ -161,29 +183,34 @@ recipes with `verify-qa`. See the
 [maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
 installation, state, load holds, limits and offline tests.
 
-## Docs-only CI lane (YPER4-548)
+## Docs-only CI lane (YPER4-548 / YPER4-663)
 
-On non-draft PRs, the existing `ci-tests` and `browser-smoke` jobs both run and
-report ordinary **success**, not a skipped job, when every changed file is under
-`docs/`, `.claude/`, `scripts/self_hosted_agent/` or `.github/`, or is a `.md`
-file at the repo root (`README.md`). Nested Markdown such as
-`src/app/wiki/agents/agents.md` is app content and runs everything. Changes to
-`.github/workflows/ci-tests.yml` or `.github/scripts/` always run everything so
-the edited gate is exercised. Existing live-settings, review and approval guards still apply.
-There are no workflow-level path filters and no additional detector jobs.
+Required `app-smoke` and `browser-smoke` still report success when every changed
+file is documentation, skills or `tests/**` outside `src/`. The shared
+`.github/scripts/ci-change-scope.cjs` emits `heavy_needed=false` for `docs/**`,
+`.claude/**`, `skills/**`, `.agents/skills/**`, `tests/**` and Markdown outside
+`src/`. Source files (even Markdown), dependency files and CI/harness code run
+smoke normally. Empty/unknown diffs and detector failures run the heavy lane.
+Production pushes always run everything.
 
-Each job runs `.github/scripts/ci-change-scope.cjs` using the runner's bundled
-Node before setup-node, dependency installation, caches, tests or Docker work.
-It fetches the exact PR base and head SHAs and uses `git diff --no-renames
---name-only -z BASE_SHA HEAD_SHA`; both sides of a renamed file are considered.
-A non-doc file, empty list, missing SHA/base, git error or detector failure runs
-the heavy lane. Production pushes always run everything. The existing PR-only
-cancellation and draft guards are unchanged.
+App Smoke determines scope in its trusted validation job and publishes
+`app-smoke: success` with `docs-only change, skipped` without starting its build
+job. Browser smoke keeps its successful required job and explicit scope output,
+but skips install/build/tests with a clear log line. Its PostgreSQL, Redis and
+Soketi job-level services still start. Neither required workflow uses path skips.
+Visual Regression keeps its narrow screen/harness path filter and excludes
+Markdown; unit-test-only changes do not start it.
 
-Browser PostgreSQL, Redis and Soketi stay job-level services, so a docs-only
-`browser-smoke` still pays their short start-up but skips install, build and tests.
-Only free GitHub-hosted `ubuntu-latest` runners are used. Verify the matcher without installing dependencies:
-`node .github/scripts/ci-change-scope.cjs --self-check`.
+The stricter existing `build_needed` output for `ci-tests` is unchanged: changed
+unit tests still run. Its legacy docs-only exclusions remain `docs/`, `.claude/`,
+`scripts/self_hosted_agent/`, non-exercising `.github/` files and root Markdown;
+`.github/workflows/ci-tests.yml` and `.github/scripts/` always exercise CI. Live
+settings, review and approval guards remain mandatory. No detector job is added.
+
+The detector fetches exact base/head SHAs and uses NUL-delimited
+`git diff --no-renames --name-only`; moving source into docs cannot hide a
+removed source file. Its self-check covers both outputs and fail-closed cases:
+`node .github/scripts/ci-change-scope.cjs --self-check` (run in CI, not here).
 
 ## Visual regression (informational v1)
 
