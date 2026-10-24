@@ -25,6 +25,7 @@ import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/definitions/htpr-7725-saved-view-assignee";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
 type UpdateOptions = {
@@ -176,6 +177,7 @@ const applyProjectFilters = (
 const UpdateKanban = () => {
   const queryClient = useQueryClient();
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
+  const humanAssigneesOnly = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const setactiveitem = useSetRecoilState(activeItemAtom);
   const setInViewObject = useSetRecoilState(inViewObjectAtom);
   const [_currentProject, __] = useRecoilState(currentProjectAtom)
@@ -251,9 +253,12 @@ const UpdateKanban = () => {
       "running-board",
       projectToUpdate.id,
     ]);
-    const filterRuntimeContext = Array.isArray(runningTimers)
-      ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
-      : undefined;
+    const filterRuntimeContext = {
+      humanAssigneesOnly,
+      ...(Array.isArray(runningTimers)
+        ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
+        : {}),
+    };
     const filteredSections = reconcileSections(
       previousProject.filteredSections,
       applyProjectFilters(
