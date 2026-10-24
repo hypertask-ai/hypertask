@@ -110,6 +110,11 @@ function fakeRedis() {
   };
   const get = (key) => Number(values.get(key) ?? 0);
   const zset = (key) => { if (!sets.has(key)) sets.set(key, new Map()); return sets.get(key); };
+  const heldAmount = (member, reservationsKey) => {
+    const encoded = member.slice(member.indexOf("|") + 1, member.lastIndexOf("|"));
+    const original = encoded ? JSON.parse(encoded).find((scope) => scope[1] === reservationsKey) : undefined;
+    return original?.[3] ?? Number(member.split("|").at(-1));
+  };
   return {
     values, sets, journals,
     get: async (key) => values.get(key) ?? null,
@@ -162,17 +167,18 @@ function fakeRedis() {
                 const originals = encoded ? JSON.parse(encoded) : [[keys[c - 1], keys[r - 1]]];
                 for (const [committedKey, reservationsKey] of originals) {
                   if (zset(reservationsKey).delete(member)) {
-                    values.set(committedKey, String(get(committedKey) + Number(member.split("|").at(-1))));
+                    values.set(committedKey, String(get(committedKey) + heldAmount(member, reservationsKey)));
                     rememberMonth(committedKey, member, args[1], Number(args[1]) - 15 * 60 * 1000);
                   }
                 }
               }
             }
             total += get(keys[c - 1]);
-            for (const member of zset(keys[r - 1]).keys()) total += Number(member.split("|").at(-1));
+            for (const member of zset(keys[r - 1]).keys()) total += heldAmount(member, keys[r - 1]);
           }
           if (scope.pending) total += get(keys[scope.pending - 1]);
-          if (total + Number(args[2]) > scope.cap) return -index - 1;
+          const held = scope.reason === "day" ? Math.min(Number(args[2]), scope.cap) : Number(args[2]);
+          if (total + held > scope.cap) return -index - 1;
         }
         for (const scope of scopes) zset(keys[scope.pairs[scope.writeIndex - 1][1] - 1]).set(args[4], Number(args[3]));
         return 1;
@@ -388,6 +394,66 @@ test("day seed refuses before inference and retries neither reseed nor leave res
   for (const set of redis.sets.values()) assert.ok([...set.keys()].every((member) => member === first.id));
   assert.equal(allowance.sharedAiAllowanceErrorMessage(new allowance.SharedAiAllowanceExceededError("month", "day")), constants.DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE);
 });
+
+for (const backend of ["fake", "real Redis"]) {
+  test(`${backend}: Free default reservation holds the day cap, settles real spend and refuses at the daily boundary`, async (t) => {
+    if (backend === "real Redis") { redis = await realRedis(t); if (!redis) return; }
+    const first = await reserve({ amountUsd: 0.97 });
+    const day = first.scopes[1];
+    const originalScopes = JSON.parse(first.id.slice(first.id.indexOf("|") + 1, first.id.lastIndexOf("|")));
+    assert.deepEqual(originalScopes.map((scope) => scope[3]), [970000, 250000]);
+    await assert.rejects(reserve({ amountUsd: 0.01, lane: "system" }), refusal("day"));
+    await allowance.settlePlanAllowance(first, 0.03);
+    await allowance.settlePlanAllowance(first, 0.9);
+    assert.equal(await redis.get(day.committedKey), "30000");
+    assert.equal(await redis.get(first.scopes[0].committedKey), "30000");
+    for (const scope of first.scopes) {
+      const pending = backend === "fake" ? [...redis.sets.get(scope.reservationsKey).keys()] : await redis.zrange(scope.reservationsKey, 0, -1);
+      assert.deepEqual(pending, [], "settlement removes the entire scope hold");
+    }
+    const journalKey = first.scopes[0].committedKey.replace(/:committed$/, ":recent-settled");
+    const journal = backend === "fake" ? [...redis.journals.get(journalKey).keys()] : await redis.zrange(journalKey, 0, -1);
+    assert.deepEqual(journal, [`${first.id}|30000`]);
+
+    const atBoundary = await reserve({ amountUsd: 0.22, lane: "system" });
+    await allowance.settlePlanAllowance(atBoundary, 0.22);
+    assert.equal(await redis.get(day.committedKey), "250000");
+    await assert.rejects(reserve({ amountUsd: 0.01 }), refusal("day"));
+    for (const scope of atBoundary.scopes) {
+      const pending = backend === "fake" ? [...redis.sets.get(scope.reservationsKey).keys()] : await redis.zrange(scope.reservationsKey, 0, -1);
+      assert.deepEqual(pending, []);
+    }
+
+    const overrun = await reserve({ teamId: "real-cost-team", amountUsd: 0.97 });
+    await allowance.settlePlanAllowance(overrun, 0.3);
+    assert.equal(await redis.get(overrun.scopes[1].committedKey), "300000", "actual cost is not clipped to the day hold");
+  });
+
+  test(`${backend}: expiry releases each original scope's hold and late settlement leaves no pending`, async (t) => {
+    if (backend === "real Redis") { redis = await realRedis(t); if (!redis) return; }
+    const guest = { ...free, demoGlobal: true };
+    const original = await reserve({ policy: guest, amountUsd: 0.97 });
+    const originalScopes = JSON.parse(original.id.slice(original.id.indexOf("|") + 1, original.id.lastIndexOf("|")));
+    assert.deepEqual(originalScopes.map((scope) => scope[3]), [970000, 250000, 970000]);
+    for (const scope of original.scopes) {
+      if (backend === "fake") redis.sets.get(scope.reservationsKey).set(original.id, Date.now() - 1);
+      else await redis.zadd(scope.reservationsKey, Date.now() - 1, original.id);
+    }
+    const sweep = await reserve({ policy: guest, amountUsd: 0 });
+    assert.deepEqual(await Promise.all(original.scopes.map((scope) => redis.get(scope.committedKey))), ["970000", "250000", "970000"]);
+    for (const scope of original.scopes) {
+      const pending = backend === "fake" ? [...redis.sets.get(scope.reservationsKey).keys()] : await redis.zrange(scope.reservationsKey, 0, -1);
+      assert.deepEqual(pending, [sweep.id], "only the new zero hold remains");
+    }
+    await allowance.settlePlanAllowance(original, 0.03);
+    await allowance.settlePlanAllowance(sweep, 0);
+    assert.deepEqual(await Promise.all(original.scopes.map((scope) => redis.get(scope.committedKey))), ["970000", "250000", "970000"]);
+    for (const scope of original.scopes) {
+      const pending = backend === "fake" ? [...redis.sets.get(scope.reservationsKey).keys()] : await redis.zrange(scope.reservationsKey, 0, -1);
+      assert.deepEqual(pending, []);
+    }
+  });
+}
 
 test("monthly demo seed is once and shared across teams and demo-only callers", async () => {
   process.env.DEMO_AI_GATEWAY_API_KEY = "vck_demo_test"; demoSpend = 14.8;

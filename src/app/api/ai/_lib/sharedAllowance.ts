@@ -467,13 +467,23 @@ return fromPending + fromVisible
 `;
 
 const EXPIRE_RESERVATION_SCRIPT = `
+local function reservationHeldAmount(member, reservationsKey)
+  local amount = tonumber(string.match(member, "|(%d+)$") or "0")
+  local encoded = string.match(member, "^[^|]+|(.+)|%d+$")
+  if encoded then
+    for _, original in ipairs(cjson.decode(encoded)) do
+      if original[2] == reservationsKey then return tonumber(original[4]) or amount end
+    end
+  end
+  return amount
+end
 local function expireReservation(member, committedKey, reservationsKey, ttlSeconds, now)
   local encoded = string.match(member, "^[^|]+|(.+)|%d+$")
   local originalScopes = encoded and cjson.decode(encoded) or {{committedKey, reservationsKey, ttlSeconds}}
   local amount = tonumber(string.match(member, "|(%d+)$") or "0")
   for _, original in ipairs(originalScopes) do
     if redis.call("ZREM", original[2], member) == 1 then
-      redis.call("INCRBY", original[1], amount)
+      redis.call("INCRBY", original[1], tonumber(original[4]) or amount)
       redis.call("EXPIRE", original[1], original[3])
       local lanePrefix = string.match(original[1], "^(ai%-allowance:%d%d%d%d%-%d%d:.+):committed$")
       if lanePrefix then
@@ -575,7 +585,7 @@ async function resyncToGatewaySpend(args: {
     return false;
   }
   const now = Date.now();
-  await args.redis.eval(
+  const changed = await args.redis.eval(
     RESYNC_TO_GATEWAY_SCRIPT,
     args.lane === "visible" ? 4 : 3,
     args.committedKey,
@@ -592,7 +602,7 @@ async function resyncToGatewaySpend(args: {
     String(args.month.ttlSeconds),
     String(now),
   );
-  return true;
+  return Number(changed) !== 0;
 }
 
 async function reconcileLegacySplit(args: {
@@ -1059,11 +1069,12 @@ for index, scope in ipairs(scopes) do
     end
     total = total + tonumber(redis.call("GET", KEYS[pair[1]]) or "0")
     for _, member in ipairs(redis.call("ZRANGE", KEYS[pair[2]], 0, -1)) do
-      total = total + tonumber(string.match(member, "|(%d+)$") or "0")
+      total = total + reservationHeldAmount(member, KEYS[pair[2]])
     end
   end
   if scope.pending then total = total + tonumber(redis.call("GET", KEYS[scope.pending]) or "0") end
-  if total + amount > scope.cap then return -index end
+  local held = scope.reason == "day" and math.min(amount, scope.cap) or amount
+  if total + held > scope.cap then return -index end
 end
 for _, scope in ipairs(scopes) do
   local pair = scope.pairs[scope.writeIndex]
@@ -1171,7 +1182,8 @@ export async function reservePlanAllowance(args: {
   }));
   const amount = usdToMicroUsd(args.amountUsd);
   const originalScopes = scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds }));
-  const id = `${randomUUID()}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds]))}|${amount}`;
+  const id = `${randomUUID()}|${JSON.stringify(originalScopes.map((scope, index) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds,
+    scopes[index].reason === "day" ? Math.min(amount, scopes[index].cap) : amount]))}|${amount}`;
   const redis = await getRedis();
   const followsRealSpend = await allowanceFollowsRealSpend(args.userId ?? null);
   const reserve = () => redis.eval(RESERVE_SCOPES_SCRIPT, keys.length, ...keys,
@@ -1179,16 +1191,18 @@ export async function reservePlanAllowance(args: {
   let accepted = Number(await reserve());
   if (accepted !== 1 && scopes[-accepted - 1]?.reason === "month" && args.teamId && followsRealSpend) {
     const scope = scopes[-accepted - 1];
-    const { committedKey } = scope.pairs[scope.writeIndex - 1];
-    const lanePrefix = committedKey.replace(/:committed$/, "");
-    const recentSettledKey = `${lanePrefix}:recent-settled`;
-    if (await resyncToGatewaySpend({
-      committedKey, gatewayApiKey: args.gatewayApiKey, journalStartedKey: `${recentSettledKey}-since`,
-      lane: args.lane ?? "visible", legacyPendingKey: scope.pendingKey!, lockKey: `${lanePrefix}:gateway-resync-lock`,
-      month, recentSettledKey, redis, teamId: args.teamId,
-    })) {
-      accepted = Number(await reserve());
+    let resynced = false;
+    for (const [index, { committedKey }] of scope.pairs.entries()) {
+      const lanePrefix = committedKey.replace(/:committed$/, "");
+      const recentSettledKey = `${lanePrefix}:recent-settled`;
+      const changed = await resyncToGatewaySpend({
+        committedKey, gatewayApiKey: args.gatewayApiKey, journalStartedKey: `${recentSettledKey}-since`,
+        lane: index === 0 ? "visible" : "system", legacyPendingKey: scope.pendingKey!, lockKey: `${lanePrefix}:gateway-resync-lock`,
+        month, recentSettledKey, redis, teamId: args.teamId,
+      });
+      resynced = changed || resynced;
     }
+    if (resynced) accepted = Number(await reserve());
   }
   if (accepted !== 1) {
     const refused = scopes[-accepted - 1];
