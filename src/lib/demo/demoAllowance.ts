@@ -30,6 +30,7 @@ export function cappedDemoModel(model: Exclude<LanguageModel, string>, modelSlug
     middleware: teamId ? createSharedAllowanceMiddleware({
       allowanceUsd: GUEST_POLICY.monthlyUsd,
       gatewayApiKey,
+      fundingSource: "demo",
       modelSlug,
       resolvePolicy: async () => GUEST_POLICY,
     }) : {
@@ -37,7 +38,7 @@ export function cappedDemoModel(model: Exclude<LanguageModel, string>, modelSlug
       wrapGenerate: async ({ doGenerate, params }) => {
         const pricing = await modelPricing(modelSlug);
         const amountUsd = estimateReservationMicroUsd({ ...params, pricing }) / 1_000_000;
-        const reservation = await reservePlanAllowance({ policy: GUEST_POLICY, gatewayApiKey, amountUsd });
+        const reservation = await reservePlanAllowance({ policy: GUEST_POLICY, gatewayApiKey, fundingSource: "demo", amountUsd });
         let actualUsd = amountUsd;
         try {
           const result = await doGenerate();
