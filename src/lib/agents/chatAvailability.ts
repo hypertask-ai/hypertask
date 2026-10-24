@@ -20,11 +20,11 @@ export function hasFreshAgentChatHeartbeat(
 export function agentChatDeliveryMode(
   availability: ChatAvailability,
   now = new Date(),
+  pollingFallbackEnabled = false,
 ): AgentChatDeliveryMode {
   if (availability.subscription?.active) {
-    return availability.subscription.events.includes("chat.message")
-      ? "webhook"
-      : null;
+    if (availability.subscription.events.includes("chat.message")) return "webhook";
+    if (!pollingFallbackEnabled) return null;
   }
   return hasFreshAgentChatHeartbeat(availability.heartbeatAt, now)
     ? "polling"

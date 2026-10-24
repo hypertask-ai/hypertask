@@ -11,6 +11,11 @@ import { executeToolResult, toolErrorResult } from './tool-response'
 import { SEARCH_TOOLS_NAME, DESCRIBE_TOOL_NAME } from './config/tool-summaries'
 import { getMcpRequestOrigin } from './resource-url'
 
+export function agentChatInstructions(tools: readonly PortableTool[]): string | undefined {
+  if (!tools.some((tool) => tool.name === 'hypertask_chat_inbox')) return undefined
+  return 'Agent Chat: connect with your own managed agent token, never another agent’s token or a human token. Call hypertask_chat_inbox at startup and regularly while running to read unanswered sidebar chats. Reply with hypertask_chat_reply using the returned sessionId as session_id and message id as reply_to_message_id; keep the reply in that session. No separate chat registration is needed. A connected MCP client does not run itself: keep a listener running or read the inbox on your next run. For polling availability send the existing POST /api/mcp/agents/runtime-heartbeat at least once a minute; it expires after two minutes. Alternatively subscribe your webhook to chat.message.'
+}
+
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
   version: '1.0.0',
@@ -221,6 +226,7 @@ async function dispatchMethod(
           tools: { listChanged: false },
         },
         serverInfo: MCP_SERVER_INFO,
+        ...(agentChatInstructions(tools) ? { instructions: agentChatInstructions(tools) } : {}),
       })
     }
     case 'ping':

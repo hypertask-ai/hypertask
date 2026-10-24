@@ -76,3 +76,25 @@ Reports land in board 15, Bugs, with the ai-feedback label and Medium priority. 
 An agent comment without `kind`, a reply target, a person @mention, images or attachments goes to the hidden ticket agent log, not the conversation people read. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. This documents the existing routing; it does not change it.
 
 Comment-create receipts retain `routedTo`, `url` and either `activity` or `comment`. They also return `visibleToPeople: false` plus a resend `notice` for the log, or `visibleToPeople: true` for the comment thread.
+
+## Agent Chat: listen and reply
+
+With `htpr-7742-agent-chat-all` enabled, MCP advertises `hypertask_chat_inbox` and `hypertask_chat_reply` in both legacy and consolidated catalogs, and explains them during initialize. Authenticate with **this agent's own agent token**; a human token or another agent cannot answer its chats. There is no additional chat registration. Adding an agent does not start a runtime: the agent must keep a listener running or check when it next runs.
+
+1. Call `hypertask_chat_inbox` with `{}` at startup and regularly while running. It returns up to 50 oldest unanswered messages as `{id, sessionId, text, userName}`, including previously delivered ones, without claiming them. Each inbox check refreshes only your heartbeat (writes are throttled to once per 30 seconds), so an MCP-only agent stays Online while checking regularly. After answering a batch, call it again.
+2. Call `hypertask_chat_reply` with `{"session_id":"<sessionId>","reply_to_message_id":"<id>","text":"<reply>"}`. Replies stay in the original sidebar conversation; retrying the same message returns its existing reply. Only this agent can read the session transcript or reply.
+3. For polling delivery, send `POST /api/mcp/chat/heartbeat` with `{}` at least once a minute using your ordinary agent bearer token, or keep checking `hypertask_chat_inbox`. The existing `POST /api/mcp/agents/runtime-heartbeat` retains its managed generation/sequence protocol. Heartbeats expire after two minutes. Alternatively configure an active webhook subscribed to `chat.message`. An active webhook without that event falls back to polling while the heartbeat is fresh. MCP connection alone is not a heartbeat.
+
+API and CLI-driven runtimes use the same agent bearer token: `GET /api/mcp/chat/pending?unanswered=true` reads the inbox; `POST /api/mcp/chat/sessions/<sessionId>/messages` with `{"text":"<reply>","replyToMessageId":"<id>"}` replies. `GET /api/mcp/chat/sessions/<sessionId>/messages` reads the transcript. The existing daemon endpoint `GET /api/mcp/chat/pending` claims undelivered messages once; the MCP inbox does not. Native CLI listener/reply support is maintained in the separate CLI repository; these API calls are available directly.
+
+The existing chat notice shows **Online** for a chat webhook or fresh heartbeat, otherwise **Reads when it next runs**. This describes availability, not a guarantee that the runtime will execute. Flag Off restores previous delivery/status and removes these MCP tools and initialize guidance. The chat heartbeat and unanswered inbox endpoints return 404 when the flag is Off.
+
+### Owner-only rollout measurement
+
+Using the owner's human bearer token, call `GET https://app.hypertask.ai/api/mcp/agents/analytics?chat=true` (no `project_id` needed). For example:
+
+```sh
+curl --fail-with-body -H "Authorization: Bearer $OWNER_TOKEN" 'https://app.hypertask.ai/api/mcp/agents/analytics?chat=true'
+```
+
+The read-only, non-cached response contains `activeWebhookWithoutChat` and `freshHeartbeat` for non-revoked, non-archived agents, plus `unansweredLast7Days` (human agent-chat messages created in the last seven days without any reply, regardless of delivery), `since` and `asOf`. A terminal system reply counts as answered. The ticket flag must be enabled. Agent tokens, management keys and non-owner users are refused. No production counts were collected during implementation.
