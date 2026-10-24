@@ -121,3 +121,38 @@ if [ "$command" = review ]; then
   review_id=$(jq -er '.review.id' "$response") || fail 'missing review id in response'
   printf 'review %s\n' "$review_id"
 fi
+
+if [ "$command" = set ] && [ "$mode" = EVERYONE ]; then
+  jq -e --arg key "$key" '.flag.key == $key and .flag.mode == "EVERYONE"' "$response" >/dev/null \
+    || fail 'Everyone was requested but the response did not confirm it; no ticket moved'
+  owner=$(jq -r '.flag.ticketId // empty' "$response")
+  if [ -z "$owner" ] && [[ $key =~ ^(htpr|yper4|hyfa)-([1-9][0-9]*)(-|$) ]]; then
+    owner="${BASH_REMATCH[1]^^}-${BASH_REMATCH[2]}"
+  fi
+  if [ -n "$owner" ]; then
+    [[ $owner =~ ^(HTPR|YPER4|HYFA)-[1-9][0-9]*$ ]] || fail 'invalid flag owner ticket'
+    task=$(SHIP_SESSION_NAME="$IDENTITY" vcc task get "$owner" --json) \
+      || fail "flag is Everyone, but cannot read $owner; retry with ht-flags-sweep --go"
+    section=$(jq -er '.success == true and (.tasks | length == 1)' <<<"$task" >/dev/null &&
+      jq -er '.tasks[0].section' <<<"$task") || fail "flag is Everyone, but cannot read $owner section"
+    if [ "$section" = Flags ]; then
+      # A ticket can own several flags: switching one must not finish the others.
+      flags=$(SHIP_SESSION_NAME="$IDENTITY" "$0" get) || fail "flag is Everyone, but cannot check all flags of $owner; leave it in Flags"
+      printf '%s\n%s\n' "$(jq -c . <<<"$task")" "$(jq -c . <<<"$flags")" | SHIP_SESSION_NAME="$IDENTITY" python3 -c '
+import json, sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[1])
+from ticket_flags import require_everyone
+try:
+    task, flags = [json.loads(line) for line in sys.stdin]
+    require_everyone(sys.argv[2], flags["flags"], json.dumps(task), require_flags=True)
+except (ValueError, KeyError, TypeError) as error:
+    print("ht-flag: " + str(error), file=sys.stderr)
+    sys.exit(1)
+' "$(dirname "$(readlink -f "$0")")" "$owner" || fail "flag is Everyone; $owner remains in Flags"
+      SHIP_SESSION_NAME="$IDENTITY" vcc task move "$owner" --section Done \
+        || fail "flag is Everyone, but moving $owner from Flags to Done failed; retry the sweep"
+      printf 'ht-flag: moved %s from Flags to Done (%s is Everyone)\n' "$owner" "$key" >&2
+    fi
+  fi
+fi
