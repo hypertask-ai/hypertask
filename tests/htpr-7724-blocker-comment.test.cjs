@@ -134,3 +134,27 @@ for (const mobile of [false, true]) {
     }
   });
 }
+
+for (const enabled of [false, true]) {
+  test(`ticket command dispatch honors the blocker flag without disabling Pin: enabled=${enabled}`, () => {
+    const blockerCalls = [], pinCalls = [];
+    const { useTaskDetailCommandActions } = load("src/app/detail/[...slug]/useTaskDetailCommandActions.tsx", {
+      react: { useCallback: (fn) => fn },
+      axios: { default: {} },
+      "react-hot-toast": { default: {} },
+      "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, FLAG); return enabled; } },
+      "@/lib/configs/taskDetail.config": { default: { commandModes: { starComment: "StarComment" } } },
+      "@/lib/constants/TaskDetail": {},
+      "@/lib/constants/constants": {},
+      "@/utils/helperFunctions/TaskDetail": {},
+    });
+    const actions = useTaskDetailCommandActions(() => ({
+      handleBlockerCommentFromHTC: () => { blockerCalls.push(true); },
+      handleStarCommentFromHTC: (type) => pinCalls.push(type),
+    }));
+    actions.callback(undefined, "BlockerComment");
+    assert.equal(blockerCalls.length, enabled ? 1 : 0);
+    actions.callback("Public", "StarComment");
+    assert.deepEqual(pinCalls, ["Public"]);
+  });
+}

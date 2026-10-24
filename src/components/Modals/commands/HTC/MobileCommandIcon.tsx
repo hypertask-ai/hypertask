@@ -30,6 +30,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { CommandMode } from "@/models/enums";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import type { ICommandList } from "./HTCTypes";
 
 const iconForCommand = (command: ICommandList): LucideIcon => {
@@ -178,7 +180,10 @@ const iconForCommand = (command: ICommandList): LucideIcon => {
 };
 
 export const MobileCommandIcon = ({ command }: { command: ICommandList }) => {
-  const Icon = iconForCommand(command);
+  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const Icon = command.commandMode === CommandMode.BlockerComment && !blockerCommentEnabled
+    ? MoreHorizontal
+    : iconForCommand(command);
 
   return (
     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-label-span text-text-light-gray">

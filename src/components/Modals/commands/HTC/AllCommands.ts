@@ -1303,11 +1303,18 @@ export const getAllCommands = (
   roundedEnabled = false,
   keepAiChatClosedKeywords = "",
   aiChatAutoOpenCommandName = "",
+  blockerCommentEnabled = false,
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
   const bulk = getBulkTaskCommands({ ...commandOptions, kanbanSelectAllEnabled });
-  const comment = getCommentCommands(commandOptions);
+  const comment = getCommentCommands({
+    ...commandOptions,
+    commentOptions: commandOptions.commentOptions ? {
+      ...commandOptions.commentOptions,
+      blockerCommentEnabled: blockerCommentEnabled && commandOptions.commentOptions.blockerCommentEnabled,
+    } : undefined,
+  });
   const task = getTaskCommands(commandOptions);
   const board = getBoardCommands(commandOptions);
   const appShell = getAppShellCommands();

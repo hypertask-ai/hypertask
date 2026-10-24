@@ -14,6 +14,7 @@ import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 
@@ -61,6 +62,7 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
+  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   let agentSidebarChatsEnabled = false;
   if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
@@ -139,6 +141,12 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   if (!roundedEnabled) {
     switchCommandTheme = (theme) => switchToTheme(theme === "rounded" ? "system" : theme);
   }
+  let dispatchCommentFunction = commentFunctionHandler;
+  if (!blockerCommentEnabled) {
+    dispatchCommentFunction = (type, payload) => {
+      if (type !== "BlockerComment") commentFunctionHandler(type, payload);
+    };
+  }
   const {
   handleAction,
   } = createCommandDispatcher({
@@ -154,7 +162,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
     markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
     saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,
-    summarizeTicketHandler, viewSubTasksHandler, commentFunctionHandler, GoToOnboarding, isMbl,
+    summarizeTicketHandler, viewSubTasksHandler, commentFunctionHandler: dispatchCommentFunction, GoToOnboarding, isMbl,
     setShowAiChatInterface, showAiChatInterface, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, setAiChatPinned,
     aiChatPinned, setIsSidebarMode, copyCurrentPageURL, subscribeGoogleCalendar, copyURLFunctionHandler,
     moveTaskToInboxHandler, copyBranchNameHandler, starTaskHandler, setReminderHandler, myTasksSnoozeEnabled,

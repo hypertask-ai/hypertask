@@ -161,7 +161,8 @@ test("someone else's comment does not get Edit", () => {
 
 test("blocker action reuses the comment group immediately after Pin and is absent with its flag off", () => {
   const options = { context: "Task", commentOptions: { isApple: false, isCurrentUserCreator: false, isPinned: false, isStarred: false, blockerCommentEnabled: true, isBlocker: false } };
-  const commands = () => getAllCommands(options).find((group) => group.group === "Comment").commandLists;
+  const commands = (enabled = true) => getAllCommands(options, undefined, false, "", "", enabled).find((group) => group.group === "Comment").commandLists;
+  assert.equal(commands(false).some((command) => command.key === "blockerComment"), false);
   const listed = commands();
   const pinIndex = listed.findIndex((command) => command.key === "pinComment");
   assert.equal(listed[pinIndex + 1].key, "blockerComment");
