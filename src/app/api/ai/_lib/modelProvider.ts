@@ -1,6 +1,5 @@
 import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { createHmac, randomUUID } from "node:crypto";
-import { HTPR_7689_PROMPT_CACHING_FLAG } from "@/lib/flags/definitions/htpr-7689-prompt-caching";
 import { waitUntil } from "@vercel/functions";
 import { logAiUsage, type AiUsageRecord } from "./aiUsage";
 import { identifyPrompt } from "@/lib/ai/prompts/registry";
@@ -305,8 +304,11 @@ export async function aiPromptCachingEnabled(model: LanguageModel): Promise<bool
   if (typeof model === "string" || model.provider !== "gateway") return false;
   const context = modelUsageContexts.get(model);
   if (!context?.initiatingUserId) return false;
-  return context.promptCachingEnabled ??= import("@/lib/flags")
-    .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, context.initiatingUserId!))
+  return context.promptCachingEnabled ??= Promise.all([
+    import("@/lib/flags"),
+    import("@/lib/flags/definitions/htpr-7689-prompt-caching"),
+  ])
+    .then(([{ isFeatureEnabled }, { HTPR_7689_PROMPT_CACHING_FLAG }]) => isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, context.initiatingUserId!))
     .catch(() => false);
 }
 
