@@ -219,19 +219,19 @@ test("current-account sign-out restores the old identity when revocation fails",
   assert.deepEqual(accounts.assignedPaths, []);
 });
 
-test("all-account sign-out uses Better Auth's full multi-session logout", async (t) => {
-  let signOutCalls = 0;
-  const authClient = baseClient({
-    signOut: async () => {
-      signOutCalls += 1;
-      return { data: { success: true } };
-    },
+test("all-account sign-out uses server browser revocation and invalidates auth state", async (t) => {
+  const calls = [];
+  t.mock.method(global, "fetch", async (url, options) => {
+    assert.equal(url, "/api/auth/force-signout");
+    assert.equal(options.method, "POST");
+    calls.push("server");
+    return { ok: true };
   });
+  const authClient = { ...baseClient(), $store: { notify: signal => calls.push(signal) } };
   const accounts = loadAccountsModule(authClient);
   t.after(accounts.restore);
-
   assert.equal(await accounts.signOutAllAccounts(), true);
-  assert.equal(signOutCalls, 1);
+  assert.deepEqual(calls, ["server", "$sessionSignal"]);
 });
 
 test("both generic sign-out surfaces use the multi-account confirmation", () => {
@@ -257,5 +257,6 @@ test("both generic sign-out surfaces use the multi-account confirmation", () => 
   assert.match(commandSource, /CommandMode\.Logout[\s\S]*?<SignOutModal/);
   assert.match(sidebarSource, /<SignOutModal/);
   assert.match(modalSource, /Sign out of all accounts/);
-  assert.match(modalSource, /You’ll switch to/);
+  assert.doesNotMatch(modalSource, /signOutCurrentAccount|You’ll switch to/);
+  assert.equal((modalSource.match(/onClick=\{\(\) => void handleAllSignOut\(\)\}/g) ?? []).length, 2);
 });
