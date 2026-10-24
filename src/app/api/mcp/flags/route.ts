@@ -12,16 +12,19 @@ import {
   FeatureFlagApprovalError,
   defaultFeatureFlagMode,
   isFeatureEnabled,
-  isFeatureFlagOwnerUserId,
   listFeatureFlagModes,
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
 import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+import { authorize } from "@/lib/flags/agentAuthorization";
+import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
+import { FEATURE_FLAG_RELEASE_RISKS } from "@/lib/flags/releaseRisk";
+import { lockCommentReactions } from "@/lib/mcp/comments/reactionLock";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
+const FLAG_REVIEW_POLICY_COMMENT_ID = 302454;
 const APPROVAL_REQUIRED_MESSAGE = "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?";
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
@@ -49,20 +52,6 @@ function approvedSwitches(words: string, batchAllowed: boolean): Map<string, str
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-async function authorize(request: NextRequest) {
-  const limited = await checkMcpRateLimit(request);
-  if (limited) {
-    limited.headers.set("Cache-Control", "private, no-store");
-    return limited;
-  }
-  const ctx = await validateMcpAuth(request, { deferManagementPermissionCheck: true });
-  if (!ctx) return noStore({ error: "Unauthorized" }, 401);
-  if (!ctx.agentId || ctx.management || !(await isFeatureFlagOwnerUserId(ctx.user.id))) {
-    return noStore({ error: "Forbidden" }, 403);
-  }
-  return ctx;
-}
 
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
@@ -96,15 +85,42 @@ export async function PATCH(request: NextRequest) {
     }
     const text = await request.text();
     if (text.length > 1024) return noStore({ error: "Request is too large" }, 413);
-    const body = JSON.parse(text) as { key?: unknown; mode?: unknown; reason?: unknown } | null;
+    const body = JSON.parse(text) as { key?: unknown; mode?: unknown; reason?: unknown; review?: unknown; failure?: unknown } | null;
     if (!body || Array.isArray(body) || typeof body.key !== "string"
       || typeof body.mode !== "string" || !FEATURE_FLAG_MODES.includes(body.mode as FeatureFlagMode)) {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
+    const evidenceKinds = ["reason", "review", "failure"].filter((field) => Object.hasOwn(body, field));
+    if (evidenceKinds.length > 1) {
+      return noStore({ error: "Provide only one of reason, review or failure" }, 400);
+    }
+    const usesReview = evidenceKinds[0] === "review";
+    const usesFailure = evidenceKinds[0] === "failure";
+    if (usesReview && (!Number.isSafeInteger(body.review) || Number(body.review) <= 0)) {
+      return noStore({ error: "Review must be a positive review id" }, 400);
+    }
+    if (usesReview && body.mode !== "EVERYONE") {
+      throw new FeatureFlagApprovalError("A review can only switch a flag to Everyone");
+    }
+    if (usesReview && FEATURE_FLAG_RELEASE_RISKS[body.key]?.highRisk) {
+      throw new FeatureFlagApprovalError("A review cannot switch a high-risk flag; use a Question with Valentin's thumbs-up");
+    }
+    if (usesFailure) {
+      if (typeof body.failure !== "string" || body.failure.length > 300
+        || !URL.canParse(body.failure) || new URL(body.failure).protocol !== "https:") {
+        return noStore({ error: "Failure must be an https URL (max 300 characters)" }, 400);
+      }
+      if (body.mode !== "OFF") throw new FeatureFlagApprovalError("A failure record can only switch a flag Off");
+      const risk = FEATURE_FLAG_RELEASE_RISKS[body.key];
+      const definition = FEATURE_FLAG_DEFINITIONS.find((flag) => flag.key === body.key);
+      if (!risk || risk.highRisk || definition?.kind === "bugfix") {
+        throw new FeatureFlagApprovalError("Failure-Off is not allowed for high-risk, unclassified or bugfix flags; use a Question with Valentin's thumbs-up");
+      }
+    }
     const link = typeof body.reason === "string" && body.reason.length <= 500
       ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.exec(body.reason)
       : null;
-    if (!link) {
+    if (!usesReview && !usesFailure && !link) {
       return noStore({ error: "Reason must link to the approved ticket comment (#comment-<id>)" }, 400);
     }
     const agent = await prisma.agent.findUniqueOrThrow({
@@ -116,9 +132,47 @@ export async function PATCH(request: NextRequest) {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
       agentName: agent.displayName,
-      reason: body.reason as string,
+      reason: usesReview ? `flag-review:${body.review}` : usesFailure ? `live-qa-failed:${body.failure}` : body.reason as string,
       source: "api",
     }, async (tx) => {
+      if (usesReview || usesFailure) {
+        if (usesReview) {
+          await tx.$queryRaw`SELECT id FROM "FeatureFlagReview" WHERE id = ${body.review as number} FOR UPDATE`;
+          const review = await tx.featureFlagReview.findUnique({ where: { id: body.review as number } });
+          if (!review || review.key !== body.key || review.mode !== body.mode
+            || review.usedAt !== null || review.reviewerUserId !== ctx.user.id
+            || review.createdAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+            throw new FeatureFlagApprovalError("Review must be unused, less than 24 hours old, and match this user, flag and mode");
+          }
+          if (review.reviewerAgentId === ctx.agentId) {
+            throw new FeatureFlagApprovalError("The review must be recorded by a different agent");
+          }
+        }
+        const commentId = FLAG_REVIEW_POLICY_COMMENT_ID;
+        await lockCommentReactions(tx, commentId);
+        const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} FOR UPDATE`;
+        if (!locked.length) throw new FeatureFlagApprovalError("Valentin's policy thumbs-up is required on comment 302454");
+        await tx.$queryRaw`SELECT id FROM "Reaction" WHERE "commentId" = ${commentId} FOR UPDATE`;
+        const policy = await tx.comment.findFirst({
+          where: {
+            id: commentId,
+            editedAt: null,
+            task: { status: { not: "Deleted" } },
+            reactions: { some: {
+              userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
+              unified: { startsWith: "1f44d" },
+            } },
+          },
+          select: { id: true },
+        });
+        if (!policy) throw new FeatureFlagApprovalError("Valentin's policy thumbs-up is required on unedited comment 302454");
+        const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
+        if ((stored?.mode ?? defaultFeatureFlagMode(body.key as string)) === body.mode) {
+          throw new FeatureFlagApprovalError("Flag is already in that mode");
+        }
+        return;
+      }
+      if (!link) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
       const commentId = Number(link[3]);
       const approval = await tx.comment.findFirst({
         where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } },
@@ -149,7 +203,12 @@ export async function PATCH(request: NextRequest) {
           APPROVAL_REQUIRED_MESSAGE,
         );
       }
-    });
+    }, usesReview ? async (tx, changeId) => {
+      await tx.featureFlagReview.update({
+        where: { id: body.review as number },
+        data: { usedAt: new Date(), usedByChangeId: changeId },
+      });
+    } : undefined);
     const previousMode = flag.lastChange
       ? flag.lastChange.oldMode ?? defaultFeatureFlagMode(body.key)
       : flag.mode;

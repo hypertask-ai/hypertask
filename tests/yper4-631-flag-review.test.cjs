@@ -1,0 +1,477 @@
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const fs = require("node:fs");
+const test = require("node:test");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+const { NextRequest, NextResponse } = require("next/server");
+const { createJiti } = require("jiti");
+
+const root = path.resolve(__dirname, "..");
+function stubModule(relativePath, exports) {
+  const filename = path.join(root, relativePath);
+  require.cache[filename] = { id: filename, filename, loaded: true, exports };
+}
+const loadDefinitions = createJiti(__filename, { interopDefault: true });
+const definitions = [...loadDefinitions(path.join(root, "src/lib/flags/definitions.ts")).FEATURE_FLAG_DEFINITIONS];
+for (const highRisk of ["money", "access", "data-deletion", "customer-email"]) {
+  if (!definitions.some((flag) => flag.releaseRisk?.highRisk === highRisk)) {
+    definitions.push({ key: `review-${highRisk}`, kind: "feature", defaultMode: "OWNER_ONLY", releaseRisk: { risk: "new", highRisk, reason: "Test fixture" } });
+  }
+}
+definitions.push({ key: "review-default-off", kind: "feature", defaultMode: "OFF", releaseRisk: { risk: "small", reason: "Test fixture" } });
+const small = definitions.find((flag) => flag.releaseRisk && !flag.releaseRisk.highRisk && flag.kind !== "bugfix");
+const bugfix = definitions.find((flag) => flag.releaseRisk && !flag.releaseRisk.highRisk && flag.kind === "bugfix");
+assert.ok(small);
+assert.ok(bugfix);
+const key = small.key;
+const failure = "https://qa.example.test/failure";
+const evidence = {
+  key, mode: "EVERYONE", aiReviewUrl: "https://github.com/hypertask-ai/hypertask/pull/123",
+  independentReview: "Independently checked the change", liveQaUrl: "https://qa.example.test/pass", inboxCycle: "passed",
+};
+let ctx;
+let limited;
+let roleRefusal;
+let reviews;
+let stored;
+let changes;
+let locks;
+let policy;
+let broadcasts;
+let writeFails;
+let consumeFails;
+let ownerEmail;
+let legacyAllowed;
+let legacyKey;
+let legacyMode;
+let transactionTail = Promise.resolve();
+let wrapped;
+const prisma = {
+  user: { findUnique: async () => ({ email: ownerEmail }) },
+  agent: { findUniqueOrThrow: async ({ where }) => ({ displayName: where.id }) },
+  task: { findMany: async () => [] },
+  featureFlag: {
+    findUnique: async ({ where }) => stored.get(where.key) ?? null,
+    upsert: async ({ where, create, update }) => {
+      if (writeFails) throw new Error("flag write failed");
+      const row = { ...(stored.get(where.key) ?? create), ...update, key: where.key, updatedAt: new Date() };
+      stored.set(where.key, row);
+      locks.push("flag-write");
+      return row;
+    },
+  },
+  featureFlagChange: {
+    create: async ({ data }) => {
+      const row = { id: changes.length + 1, ...data, createdAt: new Date(), user: { email: ownerEmail } };
+      changes.push(row);
+      locks.push("change-write");
+      return row;
+    },
+  },
+  featureFlagReview: {
+    create: async ({ data }) => {
+      const row = { id: reviews.size + 1, ...data, createdAt: new Date(), usedAt: null, usedByChangeId: null };
+      reviews.set(row.id, row);
+      return row;
+    },
+    findUnique: async ({ where }) => reviews.get(where.id) ?? null,
+    update: async ({ where, data }) => {
+      if (consumeFails) throw new Error("review write failed");
+      assert.equal(locks.at(-1), "change-write");
+      Object.assign(reviews.get(where.id), data);
+      locks.push("review-used");
+      return reviews.get(where.id);
+    },
+  },
+  $executeRaw: async (strings, namespace, target) => {
+    assert.match(strings.join("?"), /pg_advisory_xact_lock/);
+    if (namespace === 6193) {
+      assert.equal(typeof target, "string");
+      locks.push("flag-lock");
+    } else {
+      assert.equal(namespace, 1_309_542_515);
+      assert.equal(target, 302454);
+      locks.push("policy-advisory-lock");
+    }
+    return 0;
+  },
+  $queryRaw: async (strings, id) => {
+    const sql = strings.join("?");
+    assert.match(sql, /FOR UPDATE$/);
+    if (sql.includes('"FeatureFlagReview"')) {
+      assert.equal(locks.at(-1), "flag-lock");
+      locks.push("review-lock");
+      return reviews.has(id) ? [{ id }] : [];
+    }
+    if (id === 123) return [{ id }];
+    assert.equal(id, 302454);
+    if (sql.includes('"Comment"')) {
+      assert.equal(locks.at(-1), "policy-advisory-lock");
+      assert.match(sql, /JOIN "Task"/);
+      locks.push("policy-comment-lock");
+      return policy ? [{ id }] : [];
+    }
+    assert.equal(sql, 'SELECT id FROM "Reaction" WHERE "commentId" = ? FOR UPDATE');
+    assert.equal(locks.at(-1), "policy-comment-lock");
+    locks.push("policy-reaction-lock");
+    return [];
+  },
+  comment: {
+    findFirst: async (query) => {
+      if (query.where.id === 123) {
+        if (!legacyAllowed) return null;
+        if (query.select.taskId) return { taskId: 900 };
+        return { text: `Question: Switch ${legacyKey} to ${legacyMode}?` };
+      }
+      assert.equal(locks.at(-1), "policy-reaction-lock");
+      assert.deepEqual(query, {
+        where: {
+          id: 302454, editedAt: null, task: { status: { not: "Deleted" } },
+          reactions: { some: { userId: 6, agentId: null, agentDisplayName: null, isDeleted: false, unified: { startsWith: "1f44d" } } },
+        }, select: { id: true },
+      });
+      locks.push("policy-check");
+      if (!policy || policy.editedAt || policy.status === "Deleted") return null;
+      return policy.reactions.some((reaction) => reaction.userId === 6 && reaction.agentId === null
+        && reaction.agentDisplayName === null && !reaction.isDeleted && reaction.unified.startsWith("1f44d")) ? { id: 302454 } : null;
+    },
+  },
+};
+prisma.$transaction = async (callback) => {
+  const preceding = transactionTail;
+  let release;
+  transactionTail = new Promise((resolve) => { release = resolve; });
+  await preceding;
+  const snapshot = structuredClone({ reviews, stored, changes });
+  try {
+    return await callback(prisma);
+  } catch (error) {
+    ({ reviews, stored, changes } = snapshot);
+    throw error;
+  } finally {
+    release();
+  }
+};
+stubModule("src/lib/prisma.ts", { default: prisma });
+stubModule("src/lib/flags/definitions.ts", { FEATURE_FLAG_DEFINITIONS: definitions });
+stubModule("src/lib/flags/releaseRisk.ts", {
+  FEATURE_FLAG_RELEASE_RISKS: Object.fromEntries(definitions.filter((flag) => flag.releaseRisk).map((flag) => [flag.key, flag.releaseRisk])),
+});
+stubModule("src/lib/auth/agentScope.ts", {
+  agentScopeEnforced: () => true,
+  recordAgentBoardScopeMiss: () => {},
+  prepareAgentScope: async () => {},
+  withAgentScopeRequest: (_request, run) => run(),
+});
+stubModule("src/lib/mcp/auth.ts", {
+  checkMcpRateLimit: async () => limited?.clone() ?? null,
+  validateMcpAuth: async (_request, options) => {
+    assert.deepEqual(options, { deferManagementPermissionCheck: true });
+    return ctx;
+  },
+});
+stubModule("src/lib/mcp/agents/readRoleGuard.ts", { requireAgentWriteRole: async () => roleRefusal?.clone() ?? null });
+stubModule("src/lib/mcp/routeWrapper.ts", { wrapMcpRoute: (callback) => { wrapped++; return callback; } });
+stubModule("src/lib/realtime/server.ts", { broadcastFeatureFlagsChange: async () => { broadcasts++; } });
+delete process.env.REDIS_URL;
+const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
+const flags = jiti(path.join(root, "src/lib/flags.ts"));
+const { PATCH } = jiti(path.join(root, "src/app/api/mcp/flags/route.ts"));
+const { POST } = jiti(path.join(root, "src/app/api/mcp/flags/reviews/route.ts"));
+function request(method, body, contentType = "application/json") {
+  return new NextRequest("https://local.test/api/mcp/flags", {
+    method, headers: { authorization: "Bearer test-credential", "content-type": contentType },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+async function result(response) {
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  return { status: response.status, body: await response.json() };
+}
+async function record(body = evidence) {
+  return result(await POST(request("POST", body)));
+}
+async function switchFlag(body = { key, mode: "EVERYONE", review: 1 }) {
+  return result(await PATCH(request("PATCH", body)));
+}
+async function seedReview(overrides = {}) {
+  assert.equal((await record()).status, 201);
+  Object.assign(reviews.get(1), overrides);
+  ctx.agentId = "agent-a";
+}
+function assertNoChange() {
+  assert.equal(changes.length, 0);
+  assert.equal(broadcasts, 0);
+  assert.ok([...reviews.values()].every((review) => review.usedAt === null && review.usedByChangeId === null));
+}
+test.beforeEach(() => {
+  ctx = { user: { id: 6 }, agentId: "agent-b", agentRole: "write" };
+  limited = null; roleRefusal = null; ownerEmail = "valentin.yeo@gmail.com";
+  reviews = new Map(); stored = new Map([[key, { key, mode: "OWNER_AND_QA" }]]); changes = [];
+  locks = []; broadcasts = 0; writeFails = false; consumeFails = false; legacyAllowed = true; legacyKey = key; legacyMode = "Off"; wrapped = 0;
+  delete process.env.VERCEL_GIT_COMMIT_SHA;
+  policy = { editedAt: null, status: "Normal", reactions: [{ userId: 6, agentId: null, agentDisplayName: null, isDeleted: false, unified: "1f44d", createdAt: new Date(0) }] };
+});
+
+test("agent B records immutable evidence and agent A switches, consuming the review with the change atomically", async () => {
+  process.env.VERCEL_GIT_COMMIT_SHA = "deployed-sha";
+  const recorded = await record({ ...evidence, reviewerAgentId: "forged", reviewerUserId: 7, usedAt: new Date(), inboxCyclePassed: false, deployedSha: "forged" });
+  assert.equal(recorded.status, 201);
+  const review = reviews.get(1);
+  assert.equal(review.reviewerAgentId, "agent-b");
+  assert.equal(review.reviewerUserId, 6);
+  assert.equal(review.deployedSha, "deployed-sha");
+  assert.equal(review.inboxCyclePassed, true);
+  assert.equal(review.usedAt, null);
+  assert.equal(review.independentReview, evidence.independentReview);
+  assert.equal(review.aiReviewUrl, evidence.aiReviewUrl);
+  assert.equal(review.liveQaUrl, evidence.liveQaUrl);
+  ctx.agentId = "agent-a";
+  process.env.VERCEL_GIT_COMMIT_SHA = "another-deploy";
+  const switched = await switchFlag();
+  assert.equal(switched.status, 200);
+  assert.equal(switched.body.previousMode, "OWNER_AND_QA");
+  assert.equal(switched.body.flag.mode, "EVERYONE");
+  assert.equal(changes[0].reason, "flag-review:1");
+  assert.equal(changes[0].agentId, "agent-a");
+  assert.equal(review.usedByChangeId, changes[0].id);
+  assert.ok(review.usedAt instanceof Date);
+  assert.equal(broadcasts, 1);
+  assert.equal(wrapped, 2);
+  assert.deepEqual(locks, ["flag-lock", "review-lock", "policy-advisory-lock", "policy-comment-lock", "policy-reaction-lock", "policy-check", "change-write", "review-used", "flag-write"]);
+});
+
+test("record stores null deployed SHA when unset", async () => {
+  assert.equal((await record()).status, 201);
+  assert.equal(reviews.get(1).deployedSha, null);
+});
+test("same-agent switch is refused with different agent in the error", async () => {
+  await seedReview(); ctx.agentId = "agent-b";
+  const response = await switchFlag();
+  assert.equal(response.status, 403);
+  assert.match(response.body.error, /different agent/);
+  assertNoChange();
+});
+test("a used review cannot be reused even after the flag is switched back", async () => {
+  await seedReview(); assert.equal((await switchFlag()).status, 200);
+  stored.get(key).mode = "OWNER_AND_QA";
+  assert.equal((await switchFlag()).status, 403);
+  assert.equal(changes.length, 1);
+});
+test("competing switches consume a review only once", async () => {
+  await seedReview();
+  const responses = await Promise.all([switchFlag(), switchFlag()]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 403]);
+  assert.equal(changes.length, 1);
+});
+for (const [name, overrides] of [
+  ["older than 24 hours", { createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 - 10000) }],
+  ["another key", { key: "another-key" }], ["another mode", { mode: "OFF" }],
+  ["another user", { reviewerUserId: 7 }],
+]) {
+  test(`review for ${name} is refused`, async () => {
+    await seedReview(overrides);
+    assert.equal((await switchFlag()).status, 403);
+    assertNoChange();
+  });
+}
+test("unknown review is refused", async () => {
+  assert.equal((await switchFlag()).status, 403); assertNoChange();
+});
+for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA"]) {
+  test(`review cannot be recorded or used for ${mode}`, async () => {
+    assert.equal((await record({ ...evidence, mode })).status, 403);
+    await seedReview();
+    assert.equal((await switchFlag({ key, mode, review: 1 })).status, 403);
+    assertNoChange();
+  });
+}
+for (const pathKind of ["review", "failure"]) {
+  for (const scenario of ["removed", "agent", "deleted-agent", "deleted-reaction", "wrong-user", "wrong-emoji", "edited-comment", "deleted-task", "missing-comment"]) {
+    test(`${pathKind} refuses policy ${scenario}`, async () => {
+      await seedReview();
+      const reaction = policy.reactions[0];
+      if (scenario === "removed") policy.reactions = [];
+      if (scenario === "agent") reaction.agentId = "agent-a";
+      if (scenario === "deleted-agent") reaction.agentDisplayName = "Deleted agent";
+      if (scenario === "deleted-reaction") reaction.isDeleted = true;
+      if (scenario === "wrong-user") reaction.userId = 7;
+      if (scenario === "wrong-emoji") reaction.unified = "2764";
+      if (scenario === "edited-comment") policy.editedAt = new Date();
+      if (scenario === "deleted-task") policy.status = "Deleted";
+      if (scenario === "missing-comment") policy = null;
+      const response = await switchFlag(pathKind === "review" ? undefined : { key, mode: "OFF", failure });
+      assert.equal(response.status, 403); assertNoChange();
+    });
+  }
+  test(`${pathKind} refuses stored and unstored default no-ops`, async () => {
+    await seedReview();
+    const mode = pathKind === "review" ? "EVERYONE" : "OFF";
+    stored.get(key).mode = mode;
+    const body = pathKind === "review" ? { key, mode, review: 1 } : { key, mode, failure };
+    assert.equal((await switchFlag(body)).status, 403);
+    const defaultFlag = definitions.find((flag) => flags.defaultFeatureFlagMode(flag.key) === mode
+      && (pathKind === "review" || (flag.releaseRisk && !flag.releaseRisk.highRisk && flag.kind !== "bugfix")));
+    assert.ok(defaultFlag);
+    reviews.get(1).key = defaultFlag.key;
+    assert.equal((await switchFlag({ ...body, key: defaultFlag.key })).status, 403);
+    assertNoChange();
+  });
+  test(`${pathKind} still allows old human policy thumbs-up with a skin tone`, async () => {
+    await seedReview(); policy.reactions[0].unified = "1f44d-1f3fd";
+    assert.equal((await switchFlag(pathKind === "review" ? undefined : { key, mode: "OFF", failure })).status, 200);
+  });
+}
+
+test("failure-Off on a classified non-bugfix flag succeeds with audit evidence", async () => {
+  const response = await switchFlag({ key, mode: "OFF", failure });
+  assert.equal(response.status, 200);
+  assert.equal(changes[0].reason, `live-qa-failed:${failure}`);
+  assert.equal(changes[0].agentId, "agent-b");
+  assert.equal(broadcasts, 1);
+  assert.equal(reviews.size, 0);
+  assert.deepEqual(locks, ["flag-lock", "policy-advisory-lock", "policy-comment-lock", "policy-reaction-lock", "policy-check", "change-write", "flag-write"]);
+});
+for (const category of ["money", "access", "data-deletion", "customer-email"]) {
+  test(`failure-Off refuses high-risk ${category}`, async () => {
+    const flag = definitions.find((flag) => flag.releaseRisk?.highRisk === category);
+    assert.ok(flag, `fixture for ${category}`);
+    const response = await switchFlag({ key: flag.key, mode: "OFF", failure });
+    assert.equal(response.status, 403); assert.match(response.body.error, /high-risk/); assertNoChange();
+  });
+}
+for (const flagKey of ["unknown-flag", "htpr-7036-ctrlk-column-delete-keeps-cards", bugfix.key]) {
+  test(`failure-Off refuses unclassified or bugfix ${flagKey}`, async () => {
+    assert.equal((await switchFlag({ key: flagKey, mode: "OFF", failure })).status, 403); assertNoChange();
+  });
+}
+test("failure cannot switch Everyone on", async () => {
+  assert.equal((await switchFlag({ key, mode: "EVERYONE", failure })).status, 403); assertNoChange();
+});
+for (const body of [
+  { key, mode: "EVERYONE" }, { key, mode: "EVERYONE", review: 1, reason: "x" },
+  { key, mode: "OFF", review: 1, failure }, { key, mode: "OFF", reason: "x", failure },
+  ...[null, "1", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1].map((review) => ({ key, mode: "EVERYONE", review })),
+  ...["http://qa.test/x", "not a URL", "https://qa.test/" + "x".repeat(300), null].map((url) => ({ key, mode: "OFF", failure: url })),
+]) {
+  test(`invalid switch evidence ${JSON.stringify(body)} is refused`, async () => {
+    assert.equal((await switchFlag(body)).status, 400); assertNoChange();
+  });
+}
+for (const [name, setup] of [
+  ["other user's agent", () => { ctx.user.id = 7; }],
+  ["no agent", () => { ctx.agentId = null; }],
+  ["management key", () => { ctx.management = { keyId: "test" }; }],
+  ["mismatched owner email", () => { ownerEmail = "other@test.invalid"; }],
+  ["no auth", () => { ctx = null; }],
+  ["read role", () => { roleRefusal = NextResponse.json({ error: "write required" }, { status: 403, headers: { "cache-control": "private, no-store" } }); }],
+]) {
+  test(`record and switch refuse ${name}`, async () => {
+    setup();
+    const expected = ctx ? 403 : 401;
+    assert.equal((await record()).status, expected);
+    assert.equal((await switchFlag()).status, expected);
+    assert.equal(reviews.size, 0); assertNoChange();
+  });
+}
+test("rate limit applies before auth to record and switch", async () => {
+  ctx = null; limited = NextResponse.json({ error: "rate limited" }, { status: 429 });
+  assert.equal((await record()).status, 429); assert.equal((await switchFlag()).status, 429); assertNoChange();
+});
+for (const [name, fields] of [
+  ["unknown flag", { key: "unknown-flag" }], ["retired flag", { key: "htpr-6091-feature-flags" }],
+  ["invalid key", { key: "Bad Flag" }], ["empty independent", { independentReview: "  " }],
+  ["long independent", { independentReview: "x".repeat(301) }], ["missing independent", { independentReview: undefined }],
+  ["failed inbox", { inboxCycle: "failed" }], ["missing inbox", { inboxCycle: undefined }],
+  ["HTTP live QA", { liveQaUrl: "http://qa.test/pass" }], ["bad live QA", { liveQaUrl: "not a URL" }],
+  ["long live QA", { liveQaUrl: "https://qa.test/" + "x".repeat(300) }],
+  ["HTTP AI review", { aiReviewUrl: "http://github.com/hypertask-ai/hypertask/pull/1" }],
+  ["other repo", { aiReviewUrl: "https://github.com/other/repo/pull/1" }],
+  ["PR suffix", { aiReviewUrl: `${evidence.aiReviewUrl}/extra` }], ["missing AI review", { aiReviewUrl: undefined }],
+  ["long AI review", { aiReviewUrl: "https://github.com/hypertask-ai/hypertask/pull/" + "1".repeat(300) }],
+]) {
+  test(`record refuses ${name}`, async () => {
+    assert.equal((await record({ ...evidence, ...fields })).status, 400); assert.equal(reviews.size, 0);
+  });
+}
+test("record validates body, JSON, content type and size", async () => {
+  for (const body of ["null", "[]", "1", "{"]) assert.equal((await record(body)).status, 400);
+  assert.equal((await result(await POST(request("POST", evidence, "text/plain")))).status, 415);
+  assert.equal((await record(" ".repeat(2049))).status, 413);
+  assert.equal(reviews.size, 0);
+});
+test("record still allows maximum-length evidence and a known stored legacy flag", async () => {
+  const legacy = "legacy-rollout"; stored.set(legacy, { key: legacy, mode: "OFF" });
+  assert.equal((await record({ ...evidence, key: legacy, independentReview: "x".repeat(300), liveQaUrl: "https://qa.test/".padEnd(300, "x") })).status, 201);
+});
+for (const category of ["money", "access", "data-deletion", "customer-email"]) {
+  test(`review refuses high-risk ${category}`, async () => {
+    const high = definitions.find((flag) => flag.releaseRisk?.highRisk === category);
+    stored.set(high.key, { key: high.key, mode: "OWNER_AND_QA" });
+    await seedReview({ key: high.key });
+    const response = await switchFlag({ key: high.key, mode: "EVERYONE", review: 1 });
+    assert.equal(response.status, 403); assert.match(response.body.error, /high-risk/); assertNoChange();
+  });
+}
+test("Question plus human thumbs-up still allows a high-risk flag to switch Everyone on", async () => {
+  const high = definitions.find((flag) => flag.releaseRisk?.highRisk);
+  stored.set(high.key, { key: high.key, mode: "OWNER_AND_QA" }); policy = null; legacyKey = high.key; legacyMode = "Everyone";
+  const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
+  assert.equal((await switchFlag({ key: high.key, mode: "EVERYONE", reason })).status, 200);
+});
+test("Question plus human thumbs-up still allows Off without policy approval", async () => {
+  policy = null;
+  const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
+  assert.equal((await switchFlag({ key, mode: "OFF", reason })).status, 200);
+  assert.equal(changes[0].reason, reason);
+  assert.equal(locks.includes("policy-advisory-lock"), false);
+});
+for (const flagKey of [definitions.find((flag) => flag.releaseRisk?.highRisk).key, bugfix.key, "htpr-7036-ctrlk-column-delete-keeps-cards"]) {
+  test(`Question path still allows Off for ${flagKey} without review policy approval`, async () => {
+    policy = null; legacyKey = flagKey;
+    stored.set(flagKey, { key: flagKey, mode: "EVERYONE" });
+    const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
+    assert.equal((await switchFlag({ key: flagKey, mode: "OFF", reason })).status, 200);
+    assert.equal(changes[0].reason, reason);
+  });
+}
+test("review is still valid just inside the 24-hour window", async () => {
+  await seedReview({ createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 + 60000) });
+  assert.equal((await switchFlag()).status, 200);
+});
+test("schema and migration retain all review evidence and use optional consumption fields", () => {
+  const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
+  const model = /model FeatureFlagReview \{([^}]+)\}/.exec(schema)?.[1];
+  assert.ok(model);
+  const sql = fs.readFileSync(path.join(root, "src/prisma/migrations/20261023100000_feature_flag_review/migration.sql"), "utf8");
+  for (const field of ["id", "key", "mode", "reviewerUserId", "reviewerAgentId", "aiReviewUrl", "independentReview", "liveQaUrl", "inboxCyclePassed", "deployedSha", "createdAt", "usedAt", "usedByChangeId"]) {
+    assert.match(model, new RegExp(`\\b${field}\\s+`));
+    assert.ok(sql.includes(`"${field}"`));
+  }
+  assert.match(model, /reviewerAgentId\s+String\s/);
+  assert.match(sql, /"reviewerAgentId" TEXT NOT NULL/);
+  for (const field of ["aiReviewUrl", "independentReview", "liveQaUrl"]) {
+    assert.match(model, new RegExp(`${field}\\s+String\\s+@db\\.VarChar\\(300\\)`));
+    assert.ok(sql.includes(`"${field}" VARCHAR(300) NOT NULL`));
+  }
+  assert.match(model, /createdAt\s+DateTime\s+@default\(now\(\)\)/);
+  assert.match(model, /usedAt\s+DateTime\?/);
+  assert.match(model, /usedByChangeId\s+Int\?/);
+  assert.match(sql, /"createdAt" TIMESTAMP\(3\) NOT NULL DEFAULT CURRENT_TIMESTAMP/);
+});
+for (const failurePoint of ["flag", "review"]) {
+  test(`${failurePoint} write failure rolls back flag, audit and review consumption`, async (t) => {
+    t.mock.method(console, "error", () => {});
+    await seedReview();
+    if (failurePoint === "flag") writeFails = true; else consumeFails = true;
+    assert.equal((await switchFlag()).status, 500);
+    assert.equal(stored.get(key).mode, "OWNER_AND_QA"); assertNoChange();
+  });
+}
+test("ht-flag shell regressions and new review/failure commands pass offline", async () => {
+  const result = await promisify(execFile)("bash", [path.join(root, ".claude/skills/ship/scripts/ht-flag.test.sh")], {
+    encoding: "utf8", timeout: 60000,
+  });
+  assert.match(result.stdout, /ht-flag tests passed/);
+});

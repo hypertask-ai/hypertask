@@ -10,7 +10,12 @@ function stubModule(relativePath, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
-stubModule("src/lib/auth/agentScope.ts", require("./helpers/agent-board-scope.cjs").enforcedScope);
+stubModule("src/lib/auth/agentScope.ts", {
+  agentScopeEnforced: () => true,
+  recordAgentBoardScopeMiss: () => {},
+  prepareAgentScope: async () => {},
+  withAgentScopeRequest: (_request, run) => run(),
+});
 
 let ctx;
 let owner;
@@ -141,7 +146,7 @@ async function result(response) {
   return { status: response.status, body: await response.json() };
 }
 test.beforeEach(() => {
-  ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3" };
+  ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3", agentRole: "write" };
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
   approvalQueries = []; lockQueries = []; batchFlagOn = false; commentLockLost = false;

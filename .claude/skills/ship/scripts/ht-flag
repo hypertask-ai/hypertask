@@ -2,7 +2,7 @@
 set -euo pipefail
 
 fail() { printf 'ht-flag: %s\n' "$*" >&2; exit 1; }
-usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE --reason URL [--dry-run]; reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>)'; }
+usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE (--reason URL | --review ID | --failure URL) [--dry-run] | ht-flag review KEY everyone --ai-review URL --independent TEXT --live-qa URL [--dry-run]; reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>)'; }
 
 dry_run=false
 args=()
@@ -24,7 +24,7 @@ case "$command" in
     if [ "$#" -eq 1 ]; then key=$1; fi
     ;;
   set)
-    [ "$#" -eq 4 ] && [ "$3" = --reason ] || usage
+    [ "$#" -eq 4 ] || usage
     method=PATCH
     key=$1
     [ -n "$key" ] || usage
@@ -35,12 +35,56 @@ case "$command" in
       OWNER_ONLY|only-me) mode=OWNER_ONLY ;;
       *) fail 'invalid mode' ;;
     esac
-    reason=$4
+    case "$3" in
+      --reason)
+        reason=$4
+        node -e '
+          const value = process.argv[1];
+          if (value.length > 500 || !/^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.test(value)) process.exit(1);
+        ' "$reason" || fail 'reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>) (max 500 characters)'
+        body=$(jq -nc --arg key "$key" --arg mode "$mode" --arg reason "$reason" '{key:$key,mode:$mode,reason:$reason}')
+        ;;
+      --review)
+        [ "$mode" = EVERYONE ] || fail 'review is only allowed for everyone'
+        [[ $4 =~ ^[1-9][0-9]*$ ]] || fail 'invalid review id'
+        node -e 'if (!Number.isSafeInteger(Number(process.argv[1]))) process.exit(1)' "$4" || fail 'invalid review id'
+        body=$(jq -nc --arg key "$key" --arg mode "$mode" --argjson review "$4" '{key:$key,mode:$mode,review:$review}')
+        ;;
+      --failure)
+        [ "$mode" = OFF ] || fail 'failure is only allowed for off'
+        node -e 'const u=process.argv[1]; if (u.length > 300 || !URL.canParse(u) || new URL(u).protocol !== "https:") process.exit(1)' "$4" || fail 'failure must be an https URL (max 300 characters)'
+        body=$(jq -nc --arg key "$key" --arg mode "$mode" --arg failure "$4" '{key:$key,mode:$mode,failure:$failure}')
+        ;;
+      *) usage ;;
+    esac
+    ;;
+  review)
+    [ "$#" -eq 8 ] || usage
+    key=$1
+    [ -n "$key" ] || usage
+    [[ $2 = everyone || $2 = EVERYONE ]] || fail 'review is only allowed for everyone'
+    shift 2
+    ai_review=''
+    independent=''
+    live_qa=''
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --ai-review) [ -z "$ai_review" ] || usage; ai_review=$2 ;;
+        --independent) [ -z "$independent" ] || usage; independent=$2 ;;
+        --live-qa) [ -z "$live_qa" ] || usage; live_qa=$2 ;;
+        *) usage ;;
+      esac
+      shift 2
+    done
     node -e '
-      const value = process.argv[1];
-      if (value.length > 500 || !/^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.test(value)) process.exit(1);
-    ' "$reason" || fail 'reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>) (max 500 characters)'
-    body=$(jq -nc --arg key "$key" --arg mode "$mode" --arg reason "$reason" '{key:$key,mode:$mode,reason:$reason}')
+      const [ai, text, qa] = process.argv.slice(1);
+      if (ai.length > 300 || !/^https:\/\/github\.com\/hypertask-ai\/hypertask\/pull\/[1-9]\d*$/.test(ai)
+        || !text.trim() || text.length > 300 || qa.length > 300 || !URL.canParse(qa) || new URL(qa).protocol !== "https:") process.exit(1);
+    ' "$ai_review" "$independent" "$live_qa" || fail 'review requires an AI review PR URL, independent text (1-300 characters), and an https live QA URL (max 300 characters)'
+    method=POST
+    url+=/reviews
+    body=$(jq -nc --arg key "$key" --arg ai "$ai_review" --arg text "$independent" --arg qa "$live_qa" \
+      '{key:$key,mode:"EVERYONE",aiReviewUrl:$ai,independentReview:$text,liveQaUrl:$qa,inboxCycle:"passed"}')
     ;;
   *) usage ;;
 esac
@@ -73,3 +117,7 @@ code=$(printf 'header = "Authorization: Bearer %s"\n' "$token" |
     --data "$body" --output "$response" --write-out '%{http_code}' "$url") || fail 'request failed'
 jq . "$response" || fail "HTTP $code: invalid JSON response"
 [[ $code == 2?? ]] || fail "HTTP $code"
+if [ "$command" = review ]; then
+  review_id=$(jq -er '.review.id' "$response") || fail 'missing review id in response'
+  printf 'review %s\n' "$review_id"
+fi

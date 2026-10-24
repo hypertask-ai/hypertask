@@ -128,13 +128,6 @@
       "matches": {
         "api": ["^(GET|PATCH) /api/mcp/flags$", "^POST /api/mcp/flags/reviews$"]
       },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-4060/631",
-          "expires": "2026-11-13",
-          "entries": ["POST /api/mcp/flags/reviews"]
-        }
-      },
       "exclusions": {
         "mcp": "Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags.",
         "cli": "The session-only ht-flag script uses the agent identity directly; the public CLI does not expose release controls.",
