@@ -5,7 +5,7 @@ export const HTPR_7734_AGENT_CHAT_CONTEXT_FLAG = "htpr-7734-agent-chat-context";
 export default {
   key: HTPR_7734_AGENT_CHAT_CONTEXT_FLAG,
   kind: "feature",
-  defaultMode: "EVERYONE",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-10-24",
   description: "Reuse the AI chat scope picker in docked agent chats and send the selected ticket or board context with each message.",
   releaseRisk: {
