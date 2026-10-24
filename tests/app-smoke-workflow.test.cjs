@@ -290,6 +290,10 @@ test("app smoke validates the head before isolated build and route checks", asyn
     /-v "\$scratch\/candidate-client\/@prisma:\/trusted\/node_modules\/@prisma:ro"/,
   );
   assert.match(isolated, /\[ "\$dependencies_mount" != "\$trusted_root\/node_modules" \]/);
+  assert.match(
+    isolated,
+    /mkdir -p "\$scratch\/candidate-client"[\s\S]*?chmod 0777 "\$scratch\/candidate-client"[\s\S]*?docker run --rm --name "\$\{generate\}-client"/,
+  );
   assert.match(isolated, /-v "\$dependencies_mount:\/dependencies:ro"/);
   assert.match(
     isolated,
