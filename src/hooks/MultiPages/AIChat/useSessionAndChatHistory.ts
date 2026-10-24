@@ -1,4 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/definitions/htpr-7794-stop-closes-stream";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
@@ -34,6 +35,7 @@ export const useSessionAndChatHistory = (
   historyEnabled = true,
   isTaskScoped = false
 ) => {
+  const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
@@ -222,11 +224,13 @@ export const useSessionAndChatHistory = (
             previous.map((session) => {
               if (session.id !== sessionId) return session;
               const previousMessages = session.messages ?? [];
-              const messages = updateLastMessage
-                ? previousMessages.length > 0
-                  ? [...previousMessages.slice(0, -1), message]
-                  : [message]
-                : [...previousMessages, message];
+              const messageIndex = stopClosesStream && updateLastMessage
+                ? previousMessages.findIndex((previous) => previous.id === message.id)
+                : -1;
+              const messages = [...previousMessages];
+              if (messageIndex >= 0) messages[messageIndex] = message;
+              else if (updateLastMessage && messages.length > 0) messages[messages.length - 1] = message;
+              else messages.push(message);
               return { ...session, messages, updatedAt: new Date() };
             }),
           );
@@ -244,11 +248,13 @@ export const useSessionAndChatHistory = (
 
             const target = sessionsList[index];
             const prevMessages = target.messages ?? [];
-            const nextMessages = updateLastMessage
-              ? prevMessages.length > 0
-                ? [...prevMessages.slice(0, -1), message]
-                : [message]
-              : [...prevMessages, message];
+            const messageIndex = stopClosesStream && updateLastMessage
+              ? prevMessages.findIndex((previous) => previous.id === message.id)
+              : -1;
+            const nextMessages = [...prevMessages];
+            if (messageIndex >= 0) nextMessages[messageIndex] = message;
+            else if (updateLastMessage && nextMessages.length > 0) nextMessages[nextMessages.length - 1] = message;
+            else nextMessages.push(message);
 
             const updatedSession = {
               ...target,
@@ -312,7 +318,7 @@ export const useSessionAndChatHistory = (
         console.error("Error adding message to session:", error);
       }
     },
-    [hasRequiredData, currentUser?.uid, isDemo, queryClient]
+    [hasRequiredData, currentUser?.uid, isDemo, queryClient, stopClosesStream]
   );
 
   const updateLastMessageInSessionCache = useCallback(

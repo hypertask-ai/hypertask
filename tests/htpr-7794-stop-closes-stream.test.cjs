@@ -144,12 +144,53 @@ test("server flag Off retains graceful cancellation without finishing SSE", { ti
   await pending;
 });
 
-function client(t, { enabled = true, cancelStatus = 200, cancelResult = { success: true } } = {}) {
+function legacyHistory(enabled, demo = false) {
+  const session = { id: "session", messages: [] };
+  let cached = { data: { sessions: [session] } };
+  let demoSessions = [session];
+  const { useSessionAndChatHistory } = load("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts", {
+    react: {
+      useCallback: (callback) => callback, useEffect() {}, useRef: (value) => ({ current: value }),
+      useState: (value) => Array.isArray(value)
+        ? [demoSessions, (next) => { demoSessions = typeof next === "function" ? next(demoSessions) : next; }]
+        : [value, () => {}],
+    },
+    "@/hooks/useFlag": { useFlag: (key) => key === FLAG && enabled },
+    "@/store": { currentUserAtom: "user" },
+    "@/lib/state": {
+      useRecoilValue: (atom) => atom === "user" ? { id: 7, uid: "user" } : null,
+      useRecoilState: () => [null, () => {}],
+    },
+    "next/navigation": { usePathname: () => demo ? "/demo" : "/chat/session" },
+    "./useDockedChatScope": { useDockedChatScope: () => [null] },
+    "./usePagedChatHistory": { usePagedChatHistory: () => ({}) },
+    "@tanstack/react-query": {
+      useQuery: () => ({ data: cached, isSuccess: true }),
+      useQueryClient: () => ({
+        setQueryData: (_key, update) => { cached = update(cached); },
+      }),
+    },
+    "@/utils/api/ai_chat": { AI_Chat_API: { addMessage: async (_id, message) => ({ data: { message } }) } },
+  });
+  const history = useSessionAndChatHistory();
+  return {
+    add: history.addMessageToSessionQuery,
+    messages: () => demo ? demoSessions[0].messages : cached.data.sessions[0].messages,
+  };
+}
+
+function client(t, { enabled = true, cancelStatus = 200, cancelResult = { success: true }, drainQueue = false, delayResponse = false, delayCancel = false } = {}) {
   const originalFetch = global.fetch;
   t.after(() => { global.fetch = originalFetch; });
   const requests = [];
   const controllers = [];
   const readers = [deferred(), deferred()];
+  const started = [deferred(), deferred()];
+  const responses = [deferred(), deferred()];
+  const cancelResponse = deferred();
+  const history = legacyHistory(enabled);
+  const messages = { get: (id) => history.messages().find((message) => message.id === id) };
+  let handoffs = 0;
   const cancellations = [];
   const mutations = [];
   const context = {
@@ -157,11 +198,14 @@ function client(t, { enabled = true, cancelStatus = 200, cancelResult = { succes
     isByokBlocked: false, isTyping: false,
     editor: { getHTML: () => "<p>Hello</p>", getText: () => "Hello", commands: { clearContent() {} } },
     fileUpload: { fileItems: [], clearFiles() {} },
-    messageQueueRef: { current: [] }, setQueuedMessages() {}, sendInFlightRef: { current: false },
+    messageQueueRef: { current: [] }, setQueuedMessages() {}, sendInFlightRef: { current: false }, settleSendRef: { current: null },
     surface: "chat", inViewObject: {}, waitForChatSession: async () => ({ id: "session", messages: [] }),
     currentProject: { id: 1 }, processAttachments: async () => [],
     setIsTyping: (value) => { context.isTyping = value; mutations.push(["typing", value]); },
-    addMessageToSessionQuery: (_id, message) => mutations.push(["message", message.content]),
+    addMessageToSessionQuery: (id, message, ...options) => {
+      history.add(id, message, ...options);
+      mutations.push(["message", message.content]);
+    },
     scopedProjectId: 1, modelTeamId: 1, contextList: [],
     currentAiOption: { id: "model", model: "model", source: "openai" }, pathname: "/chat/session", currentUser: { id: 7 },
     streamingSessionRef: { current: null }, streamingAssistantMessageRef: { current: null }, streamingRequestRef: { current: null },
@@ -176,18 +220,22 @@ function client(t, { enabled = true, cancelStatus = 200, cancelResult = { succes
   global.fetch = async (url, options) => {
     if (url.endsWith("/cancel")) {
       cancellations.push(JSON.parse(options.body));
+      if (delayCancel) await cancelResponse.promise;
       return Response.json(cancelResult, { status: cancelStatus });
     }
     requests.push(JSON.parse(options.body));
-    const reading = readers[requests.length - 1];
+    const index = requests.length - 1;
+    const reading = readers[index];
     const response = new Response(new ReadableStream({
       start(controller) { controllers.push(controller); },
       pull() { reading.resolve(); },
     }, { highWaterMark: 0 }));
+    started[index].resolve();
+    if (delayResponse) await responses[index].promise;
     return response;
   };
   const mocks = {
-    react: { useCallback: (callback) => callback },
+    react: { useCallback: (callback) => callback, useRef: (value) => ({ current: value }), useEffect() {} },
     "react-hot-toast": { default: { error: (message) => mutations.push(["toast", message]) } },
     "@/lib/mcp/bearerAuth": { mcpAuthorizationHeaders: () => ({}) },
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
@@ -199,16 +247,44 @@ function client(t, { enabled = true, cancelStatus = 200, cancelResult = { succes
   };
   const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", mocks);
   const { useAiChatAttachments } = load("src/hooks/MultiPages/AIChat/useAiChatAttachments.ts", mocks);
-  const send = () => createAiChatSend(context).handleSendMessage();
+  if (drainQueue) {
+    const { useAiChatSessions } = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
+      ...mocks,
+      "@/lib/constants": { default: { sendAiChatMessageRoute: context.chatRoute } },
+      "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
+      "@/components/Common/AttachmentsUpload/FileUploadHandler": { useFileUpload: () => context.fileUpload },
+      "@/lib/byokSelectedProviderGate": { shouldBlockAiDueToByokProvider: () => false },
+      "@/lib/demo/isGuestClient": { isGuestCookieUser: () => false },
+    });
+    const sessions = useAiChatSessions(context);
+    context.handleSendMessageRef = sessions.handleSendMessageRef;
+    context.drainQueuedMessage = () => {
+      mutations.push(["drain"]);
+      sessions.drainQueuedMessage();
+    };
+  }
+  const send = () => createAiChatSend(context, {
+    preserveComposer: true,
+    onSettled: () => { handoffs += 1; },
+  }).handleSendMessage();
   const stop = () => useAiChatAttachments(context).handleCancelStream();
   const waitForReader = async (index) => {
     await readers[index].promise;
   };
+  const emit = (index, event, data) => {
+    controllers[index].enqueue(new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+  };
   const done = (index) => {
-    controllers[index].enqueue(new TextEncoder().encode('event: done\ndata: {"status":"complete","assistant_persisted":true}\n\n'));
+    emit(index, "done", { status: "complete", assistant_persisted: true });
     controllers[index].close();
   };
-  return { context, requests, cancellations, mutations, controllers, send, stop, waitForReader, done };
+  return {
+    context, requests, cancellations, mutations, messages, controllers, send, stop, waitForReader, done, emit,
+    handoffs: () => handoffs,
+    waitForRequest: (index) => started[index].promise,
+    releaseResponse: (index) => responses[index].resolve(),
+    releaseCancel: () => cancelResponse.resolve(),
+  };
 }
 
 for (const [cancelStatus, lateError] of [[200, false], [409, false], [200, true]]) {
@@ -232,7 +308,10 @@ for (const [cancelStatus, lateError] of [[200, false], [409, false], [200, true]
     assert.equal(h.context.streamingRequestRef.current, activeStream);
     assert.equal(h.context.isTyping, true);
     assert.ok(h.context.sendInFlightRef.current);
-    assert.deepEqual(h.mutations, before);
+    assert.deepEqual(h.mutations.filter(([kind]) => kind !== "message"), before.filter(([kind]) => kind !== "message"));
+    if (!lateError) {
+      assert.equal(h.messages.get(h.requests[0].assistant_message_id).isDelivered, true);
+    }
     assert.equal(await h.send(), true);
     assert.equal(h.requests.length, 2);
     assert.equal(h.context.messageQueueRef.current.length, 1);
@@ -243,6 +322,142 @@ for (const [cancelStatus, lateError] of [[200, false], [409, false], [200, true]
   });
 }
 
+for (const demo of [false, true]) {
+  for (const enabled of [false, true]) {
+    test(`legacy ${demo ? "demo" : "signed-in"} cache ${enabled ? "updates the matching reply" : "retains last-message replacement with flag Off"}`, () => {
+      const history = legacyHistory(enabled, demo);
+      history.add("session", { id: "old", content: "Old partial", role: "assistant" }, true);
+      history.add("session", { id: "new", content: "New partial", role: "assistant" }, true);
+      history.add("session", { id: "old", content: "Old complete", role: "assistant", isDelivered: true }, true, true);
+      assert.deepEqual(history.messages().map(({ id, content }) => [id, content]), enabled
+        ? [["old", "Old complete"], ["new", "New partial"]]
+        : [["old", "Old partial"], ["old", "Old complete"]]);
+    });
+  }
+}
+
+for (const delayResponse of [false, true]) {
+  test(`completed Stop preserves unread reply content and done (${delayResponse ? "before response headers" : "during SSE"})`, { timeout: 2000 }, async (t) => {
+    const h = client(t, { cancelStatus: 409, cancelResult: { status: "completed" }, delayResponse });
+    const first = h.send();
+    await h.waitForRequest(0);
+    if (!delayResponse) {
+      await h.waitForReader(0);
+      h.emit(0, "content", { content: "Completed " });
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(h.messages.get(h.requests[0].assistant_message_id).content, "Completed ");
+    }
+    await h.stop();
+    assert.equal(h.context.sendInFlightRef.current, false);
+    assert.equal(h.context.isTyping, false);
+    h.emit(0, "content", { content: delayResponse ? "Completed reply" : "reply" });
+    h.done(0);
+    h.releaseResponse(0);
+    assert.equal(await first, true);
+    const message = h.messages.get(h.requests[0].assistant_message_id);
+    assert.equal(message.content, "Completed reply");
+    assert.equal(message.isDelivered, true);
+    assert.equal(h.context.isTyping, false);
+    assert.equal(h.handoffs(), 1);
+    assert.equal(h.mutations.filter(([kind]) => kind === "drain").length, 1);
+  });
+}
+
+test("late content and done update only their own reply without clearing the newer send status", { timeout: 2000 }, async (t) => {
+  const h = client(t);
+  const first = h.send();
+  await h.waitForReader(0);
+  await h.stop();
+  const second = h.send();
+  await h.waitForReader(1);
+  h.emit(1, "content", { content: "New reply" });
+  h.emit(1, "status", { content: "New send working" });
+  await new Promise((resolve) => setImmediate(resolve));
+  const activeStream = h.context.streamingRequestRef.current;
+  const sharedBefore = h.mutations.filter(([kind]) => kind !== "message");
+  h.emit(0, "status", { content: "Old send working" });
+  h.emit(0, "content", { content: "Old reply finished" });
+  h.done(0);
+  assert.equal(await first, true);
+  assert.equal(h.messages.get(h.requests[0].assistant_message_id).content, "Old reply finished");
+  assert.equal(h.messages.get(h.requests[0].assistant_message_id).isDelivered, true);
+  assert.equal(h.messages.get(h.requests[1].assistant_message_id).content, "New reply");
+  assert.equal(h.messages.get(h.requests[1].assistant_message_id).isDelivered, false);
+  assert.equal(h.context.streamingRequestRef.current, activeStream);
+  assert.equal(h.context.sendInFlightRef.current, true);
+  assert.equal(h.context.isTyping, true);
+  assert.deepEqual(h.mutations.filter(([kind]) => kind !== "message"), sharedBefore);
+  h.done(1);
+  assert.equal(await second, true);
+  assert.equal(h.messages.get(h.requests[1].assistant_message_id).isDelivered, true);
+  assert.equal(h.handoffs(), 2);
+});
+
+for (const cancelStatus of [200, 409]) {
+  test(`acknowledged Stop (${cancelStatus}) drains a queued send and notifies handoff exactly once before old SSE settles`, { timeout: 2000 }, async (t) => {
+    const h = client(t, {
+      drainQueue: true, cancelStatus,
+      cancelResult: cancelStatus === 409 ? { status: "completed" } : { success: true },
+    });
+    const first = h.send();
+    await h.waitForReader(0);
+    assert.equal(await h.send(), true);
+    assert.equal(h.context.messageQueueRef.current.length, 1);
+    const settleFirst = h.context.settleSendRef.current;
+    await h.stop();
+    await h.waitForReader(1);
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.requests[1].message, "Hello");
+    assert.equal(h.context.messageQueueRef.current.length, 0);
+    assert.equal(h.handoffs(), 1);
+    assert.equal(h.mutations.filter(([kind]) => kind === "drain").length, 1);
+    const activeStream = h.context.streamingRequestRef.current;
+    const settleSecond = h.context.settleSendRef.current;
+    settleFirst();
+    h.done(0);
+    assert.equal(await first, true);
+    assert.equal(h.handoffs(), 1);
+    assert.equal(h.mutations.filter(([kind]) => kind === "drain").length, 1);
+    assert.equal(h.context.streamingRequestRef.current, activeStream);
+    assert.equal(h.context.sendInFlightRef.current, true);
+    assert.equal(h.context.isTyping, true);
+    assert.equal(h.context.settleSendRef.current, settleSecond);
+    h.done(1);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(h.handoffs(), 2);
+    assert.equal(h.mutations.filter(([kind]) => kind === "drain").length, 2);
+    assert.equal(h.context.sendInFlightRef.current, false);
+    assert.equal(h.context.settleSendRef.current, null);
+    settleSecond();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(h.handoffs(), 2);
+    assert.equal(h.mutations.filter(([kind]) => kind === "drain").length, 2);
+  });
+}
+
+test("late Stop acknowledgement cannot settle the queued successor after normal completion", { timeout: 2000 }, async (t) => {
+  const h = client(t, { drainQueue: true, delayCancel: true });
+  const first = h.send();
+  await h.waitForReader(0);
+  assert.equal(await h.send(), true);
+  const stopping = h.stop();
+  h.done(0);
+  assert.equal(await first, true);
+  await h.waitForReader(1);
+  const activeStream = h.context.streamingRequestRef.current;
+  h.releaseCancel();
+  await stopping;
+  assert.equal(h.handoffs(), 1);
+  assert.equal(h.mutations.filter(([kind]) => kind === "drain").length, 1);
+  assert.equal(h.context.streamingRequestRef.current, activeStream);
+  assert.equal(h.context.sendInFlightRef.current, true);
+  assert.equal(h.context.isTyping, true);
+  h.done(1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.handoffs(), 2);
+  assert.equal(h.context.sendInFlightRef.current, false);
+});
+
 test("failed Stop keeps the active send locked and normal completion releases it", { timeout: 2000 }, async (t) => {
   const h = client(t, { cancelStatus: 503, cancelResult: { success: false } });
   const first = h.send();
@@ -252,8 +467,10 @@ test("failed Stop keeps the active send locked and normal completion releases it
   assert.ok(h.context.sendInFlightRef.current);
   assert.equal(h.context.streamingRequestRef.current, streamId);
   assert.equal(h.context.isTyping, true);
+  assert.equal(h.handoffs(), 0);
   h.done(0);
   assert.equal(await first, true);
+  assert.equal(h.handoffs(), 1);
   assert.equal(h.context.sendInFlightRef.current, false);
   assert.equal(h.context.isTyping, false);
 });
@@ -278,8 +495,12 @@ test("flag Off retains the old send lock until the original stream finishes", { 
   assert.equal(h.context.sendInFlightRef.current, true);
   assert.equal(await h.send(), false);
   assert.equal(h.requests.length, 1);
+  assert.equal(h.handoffs(), 0);
+  assert.equal(h.mutations.filter(([kind]) => kind === "drain").length, 0);
   h.done(0);
   assert.equal(await first, true);
+  assert.equal(h.handoffs(), 1);
+  assert.equal(h.mutations.filter(([kind]) => kind === "drain").length, 1);
   assert.equal(h.context.sendInFlightRef.current, false);
 });
 
@@ -292,7 +513,7 @@ for (const enabled of [false, true]) {
       "@/lib/state": { useRecoilState: () => [null, () => {}] },
       "@/store": {},
       "@/hooks/useFlag": { useFlag: (key) => key === FLAG && enabled },
-      "./useAiChatState": { useAiChatState: () => ({ sendInFlightRef: { current: false } }) },
+      "./useAiChatState": { useAiChatState: () => ({ sendInFlightRef: { current: false }, settleSendRef: { current: null } }) },
       "./useAiChatSessions": { useAiChatSessions: () => ({}) },
       "./useAiChatAttachments": { useAiChatAttachments: (context) => { stopContext = context; return {}; } },
       "./aiChatSend": { createAiChatSend: (context) => { sendContext = context; return {}; } },
@@ -302,7 +523,8 @@ for (const enabled of [false, true]) {
     useAiChat();
     assert.equal(sendContext.stopClosesStream, enabled);
     assert.equal(stopContext.stopClosesStream, enabled);
-    assert.equal(stopContext.sendInFlightRef, sendContext.sendInFlightRef);
+    assert.equal(stopContext.settleSendRef, sendContext.settleSendRef);
+    assert.equal(sendContext.settleSendRef.current, null);
   });
 }
 
