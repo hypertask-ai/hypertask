@@ -364,7 +364,9 @@ test("now refused: cross-origin, unsigned, agent, disabled-flag and forged Apply
 test("now refused: an agent acting for a non-owner cannot propose a board-role change; still allowed: the human owner", async () => {
   const h = harness();
   const agentTool = h.tool.createSettingsTool({ user: { id: 42 }, actingAgentId: "agent-id", body: { session_id: memberSessionId, settings_context: boardScope }, sendStatus() {}, send() {} }).hypertask_settings;
-  await assert.rejects(agentTool.execute(agentTool.inputSchema.parse({ action: "propose", change: roleChange })), /AI settings changes are not available/);
+  const refused = await agentTool.execute(agentTool.inputSchema.parse({ action: "propose", change: roleChange }));
+  assert.equal(refused.success, false);
+  assert.match(refused.error, /AI settings changes are not available/);
   assert.deepEqual(h.state.members.map((member) => member.role), ["Member", "Admin"]);
   assert.equal(h.state.writes, 0);
   assert.equal(h.state.records.size, 0);
