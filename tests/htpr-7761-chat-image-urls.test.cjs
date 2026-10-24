@@ -176,3 +176,11 @@ test("the real public-address downloader refuses loopback links through the new 
   assert.match(text(result), /private.png: could not be downloaded safely/);
   assert.deepEqual(files(result), []);
 });
+
+test("markdown image links drop the closing delimiter from a signed URL", async () => {
+  const h = harness();
+  const signed = "https://files.example.test/screenshot.png?token=fixture";
+  const result = await h.send({ message: `See [image](${signed}) here` });
+  assert.deepEqual(h.downloads.map(({ url }) => url), [signed]);
+  assert.equal(files(result).length, 1);
+});

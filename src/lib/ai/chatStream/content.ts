@@ -294,7 +294,12 @@ export async function createImageAwareUserContent(
   const textOnly = /^(?:[^/]+\/)?deepseek-/i.test(modelId);
   const imageUrls = new Set<string>();
   for (const match of body.message.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
-    const candidate = /[?#]/.test(match[0]) ? match[0] : match[0].replace(/[),.;!?\]}]+$/, "");
+    const markdownLink = body.message.slice(Math.max(0, (match.index ?? 0) - 2), match.index) === "](";
+    const candidate = markdownLink
+      ? match[0].replace(/\)+$/, "")
+      : /[?#]/.test(match[0])
+        ? match[0]
+        : match[0].replace(/[),.;!?\]}]+$/, "");
     try {
       const url = new URL(candidate);
       if (/\.(?:png|jpe?g|gif|webp)$/i.test(url.pathname)) imageUrls.add(url.href);
