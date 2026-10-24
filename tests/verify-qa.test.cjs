@@ -1,0 +1,100 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const { spawnSync } = require('node:child_process')
+const { pathToFileURL } = require('node:url')
+
+const root = path.resolve(__dirname, '..')
+const load = () => import(pathToFileURL(path.join(root, 'scripts/verify-qa-run.mjs')).href)
+const runnerEnv = {
+  GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted',
+  VERIFY_QA_BASE: 'http://127.0.0.1:3100',
+  DATABASE_URL: 'postgresql://browser_smoke:disposable@127.0.0.1:5432/hypertask_smoke',
+  REDIS_URL: 'redis://127.0.0.1:6379', VERIFY_QA_JOURNEY: 'inbox-cycle',
+}
+
+test('runner boundary accepts isolated hosted execution and refuses VPS, remote data, and unknown journeys', async () => {
+  const { assertRunner } = await load()
+  assert.equal(assertRunner(runnerEnv), 'http://127.0.0.1:3100')
+  assert.equal(assertRunner({ ...runnerEnv, VERIFY_QA_JOURNEY: 'inbox-cycle-broken' }), 'http://127.0.0.1:3100')
+  for (const override of [
+    { GITHUB_ACTIONS: 'false' }, { RUNNER_ENVIRONMENT: 'self-hosted' },
+    { VERIFY_QA_BASE: 'https://app.hypertask.ai' },
+    { DATABASE_URL: 'postgresql://browser_smoke@db.example/hypertask_smoke' },
+    { DATABASE_URL: 'postgresql://browser_smoke:x@127.0.0.1/production' },
+    { REDIS_URL: 'redis://cache.example:6379' }, { VERIFY_QA_JOURNEY: 'unknown' },
+  ]) assert.throws(() => assertRunner({ ...runnerEnv, ...override }))
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts/verify-qa-run.mjs')], {
+    encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: 'false' },
+  })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /never the VPS/)
+})
+
+test('doctor requires a matching authenticated disposable account, not just an HTTP 200', async () => {
+  const { doctorIdentity } = await load()
+  const state = id => ({ cookies: [{ name: 'nookies_user', value: encodeURIComponent(JSON.stringify({ id })) }] })
+  const payload = id => ({ slices: { user: { data: { id } } } })
+  assert.equal(doctorIdentity(state(42), 200, payload(42)), 42)
+  for (const args of [
+    [state(42), 401, payload(42)], [state(42), 200, payload(43)],
+    [state(42), 200, {}], [state(6), 200, payload(6)], [state(985), 200, payload(985)],
+  ]) assert.throws(() => doctorIdentity(...args), /Doctor failed/)
+})
+
+test('artifact logs redact credentials, cookies, bearer tokens, and JWTs but keep diagnostics', async () => {
+  const { sanitizeLog } = await load()
+  assert.equal(sanitizeLog('HTTP 500 secret-value cookie%2Fvalue Bearer token-value eyJhbGci.abc.def', ['secret-value', 'cookie/value']),
+    'HTTP 500 [REDACTED] [REDACTED] Bearer [REDACTED] [REDACTED]')
+  assert.equal(sanitizeLog('HTTP 200 ready', []), 'HTTP 200 ready')
+})
+
+function helperFixture(t, ghStatus = 0) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-qa-helper-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const sha = 'a'.repeat(40)
+  fs.writeFileSync(path.join(dir, 'git'), `#!/usr/bin/env bash\ncase "$1" in\ncheck-ref-format) exit 0 ;;\nls-remote) printf '%s\\trefs/heads/feature/test\\n' '${sha}' ;;\n*) exit 99 ;;\nesac\n`, { mode: 0o755 })
+  fs.writeFileSync(path.join(dir, 'gh'), `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify(process.argv.slice(2))); console.log('https://github.com/hypertask-ai/hypertask/actions/runs/123'); process.exit(${ghStatus})\n`, { mode: 0o755 })
+  const capture = path.join(dir, 'args.json')
+  return { dir, sha, capture, env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CAPTURE: capture } }
+}
+
+test('launch helper dispatches the pushed SHA, prints the run URL, and never starts an app', t => {
+  const { env, sha, capture } = helperFixture(t)
+  const result = spawnSync('bash', [path.join(root, 'scripts/verify-qa'), 'feature/test', 'inbox-cycle'], { env, encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /actions\/runs\/123/)
+  assert.deepEqual(JSON.parse(fs.readFileSync(capture, 'utf8')), [
+    'workflow', 'run', 'visual-regression.yml', '--repo', 'hypertask-ai/hypertask', '--ref', 'production',
+    '-f', `head=${sha}`, '-f', 'journey=inbox-cycle',
+  ])
+})
+
+test('launch helper rejects unsupported journeys and propagates dispatch failures', t => {
+  const { env, capture } = helperFixture(t, 17)
+  const invalid = spawnSync('bash', [path.join(root, 'scripts/verify-qa'), 'feature/test', 'unknown'], { env, encoding: 'utf8' })
+  assert.equal(invalid.status, 2)
+  assert.equal(fs.existsSync(capture), false)
+  const failed = spawnSync('bash', [path.join(root, 'scripts/verify-qa'), 'feature/test', 'inbox-cycle-broken', 'ceo/YPER4-697'], { env, encoding: 'utf8' })
+  assert.equal(failed.status, 17)
+  assert.deepEqual(JSON.parse(fs.readFileSync(capture, 'utf8')).slice(-6), [
+    '--ref', 'ceo/YPER4-697', '-f', `head=${'a'.repeat(40)}`, '-f', 'journey=inbox-cycle-broken',
+  ])
+})
+
+test('optional workflow keeps existing PR visual checks and isolates hosted verification with unconditional artifacts', () => {
+  const workflow = fs.readFileSync(path.join(root, '.github/workflows/visual-regression.yml'), 'utf8')
+  const verify = workflow.split('\n  verify-qa:\n')[1]
+  assert.match(workflow, /github.event_name == 'pull_request' && github.event.pull_request.draft == false/)
+  assert.match(workflow, /'verify-qa' \|\| format\('visual-regression-/)
+  assert.match(verify, /runs-on: ubuntu-latest/)
+  assert.match(verify, /timeout-minutes: 25/)
+  assert.match(verify, /ref: \$\{\{ inputs.head \}\}/)
+  assert.match(verify, /persist-credentials: false/)
+  assert.match(verify, /VERIFY_QA_REPORT_ONLY: '0'/)
+  assert.match(verify, /name: Upload verification evidence\n        if: always\(\)/)
+  assert.doesNotMatch(verify, /secrets\.|continue-on-error:|statuses: write|checks: write|self-hosted/)
+  assert.equal(spawnSync('bash', ['-n', path.join(root, 'scripts/verify-qa')]).status, 0)
+})

@@ -201,6 +201,28 @@ premerge_verify_qa:
   tagged_journeys_opt_in: HT_QA_JOURNEYS=1
   app_smoke_build_reuse: deferred
 
+on_demand_verify_qa:
+  ticket: https://app.hypertask.ai/detail/project-4060/697
+  workflow: .github/workflows/visual-regression.yml
+  job: verify-qa
+  trigger: workflow_dispatch
+  input_ref: head
+  input_journey: journey
+  journeys: [inbox-cycle, inbox-cycle-broken]
+  helper: scripts/verify-qa
+  runner: scripts/verify-qa-run.mjs
+  runs_on: ubuntu-latest
+  required: false
+  report_only: false
+  builds_per_run: 1
+  concurrency_group: verify-qa
+  cancel_in_progress: false
+  timeout_minutes: 25
+  artifact: verify-qa-<run-id>-<attempt>
+  retention_days: 7
+  production_data: false
+  repository_secrets: false
+
 ai_model_watch:
   workflow: .github/workflows/ai-model-watch.yml
   runs_on: ubuntu-latest
