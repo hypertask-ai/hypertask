@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   allowanceDriftTtl,
   gatewaySpendBreakdownMicroUsd,
+  gatewayHourlySpend,
   SYSTEM_AI_ALLOWANCE_MULTIPLIER,
   type AllowanceDriftContext,
   type AllowanceRefusal,
@@ -18,6 +19,7 @@ import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 
 const QUIET_MS = 30 * 60 * 1000;
+const REFUSAL_RECOVERY_MS = 2 * 60 * 60 * 1000;
 const BUDGET_MS = 240 * 1000;
 const MAX_TEAMS = 200;
 const CONCURRENCY = 4;
@@ -36,8 +38,7 @@ type Observation = {
   drift?: Incident;
   refusal?: Incident;
   refusalSeen: string[];
-  committed?: number[];
-  committedAt?: number;
+  refusalLastAt?: number;
 };
 
 export type AllowanceDriftCounts = {
@@ -61,6 +62,7 @@ export async function checkActiveTeamAllowanceDrift(): Promise<AllowanceDriftCou
   const month = aiAllowancePeriod(now);
   const periods = [month];
   if (now.getUTCDate() <= 2) periods.unshift(aiAllowancePeriod(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) - 1)));
+  const hourlyReports = new Map<string, ReturnType<typeof gatewayHourlySpend>>();
   const token = randomUUID();
   const lockKey = "ai-allowance-drift:lock";
   if (!await redis.set(lockKey, token, "EX", 300, "NX")) return counts;
@@ -107,14 +109,11 @@ export async function checkActiveTeamAllowanceDrift(): Promise<AllowanceDriftCou
           const before = historical ? [] : await snapshot();
           const signature = JSON.stringify([contextJson, before]);
           const state: Observation = previous ? JSON.parse(previous) : { snapshot: signature, changedAt: Date.now(), sequence: 0, refusalSeen: [] };
-          if (historical && !refusals.some((event) => !state.refusalSeen.includes(event.id))) return;
           if (!historical) {
             if (state.snapshot !== signature) {
               state.snapshot = signature;
               state.changedAt = Date.now();
             }
-            state.committed = before;
-            state.committedAt = Date.now();
           }
           const save = () => redis.set(`${prefix}:observation`, JSON.stringify(state), "EX", ttl);
           await save();
@@ -130,46 +129,62 @@ export async function checkActiveTeamAllowanceDrift(): Promise<AllowanceDriftCou
           if (JSON.stringify(before) !== JSON.stringify(after) || contextJson !== await redis.get(`${prefix}:context`)) {
             state.snapshot = "changed-during-report";
             state.changedAt = Date.now();
-            if (!historical) {
-              state.committed = after;
-              state.committedAt = Date.now();
-            }
             await save();
             counts.inconclusive++;
             return;
           }
           const reasons = { month: 0, day: 0, demo: 0 };
           buckets.forEach((bucket) => reasons[bucket.event.reason] += bucket.count);
-          const matured = refusals.filter((event) => event.time <= Date.now() - QUIET_MS && event.fundingSource === context.fundingSource && !state.refusalSeen.includes(event.id));
-          const scopeCommitted = (values: number[], event: AllowanceRefusal) => event.policyMode === "plan"
-            ? values[0] + values[1] + values[2] : event.lane === "system" ? values[1] : values[0] + values[2];
-          const scopeKey = (event: AllowanceRefusal) => `${event.policyMode}:${event.fundingSource}:${event.policyMode === "plan" ? "all" : event.lane}`;
-          const latestCommitments = new Map<string, AllowanceRefusalBucket>();
-          for (const bucket of buckets) {
-            if (bucket.event.reason !== "month") continue;
-            const key = scopeKey(bucket.event);
-            if (!latestCommitments.has(key) || bucket.time > latestCommitments.get(key)!.time) latestCommitments.set(key, bucket);
-          }
-          const committedNow = (event: AllowanceRefusal) => {
-            if (!historical) return scopeCommitted(before, event);
-            const latest = latestCommitments.get(scopeKey(event))!;
-            if (state.committed?.length === 3 && state.committed.every(validAmount) && (state.committedAt ?? -1) >= latest.time) return scopeCommitted(state.committed, event);
-            return latest.committed;
-          };
-          const underAllowanceEvents = matured.filter((event) => {
-            if (event.reason !== "month") return false;
-            const committed = committedNow(event);
-            if (committed < event.committed) {
-              counts.inconclusive++;
-              return false;
+          const maturedAt = now.getTime() - QUIET_MS;
+          const matured = refusals.filter((event) => event.reason === "month" && event.time <= maturedAt && event.fundingSource === context.fundingSource);
+          const hourlyBounds = new Map<number, { lower: number; upper: number }>();
+          if (matured.length) {
+            if (!hourlyReports.has(teamId)) {
+              hourlyReports.set(teamId, gatewayHourlySpend(funding.apiKey, teamId, periods[0].startDate, month.endDate, AbortSignal.timeout(10_000)));
             }
-            const gatewayNow = event.policyMode === "plan" ? gateway.totalMicroUsd : event.lane === "system" ? gateway.systemMicroUsd : gateway.visibleMicroUsd;
-            const billedAtRefusal = Math.max(0, gatewayNow - Math.max(0, committed - event.committed));
-            return billedAtRefusal + event.liveHolds + event.requestedHold <= event.cap;
-          });
+            const report = await hourlyReports.get(teamId)!;
+            if (report) {
+              const costs = new Map(report.map((row) => [row.hour, row.totalUsd]));
+              let billed = 0;
+              const end = Date.parse(`${period.endDate}T00:00:00Z`) + 86_400_000;
+              for (let hour = Date.parse(`${period.startDate}T00:00:00Z`); hour < end; hour += 3_600_000) {
+                const lower = Math.floor(billed * 1_000_000);
+                billed += costs.get(hour) ?? 0;
+                hourlyBounds.set(hour, { lower, upper: Math.ceil(billed * 1_000_000) });
+              }
+              if (Math.ceil(billed * 1_000_000) !== gateway.totalMicroUsd) hourlyBounds.clear();
+            }
+          }
+          const judgments = new Map<AllowanceRefusal, "under" | "over" | "inconclusive">();
+          for (const event of matured) {
+            const hour = Math.floor(event.time / 3_600_000) * 3_600_000;
+            const bounds = hourlyBounds.get(hour);
+            if (!bounds) {
+              counts.inconclusive++;
+              judgments.set(event, "inconclusive");
+              continue;
+            }
+            const laneTotal = event.policyMode === "plan" ? gateway.totalMicroUsd : event.lane === "system" ? gateway.systemMicroUsd : gateway.visibleMicroUsd;
+            const lower = Math.max(0, bounds.lower - (gateway.totalMicroUsd - laneTotal));
+            const upper = Math.min(bounds.upper, laneTotal);
+            const held = event.liveHolds + event.requestedHold;
+            const judgment = upper + held <= event.cap ? "under" : lower + held > event.cap ? "over" : "inconclusive";
+            judgments.set(event, judgment);
+            if (judgment === "inconclusive") counts.inconclusive++;
+          }
+          const underAllowanceEvents = matured.filter((event) => judgments.get(event) === "under" && !state.refusalSeen.includes(event.id));
           const underAllowanceEvent = underAllowanceEvents[0];
           const underAllowance = underAllowanceEvents.length > 0;
-          const counter = historical ? (underAllowanceEvent ? committedNow(underAllowanceEvent) : 0) : before[0] + before[1] + before[2];
+          const counter = historical ? (underAllowanceEvent?.committed ?? 0) : before[0] + before[1] + before[2];
+          const latestRefusalAt = buckets.reduce((latest, bucket) => Math.max(latest, bucket.time), 0);
+          const newRefusals = buckets.filter((bucket) => bucket.time > (state.refusalLastAt ?? 0));
+          const quietGap = state.refusalLastAt !== undefined && newRefusals.length > 0 &&
+            newRefusals.reduce((earliest, bucket) => Math.min(earliest, bucket.event.time), Infinity) - state.refusalLastAt >= REFUSAL_RECOVERY_MS;
+          const recoveryWindow = refusals.filter((event) => event.time > maturedAt - REFUSAL_RECOVERY_MS && event.time <= maturedAt);
+          const recovered = now.getTime() - latestRefusalAt >= REFUSAL_RECOVERY_MS || quietGap ||
+            (recoveryWindow.length > 0 && recoveryWindow.every((event) => judgments.get(event) === "over"));
+          if (recovered) delete state.refusal;
+          state.refusalLastAt = latestRefusalAt;
           const allowance = Math.round(context.monthlyUsd * 1_000_000);
           const margin = Math.max(10_000, allowance * 0.01);
           const drift = !historical && (context.mode === "plan"
@@ -182,7 +197,7 @@ export async function checkActiveTeamAllowanceDrift(): Promise<AllowanceDriftCou
           let team: { title: string | null } | null | undefined;
           const notify = async (kind: "drift" | "refusal", active: boolean) => {
             if (!active) {
-              delete state[kind];
+              if (kind === "drift") delete state[kind];
               return false;
             }
             if (!state[kind]) {

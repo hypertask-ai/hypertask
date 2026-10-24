@@ -540,6 +540,46 @@ export async function gatewaySpendBreakdownMicroUsd(
   };
 }
 
+export async function gatewayHourlySpend(
+  gatewayApiKey: string,
+  teamId: string,
+  startDate: string,
+  endDate: string,
+  signal?: AbortSignal,
+): Promise<Array<{ hour: number; totalUsd: number }> | null> {
+  const params = new URLSearchParams({
+    start_date: startDate,
+    end_date: endDate,
+    group_by: "day",
+    date_part: "hour",
+    tags: `team:${teamId}`,
+  });
+  const response = await fetch(`${GATEWAY_BASE_URL}/report?${params}`, {
+    signal,
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${gatewayApiKey}` },
+  });
+  if (!response.ok) throw new Error("AI Gateway hourly allowance report failed");
+  const payload = await response.json() as { results?: unknown };
+  if (!Array.isArray(payload.results)) throw new Error("AI Gateway hourly allowance report is invalid");
+  if (payload.results.length === 0) return null;
+  const hours = new Map<number, number>();
+  for (const value of payload.results) {
+    if (!value || typeof value !== "object") throw new Error("AI Gateway hourly allowance row is invalid");
+    const row = value as { hour?: unknown; total_cost?: unknown };
+    if (typeof row.hour !== "string" || !/[T ]\d{2}:00(?::00(?:\.0+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(row.hour)) return null;
+    const hour = Date.parse(row.hour);
+    const cost = finiteNonNegative(row.total_cost);
+    if (!Number.isFinite(hour) || hour % 3_600_000 !== 0 || cost === null || hours.has(hour) ||
+      hour < Date.parse(`${startDate}T00:00:00Z`) || hour >= Date.parse(`${endDate}T00:00:00Z`) + 86_400_000) {
+      throw new Error("AI Gateway hourly allowance row is invalid");
+    }
+    if (cost * MICRO_USD_PER_USD > Number.MAX_SAFE_INTEGER) throw new Error("AI Gateway hourly allowance cost is invalid");
+    hours.set(hour, cost);
+  }
+  return [...hours].map(([hour, totalUsd]) => ({ hour, totalUsd }));
+}
+
 const INITIALIZE_SPLIT_SCRIPT = `
 local initialized = redis.call("SET", KEYS[3], ARGV[5], "EX", ARGV[6], "NX")
 if not initialized then return 0 end

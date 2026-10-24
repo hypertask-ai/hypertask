@@ -32,6 +32,10 @@ let alerts;
 let deliveries;
 let teamTitle;
 let resyncEnabled;
+let hourlyRows;
+let hourlyFails;
+let hourlyCalls;
+let hourlyParams;
 
 stub("src/lib/redis.ts", { getRedis: async () => redis });
 stub("src/lib/flags.ts", { isFeatureEnabled: async (key) => {
@@ -190,6 +194,13 @@ function installFetch() {
     if (String(url).endsWith("/models")) return Response.json({ data: [{ id: "test/model", pricing: { input: "0.000001", output: "0.00005" } }] });
     reportCalls++;
     const params = new URL(String(url)).searchParams;
+    if (params.get("date_part") === "hour") {
+      hourlyCalls++; hourlyParams.push(params);
+      assert.equal(params.get("group_by"), "day");
+      assert.equal(params.get("tags"), `team:${TEAM}`);
+      if (hourlyFails) throw new Error("hourly report unavailable");
+      return Response.json({ results: hourlyRows ?? [{ hour: `${params.get("start_date")}T00:00:00Z`, total_cost: gatewayUsd }] });
+    }
     reportPeriods.push([params.get("start_date"), params.get("end_date")]);
     if (duringReport) await duringReport();
     if (reportFails) throw new Error("private provider response must not leak");
@@ -206,6 +217,7 @@ test.beforeEach(() => {
   redis = fakeRedis(); enabled = true; flagReads = 0; reportFails = false; reporterFails = false;
   gatewayUsd = 2; systemUsd = 0; reportCalls = 0; reportPeriods = []; duringReport = null; resyncEnabled = false;
   funding = { source: "managed", apiKey: "fixture-platform-credential" };
+  hourlyRows = null; hourlyFails = false; hourlyCalls = 0; hourlyParams = [];
   alerts = []; deliveries = 0; teamTitle = "Acme <script> token_abcdefghijklmnop";
   process.env.NODE_ENV = "production"; process.env.VERCEL_ENV = "production"; process.env.CRON_SECRET = "fixture-cron-authority";
   allowance.resetGatewayPricingCacheForTests();
@@ -621,6 +633,8 @@ for (const [billedAtRefusal, expectedAlerts] of [[2, 1], [5, 0]]) {
     age();
     await redis.set(`${PREFIX}:committed`, "25000000");
     gatewayUsd = billedAtRefusal + 20;
+    hourlyRows = [{ hour: "2026-10-14T11:00:00Z", total_cost: billedAtRefusal }, { hour: "2026-10-14T13:00:00Z", total_cost: 20 }];
+    now = new NativeDate("2026-10-14T14:00:00Z").getTime();
     const result = await check();
     assert.equal(result.unknown, 0);
     assert.equal(result.refusalAlerts, expectedAlerts);
@@ -629,16 +643,17 @@ for (const [billedAtRefusal, expectedAlerts] of [[2, 1], [5, 0]]) {
   });
 }
 
-test("a repaired counter below refusal commitment is inconclusive, not a wrong-refusal alert", async () => {
+test("a repaired counter below refusal commitment cannot override billed over-cap evidence", async () => {
   await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
   await redis.set(`${PREFIX}:committed`, "4000000");
+  gatewayUsd = 5;
   const result = await check();
   assert.ok(result.inconclusive > 0); assert.equal(result.unknown, 0);
   assert.equal(result.refusalAlerts, 0); assert.equal(alerts.length, 0);
   assert.deepEqual(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen, []);
 });
 
-test("refusal-time billing clamps to zero when later counter growth exceeds the report", async () => {
+test("counter growth exceeding bills never changes independently reported refusal-time billing", async () => {
   await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
   await redis.set(`${PREFIX}:committed`, "25000000");
   gatewayUsd = 2;
@@ -670,11 +685,13 @@ for (const lane of ["visible", "system"]) {
   });
 }
 
-test("plan refusal attribution includes system and pending commitment growth", async () => {
+test("plan refusal billing includes both lanes independently of system and pending counter growth", async () => {
   await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
   await redis.set(`${PREFIX}:system:committed`, "15000000");
   await redis.set(`${PREFIX}:legacy-pending`, "5000000");
   gatewayUsd = 22; systemUsd = 15;
+  hourlyRows = [{ hour: "2026-10-14T11:00:00Z", total_cost: 2 }, { hour: "2026-10-14T13:00:00Z", total_cost: 20 }];
+  now = new NativeDate("2026-10-14T14:00:00Z").getTime();
   assert.equal((await check()).refusalAlerts, 1);
 });
 
@@ -721,14 +738,15 @@ test("bucket representative changes to the smallest committed plus holds plus re
 });
 
 for (const savedSnapshot of [false, true]) {
-  test(`October 31 refusal drains November 1 using stored ${savedSnapshot ? "observer snapshot" : "refusal commitment"}, without old live counters`, async () => {
-    now = new NativeDate("2026-10-31T23:50:00Z").getTime();
+  test(`October 31 refusal drains November 1 using hourly bills ${savedSnapshot ? "after an observer snapshot" : "without an observer snapshot"}, without old live counters`, async () => {
+    now = new NativeDate("2026-10-31T22:50:00Z").getTime();
     await fresh();
     await assert.rejects(plan(), (error) => error.reason === "month");
     if (savedSnapshot) {
-      now = new NativeDate("2026-10-31T23:55:00Z").getTime();
+      now = new NativeDate("2026-10-31T22:55:00Z").getTime();
       await redis.set(`${PREFIX}:committed`, "25000000");
       gatewayUsd = 22;
+      hourlyRows = [{ hour: "2026-10-31T22:00:00Z", total_cost: 2 }, { hour: "2026-10-31T23:00:00Z", total_cost: 20 }];
       assert.equal((await check()).refusalAlerts, 0);
     }
     for (const suffix of ["committed", "system:committed", "legacy-pending"]) await redis.del(`${PREFIX}:${suffix}`);
@@ -742,6 +760,9 @@ for (const savedSnapshot of [false, true]) {
     const result = await check();
     assert.equal(result.checked, 2); assert.equal(result.unknown, 0);
     assert.equal(result.refusalAlerts, 1); assert.equal(result.drift, 0);
+    assert.equal(hourlyCalls, 1);
+    assert.equal(hourlyParams[0].get("start_date"), "2026-10-01");
+    assert.equal(hourlyParams[0].get("end_date"), "2026-11-01");
     assert.deepEqual(reportPeriods, [["2026-10-01", "2026-10-31"], ["2026-11-01", "2026-11-01"]]);
     assert.ok(redis.snapshotKeys.length > 0);
     assert.ok(redis.snapshotKeys.every((keys) => keys.every((key) => key.startsWith(currentPrefix))));
@@ -777,14 +798,15 @@ test("checker judges a summarized bucket even after its raw event is evicted", a
 });
 
 
-test("second-day drain subtracts later usage using the newest stored refusal commitment", async () => {
-  now = new NativeDate("2026-10-31T23:50:00Z").getTime();
+test("second-day drain attributes later-hour bills without old live counters", async () => {
+  now = new NativeDate("2026-10-31T22:50:00Z").getTime();
   await fresh(); await assert.rejects(plan(), (error) => error.reason === "month");
   const earliest = (await refusalEvents())[0];
   now = new NativeDate("2026-10-31T23:55:00Z").getTime();
   await redis.set(`${PREFIX}:committed`, "25000000");
   await assert.rejects(plan(), (error) => error.reason === "month");
   gatewayUsd = 22;
+  hourlyRows = [{ hour: "2026-10-31T22:00:00Z", total_cost: 2 }, { hour: "2026-10-31T23:00:00Z", total_cost: 20 }];
   await redis.del(`${PREFIX}:committed`); await redis.del(`${PREFIX}:system:committed`);
   now = new NativeDate("2026-11-02T00:30:00Z").getTime();
   const result = await check();
@@ -792,4 +814,133 @@ test("second-day drain subtracts later usage using the newest stored refusal com
   assert.equal(redis.snapshotKeys.length, 0);
   assert.deepEqual(reportPeriods, [["2026-10-01", "2026-10-31"]]);
   assert.deepEqual(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen, [earliest.id]);
+});
+
+
+test("later-hour billed spend cannot hide an under-cap refusal even with no counter growth", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month");
+  gatewayUsd = 42;
+  hourlyRows = [{ hour: "2026-10-14T11:00:00Z", total_cost: 2 }, { hour: "2026-10-14T13:00:00Z", total_cost: 40 }];
+  now = new NativeDate("2026-10-14T14:00:00Z").getTime();
+  const result = await check();
+  assert.equal(result.refusalAlerts, 1); assert.equal(result.unknown, 0);
+  assert.equal(hourlyCalls, 1);
+  assert.equal(await redis.get(`${PREFIX}:committed`), "5000000");
+});
+
+test("a refusal hour whose upper bound exceeds cap is inconclusive, never alerted or marked seen", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  gatewayUsd = 6;
+  hourlyRows = [{ hour: "2026-10-14T11:00:00Z", total_cost: 2 }, { hour: "2026-10-14T12:00:00Z", total_cost: 4 }];
+  const result = await check();
+  assert.equal(result.refusalAlerts, 0); assert.ok(result.inconclusive > 0); assert.equal(result.unknown, 0);
+  assert.equal(alerts.length, 0);
+  assert.deepEqual(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen, []);
+});
+
+test("hourly failure is unknown and retryable, never an under-cap alert", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  hourlyFails = true;
+  const result = await check();
+  assert.equal(result.unknown, 1); assert.equal(result.refusalAlerts, 0); assert.equal(alerts.length, 0);
+  assert.deepEqual(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen, []);
+  hourlyFails = false;
+  assert.equal((await check()).refusalAlerts, 1);
+});
+
+for (const rows of [[{ day: "2026-10-14", total_cost: 2 }], [{ hour: "2026-10-14", total_cost: 2 }], []]) {
+  test(`missing hour granularity or missing billed hours is inconclusive: ${JSON.stringify(rows)}`, async () => {
+    await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+    hourlyRows = rows;
+    const result = await check();
+    assert.ok(result.inconclusive > 0); assert.equal(result.unknown, 0); assert.equal(result.refusalAlerts, 0);
+    assert.equal(alerts.length, 0);
+  });
+}
+
+test("overlapping hourly rows are unknown rather than summed as extra spend", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  hourlyRows = [{ hour: "2026-10-14T11:00:00Z", total_cost: 1 }, { hour: "2026-10-14T11:00:00Z", total_cost: 1 }];
+  const result = await check();
+  assert.equal(result.unknown, 1); assert.equal(result.refusalAlerts, 0); assert.equal(alerts.length, 0);
+});
+
+test("two under-cap refusals twenty minutes apart share one episode; two quiet hours permit a new one", async () => {
+  await fresh();
+  const start = now;
+  await assert.rejects(plan(), (error) => error.reason === "month");
+  now = start + 20 * 60 * 1000;
+  await assert.rejects(plan(), (error) => error.reason === "month");
+  now = start + 31 * 60 * 1000;
+  assert.equal((await check()).refusalAlerts, 1);
+  const episode = JSON.parse(await redis.get(`${OBS}:observation`)).refusal.id;
+  now = start + 51 * 60 * 1000;
+  assert.equal((await check()).refusalAlerts, 0);
+  assert.equal(hourlyCalls, 2);
+  assert.equal(JSON.parse(await redis.get(`${OBS}:observation`)).refusalSeen.length, 2);
+  assert.equal(JSON.parse(await redis.get(`${OBS}:observation`)).refusal.id, episode);
+  await check();
+  assert.equal(JSON.parse(await redis.get(`${OBS}:observation`)).refusal.id, episode);
+  assert.equal(alerts.filter((entry) => entry.extra.stage === "refusal").length, 1);
+  now = start + 140 * 60 * 1000;
+  await check();
+  assert.equal(JSON.parse(await redis.get(`${OBS}:observation`)).refusal, undefined);
+  now += 60_000;
+  await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  assert.equal((await check()).refusalAlerts, 1);
+  const refusalAlerts = alerts.filter((entry) => entry.extra.stage === "refusal");
+  assert.equal(refusalAlerts.length, 2);
+  assert.notEqual(refusalAlerts[0].fingerprintKey, refusalAlerts[1].fingerprintKey);
+});
+
+test("two quiet hours between observations recover the old refusal episode before new evidence", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  assert.equal((await check()).refusalAlerts, 1);
+  now += 2 * 60 * 60 * 1000;
+  await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  assert.equal((await check()).refusalAlerts, 1);
+  assert.equal(alerts.filter((entry) => entry.extra.stage === "refusal").length, 2);
+});
+
+test("a full matured window of correctly refused requests recovers a refusal episode", async () => {
+  await fresh();
+  const start = now;
+  await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  assert.equal((await check()).refusalAlerts, 1);
+  const episode = JSON.parse(await redis.get(`${OBS}:observation`)).refusal.id;
+  gatewayUsd = 7;
+  hourlyRows = [{ hour: "2026-10-14T11:00:00Z", total_cost: 2 }, { hour: "2026-10-14T12:00:00Z", total_cost: 5 }];
+  for (const minute of [61, 101, 141]) {
+    now = start + minute * 60 * 1000;
+    await assert.rejects(plan(), (error) => error.reason === "month");
+    now += 31 * 60 * 1000;
+    await check();
+    if (minute === 61) assert.equal(JSON.parse(await redis.get(`${OBS}:observation`)).refusal.id, episode);
+  }
+  assert.equal(JSON.parse(await redis.get(`${OBS}:observation`)).refusal, undefined);
+  assert.equal(alerts.filter((entry) => entry.extra.stage === "refusal").length, 1);
+});
+
+
+test("legacy visible billing bounds exclude later system spend without adding overlapping tag totals", async () => {
+  await fresh(5_000_000, "legacy");
+  const middleware = allowance.createSharedAllowanceMiddleware({ allowanceUsd: 5, gatewayApiKey: funding.apiKey,
+    fundingSource: funding.source, modelSlug: "test/model" });
+  await assert.rejects(middleware.wrapGenerate({
+    params: { prompt: [], maxOutputTokens: 256, providerOptions: { gateway: { tags: [`team:${TEAM}`] } } },
+    model: {}, doGenerate: async () => { throw new Error("must not infer"); },
+  }), (error) => error.reason === "month");
+  gatewayUsd = 42; systemUsd = 40;
+  hourlyRows = [{ hour: "2026-10-14T11:00:00Z", total_cost: 2 }, { hour: "2026-10-14T13:00:00Z", total_cost: 40 }];
+  now = new NativeDate("2026-10-14T14:00:00Z").getTime();
+  const result = await check();
+  assert.equal(result.refusalAlerts, 1); assert.equal(result.unknown, 0); assert.equal(hourlyCalls, 1);
+});
+
+test("fractional-micro hourly costs round once at cumulative bounds, not once per bucket", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
+  gatewayUsd = 4.7999996;
+  hourlyRows = [{ hour: "2026-10-14T10:00:00Z", total_cost: 2.0000002 }, { hour: "2026-10-14T11:00:00Z", total_cost: 2.7999994 }];
+  const result = await check();
+  assert.equal(result.refusalAlerts, 1); assert.equal(result.unknown, 0);
 });
