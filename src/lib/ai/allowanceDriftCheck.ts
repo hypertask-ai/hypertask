@@ -138,21 +138,26 @@ export async function checkActiveTeamAllowanceDrift(): Promise<AllowanceDriftCou
           const maturedAt = now.getTime() - QUIET_MS;
           const matured = refusals.filter((event) => event.reason === "month" && event.time <= maturedAt && event.fundingSource === context.fundingSource);
           const hourlyBounds = new Map<number, { lower: number; upper: number }>();
+          let hourlyReportFailed = false;
           if (matured.length) {
             if (!hourlyReports.has(teamId)) {
               hourlyReports.set(teamId, gatewayHourlySpend(funding.apiKey, teamId, periods[0].startDate, month.endDate, AbortSignal.timeout(10_000)));
             }
-            const report = await hourlyReports.get(teamId)!;
+            const report = await hourlyReports.get(teamId)!.catch(() => {
+              hourlyReportFailed = true;
+              return null;
+            });
+            if (hourlyReportFailed) counts.unknown++;
             if (report) {
-              const costs = new Map(report.map((row) => [row.hour, row.totalUsd]));
-              let billed = 0;
+              const costs = new Map(report.map((row) => [row.hour, Math.round(row.totalUsd * 1_000_000)]));
+              let billedMicroUsd = 0;
               const end = Date.parse(`${period.endDate}T00:00:00Z`) + 86_400_000;
               for (let hour = Date.parse(`${period.startDate}T00:00:00Z`); hour < end; hour += 3_600_000) {
-                const lower = Math.floor(billed * 1_000_000);
-                billed += costs.get(hour) ?? 0;
-                hourlyBounds.set(hour, { lower, upper: Math.ceil(billed * 1_000_000) });
+                const lower = billedMicroUsd;
+                billedMicroUsd += costs.get(hour) ?? 0;
+                hourlyBounds.set(hour, { lower, upper: billedMicroUsd });
               }
-              if (Math.ceil(billed * 1_000_000) !== gateway.totalMicroUsd) hourlyBounds.clear();
+              if (Math.abs(billedMicroUsd - gateway.totalMicroUsd) > report.length) hourlyBounds.clear();
             }
           }
           const judgments = new Map<AllowanceRefusal, "under" | "over" | "inconclusive">();
@@ -160,7 +165,7 @@ export async function checkActiveTeamAllowanceDrift(): Promise<AllowanceDriftCou
             const hour = Math.floor(event.time / 3_600_000) * 3_600_000;
             const bounds = hourlyBounds.get(hour);
             if (!bounds) {
-              counts.inconclusive++;
+              if (!hourlyReportFailed) counts.inconclusive++;
               judgments.set(event, "inconclusive");
               continue;
             }

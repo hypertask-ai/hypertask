@@ -848,6 +848,28 @@ test("hourly failure is unknown and retryable, never an under-cap alert", async 
   assert.equal((await check()).refusalAlerts, 1);
 });
 
+test("hourly cents that add up to the month total keep refusal bounds (0.10 + 0.20 = 0.30)", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month");
+  hourlyRows = [{ hour: "2026-10-14T10:00:00Z", total_cost: 0.1 }, { hour: "2026-10-14T11:00:00Z", total_cost: 0.2 }];
+  gatewayUsd = 0.3;
+  await check(); age();
+  const result = await check();
+  assert.equal(result.unknown, 0); assert.equal(result.inconclusive, 0); assert.equal(result.refusalAlerts, 1);
+  const refusalAlerts = alerts.filter((entry) => entry.extra.stage === "refusal");
+  assert.equal(refusalAlerts.length, 1);
+  assert.match(refusalAlerts[0].message, /refused while under allowance/);
+});
+
+test("hourly report failure still lets the drift check alert", async () => {
+  await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); await check(); age();
+  hourlyFails = true;
+  const result = await check();
+  assert.deepEqual(result, { checked: 1, inconclusive: 0, unknown: 1, drift: 1, refusalAlerts: 0 });
+  assert.equal(alerts.length, 1); assert.equal(alerts[0].extra.stage, "drift");
+  assert.match(alerts[0].message, /drift CONFIRMED/);
+  assert.match(alerts[0].message, /counter \$5\.000000; gateway \$2\.000000; allowance \$5\.000000/);
+});
+
 for (const rows of [[{ day: "2026-10-14", total_cost: 2 }], [{ hour: "2026-10-14", total_cost: 2 }], []]) {
   test(`missing hour granularity or missing billed hours is inconclusive: ${JSON.stringify(rows)}`, async () => {
     await fresh(); await assert.rejects(plan(), (error) => error.reason === "month"); age();
