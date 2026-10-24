@@ -56,11 +56,22 @@ def require_everyone(ticket, flags, references="", require_flags=False):
 
 def main():
     ticket, repo, pr = sys.argv[1:]
-    references = ""
+    try:
+        current = json.loads(subprocess.check_output([
+            "hypertask", "tasks", "get", ticket, "--json"], text=True))
+        if current.get("success") is not True or len(current["tasks"]) != 1:
+            raise ValueError("invalid ticket response")
+        references = current["tasks"][0].get("description", "")
+        if references is None:
+            references = ""
+        if not isinstance(references, str):
+            raise ValueError("invalid ticket description")
+    except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.SubprocessError) as error:
+        raise ValueError(f"cannot read current ticket {ticket}") from error
     if pr:
         body = subprocess.check_output([
             "gh", "pr", "view", pr, "-R", repo, "--json", "body", "--jq", ".body"], text=True)
-        references = "\n".join(re.findall(
+        references += "\n" + "\n".join(re.findall(
             r"https://app\.hypertask\.ai/admin/flags/[a-z0-9-]+|"
             r"^\s*(?:feature flag|flag):[^\n]+", body, re.MULTILINE | re.IGNORECASE))
         pages = subprocess.check_output([

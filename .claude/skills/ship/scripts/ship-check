@@ -531,6 +531,11 @@ check_proof() {
 
 check_flags() {
   local n; n=$(bound_pr "$1")
+  if [ -s "$EVID/$1/dropped" ]; then
+    dropped_ok flags "$1" >/dev/null || return 1
+    # The closed, unmerged PR never shipped; live ticket flags still apply.
+    n=''
+  fi
   python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ticket_flags.py" "$1" "$REPO" "$n" \
     || fail "cannot mark $1 Done until every ticket flag is Everyone; use Flags after live QA (mode read failures block Done only)"
 }

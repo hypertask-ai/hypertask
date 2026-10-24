@@ -433,6 +433,7 @@ esac
 MOCK
 cat > "$E/docs-bin/hypertask" <<'MOCK'
 #!/usr/bin/env bash
+if [[ $* == 'tasks get YPER4-388 --json' ]]; then echo '{"success":true,"tasks":[{"description":""}]}'; exit; fi
 [[ $1 == comment && $2 == list && $3 == "${DOCS_TICKET:-YPER4-388}" ]] || exit 1
 if [ -n "${DOCS_COMMENTS:-}" ]; then printf '%s\n' "$DOCS_COMMENTS"
 else echo '{"comments":[]}'; fi
@@ -508,6 +509,11 @@ case "$*" in
     [ "${VERSION_ERROR:-0}" = 0 ] || exit 1; echo "$VERSION_FIXTURE" ;;
   *) exit 1 ;;
 esac
+MOCK
+cat > "$E/worker-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $* == 'tasks get YPER4-999 --json' ]] || exit 1
+echo '{"success":true,"tasks":[{"description":""}]}'
 MOCK
 chmod +x "$E/worker-bin/"*
 worker_sha=f2619e33637f2577b609be8b52234910ee61b802
@@ -1048,6 +1054,7 @@ else exit 1; fi
 MOCK
 cat > "$NC/bin/hypertask" <<'MOCK'
 #!/usr/bin/env bash
+if [[ $1 == tasks && $2 == get ]]; then echo '{"success":true,"tasks":[{"description":""}]}'; exit; fi
 [[ $1 == comment && $2 == list ]] && cat "$NC/comments" || exit 1
 MOCK
 chmod +x "$NC/bin/gh" "$NC/bin/hypertask"; export NC
