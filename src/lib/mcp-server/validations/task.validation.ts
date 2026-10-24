@@ -36,8 +36,9 @@ const taskContentTypeSchema = z
 
 export const SetTaskWaitingOnInputSchema = z.object({
   taskId: z.number().int().positive().max(2_147_483_647).describe('Task database ID from get_tasks.'),
-  userId: z.number().int().positive().max(2_147_483_647).nullable().describe('Board member user ID to wait on, or null to clear.'),
-}).strict();
+  userId: z.number().int().positive().max(2_147_483_647).nullable().optional().describe('Board member user ID to wait on, or null to clear.'),
+  blockerCommentId: z.number().int().positive().max(2_147_483_647).nullable().optional().describe('Comment on this task explaining the blocker; null clears the marker. Send with userId to change both atomically.'),
+}).strict().refine((input) => input.userId !== undefined || input.blockerCommentId !== undefined, { message: 'Provide userId or blockerCommentId' });
 
 export function getGetTasksInputSchema() {
   return createTaskIdentificationArraySchema();

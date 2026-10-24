@@ -8,8 +8,8 @@ const { access: projectAccess, matches } = require("./helpers/agent-board-scope.
 function fixture(options = {}) {
   const owner = { id: 7, displayName: "Owner", email: "owner@example.invalid" };
   const ctx = { user: owner, agentId: "agent-owner", agentRole: "write", teamScope: null, ...options.ctx };
-  const task = { id: 42, projectId: 15, waitingOnUserId: 8, waitingOnSetById: 7, waitingOnSetAt: new Date() };
-  const writes = [], activities = [], boards = [], inboxes = [], access = [], members = [], leases = [], flags = [];
+  const task = { id: 42, projectId: 15, waitingOnUserId: 8, waitingOnSetById: 7, waitingOnSetAt: new Date(), blockerCommentId: null };
+  const writes = [], activities = [], boards = [], inboxes = [], access = [], members = [], leases = [], flags = [], commentReads = [], taskChanges = [];
   const projectWhere = projectAccess.getProjectWhere;
   const project = {
     ownerId: options.ownerDenied ? 99 : 7,
@@ -30,12 +30,18 @@ function fixture(options = {}) {
       update: async (query) => {
         writes.push(query);
         assert.deepEqual(query.where, { id: 42 });
-        assert.deepEqual(query.select, { id: true, waitingOnUserId: true, waitingOnSetById: true, waitingOnSetAt: true });
+        assert.deepEqual(query.select, { id: true, waitingOnUserId: true, waitingOnSetById: true, waitingOnSetAt: true, ...(Object.hasOwn(query.data, "blockerCommentId") ? { blockerCommentId: true } : {}) });
         Object.assign(task, query.data);
-        const { id, waitingOnUserId, waitingOnSetById, waitingOnSetAt } = task;
-        return { id, waitingOnUserId, waitingOnSetById, waitingOnSetAt };
+        return Object.fromEntries(Object.keys(query.select).map((key) => [key, task[key]]));
       },
     },
+    comment: { findFirst: async ({ where }) => {
+      commentReads.push(where);
+      assert.equal(where.taskId, 42);
+      assert.deepEqual(where.activity, { equals: require("@prisma/client").Prisma.DbNull });
+      const comment = { id: where.id, taskId: options.foreignComment ? 99 : 42, activity: options.activityComment ? { type: "TaskMoved" } : null };
+      return ![101, 102].includes(comment.id) || comment.taskId !== where.taskId || comment.activity !== null ? null : { id: comment.id };
+    } },
     user: { findUnique: async ({ where }) => where.id === 7 ? owner : { displayName: "Member" } },
   };
   const mocks = {
@@ -48,6 +54,7 @@ function fixture(options = {}) {
       flags.push({ key, userId });
       assert.equal(userId, ctx.user.id);
       if (key === "htpr-7665-agent-read-role-guard") return true;
+      if (key === "htpr-7724-blocker-comment") return options.blockerFlagEnabled !== false;
       assert.equal(key, "htpr-7723-task-waiting-on");
       return options.flagEnabled !== false;
     } },
@@ -68,6 +75,7 @@ function fixture(options = {}) {
     "@/lib/realtime/server": {
       broadcastBoardChange: async (...args) => { boards.push(args); },
       broadcastInboxChange: async (...args) => { inboxes.push(args); },
+      broadcastTaskChange: async (...args) => { taskChanges.push(args); },
     },
     "@/lib/aiFeedback/automatic": { queueRestFailure: () => {} },
     "@/lib/mcp/tasks/agentMutationLeaseAdoption": {
@@ -90,7 +98,7 @@ function fixture(options = {}) {
     body: raw ? body : JSON.stringify(body),
   });
   return {
-    owner, ctx, writes, activities, boards, inboxes, access, members, leases, flags,
+    owner, ctx, task, writes, activities, boards, inboxes, access, members, leases, flags, commentReads, taskChanges,
     post: (body, raw = false) => POST(request(body, raw)),
     session: (body) => session(request(body)),
     pages: async (body) => {
@@ -229,4 +237,95 @@ test("membership service errors retain their status and no duplicate inbox broad
   const allowed = fixture();
   assert.equal((await allowed.post({ taskId: 42, userId: 8 })).status, 200);
   assert.deepEqual(allowed.inboxes, [[8, { originUserId: 7 }]]);
+});
+
+test("blocker comment and person are set in one write, replaced, read in the receipt, and cleared together", async () => {
+  const f = fixture();
+  const set = await f.post({ taskId: 42, userId: 9, blockerCommentId: 101 });
+  assert.equal(set.status, 200);
+  assert.equal((await set.json()).task.blockerCommentId, 101);
+  assert.equal(f.writes.length, 1);
+  assert.equal(f.writes[0].data.blockerCommentId, 101);
+  assert.equal(f.writes[0].data.waitingOnUserId, 9);
+  assert.deepEqual(f.taskChanges, [[42, { originUserId: 7 }]]);
+
+  const replace = await f.post({ taskId: 42, blockerCommentId: 102 });
+  assert.equal(replace.status, 200);
+  const receipt = (await replace.json()).task;
+  assert.equal(receipt.blockerCommentId, 102);
+  assert.equal(receipt.waitingOnUserId, 9);
+  assert.deepEqual(f.writes[1].data, { blockerCommentId: 102 });
+  assert.equal(f.activities.length, 1);
+
+  const cleared = await f.post({ taskId: 42, userId: null, blockerCommentId: null });
+  assert.equal(cleared.status, 200);
+  assert.deepEqual((await cleared.json()).task, { id: 42, blockerCommentId: null, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null });
+  assert.equal(f.writes.length, 3);
+  assert.equal(f.commentReads.length, 2);
+});
+
+test("app session and Pages callers can mark and unmark without changing the waiting-on person", async () => {
+  const f = fixture();
+  const response = await f.session({ taskId: 42, blockerCommentId: 101 });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).blockerCommentId, 101);
+  const cleared = await f.pages({ taskId: 42, blockerCommentId: null });
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.body.blockerCommentId, null);
+  assert.equal(cleared.body.waitingOnUserId, 8);
+  assert.deepEqual(f.activities, []);
+  assert.deepEqual(f.members, []);
+  assert.deepEqual(f.inboxes, []);
+  assert.equal(f.taskChanges.length, 2);
+});
+
+for (const method of ["post", "session", "pages"]) {
+  test(`blocker flag off refuses ${method} setting and clearing before content reads or writes`, async () => {
+    const f = fixture({ blockerFlagEnabled: false });
+    for (const blockerCommentId of [101, null]) {
+      const response = await f[method]({ taskId: 42, userId: 9, blockerCommentId });
+      assert.equal(response.status, 404);
+    }
+    for (const calls of [f.access, f.commentReads, f.writes, f.members, f.activities, f.boards, f.inboxes, f.taskChanges]) assert.deepEqual(calls, []);
+  });
+}
+
+for (const option of ["foreignComment", "activityComment"]) test(`${option} is refused without partially changing the person`, async () => {
+  const f = fixture({ [option]: true });
+  const response = await f.post({ taskId: 42, userId: 9, blockerCommentId: 101 });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /comment on this task/);
+  assert.equal(f.task.waitingOnUserId, 8);
+  for (const calls of [f.members, f.writes, f.activities, f.taskChanges]) assert.deepEqual(calls, []);
+});
+
+test("invalid member does not partially mark a valid comment", async () => {
+  const f = fixture({ nonMember: true });
+  assert.equal((await f.post({ taskId: 42, userId: 99, blockerCommentId: 101 })).status, 400);
+  assert.equal(f.task.blockerCommentId, null);
+  assert.deepEqual(f.writes, []);
+});
+
+for (const options of [{ ownerDenied: true }, { scopeDenied: true, ctx: { teamScope: { teamId: "team-1", accessBinding: "binding" } } }, { deleted: true }, { ctx: { agentRole: "read" } }]) {
+  test(`blocker mutation keeps task access and agent-role checks: ${JSON.stringify(options)}`, async () => {
+    const f = fixture(options);
+    assert.ok([403, 404].includes((await f.post({ taskId: 42, blockerCommentId: 101 })).status));
+    assert.deepEqual(f.commentReads, []);
+    assert.deepEqual(f.writes, []);
+  });
+}
+
+for (const blockerCommentId of ["101", 0, -1, 1.5, 2 ** 40, false, {}]) {
+  test(`invalid blocker comment ID is refused: ${JSON.stringify(blockerCommentId)}`, async () => {
+    const f = fixture();
+    assert.equal((await f.post({ taskId: 42, blockerCommentId })).status, 400);
+    assert.deepEqual(f.access, []);
+    assert.deepEqual(f.writes, []);
+  });
+}
+
+test("blocker flag is independent of the older agent waiting-on switch", async () => {
+  const f = fixture({ flagEnabled: false });
+  assert.equal((await f.post({ taskId: 42, userId: 9, blockerCommentId: 101 })).status, 200);
+  assert.deepEqual(f.flags, [{ key: "htpr-7724-blocker-comment", userId: 7 }]);
 });

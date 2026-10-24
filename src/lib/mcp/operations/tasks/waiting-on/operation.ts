@@ -23,21 +23,22 @@ export async function POST(request: NextRequest) {
       if (!ctx) return await mcpRouteUnauthorizedResponse(request);
       const roleRefusal = await requireAgentWriteRole(ctx);
       if (roleRefusal) return roleRefusal;
-      if (!(await isFeatureEnabled(HTPR_7723_TASK_WAITING_ON_FLAG, ctx.user.id))) {
-        return NextResponse.json({ success: false, error: "Task waiting-on is not enabled" }, { status: 404 });
-      }
-
       let body;
       try {
         body = await request.json();
       } catch {
         return NextResponse.json({ success: false, error: "Invalid request body", message: "Request body must be valid JSON" }, { status: 400 });
       }
-      if (!body || Array.isArray(body) || typeof body.taskId !== "number" || !Number.isInteger(body.taskId)
-        || (body.userId !== null && (typeof body.userId !== "number" || !Number.isInteger(body.userId)))) {
-        return NextResponse.json({ success: false, error: "taskId must be an integer and userId must be an integer or null" }, { status: 400 });
+      if (body?.blockerCommentId === undefined && !(await isFeatureEnabled(HTPR_7723_TASK_WAITING_ON_FLAG, ctx.user.id))) {
+        return NextResponse.json({ success: false, error: "Task waiting-on is not enabled" }, { status: 404 });
       }
-      const outOfRange = findIdParamOutOfRange({ taskId: body.taskId, userId: body.userId });
+      if (!body || Array.isArray(body) || typeof body.taskId !== "number" || !Number.isInteger(body.taskId)
+        || (body.userId !== undefined && body.userId !== null && (typeof body.userId !== "number" || !Number.isInteger(body.userId)))
+        || (body.blockerCommentId !== undefined && body.blockerCommentId !== null && (typeof body.blockerCommentId !== "number" || !Number.isInteger(body.blockerCommentId) || body.blockerCommentId <= 0))
+        || (body.userId === undefined && body.blockerCommentId === undefined)) {
+        return NextResponse.json({ success: false, error: "Provide integer taskId and userId and/or blockerCommentId (integer or null)" }, { status: 400 });
+      }
+      const outOfRange = findIdParamOutOfRange({ taskId: body.taskId, userId: body.userId, blockerCommentId: body.blockerCommentId });
       if (outOfRange) {
         return NextResponse.json({ success: false, error: idOutOfRangeMessage(outOfRange), code: "invalid_field" }, { status: 400 });
       }
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
         () => setTaskWaitingOn({
           taskId: body.taskId,
           userId: body.userId,
+          blockerCommentId: body.blockerCommentId,
           currentUser,
           agentId: ctx.agentId,
           teamScope: ctx.teamScope,

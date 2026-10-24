@@ -47,6 +47,7 @@ export interface ParentTaskSummary {
 
 export interface TaskListItem {
   id: number
+  blockerCommentId?: number | null
   ticketNumber?: string
   title: string
   description: string
@@ -753,6 +754,7 @@ export async function GET(request: NextRequest) {
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
+        blockerCommentId: task.blockerCommentId ?? null,
         uniqueIndex: task.uniqueIndex,
         title: task.title,
         description: mapTaskDescriptionContent(task),

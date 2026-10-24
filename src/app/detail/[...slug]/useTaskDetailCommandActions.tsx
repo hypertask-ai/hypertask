@@ -13,7 +13,7 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
 
 
   const callback = (payload: any, mode: string) => {
-    const { handleReplyCommentFromHTC, handleReactToCommentFromHTC, deleteComment, moveTaskToNextColumn, openAifromHtc, viewSubTasksfromHtc, copyCommentURLFromHTC, copyCommentContentFromHTC, createTaskFromCommentHTC, handleEditCommentFromHTC, handleStarCommentFromHTC, toggleRemoveSubtaskModal, UnFollowCallback, getTask } = getContext();
+    const { handleReplyCommentFromHTC, handleReactToCommentFromHTC, deleteComment, moveTaskToNextColumn, openAifromHtc, viewSubTasksfromHtc, copyCommentURLFromHTC, copyCommentContentFromHTC, createTaskFromCommentHTC, handleEditCommentFromHTC, handleStarCommentFromHTC, handleBlockerCommentFromHTC, toggleRemoveSubtaskModal, UnFollowCallback, getTask } = getContext();
     if (mode === taskDetailConfig.commandModes.delete) deleteComment(payload);
     else if (mode === taskDetailConfig.commandModes.archive) return markAsDone();
     else if (mode === taskDetailConfig.commandModes.acceptTask)
@@ -48,6 +48,7 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
       );
     else if (mode === taskDetailConfig.commandModes.starTask) handleStarTask();
     else if (mode === taskDetailConfig.commandModes.starComment) handleStarCommentFromHTC(payload);
+    else if (mode === "BlockerComment") void handleBlockerCommentFromHTC();
     else if (mode === taskDetailConfig.commandModes.copyFunctions) handleCopyFunctionsFromHTC(payload);
     else if (mode === taskDetailConfig.commandModes.archiveTaskNotification) navigateToNextTask(true, true);
     else if (mode === taskDetailConfig.commandModes.setReminder) setShowRemindMeModal((prev) => !prev);

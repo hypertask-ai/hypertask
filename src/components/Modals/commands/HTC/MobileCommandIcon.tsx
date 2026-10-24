@@ -119,6 +119,7 @@ const iconForCommand = (command: ICommandList): LucideIcon => {
     case CommandMode.GoToStarred:
     case CommandMode.ManageFavorites:
       return Star;
+    case CommandMode.BlockerComment:
     case CommandMode.PinComment:
     case CommandMode.GoToPinned:
     case CommandMode.PinAIChatOpen:

@@ -36,6 +36,7 @@ export interface createTaskDetailActionsHandlers {
   handleReplyCommentFromHTC: () => void;
   handleEditCommentFromHTC: () => void;
   handleStarCommentFromHTC: (type: ViewVisibility) => void;
+  handleBlockerCommentFromHTC: () => Promise<void>;
   createTaskFromCommentHTC: () => void;
   processAttachmentsForNewTask: (attachments?: IAttachment[]) => any[];
   copyCommentURLFromHTC: () => void;
