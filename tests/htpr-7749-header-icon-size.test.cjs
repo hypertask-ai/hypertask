@@ -153,7 +153,7 @@ for (const mobile of [false, true]) {
     const { RemindMeTaskDetail, HTCButton } = header({ mobile });
     const reminder = icon(elements(RemindMeTaskDetail({ navigateToNextTask: noop, children: "Snooze" })), "Clock");
     assert.equal(reminder.size, 18);
-    assert.equal(reminder.className, "task-option-icon h-[18px] w-[18px] text-[#696b6e] hover:text-[#95999e]");
+    assert.equal(reminder.className, "h-[18px] w-[18px] task-option-icon text-[#696b6e] hover:text-[#95999e]");
     const command = icon(elements(HTCButton({ isKanban: true })), "Image");
     assert.equal(command.width, mobile ? 18 : 16);
     assert.equal(command.height, mobile ? 14 : 16);
