@@ -45,7 +45,7 @@ export function useAiChat() {
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
-  startSending, startStreaming, completeStream, cancelStream,
+  dispatchInteraction,
   } = useAiChatState();
   useEffect(editWithAiEnabled ? () => {
     if (editTaskId === null) return;
@@ -73,10 +73,10 @@ export function useAiChat() {
   handleCancelStream, audioTiptapCallback, toggleRecording, processAttachments, buildGuestBoard,
   waitForChatSession,
   } = useAiChatAttachments({
-    streamingSessionRef, currentStreamingSession, streamingAssistantMessageRef, streamingRequestRef, setCurrentStreamingSession,
+    streamingSessionRef, currentStreamingSession, streamingAssistantMessageRef, streamingRequestRef,
     setIsTyping, setAgentStatus, chatRoute, token, editor,
     setIsRecording, addMessageToSessionQuery, scopedProjectId, ensureSessionForCurrentBoard,
-    cancelStream,
+    dispatchInteraction,
   });
   let sendTicketScope = false;
   if (ticketScopeEnabled) sendTicketScope = ticketScopeSelected;
@@ -94,7 +94,7 @@ export function useAiChat() {
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
     appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry,
-    startSending, startStreaming, completeStream,
+    dispatchInteraction,
   }, askAiFullscreenEnabled ? {
     preserveComposer: true,
     onSettled: () => setSendSettledVersion((version) => version + 1),

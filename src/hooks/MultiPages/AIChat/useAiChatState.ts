@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { Editor } from "@tiptap/react";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -16,50 +16,14 @@ import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
+import {
+  applyAiChatInteraction,
+  projectAiChatInteraction,
+  type AiChatInteractionEvent,
+  type AiChatInteractionState,
+} from "./aiChatInteraction";
 
-type AiChatInteractionState =
-  | { kind: 'idle' }
-  | { kind: 'recording' }
-  | { kind: 'sending' }
-  | { kind: 'streaming'; sessionId: string; assistantMessageId: string; requestId: string };
-
-type AiChatStateAction =
-  | { type: 'START_RECORDING' }
-  | { type: 'STOP_RECORDING' }
-  | { type: 'START_SENDING' }
-  | { type: 'START_STREAMING'; sessionId: string; assistantMessageId: string; requestId: string }
-  | { type: 'CANCEL_STREAM' }
-  | { type: 'COMPLETE_STREAM' };
-
-function aiChatStateReducer(state: AiChatInteractionState, action: AiChatStateAction): AiChatInteractionState {
-  switch (action.type) {
-    case 'START_RECORDING':
-      if (state.kind === 'idle') return { kind: 'recording' };
-      return state;
-    case 'STOP_RECORDING':
-      if (state.kind === 'recording') return { kind: 'idle' };
-      return state;
-    case 'START_SENDING':
-      if (state.kind === 'idle') return { kind: 'sending' };
-      return state;
-    case 'START_STREAMING':
-      if (state.kind === 'sending' || state.kind === 'idle') {
-        return {
-          kind: 'streaming',
-          sessionId: action.sessionId,
-          assistantMessageId: action.assistantMessageId,
-          requestId: action.requestId,
-        };
-      }
-      return state;
-    case 'CANCEL_STREAM':
-    case 'COMPLETE_STREAM':
-      if (state.kind === 'streaming') return { kind: 'idle' };
-      return state;
-    default:
-      return state;
-  }
-}
+export type { AiChatInteractionEvent, AiChatInteractionState } from "./aiChatInteraction";
 
 export function useAiChatState() {
 
@@ -134,7 +98,8 @@ export function useAiChatState() {
     surface === "my_tasks" || surface === "inbox" || surface === "calendar";
   const [chatMounted, setChatMounted] = useState<boolean>(false);
   const [minimized, setMinimized] = useState(false);
-  const [interactionState, dispatch] = useState<AiChatInteractionState>({ kind: 'idle' });
+  const interactionRef = useRef<AiChatInteractionState>({ phase: "idle", recording: false });
+  const [interaction, setInteraction] = useState<AiChatInteractionState>({ phase: "idle", recording: false });
   const [queuedMessages, setQueuedMessages] = useState<QueuedAiChatMessage[]>([]);
   const messageQueueRef = useRef<QueuedAiChatMessage[]>([]);
   const persistentQueueEnabled = useFlag(HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG);
@@ -156,9 +121,17 @@ export function useAiChatState() {
   const streamingAssistantMessageRef = useRef<string | null>(null);
   const streamingRequestRef = useRef<string | null>(null);
   const sendInFlightRef = useRef(false);
-  
-  const dispatchStateAction = useCallback((action: AiChatStateAction) => {
-    dispatch((prevState) => aiChatStateReducer(prevState, action));
+  const dispatchInteraction = useCallback((event: AiChatInteractionEvent) => {
+    const next = applyAiChatInteraction(interactionRef.current, event, {
+      sendInFlightRef,
+      streamingSessionRef,
+      streamingAssistantMessageRef,
+      streamingRequestRef,
+      setCurrentStreamingSession: () => undefined,
+    });
+    if (next === interactionRef.current) return;
+    interactionRef.current = next;
+    setInteraction(next);
   }, []);
   const [displayAiOptions] = useState<TAiModal[]>(aiOptionsWithoutOpenRouter);
   const [contextList, setContextList] = useState<MentionItem[]>([]);
@@ -303,56 +276,33 @@ export function useAiChatState() {
     visibleQueuedMessages = currentSession ? persistentQueue.get(currentSession.id) : [];
   }
 
-  const isTyping = interactionState.kind === 'streaming';
-  const isRecording = interactionState.kind === 'recording';
-  const currentStreamingSession = interactionState.kind === 'streaming' ? interactionState.sessionId : null;
+  const projected = projectAiChatInteraction(interaction);
+  const isTyping = projected.isTyping;
+  const isRecording = projected.isRecording;
+  const currentStreamingSession = projected.currentStreamingSession;
 
-  const setIsTyping = useCallback((value: boolean) => {
-    if (value) {
-      dispatchStateAction({ type: 'START_STREAMING', sessionId: '', assistantMessageId: '', requestId: '' });
-    } else {
-      dispatchStateAction({ type: 'COMPLETE_STREAM' });
-    }
-  }, [dispatchStateAction]);
+  const setIsTyping = useCallback<Dispatch<SetStateAction<boolean>>>((value) => {
+    const resolved = typeof value === "function" ? value(projectAiChatInteraction(interactionRef.current).isTyping) : value;
+    dispatchInteraction(resolved ? { type: "MARK_TYPING" } : { type: "END_TYPING" });
+  }, [dispatchInteraction]);
 
   const setIsRecording = useCallback((value: boolean) => {
-    if (value) {
-      dispatchStateAction({ type: 'START_RECORDING' });
-    } else {
-      dispatchStateAction({ type: 'STOP_RECORDING' });
-    }
-  }, [dispatchStateAction]);
+    dispatchInteraction(value ? { type: "START_RECORDING" } : { type: "STOP_RECORDING" });
+  }, [dispatchInteraction]);
 
   const setCurrentStreamingSession = useCallback((sessionId: string | null) => {
-    if (sessionId) {
-      dispatchStateAction({ type: 'START_STREAMING', sessionId, assistantMessageId: '', requestId: '' });
-    } else {
-      dispatchStateAction({ type: 'COMPLETE_STREAM' });
+    if (sessionId === null) {
+      dispatchInteraction({ type: "CANCEL_STREAM" });
+      return;
     }
-  }, [dispatchStateAction]);
-
-  useEffect(() => {
-    streamingSessionRef.current = interactionState.kind === 'streaming' ? interactionState.sessionId : null;
-    streamingAssistantMessageRef.current = interactionState.kind === 'streaming' ? interactionState.assistantMessageId : null;
-    streamingRequestRef.current = interactionState.kind === 'streaming' ? interactionState.requestId : null;
-    sendInFlightRef.current = interactionState.kind === 'sending';
-  }, [interactionState]);
-
-  const startSending = useCallback(() => {
-    dispatchStateAction({ type: 'START_SENDING' });
-  }, [dispatchStateAction]);
-
-  const startStreaming = useCallback((sessionId: string, assistantMessageId: string, requestId: string) => {
-    dispatchStateAction({ type: 'START_STREAMING', sessionId, assistantMessageId, requestId });
-  }, [dispatchStateAction]);
-
-  const completeStream = useCallback(() => {
-    dispatchStateAction({ type: 'COMPLETE_STREAM' });
-  }, [dispatchStateAction]);
-
-  const cancelStream = useCallback(() => {
-    dispatchStateAction({ type: 'CANCEL_STREAM' });
-  }, [dispatchStateAction]);
+    const current = interactionRef.current;
+    dispatchInteraction({
+      type: "BEGIN_STREAM",
+      sessionId,
+      assistantMessageId: current.phase === "streaming" ? current.assistantMessageId : sessionId,
+      requestId: current.phase === "streaming" ? current.requestId : sessionId,
+    });
+  }, [dispatchInteraction]);
 
   return {
   lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
@@ -373,6 +323,6 @@ export function useAiChatState() {
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
-  startSending, startStreaming, completeStream, cancelStream,
+  dispatchInteraction,
   };
 }

@@ -19,7 +19,7 @@ const modules = {
     "useTableRows.ts", "useTableActions.ts", "useTableKeyboard.ts", "TableTaskRow.tsx",
   ],
   "src/hooks/MultiPages/AIChat/useAiChat.ts": [
-    "aiChatShared.ts", "useAiChatState.ts", "useAiChatSessions.ts",
+    "aiChatInteraction.ts", "aiChatShared.ts", "useAiChatState.ts", "useAiChatSessions.ts",
     "aiChatKeyboard.ts", "useAiChatAttachments.ts", "aiChatSend.ts",
     "aiChatStream.ts", "useAiChatPresentation.ts",
   ],
