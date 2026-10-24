@@ -9,7 +9,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { ActivityGroup, chatStatusText, emptyFeedText, FeedFilter, MessageBubble, ScrollToBottomButton } from "./AgentChatFeedItems";
 import type { useAgentChatComposer } from "./useAgentChatComposer";
 import type { useAgentChatFeed } from "./useAgentChatFeed";
@@ -330,7 +330,7 @@ export function AgentChatPane({
               {reuseAiComposer ? (
                 <AI_Tiptap_Container
                   controlledComposer={{
-                    showScope: contextEnabled && !!embedded,
+                    ...(contextEnabled && embedded ? { showScope: true } : {}),
                     value: draft,
                     inputRef: composerRef,
                     editorRef: composerEditorRef,

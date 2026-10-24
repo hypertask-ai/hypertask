@@ -7,7 +7,7 @@ import { useRecoilValue } from "@/lib/state";
 import { currentProjectAtom, inViewObjectAtom } from "@/store";
 import { useDockedChatScope } from "@/hooks/MultiPages/AIChat/useDockedChatScope";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import type { AgentChatContext } from "@/lib/agents/chatContext";
 import toast from "react-hot-toast";
 import { MAX_MESSAGE_LENGTH, TChatMessage } from "./agentChatTypes";
