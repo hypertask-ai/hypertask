@@ -406,13 +406,19 @@ function analyze(file) {
   const add = (ref, prefix) => {
     if (!ref) return;
     if (!ref.includes("/") && !walks) return;
-    result.refs.push({ ref, prefix });
-    if (prefix) return;
-    for (const ext of EXTENSIONS) {
-      for (const cand of [ref + ext, `${ref}/index${ext}`]) {
-        if (isFile(cand)) result.edges.add(cand);
+    const resolved = [];
+    if (!prefix) {
+      for (const ext of EXTENSIONS) {
+        for (const cand of [ref + ext, `${ref}/index${ext}`]) {
+          if (isFile(cand)) resolved.push(cand);
+        }
       }
+      for (const cand of resolved) result.edges.add(cand);
     }
+    // import "@/utils" resolves to src/utils/index.ts. That module is the
+    // dependency, not every file under src/utils/. A prefix, a directory
+    // walk, or a path that names no file still covers the tree.
+    if (prefix || walks || resolved.length === 0) result.refs.push({ ref, prefix });
   };
   for (const m of text.matchAll(LITERAL_RE)) {
     const raw = m[1] ?? m[2] ?? m[3] ?? "";
