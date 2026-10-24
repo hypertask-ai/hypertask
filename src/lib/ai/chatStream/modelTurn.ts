@@ -1,8 +1,7 @@
 
 
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/definitions/htpr-7755-bulk-preview-confirmation";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
