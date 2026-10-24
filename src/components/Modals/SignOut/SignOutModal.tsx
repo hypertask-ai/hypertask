@@ -1,21 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { IoIosClose } from "react-icons/io";
 import { ModalBody } from "reactstrap";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
 } from "@/components/Common/CommonModalComponents";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
 import {
   getActiveAccountId,
   getCurrentAccount,
   listAccountsWithStatus,
   mergeCurrentAccount,
-  signOutCurrentAccount,
   SwitchAccount,
 } from "@/lib/auth/accounts";
 
@@ -30,30 +27,12 @@ const accountLabel = (account: SwitchAccount | null | undefined) =>
   account?.email ?? account?.name ?? "this account";
 
 const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
-  const projectEntryEnabled = useFlag(HTPR_7799_PROJECT_ENTRY_FLAG);
   const { handleHardReset } = useSignout();
   const [accounts, setAccounts] = useState<SwitchAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [listUnavailable, setListUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const activeId = getActiveAccountId();
-
-  const refreshAccounts = useCallback(async (clearErrorOnSuccess = false) => {
-    const result = await listAccountsWithStatus();
-    setAccounts(result.accounts);
-    if (!result.ok) {
-      setListUnavailable(true);
-      setError("Couldn’t check the other signed-in accounts. Please try again.");
-    } else if (clearErrorOnSuccess) {
-      setListUnavailable(false);
-      setError(null);
-    } else {
-      setListUnavailable(false);
-    }
-    setLoading(false);
-    return result;
-  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -61,10 +40,7 @@ const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
       if (!alive) return;
       setAccounts(result.accounts);
       if (!result.ok) {
-        setListUnavailable(true);
-        setError(
-          "Couldn’t check the other signed-in accounts. Please try again.",
-        );
+        setError("Couldn’t check the other signed-in accounts. Please try again.");
       }
       setLoading(false);
     });
@@ -96,32 +72,6 @@ const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
   const nextAccount = visibleAccounts.find(
     (account) => account.id !== activeId && Boolean(account.sessionToken),
   );
-
-  const handleCurrentSignOut = async () => {
-    if (listUnavailable) {
-      setLoading(true);
-      await refreshAccounts(true);
-      return;
-    }
-
-    setError(null);
-    setSubmitting(true);
-
-    if (!nextAccount) {
-      const signedOut = await handleHardReset();
-      if (!signedOut) setSubmitting(false);
-      return;
-    }
-
-    const signedOut = await signOutCurrentAccount(nextAccount.sessionToken);
-    if (signedOut) return;
-
-    setError(
-      "Couldn’t sign out this account. Its session may have expired. Please try again.",
-    );
-    await refreshAccounts();
-    setSubmitting(false);
-  };
 
   const handleAllSignOut = async () => {
     setError(null);
@@ -158,9 +108,7 @@ const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
         ) : (
           <>
             <p className="text-dense font-medium">
-              {!projectEntryEnabled && nextAccount
-                ? `Sign out ${accountLabel(currentAccount)}? You’ll switch to ${accountLabel(nextAccount)}.`
-                : `Sign out ${accountLabel(currentAccount)}?`}
+              {`Sign out ${accountLabel(currentAccount)}?`}
             </p>
             {error && (
               <p className="mt-3 text-dense font-medium text-red-400" role="alert">
@@ -189,14 +137,10 @@ const SignOutModal: React.FC<SignOutModalProps> = ({ closeHandler }) => {
               <button
                 className={`${buttonClassName} bg-active-modal-element text-white-black`}
                 disabled={submitting}
-                onClick={() => void (projectEntryEnabled ? handleAllSignOut() : handleCurrentSignOut())}
+                onClick={() => void handleAllSignOut()}
                 type="button"
               >
-                {submitting
-                  ? "Signing out…"
-                  : !projectEntryEnabled && listUnavailable
-                    ? "Retry"
-                    : `Sign out ${accountLabel(currentAccount)}`}
+                {submitting ? "Signing out…" : `Sign out ${accountLabel(currentAccount)}`}
               </button>
             </div>
           </>

@@ -1,6 +1,7 @@
 'use client'
 import Unauthorized from "../unauthorized/page";
-import { HTPR_7799_PROJECT_ENTRY_FLAG, HTPR_7775_SAVED_URL_VIEW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
+import { HTPR_7775_SAVED_URL_VIEW_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
