@@ -64,10 +64,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       return true;
     }
 
-    const htmlContent = retryContent ?? editor?.getHTML() ?? "";
+    const composerHtml = editor?.getHTML() ?? "";
+    const htmlContent = retryContent ?? composerHtml;
     const editorHtmlForAttachments = retryContent
       ? options?.htmlForAttachments ?? ""
-      : editor?.getHTML() ?? "";
+      : composerHtml;
     let content = editor?.getText() ?? htmlContent;
 
     if (retryContent) {
@@ -77,7 +78,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     if (!content.trim()) return false;
     sendInFlightRef.current = true;
     const files = preserveComposer ? [] : [...(options?.filesForAttachments ?? fileUpload.fileItems)];
-    if (consumesComposer) fileUpload.clearFiles();
+    if (consumesComposer) {
+      fileUpload.clearFiles();
+      editor?.commands.clearContent();
+    }
+    let restoreComposer = consumesComposer;
     let restoreFiles = files.length > 0;
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
@@ -96,6 +101,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
       if (isGuestBoardBuild(currentProject)) {
         await buildGuestBoard(content.trim(), session);
+        restoreComposer = false;
         return true;
       }
 
@@ -120,7 +126,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     );
 
     restoreFiles = false;
-    if (consumesComposer) editor?.commands.clearContent();
+    restoreComposer = false;
 
     setIsTyping(true);
 
@@ -321,6 +327,9 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         console.log("Message has been completed");
       }
     } finally {
+      if (restoreComposer && editor?.isEmpty) {
+        editor.commands.setContent(composerHtml);
+      }
       if (restoreFiles) {
         fileUpload.setFileItems((current) => [
           ...files,

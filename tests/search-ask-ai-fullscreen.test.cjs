@@ -314,7 +314,7 @@ test('the reused sender adds the question first and streams the reply without se
       let availableSession = session
       const { handleSendMessage } = createAiChatSend({
         isByokBlocked: false, isTyping: false,
-        editor: { getText: () => 'Unsent draft', commands: { clearContent: () => cleared.push('draft') } },
+        editor: { getText: () => 'Unsent draft', getHTML: () => '<p>Unsent draft</p>', commands: { clearContent: () => cleared.push('draft') } },
         fileUpload: { fileItems: [{ name: 'unsent.txt' }], clearFiles: () => cleared.push('files') },
         sendInFlightRef, waitForChatSession: async () => availableSession,
         processAttachments: async (...args) => { processed.push(args); return [{ mimeType: 'text/plain', fileName: 'unsent.txt', url: '/draft' }] },

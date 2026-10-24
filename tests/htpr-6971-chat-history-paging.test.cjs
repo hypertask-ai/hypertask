@@ -1017,10 +1017,17 @@ test('paged send rejects a changed or deleted displayed session during attachmen
   global.fetch = async () => new Response('fixture stream');
   try { for (const deleted of [false, true]) {
     const preparation = deferred(); let displayed = session(9), writes = 0, cleared = 0;
+    let draft = 'question', html = '<p>question</p>';
     const { handleSendMessage } = createAiChatSend({
       sessionPagingEnabled: true, getDisplayedSession: () => displayed,
       waitForChatSession: async () => session(9), processAttachments: () => preparation.promise,
-      editor: { getText: () => 'question', getHTML: () => '<p>question</p>', commands: { clearContent: () => { cleared++; } } },
+      editor: {
+        getText: () => draft, getHTML: () => html, get isEmpty() { return !draft && !html; },
+        commands: {
+          clearContent: () => { cleared++; draft = ''; html = ''; },
+          setContent: (content) => { html = content; draft = content.replace(/<[^>]*>/g, ''); },
+        },
+      },
       sendInFlightRef: { current: false }, handleSendMessageRef: { current: null },
       addMessageToSessionQuery: () => { writes++; }, drainQueuedMessage: () => {}, isFullScreenChat: true,
       setIsTyping: () => {}, setAgentStatus: () => {}, setCurrentStreamingSession: () => {},
@@ -1034,7 +1041,9 @@ test('paged send rejects a changed or deleted displayed session during attachmen
     preparation.resolve([]);
     assert.equal(await sending, false);
     assert.equal(writes, 0);
-    assert.equal(cleared, 0, 'do not erase the composer when its conversation changed');
+    assert.equal(cleared, 1, 'detach the active draft before session preparation');
+    assert.equal(draft, 'question', 'restore the detached draft when its conversation changed');
+    assert.equal(html, '<p>question</p>');
   } } finally { global.fetch = originalFetch; }
 });
 

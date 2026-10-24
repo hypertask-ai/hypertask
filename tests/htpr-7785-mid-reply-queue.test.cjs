@@ -12,7 +12,7 @@ function deferred() {
 }
 
 function chatFixture(fullScreen) {
-  const state = { draft: "first", html: "<p>first</p>", queued: [], payloads: [], created: [], messages: [], processed: [] };
+  const state = { draft: "first", html: "<p>first</p>", queued: [], payloads: [], created: [], messages: [], processed: [], errors: [] };
   const session = { id: "active-chat", userId: 985, agentId: null, taskId: null, messages: [] };
   const fileUpload = {
     fileItems: [],
@@ -27,7 +27,11 @@ function chatFixture(fullScreen) {
     currentAiOption: { id: "fixture", model: "fixture", source: "openai" }, contextList: [],
     editor: {
       getText: () => state.draft, getHTML: () => state.html,
-      commands: { clearContent() { state.draft = ""; state.html = ""; } },
+      get isEmpty() { return !state.draft && !state.html; },
+      commands: {
+        clearContent() { state.draft = ""; state.html = ""; },
+        setContent(html) { state.draft = html.replace(/<[^>]*>/g, ""); state.html = html; },
+      },
     },
     fileUpload, messageQueueRef: { current: [] }, sendInFlightRef: { current: false },
     setQueuedMessages(items) { state.queued = items; },
@@ -73,7 +77,7 @@ function chatFixture(fullScreen) {
       streams.push(stream);
       await stream.promise;
     } },
-    "react-hot-toast": { default: { error: assert.fail } },
+    "react-hot-toast": { default: { error: (message) => state.errors.push(message) } },
     "@/lib/agents/chatViewerState": { sidebarChatHeaders: () => ({}) },
     "@/lib/mcp/bearerAuth": { mcpAuthorizationHeaders: () => ({}) },
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
@@ -149,6 +153,87 @@ for (const fullScreen of [false, true]) {
       assert.equal(context.sendInFlightRef.current, false);
     });
   });
+
+  for (const preparationStage of ["session", "attachments"]) {
+    test(`${surface}: repeated submit during ${preparationStage} preparation does not queue the active draft`, async () => {
+      await withChat(fullScreen, async ({ state, context, streams, queues, renderSender }) => {
+        const preparation = deferred();
+        if (preparationStage === "session") {
+          context.waitForChatSession = () => preparation.promise;
+        } else {
+          const processAttachments = context.processAttachments;
+          context.processAttachments = async (...args) => {
+            await preparation.promise;
+            return processAttachments(...args);
+          };
+        }
+        const first = renderSender().handleSendMessage();
+        assert.equal(state.draft, "");
+        assert.equal(state.html, "");
+        await settle();
+        assert.equal(await renderSender().handleSendMessage(), false);
+        assert.deepEqual(state.queued, []);
+        state.draft = "new unsent draft";
+        state.html = "<p>new <strong>unsent</strong> draft</p>";
+        preparation.resolve(await queues.ensureSessionForCurrentBoard());
+        await settle();
+        assert.deepEqual(state.payloads.map(({ message }) => message), ["first"]);
+        assert.deepEqual(state.processed, [{ html: "<p>first</p>", files: [] }]);
+        assert.equal(state.draft, "new unsent draft");
+        assert.equal(state.html, "<p>new <strong>unsent</strong> draft</p>");
+        streams[0].resolve();
+        assert.equal(await first, true);
+        await settle();
+        assert.deepEqual(state.queued, []);
+        assert.equal(state.payloads.length, 1);
+      });
+    });
+  }
+
+  test(`${surface}: unavailable session restores the detached text-only draft and its formatting`, async () => {
+    await withChat(fullScreen, async ({ state, context, renderSender }) => {
+      const setup = deferred();
+      state.html = "<p><strong>first</strong></p>";
+      context.waitForChatSession = () => setup.promise;
+      const first = renderSender().handleSendMessage();
+      assert.equal(state.draft, "");
+      assert.equal(state.html, "");
+      setup.resolve(undefined);
+      assert.equal(await first, false);
+      assert.equal(state.draft, "first");
+      assert.equal(state.html, "<p><strong>first</strong></p>");
+      assert.deepEqual(state.errors, ["AI chat is still loading. Please try again."]);
+      assert.deepEqual(state.payloads, []);
+      assert.equal(context.sendInFlightRef.current, false);
+    });
+  });
+
+  for (const nextDraft of [
+    { text: "new unsent draft", html: "<p>new <strong>unsent</strong> draft</p>" },
+    { text: "", html: '<p><img src="data:image/png;base64,new"></p>' },
+  ]) {
+    test(`${surface}: failed preparation preserves a newer ${nextDraft.text ? "text" : "image-only"} draft`, async () => {
+      await withChat(fullScreen, async ({ state, context, renderSender }) => {
+        const preparation = deferred();
+        context.processAttachments = async () => {
+          await preparation.promise;
+          throw new Error("attachment unavailable");
+        };
+        const first = renderSender().handleSendMessage();
+        assert.equal(state.draft, "");
+        await settle();
+        state.draft = nextDraft.text;
+        state.html = nextDraft.html;
+        const rejected = assert.rejects(first, /attachment unavailable/);
+        preparation.resolve();
+        await rejected;
+        assert.equal(state.draft, nextDraft.text);
+        assert.equal(state.html, nextDraft.html);
+        assert.deepEqual(state.payloads, []);
+        assert.equal(context.sendInFlightRef.current, false);
+      });
+    });
+  }
 
   for (const withQueuedFile of [false, true]) {
     test(`${surface}: setup-time queue owns only its files (${withQueuedFile ? "attached" : "text only"})`, async () => {
@@ -243,12 +328,15 @@ for (const fullScreen of [false, true]) {
       await settle();
       assert.deepEqual(state.processed, [{ html: "<p>first</p>", files: [activeFile] }]);
       assert.deepEqual(context.fileUpload.fileItems, []);
+      assert.equal(state.draft, "");
+      assert.equal(state.html, "");
       context.fileUpload.resetFiles([draftFile]);
       const rejected = assert.rejects(first, /attachment unavailable/);
       preparation.resolve();
       await rejected;
       assert.deepEqual(context.fileUpload.fileItems, [activeFile, draftFile]);
       assert.equal(state.draft, "first");
+      assert.equal(state.html, "<p>first</p>");
       assert.deepEqual(state.payloads, []);
       assert.equal(context.sendInFlightRef.current, false);
     });
