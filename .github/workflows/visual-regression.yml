@@ -382,4 +382,5 @@ jobs:
         if: always() && steps.evidence.outputs.artifact-url != ''
         env:
           ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
-        run: printf '\nEvidence artifact: %s\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          printf '\nEvidence artifact: %s\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
