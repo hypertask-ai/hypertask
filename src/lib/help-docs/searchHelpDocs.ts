@@ -1,7 +1,6 @@
 export const HELP_DOCS_BASE_URL = "https://help.hypertask.ai";
 
 const HELP_DOCS_FETCH_TIMEOUT_MS = 8000;
-const HELP_DOCS_CONTENT_LIMIT = 1500;
 
 export interface HelpDocsSearchInput {
   query: string;
@@ -76,8 +75,7 @@ export async function searchHelpDocs(
                   .replace(/<[^>]+>/g, " ")
                   .replace(/&nbsp;/g, " ")
                   .replace(/\s+/g, " ")
-                  .trim()
-                  .slice(0, HELP_DOCS_CONTENT_LIMIT);
+                  .trim();
               }
             }
           } catch {
