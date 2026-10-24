@@ -21,6 +21,7 @@ import prisma from '@/lib/prisma'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { enqueueSignupCompleted } from '@/lib/telemetry/signupCompleted'
 import { provisionNewUser } from '@/utils/controllers/users/provisionNewUser'
+import { resumeIncompleteSignup } from '@/utils/controllers/users/resumeIncompleteSignup'
 
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
 
@@ -255,6 +256,24 @@ export const auth = betterAuth({
             })
             throw error
           }
+        },
+      },
+    },
+    session: {
+      create: {
+        after: async (session, context) => {
+          const userId = Number(session.userId)
+          if (!Number.isSafeInteger(userId)) return
+          const signupMethod = context?.path === '/callback/google' ? 'google' : 'email'
+          await resumeIncompleteSignup({
+            userId,
+            shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive,
+            skipOnboarding: authConfig.onboarding.skipOnboarding,
+            isVerified: true,
+            createGoogleAccount: signupMethod === 'google',
+            signupAttribution: signupAttributionFromHeaders(context?.request?.headers, signupMethod),
+            cookieHeader: context?.request?.headers.get('cookie') ?? null,
+          })
         },
       },
     },
