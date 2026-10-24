@@ -47,6 +47,12 @@ Record the effective flag and response. If chips are returned, wait for them
 
 ## What proof to collect
 
+For code readability (https://app.hypertask.ai/detail/project-15/7782), request
+shell, JSON and SQL fenced blocks plus inline code and a long unbroken line.
+Check readable text, monospace, horizontal block scrolling and Copy response
+in the docked sidebar, `/chat`, and phone view at 390x844. Capture Porcelain,
+Graphite, AMOLED and Dia, plus Follow system with light and dark device modes.
+
 Screenshot the sent message and the received reply together, with the model
 name visible if the UI shows it. If the ticket is about a specific
 model/provider, don't accept a reply from a silently-substituted fallback
