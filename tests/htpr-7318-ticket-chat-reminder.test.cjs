@@ -231,7 +231,7 @@ test("changing viewers cannot reuse the previous viewer's cached private threads
     assert.equal(rows().length, 3);
     await view.viewer(986);
     assert.deepEqual(rows().map(row => row.querySelector("span").textContent), ["Teammate private conversation"]);
-    assert.equal(view.client.getQueryData(["task-sessions", 43, 985]).length, 3);
+    assert.equal(view.client.getQueryData(["task-sessions", 43, 985]), undefined);
     assert.equal(view.client.getQueryData(["task-sessions", 43, 986]).length, 1);
     await view.viewer(987);
     assert.equal(block(), null);
