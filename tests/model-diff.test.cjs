@@ -42,16 +42,18 @@ test("gateway failure falls back to authenticated provider lists without claimin
   const sources = await collectSources({ env: { OPENAI_API_KEY: "fixture-openai", ANTHROPIC_API_KEY: "fixture-anthropic" },
     fetchImpl: async (url, options) => {
       calls.push([url, options.headers]);
-      if (url.includes("ai-gateway")) return response({}, 403);
-      return response(url.includes("openai.com") ? fixture.openai : fixture.anthropic);
+      if (url === "https://ai-gateway.vercel.sh/v1/models") return response({}, 403);
+      if (url === "https://api.openai.com/v1/models") return response(fixture.openai);
+      if (url === "https://api.anthropic.com/v1/models") return response(fixture.anthropic);
+      throw new Error(`Unexpected model endpoint: ${url}`);
     } });
   const fallback = diffModels(catalog, sources);
   assert.deepEqual(fallback.sourcesUsed, ["openai", "anthropic"]);
   assert.ok(fallback.warnings.includes("gateway: HTTP 403"));
   assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
   assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 1);
-  assert.equal(calls.find(([url]) => url.includes("openai.com"))[1].Authorization, "Bearer fixture-openai");
-  assert.equal(calls.find(([url]) => url.includes("anthropic.com"))[1]["x-api-key"], "fixture-anthropic");
+  assert.equal(calls.find(([url]) => url === "https://api.openai.com/v1/models")[1].Authorization, "Bearer fixture-openai");
+  assert.equal(calls.find(([url]) => url === "https://api.anthropic.com/v1/models")[1]["x-api-key"], "fixture-anthropic");
 });
 
 test("provider pagination is complete, and absent keys or malformed gateway data are explicit", async () => {
