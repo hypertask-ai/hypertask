@@ -294,7 +294,7 @@ export async function createImageAwareUserContent(
   const textOnly = /^(?:[^/]+\/)?deepseek-/i.test(modelId);
   const imageUrls = new Set<string>();
   for (const match of body.message.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
-    const candidate = match[0].replace(/[),.;!?\]}]+$/, "");
+    const candidate = /[?#]/.test(match[0]) ? match[0] : match[0].replace(/[),.;!?\]}]+$/, "");
     try {
       const url = new URL(candidate);
       if (/\.(?:png|jpe?g|gif|webp)$/i.test(url.pathname)) imageUrls.add(url.href);
@@ -303,7 +303,7 @@ export async function createImageAwareUserContent(
   }
 
   const content = createUserContent(
-    supportsImages ? body : { ...body, images64: [] },
+    textOnly ? { ...body, images64: [] } : body,
     authedUser,
     currentTaskContext,
     promptCachingEnabled,
@@ -317,7 +317,7 @@ export async function createImageAwareUserContent(
   } else if (textOnly) {
     status.push("IMAGE CAPABILITY: The selected model is text-only. If images were supplied, explain that this selected model cannot see them and ask the user to select a vision-capable model.");
   } else {
-    status.push("IMAGE CAPABILITY: Image support is unknown for the selected model. Image inputs were not sent; do not claim that all chat models lack vision.");
+    status.push("IMAGE CAPABILITY: Image support is unknown for the selected model. Existing image uploads were forwarded unchanged; do not claim that all chat models lack vision.");
   }
 
   const attachedUrls = new Set((body.images64 ?? []).map((image) => image.url));
@@ -347,7 +347,9 @@ export async function createImageAwareUserContent(
     }
     if (candidates.length > 4) status.push("Only the first four new image links were loaded. Ask the user to send the remaining images separately if needed.");
   } else if (!supportsImages && (imageUrls.size || body.images64?.length)) {
-    status.push("Images were supplied by the user but were not sent as image content to this selected model.");
+    status.push(textOnly
+      ? "Images were supplied by the user but were not sent as image content to this selected model."
+      : "Images were supplied by the user. Linked images were not downloaded because image support is unknown.");
   }
   parts.push({ type: "text", text: status.join("\n") });
   return parts;

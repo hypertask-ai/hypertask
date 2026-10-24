@@ -21,6 +21,7 @@ function harness({ enabled = true, modelId = "claude-haiku-5.5", download } = {}
   const { runModelTurn } = load("src/lib/ai/chatStream/modelTurn.ts", {
     "@/lib/ai/prompts/registry": {},
     "@/lib/prisma": {},
+    "@/lib/flags/keys": load("src/lib/flags/definitions/htpr-7761-chat-image-urls.ts", {}),
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
       return key === flag && enabled;
@@ -107,6 +108,25 @@ test("custom models do not get an invented vision capability", async () => {
   assert.match(text(result), /Images were supplied/);
   assert.deepEqual(files(result), []);
   assert.deepEqual(h.downloads, []);
+});
+
+test("custom models retain existing image uploads without automatic link downloads", async () => {
+  const h = harness({ modelId: "my-custom-vision-model" });
+  const result = await h.send({ message: `Describe ${imageUrl}`, images64: [{ url: imageUrl, mimeType: "image/png" }] });
+  assert.deepEqual(files(result), [{ type: "file", mediaType: "image/png", filename: undefined, data: new URL(imageUrl) }]);
+  assert.match(text(result), /Image support is unknown/);
+  assert.doesNotMatch(text(result), /Image inputs were not sent|were not sent as image content/);
+  assert.deepEqual(h.downloads, []);
+});
+
+test("signed image URL query values retain trailing punctuation", async () => {
+  for (const suffix of ["!", ")", ",", ".", ";", "?", "]", "}"]) {
+    const h = harness();
+    const signed = `https://files.example.test/screenshot.png?token=fixture${suffix}`;
+    const result = await h.send({ message: `Describe <a href="${signed}">image</a>` });
+    assert.deepEqual(h.downloads.map(({ url }) => url), [signed]);
+    assert.equal(files(result).length, 1);
+  }
 });
 
 test("duplicate links, punctuation and query strings are handled without fetching history or unrelated links", async () => {
