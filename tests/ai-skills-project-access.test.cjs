@@ -112,11 +112,18 @@ for (const teamScope of [undefined, null, { teamId: "team-1" }]) {
 }
 
 const manualSkillBody = "Review Done tickets.\n```html\n<ticket>Keep the evidence</ticket>\n```\n" + "Long instructions. ".repeat(2000).trimEnd();
+const headingSkillBody = `Review these instructions.\n# Done column triage\n${manualSkillBody}\n## Later heading`;
 
 for (const [name, markdown, expectedName, expectedBody, description] of [
+  [undefined, headingSkillBody, "Done column triage", headingSkillBody, null],
+  [undefined, `\n  ${manualSkillBody}\n`, "Review Done tickets.", manualSkillBody, null],
+  [undefined, `${"x".repeat(81)}\nReview changes.`, "x".repeat(80), `${"x".repeat(81)}\nReview changes.`, null],
+  [undefined, `# ${"y".repeat(81)}\nReview changes.`, "y".repeat(80), `# ${"y".repeat(81)}\nReview changes.`, null],
   ["Done column triage", manualSkillBody, "Done column triage", manualSkillBody, null],
+  ["Client name", headingSkillBody, "Client name", headingSkillBody, null],
   ["", "---\nname: Markdown review\ndescription: Check the board.\n---\nReview changes.", "Markdown review", "Review changes.", "Check the board."],
-  ["Fallback name", "---\nname: Frontmatter name\n---\nReview changes.", "Frontmatter name", "Review changes.", null],
+  ["Fallback name", "---\nname: Frontmatter name\n---\n# Body heading\nReview changes.", "Frontmatter name", "# Body heading\nReview changes.", null],
+  [undefined, "---\ndescription: Check the board.\n---\n# Body title\nReview changes.", "Body title", "# Body title\nReview changes.", "Check the board."],
 ]) {
   test(`Settings markdown persists, reloads and resolves for chat: ${expectedName}`, async () => {
     const h = harness({ denied: false });
@@ -167,7 +174,7 @@ test("a board member does not need an administrator role to save a manually name
 });
 
 for (const [name, markdown, expectedError] of [
-  ["", "Review changes.", "Skill name is required"],
+  ["", " \n\t ", "Skill name is required"],
   ["Large skill", "x".repeat(64 * 1024 + 1), 'Skill "Large skill" exceeds the 64KB body limit'],
 ]) {
   test(`manual skill validation returns a specific error without persisting: ${expectedError}`, async () => {
