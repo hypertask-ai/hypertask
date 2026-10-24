@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
-import { FEATURE_FLAG_QA_USER, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7025_WELCOME_EMAIL_FLAG } from "@/lib/flags/keys";
+import { FEATURE_FLAG_QA_USER } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 
@@ -24,9 +23,6 @@ export async function POST(request: NextRequest) {
     const type = body?.type ?? "welcome";
     if (type !== "welcome" && type !== "agent_nudge") {
       return NextResponse.json({ error: "Invalid email type" }, { status: 400 });
-    }
-    if (type === "welcome" && !await isFeatureEnabled(HTPR_7025_WELCOME_EMAIL_FLAG, session.userId)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {

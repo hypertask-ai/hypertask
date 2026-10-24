@@ -1922,7 +1922,7 @@
       "count": 1
     },
     "tailwindcss/no-custom-classname": {
-      "count": 1
+      "count": 2
     }
   },
   "src/components/PageComponents/TaskDetail/TaskOptions/ShareTaskButton.tsx": {

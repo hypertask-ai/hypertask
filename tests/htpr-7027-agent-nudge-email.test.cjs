@@ -417,9 +417,9 @@ test("native auth schedules only real successful sign-ins after cookies, not bri
   }
 });
 
-test("QA arm accepts nudge without flags, gates welcome and maintains identity/origin/new inbox guards", async () => {
+test("QA arm accepts nudge and welcome without flags and maintains identity/origin/new inbox guards", async () => {
   const values = [], flags = [], userQueries = [];
-  const state = { id: 985, email: "valentin@hypertask.ai", welcomeEnabled: false, existingEmail: "Existing@MAIL.TM" };
+  const state = { id: 985, email: "valentin@hypertask.ai", existingEmail: "Existing@MAIL.TM" };
   const { POST } = load("src/app/api/onboarding/emails/qa-arm/route.ts", {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => state.id ? { userId: state.id } : null },
     "@/lib/prisma": { __esModule: true, default: { user: {
@@ -430,7 +430,7 @@ test("QA arm accepts nudge without flags, gates welcome and maintains identity/o
         return query.where.email.equals.toLowerCase() === state.existingEmail.toLowerCase() ? { id: 3001 } : null;
       },
     } } },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER: { userId: 985, email: "valentin@hypertask.ai" }, isFeatureEnabled: async (flag, id) => { flags.push([flag, id]); assert.equal(flag, "htpr-7025-welcome-email"); return state.welcomeEnabled; } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER: { userId: 985, email: "valentin@hypertask.ai" }, isFeatureEnabled: async (flag, id) => { flags.push([flag, id]); throw new Error("Feature flag service must not be called"); } },
     "@/lib/redis": { getRedis: async () => ({ set: async (...args) => values.push(args) }) },
   });
   const request = (email = "qa@yopmail.com", type = "agent_nudge", origin = "https://app.hypertask.ai") => new NextRequest("https://app.hypertask.ai/api/onboarding/emails/qa-arm", { method: "POST", headers: { host: "app.hypertask.ai", ...(origin ? { origin } : {}), "Content-Type": "application/json" }, body: JSON.stringify({ email, type }) });
@@ -449,13 +449,9 @@ test("QA arm accepts nudge without flags, gates welcome and maintains identity/o
     assert.deepEqual(values.at(-1), [`onboarding:qa-armed:${email.trim().toLowerCase()}`, "1", "EX", 7200]);
   }
   assert.deepEqual(flags, []);
-  const armedCount = values.length;
-  assert.equal((await POST(request(undefined, "welcome"))).status, 403);
-  assert.equal(values.length, armedCount);
-  state.welcomeEnabled = true;
   assert.equal((await POST(request(undefined, "welcome"))).status, 200);
   assert.deepEqual(values.at(-1), ["onboarding:qa-armed:qa@yopmail.com", "1", "EX", 7200]);
-  assert.deepEqual(flags, [["htpr-7025-welcome-email", 985], ["htpr-7025-welcome-email", 985]]);
+  assert.deepEqual(flags, []);
 });
 
 test("permanent nudge uses shared connection eligibility and successful-delivery analytics", () => {

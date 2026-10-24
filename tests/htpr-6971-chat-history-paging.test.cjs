@@ -220,8 +220,13 @@ test('OFF uses only legacy request/cache and demo never persists or negotiates',
   await withHistory({ demo: true }, async ({ history, requests }) => {
     assert.equal(history().isSuccess, true);
     assert.equal(history().sessions.length, 1);
+    const firstId = history().currentSession.id;
+    assert.match(firstId, /^demo-chat-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.equal(requests.length, 0);
     await React.act(async () => history().startNewSession());
+    assert.notEqual(history().currentSession.id, firstId);
+    assert.equal(history().currentSession.userId, 6);
+    assert.equal(history().sessions.length, 2);
     assert.equal(requests.length, 0);
   });
 });

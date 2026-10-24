@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useGetNotifications } from "@/hooks/Inbox/useGetNotifications";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from "@/lib/flags/keys";
+import { HTPR_7801_INBOX_VISIBLE_ORDER_FLAG } from "@/lib/flags/definitions/htpr-7801-inbox-visible-order";
 import { decisionsSplitName } from "@/lib/configs/inbox.config";
 import {
   buildInboxTasksPlaylist,
@@ -22,6 +23,7 @@ type Props = {
 const InboxPlaylistRestorer = ({ userId, task }: Props) => {
   const { data } = useGetNotifications(userId);
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
+  const inboxVisibleOrder = useFlag(HTPR_7801_INBOX_VISIBLE_ORDER_FLAG);
   const [tasksPlayList, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const split = useSearchParams()?.get("split");
   const structuredData = data?.structuredData;
@@ -34,9 +36,10 @@ const InboxPlaylistRestorer = ({ userId, task }: Props) => {
       buildInboxTasksPlaylist(
         picked.notifications,
         decisionCommentLinkEnabled && picked.splitName === decisionsSplitName,
+        inboxVisibleOrder ? { oldestFirst: picked.splitName === "Blocked by you" } : undefined,
       ),
     );
-  }, [structuredData, tasksPlayList, task.projectId, task.uniqueIndex, split, decisionCommentLinkEnabled]);
+  }, [structuredData, tasksPlayList, task.projectId, task.uniqueIndex, split, decisionCommentLinkEnabled, inboxVisibleOrder]);
 
   return null;
 };

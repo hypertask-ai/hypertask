@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/ai-model-canary",
+      "schedule": "40 4 * * *"
+    },
+    {
       "path": "/api/cron/ai-allowance-drift",
       "schedule": "*/5 * * * *"
     },
