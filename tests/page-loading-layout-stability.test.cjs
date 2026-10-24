@@ -107,6 +107,8 @@ function reservations(state) {
     isAiChatSidebarModeAtom: "isAiChatSidebarMode", aiChatSidebarWidthPxAtom: "aiChatSidebarWidthPx",
   };
   const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: "htpr-7650-ai-chat-open-switches" },
     "@/hooks/General/useKeepAiChatClosed": { useKeepAiChatClosed: () => ({ keepAiChatClosed: state.keepAiChatClosed ?? false, ready: true }) },
     "@/lib/state": { useRecoilValue: (atom) => state[atom] },
     "@/store": atoms,

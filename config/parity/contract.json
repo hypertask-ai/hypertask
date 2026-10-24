@@ -162,8 +162,15 @@
         "api": ["^GET /api/mcp/tasks$", "^GET /api/mcp/tasks/mine$"],
         "mcp": ["^hypertask_(list_tasks|get_tasks)$"],
         "cli": ["^task (list|get)$"],
-        "ai_chat": ["^hypertask_(list_tasks|get_tasks|my_tasks)$"],
+        "ai_chat": ["^hypertask_(list_tasks|get_tasks|my_tasks)$", "^hypertask_show_ticket_rows$"],
         "hyperai": ["^hypertask_(list_tasks|get_tasks)$"]
+      },
+      "planned": {
+        "ai_chat": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7683",
+          "expires": "2026-11-20",
+          "entries": ["hypertask_show_ticket_rows"]
+        }
       }
     },
     {
