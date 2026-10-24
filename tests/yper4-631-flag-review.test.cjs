@@ -121,8 +121,20 @@ const prisma = {
     findFirst: async (query) => {
       if (query.where.id === 123) {
         if (!legacyAllowed) return null;
-        if (query.select.taskId) return { taskId: 900 };
-        return { text: `Question: Switch ${legacyKey} to ${legacyMode}?` };
+        if (query.select.taskId && !query.select.id) return { taskId: 900 };
+        const reaction = query.select.reactions.where;
+        assert.deepEqual({ ...reaction, createdAt: undefined }, {
+          userId: 6, agentId: null, agentDisplayName: null, isDeleted: false,
+          unified: { startsWith: "1f44d" }, createdAt: undefined,
+        });
+        const createdAt = new Date();
+        assert.ok(createdAt >= reaction.createdAt.gte);
+        return {
+          id: 123, taskId: 900, creatorId: 6, agentId: "agent-b", agentDisplayName: null,
+          text: `Question: Switch ${legacyKey} to ${legacyMode}?`, commentText: null,
+          createdAt, editedAt: null, editedByUserId: null, editedByAgentId: null,
+          reactions: [{ createdAt }],
+        };
       }
       assert.equal(locks.at(-1), "policy-reaction-lock");
       assert.deepEqual(query, {
@@ -135,6 +147,13 @@ const prisma = {
       if (!policy || policy.editedAt || policy.status === "Deleted") return null;
       return policy.reactions.some((reaction) => reaction.userId === 6 && reaction.agentId === null
         && reaction.agentDisplayName === null && !reaction.isDeleted && reaction.unified.startsWith("1f44d")) ? { id: 302454 } : null;
+    },
+    findMany: async (query) => {
+      assert.equal(query.where.taskId, 900);
+      assert.equal(query.where.creatorId, 6);
+      assert.equal(query.where.agentId, null);
+      assert.equal(query.where.agentDisplayName, null);
+      return [];
     },
   },
 };

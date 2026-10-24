@@ -6,6 +6,7 @@ import {
   HTPR_7311_DECISION_COMMENT_LINK_FLAG,
   SHORTCUT_NUDGES_FLAG,
 } from "@/lib/flags/keys";
+import { HTPR_5906_NO_PHONE_NUDGES_FLAG } from "@/lib/flags/definitions/htpr-5906-no-phone-nudges";
 
 import { useFirstScreenSurface, type FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
 import { projectInboxDateGroup } from "@/lib/firstScreen/inbox";
@@ -334,6 +335,7 @@ const InboxSplit = ({
   let typedWrite: typeof setNotificationSeen | undefined;
   if (typedWrites) typedWrite = setNotificationSeen;
   const shortcutNudgesEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
+  const noPhoneNudges = useFlag(HTPR_5906_NO_PHONE_NUDGES_FLAG) && isMbl;
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
   const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
@@ -818,7 +820,7 @@ const InboxSplit = ({
       }
       if (targetNotification) {
         const accountId = currentUser?.id;
-        const enabled = shortcutNudgesEnabled && tipsEnabled;
+        const enabled = shortcutNudgesEnabled && tipsEnabled && !noPhoneNudges;
         if (source === "keyboard" && typeof accountId === "number") {
           setArchiveNudge((current) =>
             clearArchiveShortcutNudge(current, accountId),

@@ -75,6 +75,11 @@
       "read_only": false,
       "permission": "data"
     },
+    "waiting_on": {
+      "tool": "hypertask_set_task_waiting_on",
+      "read_only": false,
+      "permission": "data"
+    },
     "assign": {
       "tool": "hypertask_assign_user",
       "read_only": false,

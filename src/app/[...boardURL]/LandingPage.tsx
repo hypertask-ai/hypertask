@@ -1,4 +1,5 @@
 'use client'
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
@@ -81,6 +82,7 @@ export function useLandingBoardAccess(context: useLandingBoardAccessContext) {
 
 const queryClient = useQueryClient();
 const setRouteCurrentProject = useSetRecoilState(currentProjectAtom)
+const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
 const router = useRouter()
 const {
   releaseSecondaryStartup,
@@ -174,7 +176,7 @@ const markLocalBoardPublished = useCallback(
           )
         : undefined
     if (!localProject) return
-    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView))
+    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled }))
     setBoardAccess((current) =>
       current.key === boardAccessKey &&
       (current.status === "authorized" || current.status === "denied")
@@ -183,6 +185,7 @@ const markLocalBoardPublished = useCallback(
     )
   },
   [
+    assigneeFixEnabled,
     boardAccessKey,
     currentView,
     queryClient,
@@ -573,6 +576,7 @@ type useLandingBoardSurfaceContext = Pick<LandingPageInput, "user"> &
 
 
 export function useLandingBoardSurface(context: useLandingBoardSurfaceContext) {
+  const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const {
   setBoardAccess, boardAccessKey, setNetworkAccess, pilotParameter, setSyncedBoardPilotEnabled,
   setPilotPreferenceResolved, pilotPreferenceResolved, pilotExplicitlyDisabled, latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef,
@@ -700,10 +704,10 @@ const projectsForSection = useMemo(() => {
   if (!data?.updatedProjects) return []
   const projects = [...data.updatedProjects]
   if (projectIndex >= 0 && projects[projectIndex]) {
-    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView)
+    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled })
   }
   return projects
-}, [data?.updatedProjects, projectIndex, currentView])
+}, [assigneeFixEnabled, data?.updatedProjects, projectIndex, currentView])
 
 const pinnedProject = projectsForSection[projectIndex]
 const boardLayoutForRender =

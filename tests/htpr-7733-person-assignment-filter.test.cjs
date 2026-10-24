@@ -81,6 +81,7 @@ function fixture(surface, enabled, { legacy = false, ranked = false, operatorFil
     "@/lib/mcp/tasks/mappers": {
       mcpTaskUserCommentCount: true, mcpTaskLabelSelect: {},
       mapTaskAssignee: (row) => row, mapTaskDescriptionContent: () => "",
+      mapMcpTaskLabel: ({ label }) => ({ id: label.id, name: label.value || "" }),
     },
     "@/lib/mcp/tasks/resolveTask": { taskIdentifierErrorResponse: () => null },
     "@/lib/mcp/pagination/cursor": { encodeCursor: () => null },

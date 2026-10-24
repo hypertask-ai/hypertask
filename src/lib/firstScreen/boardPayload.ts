@@ -1,3 +1,4 @@
+import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import type { IProject, ISection, ITask, IView } from "@/models/model";
 import { getCurrentProject } from "@/utils/helperFunctions/helperFunctions";
 import { getFilteredSections } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
@@ -10,14 +11,14 @@ export type BoardTasksPayload = {
     allViews: IView[];
 }
 
-export const hydrateBoardSections = (project:IProject):IProject => {
+export const hydrateBoardSections = (project:IProject, runtimeContext?:IFilterRuntimeContext):IProject => {
     const { _sections, firstTask } = getCurrentProject(project) as {
         _sections: ISection[];
         firstTask: ITask | null;
     }
     project.sections = _sections
     project.firstTask = firstTask
-    let filtered = getFilteredSections(_sections, project)
+    let filtered = getFilteredSections(_sections, project, undefined, {}, runtimeContext)
     filtered = getAppliedSubtaskSections(filtered, project)
     filtered = getFilteredEmptySections(filtered, project)
     project.filteredSections = filtered
@@ -27,7 +28,7 @@ export const hydrateBoardSections = (project:IProject):IProject => {
 export const isBoardPayloadHydrated = (project:IProject):boolean =>
     Boolean(project.tasks) && (!project.project_view || Array.isArray(project.project_view.allViews))
 
-export const hydrateBoardWithPayload = (project:IProject, payload:BoardTasksPayload):IProject => {
+export const hydrateBoardWithPayload = (project:IProject, payload:BoardTasksPayload, runtimeContext?:IFilterRuntimeContext):IProject => {
     const hydratedMetadata = payload.project
         ? { ...project, ...payload.project }
         : project
@@ -38,7 +39,7 @@ export const hydrateBoardWithPayload = (project:IProject, payload:BoardTasksPayl
         ...hydratedMetadata,
         tasks: payload.tasks,
         project_view: projectView,
-    })
+    }, runtimeContext)
 }
 
 export const BOARD_TASKS_KEY = (projectId:number, userId:number) =>

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { featureFlagsForUser } from "@/lib/flags";
 import getBoardTasks from "@/utils/controllers/projects/getBoardTasks";
 import getFirst from "@/utils/controllers/projects/getFirst";
@@ -11,7 +12,7 @@ import notificationGetCount from "@/utils/controllers/notifications/getCount";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
 import { BOARD_DOCUMENT_ROUTE_HEADER, BOARD_DOCUMENT_TIMEOUT_MS, BOARD_FIRST_SCREEN_FLAG,
   projectBoardDocumentPayload, projectBoardDocumentUser, type BoardDocument } from "./boardDocument";
-import { hydrateBoardWithPayload, type BoardTasksPayload } from "./boardPayload";
+import { hydrateBoardSections, hydrateBoardWithPayload, type BoardTasksPayload } from "./boardPayload";
 import { pinProjectViewToUrl, projectBoardFirstScreen } from "./boardView";
 
 export async function readBoardDocument(route: string, displayCookie: string | undefined, deadline = Infinity): Promise<BoardDocument | null> {
@@ -43,7 +44,12 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   const payload = projectBoardDocumentPayload(response.json as unknown as BoardTasksPayload);
   if (payload.project?.id !== projectId) return null;
   const viewSlug = url.searchParams.get("view");
-  const project = pinProjectViewToUrl(hydrateBoardWithPayload(payload.project, payload), viewSlug);
+  const runtimeContext = { legacyAgentAssigneeMatch: flags[HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG] === false };
+  const hydratedProject = hydrateBoardWithPayload(payload.project, payload, runtimeContext);
+  const pinnedProject = pinProjectViewToUrl(hydratedProject, viewSlug);
+  const project = pinnedProject === hydratedProject
+    ? hydratedProject
+    : hydrateBoardSections(pinnedProject, runtimeContext);
   const selection = projectBoardFirstScreen(project, url.searchParams.get("surface"), display.boardLayout, viewSlug);
   const now = new Date().toISOString();
   const generation = randomUUID();

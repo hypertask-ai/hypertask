@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline CLI tests. All HTTP and board calls are stubs; one capture uses installed Playwright.
+# Offline CLI tests. HTTP and board calls are stubs; link checks and one capture use local Playwright.
 set -euo pipefail
 cd "$(dirname "$0")"
 D=$(mktemp -d "$PWD/.wireframe-test.XXXXXX"); trap 'rm -rf "$D"' EXIT
@@ -8,6 +8,9 @@ mkdir -p "$D/bin" "$D/home/.local/bin" "$D/modules" "$D/npm-cache" "$D/tmp"
 export REAL_NPX="$(command -v npx || true)"
 export npm_config_prefix="$(dirname "$(dirname "$(command -v playwright)")")"
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+if [ -f "$HOME/.local/state/vcc-evidence/HTPR-7724/wireframe/live-styles.json" ]; then
+    cp "$HOME/.local/state/vcc-evidence/HTPR-7724/wireframe/live-styles.json" "$D/live-styles-redo.json"
+fi
 export HOME="$D/home" WIREFRAME_HOME="$D/data" TMPDIR="$D/tmp"
 export PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$D/modules"
 export npm_config_offline=true npm_config_cache="$D/npm-cache" npm_config_update_notifier=false
@@ -182,6 +185,75 @@ for args, message in [((), "--question is required"), (("--question", "Build thi
     assert message in p.stderr and not log
 ok("missing or invalid question fails before any upload or CLI call")
 
+page = home / "HTPR-255/index.html"
+record = page.with_name("live-styles.json")
+turl = "https://app.hypertask.ai/detail/project-15/255"
+link = f'<a href="{turl}">HTPR-255</a>'
+valid_page = kit.read_text().replace("<body>", "<body><header>" + link + "</header>")
+styles = [{"sourceUrl": "https://app.hypertask.ai/detail/project-15/6894", "styles": {"outline-width": "1px", "outline-style": "solid"}}]
+record.write_text(json.dumps(styles))
+link_message = f"publish refused: add a visible link to {turl} at the top of <body>, before the main wireframe frame (within the first 200px)"
+for content in [
+    kit.read_text(),
+    '<body>' + turl + '</body>',
+    '<head><link href="' + turl + '"></head><body>Wireframe</body>',
+    '<body><!-- ' + link + ' --><main>Wireframe</main></body>',
+    '<body><script type="text/plain">' + link + '</script></body>',
+    '<body><template>' + link + '</template></body>',
+    '<body>' + link.replace('project-15/255', 'project-15/999') + '</body>',
+    '<body>' + link.replace('project-15', 'project-4060') + '</body>',
+    '<body><div hidden>' + link + '</div></body>',
+    '<style>.hidden{display:none}</style><body><div class="hidden">' + link + '</div></body>',
+    '<body><div style="visibility:hidden">' + link + '</div></body>',
+    '<body><div style="opacity:0">' + link + '</div></body>',
+    '<body>' + link.replace('HTPR-255</a>', '</a>') + '</body>',
+    '<body><main>Wireframe</main><footer>' + link + '</footer></body>',
+    '<body><div style="height:1000px">Wireframe</div>' + link + '</body>',
+]:
+    page.write_text(content)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.strip() == link_message, p.stderr
+    assert not events(log, "http") and not events(log, "vcc") and not events(log, "npx")
+ok("absent, wrong-ticket, hidden, empty and late links fail before upload or board writes")
+
+page.write_text(valid_page)
+styles_message = f"publish refused: create {record} beside index.html using headless Playwright getComputedStyle on every existing live element as QA user 985; save non-empty JSON entries with sourceUrl on https://app.hypertask.ai and styles (or the HTPR-7724 sourceTicket/themes format)"
+for content in [None, '', '{', '{}', '[]', 'null', '[null]', json.dumps([{**styles[0], "invalid": float("nan")}]), json.dumps([{"sourceUrl": turl}]),
+                json.dumps([{"styles": {"color": "red"}}]),
+                json.dumps([{"sourceUrl": "https://app.hypertask.ai.evil.test", "styles": {"color": "red"}}]),
+                json.dumps([{"sourceUrl": turl, "styles": {}}]),
+                json.dumps([{"sourceUrl": turl, "styles": {"color": ""}}]),
+                json.dumps(styles + [{"sourceUrl": turl}]),
+                json.dumps({"sourceTicket": turl, "themes": {}}),
+                json.dumps({"sourceTicket": turl, "themes": {"porcelain": {"pinned": {"styles": {}}}}})]:
+    record.unlink(missing_ok=True)
+    if content is not None:
+        record.write_text(content)
+    p, log = invoke("publish", "HTPR-255", "--question", "Build this?", "--why", "It reuses live styles.", fail=True)
+    assert p.stderr.strip() == styles_message, p.stderr
+    assert not events(log, "http") and not events(log, "vcc") and not events(log, "npx")
+ok("missing, invalid, empty or incomplete live styles fail before upload or board writes")
+
+redo = {"sourceTicket": "https://app.hypertask.ai/detail/project-15/6894", "viewport": {"width": 1440, "height": 900},
+        "themes": {"porcelain": {"htmlClass": "light porcelain", "destructive": "0 72.22% 50.59%",
+                                 "pinned": {"id": "comment-2", "styles": styles[0]["styles"]},
+                                 "normal": {"id": "comment-14", "styles": {"outline-width": "1px"}}}}}
+if (D / "live-styles-redo.json").is_file():
+    redo = json.loads((D / "live-styles-redo.json").read_text())
+record.write_text(json.dumps(redo))
+p, log = invoke("publish", "HTPR-255", "--no-comment")
+assert len(uploaded(log, "waiting")) == 1
+assert not events(log, "vcc") and not events(log, "npx")
+ok("HTPR-7724 redo-shaped header link and sourceTicket/themes record pass through upload stubs")
+record.write_text(json.dumps(styles))
+other = home / "YPER4-255/index.html"
+other.write_text(valid_page.replace("project-15", "project-4060"))
+other.with_name("live-styles.json").write_text(json.dumps(styles))
+p, log = invoke("publish", "YPER4-255", "--no-comment", fail=True, PROJECT_ID="99")
+assert "https://app.hypertask.ai/detail/project-99/255" in p.stderr
+assert not events(log, "http") and not events(log, "vcc")
+ok("required link uses resolved ticket coordinates, not a hard-coded board")
+
 p, log = invoke("publish", "HTPR-255", "--no-comment")
 assert len(uploaded(log, "waiting")) == 1
 assert not events(log, "vcc") and not events(log, "npx")
@@ -214,6 +286,7 @@ assert "stub HTTP failure" in p.stderr and [e["method"] for e in events(log, "ht
 p, log = invoke("status", "HTPR-255", "invalid", fail=True)
 assert "invalid choice" in p.stderr and not log
 ok("status of an unpublished wireframe or an invalid state never uploads")
+page.write_text(valid_page)
 
 p, log = invoke("publish", "BASE")
 assert len(uploaded(log, "waiting", "BASE", 4060)) == 1

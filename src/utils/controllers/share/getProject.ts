@@ -47,6 +47,8 @@ export default async function getProject(shareId: string) {
                     include: {
                         assignees: {
                             select: {
+                                userId: true,
+                                agentId: true,
                                 user: {
                                     select: {
                                         id: true,
