@@ -90,6 +90,7 @@ function fixture(overrides = {}) {
   };
   const dependencies = {
     ...bulkTools,
+    isPlanLimitReachedError: () => false,
     toStoredHtml,
     user: { id: USER_ID },
     actingAgentId: null,
