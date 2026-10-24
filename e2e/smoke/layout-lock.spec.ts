@@ -311,6 +311,38 @@ test('layout lock: desktop New Task window stays narrow and inside the viewport'
   expect(box!.y + box!.height).toBeLessThanOrEqual(900)
 })
 
+// HTPR-7696: agent and markdown descriptions store newlines between and inside paragraphs. The first
+// paint must already use the editor's spacing, so the description never grows or shrinks once shown.
+test('layout lock: an agent-written description keeps its height from first paint to the live editor', async ({ page }, testInfo) => {
+  test.setTimeout(90_000)
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { agentDescriptionDetailPath: string }
+  if (testInfo.project.name === 'Mobile') await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: 4 })
+  await page.addInitScript(() => {
+    const heights: Array<{ time: number; height: number; editable: boolean }> = []
+    ;(window as unknown as { __descriptionHeights: typeof heights }).__descriptionHeights = heights
+    const sample = () => {
+      const text = document.querySelector('[data-testid="ticket-description"] .ProseMirror')
+      if (text) {
+        const height = Math.round(text.getBoundingClientRect().height)
+        const editable = text.getAttribute('contenteditable') === 'true'
+        const last = heights[heights.length - 1]
+        if (height > 0 && (!last || last.height !== height || last.editable !== editable)) heights.push({ time: Math.round(performance.now()), height, editable })
+      }
+      if (performance.now() < 20_000) requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  })
+  await page.goto(withRealtime(fixture.agentDescriptionDetailPath), { waitUntil: 'load' })
+  await expect(page.locator('[data-testid="ticket-description"] .ProseMirror').first()).toContainText('Last paragraph with extra spaces.', { timeout: 30_000 })
+  await page.waitForTimeout(4000)
+  const heights = await page.evaluate(() => (window as unknown as { __descriptionHeights: Array<{ time: number; height: number; editable: boolean }> }).__descriptionHeights)
+  await testInfo.attach('description-heights', { body: JSON.stringify(heights, null, 2), contentType: 'application/json' })
+  expect(heights.length, 'layout lock: the description text was never measured').toBeGreaterThan(0)
+  const first = heights[0].height
+  const settled = heights[heights.length - 1].height
+  expect(Math.abs(settled - first), `layout lock: the description changed height after first paint (${testInfo.project.name}): ${heights.map((h) => `${h.height}px${h.editable ? ' editor' : ''} at ${h.time}ms`).join(', ')}`).toBeLessThanOrEqual(2)
+})
+
 // HTPR-7074: a cold ticket open must not shove the comment box (or anything else) down the page.
 const CLS_BUDGET = 0.05
 type ShiftSource = { node: string; previous: number[]; current: number[] }

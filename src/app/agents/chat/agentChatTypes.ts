@@ -35,7 +35,7 @@ export type SidebarChatAgent = {
   photoURL: string | null;
   runtimeType: "NATIVE" | "EXTERNAL";
   sessionId: string | null;
-  status: "connected" | "working" | "waiting" | "stalled" | "offline";
+  status: "connected" | "working" | "waiting" | "stalled" | "offline" | null;
   deliveryMode: "webhook" | "polling" | null;
 };
 
@@ -49,6 +49,7 @@ export interface SidebarChatContext {
   agents: SidebarChatAgent[];
   error: string | null;
   onSelect: (target: SidebarChatTarget) => void;
+  onSelectSession: (sessionId: string) => void;
   onRetry: () => void;
 }
 

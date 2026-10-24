@@ -51,10 +51,10 @@ async function create({ activeFilters = emptyFilters, position = "bottom", view 
   let inserted;
   let selected;
   const hook = load("src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx", {
-    "@/store": { currentProjectAtom: "project", currentUserAtom: "user", activeSectionAtom: "section" },
+    "@/store": { currentProjectAtom: "project", currentUserAtom: "user", activeSectionAtom: "section", aiChatNewTicketPathAtom: "new-ticket-path" },
     "@tanstack/react-query": { useQueryClient: () => ({ setQueryData: (key, value) => cached.set(JSON.stringify(key), value), invalidateQueries: () => assert.fail("must not need a reload") }) },
     "@/lib/state": { useRecoilValue: (atom) => atom === "project" ? project : { id: 6 } },
-    "jotai": { useStore: () => ({ get: () => 0 }) },
+    "jotai": { useStore: () => ({ get: () => 0, set: () => {} }) },
     "@/utils/generateRank": { default: (before, after) => { assert.equal(before, position === "bottom" && existing ? "a" : undefined); assert.equal(after, position === "top" && existing ? "a" : undefined); return "rank-new"; } },
     "axios": { default: { post: async (url, body) => { posts.push({ url, body }); return { status: 200, data: { ...body, id: 101, taskLabels: [] } }; } } },
     "./useUpdateTaskInBoards": { default: () => ({

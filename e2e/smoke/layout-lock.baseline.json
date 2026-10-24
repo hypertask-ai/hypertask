@@ -11,9 +11,9 @@
             "title": {
               "selector": "#title-input",
               "box": {
-                "x": 130,
+                "x": 258,
                 "y": 36,
-                "width": 668,
+                "width": 832,
                 "height": 37
               }
             },
@@ -21,9 +21,9 @@
               "selector": "[data-testid=\"ticket-description\"]",
               "contentHeight": true,
               "box": {
-                "x": 112,
+                "x": 240,
                 "y": 105,
-                "width": 524,
+                "width": 680,
                 "height": 207
               }
             },
@@ -31,9 +31,9 @@
               "selector": ":nth-match([data-testid=\"ticket-comment\"], 1)",
               "contentHeight": true,
               "box": {
-                "x": 112,
+                "x": 240,
                 "y": 320,
-                "width": 524,
+                "width": 680,
                 "height": 90
               }
             },
@@ -41,18 +41,18 @@
               "selector": ":nth-match([data-testid=\"ticket-comment\"], 2)",
               "contentHeight": true,
               "box": {
-                "x": 112,
+                "x": 240,
                 "y": 426,
-                "width": 524,
+                "width": 680,
                 "height": 90
               }
             },
             "composer": {
               "selector": "[data-testid=\"comment-composer\"]",
               "box": {
-                "x": 112,
+                "x": 240,
                 "y": 532,
-                "width": 524,
+                "width": 680,
                 "height": 152
               }
             },
@@ -60,7 +60,7 @@
               "selector": "[data-task-properties-rail]",
               "contentHeight": true,
               "box": {
-                "x": 644,
+                "x": 936,
                 "y": 105,
                 "width": 312,
                 "height": 443
@@ -208,7 +208,7 @@
             "toolbar": {
               "selector": "div:has(> [aria-label=\"Filter board\"])",
               "box": {
-                "x": 885,
+                "x": 1298,
                 "y": 24,
                 "width": 120,
                 "height": 32
@@ -218,9 +218,9 @@
               "selector": ".section-container:has([data-title=\"To do\"])",
               "contentHeight": true,
               "box": {
-                "x": 63,
+                "x": 69,
                 "y": 72,
-                "width": 463,
+                "width": 535,
                 "height": 756
               }
             },
@@ -228,9 +228,9 @@
               "selector": ".section-container:has([data-title=\"Done\"])",
               "contentHeight": true,
               "box": {
-                "x": 542,
+                "x": 620,
                 "y": 72,
-                "width": 463,
+                "width": 535,
                 "height": 756
               }
             },
@@ -247,9 +247,9 @@
               "selector": "[data-title=\"To do\"] [id^=\"task-\"]:has(a[href^=\"/detail/\"])",
               "contentHeight": true,
               "box": {
-                "x": 72,
+                "x": 78,
                 "y": 109,
-                "width": 445,
+                "width": 517,
                 "height": 60
               }
             }
@@ -800,6 +800,8 @@
   "flagSnapshotSha256": "dbe55bec498b41eea368b0b8f51e532ef208dfb6565338725bb755822439f505",
   "approvedIn": {
     "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-4060/253",
-    "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-4060/253"
+    "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-4060/253",
+    "ticket/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
+    "board/Desktop": "https://app.hypertask.ai/detail/project-15/7650"
   }
 }

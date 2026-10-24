@@ -141,7 +141,10 @@ const baseline = {
                 "emojiFrequency": true,
                 "calendarViews": true,
                 "allTasksDateRange": true,
-                "boardSortMode": true
+                "boardSortMode": true,
+                "aiChatOpenNewTickets": true,
+                "aiChatOpenTickets": true,
+                "aiChatOpenBoards": true
               }
             }
           ]
@@ -290,7 +293,10 @@ const baseline = {
                 "emojiFrequency": true,
                 "calendarViews": true,
                 "allTasksDateRange": true,
-                "boardSortMode": true
+                "boardSortMode": true,
+                "aiChatOpenNewTickets": true,
+                "aiChatOpenTickets": true,
+                "aiChatOpenBoards": true
               }
             }
           ]

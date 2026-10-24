@@ -41,7 +41,7 @@ test("automatic board and task opening do not overwrite the saved mode", () => {
   const board = source("src/app/[...boardURL]/LandingPage.tsx");
   const task = source("src/app/detail/[...slug]/TaskDetailComp.tsx");
   const boardAutoOpen = board.match(
-    /useEffect\(\(\) => \{\s*if \(\s*!hydrated \|\|\s*isMblForChat[\s\S]*?\n\}\, \[/
+    /useEffect\(\(\) => \{\s*if \(\s*hydrated &&\s*!isMblForChat[\s\S]*?\n\}\, \[/
   );
   const taskAutoOpen = task.match(
     /useEffect\(\(\) => \{\s*if \(\s*!hydrated \|\|\s*_mbl[\s\S]*?\n  \}\, \[/

@@ -1,6 +1,7 @@
 
 "use client";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG } from "@/lib/flags/keys";
+import { useAiChatAutoOpen } from "@/hooks/General/useAiChatAutoOpen";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
 import {
   lazy,
   ReactNode,
@@ -400,6 +401,9 @@ export default function GlobalProvider({
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
+  const { reserve: aiChatSwitchReserve } = useAiChatAutoOpen(mbl);
+  let aiChatOpenSwitchesEnabled = !useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  if (useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG)) aiChatOpenSwitchesEnabled = true;
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
@@ -409,7 +413,7 @@ export default function GlobalProvider({
   const [reserveBoardChat, setReserveBoardChat] = useState(() =>
     firstScreen?.scope.route === "/project" && pathname?.startsWith("/project") === true &&
     firstScreen.flags.values[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] === true &&
-    !mbl && authenticatedUserId !== null && chatAutoOpenReady && !keepAiChatClosed &&
+    !aiChatOpenSwitchesEnabled && !mbl && authenticatedUserId !== null && chatAutoOpenReady && !keepAiChatClosed &&
     (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
   );
   useEffect(() => {
@@ -496,6 +500,7 @@ export default function GlobalProvider({
 
   useEffect(() => {
     if (
+      aiChatOpenSwitchesEnabled ||
       !chatAutoOpenReady ||
       hasAttemptedChatRestoreRef.current ||
       !currentUser?.id ||
@@ -511,7 +516,7 @@ export default function GlobalProvider({
       setShowAiChatInterface(true);
       setAiChatExplicitOpenAt(null);
     }
-  }, [currentUser?.id, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
+  }, [currentUser?.id, aiChatOpenSwitchesEnabled, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
     if (!hasAttemptedChatRestoreRef.current) return;
@@ -584,7 +589,7 @@ export default function GlobalProvider({
     (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
   let reserveFlaggedBoardChat = false;
-  if (useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG)) reserveFlaggedBoardChat = reserveBoardChat;
+  if (useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG) && !aiChatOpenSwitchesEnabled) reserveFlaggedBoardChat = reserveBoardChat;
   const { sidebarWidthPx, showMobileShellPath, showMobileTabBar, showMobileBottomInset, showMobileBottomNav } = usePageLoadReservations({
     mbl,
     pathname,
@@ -592,6 +597,7 @@ export default function GlobalProvider({
     currentUserId: currentUser?.id,
     showAiChatInterface,
     reserveBoardChat: reserveFlaggedBoardChat,
+    aiChatSwitchReserve: aiChatOpenSwitchesEnabled ? aiChatSwitchReserve : undefined,
     aiChatAutoOpenSuppressed,
     commentComposerOpen,
     agentChatHidesMobileShell,

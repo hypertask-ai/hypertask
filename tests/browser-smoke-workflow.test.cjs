@@ -77,7 +77,8 @@ test("required browser smoke clicks its seeded ticket under live modes and the i
   assert.match(job, /playwright test[^\n]+--grep 'seeded board card opens'/);
   assert.match(seed, /prisma\.featureFlag\.upsert/);
   assert.match(seed, /mode === "EVERYONE"/);
-  assert.match(seed, /description_:\s*\{\s*create: \{ content: "<p>[^<]+<\/p>", creatorId: ownerId/);
+  assert.match(seed, /descriptionHtml = "<p>[^<]+<\/p>"/);
+  assert.match(seed, /description_:\s*\{\s*create: \{ content: descriptionHtml, creatorId: ownerId/);
   assert.match(seed, /taskId: board\.task\.id/);
   assert.match(seed, /detailPath: `\/detail\/project-\$\{board\.id\}\/\$\{board\.task\.uniqueIndex\}`/);
   assert.match(smoke, /width: 1440, height: 900/);

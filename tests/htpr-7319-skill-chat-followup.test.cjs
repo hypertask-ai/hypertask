@@ -263,7 +263,7 @@ async function withCompose(options, check) {
   dom.window.HTMLElement.prototype.attachEvent = () => {};
   dom.window.HTMLElement.prototype.detachEvent = () => {};
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  const atoms = Object.fromEntries(["currentProjectAtom", "currentUserAtom", "lastUsedBoardsAtom", "composeTaskChatIntroAtom", "composeTaskSkillFollowupAtom", "composeTaskQuestionsTaskIdAtom", "showAIChatInterfaceAtom", "isAiChatSidebarModeAtom", "aiChatAutoOpenSuppressedAtom", "aiChatExplicitOpenAtAtom", "dockedChatScopeAtom", "fullScreenChatScopeAtom", "inViewObjectAtom", "taskDetailNonEssentialReadyAtom", "aiChatEditTaskIdAtom"].map((name) => [name, name]));
+  const atoms = Object.fromEntries(["currentProjectAtom", "currentUserAtom", "lastUsedBoardsAtom", "composeTaskChatIntroAtom", "composeTaskSkillFollowupAtom", "composeTaskQuestionsTaskIdAtom", "showAIChatInterfaceAtom", "isAiChatSidebarModeAtom", "aiChatAutoOpenSuppressedAtom", "aiChatNewTicketPathAtom", "aiChatExplicitOpenAtAtom", "dockedChatScopeAtom", "fullScreenChatScopeAtom", "inViewObjectAtom", "taskDetailNonEssentialReadyAtom", "aiChatEditTaskIdAtom"].map((name) => [name, name]));
   const project = { id: 15, title: "Board", uniqueIdentifier: "HTPR" };
   const values = new Map([[atoms.currentProjectAtom, project], [atoms.currentUserAtom, { id: 985, uid: "qa" }], [atoms.lastUsedBoardsAtom, {}], [atoms.taskDetailNonEssentialReadyAtom, true], [atoms.inViewObjectAtom, options.existing ? { taskId: 43, taskProjectId: 15 } : {}]]);
   const subscribers = new Set();
@@ -282,7 +282,7 @@ async function withCompose(options, check) {
   if (options.existing) flags.add(keys.HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const taskContext = React.createContext(options.existing ? { currentTask: { ...task, title: "", description_: { content: "" } }, setCurrentTask() {}, setDescription() {} } : undefined);
   const mobileContext = React.createContext(false);
-  const basic = { "@/lib/state": state, "@/store": atoms, "@/hooks/useFlag": { useFlag: (key) => flags.has(key) } };
+  const basic = { "@/lib/state": state, "@/store": atoms, "@/hooks/useFlag": { useFlag: (key) => flags.has(key), useFlagReady: () => true } };
   const api = composeApi();
   let visible = true, history, reactRoot, selectedTask = 43;
   const pending = deferred();
