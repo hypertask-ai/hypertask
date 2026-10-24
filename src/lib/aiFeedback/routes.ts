@@ -28,6 +28,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/features',
   '/api/mcp/feedback',
   '/api/mcp/flags',
+  '/api/mcp/flags/reviews',
   '/api/mcp/hello',
   '/api/mcp/inbox/archive',
   '/api/mcp/inbox/composition',
