@@ -53,9 +53,9 @@ const HTCButton = ({
               ? "/loginLogoMain.png"
               : "/HTCLogoGray.png"
           }
-          width={16}
-          height={16}
-          className={headerIconSizeEnabled ? "h-4 w-4 object-contain" : undefined}
+          width={headerIconSizeEnabled ? 20 : 16}
+          height={headerIconSizeEnabled ? 20 : 16}
+          className={headerIconSizeEnabled ? "h-5 w-5 object-contain" : undefined}
           alt=""
         />
         <Tooltip

@@ -79,10 +79,10 @@ const RemindMeTaskDetail:React.FC<ArchiveTaskNotificationProps> = (
                         keyCombination={["H"]}
                     />
                     <Clock
-                      size={headerIconSizeEnabled ? 16 : 18}
+                      size={headerIconSizeEnabled ? 20 : 18}
                       strokeWidth={1.75}
                       fill="none"
-                      className={`task-option-icon ${headerIconSizeEnabled ? "" : "h-[18px] w-[18px] "}text-[#696b6e] hover:text-[#95999e]`}
+                      className={headerIconSizeEnabled ? "keep-stroke task-option-icon text-[#696b6e] hover:text-[#95999e]" : "task-option-icon h-[18px] w-[18px] text-[#696b6e] hover:text-[#95999e]"}
                     />
                     {props?.children}
 

@@ -79,7 +79,7 @@ function icon(nodes, type) {
 }
 
 for (const mobile of [false, true]) {
-  test(`flag on gives all four controls 16px icons and consistent Lucide strokes (${mobile ? "phone" : "desktop"})`, () => {
+  test(`flag on uses shared 20px header icons and preserves the mobile command image (${mobile ? "phone" : "desktop"})`, () => {
     const components = header({ mobile });
     const nodes = elements([
       components.ArchiveTaskNotifications({ selected: true, navigateToNextTask: noop }),
@@ -89,15 +89,17 @@ for (const mobile of [false, true]) {
     ]);
     for (const type of ["Archive", "CircleCheck", "Clock"]) {
       const props = icon(nodes, type);
-      assert.equal(props.size, 16);
+      assert.equal(props.size, 20);
       assert.equal(props.strokeWidth, 1.75);
-      assert.doesNotMatch(props.className, /keep-stroke|\b[hw]-\[/);
+      assert.match(props.className, /\bkeep-stroke\b/);
+      assert.doesNotMatch(props.className, /\b[hw]-\[/);
     }
+    assert.equal(icon(nodes, "Clock").className, "keep-stroke task-option-icon text-[#696b6e] hover:text-[#95999e]");
     const image = icon(nodes, "Image");
-    assert.equal(image.width, mobile ? 18 : 16);
-    assert.equal(image.height, mobile ? 14 : 16);
+    assert.equal(image.width, mobile ? 18 : 20);
+    assert.equal(image.height, mobile ? 14 : 20);
     if (mobile) assert.equal(image.className, undefined);
-    else assert.equal(image.className, "h-4 w-4 object-contain");
+    else assert.equal(image.className, "h-5 w-5 object-contain");
   });
 
   test(`flag off keeps the original sizes and stroke classes (${mobile ? "phone" : "desktop"})`, () => {
@@ -114,7 +116,7 @@ for (const mobile of [false, true]) {
     }
     const clock = icon(nodes, "Clock");
     assert.equal(clock.size, 18);
-    assert.match(clock.className, /h-\[18px\] w-\[18px\]/);
+    assert.equal(clock.className, "task-option-icon h-[18px] w-[18px] text-[#696b6e] hover:text-[#95999e]");
     assert.doesNotMatch(clock.className, /\bkeep-stroke\b/);
     for (const type of ["Archive", "CircleCheck", "Clock"]) assert.equal(icon(nodes, type).strokeWidth, 1.75);
     const image = icon(nodes, "Image");
@@ -128,43 +130,48 @@ for (const enabled of [false, true]) {
   test(`the desktop header wires all four controls with flag ${enabled ? "on" : "off"}`, () => {
     const { TaskOptions } = header({ enabled });
     const nodes = elements(TaskOptions());
-    assert.equal(icon(nodes, "Archive").size, enabled ? 16 : 20);
-    assert.equal(icon(nodes, "CircleCheck").size, enabled ? 16 : 20);
-    assert.equal(icon(nodes, "Clock").size, enabled ? 16 : 18);
-    assert.equal(icon(nodes, "Image").width, 16);
+    assert.equal(icon(nodes, "Archive").size, 20);
+    assert.equal(icon(nodes, "CircleCheck").size, 20);
+    assert.equal(icon(nodes, "Clock").size, enabled ? 20 : 18);
+    assert.equal(icon(nodes, "Image").width, enabled ? 20 : 16);
+    assert.equal(icon(nodes, "Image").height, enabled ? 20 : 16);
+    assert.equal(icon(nodes, "Image").className, enabled ? "h-5 w-5 object-contain" : undefined);
     assert.equal(nodes.filter((node) => node.type === "Share").length, 1);
   });
 
   test(`the phone header preserves its existing controls with flag ${enabled ? "on" : "off"}`, () => {
     const { TaskOptions } = header({ enabled, mobile: true });
     const nodes = elements(TaskOptions());
-    assert.equal(icon(nodes, "CircleCheck").size, enabled ? 16 : 20);
+    assert.equal(icon(nodes, "CircleCheck").size, 20);
     assert.equal(nodes.filter((node) => node.type === "Share").length, 1);
     assert.deepEqual(nodes.filter((node) => ["Archive", "Clock", "Image"].includes(node.type)), []);
   });
 }
 
-test("non-header reminder and kanban command icons keep their original sizes", () => {
-  const { RemindMeTaskDetail, HTCButton } = header({ mobile: true });
-  const reminder = icon(elements(RemindMeTaskDetail({ navigateToNextTask: noop, children: "Snooze" })), "Clock");
-  assert.equal(reminder.size, 18);
-  assert.match(reminder.className, /h-\[18px\] w-\[18px\]/);
-  const command = icon(elements(HTCButton({ isKanban: true })), "Image");
-  assert.equal(command.width, 18);
-  assert.equal(command.height, 14);
-});
+for (const mobile of [false, true]) {
+  test(`non-header reminder and kanban command icons keep their original sizes (${mobile ? "phone" : "desktop"})`, () => {
+    const { RemindMeTaskDetail, HTCButton } = header({ mobile });
+    const reminder = icon(elements(RemindMeTaskDetail({ navigateToNextTask: noop, children: "Snooze" })), "Clock");
+    assert.equal(reminder.size, 18);
+    assert.equal(reminder.className, "task-option-icon h-[18px] w-[18px] text-[#696b6e] hover:text-[#95999e]");
+    const command = icon(elements(HTCButton({ isKanban: true })), "Image");
+    assert.equal(command.width, mobile ? 18 : 16);
+    assert.equal(command.height, mobile ? 14 : 16);
+    assert.equal(command.className, undefined);
+  });
+}
 
 test("no notification still means no remove-notification icon", () => {
   const { TaskOptions } = header({ notifications: 0 });
   const nodes = elements(TaskOptions());
   assert.equal(nodes.filter((node) => node.type === "Archive").length, 0);
-  assert.equal(icon(nodes, "CircleCheck").size, 16);
+  assert.equal(icon(nodes, "CircleCheck").size, 20);
 });
 
 test("archived tasks retain the archived indicator", () => {
   const { MarkTaskAsDone } = header({ status: "Archive" });
   const props = icon(elements(MarkTaskAsDone({ markAsDone: noop })), "CircleCheck");
-  assert.equal(props.size, 16);
+  assert.equal(props.size, 20);
   assert.match(props.className, /\btask-archived-indicator\b/);
 });
 
@@ -175,6 +182,7 @@ test("bugfix flag is on for Everyone with the requested shipped date and release
   assert.equal(definition.kind, "bugfix");
   assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.shippedOn, "2026-10-24");
+  assert.match(definition.description, /20px header size/);
   assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason);
 });
