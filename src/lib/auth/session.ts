@@ -1,6 +1,11 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 
+export type ForceSignOutResult = {
+  browserCookiesCleared: boolean
+  serverSessionsRevoked: boolean
+}
+
 export const SESSION_COOKIE = 'ht_session'
 export const SESSION_TTL_SECONDS = 600 * 60 * 24 * 7
 const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/

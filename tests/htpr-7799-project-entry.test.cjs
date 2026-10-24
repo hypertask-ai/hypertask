@@ -159,11 +159,12 @@ test("entry shares board API access rules and missing-id first-screen startup de
   assert.ok(source.indexOf("flags[HTPR_7799_PROJECT_ENTRY_FLAG]") < source.indexOf("await getFirst(user.id)"));
 });
 
-test("project recovery is a reversible Everyone bugfix flag", () => {
+test("project recovery has an access-classified QA default", () => {
   const flag = loader()("src/lib/flags/definitions/htpr-7799-project-entry.ts").default;
   assert.equal(flag.key, key);
   assert.equal(flag.kind, "bugfix");
-  assert.equal(flag.defaultMode, "EVERYONE");
+  assert.equal(flag.defaultMode, "OWNER_AND_QA");
+  assert.equal(flag.releaseRisk.highRisk, "access");
   assert.ok(flag.releaseRisk.reason);
 });
 

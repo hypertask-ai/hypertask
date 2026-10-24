@@ -7,17 +7,15 @@ const cookieHelpers = require("better-auth/cookies");
 
 const read = file => fs.readFileSync(file, "utf8");
 
-test("Google explicitly opens the chooser; normal Google sign-in remains unrestricted", async () => {
+test("Google OAuth initiation keeps the production provider default without a new chooser", async () => {
   const source = read("src/lib/auth/betterAuth.ts");
   const block = source.match(/socialProviders:\s*\{\s*google:\s*\{([\s\S]*?)\n\s*\}/)?.[1];
   assert.ok(block);
-  assert.match(block, /prompt:\s*["']select_account["']/);
-  assert.doesNotMatch(block, /hostedDomain|loginHint|disableSignIn|disableSignUp/);
+  assert.doesNotMatch(block, /prompt:|hostedDomain|loginHint|disableSignIn|disableSignUp/);
   const { google } = await import("@better-auth/core/social-providers");
-  const prompt = block.match(/prompt:\s*["']([^"']+)["']/)[1];
-  const provider = google({ clientId: "fixture", clientSecret: "fixture", prompt });
+  const provider = google({ clientId: "fixture", clientSecret: "fixture" });
   const url = await provider.createAuthorizationURL({ state: "fixture", codeVerifier: "fixture", redirectURI: "https://app.hypertask.ai/api/auth/callback/google" });
-  assert.equal(url.searchParams.get("prompt"), "select_account");
+  assert.equal(url.searchParams.get("prompt"), null);
   assert.equal(url.searchParams.get("hd"), null);
   assert.ok(url.searchParams.get("scope").includes("email"));
 });
@@ -57,6 +55,7 @@ for (const multi of [true, false]) {
     });
     const response = await load("src/app/api/auth/force-signout/route.ts").POST(new Request("http://localhost/api/auth/force-signout", { method: "POST", headers: { cookie: cookies.join("; ") } }));
     assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { browserCookiesCleared: true, serverSessionsRevoked: true });
     assert.deepEqual(events, ["legacy-revoked", "better-auth-revoked"]);
     assert.deepEqual([...sessions], ["other-browser"]);
     for (const name of names) {
@@ -85,7 +84,7 @@ test("normal sign-out invalidates client auth state and still succeeds", async (
     global.fetch = async (url, options) => {
       assert.equal(url, "/api/auth/force-signout");
       assert.equal(options.method, "POST");
-      return { ok: true };
+      return { ok: true, json: async () => ({ browserCookiesCleared: true, serverSessionsRevoked: true }) };
     };
     const accounts = loader({
       nookies: {}, "@/lib/configs/auth.config": {},
@@ -150,10 +149,10 @@ for (const cleared of [false, true, "blocked"]) {
 
 for (const enabled of [false, true]) {
   for (const otherAccount of [false, true]) {
-    test(`Sign out clears every remembered account with flag ${enabled} and ${otherAccount ? "multiple" : "one"} account`, async () => {
+    test(`Sign out uses the ${enabled ? "browser-wide" : "current-account"} action with ${otherAccount ? "multiple" : "one"} account`, async () => {
       const view = mount();
       let signouts = 0;
-      let switches = 0;
+      const switches = [];
       const current = { id: 182, name: "Account 182" };
       const accounts = [current, ...(otherAccount ? [{ id: 6, name: "Account 6", sessionToken: "fixture" }] : [])];
       const load = loader({
@@ -164,17 +163,20 @@ for (const enabled of [false, true]) {
         "@/lib/auth/accounts": {
           getActiveAccountId: () => current.id, getCurrentAccount: () => current,
           listAccountsWithStatus: async () => ({ accounts, ok: true }), mergeCurrentAccount: list => list,
-          signOutCurrentAccount: async () => { switches++; return true; },
+          signOutCurrentAccount: async token => { switches.push(token); return true; },
         },
       });
       try {
         await React.act(async () => view.render(React.createElement(load("src/components/Modals/SignOut/SignOutModal.tsx").default, { closeHandler: () => {} })));
-        const primary = Array.from(view.container.querySelectorAll("button")).find(button => button.textContent === "Sign out Account 182");
-        assert.ok(primary);
-        await React.act(async () => primary.click());
-        assert.equal(signouts, 1);
-        assert.equal(switches, 0);
+        const buttons = Array.from(view.container.querySelectorAll("button"));
+        const signOutButtons = buttons.filter(button => button.textContent.startsWith("Sign out"));
+        assert.equal(signOutButtons.length, 1);
+        assert.equal(signOutButtons[0].textContent, enabled ? "Sign out of all accounts" : "Sign out Account 182");
+        assert.ok(view.container.textContent.includes(enabled ? "Sign out of every account on this browser?" : "Sign out Account 182?"));
         assert.equal(view.container.textContent.includes("You’ll switch to"), false);
+        await React.act(async () => signOutButtons[0].click());
+        assert.equal(signouts, enabled || !otherAccount ? 1 : 0);
+        assert.deepEqual(switches, !enabled && otherAccount ? ["fixture"] : []);
       } finally { view.close(); }
     });
   }
@@ -203,16 +205,56 @@ test("failed browser sign-out leaves local account data intact for retry", async
 });
 
 for (const failure of ["throw", "http-error"]) {
-  test(`forced sign-out clears cookies but reports failure when Better Auth fails: ${failure}`, async () => {
-    const load = loader({
+  test(`Better Auth failure still expires cookies, logs the failure, clears client state and navigates: ${failure}`, async (t) => {
+    const errors = [];
+    t.mock.method(console, "error", (...args) => errors.push(args));
+    const route = loader({
       "next/server": { NextResponse }, "better-auth/cookies": cookieHelpers,
       "@/lib/auth/sessionRevocation": { revokeSessionToken: async () => {} },
-      "@/lib/auth/betterAuth": { auth: { api: { signOut: async () => { if (failure === "throw") throw new Error("fixture outage"); return NextResponse.json({ success: false }, { status: 500 }); } } } },
+      "@/lib/auth/betterAuth": { auth: { api: { signOut: async () => {
+        if (failure === "throw") throw new Error("fixture outage");
+        return NextResponse.json({ success: false }, { status: 500 });
+      } } } },
     });
     const names = ["better-auth.session_token", "__Secure-better-auth.session_token_multi-fixture", "better-auth.session_data.0", "ht_session", "nookies_user"];
-    const response = await load("src/app/api/auth/force-signout/route.ts").POST(new Request("http://localhost/api/auth/force-signout", { method: "POST", headers: { cookie: names.map(name => `${name}=fixture`).join("; ") } }));
-    assert.equal(response.status, 503);
-    assert.deepEqual(await response.json(), { ok: false });
+    const response = await route("src/app/api/auth/force-signout/route.ts").POST(new Request("http://localhost/api/auth/force-signout", { method: "POST", headers: { cookie: names.map(name => `${name}=fixture`).join("; ") } }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.clone().json(), { browserCookiesCleared: true, serverSessionsRevoked: false });
     for (const name of names) assert.equal(response.cookies.get(name)?.maxAge, 0);
-});
+    assert.equal(errors.length, 1);
+    assert.match(errors[0][0], /Better Auth session revocation failed/);
+
+    const oldFetch = global.fetch;
+    const oldStorage = global.localStorage;
+    const events = [];
+    const view = mount();
+    const mountedWindow = global.window;
+    global.fetch = async () => response.clone();
+    global.window = { location: { href: "/project" } };
+    global.localStorage = { clear: () => events.push("storage-cleared") };
+    try {
+      const accounts = loader({
+        nookies: {}, "@/lib/configs/auth.config": {},
+        "@/lib/auth/betterAuthClient": { authClient: { $store: { notify: () => events.push("auth-invalidated") } } },
+      })("src/lib/auth/accounts.ts");
+      const signout = loader({
+        "react-hot-toast": { default: Object.assign(() => {}, { error: () => assert.fail("browser cleanup must not fail") }) },
+        "@/lib/state": { useResetRecoilState: () => () => {} },
+        "@tanstack/react-query": { useQueryClient: () => ({ clear: () => events.push("query-cleared") }) },
+        "@/hooks/General/useFcmToken": { default: () => ({}) },
+        axios: {}, "@/lib/constants/utm": { ALL_UTM_COOKIE_NAMES: [] }, "@/store": {},
+        "@/lib/localReadModels/clear": { clearAllLocalReadModels: async () => { events.push("read-models-cleared"); return true; } },
+        "@/lib/auth/accounts": accounts,
+      });
+      let reset;
+      function Probe() { reset = signout("src/hooks/MultiPages/HTC/useSignout.ts").useSignout().handleHardReset; return null; }
+      view.render(React.createElement(Probe));
+      assert.equal(await reset(), true);
+      assert.ok(events.includes("auth-invalidated"));
+      assert.ok(events.includes("query-cleared"));
+      assert.ok(events.includes("read-models-cleared"));
+      assert.ok(events.includes("storage-cleared"));
+      assert.equal(global.window.location.href, "/login");
+    } finally { global.fetch = oldFetch; global.window = mountedWindow; global.localStorage = oldStorage; view.close(); }
+  });
 }

@@ -25,7 +25,7 @@ test("hard reset uses the browser cookie cleanup endpoint even when Better Auth 
   assert.match(signoutSource, /await signOutAllAccounts\(\)/);
   assert.doesNotMatch(signoutSource, /if \(!\(await signOutAllAccounts\(\)\)\)/);
   assert.match(accountsSource, /fetch\("\/api\/auth\/force-signout"/);
-  assert.match(forceSignoutSource, /auth\.api\.signOut[\s\S]*\.catch\(\(\) => null\)/);
+  assert.match(forceSignoutSource, /auth\.api\.signOut[\s\S]*\.catch\(\(error\) =>/);
   assert.match(signoutSource, /window\.location\.href = "\/login"/);
 
   const serverCleanup = signoutSource.indexOf(
@@ -46,7 +46,7 @@ test("force-signout expires every browser authentication cookie", async () => {
     method: "POST", headers: { cookie: names.map(name => `${name}=fixture`).join("; ") },
   }));
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(await response.json(), { browserCookiesCleared: true, serverSessionsRevoked: true });
   for (const name of names) {
     assert.equal(response.cookies.get(name)?.value, "");
     assert.equal(response.cookies.get(name)?.maxAge, 0);

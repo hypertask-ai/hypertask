@@ -225,7 +225,7 @@ test("all-account sign-out uses server browser revocation and invalidates auth s
     assert.equal(url, "/api/auth/force-signout");
     assert.equal(options.method, "POST");
     calls.push("server");
-    return { ok: true };
+    return { ok: true, json: async () => ({ browserCookiesCleared: true, serverSessionsRevoked: true }) };
   });
   const authClient = { ...baseClient(), $store: { notify: signal => calls.push(signal) } };
   const accounts = loadAccountsModule(authClient);
@@ -257,6 +257,7 @@ test("both generic sign-out surfaces use the multi-account confirmation", () => 
   assert.match(commandSource, /CommandMode\.Logout[\s\S]*?<SignOutModal/);
   assert.match(sidebarSource, /<SignOutModal/);
   assert.match(modalSource, /Sign out of all accounts/);
-  assert.doesNotMatch(modalSource, /signOutCurrentAccount|You’ll switch to/);
-  assert.equal((modalSource.match(/onClick=\{\(\) => void handleAllSignOut\(\)\}/g) ?? []).length, 2);
+  assert.match(modalSource, /signOutCurrentAccount/);
+  assert.doesNotMatch(modalSource, /You’ll switch to/);
+  assert.match(modalSource, /projectEntryEnabled \? handleAllSignOut\(\) : handleCurrentSignOut\(\)/);
 });

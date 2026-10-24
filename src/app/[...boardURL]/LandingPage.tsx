@@ -1169,7 +1169,7 @@ const boardRender =
 
 return (
     <BoardDocumentBoundary fallback={projectEntryEnabled ? (
-      <div className="flex min-h-[50vh] items-center justify-center text-sm text-secondary" role="status">
+      <div className="flex min-h-[50vh] items-center justify-center text-content text-secondary" role="status">
         Loading board…
       </div>
     ) : <></>}>
@@ -1215,7 +1215,7 @@ return (
           </div>
         )
       ) : projectEntryEnabled ? (
-        <div className="flex min-h-[50vh] items-center justify-center text-sm text-secondary" role="status">
+        <div className="flex min-h-[50vh] items-center justify-center text-content text-secondary" role="status">
           Loading board…
         </div>
       ) : null}
