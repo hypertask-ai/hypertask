@@ -54,26 +54,12 @@ describe("Quarantined tests configuration", () => {
     }
   });
 
-  test("every quarantined test has evidence links (2+)", () => {
+  test("every quarantined test has evidence links (2+)", async () => {
+    const { entryProblems } = await import("../scripts/test-quarantine.mjs");
     const config = JSON.parse(readFileSync(QUARANTINE_FILE, "utf8"));
     for (const entry of config.tests) {
-      assert.ok(entry.evidence, `Test "${entry.test}" missing evidence`);
-      assert.ok(
-        Array.isArray(entry.evidence),
-        `Test "${entry.test}" evidence must be an array`
-      );
-      assert.ok(
-        entry.evidence.length >= 2,
-        `Test "${entry.test}" evidence must have at least 2 links (proof of flakiness: same SHA failed then passed)`
-      );
-      for (const link of entry.evidence) {
-        assert.ok(
-          typeof link === "string" &&
-            (link.includes("github.com") &&
-              (link.includes("/actions/runs/") || link.includes("/commit/"))),
-          `Test "${entry.test}" evidence link must be a GitHub actions run or commit URL: ${link}`
-        );
-      }
+      const problems = entryProblems(entry).filter((problem) => problem.startsWith("need at least") || problem.includes("evidence"));
+      assert.deepEqual(problems, [], `Test "${entry.test}" evidence: ${problems.join("; ")}`);
     }
   });
 
@@ -135,7 +121,19 @@ describe("Quarantined tests configuration", () => {
       );
     }
 
-    // This is a warning, not a failure - allow old entries but call them out
     assert.ok(true, "Age check is advisory only");
+  });
+
+  test("every quarantined test is a proven row in the committed report", () => {
+    const report = readFileSync(join(__dirname, "..", "docs/flaky-tests-report.md"), "utf8");
+    const proven = report.split("## Test failures that also passed on the same SHA")[0];
+    const config = JSON.parse(readFileSync(QUARANTINE_FILE, "utf8"));
+    assert.ok(proven.includes("## Proven flaky tests"), "report is missing the proven section");
+    for (const entry of config.tests) {
+      assert.ok(proven.includes(entry.test), `Test "${entry.test}" is not in the proven section`);
+      for (const link of entry.evidence) {
+        assert.ok(proven.includes(link), `Evidence ${link} is not in the proven section`);
+      }
+    }
   });
 });
