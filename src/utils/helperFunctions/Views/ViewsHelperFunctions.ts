@@ -200,11 +200,11 @@ export const resolveShowArchivedForBoard = (
 }
 
 
-export const getActiveFiltersFromProject = (project?:IProject|null):IFilterSettings=>{
-    const view = project?.project_view?.user_project_views[0]
-    if (!project || !view) return defaultFilterSettings
-    const unsaved = view.unsavedView?.board_filters as IFilterSettings
-    const applied = view.appliedView?.board_filters as IFilterSettings
+export const getActiveFiltersFromProject = (project?:IProject|null, runtimeContext?:IFilterRuntimeContext):IFilterSettings=>{
+    const view = project?.project_view?.user_project_views?.[0]
+    if (!project || (!view && runtimeContext?.legacyMissingPersonalViewFilters)) return defaultFilterSettings
+    const unsaved = view?.unsavedView?.board_filters as IFilterSettings
+    const applied = view?.appliedView?.board_filters as IFilterSettings
     const defaultView = project.project_view?.default_view?.board_filters as IFilterSettings
     return deepCopy(unsaved??applied??defaultView??defaultFilterSettings)
 }
