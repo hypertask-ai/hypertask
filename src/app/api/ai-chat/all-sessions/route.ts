@@ -24,7 +24,7 @@ const transcriptInclude = {
 };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function pagedSessions(request: NextRequest, userId: number, ticketRowsEnabled: boolean, agentId?: string) {
+async function pagedSessions(request: NextRequest, userId: number, ticketRowsEnabled: () => Promise<boolean>, agentId?: string) {
   const params = new URL(request.url).searchParams;
   const visible = {
     userId,
@@ -127,11 +127,8 @@ export async function GET(request: NextRequest) {
       : await (await import("@/app/api/ai/_lib/requestUser")).getCliBearerChatUser(request, "all-sessions");
     const userId = currentUser?.userId ?? cliBearerUser?.id;
     if (!userId) return unauthorized();
-    let ticketRowsEnabled = false;
-    try {
-      ticketRowsEnabled = await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, userId);
-    } catch {
-    }
+    let ticketRowsCheck: Promise<boolean> | undefined;
+    const ticketRowsEnabled = () => ticketRowsCheck ??= isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, userId).catch(() => false);
     if (sidebarChatProjectId(request.headers) !== undefined) {
       const sessionId = new URL(request.url).searchParams.get("sessionId") ?? "";
       const access = await loadSidebarChatRequest(request, sessionId);

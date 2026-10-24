@@ -68,9 +68,11 @@ export async function hydrateTicketGroups(
 export async function hydrateChatTicketMessages<T extends { id: string; messages: { ticketGroups?: unknown }[] }>(
   session: T,
   userId: number,
-  enabled: boolean,
+  enabled: boolean | (() => Promise<boolean>),
 ) {
-  const references = session.messages.map((message) => enabled ? parseTicketGroupReferences(message.ticketGroups) : undefined);
+  const storesTicketGroups = session.messages.some((message) => message.ticketGroups != null);
+  const rowsEnabled = storesTicketGroups && (typeof enabled === "function" ? await enabled() : enabled);
+  const references = session.messages.map((message) => rowsEnabled ? parseTicketGroupReferences(message.ticketGroups) : undefined);
   const groups = references.flatMap((reference) => reference?.groups ?? []);
   let hydrated: ChatTicketGroup[] = [];
   if (groups.length) {
