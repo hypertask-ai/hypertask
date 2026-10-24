@@ -9,7 +9,7 @@ function fixture(options = {}) {
   const owner = { id: 7, displayName: "Owner", email: "owner@example.invalid" };
   const ctx = { user: owner, agentId: "agent-owner", agentRole: "write", teamScope: null, ...options.ctx };
   const task = { id: 42, projectId: 15, waitingOnUserId: 8, waitingOnSetById: 7, waitingOnSetAt: new Date() };
-  const writes = [], activities = [], boards = [], inboxes = [], access = [], members = [], leases = [];
+  const writes = [], activities = [], boards = [], inboxes = [], access = [], members = [], leases = [], flags = [];
   const projectWhere = projectAccess.getProjectWhere;
   const project = {
     ownerId: options.ownerDenied ? 99 : 7,
@@ -44,7 +44,13 @@ function fixture(options = {}) {
       prepareAgentScope: async () => {},
     },
     "@/lib/prisma": { default: db },
-    "@/lib/flags": { isFeatureEnabled: async () => true },
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+      flags.push({ key, userId });
+      assert.equal(userId, ctx.user.id);
+      if (key === "htpr-7665-agent-read-role-guard") return true;
+      assert.equal(key, "htpr-7723-task-waiting-on");
+      return options.flagEnabled !== false;
+    } },
     "@/lib/flags/keys": { HTPR_7665_AGENT_READ_ROLE_GUARD_FLAG: "htpr-7665-agent-read-role-guard" },
     "@/lib/mcp/auth": {
       checkMcpRateLimit: async () => options.limited ? NextResponse.json({ success: false, error: "Rate limited" }, { status: 429 }) : null,
@@ -84,7 +90,7 @@ function fixture(options = {}) {
     body: raw ? body : JSON.stringify(body),
   });
   return {
-    owner, ctx, writes, activities, boards, inboxes, access, members, leases,
+    owner, ctx, writes, activities, boards, inboxes, access, members, leases, flags,
     post: (body, raw = false) => POST(request(body, raw)),
     session: (body) => session(request(body)),
     pages: async (body) => {
@@ -99,6 +105,19 @@ function fixture(options = {}) {
   };
 }
 
+for (const userId of [9, null]) {
+  test(`flag off: MCP refuses ${userId === null ? "clearing" : "setting"} waiting-on before reads or side effects`, async () => {
+    const f = fixture({ flagEnabled: false, ctx: { user: { id: 23 } } });
+    const response = await f.post({ taskId: 42, userId });
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { success: false, error: "Task waiting-on is not enabled" });
+    assert.deepEqual(f.flags, [{ key: "htpr-7723-task-waiting-on", userId: 23 }]);
+    for (const calls of [f.access, f.members, f.writes, f.activities, f.boards, f.inboxes, f.leases]) {
+      assert.deepEqual(calls, []);
+    }
+  });
+}
+
 test("now refused: read-role agents cannot write or look up task content", async () => {
   const f = fixture({ ctx: { agentRole: "read" } });
   const response = await f.post({ taskId: 42, userId: 9 });
@@ -110,8 +129,8 @@ test("now refused: read-role agents cannot write or look up task content", async
   assert.deepEqual(f.leases, []);
 });
 
-test("still allowed: an owner agent sets a board member then clears through the shared write", async () => {
-  const f = fixture();
+test("flag on: an owner agent sets a board member then clears through the shared write", async () => {
+  const f = fixture({ flagEnabled: true });
   const response = await f.post({ taskId: 42, userId: 9 });
   assert.equal(response.status, 200);
   const result = await response.json();
@@ -132,6 +151,10 @@ test("still allowed: an owner agent sets a board member then clears through the 
   assert.equal(f.members.length, 1);
   assert.equal(f.activities[1].activityBody.data.waitingOnDisplayName, null);
   assert.deepEqual(f.inboxes.slice(2), [[9, { originUserId: 7 }]]);
+  assert.deepEqual(f.flags, [
+    { key: "htpr-7723-task-waiting-on", userId: 7 },
+    { key: "htpr-7723-task-waiting-on", userId: 7 },
+  ]);
 });
 
 for (const option of ["ownerDenied", "scopeDenied", "deleted"]) {
@@ -158,8 +181,8 @@ test("now refused: a target outside board membership returns 400", async () => {
   assert.deepEqual(f.inboxes, []);
 });
 
-test("still allowed: the existing session and Pages route retain coercion, raw receipts, activity and broadcasts", async () => {
-  const f = fixture();
+test("flag off: the existing session and Pages route retain coercion, raw receipts, activity and broadcasts", async () => {
+  const f = fixture({ flagEnabled: false });
   const response = await f.session({ taskId: "42", userId: "9" });
   assert.equal(response.status, 200);
   const receipt = await response.json();
@@ -174,6 +197,7 @@ test("still allowed: the existing session and Pages route retain coercion, raw r
   assert.equal(f.boards.length, 2);
   assert.deepEqual(f.inboxes.map(([id]) => id), [8, 9, 9]);
   assert.deepEqual(f.leases, []);
+  assert.deepEqual(f.flags, []);
 });
 
 for (const body of [null, [], {}, { taskId: "42", userId: 9 }, { taskId: 42, userId: "9" }, { taskId: 42.5, userId: null }, { taskId: 42, userId: 2 ** 40 }]) {

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7723_TASK_WAITING_ON_FLAG } from "@/lib/flags/definitions/htpr-7723-task-waiting-on";
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import {
   wrapMcpRoute,
@@ -21,6 +23,9 @@ export async function POST(request: NextRequest) {
       if (!ctx) return await mcpRouteUnauthorizedResponse(request);
       const roleRefusal = await requireAgentWriteRole(ctx);
       if (roleRefusal) return roleRefusal;
+      if (!(await isFeatureEnabled(HTPR_7723_TASK_WAITING_ON_FLAG, ctx.user.id))) {
+        return NextResponse.json({ success: false, error: "Task waiting-on is not enabled" }, { status: 404 });
+      }
 
       let body;
       try {
