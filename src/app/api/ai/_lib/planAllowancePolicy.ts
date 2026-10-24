@@ -57,10 +57,10 @@ return seats
 `;
 
 async function cachedPaidSeats(teamId: string, month: string, byok: boolean): Promise<number> {
-  const cached = seatSnapshots.get(teamId);
+  const cached = seatSnapshots.get(`${teamId}:${byok ? "members" : "seats"}`);
   if (cached && cached.month === month && cached.expiresAt > Date.now()) return cached.seats;
   const seats = byok ? await teamMembers(teamId) : await paidSeats(teamId);
-  seatSnapshots.set(teamId, { seats, month, expiresAt: Date.now() + POLICY_CACHE_TTL_MS });
+  seatSnapshots.set(`${teamId}:${byok ? "members" : "seats"}`, { seats, month, expiresAt: Date.now() + POLICY_CACHE_TTL_MS });
   return seats;
 }
 
@@ -146,17 +146,18 @@ export async function resolveTeamAllowancePolicy(
     if ((fundingSource === "managed" || byok) && !demoGlobal) {
       const month = aiAllowancePeriod();
       const seats = await cachedPaidSeats(teamId, month.key, byok);
-      let cached = seatHighWaters.get(teamId);
+      const highWaterKey = `ai-allowance:${month.key}:${teamId}:${byok ? "members-high" : "seats-high"}`;
+      let cached = seatHighWaters.get(highWaterKey);
       if (!cached || cached.month !== month.key || seats > cached.observedSeats) {
         const redis = await getRedis();
         const highWater = Number(await redis.eval(SEATS_HIGH_WATER_SCRIPT, 1,
-          `ai-allowance:${month.key}:${teamId}:seats-high`, String(seats), String(month.ttlSeconds)));
+          highWaterKey, String(seats), String(month.ttlSeconds)));
         if (!Number.isSafeInteger(highWater) || highWater < seats) throw new Error("Invalid AI allowance seat high-water");
         cached = { month: month.key, observedSeats: seats, highWater, expiresAt: Date.now() + POLICY_CACHE_TTL_MS };
-        seatHighWaters.set(teamId, cached);
+        seatHighWaters.set(highWaterKey, cached);
       } else if (cached.expiresAt <= Date.now()) {
         const redis = await getRedis();
-        const highWater = Number(await redis.get(`ai-allowance:${month.key}:${teamId}:seats-high`));
+        const highWater = Number(await redis.get(highWaterKey));
         if (!Number.isSafeInteger(highWater) || highWater < seats) throw new Error("Invalid AI allowance seat high-water");
         cached.highWater = Math.max(cached.highWater, highWater);
         cached.expiresAt = Date.now() + POLICY_CACHE_TTL_MS;

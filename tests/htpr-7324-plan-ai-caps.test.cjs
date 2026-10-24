@@ -434,7 +434,7 @@ for (const [members, monthlyUsd] of [[3, 7.5], [10, 25]]) {
     const byokPolicy = await policy.resolveTeamAllowancePolicy(teamId, "shared");
     assert.deepEqual(byokPolicy, { mode: "plan", monthlyUsd, dailyUsd: null, demoGlobal: false });
     assert.deepEqual(memberQueries, [{ where: { status: "Accepted" }, select: { userId: true } }]);
-    assert.equal(await redis.get(`ai-allowance:${constants.aiAllowancePeriod().key}:${teamId}:seats-high`), String(members));
+    assert.equal(await redis.get(`ai-allowance:${constants.aiAllowancePeriod().key}:${teamId}:members-high`), String(members));
     daySpend = 1;
     const reservation = await reserve({ teamId, policy: byokPolicy, amountUsd: 1 });
     assert.equal(reservation.scopes.length, 1, "spending more than the Free daily cap uses only the monthly scope");
@@ -444,6 +444,19 @@ for (const [members, monthlyUsd] of [[3, 7.5], [10, 25]]) {
     assert.equal((await allowance.teamAllowanceSnapshot(teamId, monthlyUsd, byokPolicy)).usedUsd, 1);
   });
 }
+
+test("a BYOK team with 100 members that moves to 10 paid seats gets $50, not 100 seats; moving back keeps the member count", async () => {
+  const teamId = "byok-to-paid";
+  plan = "BYOK";
+  teamOverride.members = [{ userId: 7324 }, ...Array.from({ length: 99 }, (_, i) => ({ userId: i + 1 }))];
+  assert.equal((await policy.resolveTeamAllowancePolicy(teamId, "shared")).monthlyUsd, 250);
+  plan = "Pro"; seats = 10;
+  assert.deepEqual(await policy.resolveTeamAllowancePolicy(teamId, "managed"), { mode: "plan", monthlyUsd: 50, dailyUsd: null, demoGlobal: false });
+  assert.equal(await redis.get(`ai-allowance:${constants.aiAllowancePeriod().key}:${teamId}:seats-high`), "10");
+  assert.equal(await redis.get(`ai-allowance:${constants.aiAllowancePeriod().key}:${teamId}:members-high`), "100");
+  plan = "BYOK";
+  assert.equal((await policy.resolveTeamAllowancePolicy(teamId, "shared")).monthlyUsd, 250);
+});
 
 test("BYOK accepted-member high-water survives decreases, observes increases and resets next UTC month", async () => {
   plan = "BYOK";
