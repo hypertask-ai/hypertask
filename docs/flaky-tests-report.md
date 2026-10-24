@@ -4,12 +4,15 @@ Window: workflow runs created 2026-10-10 through 2026-10-24, workflow ci-tests.y
 Runs scanned: 3018.
 Runs with more than one attempt: 138.
 Same-SHA ci-tests jobs that failed and later passed: 34.
+Jobs in that set whose log names a failing test: 7.
 
 A same-SHA fail-then-pass counts only when the ci-tests job itself failed and a later attempt (or another run of that SHA) of the ci-tests job passed.
 Cancelled workflows and browser-smoke-only failures are not in that count.
 A row below is a test flake only when the failed job log contains a TAP `not ok <n> - <name>` line or a spec-reporter `✖ <name> (…ms)` line from the test step.
-Rate limit, cancel, and runner-shutdown failures stay in the non-test table with the log line that classified them.
-Quarantine requires the same test to fail and later pass on at least two distinct SHAs.
+GitHub installation rate-limit reds and next/font Google fetch failures (visual-regression and the browser-smoke build, src/app/login/LoginComponent.tsx) are infra. They are tracked in https://app.hypertask.ai/detail/project-4060/678 and noted on https://app.hypertask.ai/detail/project-4060/668. They are not test flakes and are excluded from the failing-test job count and from the proven, same-SHA test, and same-code sections.
+Rate limit, cancel, runner-shutdown, and font-fetch failures stay in the non-test table with the log line that classified them.
+Quarantine is only for a flake whose cause is not yet found. A known cause is fixed and left off the quarantine list.
+The timer report order row is that case. Its fixture rows use fixed startedAt values, and listReport breaks equal startedAt by id, so it is not quarantined.
 A different SHA is counted only as a same-code flake: the ci-tests or browser-smoke job passed on that SHA, and the diff touches neither src/, e2e/, nor the failing test file.
 
 ## Proven flaky tests (1)
@@ -124,20 +127,6 @@ e2e/smoke/agent-sidebar-chats.spec.ts › open error retries the same selected a
 - `73c3460c43e4b9aa4077a98e1a693fd71c97e2e1` failed https://github.com/hypertask-ai/hypertask/actions/runs/40113928036/job/120937126132 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40106227791/job/120908364587
 - `91d695fc5dcb407be70653242f13275f063fd005` failed https://github.com/hypertask-ai/hypertask/actions/runs/40038897365/job/120705526803 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40033039621/job/120694515383
 
-### e2e/smoke/inbox-cycle.spec.ts › inbox cycle: open by click, send a comment, J and E all stay in the inbox flow
-
-Distinct SHAs: 4. Failing attempts: 4.
-
-Log line:
-
-```
-e2e/smoke/inbox-cycle.spec.ts › inbox cycle: open by click, send a comment, J and E all stay in the inbox flow
-```
-- `06f8e43489d33fdf637b7a0dc25339109b557905` failed https://github.com/hypertask-ai/hypertask/actions/runs/40042620092/job/120716962880 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40033039621/job/120694515383
-- `540972d76594196bef0f1829a55d777151040adf` failed https://github.com/hypertask-ai/hypertask/actions/runs/40030043815/job/120676223950 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40034039620/job/120689019069
-- `7343973ac04b5500d6f6b4b1a716feec2601f1a5` failed https://github.com/hypertask-ai/hypertask/actions/runs/40026559732/job/120664108009 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40033039621/job/120694515383
-- `9993807d051d370259c37eae1c30fe5faabd71fa` failed https://github.com/hypertask-ai/hypertask/actions/runs/40002678152/job/120582553840 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40009068324/job/120604431124
-
 ### tests/helpers/htpr-6992-pins.cjs › /home/runner/work/hypertask/hypertask/tests/helpers/htpr-6992-pins.cjs
 
 Distinct SHAs: 4. Failing attempts: 4.
@@ -179,6 +168,19 @@ tests/htpr-7324-plan-ai-caps.test.cjs › tests/htpr-7324-plan-ai-caps.test.cjs
 - `29f9ffb966280832438d1cbbd2f3771f812af6b0` failed https://github.com/hypertask-ai/hypertask/actions/runs/40037597053/job/120700774995 then passed https://github.com/hypertask-ai/hypertask/actions/runs/39361312206/job/118427905104
 - `2fbcb4effe8ce124ac7ab934b86f535a431b45e9` failed https://github.com/hypertask-ai/hypertask/actions/runs/40054235946/job/120753535214 then passed https://github.com/hypertask-ai/hypertask/actions/runs/39361312206/job/118427905104
 - `92a1b9fa556af6fe66247fc5ae8527c53641f511` failed https://github.com/hypertask-ai/hypertask/actions/runs/40021436618/job/120646697104 then passed https://github.com/hypertask-ai/hypertask/actions/runs/39361312206/job/118427905104
+
+### e2e/smoke/inbox-cycle.spec.ts › inbox cycle: open by click, send a comment, J and E all stay in the inbox flow
+
+Distinct SHAs: 3. Failing attempts: 3.
+
+Log line:
+
+```
+e2e/smoke/inbox-cycle.spec.ts › inbox cycle: open by click, send a comment, J and E all stay in the inbox flow
+```
+- `06f8e43489d33fdf637b7a0dc25339109b557905` failed https://github.com/hypertask-ai/hypertask/actions/runs/40042620092/job/120716962880 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40033039621/job/120694515383
+- `7343973ac04b5500d6f6b4b1a716feec2601f1a5` failed https://github.com/hypertask-ai/hypertask/actions/runs/40026559732/job/120664108009 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40033039621/job/120694515383
+- `9993807d051d370259c37eae1c30fe5faabd71fa` failed https://github.com/hypertask-ai/hypertask/actions/runs/40002678152/job/120582553840 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40009068324/job/120604431124
 
 ### e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget
 

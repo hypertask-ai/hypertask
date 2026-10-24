@@ -63,6 +63,43 @@ test("same app code ignores lint scripts and rejects src or the failing test", a
   assert.equal(sameAppCode(["e2e/smoke/prod.spec.ts"], ["e2e/smoke/prod.spec.ts › docked AI chat"]), false);
 });
 
+test("a Google font fetch failure is infra and the workflow grep echo is not", async () => {
+  const { classifyActionsLog } = await import("../scripts/flaky-log.mjs");
+  const fontLog = [
+    "2026-10-24T14:45:15.7307872Z src/app/login/LoginComponent.tsx",
+    "2026-10-24T14:45:15.7308168Z An error occurred in `next/font`.",
+    "2026-10-24T14:45:15.7311056Z     at async nextFontGoogleFontLoader (/home/runner/work/hypertask/hypertask/node_modules/next/dist/compiled/@next/font/dist/google/loader.js:104:33)",
+    "2026-10-24T14:45:16.3707847Z ##[error]Process completed with exit code 1.",
+    "2026-10-24T14:45:16.4707847Z ✖ MCP timer running/report and team presence forward the authenticated agent to real services (12.5ms)",
+  ].join("\n");
+  const classified = classifyActionsLog(fontLog);
+  assert.equal(classified.kind, "infra");
+  assert.equal(classified.infraId, "font-fetch");
+  assert.deepEqual(classified.tests, []);
+  const echo = classifyActionsLog("2026-10-24T14:43:17.0375299Z grep -q 'next/font/google' \"$RUNNER_TEMP/next-build.log\" || exit 1");
+  assert.notEqual(echo.infraId, "font-fetch");
+});
+
+test("the report excludes rate-limit and font-fetch from the flaky-test count", async () => {
+  const { renderReport } = await import("../scripts/flaky-log.mjs");
+  const report = renderReport({
+    since: "2026-10-10",
+    until: "2026-10-24",
+    runsScanned: 3,
+    retriedRuns: 2,
+    failThenPass: 2,
+    flakyTestJobs: 0,
+    testIncidents: [],
+    nonTest: [],
+    sameCode: [],
+  });
+  assert.match(report, /Jobs in that set whose log names a failing test: 0\./);
+  assert.match(report, /project-4060\/678/);
+  assert.match(report, /project-4060\/668/);
+  assert.match(report, /LoginComponent\.tsx/);
+  assert.match(report, /not test flakes/);
+});
+
 test("ranking is deterministic", async () => {
   const { rankFlakes } = await import("../scripts/flaky-log.mjs");
   const incidents = [

@@ -10,6 +10,7 @@ const INFRA_RULES = [
   { id: "cancelled", pattern: /The operation was canceled|Canceling since a higher priority waiting request/i },
   { id: "runner-shutdown", pattern: /The runner has received a shutdown signal|Lost communication with the server/i },
   { id: "disk", pattern: /No space left on device/i },
+  { id: "font-fetch", pattern: /An error occurred in `next\/font`|nextFontGoogleFontLoader/ },
 ];
 
 export function actionsLogMessage(line) {
@@ -88,6 +89,9 @@ export function classifyActionsLog(text) {
   for (const name of [...found.keys()]) {
     if ([...found.keys()].some((other) => other !== name && other.endsWith(` › ${name}`))) found.delete(name);
   }
+  if (infra?.id === "font-fetch") {
+    return { kind: "infra", tests: [], infraId: infra.id, evidenceLine: infra.line, evidenceByTest: new Map() };
+  }
   const tests = [...found.keys()].sort();
   if (tests.length > 0) {
     return { kind: "test", tests, evidenceLine: found.get(tests[0]) || tests[0], evidenceByTest: found };
@@ -136,7 +140,7 @@ export function rankFlakes(incidents) {
   return rows;
 }
 
-export function renderReport({ since, until, runsScanned, retriedRuns, failThenPass, testIncidents, nonTest, sameCode = [] }) {
+export function renderReport({ since, until, runsScanned, retriedRuns, failThenPass, flakyTestJobs = failThenPass, testIncidents, nonTest, sameCode = [] }) {
   const ranked = rankFlakes(testIncidents);
   const proven = ranked.filter((row) => row.shaCount >= 2);
   const sameCodeRanked = rankFlakes(sameCode);
@@ -147,12 +151,15 @@ export function renderReport({ since, until, runsScanned, retriedRuns, failThenP
   lines.push(`Runs scanned: ${runsScanned}.`);
   lines.push(`Runs with more than one attempt: ${retriedRuns}.`);
   lines.push(`Same-SHA ci-tests jobs that failed and later passed: ${failThenPass}.`);
+  lines.push(`Jobs in that set whose log names a failing test: ${flakyTestJobs}.`);
   lines.push("");
   lines.push("A same-SHA fail-then-pass counts only when the ci-tests job itself failed and a later attempt (or another run of that SHA) of the ci-tests job passed.");
   lines.push("Cancelled workflows and browser-smoke-only failures are not in that count.");
   lines.push("A row below is a test flake only when the failed job log contains a TAP `not ok <n> - <name>` line or a spec-reporter `✖ <name> (…ms)` line from the test step.");
-  lines.push("Rate limit, cancel, and runner-shutdown failures stay in the non-test table with the log line that classified them.");
-  lines.push("Quarantine requires the same test to fail and later pass on at least two distinct SHAs.");
+  lines.push("GitHub installation rate-limit reds and next/font Google fetch failures (visual-regression and the browser-smoke build, src/app/login/LoginComponent.tsx) are infra. They are tracked in https://app.hypertask.ai/detail/project-4060/678 and noted on https://app.hypertask.ai/detail/project-4060/668. They are not test flakes and are excluded from the failing-test job count and from the proven, same-SHA test, and same-code sections.");
+  lines.push("Rate limit, cancel, runner-shutdown, and font-fetch failures stay in the non-test table with the log line that classified them.");
+  lines.push("Quarantine is only for a flake whose cause is not yet found. A known cause is fixed and left off the quarantine list.");
+  lines.push("The timer report order row is that case. Its fixture rows use fixed startedAt values, and listReport breaks equal startedAt by id, so it is not quarantined.");
   lines.push("A different SHA is counted only as a same-code flake: the ci-tests or browser-smoke job passed on that SHA, and the diff touches neither src/, e2e/, nor the failing test file.");
   lines.push("");
   lines.push(`## Proven flaky tests (${proven.length})`);

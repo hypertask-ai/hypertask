@@ -284,6 +284,7 @@ function main() {
   const testIncidents = [];
   const nonTest = [];
   let failThenPass = 0;
+  let flakyTestJobs = 0;
   const seenJobs = new Set();
 
   for (const group of interesting) {
@@ -303,6 +304,7 @@ function main() {
       }
       failThenPass += 1;
       const passUrl = pair.passes[pair.passes.length - 1].url;
+      let sawTest = false;
       for (const failure of pair.failures) {
         const key = `${run.id}:${failure.attempt}`;
         if (seenJobs.has(key)) continue;
@@ -310,6 +312,7 @@ function main() {
         const log = fetchFailedLog(run.id, failure.attempt, failure.id);
         const classified = classifyActionsLog(log);
         if (classified.kind === "test") {
+          sawTest = true;
           for (const test of classified.tests) {
             testIncidents.push({
               test,
@@ -334,6 +337,7 @@ function main() {
           });
         }
       }
+      if (sawTest) flakyTestJobs += 1;
     }
   }
 
@@ -345,6 +349,7 @@ function main() {
     runsScanned: runs.length,
     retriedRuns,
     failThenPass,
+    flakyTestJobs,
     testIncidents,
     nonTest,
     sameCode,

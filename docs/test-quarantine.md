@@ -4,7 +4,7 @@
 
 Every entry needs an owner, an https ticket URL, at least two GitHub actions-run or commit evidence links, a reason, and `addedAt`. `tests/quarantined-tests-lint.test.cjs` fails the suite when one of those is missing.
 
-Quarantine is only for a test the detector proved flaky: the ci-tests job failed and a later attempt of that same commit passed, on at least two commits. Same-code failures on different commits are reported and are not quarantined by that bar. The `test` field is the node test name the runner prints, without the `file ›` prefix.
+Quarantine is only for a test the detector proved flaky and whose cause is not yet found: the ci-tests job failed and a later attempt of that same commit passed, on at least two commits. A known cause is fixed and left off the list. Same-code failures on different commits are reported and are not quarantined by that bar. The `test` field is the node test name the runner prints, without the `file ›` prefix. GitHub installation rate-limit reds and next/font Google fetch failures are infra, tracked in https://app.hypertask.ai/detail/project-4060/678 and noted on https://app.hypertask.ai/detail/project-4060/668.
 
 ```bash
 node scripts/detect-flaky-tests.mjs --since 2026-10-10 --until 2026-10-24 --out docs/flaky-tests-report.md

@@ -1,18 +1,4 @@
 {
   "$schema": "./quarantined-tests.schema.json",
-  "tests": [
-    {
-      "test": "MCP timer running/report and team presence forward the authenticated agent to real services",
-      "owner": "hypertask-runners",
-      "ticket": "https://app.hypertask.ai/detail/project-4060/668",
-      "evidence": [
-        "https://github.com/hypertask-ai/hypertask/actions/runs/39688934407/attempts/1",
-        "https://github.com/hypertask-ai/hypertask/actions/runs/39688934407/attempts/2",
-        "https://github.com/hypertask-ai/hypertask/actions/runs/39535056123/attempts/1",
-        "https://github.com/hypertask-ai/hypertask/actions/runs/39535056123/attempts/2"
-      ],
-      "reason": "listReport sorts entries by startedAt descending after the query. The fixture stamps each row with new Date(), so a millisecond boundary swaps project ids from [15, 4060] to [4060, 15]. The prisma mock ignores orderBy and returns filter order. adminSet is only used for canManage, not result order. The same test earlier failed on presence ids [other-4060, other-15] versus [other-15, other-4060].",
-      "addedAt": "2026-10-24"
-    }
-  ]
+  "tests": []
 }
