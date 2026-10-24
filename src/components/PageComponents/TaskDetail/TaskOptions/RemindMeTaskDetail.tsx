@@ -5,6 +5,8 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { useSearchParams } from "next/navigation";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { Clock } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7749_HEADER_ICON_SIZE_FLAG } from "@/lib/flags/definitions/htpr-7749-header-icon-size";
 
 interface ArchiveTaskNotificationProps {
   children?:ReactNode;
@@ -12,12 +14,14 @@ interface ArchiveTaskNotificationProps {
   hoverText:"#95999E"
   navigateToNextTask: (archiveNotification?: boolean, shouldNavigate?: boolean, remindMe?: boolean, force?: "forceNavigate", inboxFlow?: string | null) => string | undefined
   remindTask?: boolean;
+  isHeader?: boolean;
 }
 
 
 const RemindMeTaskDetail:React.FC<ArchiveTaskNotificationProps> = (
   {...props}
 )=>{
+    const headerIconSizeEnabled = useFlag(HTPR_7749_HEADER_ICON_SIZE_FLAG) && props.isHeader;
     const searchParams = useSearchParams()
     const classNamesToReturnFrom = ["modal-open","ProseMirror ProseMirror-focused",undefined]
     const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
@@ -75,10 +79,10 @@ const RemindMeTaskDetail:React.FC<ArchiveTaskNotificationProps> = (
                         keyCombination={["H"]}
                     />
                     <Clock
-                      size={18}
+                      size={headerIconSizeEnabled ? 20 : 18}
                       strokeWidth={1.75}
                       fill="none"
-                      className="task-option-icon h-[18px] w-[18px] text-[#696b6e] hover:text-[#95999e]"
+                      className={headerIconSizeEnabled ? "keep-stroke task-option-icon text-[#696b6e] hover:text-[#95999e]" : "task-option-icon h-[18px] w-[18px] text-[#696b6e] hover:text-[#95999e]"}
                     />
                     {props?.children}
 

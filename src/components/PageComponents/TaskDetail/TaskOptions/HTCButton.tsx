@@ -7,6 +7,8 @@ import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7749_HEADER_ICON_SIZE_FLAG } from "@/lib/flags/definitions/htpr-7749-header-icon-size";
 
 const HTCButton = ({
   isKanban = false,
@@ -15,6 +17,7 @@ const HTCButton = ({
   isKanban?: boolean;
   htcButtonCallback?: () => void;
 }) => {
+  const headerIconSizeEnabled = useFlag(HTPR_7749_HEADER_ICON_SIZE_FLAG) && !isKanban;
   const [_, setShowCommands] = useRecoilState(showCommandsAtom);
   const isMobile = useContext(MobileViewContext);
   const { effectiveTheme } = useDarkMode();
@@ -35,7 +38,7 @@ const HTCButton = ({
     return (
       <div
         className={`relative group ${
-          isKanban ? "w-[14px]" : "w-[16px]"
+          isKanban ? "w-[14px]" : headerIconSizeEnabled ? "w-5" : "w-[16px]"
         }  rounded-full cursor-pointer flex items-center justify-center`}
         onClick={(e: any) => {
           e.preventDefault();
@@ -50,8 +53,9 @@ const HTCButton = ({
               ? "/loginLogoMain.png"
               : "/HTCLogoGray.png"
           }
-          width={16}
-          height={16}
+          width={headerIconSizeEnabled ? 20 : 16}
+          height={headerIconSizeEnabled ? 20 : 16}
+          className={headerIconSizeEnabled ? "h-5 w-5 object-contain" : undefined}
           alt=""
         />
         <Tooltip
