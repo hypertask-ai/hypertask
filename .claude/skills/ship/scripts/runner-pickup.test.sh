@@ -2,7 +2,7 @@
 # Offline tests for runner-pickup and the runner-inbox-stop hook, using a fake vcc (no network, no GitHub).
 cd "$(dirname "$0")" || exit 1
 LEGACY_NAME="INFRA MANAGER" # Deliberate fallback-name fixture.
-HERE=$PWD; HOOK=$HERE/../../../hooks/runner-inbox-stop.sh; SCRIPT=$HERE/runner-pickup
+HERE=$PWD; HOOK=${RUNNER_PICKUP_TEST_HOOK:-$HERE/../../../hooks/runner-inbox-stop.sh}; SCRIPT=$HERE/runner-pickup
 fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 eq() { [ "$2" = "$3" ] && ok "$1" || bad "$1 (want '$3' got '$2')"; }
@@ -121,6 +121,41 @@ before=$(activity); RUNNER_PICKUP_MAX_AGE_DAYS=100000 "$SCRIPT" run 3 2>/dev/nul
 eq "delivered item is not requeued or announced" "$(activity)" "$before"
 jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
 eq "prompt mode adds context instead of blocking" "$(hook 'RUNNER 3' "$pl" prompt | jq -r .hookSpecificOutput.hookEventName)" "UserPromptSubmit"
+
+# Weekly pickup pause also holds tickets already queued before the threshold was crossed.
+status=$HOME/.local/state/token-ladder/status.json
+mkdir -p "$(dirname "$status")"
+printf -- '- [x] G1: settled\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+for usage in 86 85.1 100; do
+  printf '{"claude":{"week":{"used":%s}}}\n' "$usage" > "$status"
+  for mode in stop prompt; do
+    jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+    out=$(hook 'RUNNER 3' "$pl" "$mode" 2>"$T/pause.log")
+    eq "week $usage $mode: ticket stays queued" "$out|$(jq -r '.items[0].delivered' "$inbox")" "|false"
+    eq "week $usage $mode: one pause log line" "$(cat "$T/pause.log")" "pickup paused: claude week $usage%"
+  done
+done
+# Pausing tickets must not swallow human board messages.
+printf '%s\n' '{"id":"pause-event","ts":1,"text":"human message while paused","delivered":false}' > "$RUNNER_INBOX_DIR/runner-3.events.jsonl"
+out=$(hook 'RUNNER 3' "$pl" 2>/dev/null)
+eq "weekly pause still delivers board events" "$(jq -r .reason <<<"$out" | tail -1)|$(jq -r '.items[0].delivered' "$inbox")" "1) human message while paused|false"
+for usage in 85 0 null '"90"' true -1 101; do
+  printf '{"claude":{"week":{"used":%s}}}\n' "$usage" > "$status"
+  jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+  out=$(hook 'RUNNER 3' "$pl" 2>"$T/pause.log")
+  eq "week $usage: boundary or invalid value delivers" "$(jq -r .decision <<<"$out")|$(jq -r '.items[0].delivered' "$inbox")|$(cat "$T/pause.log")" "block|true|"
+done
+for state in missing malformed fields; do
+  case "$state" in
+    missing) rm -f "$status" ;;
+    malformed) printf '{broken' > "$status" ;;
+    fields) printf '{"codex":{"week":{"used":99}}}' > "$status" ;;
+  esac
+  jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+  out=$(hook 'RUNNER 3' "$pl" 2>"$T/pause.log")
+  eq "week state $state: fail open" "$(jq -r .decision <<<"$out")|$(cat "$T/pause.log")" "block|"
+done
+rm -f "$status" "$RUNNER_INBOX_DIR/runner-3.events.jsonl"
 
 # ---- YPER4-284: board events reach the session through the hook, exactly once ----
 jq -c '.items|=map(.delivered=true)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"

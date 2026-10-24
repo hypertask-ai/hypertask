@@ -20,7 +20,10 @@ import {
   shouldInstallAuthenticatedProjectWebVitals,
   type AppWebVitalMetric,
 } from "@/lib/analytics/appWebVitals";
-import { dropResizeObserverLoopException } from "@/lib/analytics/browserNoise";
+import {
+  dropResizeObserverLoopException,
+  dropSelfRecoveringChunkLoadException,
+} from "@/lib/analytics/browserNoise";
 import { installBrowserCaptureSink } from "@/lib/analytics/browserCapture";
 
 const AUTHENTICATED_ANALYTICS_PAINT_SETTLE_MS = 2_500;
@@ -389,7 +392,9 @@ export default function PostHogAnalytics({
               event.properties.source = "web";
             }
             return scopeProjectWebVitalsEvent(
-              dropResizeObserverLoopException(event),
+              dropSelfRecoveringChunkLoadException(
+                dropResizeObserverLoopException(event),
+              ),
               {
                 userId: latestIdentityRef.current.userId,
                 isGuest: latestIdentityRef.current.isGuest,
