@@ -109,10 +109,11 @@ function fixture(kind, scenario) {
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: (token) => { effects.push(["signed-session", token]); return token === "agent-token" ? { agentId: "owned" } : null; } },
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: load("src/lib/auth/resolveActingAgent.ts", {}).resolveActingAgent },
     "@/lib/ai/taskWriterDueDate": { taskWriterDueDateForSave: () => { throw new Error("Legacy parity must not resolve writer dates"); } },
-    "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date" },
+    "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date", HTPR_7740_CREATE_RESPONSE_FLAG: "htpr-7740-create-response" },
     "@/lib/flags": {
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
       isFeatureEnabled: async (key, userId) => {
+        if (key === "htpr-7740-create-response") return false;
         effects.push(["product-flag", key, userId]); return !scenario.productOff && !(key === "new-task" && scenario.newWindowOff);
       },
     },

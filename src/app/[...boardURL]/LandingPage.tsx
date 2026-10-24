@@ -1,6 +1,6 @@
 'use client'
 import Unauthorized from "../unauthorized/page";
-import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
+import { HTPR_7799_PROJECT_ENTRY_FLAG, HTPR_7775_SAVED_URL_VIEW_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
@@ -84,6 +84,7 @@ export function useLandingBoardAccess(context: useLandingBoardAccessContext) {
 
 const queryClient = useQueryClient();
 const setRouteCurrentProject = useSetRecoilState(currentProjectAtom)
+const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
 const router = useRouter()
 const {
@@ -178,7 +179,7 @@ const markLocalBoardPublished = useCallback(
           )
         : undefined
     if (!localProject) return
-    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled }))
+    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled }, restoreUrlViewSections))
     setBoardAccess((current) =>
       current.key === boardAccessKey &&
       (current.status === "authorized" || current.status === "denied")
@@ -188,6 +189,7 @@ const markLocalBoardPublished = useCallback(
   },
   [
     assigneeFixEnabled,
+    restoreUrlViewSections,
     boardAccessKey,
     currentView,
     queryClient,
@@ -578,6 +580,7 @@ type useLandingBoardSurfaceContext = Pick<LandingPageInput, "user"> &
 
 
 export function useLandingBoardSurface(context: useLandingBoardSurfaceContext) {
+  const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const {
   setBoardAccess, boardAccessKey, setNetworkAccess, pilotParameter, setSyncedBoardPilotEnabled,
@@ -706,10 +709,10 @@ const projectsForSection = useMemo(() => {
   if (!data?.updatedProjects) return []
   const projects = [...data.updatedProjects]
   if (projectIndex >= 0 && projects[projectIndex]) {
-    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled })
+    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled }, restoreUrlViewSections)
   }
   return projects
-}, [assigneeFixEnabled, data?.updatedProjects, projectIndex, currentView])
+}, [assigneeFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
 
 const pinnedProject = projectsForSection[projectIndex]
 const boardLayoutForRender =

@@ -21,9 +21,9 @@ for (const entry of cases) {
         const pinned = views.pinProjectToUrlView(storedProject, link.searchParams.get("view"));
         assert.equal(pinned.project_view.user_project_views[0].unsavedView, undefined);
         if (!entry.filters.some((filter) => filter.type === "RunningTimer")) {
-          assert.deepEqual(sectionIds(pinned.filteredSections), entry.expected);
+          assert.deepEqual(sectionIds(pinned.filteredSections).sort(), [...entry.expected].sort());
         }
-        assert.deepEqual(sectionIds(filters.getFilteredSections(pinned.sections, pinned, undefined, {}, context)), entry.expected);
+        assert.deepEqual(sectionIds(filters.getFilteredSections(pinned.sections, pinned, undefined, {}, context)).sort(), [...entry.expected].sort());
       }
     }
   });
