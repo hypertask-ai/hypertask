@@ -55,11 +55,14 @@ export function AgentConfigForm({
   handleImportantToggle, currentUser,
 }: Props) {
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
+  const flagModelOptions = deepseekFlashFastEnabled
+    ? aiModelOptions
+    : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true, deepseekFlashFastEnabled))
-    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false, deepseekFlashFastEnabled));
+    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true))
+    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true));
   return (
     <>
                 <section className="bg-comment-description rounded-[4px] px-4 py-3 shadow-md flex flex-col gap-1.5">

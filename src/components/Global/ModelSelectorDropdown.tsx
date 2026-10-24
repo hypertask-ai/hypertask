@@ -803,11 +803,14 @@ type AIModelDropDownButtonProps = Omit<
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
+  const flagModelOptions = deepseekFlashFastEnabled
+    ? aiModelOptions
+    : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true, deepseekFlashFastEnabled))
-    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false, deepseekFlashFastEnabled));
+    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true))
+    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true));
   return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} />;
 };
 

@@ -29,7 +29,7 @@ test.afterEach(() => {
   for (const [filename, cached] of originalCache) require.cache[filename] = cached;
 });
 
-test("Flash Fast is a distinct gateway option immediately after unchanged Flash", () => {
+test("Flash Fast is a distinct gateway option immediately after snapshot-pinned Flash", () => {
   const catalog = loadTs("src/lib/aiModelOptions.ts");
   const option = catalog.getAiModelOptionById(optionId);
   assert.deepEqual(option, {
@@ -55,12 +55,15 @@ test("Flash Fast is a distinct gateway option immediately after unchanged Flash"
     id: "deepseek-v4.1-flash",
     source: "gateway",
     title: "DeepSeek V4.1 Flash",
-    model: "deepseek/deepseek-v4.1-flash",
+    model: "deepseek/deepseek-v4.1-flash-1017",
+    directModel: "deepseek-flash",
     desc: "Cheapest general model",
     reasoning: "instant",
     modelKey: "deepseek-v4.1-flash",
   });
-  assert.equal(catalog.getAiModelOptionById("deepseek-v4-flash").id, "deepseek-v4.1-flash");
+  for (const legacyId of ["deepseek-v4-flash", "deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash"]) {
+    assert.equal(catalog.getAiModelOptionById(legacyId).id, "deepseek-v4.1-flash");
+  }
 });
 
 test("the ticket feature flag is client-safe and live for Everyone by default", () => {
@@ -69,8 +72,9 @@ test("the ticket feature flag is client-safe and live for Everyone by default", 
   assert.equal(flag.HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, flagKey);
   assert.equal(definition.key, flagKey);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "EVERYONE");
-  assert.equal(definition.releaseRisk.risk, "small");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.releaseRisk.risk, "new");
+  assert.equal(definition.releaseRisk.highRisk, "money");
   assert.ok(definition.releaseRisk.reason);
   assert.ok(definition.description);
   assert.match(definition.shippedOn, /^\d{4}-\d{2}-\d{2}$/);
@@ -110,20 +114,23 @@ test("saved and requested Fast choices use each plan default while Off", () => {
   }
 });
 
-test("Fast credentials skip direct team and agent keys but retain gateway funding", async () => {
+test("Fast credentials preserve customer gateway keys and replace direct keys with gateway funding", async () => {
   const catalog = loadTs("src/lib/aiModelOptions.ts");
   let gatewayKey = "vck_team_gateway";
+  let deepseekKey = "sk-direct-deepseek";
+  let agentKey = null;
+  let gdprSafeMode = false;
   const keyLookups = [];
   stubModule("src/lib/prisma.ts", {
     default: {
-      team: { findUnique: async () => ({ aiProviderSettings: { providers: { deepseek: true } } }) },
+      team: { findUnique: async () => ({ aiProviderSettings: { gdprSafeMode, providers: { deepseek: true } } }) },
       teamByokApiKey: { findUnique: async ({ where }) => {
         const provider = where.teamId_provider.provider;
         keyLookups.push(provider);
-        const key = provider === "gateway" ? gatewayKey : provider === "deepseek" ? "sk-direct-deepseek" : null;
+        const key = provider === "gateway" ? gatewayKey : provider === "deepseek" ? deepseekKey : null;
         return key ? { enabled: true, ciphertext: key } : null;
       } },
-      agentByokApiKey: { findUnique: async () => { throw new Error("Fast must not inspect direct agent keys"); } },
+      agentByokApiKey: { findUnique: async () => agentKey ? { enabled: true, ciphertext: agentKey } : null },
     },
   });
   stubModule("src/lib/crypto/byokCipher.ts", { decryptByokSecret: (value) => value });
@@ -139,7 +146,23 @@ test("Fast credentials skip direct team and agent keys but retain gateway fundin
   const flags = [{ provider: "deepseek", enabled: true, ciphertext: "sk-request-deepseek" }];
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), gatewayKey);
   assert.deepEqual(keyLookups, ["gateway"]);
+  keyLookups.length = 0;
+  deepseekKey = "vck_deepseek_slot";
+  assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, lookup), deepseekKey);
+  assert.deepEqual(keyLookups, ["deepseek"]);
+  agentKey = "vck_agent_deepseek";
+  assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), agentKey);
+  agentKey = "sk-agent-deepseek";
+  assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), gatewayKey);
+  agentKey = null;
+  deepseekKey = "sk-direct-deepseek";
+  assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, lookup), gatewayKey);
+  deepseekKey = null;
+  assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, lookup), gatewayKey);
   gatewayKey = undefined;
+  assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), undefined);
+  gdprSafeMode = true;
+  gatewayKey = "vck_team_gateway";
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), undefined);
 });
 

@@ -1330,7 +1330,7 @@ test("disabled provider selections fall back and gateway-only models keep full s
     userId: 1000,
   });
   assert.equal(gatewayOnly.provider, "gateway");
-  assert.equal(gatewayOnly.modelId, "deepseek/deepseek-v4.1-flash");
+  assert.equal(gatewayOnly.modelId, "deepseek/deepseek-v4.1-flash-1017");
   assert.equal(gatewayOnly.model.config.provider, "gateway");
 
 });
