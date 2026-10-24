@@ -35,24 +35,24 @@
     "path": "src/lib/mcp/operations/tasks/operation.ts",
     "call": "prisma.task.findMany({ where, include })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "421d7568e84b47c931916428cf666c5daca2fc26c9465cd01e901190ccc24576",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7684",
+    "sha256": "7f3faebd44c18a77f61c327e612d52e66d31ad5c78363cb4cb9825a4c47cf875",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present."
   },
   {
     "path": "src/lib/mcp/operations/tasks/operation.ts",
     "call": "prisma.task.count({ where })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "421d7568e84b47c931916428cf666c5daca2fc26c9465cd01e901190ccc24576",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7684",
+    "sha256": "7f3faebd44c18a77f61c327e612d52e66d31ad5c78363cb4cb9825a4c47cf875",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present."
   },
   {
     "path": "src/lib/mcp/operations/tasks/operation.ts",
     "call": "prisma.task.findMany({ where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, section: true, description_:true, sectionId: true, parentTaskId: true, projectId: true, project: { select: { id: true, title: true, staleWarnDays: true, staleHotDays: true, } }, parentTask: { ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { where: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } } : {}), select: { id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true } }, status: true, priority: { select: { Priority_Value: true } }, dueDate: true, createdAt: true, updatedAt: true, permanentlyDeleteAt: true, sectionChangedAt: true, lastCommentAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, assignees: { where: { OR: [ { agentId: null }, { agent: accessibleAgentWhere(user.id) }, ], }, include: { user: { select: { id: true, email: true, displayName: true, }, }, agent: { select: mcpVisibleAgentSelect(user.id) }, agentAssigner: { select: mcpVisibleAgentSelect(user.id) }, }, }, taskLabels: { select: { label: { select: mcpTaskLabelSelect, }, }, }, savedContent: { where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' }, select: { id: true, type: true }, }, _count: { select: { taskLabels: true, comments: mcpTaskUserCommentCount, }, }, subTasks: { where: { ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } : {}), status: { not: \"Deleted\", }, }, select:{ id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true }, orderBy: { createdAt: \"asc\", }, }, }, orderBy, take: limit, ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : { skip: usesCursor ? 0 : offset }), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "421d7568e84b47c931916428cf666c5daca2fc26c9465cd01e901190ccc24576",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7684",
+    "sha256": "7f3faebd44c18a77f61c327e612d52e66d31ad5c78363cb4cb9825a4c47cf875",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Identifier hydration retains where.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Listing count and hydration retain projectId from the same helper-scoped accessibleProjects query; requested project/board overrides must belong to those IDs. Subsequent filters, including hasPrWhere, do not widen projectId. Parent-task hydration is also team-scoped when ctx.teamScope is present."
   },
   {

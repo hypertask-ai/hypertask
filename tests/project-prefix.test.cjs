@@ -280,7 +280,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 6 }, agentId }) },
     "@/lib/mcp/agents": {}, "@/lib/agents/visibility": {},
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}), mapTaskToMcpGetResponse: task => ({ id: task.id, ticketNumber: task.ticketNumber }) },
-    "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": {}, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
+    "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/keys": { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer" }, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
     "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
   return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };

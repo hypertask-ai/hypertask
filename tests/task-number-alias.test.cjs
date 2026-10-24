@@ -131,7 +131,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     "@/lib/mcp/tasks/resolveTask": resolver,
     "@/lib/mcp/pagination/cursor": {},
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
-    "@/lib/flags": {},
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/mcp/listQuery": {},
     "@/lib/mcp/readListQuery": {},
     "@/lib/mcp/priorityFilter": {},
