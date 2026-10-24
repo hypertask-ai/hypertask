@@ -415,6 +415,15 @@ jobs:
         if: steps.pg.outputs.need == '1'
         run: docker pull "$HTPR_PG_IMAGE"
 
+      # Comparison tests `git show origin/production:<file>`. The old single
+      # job fetched the base ref while selecting tests; a fresh shard checkout
+      # does not, and fetch-depth 1 leaves that name missing.
+      - name: Fetch base branch for comparison tests
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_BASE_REF:-production}"
+          git fetch --depth=1 origin "+refs/heads/${ref}:refs/remotes/origin/${ref}"
+
       - name: Test shard
         id: push-test
         shell: bash
