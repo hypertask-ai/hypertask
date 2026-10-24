@@ -252,6 +252,7 @@
     "tests/user-profile-startup-cache.test.cjs",
     "tests/ux-signoff-gate.test.cjs",
     "tests/variable-plex-font.test.cjs",
+    "tests/verify-qa-premerge.test.cjs",
     "tests/view-layout-preference.test.cjs",
     "tests/view-services.test.cjs",
     "tests/view-sorting-stack.test.cjs",
@@ -263,5 +264,5 @@
     "tests/yper4-600-node-runtime-log.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 262
+  "count": 263
 }

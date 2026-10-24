@@ -192,6 +192,13 @@ test("git show of a shorter base allowlist refuses the current list", () => {
   const commit = execFileSync("git", ["commit-tree", rootTree, "-m", "shorter allowlist"], {
     cwd: root,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "source-text-allowlist",
+      GIT_AUTHOR_EMAIL: "source-text-allowlist@example.invalid",
+      GIT_COMMITTER_NAME: "source-text-allowlist",
+      GIT_COMMITTER_EMAIL: "source-text-allowlist@example.invalid",
+    },
   }).trim();
   const basePaths = JSON.parse(git(["show", `${commit}:tests/source-text-regex-allowlist.json`])).allowlist;
   const added = pathsAdded(basePaths, allowlist);
