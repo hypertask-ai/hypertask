@@ -438,6 +438,11 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
     return resolveTeamCustomEndpoint(lookup);
   }
 
+  if (option.modelKey === "deepseek-v4.1-flash-fast") {
+    if (!(await isByokProviderAllowedForLookup("deepseek", lookup))) return undefined;
+    return getTeamGatewayApiKey(lookup);
+  }
+
   const definition = getAiModelDefinition(option.modelKey);
   const providerInfo =
     definition && definition.provider !== "custom"

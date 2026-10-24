@@ -1,5 +1,7 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
@@ -52,11 +54,12 @@ export function AgentConfigForm({
   handleVisibilityChange, providerKeyLoaded, visibilityNotice, savingImportant,
   handleImportantToggle, currentUser,
 }: Props) {
+  const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
-    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
+    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true, deepseekFlashFastEnabled))
+    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false, deepseekFlashFastEnabled));
   return (
     <>
                 <section className="bg-comment-description rounded-[4px] px-4 py-3 shadow-md flex flex-col gap-1.5">

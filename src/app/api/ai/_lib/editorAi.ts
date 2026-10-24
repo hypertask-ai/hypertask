@@ -1,3 +1,4 @@
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
@@ -16,7 +17,7 @@ import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
-import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
+import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
@@ -307,6 +308,7 @@ export function defaultModelSelection(
   customEndpointConfigured = true,
   defaultModelOption = defaultAiModelOption,
   haiku55Enabled = defaultModelOption.modelKey === "claude-haiku-5-5",
+  deepseekFlashFastEnabled = false,
 ) {
   const option = resolveUserFacingModelOption(
     feature,
@@ -315,7 +317,7 @@ export function defaultModelSelection(
     { customEndpointConfigured, defaultModelOption, haiku55Enabled }
   );
   if (!option) throw new Error("This AI feature is turned off for your team");
-  return selectionFromModelOption(filterModelOptionForTeam(option, settings, haiku55Enabled));
+  return selectionFromModelOption(filterModelOptionForTeam(resolveAiModelOption([option.id], defaultModelOption, haiku55Enabled, deepseekFlashFastEnabled), settings, haiku55Enabled));
 }
 
 function resolveTaskWriterSelection(
@@ -324,6 +326,7 @@ function resolveTaskWriterSelection(
   modelOptionId?: string | null,
   defaultModelOption = defaultAiModelOption,
   haiku55Enabled = defaultModelOption.modelKey === "claude-haiku-5-5",
+  deepseekFlashFastEnabled = false,
 ): { provider: ProviderId; model: string; modelOption?: TAiModelOption } {
   const provider = normalizeProvider(sourceSelected);
   const requestedModel = modelSelected?.trim();
@@ -338,13 +341,14 @@ function resolveTaskWriterSelection(
           true,
           defaultModelOption,
           haiku55Enabled,
+          deepseekFlashFastEnabled,
         );
   }
 
   const modelOption =
     getAiModelOptionById(modelOptionId, haiku55Enabled) ?? getAiModelOptionById(requestedModel, haiku55Enabled);
   if (modelOption) {
-    return selectionFromModelOption(modelOption);
+    return selectionFromModelOption(resolveAiModelOption([modelOption.id], defaultModelOption, haiku55Enabled, deepseekFlashFastEnabled));
   }
 
   return defaultModelSelection(
@@ -354,6 +358,7 @@ function resolveTaskWriterSelection(
     true,
     defaultModelOption,
     haiku55Enabled,
+    deepseekFlashFastEnabled,
   );
 }
 
@@ -658,6 +663,9 @@ export async function selectTaskWriterModel(args: {
         credential.trim() !== sharedKey) ||
       (credential !== null && typeof credential === "object");
   }
+  const deepseekFlashFastEnabled = await import("@/lib/flags")
+    .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, args.userId ?? 0))
+    .catch(() => false);
   const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
   const defaultContext = haiku55Enabled
     ? await getAiDefaultModelContext(keyLookup, true, storePlanId, args.byokProviderFlags)
@@ -686,6 +694,7 @@ export async function selectTaskWriterModel(args: {
         true,
         requestDefaultModelOption,
         haiku55Enabled,
+        deepseekFlashFastEnabled,
       )
     : resolveTaskWriterSelection(
         args.sourceSelected,
@@ -693,6 +702,7 @@ export async function selectTaskWriterModel(args: {
         args.modelOptionId,
         requestDefaultModelOption,
         haiku55Enabled,
+        deepseekFlashFastEnabled,
       );
   if (selection.modelOption) {
     selection = selectionFromModelOption(
@@ -742,6 +752,7 @@ export async function selectTaskWriterModel(args: {
       false,
       requestDefaultModelOption,
       haiku55Enabled,
+      deepseekFlashFastEnabled,
     );
     byokApiKey = await resolveAiFallbackCredential(
       () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
@@ -757,6 +768,7 @@ export async function selectTaskWriterModel(args: {
         true,
         requestDefaultModelOption,
         haiku55Enabled,
+        deepseekFlashFastEnabled,
       );
     } else if (!byokApiKey) {
       selection = defaultModelSelection(
@@ -766,6 +778,7 @@ export async function selectTaskWriterModel(args: {
         true,
         requestDefaultModelOption,
         haiku55Enabled,
+        deepseekFlashFastEnabled,
       );
       byokApiKey = await resolveAiFallbackCredential(
         () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),

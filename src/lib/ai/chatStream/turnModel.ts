@@ -1,3 +1,4 @@
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { NextResponse } from "next/server";
 
@@ -136,6 +137,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           credential.trim() !== sharedKey) ||
         (credential !== null && typeof credential === "object");
     }
+    const deepseekFlashFastEnabled = await import("@/lib/flags")
+      .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, dbUser.id))
+      .catch(() => false);
     const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
     const defaultContext = haiku55Enabled
       ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId, body.byokProviderFlags)
@@ -164,6 +168,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       personalModelOptionId,
       requestDefaultModelOption,
       haiku55Enabled,
+      deepseekFlashFastEnabled,
     );
     if (selection.modelOption) {
       selection = selectionFromModelOption(
@@ -215,7 +220,8 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         personalModelOptionId,
         false,
         requestDefaultModelOption,
-      haiku55Enabled,
+        haiku55Enabled,
+        deepseekFlashFastEnabled,
       );
       byokApiKey = await resolveAiFallbackCredential(
         () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
@@ -230,7 +236,8 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           personalModelOptionId,
           true,
           requestDefaultModelOption,
-      haiku55Enabled,
+          haiku55Enabled,
+          deepseekFlashFastEnabled,
         );
       } else if (!byokApiKey) {
         selection = defaultModelSelection(
@@ -239,7 +246,8 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           personalModelOptionId,
           true,
           requestDefaultModelOption,
-      haiku55Enabled,
+          haiku55Enabled,
+          deepseekFlashFastEnabled,
         );
         byokApiKey = await resolveAiFallbackCredential(
           () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),

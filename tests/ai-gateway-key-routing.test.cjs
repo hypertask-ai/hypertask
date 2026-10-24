@@ -1010,6 +1010,7 @@ test("model and effort dimensions resolve every supported provider configuration
     ["claude-opus-5-5", "light", claudeThinking("disabled", "low")],
     ["claude-opus-5-5", "high", claudeThinking("adaptive", "high")],
     ["deepseek-v4.1-flash", undefined, undefined],
+    ["deepseek-v4.1-flash-fast", undefined, undefined],
     ["deepseek-v4-pro", undefined, undefined],
     ["kimi-k2.5", undefined, undefined],
     ["kimi-k3", undefined, undefined],
