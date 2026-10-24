@@ -833,8 +833,8 @@ for (const backend of ["fake", "real Redis"]) {
 }
 
 test("flag registry is file-local, money-gated, and dated 2026-10-24", () => {
-  const module = load(path.join(root, "src/lib/flags/definitions/htpr-7692-billed-cost.ts"));
-  const flag = module.default ?? module;
+  const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7692-billed-cost.ts"));
+  const flag = definition.default ?? definition;
   assert.equal(flag.key, FLAG); assert.equal(flag.kind, "bugfix"); assert.equal(flag.defaultMode, "OWNER_AND_QA");
   assert.equal(flag.releaseRisk.risk, "small"); assert.equal(flag.releaseRisk.highRisk, "money"); assert.equal(flag.shippedOn, "2026-10-24");
   const source = fs.readFileSync(path.join(root, "src/app/api/ai/_lib/sharedAllowance.ts"), "utf8");
