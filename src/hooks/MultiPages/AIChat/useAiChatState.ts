@@ -202,7 +202,8 @@ export function useAiChatState() {
     deleteSession: deleteSessionInHistory,
   } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
   const keepDrafts = useFlag(HTPR_7770_AI_CHAT_DRAFTS_FLAG);
-  useAiChatDraft(editor, currentUser?.id, activeSession ?? currentSession?.id, keepDrafts);
+  useAiChatDraft(editor, currentUser?.id, activeSession ?? currentSession?.id, keepDrafts,
+    !activeSession || currentSession?.id === activeSession ? currentSession?.agentId : undefined);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const chatHistoryReadyRef = useRef(chatHistoryReady);

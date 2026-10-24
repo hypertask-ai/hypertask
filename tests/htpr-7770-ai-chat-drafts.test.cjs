@@ -36,8 +36,9 @@ async function withComposer(run, enabled = true, initialProps = {}) {
   let editor = new Editor({ extensions: [StarterKit], content: "" });
   let reactRoot = createRoot(document.getElementById("root"));
   let props = { userId: 985, sessionId: "session-a", enabled, ...initialProps };
+  const companions = [];
   function DraftOwner() {
-    useAiChatDraft(editor, props.userId, props.sessionId, props.enabled);
+    useAiChatDraft(editor, props.userId, props.sessionId, props.enabled, props.agentId);
     return null;
   }
   const render = async (next = {}) => {
@@ -50,6 +51,17 @@ async function withComposer(run, enabled = true, initialProps = {}) {
       get editor() { return editor; },
       storage: window.localStorage,
       render,
+      async companion() {
+        const peerEditor = new Editor({ extensions: [StarterKit], content: "" });
+        const peerRoot = createRoot(document.body.appendChild(document.createElement("div")));
+        function Peer() {
+          useAiChatDraft(peerEditor, props.userId, props.sessionId, props.enabled, props.agentId);
+          return null;
+        }
+        companions.push({ root: peerRoot, editor: peerEditor });
+        await act(async () => peerRoot.render(React.createElement(Peer)));
+        return peerEditor;
+      },
       async reload() {
         await act(async () => reactRoot.unmount());
         editor.destroy();
@@ -59,6 +71,10 @@ async function withComposer(run, enabled = true, initialProps = {}) {
       },
     });
   } finally {
+    for (const peer of companions) {
+      await act(async () => peer.root.unmount());
+      peer.editor.destroy();
+    }
     await act(async () => reactRoot.unmount());
     editor.destroy();
     dom.window.close();
@@ -258,6 +274,97 @@ test("flag off keeps the previous background-send clearing behavior and does not
     assert.equal(storage.length, 0);
     assert.equal(context.sent.find((message) => message.role === "human").content, "Queued question");
   }, false);
+});
+
+test("native agent drafts migrate as plain text when session metadata arrives and are not resurrected after sending", async () => {
+  await withComposer(async (h) => {
+    h.storage.setItem("agentChat.draft.985.native", "Use <strong>literal text</strong>\nNext line");
+    await h.render({ agentId: "native" });
+    assert.equal(h.editor.getHTML(), "<p>Use &lt;strong&gt;literal text&lt;/strong&gt;</p><p>Next line</p>");
+    assert.equal(h.storage.getItem("aiChat.draft.985.session-a"), h.editor.getHTML());
+    assert.equal(h.storage.getItem("agentChat.draft.985.native"), null);
+    await h.reload();
+    assert.equal(h.editor.getText(), "Use <strong>literal text</strong>\n\nNext line");
+    global.fetch = async () => streamReply();
+    assert.equal(await createAiChatSend(turnContext(h.editor)).handleSendMessage(), true);
+    await h.reload();
+    assert.equal(h.editor.getText(), "");
+    assert.equal(h.storage.getItem("aiChat.draft.985.session-a"), null);
+  });
+});
+
+for (const existing of ["session draft", "typed while loading"]) {
+  test(`legacy migration preserves ${existing}`, async () => {
+    await withComposer(async (h) => {
+      h.storage.setItem("agentChat.draft.985.native", "Older native draft");
+      if (existing === "session draft") h.storage.setItem("aiChat.draft.985.session-a", "<p>Session draft</p>");
+      else h.editor.commands.setContent("<p>Typed while loading</p>");
+      await h.render({ sessionId: "session-a", agentId: "native" });
+      assert.equal(h.editor.getText(), existing === "session draft" ? "Session draft" : "Typed while loading");
+      await h.reload();
+      assert.equal(h.editor.getText(), existing === "session draft" ? "Session draft" : "Typed while loading");
+    }, true, { sessionId: null });
+  });
+}
+
+for (const leave of ["switch", "unmount"]) {
+  test(`an untouched composer cannot erase a newer tab's draft on ${leave}`, async () => {
+    await withComposer(async (h) => {
+      h.storage.setItem("aiChat.draft.985.session-a", "<p>Written in another tab</p>");
+      if (leave === "switch") {
+        await h.render({ sessionId: "session-b" });
+        await h.render({ sessionId: "session-a" });
+      } else await h.reload();
+      assert.equal(h.editor.getText(), "Written in another tab");
+      assert.equal(h.storage.getItem("aiChat.draft.985.session-a"), "<p>Written in another tab</p>");
+    });
+  });
+}
+
+test("storage notifications synchronize clean composers, including remote deletion and account isolation", async () => {
+  await withComposer(async (h) => {
+    h.editor.commands.setContent("<p>Original draft</p>");
+    h.storage.setItem("aiChat.draft.985.session-a", "<p>Newer draft</p>");
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "aiChat.draft.986.session-a" }));
+    assert.equal(h.editor.getText(), "Original draft");
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "aiChat.draft.985.session-a" }));
+    assert.equal(h.editor.getText(), "Newer draft");
+    h.storage.removeItem("aiChat.draft.985.session-a");
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "aiChat.draft.985.session-a" }));
+    assert.equal(h.editor.getText(), "");
+    await h.render({ sessionId: "session-b" });
+    await h.render({ sessionId: "session-a" });
+    assert.equal(h.editor.getText(), "");
+  });
+});
+
+test("local edits based on a stale storage revision cannot overwrite a newer draft", async () => {
+  await withComposer(async (h) => {
+    h.editor.commands.setContent("<p>Original draft</p>");
+    h.storage.setItem("aiChat.draft.985.session-a", "<p>Newer draft</p>");
+    h.editor.commands.setContent("<p>Stale local edit</p>");
+    assert.equal(h.storage.getItem("aiChat.draft.985.session-a"), "<p>Newer draft</p>");
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "aiChat.draft.985.session-a" }));
+    assert.equal(h.editor.getText(), "Stale local edit");
+    await h.reload();
+    assert.equal(h.editor.getText(), "Newer draft");
+  });
+});
+
+test("two composers in one window synchronize writes and clearing without cleanup resurrecting drafts", async () => {
+  await withComposer(async (h) => {
+    const peer = await h.companion();
+    h.editor.commands.setContent("<p>Main composer</p>");
+    assert.equal(peer.getText(), "Main composer");
+    peer.commands.setContent("<p>Peer composer</p>");
+    assert.equal(h.editor.getText(), "Peer composer");
+    peer.commands.clearContent();
+    assert.equal(h.editor.getText(), "");
+    assert.equal(h.storage.getItem("aiChat.draft.985.session-a"), null);
+    await h.reload();
+    assert.equal(h.editor.getText(), "");
+    assert.equal(peer.getText(), "");
+  });
 });
 
 test("the ticket flag supplies Everyone bugfix defaults and release risk", () => {

@@ -453,7 +453,8 @@ test("native switching snapshots the latest draft and attachments after open, tr
   };
   const mocks = {
     react: { ...react, default: react },
-    "@/hooks/useFlag": { useFlag: () => sidebarFlag },
+    "@/hooks/useFlag": { useFlag: (key) => key !== "htpr-7770-ai-chat-drafts" && sidebarFlag },
+    "@/lib/flags/definitions/htpr-7770-ai-chat-drafts": { HTPR_7770_AI_CHAT_DRAFTS_FLAG: "htpr-7770-ai-chat-drafts" },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },

@@ -163,7 +163,8 @@ function sidebar(initialSession = { id: "remembered", agentId: null }) {
   };
   const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
     react: { ...state.react, default: state.react },
-    "@/hooks/useFlag": { useFlag: () => true }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
+    "@/hooks/useFlag": { useFlag: key => key !== "htpr-7770-ai-chat-drafts" }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
+    "@/lib/flags/definitions/htpr-7770-ai-chat-drafts": { HTPR_7770_AI_CHAT_DRAFTS_FLAG: "htpr-7770-ai-chat-drafts" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },
     "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: noop },

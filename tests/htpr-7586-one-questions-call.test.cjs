@@ -95,6 +95,7 @@ async function withSidebar(options, check) {
       ...mocks, "./WelcomeScreen": { WelcomeScreen }, "./MessageList": { MessageList },
       "@/app/agents/chat/AgentChatClient": { default: () => null },
       "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+      "@/lib/flags/definitions/htpr-7770-ai-chat-drafts": { HTPR_7770_AI_CHAT_DRAFTS_FLAG: "htpr-7770-ai-chat-drafts" },
       "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: () => {} },
       "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null, setNativeSidebarChat: () => {} },
       "@/utils/api/ai_chat/aiChatHelpers": { AI_Chat_API: {} },
