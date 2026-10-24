@@ -1,5 +1,7 @@
 import { parse } from 'node-html-parser'
 import { resolveSkills } from '@/app/api/ai/_lib/skills'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7757_MCP_SKILL_CONTEXT_FLAG } from '@/lib/flags/definitions/htpr-7757-mcp-skill-context'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -9,6 +11,7 @@ export async function getMcpSkillContext(
   projectId: number,
   texts: string[],
 ) {
+  if (!await isFeatureEnabled(HTPR_7757_MCP_SKILL_CONTEXT_FLAG, ctx.user.id)) return null
   const context = { userId: ctx.user.id, projectId, agentId: ctx.agentId, teamScope: ctx.teamScope }
   const available = await prisma.aI_Skill.findMany({
     where: {

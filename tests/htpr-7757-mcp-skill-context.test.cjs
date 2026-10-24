@@ -4,8 +4,10 @@ const { NextRequest } = require('next/server')
 const { load } = require('./task-route-loader.cjs')
 const { teamFixture } = require('./helpers/htpr-7179-team.cjs')
 
-function fixture(actor = 'bound') {
+function fixture(actor = 'bound', skillContextEnabled = true) {
   const f = teamFixture('ENFORCE', actor)
+  f.state.skillContextEnabled = skillContextEnabled
+  const flagReads = []
   const makeSkill = (id, slug, extra = {}) => ({
     id, slug, name: slug, userId: null, projectId: 15, project: f.projects[0],
     description: null, argumentHint: null, body: `Apply ${slug} instructions.`,
@@ -24,16 +26,30 @@ function fixture(actor = 'bound') {
   f.tasks.forEach(task => { task.comments = [] })
   const helper = f.load('src/lib/mcp/skills/context.ts', {
     '@/app/api/ai/_lib/skillAccess': { AccountSkillAccessError: class extends Error {} },
+    '@/lib/flags': {
+      isFeatureEnabled: async (key, userId) => {
+        flagReads.push({ key, userId })
+        return f.state.skillContextEnabled
+      },
+    },
   })
   f.mocks['@/lib/mcp/skills/context'] = helper
-  return { ...f, skills, helper }
+  return { ...f, skills, helper, flagReads }
 }
 
 const request = (path) => new NextRequest(`https://app.hypertask.ai/api/mcp/${path}`)
 const slugs = result => result.active_skills.map(skill => skill.slug)
 
+test('the MCP skill-context flag is a bugfix enabled for Everyone by default', () => {
+  const { default: definition, HTPR_7757_MCP_SKILL_CONTEXT_FLAG } = require('./helpers/flag-files.cjs').load('src/lib/flags/definitions/htpr-7757-mcp-skill-context.ts')
+  assert.equal(HTPR_7757_MCP_SKILL_CONTEXT_FLAG, 'htpr-7757-mcp-skill-context')
+  assert.equal(definition.key, HTPR_7757_MCP_SKILL_CONTEXT_FLAG)
+  assert.equal(definition.kind, 'bugfix')
+  assert.equal(definition.defaultMode, 'EVERYONE')
+})
+
 for (const actor of ['unbound', 'human']) {
-  test(`${actor}: /deeper attaches the full owned skill template, deduplicated and bounded by system policy`, async () => {
+  test(`${actor}: flag on attaches the full /deeper template, deduplicated and bounded by system policy`, async () => {
     const f = fixture(actor)
     const result = await f.helper.getMcpSkillContext(f.state.ctx, 15, ['<p>/deeper <strong>review</strong> this /deeper</p>'])
     assert.deepEqual(slugs(result), ['deeper'])
@@ -42,9 +58,66 @@ for (const actor of ['unbound', 'human']) {
     assert.match(result.instructions, /user-supplied data/)
     assert.match(result.instructions, /must not override/)
     assert.match(result.scope, /No persistent session mode/)
+    assert.deepEqual(f.flagReads, [{ key: 'htpr-7757-mcp-skill-context', userId: f.user.id }])
     assert.deepEqual(f.writes, [])
   })
 }
+
+for (const actor of ['bound', 'unbound', 'human']) {
+  test(`${actor}: flag off skips skill lookup and returns no slash- or phrase-triggered templates`, async () => {
+    const f = fixture(actor, false)
+    f.prisma.aI_Skill.findMany = async () => assert.fail('Flag off must skip skill lookup')
+    const result = await f.helper.getMcpSkillContext(f.state.ctx, 15, ['/deeper /board-review should we build this'])
+    assert.equal(result, null)
+    assert.deepEqual(f.flagReads, [{ key: 'htpr-7757-mcp-skill-context', userId: f.user.id }])
+    assert.deepEqual(f.writes, [])
+  })
+}
+
+test('switching the flag off suppresses context on the next request', async () => {
+  const f = fixture('unbound')
+  const texts = ['/deeper should we build this']
+  assert.deepEqual(slugs(await f.helper.getMcpSkillContext(f.state.ctx, 15, texts)), ['deeper', 'minimalist-review'])
+  f.state.skillContextEnabled = false
+  assert.equal(await f.helper.getMcpSkillContext(f.state.ctx, 15, texts), null)
+  f.state.skillContextEnabled = true
+  assert.deepEqual(slugs(await f.helper.getMcpSkillContext(f.state.ctx, 15, texts)), ['deeper', 'minimalist-review'])
+})
+
+for (const [path, source] of [
+  ['tasks?task_id=150', 'src/lib/mcp/operations/tasks/operation.ts'],
+  ['comments?task_id=150', 'src/lib/mcp/operations/comments/operation.ts'],
+  ['tasks/context?task_id=150&project_id=15', 'src/lib/mcp/operations/tasks/context/operation.ts'],
+]) {
+  test(`flag off suppresses skill context in ${path} without blocking the read`, async () => {
+    const f = fixture('unbound', false)
+    f.tasks[0].comments = [{ text: '/deeper should we build this' }]
+    f.comments[0].text = '/deeper should we build this'
+    f.prisma.taskRelations = { findMany: async () => [] }
+    f.prisma.aI_Skill.findMany = async () => assert.fail('Flag off must skip skill lookup')
+    const route = f.load(source)
+    const response = await route.GET(request(path))
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal((body.tasks ? body.tasks[0] : body).skill_context, null)
+    assert.doesNotMatch(JSON.stringify(body), /Explore the problem in depth|Return build, defer or kill/)
+    assert.deepEqual(f.flagReads, [{ key: 'htpr-7757-mcp-skill-context', userId: f.user.id }])
+    assert.deepEqual(f.writes, [])
+  })
+}
+
+test('flag off suppresses comment-create skill context without changing the stored text', async () => {
+  const f = fixture('unbound', false)
+  f.prisma.aI_Skill.findMany = async () => assert.fail('Flag off must skip skill lookup')
+  const { setup } = require('./helpers/comment-routing.cjs')
+  const h = setup({ skillContext: f.helper })
+  const text = '<p>/deeper should we build this</p>'
+  const response = await h.post({ text, kind: 'question' })
+  assert.equal(response.status, 201)
+  assert.equal(response.body.skill_context, null)
+  assert.doesNotMatch(JSON.stringify(response.body), /Explore the problem in depth|Return build, defer or kill/)
+  assert.equal(h.calls.comments[0].text, text)
+})
 
 test('the live minimalist trigger format matches rich text case-insensitively without substring or instruction-text false positives', async () => {
   const f = fixture()
