@@ -48,7 +48,10 @@ const Provider = load('src/utils/Providers.tsx', {
   '@/lib/firstScreen/boardDocument': require('../src/lib/firstScreen/boardDocument.ts'),
   '@/lib/firstScreen/inboxDocument': require('../src/lib/firstScreen/inboxDocument.ts'),
   '@/lib/firstScreen/ticketShell': require('../src/lib/firstScreen/ticketShell.ts'),
-  '@/lib/firstScreen/boardAdoption': { adoptBoardDocument() { throw Error('Shell reached board adoption'); } },
+  '@/lib/firstScreen/boardAdoption': load('src/lib/firstScreen/boardAdoption.ts', {
+    './boardPayload': { BOARD_TASKS_KEY: (projectId, accountId) => ['boardTasks', accountId, projectId] },
+    './boardDocument': require('../src/lib/firstScreen/boardDocument.ts'),
+  }),
   '@/lib/firstScreen/inboxAdoption': { adoptInboxDocument() { throw Error('Shell reached inbox adoption'); } },
   '@/lib/firstScreen/BoardDisplayMirror': { default: empty }, '@/lib/contexts/MobileViewFlagBridge': { default: empty },
   '@/store': atoms, 'next/navigation': navigation, 'react-hot-toast': { Toaster: empty }, '@/lib/contexts/mobileContext': mobile,
@@ -100,6 +103,48 @@ test('both real flag readers seed flags/mobile/preferences but never route data,
         const client = clients.at(-1);
         assert.equal(client.getQueryData(['feature-flags', accountId])?.['visible-ticket-flag'] === true, accepted);
         assert.ok(client.getQueryCache().getAll().every(query => query.queryKey[0] === 'feature-flags'));
+        dom.window.close();
+      }
+    }
+  } finally { clearClients(); }
+});
+
+test('HTPR-7718: both flag readers apply a first-visit seed on the first render and reject another account', () => {
+  const flagSeed = { accountId: 985, evaluatedAt: new Date().toISOString(), values: { 'visible-ticket-flag': true } };
+  try {
+    for (const FlagProvider of [flags.FeatureFlagProvider, flags.SubscribedFeatureFlagProvider]) {
+      for (const accountId of [985, 6]) {
+        const dom = new JSDOM(renderToString(React.createElement(Provider, {
+          initialIsMobile: true, initialIsApple: false, authenticatedUserId: 985,
+          firstScreen: null, shellSeed: null, flagSeed: { ...flagSeed, accountId }, flagProvider: FlagProvider,
+        }, React.createElement(Probe))));
+        assert.deepEqual(JSON.parse(dom.window.document.querySelector('output').textContent), { ...expected(false, true), flag: accountId === 985, loaded: accountId === 985 });
+        assert.equal(clients.at(-1).getQueryData(['feature-flags', 985])?.['visible-ticket-flag'] === true, accountId === 985);
+        dom.window.close();
+      }
+    }
+  } finally { clearClients(); }
+});
+
+test('HTPR-7718: board snapshot flags win over the first-visit fallback for both flag readers', () => {
+  try {
+    for (const FlagProvider of [flags.FeatureFlagProvider, flags.SubscribedFeatureFlagProvider]) {
+      for (const boardFlag of [true, false]) {
+        const now = new Date().toISOString();
+        const firstScreen = { schemaVersion: 1, scope: { accountId: 985, route: '/project', generation: 'board-seed' },
+          fetchedAt: now, now, completeness: 'complete', authorization: { outcome: 'authorized' },
+          flags: { accountId: 985, evaluatedAt: now, values: { ...values, 'visible-ticket-flag': boardFlag } },
+          display: seed.display, selection: { surface: 'board' },
+          data: { user: { id: 985 }, projectId: 15, payload: { project: { id: 15 } },
+            projects: { accountId: 985, updatedProjects: [{ id: 15 }] } } };
+        const dom = new JSDOM(renderToString(React.createElement(Provider, {
+          initialIsMobile: true, initialIsApple: false, authenticatedUserId: 985, firstScreen, shellSeed: null,
+          flagSeed: { accountId: 985, evaluatedAt: now, values: { 'visible-ticket-flag': !boardFlag } }, flagProvider: FlagProvider,
+        }, React.createElement(Probe))));
+        const observed = JSON.parse(dom.window.document.querySelector('output').textContent);
+        assert.equal(observed.flag, boardFlag);
+        assert.equal(observed.loaded, true);
+        assert.equal(clients.at(-1).getQueryData(['feature-flags', 985])['visible-ticket-flag'], boardFlag);
         dom.window.close();
       }
     }
