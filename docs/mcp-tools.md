@@ -80,3 +80,17 @@ Reports land in board 15, Bugs, with the ai-feedback label and Medium priority. 
 An agent comment without `kind`, a reply target, a person @mention, images or attachments goes to the hidden ticket agent log, not the conversation people read. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. This documents the existing routing; it does not change it.
 
 Comment-create receipts retain `routedTo`, `url` and either `activity` or `comment`. They also return `visibleToPeople: false` plus a resend `notice` for the log, or `visibleToPeople: true` for the comment thread.
+
+### Blocker comment
+
+In a ticket, select a comment and open its existing Commands palette (Ctrl+K, or long-press on a phone). **Mark as blocker**, beside **Pin comment**, gives it the same full 1px frame in red. **Unmark as blocker** removes the frame. Marking another comment replaces the previous marker; pinning remains independent.
+
+The CLI-facing `POST /api/mcp/tasks/waiting-on` endpoint and MCP `hypertask_set_task_waiting_on` tool (consolidated `hypertask_tasks`, action `waiting_on`) accept:
+
+```json
+{ "taskId": 42, "userId": 7, "blockerCommentId": 101 }
+```
+
+Both fields are updated atomically. The person must be a board member, and the comment must belong to that ticket and not be an activity entry. Omit either field to preserve it; send both as `null` to clear both. A comment-only update or clear leaves the blocking person unchanged. Task reads and marker-write receipts expose `blockerCommentId`. Deleting the marked comment clears the marker automatically.
+
+This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Everyone. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.

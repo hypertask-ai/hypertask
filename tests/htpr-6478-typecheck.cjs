@@ -5,7 +5,7 @@ const { spawnSync } = require('node:child_process')
 const root = path.resolve(__dirname, '..')
 const include = [
   'next-env.d.ts', 'src/**/*.d.ts', 'src/lib/mcp/operations/**/*.ts',
-  'src/lib/mcp/inProcessClient.ts', 'src/lib/mcp/operationContext.ts',
+  'src/lib/mcp/directOperationClient.ts', 'src/lib/mcp/operationContext.ts',
   'src/lib/mcp/auth/session.ts', 'src/lib/mcp/auth/rateLimit.ts',
   'src/lib/mcp-server/handler.ts', 'src/lib/mcp-server/legacy-sse.ts',
   'src/lib/mcp-server/utils/executeWithService.ts', 'src/lib/mcp-server/tools/**/*.ts',
