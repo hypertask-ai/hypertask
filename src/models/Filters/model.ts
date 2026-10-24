@@ -35,6 +35,7 @@ export type TMatchFilters = "ALL"|"ANY";
 export interface IFilterRuntimeContext {
   runningTaskIds?: ReadonlySet<number>;
   legacyAgentAssigneeMatch?: boolean;
+  legacyMissingPersonalViewFilters?: boolean;
 }
 export type TCondition = (item: ITask, value: any, project?: IProject, match?: TMatchFilters, runtimeContext?: IFilterRuntimeContext) => boolean;
 export interface IFilter {

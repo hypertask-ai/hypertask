@@ -85,7 +85,7 @@ for (const type of dateTypes) {
   add(`${type} inferred BEFORE future`, type, [{ selectedDate: date("11-22"), condition: null }], due ? ["a", "b", "d"] : ["a", "b", "c", "h", "d", "e"]);
   add(`${type} inferred AFTER past`, type, [{ selectedDate: date("11-17"), condition: null }], due ? ["a", "c", "h", "e"] : ["a", "f"]);
   add(`${type} inclusive exact timestamp range`, type, [{ fromDate: date("11-17"), toDate: date("11-18") }], ["a", "b"]);
-  add(`${type} custom calendar range includes final day`, type, [{ fromDate: "2026-11-17T00:00:00.000Z", toDate: "2026-11-18T00:00:00.000Z" }], ["a", "b"], undefined, { knownBug: "HTPR-7774 date range drops the final day" });
+  add(`${type} custom calendar range includes final day`, type, [{ fromDate: "2026-11-17T00:00:00.000Z", toDate: "2026-11-18T00:00:00.000Z" }], ["a", "b"], undefined, { calendarMode: { CreatedAt: "createdAt", UpdatedRange: "updatedAt", DueDate: "dueDate" }[type] });
   add(`${type} empty date selection`, type, [{}], due ? ["a", "b", "c", "h", "d", "e"] : BASE);
 }
 add("DueDate NO_DUE_DATE", "DueDate", [{ dynamicRange: "NO_DUE_DATE" }], ["g", "f"]);

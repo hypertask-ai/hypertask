@@ -16,6 +16,7 @@ import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import type { SectionCompProps } from "./LandingPageSection";
 
 type Context = Pick<SectionCompProps, "_allProjects" | "_boardLayout" | "_projectIndex" | "_currentUser" | "_readinessProjectId" | "_readinessRouteEntryId" | "_authenticated" | "_localDatabasePilotEnabled" | "_readinessSource">;
@@ -28,6 +29,7 @@ export function useLandingSectionState(context: Context) {
 
 
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
+const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
 const router = useRouter();
 const queryClient = useQueryClient();
 const {
@@ -67,12 +69,13 @@ const { timers: runningTimers, timerDataReady } = useBoardRunningTimers(
 );
 const filterRuntimeContext = useMemo(() => ({
   legacyAgentAssigneeMatch: !assigneeFixEnabled,
+  legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
   runningTaskIds: timerDataReady
     ? new Set(runningTimers.keys())
     : new Set(sections.flatMap((section) =>
         (section.items ?? []).map((task) => task.id)
       )),
-}), [assigneeFixEnabled, runningTimers, sections, timerDataReady]);
+}), [assigneeFixEnabled, defaultFiltersFixEnabled, runningTimers, sections, timerDataReady]);
 
 useEffect(() => {
   const project = _allProjects?.[_projectIndex]

@@ -1,4 +1,5 @@
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 
 
 import dynamic from "next/dynamic";
@@ -141,6 +142,7 @@ export const Section = ({
 
   const isMbl = useContext(MobileViewContext);
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
+  const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
   const revealAheadInColumn = useFlag(HTPR_7695_COLUMN_REVEAL_AHEAD_FLAG);
   const shouldWarmInitialTasks = shouldWarmInitialBoardTasks({
     isMobile: isMbl,
@@ -363,10 +365,10 @@ export const Section = ({
             archivedTasks,
             section.sectionId,
             currentProject,
-            { legacyAgentAssigneeMatch: !assigneeFixEnabled },
+            { legacyAgentAssigneeMatch: !assigneeFixEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled },
           )
         : [],
-    [archivedTasks, assigneeFixEnabled, currentProject, section.sectionId, showArchivedOnBoard]
+    [archivedTasks, assigneeFixEnabled, defaultFiltersFixEnabled, currentProject, section.sectionId, showArchivedOnBoard]
   );
   const archivedTasksPlayList = useMemo(
     () =>
