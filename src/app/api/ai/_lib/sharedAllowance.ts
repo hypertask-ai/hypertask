@@ -5,6 +5,7 @@ import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
 import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7079_FAILED_AI_ALLOWANCE_FLAG } from "@/lib/flags/definitions/htpr-7079-failed-ai-allowance";
+import { HTPR_7687_ALLOWANCE_RESYNC_FLAG } from "@/lib/flags/definitions/htpr-7687-allowance-resync";
 import { isHaiku55Model } from "@/lib/aiModelOptions";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import {
@@ -25,6 +26,8 @@ const RESERVATION_SAFETY_USD = 0.01;
 const RESERVATION_SAFETY_MULTIPLIER = 1.5;
 const LEGACY_RECONCILIATION_WINDOW_MS = 15 * 60 * 1000;
 const LEGACY_RECONCILIATION_INTERVAL_SECONDS = 60;
+const GATEWAY_RESYNC_INTERVAL_SECONDS = 60;
+const GATEWAY_REPORT_DELAY_WINDOW_MS = 15 * 60 * 1000;
 export const SYSTEM_AI_ALLOWANCE_MULTIPLIER = 10;
 
 type AllowanceLane = "visible" | "system";
@@ -101,6 +104,7 @@ type AllowanceReservation = {
   id: string;
   inputOnlyMicroUsd: number | null;
   pricing: ModelPricing;
+  recentSettledKey: string;
   reservationsKey: string;
   ttlSeconds: number;
 };
@@ -143,6 +147,16 @@ function teamTagFromProviderOptions(providerOptions: unknown): string | null {
     return match?.[1] ? [match[1]] : [];
   });
   return teamIds.length === 1 ? teamIds[0] : null;
+}
+
+function userIdFromProviderOptions(providerOptions: unknown): number | null {
+  const tags = (providerOptions as { gateway?: { tags?: unknown } } | null)?.gateway?.tags;
+  if (!Array.isArray(tags)) return null;
+  const userIds = tags.flatMap((tag) => {
+    const match = typeof tag === "string" ? /^user:(\d+)$/.exec(tag.trim()) : null;
+    return match ? [Number(match[1])] : [];
+  });
+  return userIds.length === 1 ? userIds[0] : null;
 }
 
 function allowanceLaneFromProviderOptions(
@@ -293,6 +307,14 @@ async function failedCallsCountInputOnly(): Promise<boolean> {
   }
 }
 
+async function allowanceFollowsRealSpend(userId: number | null): Promise<boolean> {
+  try {
+    return await isFeatureEnabled(HTPR_7687_ALLOWANCE_RESYNC_FLAG, userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
 function settledUsageMicroUsd(
   usage: GatewayUsage | undefined,
   pricing: ModelPricing,
@@ -435,10 +457,12 @@ local expired = redis.call("ZRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
 for _, member in ipairs(expired) do
   local amount = string.match(member, "|(%d+)$")
   if amount then committed = committed + tonumber(amount) end
+  redis.call("ZADD", KEYS[4], ARGV[1], member)
 end
 if #expired > 0 then
   redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
   redis.call("SET", KEYS[1], committed)
+  redis.call("EXPIRE", KEYS[4], ARGV[6])
 end
 local active = redis.call("ZRANGE", KEYS[2], 0, -1)
 local reserved = 0
@@ -456,13 +480,89 @@ redis.call("EXPIRE", KEYS[2], ARGV[6])
 return 1
 `;
 
-const SETTLE_SCRIPT = `
+const SETTLE_AND_REMEMBER_SCRIPT = `
 local removed = redis.call("ZREM", KEYS[2], ARGV[1])
 if removed == 0 then return 0 end
 redis.call("INCRBY", KEYS[1], ARGV[2])
 redis.call("EXPIRE", KEYS[1], ARGV[3])
+redis.call("ZADD", KEYS[3], ARGV[4], ARGV[1] .. "|" .. ARGV[2])
+redis.call("ZREMRANGEBYSCORE", KEYS[3], "-inf", ARGV[5])
+redis.call("EXPIRE", KEYS[3], ARGV[3])
+redis.call("SET", KEYS[4], ARGV[4], "EX", ARGV[3], "NX")
 return 1
 `;
+
+const RESYNC_TO_GATEWAY_SCRIPT = `
+redis.call("SET", KEYS[3], ARGV[5], "EX", ARGV[4], "NX")
+local journalCoversDelay = tonumber(redis.call("GET", KEYS[3])) <= tonumber(ARGV[3])
+redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
+local recentlySettled = 0
+for _, member in ipairs(redis.call("ZRANGE", KEYS[2], 0, -1)) do
+  local amount = string.match(member, "|(%d+)$")
+  if amount then recentlySettled = recentlySettled + tonumber(amount) end
+end
+local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
+local legacyPending = KEYS[4] and tonumber(redis.call("GET", KEYS[4]) or "0") or 0
+local observed = math.max(tonumber(ARGV[1]) - legacyPending, 0)
+local resynced = math.max(observed, committed)
+if journalCoversDelay then
+  resynced = math.max(observed, math.min(committed, observed + recentlySettled))
+end
+redis.call("SET", KEYS[1], resynced, "EX", ARGV[4])
+return committed - resynced
+`;
+
+async function resyncToGatewaySpend(args: {
+  committedKey: string;
+  gatewayApiKey: string;
+  journalStartedKey: string;
+  lane: AllowanceLane;
+  legacyPendingKey: string;
+  lockKey: string;
+  month: ReturnType<typeof aiAllowancePeriod>;
+  recentSettledKey: string;
+  redis: Awaited<ReturnType<typeof getRedis>>;
+  teamId: string;
+}): Promise<boolean> {
+  const acquired = await args.redis.set(
+    args.lockKey,
+    "1",
+    "EX",
+    GATEWAY_RESYNC_INTERVAL_SECONDS,
+    "NX",
+  );
+  if (!acquired) return false;
+  let observedSpend: GatewaySpendBreakdown;
+  try {
+    observedSpend = await gatewaySpendBreakdownMicroUsd(
+      args.gatewayApiKey,
+      args.teamId,
+      args.month.startDate,
+      args.month.endDate,
+    );
+  } catch {
+    return false;
+  }
+  const now = Date.now();
+  await args.redis.eval(
+    RESYNC_TO_GATEWAY_SCRIPT,
+    args.lane === "visible" ? 4 : 3,
+    args.committedKey,
+    args.recentSettledKey,
+    args.journalStartedKey,
+    ...(args.lane === "visible" ? [args.legacyPendingKey] : []),
+    String(
+      args.lane === "system"
+        ? observedSpend.systemMicroUsd
+        : observedSpend.visibleMicroUsd,
+    ),
+    String(now - GATEWAY_REPORT_DELAY_WINDOW_MS),
+    String(now - GATEWAY_REPORT_DELAY_WINDOW_MS - RESERVATION_TTL_MS),
+    String(args.month.ttlSeconds),
+    String(now),
+  );
+  return true;
+}
 
 async function reconcileLegacySplit(args: {
   completedKey: string;
@@ -524,6 +624,7 @@ async function reserveSharedAllowance(args: {
   modelSlug: string;
   prompt: unknown;
   teamId: string;
+  userId: number | null;
 }): Promise<AllowanceReservation> {
   const now = new Date();
   const month = aiAllowancePeriod(now);
@@ -541,6 +642,8 @@ async function reserveSharedAllowance(args: {
     args.lane === "system" ? systemCommittedKey : visibleCommittedKey;
   const reservationsKey =
     args.lane === "system" ? systemReservationsKey : visibleReservationsKey;
+  const lanePrefix = args.lane === "system" ? `${keyPrefix}:system` : keyPrefix;
+  const followsRealSpend = await allowanceFollowsRealSpend(args.userId);
   const redis = await getRedis();
 
   let initialized = false;
@@ -599,12 +702,15 @@ async function reserveSharedAllowance(args: {
   const id = randomUUID();
   const member = `${id}|${amountMicroUsd}`;
   const expiresAt = Date.now() + RESERVATION_TTL_MS;
-  const accepted = await redis.eval(
+  const recentSettledKey = `${lanePrefix}:recent-settled`;
+  const journalStartedKey = `${recentSettledKey}-since`;
+  const reserve = () => redis.eval(
     RESERVE_SCRIPT,
-    3,
+    4,
     committedKey,
     reservationsKey,
     legacyPendingKey,
+    recentSettledKey,
     String(Date.now()),
     String(amountMicroUsd),
     String(
@@ -618,7 +724,26 @@ async function reserveSharedAllowance(args: {
     String(month.ttlSeconds),
     args.lane === "visible" ? "1" : "0",
   );
-  if (Number(accepted) !== 1) {
+  let accepted = Number(await reserve()) === 1;
+  if (
+    !accepted &&
+    followsRealSpend &&
+    (await resyncToGatewaySpend({
+      committedKey,
+      gatewayApiKey: args.gatewayApiKey,
+      journalStartedKey,
+      lane: args.lane,
+      legacyPendingKey,
+      lockKey: `${lanePrefix}:gateway-resync-lock`,
+      month,
+      recentSettledKey,
+      redis,
+      teamId: args.teamId,
+    }))
+  ) {
+    accepted = Number(await reserve()) === 1;
+  }
+  if (!accepted) {
     throw new SharedAiAllowanceExceededError(month.key);
   }
 
@@ -628,9 +753,31 @@ async function reserveSharedAllowance(args: {
     id: member,
     inputOnlyMicroUsd: inputOnly,
     pricing,
+    recentSettledKey,
     reservationsKey,
     ttlSeconds: month.ttlSeconds,
   };
+}
+
+async function commitReservation(
+  reservation: AllowanceReservation,
+  settledMicroUsd: number,
+) {
+  const redis = await getRedis();
+  const now = Date.now();
+  await redis.eval(
+    SETTLE_AND_REMEMBER_SCRIPT,
+    4,
+    reservation.committedKey,
+    reservation.reservationsKey,
+    reservation.recentSettledKey,
+    `${reservation.recentSettledKey}-since`,
+    reservation.id,
+    String(settledMicroUsd),
+    String(reservation.ttlSeconds),
+    String(now),
+    String(now - GATEWAY_REPORT_DELAY_WINDOW_MS),
+  );
 }
 
 async function settleReservation(
@@ -638,35 +785,19 @@ async function settleReservation(
   usage?: GatewayUsage,
   beforeOutput = false,
 ) {
-  const settledMicroUsd = settledUsageMicroUsd(
-    usage,
-    reservation.pricing,
-    reservation.amountMicroUsd,
-    beforeOutput ? reservation.inputOnlyMicroUsd : null,
-  );
-  const redis = await getRedis();
-  await redis.eval(
-    SETTLE_SCRIPT,
-    2,
-    reservation.committedKey,
-    reservation.reservationsKey,
-    reservation.id,
-    String(settledMicroUsd),
-    String(reservation.ttlSeconds),
+  await commitReservation(
+    reservation,
+    settledUsageMicroUsd(
+      usage,
+      reservation.pricing,
+      reservation.amountMicroUsd,
+      beforeOutput ? reservation.inputOnlyMicroUsd : null,
+    ),
   );
 }
 
 async function releaseUnavailableReservation(reservation: AllowanceReservation) {
-  const redis = await getRedis();
-  await redis.eval(
-    SETTLE_SCRIPT,
-    2,
-    reservation.committedKey,
-    reservation.reservationsKey,
-    reservation.id,
-    "0",
-    String(reservation.ttlSeconds),
-  );
+  await commitReservation(reservation, 0);
 }
 
 async function settleAfterInference(
@@ -708,6 +839,7 @@ export function createSharedAllowanceMiddleware(args: {
       modelSlug: args.modelSlug,
       prompt: params.prompt,
       teamId,
+      userId: userIdFromProviderOptions(params.providerOptions),
     });
   };
 
@@ -825,6 +957,7 @@ export function createImageAllowanceMiddleware(args: {
         modelSlug: args.modelSlug,
         prompt: params.prompt,
         teamId,
+        userId: userIdFromProviderOptions(params.providerOptions),
       });
       try {
         const result = await doGenerate();
