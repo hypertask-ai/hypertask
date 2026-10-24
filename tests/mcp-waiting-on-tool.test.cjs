@@ -42,8 +42,10 @@ function fixture(options = {}) {
       },
     },
   };
+  mocks["./auth"] = mocks["@/lib/mcp/auth"];
+  mocks["./operationContext"] = mocks["@/lib/mcp/operationContext"];
   const { POST } = load("src/lib/mcp/operations/tasks/waiting-on/operation.ts", mocks);
-  mocks["@/lib/mcp/operations"] = {
+  mocks["./operations"] = {
     executeMcpOperation: async (request) => {
       const endpoint = request.nextUrl.pathname;
       assert.equal(endpoint, "/mcp/tasks/waiting-on");

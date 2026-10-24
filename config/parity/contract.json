@@ -203,11 +203,18 @@
       "id": "tasks.mutate",
       "title": "Create, update, move, batch, or escalate tasks",
       "matches": {
-        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate|waiting-on)$", "^POST /api/mcp/tasks/card-actions$"],
-        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards|set_task_waiting_on)$"],
-        "cli": ["^task (create|update|move|move-board)$", "^agent move$"],
+        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate)$", "^POST /api/mcp/tasks/card-actions$", "^POST /api/mcp/tasks/waiting-on$"],
+        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$"],
+        "cli": ["^task (create|update|move|move-board)$", "^agent move$", "^task waiting-on$"],
         "ai_chat": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
-        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards|set_task_waiting_on)$"]
+        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7723",
+          "expires": "2026-11-13",
+          "entries": ["task waiting-on"]
+        }
       }
     },
     {
