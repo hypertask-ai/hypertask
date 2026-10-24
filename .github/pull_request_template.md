@@ -1,3 +1,18 @@
+## Flag
+
+<!--
+One Flag line and one Everyone line, outside this comment.
+Link the flag this PR introduces or uses:
+Flag link: https://app.hypertask.ai/admin/flags/<flag-key>
+Everyone: yes
+Everyone: no (<current mode>)
+When no flag applies:
+Flag none: none (<reason>)
+-->
+
+Flag: 
+Everyone: 
+
 ## Outcome
 
 <!-- What user-visible or operational behavior changes? -->

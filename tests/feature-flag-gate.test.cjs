@@ -55,12 +55,12 @@ function commit(git, message) {
   return git(["rev-parse", "HEAD"]).trim();
 }
 
-async function evaluate(title, baseSha, headSha, cwd, labels = []) {
+async function evaluate(title, baseSha, headSha, cwd, labels = [], body) {
   const original = process.cwd();
   process.chdir(cwd);
   try {
     const { evaluate: run } = await import(scriptUrl);
-    return await run({ title, baseSha, headSha, labels });
+    return await run({ title, baseSha, headSha, labels, ...(body === undefined ? {} : { body }) });
   } finally {
     process.chdir(original);
   }
@@ -2048,4 +2048,69 @@ export function Provider() {
     const result = await evaluate("HTPR-1 [FEATURE] sidebar startup", base, commit(fixture.git, name), fixture.dir);
     assert.equal(result.pass, expected, `${name}: ${result.reason}`);
   }
+});
+
+test("PR body flag statement: missing line fails", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/util.ts", "export const value = 1;\n");
+  const head = commit(git, "backend");
+  const result = await evaluate("HTPR-2 [FEATURE] backend", base, head, dir, [], "No flag statement in this body.\n");
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /one Flag line/);
+});
+
+test("PR body flag statement: none (reason) passes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/util.ts", "export const value = 1;\n");
+  const head = commit(git, "backend");
+  const result = await evaluate(
+    "HTPR-2 [FEATURE] backend",
+    base,
+    head,
+    dir,
+    [],
+    "Flag: none (CI-only change)\n",
+  );
+  assert.equal(result.pass, true, result.reason);
+});
+
+test("PR body flag statement: link to the wrong key fails", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, defaultMode: "EVERYONE", description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
+  const head = commit(git, "add flag");
+  const result = await evaluate(
+    "HTPR-5 [FEATURE] add flag",
+    base,
+    head,
+    dir,
+    [],
+    "Flag: https://app.hypertask.ai/admin/flags/htpr-9-wrong\nEveryone: yes\n",
+  );
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /https:\/\/app\.hypertask\.ai\/admin\/flags\/htpr-5-widget/);
+  assert.doesNotMatch(result.reason, /htpr-9-wrong/);
+});
+
+test("PR body flag statement: valid link plus Everyone line passes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, defaultMode: "EVERYONE", description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
+  const head = commit(git, "add flag");
+  const result = await evaluate(
+    "HTPR-5 [FEATURE] add flag",
+    base,
+    head,
+    dir,
+    [],
+    "Flag: https://app.hypertask.ai/admin/flags/htpr-5-widget\nEveryone: yes\n",
+  );
+  assert.equal(result.pass, true, result.reason);
+  const template = fs.readFileSync(path.join(root, ".github/pull_request_template.md"), "utf8");
+  assert.match(template, /^Flag: $/m);
+  assert.match(template, /^Everyone: $/m);
 });

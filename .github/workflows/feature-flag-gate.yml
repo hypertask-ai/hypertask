@@ -116,9 +116,11 @@ jobs:
           base_sha=$(jq -r '.base.sha' "$pr_json")
           api_head_sha=$(jq -r '.head.sha' "$pr_json")
           head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
-          export FEATURE_FLAG_PR_LABELS
+          export FEATURE_FLAG_PR_LABELS FEATURE_FLAG_PR_BODY
           FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' "$pr_json")
-          fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
+          FEATURE_FLAG_PR_BODY=$(jq -r '.body // ""' "$pr_json")
+          body_hash=$(printf '%s' "$FEATURE_FLAG_PR_BODY" | sha256sum | cut -c1-16)
+          fingerprint="ffg=$base_sha.$(printf '%s\n%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" "$body_hash" | sha256sum | cut -c1-16)"
           result=2
 
           if [ "$api_head_sha" != "$head_sha" ]; then
@@ -197,7 +199,7 @@ jobs:
              [ "$(jq -r '.title' "$current_json")" != "$title" ] ||
              [ "$(jq -r '.base.sha' "$current_json")" != "$base_sha" ] ||
              [ "$(jq -r '.head.sha' "$current_json")" != "$head_sha" ] ||
-             ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' "$current_json" >/dev/null; then
+             ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" --arg body "$FEATURE_FLAG_PR_BODY" '([.labels[]?.name // empty] | sort) == ($labels | sort) and (.body // "") == $body' "$current_json" >/dev/null; then
             echo "Pull request #$PR_NUMBER changed during evaluation; its queued event will evaluate the new state."
             publish_error_status "feature-flag-gate is waiting for the updated pull request" ||
               echo "::error::Cannot replace the pending feature-flag-gate status."
@@ -384,14 +386,16 @@ jobs:
             base_sha=$(jq -r '.base.sha' <<<"$pull")
             head_sha=$(jq -r '.head.sha' <<<"$pull")
             head_repo=$(jq -r '.head.repo.full_name' <<<"$pull")
-            export FEATURE_FLAG_PR_LABELS
+            export FEATURE_FLAG_PR_LABELS FEATURE_FLAG_PR_BODY
             FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' <<<"$pull")
+            FEATURE_FLAG_PR_BODY=$(jq -r '.body // ""' <<<"$pull")
             head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$pages")
             reason_file="$gate_tmp/reason-$number.txt"
             error_file="$gate_tmp/error-$number.txt"
             payload="$gate_tmp/status-$number.json"
             result=2
-            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
+            body_hash=$(printf '%s' "$FEATURE_FLAG_PR_BODY" | sha256sum | cut -c1-16)
+            fingerprint="ffg=$base_sha.$(printf '%s\n%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" "$body_hash" | sha256sum | cut -c1-16)"
             statuses_file="$gate_tmp/latest-statuses-$number.json"
             if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
               echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; evaluating without deduplication."
@@ -456,7 +460,7 @@ jobs:
                [ "$(jq -r '.title' <<<"$current")" != "$title" ] ||
                [ "$(jq -r '.base.sha' <<<"$current")" != "$base_sha" ] ||
                [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
-               ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
+               ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" --arg body "$FEATURE_FLAG_PR_BODY" '([.labels[]?.name // empty] | sort) == ($labels | sort) and (.body // "") == $body' <<<"$current" >/dev/null; then
               echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file" ||
                 echo "::error::Cannot publish the feature-flag-gate error for #$number."

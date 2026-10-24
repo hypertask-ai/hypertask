@@ -74,7 +74,8 @@ const waitingDescription = "feature-flag-gate is waiting for the run on the newe
 
 function featureFlagStatus(pull, overrides = {}) {
   const labels = JSON.stringify((pull.labels ?? []).map((label) => label.name).sort());
-  const titleHash = createHash("sha256").update(`${pull.title}\n${labels}`).digest("hex").slice(0, 16);
+  const bodyHash = createHash("sha256").update(pull.body ?? "").digest("hex").slice(0, 16);
+  const titleHash = createHash("sha256").update(`${pull.title}\n${labels}\n${bodyHash}`).digest("hex").slice(0, 16);
   return {
     context: "feature-flag-gate", state: "success", description: "ok", updated_at: new Date().toISOString(),
     target_url: `https://example.invalid/actions/runs/previous#ffg=${pull.base.sha}.${titleHash}`,

@@ -1522,7 +1522,79 @@ function readLabelsFromEnv() {
   }
 }
 
-export function evaluate({ title, baseSha, headSha, labels = [] }) {
+const FLAG_ADMIN_URL = "https://app.hypertask.ai/admin/flags/";
+
+function flagKeyInUrlPattern() {
+  return new RegExp(
+    `${FLAG_ADMIN_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}((?:htpr|hyfa|yper4)-\\d+-[a-z0-9-]+)(?=$|[^a-z0-9-])`,
+    "g",
+  );
+}
+
+function flagStatementSource(body) {
+  return String(body)
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/```[\s\S]*?```/g, "");
+}
+
+function flagStatementProblem(body, knownFlagKeys) {
+  const flags = [];
+  const everyones = [];
+  for (const raw of flagStatementSource(body).split(/\r?\n/)) {
+    const line = raw.trim().replace(/^[-*]\s+/, "");
+    if (line.startsWith("Flag:")) {
+      const value = line.slice("Flag:".length).trim();
+      if (value) flags.push(value);
+    } else if (line.startsWith("Everyone:")) {
+      const value = line.slice("Everyone:".length).trim();
+      if (value) everyones.push(value);
+    }
+  }
+  if (flags.length !== 1) {
+    return failure(
+      "Pull request body needs one Flag line: " +
+      `Flag: ${FLAG_ADMIN_URL}<flag-key> or Flag: none (<reason>).`,
+    );
+  }
+  const none = /^none \((.+)\)$/.exec(flags[0]);
+  let linkedKey = null;
+  if (none) {
+    if (!none[1].trim() || none[1].includes(")")) {
+      return failure("Flag: none needs a reason in parentheses, for example Flag: none (CI-only change).");
+    }
+  } else {
+    const matches = [...flags[0].matchAll(flagKeyInUrlPattern())];
+    if (matches.length !== 1) {
+      return failure(`Flag line must link to ${FLAG_ADMIN_URL}<flag-key>.`);
+    }
+    linkedKey = matches[0][1];
+  }
+  const known = [...knownFlagKeys].sort();
+  if (known.length > 0 && !known.includes(linkedKey)) {
+    return failure(
+      "Flag line must link to the flag this pull request introduces or uses: " +
+      known.map((key) => `${FLAG_ADMIN_URL}${key}`).join(", "),
+    );
+  }
+  const everyoneRequired = linkedKey !== null || known.length > 0;
+  if (everyoneRequired && everyones.length !== 1) {
+    return failure("Pull request body needs one Everyone line: Everyone: yes or Everyone: no (<current mode>).");
+  }
+  if (everyones.length > 1) {
+    return failure("Pull request body needs one Everyone line: Everyone: yes or Everyone: no (<current mode>).");
+  }
+  if (everyones.length === 1 && everyones[0] !== "yes" && !/^no \(.+\)$/.test(everyones[0])) {
+    return failure("Everyone line must be Everyone: yes or Everyone: no (<current mode>).");
+  }
+  return null;
+}
+
+export function evaluate({ title, baseSha, headSha, labels = [], body }) {
+  const knownFlagKeys = new Set();
+  const finish = (result) => {
+    if (body === undefined || !result?.pass) return result;
+    return flagStatementProblem(body, knownFlagKeys) ?? result;
+  };
   const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
     .split("\n").filter(Boolean);
   if (changedFiles.some((path) => ["src/lib/flags/keys.ts", "src/lib/flags.ts", "src/lib/flags/definitions.ts", "src/lib/flags/releaseRisk.ts"].includes(path) || path.startsWith("src/lib/flags/definitions/"))) {
@@ -1536,6 +1608,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
       for (const key of headDefinitions.keys) {
         if (!baseDefinitions.keys.includes(key)) added.add(key);
       }
+      for (const key of added) knownFlagKeys.add(key);
       if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
       const baseFiles = new Set(flagDefinitionPaths(mergeBase));
       for (const path of flagDefinitionPaths(headSha)) {
@@ -1557,7 +1630,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
     !/\.stories\.[jt]sx?$/.test(path));
   if (uiFiles.length === 0) {
-    return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
+    return finish({ pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." });
   }
 
   // Title exemptions never bypass registry default validation.
@@ -1570,7 +1643,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   }
 
   if (/^YPER4-\d+ \[[^\]]+\] \S/.test(title)) {
-    return { pass: true, ownerReview: "exempt-ui", reason: "Infra ticket: no flag required" };
+    return finish({ pass: true, ownerReview: "exempt-ui", reason: "Infra ticket: no flag required" });
   }
 
   const titleMatch = title.match(/^(?:HTPR|HYFA)-(\d+) \[([^\]]+)\] \S/);
@@ -1584,11 +1657,11 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         `(over the ${CROSS_CHECK_LINE_BUDGET}-line budget). Retitle it as [FEATURE] with a feature flag or split it.`,
       );
     }
-    return {
+    return finish({
       pass: true,
       ownerReview: "exempt-ui",
       reason: `[REFACTOR] is exempt (${uiAdded} UI lines added, ${moved} moved, ${newLines} new, ${riskyNew} risky new).`,
-    };
+    });
   }
   const titleExempt = isExemptTitleTag(tag);
   const aiChatLabel = hasAiChatLabel(labels);
@@ -1626,7 +1699,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
       : titleExempt
         ? `[${tag}]`
         : "AI CHAT label";
-    if (!widened) return { pass: true, ownerReview: "exempt-ui", reason: `${reasonPrefix} is exempt (${uiAdded} UI lines added).` };
+    if (!widened) return finish({ pass: true, ownerReview: "exempt-ui", reason: `${reasonPrefix} is exempt (${uiAdded} UI lines added).` });
   }
   if (!titleMatch) {
     return failure("The pull request title has no valid HTPR or HYFA ticket and tag, so the feature flag requirement cannot be checked.");
@@ -1672,6 +1745,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         addedLinesFor(mergeBase, headSha, path),
       );
       if (key) {
+        knownFlagKeys.add(key);
         const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);
         for (const uiPath of covered) coveredUiFiles.add(uiPath);
         if (covered.size > 0 && !matchedGate) matchedGate = { key, path };
@@ -1679,11 +1753,11 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     }
     if (matchedGate && (requiredUiFiles.length === 0 ||
         requiredUiFiles.every((path) => coveredUiFiles.has(path)))) {
-      return {
+      return finish({
         pass: true,
         ownerReview: "feature-gated-ui",
         reason: `[${tag}] calls ticket-specific feature gate ${matchedGate.key} in changed code covering every UI entry from ${matchedGate.path}.`,
-      };
+      });
     }
   } catch (error) {
     return failure(`Feature flag files or imports could not be parsed safely: ${error.message}`);
@@ -1708,7 +1782,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const [title, baseSha, headSha, decisionFile] = process.argv.slice(2);
   try {
     if (!title || !baseSha || !headSha) throw new Error("title, base SHA, and head SHA are required");
-    const result = evaluate({ title, baseSha, headSha, labels: readLabelsFromEnv() });
+    const envBody = process.env.FEATURE_FLAG_PR_BODY;
+    const result = evaluate({
+      title,
+      baseSha,
+      headSha,
+      labels: readLabelsFromEnv(),
+      ...(envBody === undefined ? {} : { body: envBody }),
+    });
     if (decisionFile) writeFileSync(decisionFile, `${result.ownerReview ?? "automerge"}\n`);
     console.log(result.reason);
     process.exitCode = result.pass ? 0 : 1;

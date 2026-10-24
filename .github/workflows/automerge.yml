@@ -422,8 +422,9 @@ jobs:
             final_base_sha=$(jq -r '.base.sha' "$FINAL_PR_JSON")
             final_head_sha=$(jq -r '.head.sha' "$FINAL_PR_JSON")
             final_head_repo=$(jq -r '.head.repo.full_name' "$FINAL_PR_JSON")
-            export FEATURE_FLAG_PR_LABELS
+            export FEATURE_FLAG_PR_LABELS FEATURE_FLAG_PR_BODY
             FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' "$FINAL_PR_JSON")
+            FEATURE_FLAG_PR_BODY=$(jq -r '.body // ""' "$FINAL_PR_JSON")
             if ! final_head_pr_count=$(jq -er --arg sha "$final_head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$FINAL_HEADS_JSON"); then
               echo "::error::Cannot verify current production PR heads; refusing to merge."
               infra_failures=$((infra_failures+1))
@@ -507,10 +508,11 @@ jobs:
               echo "::endgroup::"
               continue
             fi
-            if ! jq -e --arg title "$final_title" --arg base "$final_base_sha" --arg head "$final_head_sha" --arg repo "$REPO" --argjson labels "$FEATURE_FLAG_PR_LABELS" '
+            if ! jq -e --arg title "$final_title" --arg base "$final_base_sha" --arg head "$final_head_sha" --arg repo "$REPO" --argjson labels "$FEATURE_FLAG_PR_LABELS" --arg body "$FEATURE_FLAG_PR_BODY" '
                  .state == "open" and .base.ref == "production" and
                  .title == $title and .base.sha == $base and .head.sha == $head and .head.repo.full_name == $repo and
-                 (([.labels[]?.name // empty] | sort) == ($labels | sort))
+                 (([.labels[]?.name // empty] | sort) == ($labels | sort)) and
+                 ((.body // "") == $body)
                ' "$VERIFY_PR_JSON" >/dev/null || [ "$verify_head_pr_count" -ne 1 ]; then
               echo "skip: PR metadata or head ownership changed during feature-flag re-evaluation"
               echo "::endgroup::"
