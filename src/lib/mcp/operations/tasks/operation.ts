@@ -1,4 +1,3 @@
-import { getMcpSkillContext } from '@/lib/mcp/skills/context'
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -283,6 +282,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (orConditions.length > 0) {
+        const { getMcpSkillContext } = await import('@/lib/mcp/skills/context')
         const includeAiSummary = !ctx.agentId && !ctx.management &&
           await isFeatureEnabled(HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, user.id).catch(() => false)
 
