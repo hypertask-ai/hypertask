@@ -17,6 +17,8 @@ import { HTPR_7071_AGENT_STATUS_CHIP_FLAG } from '@/lib/flags/keys';
 import { agentStatusIsFresh, agentStatusText, agentStepFor } from '@/lib/agentStatus/chip';
 import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
+import { useBoardCardData } from './BoardCardData';
+import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from '@/lib/flags/definitions/htpr-7677-board-card-data-once';
 
 interface ITaskTopRow {
     task:ITask;
@@ -35,7 +37,39 @@ interface ITaskTopRow {
     blockingUser?: BlockerUser;
     agents?: IAgent[];
 }
-const TaskTagsRow:React.FC<ITaskTopRow>  = ({
+type TaskTimeOnCard = {
+    showTimeTotals: boolean;
+    runningTimer?: { startedAt: string; pausedAt: string | null };
+    timeTotal?: BoardTimeTotal;
+}
+
+const TaskTagsRow:React.FC<ITaskTopRow> = (props) => {
+      const boardCardDataOnce = useFlag(HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG)
+      const boardCardData = useBoardCardData(props.task.projectId)
+      if (!boardCardDataOnce || !boardCardData) return <TaskTagsRowWithOwnTimers {...props} />
+      return (
+        <TaskTagsRowContent
+          {...props}
+          showTimeTotals={boardCardData.showTimeTotals}
+          runningTimer={boardCardData.runningTimers.get(props.task.id)}
+          timeTotal={boardCardData.timeTotals.get(props.task.id)}
+        />
+      )
+}
+
+const TaskTagsRowWithOwnTimers:React.FC<ITaskTopRow> = (props) => {
+      const { showTimeTotals, timers, timeTotals } = useBoardRunningTimers(props.task.projectId, { project: props.project })
+      return (
+        <TaskTagsRowContent
+          {...props}
+          showTimeTotals={showTimeTotals}
+          runningTimer={timers.get(props.task.id)}
+          timeTotal={timeTotals.get(props.task.id)}
+        />
+      )
+}
+
+const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
     task,
     project,
     setShowEstimateModal,
@@ -44,13 +78,9 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
     setShowAssignModal,
     toggleDueDate,
     updateActiveItemAndItemInView:updateTaskFocus,
-    dueDate,priority, estimate, taskLabels, hasDraft = false, blockingUser, agents = []}) => {
+    dueDate,priority, estimate, taskLabels, hasDraft = false, blockingUser, agents = [],
+    showTimeTotals, runningTimer, timeTotal}) => {
 
-      const {
-        showTimeTotals,
-        timers: runningTimers,
-        timeTotals,
-      } = useBoardRunningTimers(task.projectId, { project })
       const agentStatusEnabled = useFlag(HTPR_7071_AGENT_STATUS_CHIP_FLAG)
       const agentMinute = useMinuteClock(Boolean(agentStatusEnabled && task.agentStatus))
       const agentStatusLine = agentStatusEnabled && task.agentStatus && agentStatusIsFresh(task.agentStatus.at, agentMinute)
@@ -63,8 +93,6 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
             task.agentStatus.at,
           )
         : null
-      const runningTimer = runningTimers.get(task.id)
-      const timeTotal = timeTotals.get(task.id)
       const customFieldValues = (task as ITask & { customFieldValues?: CustomFieldValue[] }).customFieldValues
 
 
@@ -183,7 +211,7 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
             );
           })()}
 
-          <CustomFieldChips projectId={task.projectId} values={customFieldValues} />
+          {hasCustomFieldValues && <CustomFieldChips projectId={task.projectId} values={customFieldValues} />}
 
     </div>
     :<></>
