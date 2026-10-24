@@ -1,0 +1,41 @@
+name: AI model watch
+
+on:
+  schedule:
+    - cron: '43 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-model-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Check offline discovery and deduplication fixtures
+        run: node --test tests/model-diff.test.cjs
+      - name: Discover model changes
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          node scripts/model-diff --json > "$RUNNER_TEMP/model-diff.json"
+          cat "$RUNNER_TEMP/model-diff.json"
+      - name: File missing board 15 tickets
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+        run: node .github/scripts/ai-model-watch.cjs "$RUNNER_TEMP/model-diff.json"

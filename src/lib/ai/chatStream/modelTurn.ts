@@ -6,7 +6,7 @@ import { settingsPages, type SettingProposalCard } from "@/lib/ai/settings/catal
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7363_CHAT_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
 
 import { loadCurrentTaskContext } from "@/app/api/ai/_lib/currentTaskContext";
 import { type ModelMessage } from "ai";
@@ -21,7 +21,7 @@ import { resolveSkillsForAiRequest } from "@/app/api/ai/_lib/chatSkillResolution
 import { ChatRequest } from "@/lib/ai/chatStream/request";
 import { ToolExecution } from "@/lib/ai/chatStream/types";
 
-import { AGENT_SYSTEM_PROMPT } from "@/lib/ai/chatStream/prompt";
+import { AGENT_SYSTEM_PROMPT, chatSurfacePrompt } from "@/lib/ai/chatStream/prompt";
 import { aiPromptCachingEnabled, configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { createUserContent } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
@@ -49,6 +49,9 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const instructions = [
     AGENT_SYSTEM_PROMPT,
     settingsScope ? `The person is in Settings, section ${settingsScope.section}: ${settingsPages[settingsScope.section]}. Use hypertask_settings to read current values before proposing one change. You can propose theme, notification category/channel and board roles only on their open page. Every change requires the app's Apply/Cancel card; never apply through any other action or claim it is done. The app renders the real card; do not fabricate buttons or review links. For unsupported changes, explain the location and use open. The page catalog covers nearby settings, but other pages' values and actions require navigating there first. This Settings scope overrides unrelated board/task instructions.` : null,
+    resolvedBody.surface && await isFeatureEnabled(HTPR_7760_CHAT_SURFACE_FLAG, dbUser.id)
+      ? chatSurfacePrompt(resolvedBody.surface)
+      : null,
     inlineAgentImagesEnabled ? renderPrompt("inline-agent-images") : null,
     skillResolution.systemPromptAddition,
     agentPromptAddition,

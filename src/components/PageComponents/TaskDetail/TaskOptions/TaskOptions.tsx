@@ -51,6 +51,7 @@ const TaskOptions = () => {
         )}
 
         <RemindMeTaskDetail
+          isHeader
           color="#696b6e"
           hoverText="#95999E"
           navigateToNextTask={navigateToNextTask}
