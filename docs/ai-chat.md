@@ -9,3 +9,7 @@ The already-shipped server contract requires both the server's `htpr-6924-rest-c
 Sources: `src/hooks/MultiPages/AIChat/usePagedChatHistory.ts`, `src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts`, `src/components/AI_CHAT/ChatHeader.tsx`, `src/utils/api/ai_chat/aiChatHelpers.ts`.
 Regression proof: `node --test tests/htpr-6971-chat-history-paging.test.cjs`.
 Ticket: https://app.hypertask.ai/detail/project-15/6971
+
+## Ticket rows in answers
+
+With `htpr-7683-ai-chat-ticket-rows` enabled (Everyone by default), ticket answers can show compact rows grouped under headings such as Done or New. Each row opens the ticket and shows its current status, assignee avatars and priority. Five rows appear per group; choose “+N more” to see the rest. Reopened conversations refresh the rows and omit tickets you can no longer access. Turning the flag off keeps the existing text-only answers.

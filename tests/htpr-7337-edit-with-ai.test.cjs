@@ -155,6 +155,7 @@ function editModeCleanup({ enabled = true, open = true, taskId = 123, messages =
     react: hookReact,
     "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
     "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
+    "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
     "@/lib/state": { useRecoilState: () => [123, (value) => cleared.push(value)] },
     "@/store": { aiChatEditTaskIdAtom: "edit" },
     "./useAiChatState": { useAiChatState: () => ({ showAiChatInterface: open, taskId, currentSession: { messages } }) },

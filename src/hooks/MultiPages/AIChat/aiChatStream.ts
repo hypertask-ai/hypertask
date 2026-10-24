@@ -5,7 +5,7 @@ import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
-type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat"> & {
+type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "ticketRowsEnabled"> & {
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
   assistantMessageId: string;
@@ -177,6 +177,7 @@ export async function consumeAiChatStream(context: Context) {
                       const initialAssistantMessage: IChatMessage = {
                         id: assistantMessageId,
                         content: aiContent,
+                        ...(context.ticketRowsEnabled && parsed.assistant_persisted === true && Array.isArray(parsed.ticketGroups) ? { ticketGroups: parsed.ticketGroups } : {}),
                         role: "assistant",
                         createdAt: new Date(),
                         sessionId: session.id,

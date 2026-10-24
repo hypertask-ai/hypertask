@@ -1,3 +1,5 @@
+import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
+import { hydrateChatTicketMessages } from "@/lib/ai/chatStream/ticketGroups";
 import { loadSidebarChatRequest, sidebarChatProjectId } from "@/lib/agents/chatAccess";
 import { randomUUID } from "node:crypto";
 import { getRedis } from "@/lib/redis";
@@ -21,7 +23,7 @@ const transcriptInclude = {
 };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function pagedSessions(request: NextRequest, userId: number) {
+async function pagedSessions(request: NextRequest, userId: number, ticketRowsEnabled: () => Promise<boolean>) {
   const params = new URL(request.url).searchParams;
   const visible = {
     userId,
@@ -40,7 +42,7 @@ async function pagedSessions(request: NextRequest, userId: number) {
       include: transcriptInclude,
     });
     return session
-      ? NextResponse.json({ success: true, session })
+      ? NextResponse.json({ success: true, session: await hydrateChatTicketMessages(session, userId, ticketRowsEnabled) })
       : NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
   }
 
@@ -123,6 +125,8 @@ export async function GET(request: NextRequest) {
       : await (await import("@/app/api/ai/_lib/requestUser")).getCliBearerChatUser(request, "all-sessions");
     const userId = currentUser?.userId ?? cliBearerUser?.id;
     if (!userId) return unauthorized();
+    let ticketRowsCheck: Promise<boolean> | undefined;
+    const ticketRowsEnabled = () => ticketRowsCheck ??= isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, userId).catch(() => false);
     if (sidebarChatProjectId(request.headers) !== undefined) {
       const sessionId = new URL(request.url).searchParams.get("sessionId") ?? "";
       const access = await loadSidebarChatRequest(request, sessionId);
@@ -131,7 +135,7 @@ export async function GET(request: NextRequest) {
         where: { id: sessionId, userId, agent: { runtimeType: "NATIVE" } },
         include: transcriptInclude,
       });
-      return session ? NextResponse.json({ success: true, session }, { headers: { "Cache-Control": "private, no-store" } })
+      return session ? NextResponse.json({ success: true, session: await hydrateChatTicketMessages(session, userId, ticketRowsEnabled) }, { headers: { "Cache-Control": "private, no-store" } })
         : NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
     }
 
@@ -146,7 +150,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (restCompat && new URL(request.url).searchParams.get("compat") === "htpr-6924") {
-      return await pagedSessions(request, userId);
+      return await pagedSessions(request, userId, ticketRowsEnabled);
     }
 
     const sessions = await prisma.chatSession.findMany({
@@ -192,7 +196,7 @@ export async function GET(request: NextRequest) {
       sessions.push(session);
     }
 
-    return NextResponse.json({ success: true, sessions });
+    return NextResponse.json({ success: true, sessions: await Promise.all(sessions.map((session) => hydrateChatTicketMessages(session, userId, ticketRowsEnabled))) });
   } catch (error) {
     console.error("🚀 ~ GET ~ Error listing chat sessions:", error);
     return NextResponse.json(

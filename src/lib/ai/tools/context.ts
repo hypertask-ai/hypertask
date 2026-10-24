@@ -1,3 +1,5 @@
+import type { ChatTicketGroupReferences } from "@/models/model";
+import type { ToolExecution } from "@/lib/ai/chatStream/types";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import { NextRequest } from "next/server";
 import { createAgentForUser } from "@/lib/mcp/agents/create";
@@ -22,7 +24,8 @@ export function createToolContext(
   chatTaskWriterEnabled = false,
   abortSignal?: AbortSignal,
   inlineAgentImagesEnabled = false,
-  teamScope?: AgentTokenTeamScope | null
+  teamScope?: AgentTokenTeamScope | null,
+  ticketRows: TicketRowsSink = { executions: [], setGroups: () => undefined },
 ) {
   if (actingAgentId && teamScope === undefined) throw new Error("Agent team scope is unavailable");
   const requestingUserId = user.id;
@@ -76,7 +79,9 @@ export function createToolContext(
       : null;
   };
   const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued });
-  return { teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
+  return { ticketRows, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
 }
+
+export type TicketRowsSink = { executions: ToolExecution[]; setGroups: (groups: ChatTicketGroupReferences) => void };
 
 export type ToolContext = ReturnType<typeof createToolContext>;

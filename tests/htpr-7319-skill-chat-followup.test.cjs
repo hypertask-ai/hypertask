@@ -599,6 +599,7 @@ async function sendAfterIntro(session, question) {
   const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
     "@/lib/agents/chatViewerState": { sidebarChatHeaders: () => ({}) },
     "./aiChatStream": { consumeAiChatStream: async () => {} },
+    "@/lib/ai/ticketRowsHistory": { historyContent: (message) => message.content },
     "react-hot-toast": { default: { error: assert.fail } },
     "@/lib/mcp/bearerAuth": { mcpAuthorizationHeaders: () => ({}) },
     "@/lib/aiChat/streamRefusal": {},
