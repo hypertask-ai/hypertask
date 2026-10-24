@@ -1,3 +1,7 @@
+import { useFlag } from "@/hooks/useFlag";
+import { planLimitRefusalMessage } from "@/lib/planLimitsClient";
+import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
+import toast from "react-hot-toast";
 
 import { aiChatNewTicketPathAtom, currentProjectAtom, activeSectionAtom, currentUserAtom } from "@/store";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,6 +35,8 @@ interface CreateTaskGloballyParams {
 }
 
 const useAddDeleteTaskInBoards = () => {
+  let showPlanLimitToast = false;
+  if (useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG)) showPlanLimitToast = true;
   const queryClient = useQueryClient();
   const store = useStore();
   const _currentProject = useRecoilValue(currentProjectAtom)
@@ -140,7 +146,13 @@ const useAddDeleteTaskInBoards = () => {
           section_title: section,
           ranking,
         });
-        if (result?.error || !result?.resposne?.newTask) return false;
+        if (result?.error || !result?.resposne?.newTask) {
+          if (showPlanLimitToast) {
+            const message = planLimitRefusalMessage(result?.ErrorMessage);
+            if (message) toast.error(message);
+          }
+          return false;
+        }
         task = {
           ...result.resposne.newTask,
           assignees: defaults.assignees.map((assignee) => "uid" in assignee
@@ -188,6 +200,10 @@ const useAddDeleteTaskInBoards = () => {
       }
       return true;
     } catch (error) {
+      if (showPlanLimitToast) {
+        const message = planLimitRefusalMessage(error);
+        if (message) toast.error(message);
+      }
       console.log("🚀 ~ createItem ~ error:", error);
       return false;
     }

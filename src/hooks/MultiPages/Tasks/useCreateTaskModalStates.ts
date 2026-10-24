@@ -1,3 +1,6 @@
+import { planLimitRefusalMessage } from "@/lib/planLimitsClient";
+import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
+import toast from "react-hot-toast";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
@@ -80,6 +83,8 @@ interface IProccessed {
 }
 
 const useCreateTaskModalGlobalStates = () => {
+  let showPlanLimitToast = false;
+  if (useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG)) showPlanLimitToast = true;
   const [initializeDefaults, setInitializeDefaults] = useState(true);
   const [showAssignModal, setShowAssignModal] = useState<boolean>(false);
   const [showConfirmationModal, setShowConfirmationModal] =
@@ -618,10 +623,17 @@ const useCreateTaskModalGlobalStates = () => {
         traceScope,
       );
 
-      if (res?.error) return;
+      if (res?.error) {
+        if (showPlanLimitToast) {
+          const message = planLimitRefusalMessage(res.ErrorMessage);
+          if (message) toast.error(message);
+        }
+        return;
+      }
       return res?.resposne?.newTask;
     },
     [
+      showPlanLimitToast,
       formValues.currentProject,
       currentUser?.id,
       formValues.title,
