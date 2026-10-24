@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""Report approvals nobody picked up for an hour; only --go messages HT Product Lead."""
+import argparse
+import contextlib
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime
+from html.parser import HTMLParser
+
+HERE = Path(__file__).resolve().parent
+HOME = Path.home()
+STATE = HOME / ".local/state/ht-approved-sweep"
+
+
+class VisibleText(HTMLParser):
+    def __init__(self, text):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.feed(text)
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("p", "div", "li", "br", "h1", "h2", "h3"):
+            self.parts.append(" ")
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def visible(comment):
+    return "".join(VisibleText(comment.get("text") or comment.get("commentText") or "").parts).strip()
+
+
+def timestamp(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+
+
+def agent(row):
+    return row.get("agent") or row.get("agentId") or row.get("agent_display_name") or row.get("agentDisplayName")
+
+
+def human(row):
+    return row.get("creatorId", row.get("userId")) == 6 and not agent(row) and not row.get("isAgent")
+
+
+def command(args, env, **kwargs):
+    return subprocess.run(args, env=env, text=True, capture_output=True, timeout=45, **kwargs)
+
+
+def read(args, env):
+    result = command(["vcc", *args], env)
+    if result.returncode:
+        raise ValueError(f"vcc {' '.join(args)}: {result.stderr.strip()}")
+    return result.stdout
+
+
+def pages(args, key, env):
+    rows, cursor, seen = [], None, set()
+    while True:
+        data = json.loads(read([*args, "--limit", "100", "--json", *(["--cursor", cursor] if cursor else [])], env))
+        if data.get("success") is not True or not isinstance(data.get(key), list):
+            raise ValueError(f"invalid {key} list")
+        rows.extend(data[key])
+        if len(rows) == data["total"]:
+            return rows
+        cursor = data.get("nextCursor")
+        if not data[key] or not cursor or cursor in seen or len(rows) > data["total"]:
+            raise ValueError(f"incomplete {key} list")
+        seen.add(cursor)
+
+
+def approval(comments, env):
+    texts = [visible(c) for c in comments]
+    result = command(["node", str(HERE / "approval-answer.cjs")], env, input=json.dumps(texts))
+    if result.returncode:
+        raise ValueError(f"answer classifier failed: {result.stderr.strip()}")
+    answers = json.loads(result.stdout)
+    events = []
+    for c, text, answer in zip(comments, texts, answers, strict=True):
+        created = timestamp(c["createdAt"])
+        # Edits cannot create an approval, but a later human no still withdraws it.
+        if human(c) and answer == "no":
+            events.append((max(created, timestamp(c["editedAt"]) if c.get("editedAt") else created), c["id"], "no", c))
+        if c.get("editedAt") or c.get("editedBy"):
+            continue
+        if human(c) and answer == "yes":
+            events.append((created, c["id"], "yes", c))
+        if re.search(r"(?:^|\s)Question:", text, re.I):
+            for reaction in c.get("reactions", []):
+                emoji = reaction.get("emoji", "")
+                if (human(reaction) and not reaction.get("isDeleted")
+                        and (emoji.startswith("👍") or reaction.get("unified", "").lower().startswith("1f44d"))):
+                    events.append((timestamp(reaction["createdAt"]), c["id"], "yes", c))
+    if not events:
+        return None
+    latest = max(events, key=lambda event: (event[0], event[1], event[2] == "no"))
+    return latest if latest[2] == "yes" else None
+
+
+def sweep(args, env):
+    now = time.time()
+    reported_path = STATE / "reported.json"
+    reported = json.loads(reported_path.read_text()) if reported_path.exists() else {}
+    candidates = []
+    for board in (15, 4060):
+        for task in pages(["task", "list", "--project", str(board), "--status", "Normal"], "tasks", env):
+            if task["section"].strip().casefold() in ("done", "in progress"):
+                continue
+            if task.get("status", "Normal") != "Normal" or task.get("commentCount") == 0:
+                continue
+            candidates.append((board, task))
+    reports = []
+    for board, task in candidates:
+        ticket = task["ticketNumber"]
+        comments = pages(["comments", "list", ticket, "--include-activity"], "comments", env)
+        approved = approval(comments, env)
+        if not approved:
+            continue
+        at, comment_id, _, _ = approved
+        marker = f"approved-sweep:{ticket}:{comment_id}:{at}"
+        if now - at < 3600 or marker in reported:
+            continue
+        if any(timestamp(c["createdAt"]) > at and agent(c) and (
+                re.match(r"^Claimed\.", visible(c), re.I) or c.get("type") == "activity") for c in comments):
+            continue
+        activity = read(["activity", "last", ticket], env).strip()
+        if activity and timestamp(activity.split("\t")[0]) > at:
+            continue
+        url = f"https://app.hypertask.ai/detail/project-{board}/{task['uniqueIndex']}"
+        message = (f"Approved ticket not picked up for over an hour: {ticket} — {url}. "
+                   f"Valentin's approval: {url}#comment-{comment_id}. Please arrange runner pickup; this sweep never claims or moves tickets.")
+        reports.append((marker, message))
+    # Complete all reads before sending anything, so incomplete scans never partially report.
+    for marker, message in reports:
+        print(message)
+        if args.go:
+            deliver = HOME / ".agents/skills/ship/scripts/runner-deliver"
+            result = command([str(deliver), "ht-product-lead"], dict(env, RUNNER_DELIVER_ID=marker), input=message + "\n")
+            if result.returncode not in (0, 3):
+                raise ValueError(f"delivery failed: {result.stderr.strip()}")
+            # Exit 3 means runner-deliver durably queued it in the same infra-manager route.
+            reported[marker] = now
+            temporary = reported_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(reported, indent=2) + "\n")
+            os.replace(temporary, reported_path)
+    print(f"Approved sweep: {len(reports)} ticket(s) {'reported' if args.go else 'would report (dry run; use --go)'}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--go", action="store_true", help="message HT Product Lead, never change tickets")
+    args = parser.parse_args()
+    env = dict(os.environ)
+    env.setdefault("SHIP_SESSION_NAME", "RUNNER 8")
+    if not re.fullmatch(r"RUNNER [1-9][0-9]*", env["SHIP_SESSION_NAME"]):
+        raise ValueError("SHIP_SESSION_NAME must name the runner's own RUNNER identity")
+    identity = command([str(HOME / ".agents/skills/ship/scripts/ship-identity")], env)
+    fields = identity.stdout.strip().split("\t")
+    if identity.returncode or len(fields) != 2 or fields[0] != env["SHIP_SESSION_NAME"] or not Path(fields[1]).is_file():
+        raise ValueError("runner agent identity unavailable; refusing a fallback login")
+    os.umask(0o077)
+    with contextlib.ExitStack() as stack:
+        if args.go:
+            STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+            lock = stack.enter_context((STATE / "sweep.lock").open("a"))
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        sweep(args, env)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
+        print(f"ht-approved-sweep: {error}; stopped", file=sys.stderr)
+        sys.exit(1)

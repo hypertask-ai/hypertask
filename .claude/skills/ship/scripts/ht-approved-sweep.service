@@ -1,0 +1,11 @@
+[Unit]
+Description=Report approved tickets nobody picked up to HT Product Lead
+
+[Service]
+Type=oneshot
+UMask=0077
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="SHIP_SESSION_NAME=RUNNER 8"
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/ht-approved-sweep
+ExecStart=/usr/bin/flock --nonblock %h/.local/state/ht-approved-sweep/timer.lock %h/.agents/skills/ship/scripts/ht-approved-sweep --go
+TimeoutStartSec=30m

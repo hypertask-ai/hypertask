@@ -73,6 +73,27 @@ Only agents owned by the flag owner can use this API; plain user tokens and mana
 For Everyone, an agent that did not write the change (HT Product Lead or another runner) records the AI review, independent verdict and live QA: `ht-flag review KEY everyone --ai-review https://github.com/hypertask-ai/hypertask/pull/123 --independent "Reviewed independently; safe to release" --live-qa <https evidence URL>`. This asserts the core inbox cycle passed and prints `review <id>`. A different flag-owner agent (normally the runner that wrote the change) switches with `ht-flag set KEY everyone --review ID` within 24 hours. High-risk flags (money, access, data deletion, customer email) are refused on the review path and keep the Question + thumbs-up path. Reviews are single-use; the deployed SHA is retained for audit, not required to match later deploys. Two agent identities prove agreement, not two independent minds.
 On failed live QA, any flag-owner agent can immediately run `ht-flag set KEY off --failure <https failure evidence URL>` for a classified flag without high-risk metadata that is not a bugfix. High-risk, unclassified and bugfix flags still require the Question + thumbs-up path for Off. Review and failure switches refuse no-ops and require Valentin's human thumbs-up on policy comment 302454; removing it disables both paths. Never combine `--reason`, `--review` or `--failure`.
 
+## Sweep routines
+
+The daily Flags sweep (`ht-flags-sweep`, YPER4-653) reconciles board 15's Flags column against live flag modes; only all-Everyone tickets may finish.
+
+`ht-approved-sweep` (YPER4-662) checks boards 15 and 4060 hourly, outside Done/In Progress. Valentin's human Question 👍 or plain yes (the shared HTPR-7727 rule) starts a one-hour pickup clock; a later human no withdraws it. A runner's later claim or agent activity clears it. Default is read-only dry run; `--go` messages HT Product Lead once per approval using `~/.local/state/ht-approved-sweep/`, never claims or moves. Lists use one call per board when possible, minimum cursor pages above the API's 100-row cap; only candidates need comments. It requires the runner's own agent identity and refuses login fallback.
+
+After merge, from the production checkout (not a feature worktree), install explicitly; RUNNER 8 must have its existing agent credential:
+```sh
+scripts=.claude/skills/ship/scripts
+install -d ~/.agents/skills/ship/scripts ~/.config/systemd/user
+install -m 0755 "$scripts/ht-approved-sweep" ~/.agents/skills/ship/scripts/
+install -m 0644 "$scripts/approval-answer.cjs" ~/.agents/skills/ship/scripts/
+install -m 0644 "$scripts/ht-approved-sweep.service" "$scripts/ht-approved-sweep.timer" ~/.config/systemd/user/
+"$scripts/user-unit-check" ~/.config/systemd/user/ht-approved-sweep.service ~/.config/systemd/user/ht-approved-sweep.timer
+SHIP_SESSION_NAME="RUNNER 8" ~/.agents/skills/ship/scripts/ht-approved-sweep
+systemctl --user daemon-reload
+systemctl --user enable --now ht-approved-sweep.timer
+"$scripts/user-unit-check" --first-run ht-approved-sweep.service
+```
+Keep `approval-answer.cjs` beside the installed sweep, and the existing `vcc`, `ship-identity` and `runner-deliver` available. Disable reporting with `systemctl --user disable --now ht-approved-sweep.timer`.
+
 ## Local premerge board click
 
 Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
