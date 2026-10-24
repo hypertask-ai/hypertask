@@ -15,6 +15,11 @@ const deferred = () => {
 const viewer = load("src/lib/agents/chatViewerState.ts", {});
 const sendHook = load("src/app/agents/chat/useAgentChatSend.ts", {
   react: hooks,
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/hooks/MultiPages/AIChat/useDockedChatScope": { useDockedChatScope: () => [null, noop] },
+  "@/lib/state": { useRecoilValue: () => null },
+  "@/store": {},
+  "next/navigation": { usePathname: () => "/project" },
   "react-hot-toast": { default: { error: assert.fail } },
 }).useAgentChatSend;
 const sessionHook = load("src/app/agents/chat/useAgentChatSession.ts", {
@@ -752,6 +757,8 @@ test("switching away cancels the recorder and clears retained recording state be
   }
   const { AgentChatPane } = loadChatComponent("src/app/agents/chat/AgentChatPane.tsx", {
     react: React,
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "@/components/Agents/AgentAvatar": { default: () => null },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: Composer },
     "@/components/AI_CHAT/TypingIndicator": { TypingIndicator: () => null },
@@ -873,6 +880,8 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
   };
   const { AI_Tiptap_Container } = loadChatComponent("src/components/AI_CHAT/AI_Tiptap_Container.tsx", {
     ...composerMocks,
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
+    "@/hooks/MultiPages/AIChat/dockedChatScope": load("src/hooks/MultiPages/AIChat/dockedChatScope.ts", {}),
     react: { ...hooks, useContext: () => false, useMemo: (callback) => callback(), useState: (value) => [value, noop], useId: () => "general" },
     "@tiptap/react": { useEditorState: () => true },
     "@/styles/tiptap.module.scss": { default: {} },

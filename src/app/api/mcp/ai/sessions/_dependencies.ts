@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from '@/lib/prisma';
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from '@/lib/flags/definitions/htpr-7734-agent-chat-context';
+import { agentChatContextPayload } from '@/lib/agents/chatContext';
 import { checkMcpRateLimit, validateMcpAuth, type McpAuthContext } from '@/lib/mcp/auth';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 import { validateProjectAccess } from '@/lib/mcp/tasks/services';
@@ -43,11 +46,12 @@ const messageSelect = {
 
 type MessageRecord = Prisma.ChatMessageGetPayload<{ select: typeof messageSelect }>;
 
-function serializeMessage(message: MessageRecord) {
+function serializeMessage(message: MessageRecord & { context?: Prisma.JsonValue }, contextEnabled: boolean) {
   return {
     id: message.id,
     role: message.role,
-    content: message.content,
+    content: contextEnabled && message.role === 'human' ? agentChatContextPayload(message.content, message.context).text : message.content,
+    ...(contextEnabled && message.role === 'human' && message.context ? { context: message.context } : {}),
     created_at: message.createdAt.toISOString(),
     attachments: message.attachments.map((attachment) => ({
       id: attachment.id,
@@ -104,18 +108,19 @@ export const aiSessionDependencies: AiSessionHandlerDependencies<McpAuthContext>
   },
   messages: async (ctx, id, limit, offset) => {
     const where = { ...(await accessibleSessionWhere(ctx)), id };
+    const contextEnabled = Boolean(ctx.agentId) && await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id);
     const [session, messages, total] = await Promise.all([
       prisma.chatSession.findFirst({ where, select: sessionSelect }),
       prisma.chatMessage.findMany({
         where: { sessionId: id, session: where },
-        select: messageSelect,
+        select: { ...messageSelect, ...(contextEnabled ? { context: true } : {}) },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: limit,
         skip: offset,
       }),
       prisma.chatMessage.count({ where: { sessionId: id, session: where } }),
     ]);
-    return session ? { session: { ...serializeSession(session), messages: messages.map(serializeMessage) }, total } : null;
+    return session ? { session: { ...serializeSession(session), messages: messages.map((message) => serializeMessage(message, contextEnabled)) }, total } : null;
   },
   create: async ({ context, userId, agentId, id, projectId, title }) => {
     const create = async (db: Prisma.TransactionClient) => {
