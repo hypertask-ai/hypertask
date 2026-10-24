@@ -55,6 +55,7 @@ class CacheTests(unittest.TestCase):
         patch.object(m.os, "getloadavg", side_effect=lambda: (self.load, 1, 1)).start()
         patch.object(m.time, "time", side_effect=lambda: self.now).start()
         patch.object(m.time, "sleep").start()
+        patch.object(m, "live_claude", return_value=True, create=True).start()
         patch.object(m, "session_metrics", return_value=None).start()
         self.addCleanup(patch.stopall)
 

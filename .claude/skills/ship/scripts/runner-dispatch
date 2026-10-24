@@ -381,8 +381,43 @@ def queue_clear_alarm(state, runner, text, now):
     return True
 
 
+def live_claude(row):
+    # Pane text and session files can outlive Claude; inspect the actual pane tree.
+    try:
+        panes = command("tmux", "list-panes", "-a", "-F", "#{pane_id}\t#{pane_pid}")
+        roots = [int(pid) for pane, pid in (line.split() for line in panes.splitlines())
+                 if pane == row["pane"]]
+        if len(roots) != 1:
+            return False
+        pending, seen = roots, set()
+        root_args = ["-p", str(roots[0])]
+        while pending:
+            result = subprocess.run(
+                ["ps", *root_args, "--ppid", ",".join(map(str, pending)), "-o", "pid=,ppid=,stat=,comm="],
+                capture_output=True, text=True, timeout=15)
+            # ps exits 1 when there are no remaining children.
+            if result.returncode not in (0, 1) or (result.returncode == 1 and result.stderr):
+                return False
+            pending, root_args = [], []
+            for line in result.stdout.splitlines():
+                pid, parent, status, name = line.split(None, 3)
+                pid = int(pid)
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                if name == "claude" and status[0] not in "ZX":
+                    return True
+                if pid != roots[0]:
+                    pending.append(pid)
+        return False
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        return False
+
+
 def maintain_runner(row, holding, comments, now, *, loop, state, allow_clear=True):
     if not (re.fullmatch(r"RUNNER [1-9][0-9]*", row["runner"]) or row["runner"] == SPEED):
+        return False
+    if not live_claude(row):
         return False
     metrics = session_metrics(row)
     if metrics is None:
@@ -401,15 +436,40 @@ def maintain_runner(row, holding, comments, now, *, loop, state, allow_clear=Tru
     before = json.dumps(records)
     runner = row["runner"]
     record = records.setdefault(runner, {})
-    if not isinstance(record, dict) or any(type(v) not in (int, float) or not 0 <= v < float("inf")
-                                          for v in record.values()):
+    if (not isinstance(record, dict)
+            or any(not isinstance(record[k], str) for k in ("session", "reason") if k in record)
+            or any(type(v) not in (int, float) or not 0 <= v < float("inf")
+                   for k, v in record.items() if k not in {"session", "reason"}
+                   and not (k == "context" and v is None))):
         print(f"runner-dispatch: malformed clear record {runner}; maintenance skipped", file=sys.stderr)
         return False
     # Session start is a conservative baseline, not a fabricated successful clear.
     record.setdefault("first_seen", min(now, metrics["started"]))
-    record["last_clear"] = max(record.get("last_clear", 0), metrics["cleared"])
-    last_clear = record["last_clear"]
     context = metrics["context"]
+    external_at = metrics["cleared"]
+    session_changed = (record.get("session") is not None and record["session"] != metrics["session"])
+    # Old numeric-only records still prove a restart if this session began after their baseline.
+    legacy_restart = ("session" not in record and "reason" not in record
+                      and metrics["started"] > record["first_seen"])
+    if session_changed:
+        # /clear can rotate the id without changing the process's registry start time.
+        external_at = max(external_at, now)
+    elif legacy_restart:
+        external_at = max(external_at, min(now, metrics["started"]))
+    if (record.get("session") == metrics["session"] and context is not None
+            and record.get("context") is not None and context < record["context"] * 0.3
+            and metrics["usage_at"] > record.get("usage_at", 0)):
+        external_at = max(external_at, min(now, metrics["usage_at"]))
+    if external_at > record.get("last_clear", 0):
+        record.update(last_clear=external_at, reason="external")
+        print(f"cleared {runner} reason=external context={context} last_clear={external_at}", file=sys.stderr)
+    record.setdefault("last_clear", 0)
+    # Keep the last known usage across an unreadable tail, but never across sessions.
+    if (record.get("session") != metrics["session"]
+            or (context is not None and metrics["usage_at"] > record.get("usage_at", 0))):
+        record.update(context=context, usage_at=metrics["usage_at"])
+    record["session"] = metrics["session"]
+    last_clear = record["last_clear"]
     age = now - (last_clear or record["first_seen"])
     reasons = []
     if age >= ALARM_EVERY:
@@ -442,12 +502,14 @@ def maintain_runner(row, holding, comments, now, *, loop, state, allow_clear=Tru
             or fresh[0].get("spinner") or os.getloadavg()[0] > 12):
         return False
     # Tool activity must also be unchanged since checkpoint evaluation.
-    if session_metrics(row) != metrics:
+    if not live_claude(row) or session_metrics(row) != metrics:
         return False
     resume = "resume: read your held tickets' latest comments: " + (", ".join(holding) or "none")
     command("tmux", "send-keys", "-t", row["pane"], "-l", "/clear")
     command("tmux", "send-keys", "-t", row["pane"], "Enter")
-    record["last_clear"] = now
+    record.update(last_clear=now, reason=trigger, context=None, usage_at=0)
+    # The next sample establishes the post-clear baseline, not another external clear.
+    record.pop("session", None)
     write_json(path, records)
     print(f"cleared {runner} reason={trigger} context={context} held={','.join(holding) or 'none'}", file=sys.stderr)
     time.sleep(3)

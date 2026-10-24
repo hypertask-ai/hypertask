@@ -13,7 +13,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-SOURCE = Path(__file__).with_name("runner-dispatch")
+SOURCE = Path(os.environ.get("DISPATCH_TEST_SOURCE", Path(__file__).with_name("runner-dispatch")))
 loader = importlib.machinery.SourceFileLoader("runner_dispatch", str(SOURCE))
 spec = importlib.util.spec_from_loader(loader.name, loader)
 m = importlib.util.module_from_spec(spec)
@@ -69,6 +69,8 @@ class DispatchTests(unittest.TestCase):
         self.commands = patch.object(m, "command", side_effect=AssertionError("Unmocked external command")).start()
         self.addCleanup(patch.stopall)
         self.sleep = patch.object(m.time, "sleep").start()
+        self.live_reader = getattr(m, "live_claude", None)
+        self.live = patch.object(m, "live_claude", return_value=True, create=True).start()
         self.metrics_reader = m.session_metrics
         self.metrics = patch.object(m, "session_metrics", return_value=None).start()
 
@@ -174,6 +176,110 @@ class DispatchTests(unittest.TestCase):
                     with patch.object(m, "snapshots", return_value=[typed]):
                         self.dispatch([row if fresh_only else typed], go=True)
                     self.assertEqual(self.sent_texts(), [])
+
+    def test_shell_only_panes_skip_alarm_and_clear(self):
+        row = self.safe_runner(context=160_000)
+        self.metrics.return_value["started"] = self.now - m.ALARM_EVERY
+        self.live.return_value = False
+        self.dispatch([row], go=True)
+        self.assertFalse((self.state / "runner-inbox").exists())
+        self.assertFalse((self.loop / "runner-clear.json").exists())
+        self.assertEqual(self.sent_texts(), [])
+        self.metrics.assert_not_called()
+
+    def test_live_claude_checks_pane_root_and_descendants_not_stale_ui(self):
+        self.commands.side_effect = None
+        self.commands.return_value = "%4\t100\n%6\t600\n"
+        row = dict(runner="RUNNER 4", pane="%4", claude_alive=True)
+        for root, children, grandchild, expected in (
+                ("100 1 S bash", "", "", False),
+                ("100 1 S bash", "101 100 S bash", "102 101 S claude", True),
+                ("100 1 S claude", "", "", True),
+                ("100 1 S bash", "101 100 Z claude", "", False),
+                ("100 1 S bash", "101 100 S hax", "", False)):
+            with self.subTest(root=root, children=children, expected=expected):
+                replies = [types.SimpleNamespace(returncode=0, stdout=root + "\n" + children, stderr=""),
+                           types.SimpleNamespace(returncode=0 if grandchild else 1, stdout=grandchild, stderr=""),
+                           types.SimpleNamespace(returncode=1, stdout="", stderr="")]
+                with patch.object(m.subprocess, "run", side_effect=replies):
+                    self.assertEqual(self.live_reader(row), expected)
+        with patch.object(m.subprocess, "run", side_effect=OSError("ps unavailable")):
+            self.assertFalse(self.live_reader(row))
+        self.commands.return_value = "%6\t600\n"
+        self.assertFalse(self.live_reader(row))
+
+    def test_external_clear_session_change_and_usage_drop_persist_once(self):
+        for runner in ("RUNNER 3", "SPEED RUNNER"):
+            for signal in ("session", "drop", "explicit"):
+                with self.subTest(runner=runner, signal=signal):
+                    row = self.safe_runner(context=100_000, state="busy", runner=runner)
+                    path = self.loop / "runner-clear.json"
+                    path.unlink(missing_ok=True)
+                    self.dispatch([row], go=True)
+                    baseline = self.clear_records()[runner]
+                    self.assertEqual(baseline["last_clear"], 0)
+                    self.now += 60
+                    if signal == "session":
+                        self.metrics.return_value.update(session="session-2", context=None, usage_at=0)
+                        cleared_at = self.now
+                    elif signal == "drop":
+                        self.metrics.return_value.update(context=29_999, usage_at=self.now - 5)
+                        cleared_at = self.now - 5
+                    else:
+                        self.metrics.return_value.update(cleared=self.now - 5, context=None, usage_at=0)
+                        cleared_at = self.now - 5
+                    with contextlib.redirect_stderr(io.StringIO()) as log:
+                        self.dispatch([row], go=True)
+                        self.now += 60
+                        self.dispatch([row], go=True)
+                    record = self.clear_records()[runner]
+                    self.assertEqual(record["last_clear"], cleared_at)
+                    self.assertEqual(record.get("reason"), "external")
+                    self.assertEqual(record["session"], self.metrics.return_value["session"])
+                    if signal == "drop":
+                        self.assertEqual(record["context"], 29_999)
+                    self.assertEqual(log.getvalue().count(f"cleared {runner} reason=external"), 1)
+        self.assertEqual(self.sent_texts(), [])
+
+    def test_external_clear_drop_requires_new_usage_and_strict_threshold(self):
+        row = self.safe_runner(context=100_000, state="busy")
+        self.dispatch([row], go=True)
+        old_at = self.metrics.return_value["usage_at"]
+        for context, at in ((29_999, old_at), (30_000, old_at + 1), (None, 0)):
+            with self.subTest(context=context, at=at):
+                self.metrics.return_value.update(context=context, usage_at=at)
+                self.dispatch([row], go=True)
+                self.assertEqual(self.clear_records()[row["runner"]]["last_clear"], 0)
+
+    def test_external_clear_migrates_numeric_state_without_resetting_alarm_throttle(self):
+        row = self.safe_runner(context=50_000, state="busy", runner="RUNNER 3")
+        self.loop.mkdir()
+        path = self.loop / "runner-clear.json"
+        path.write_text(json.dumps({"RUNNER 3": {"first_seen": self.now - 100_000,
+                                                 "last_clear": 0, "last_alarm": self.now - 10}}))
+        self.dispatch([row], go=True)
+        record = self.clear_records()["RUNNER 3"]
+        self.assertEqual(record["last_clear"], self.metrics.return_value["started"])
+        self.assertEqual(record.get("reason"), "external")
+        self.assertEqual(record["last_alarm"], self.now - 10)
+        self.assertFalse((self.state / "runner-inbox").exists())
+        # The migrated record must remain readable on subsequent ticks.
+        self.dispatch([row], go=True)
+        self.assertEqual(self.clear_records()["RUNNER 3"], record)
+
+    def test_dispatch_clear_new_session_is_not_counted_again_as_external(self):
+        row = self.safe_runner()
+        self.dispatch([row], go=True)
+        cleared_at = self.now
+        self.now += 60
+        self.metrics.return_value.update(session="session-2", context=1000,
+                                         started=self.now - 50, usage_at=self.now - 5)
+        with contextlib.redirect_stderr(io.StringIO()) as log:
+            self.dispatch([row], go=True)
+        record = self.clear_records()[row["runner"]]
+        self.assertEqual(record["last_clear"], cleared_at)
+        self.assertEqual(record["reason"], "context_80k")
+        self.assertNotIn("reason=external", log.getvalue())
 
     def test_never_cleared_six_hours_alarm_fires_once_per_six_hours(self):
         row = self.safe_runner(context=50_000, state="busy")
@@ -430,7 +536,9 @@ class DispatchTests(unittest.TestCase):
         row = self.safe_runner(context=160_000)
         self.loop.mkdir()
         path = self.loop / "runner-clear.json"
-        for raw in ('{"broken":', '[]', '{"RUNNER 8":{"last_alarm":"bad"}}'):
+        for raw in ('{"broken":', '[]', '{"RUNNER 8":{"last_alarm":"bad"}}',
+                    '{"RUNNER 8":{"session":7}}', '{"RUNNER 8":{"reason":false}}',
+                    '{"RUNNER 8":{"context":-1}}'):
             with self.subTest(raw=raw), contextlib.redirect_stderr(io.StringIO()) as log:
                 path.write_text(raw)
                 self.dispatch([row], go=True)
