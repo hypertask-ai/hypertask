@@ -19,8 +19,7 @@ export default function ErrorScreen() {
     };
 
     const {handleHardReset} = useSignout()
-    if (projectEntryEnabled) return <Unauthorized />;
-    return (
+    return projectEntryEnabled ? <Unauthorized /> : (
         <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground px-4">
             <div className="bg-card shadow-lg rounded-xl p-8 flex flex-col items-center max-w-md w-full">
                 <h1 className="text-display font-bold mb-2">Something went wrong</h1>

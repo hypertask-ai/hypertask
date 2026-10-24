@@ -95,7 +95,8 @@ export default async function Page(
   let previousBoardString = cookieStore.get("previousBoard");
   let slugs = searchParams?.id;
 
-  if (missingProjectId && await isFeatureEnabled(HTPR_7799_PROJECT_ENTRY_FLAG, userObj.id)) {
+  const projectEntryEnabled = await isFeatureEnabled(HTPR_7799_PROJECT_ENTRY_FLAG, userObj.id);
+  if (missingProjectId && projectEntryEnabled) {
     const rememberedId = previousBoardString?.value.split("|&|")[0].match(/^project-([1-9]\d*)$/)?.[1];
     const where = { status: "Normal" as const, ...getProjectWhere(userObj.id) };
     let board;
@@ -105,7 +106,7 @@ export default async function Page(
         : null;
       board ??= await prisma.project.findFirst({ where, orderBy: { id: "asc" }, select: { id: true } });
     } catch {
-      return <Unauthorized />;
+      return projectEntryEnabled ? <Unauthorized /> : null;
     }
     if (!board) return <NoBoardsEmptyState user={userObj} />;
     redirect(buildCanonicalBoardUrl(String(board.id), searchParams));
