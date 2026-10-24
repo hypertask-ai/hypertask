@@ -13,112 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  mark-pull-request-pending:
-    if: github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
-    name: mark-feature-flag-gate-pending
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    concurrency:
-      group: feature-flag-gate-publish
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      pull-requests: read
-      statuses: write
-    steps:
-      - name: Prepare initial pending status
-        id: pending
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          jq -cnr --argjson number "$PR_NUMBER" --arg head_sha "$HEAD_SHA" \
-            --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
-            [{pr_number: $number, head_sha: $head_sha, job_started_at: $started_at,
-              fingerprint: "", deduplicate: false, payload: {
-                state: "pending", context: "feature-flag-gate",
-                description: "feature-flag-gate is evaluating this pull request"
-              }}] | "statuses=\(.)"' >>"$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: production
-          persist-credentials: false
-
-      - name: Publish prepared feature-flag statuses
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          PREPARED_STATUSES: ${{ steps.pending.outputs.statuses }}
-          EVALUATION_FAILED: "0"
-        run: |
-          set -uo pipefail
-          gate_tmp=$(mkdir -p "${RUNNER_TEMP:-/tmp}" && mktemp -d "${RUNNER_TEMP:-/tmp}/feature-flag-publish.XXXXXX") || exit 2
-          trap 'rm -rf "$gate_tmp"' EXIT
-          export GH_API_NO_WAIT=1
-          source .github/scripts/github-api-retry.sh
-          gh_api_failed=${EVALUATION_FAILED:-0}
-          failures=0
-          jq -c '.[]' <<<"$PREPARED_STATUSES" >"$gate_tmp/statuses.jsonl" || exit 2
-
-          publish_status_if_current() {
-            local record="$1"
-            local number head_sha job_started_at evaluated_fingerprint fingerprint title base_sha labels
-            number=$(jq -er '.pr_number' <<<"$record") || return 1
-            head_sha=$(jq -er '.head_sha' <<<"$record") || return 1
-            job_started_at=$(jq -er '.job_started_at' <<<"$record") || return 1
-            evaluated_fingerprint=$(jq -r '.fingerprint' <<<"$record") || return 1
-            gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || return 1
-            if ! jq -e --arg sha "$head_sha" '
-              .state == "open" and .base.ref == "production" and .head.sha == $sha
-            ' "$gate_tmp/current.json" >/dev/null; then
-              echo "skip #$number: pull request head or base moved before status publication"
-              return 0
-            fi
-            title=$(jq -er '.title' "$gate_tmp/current.json") || return 1
-            base_sha=$(jq -er '.base.sha' "$gate_tmp/current.json") || return 1
-            labels=$(jq -c '[.labels[]?.name // empty] | sort' "$gate_tmp/current.json") || return 1
-            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$labels" | sha256sum | cut -c1-16)"
-            if [ -n "$evaluated_fingerprint" ] && [ "$evaluated_fingerprint" != "$fingerprint" ]; then
-              echo "skip #$number: evaluation inputs changed before status publication"
-              return 0
-            fi
-            jq --arg target_url "$RUN_URL#$fingerprint" '.payload | .target_url = $target_url' <<<"$record" >"$gate_tmp/payload.json" || return 1
-            gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$gate_tmp/latest-statuses.json" || return 1
-            if jq -e --arg job_started_at "$job_started_at" --arg fingerprint "$fingerprint" '
-              map(select(.context == "feature-flag-gate"))[0] as $current |
-              ($current.state == "success" or $current.state == "failure") and
-              ($current.created_at // "") > $job_started_at and
-              ($current.target_url // "" | split("#")[1:] | join("#")) == $fingerprint
-            ' "$gate_tmp/latest-statuses.json" >/dev/null; then
-              echo "skip #$number: newer final feature-flag-gate status has the same fingerprint"
-              return 0
-            fi
-            if jq -e '.deduplicate' <<<"$record" >/dev/null && jq -e --slurpfile payload "$gate_tmp/payload.json" '
-              map(select(.context == "feature-flag-gate"))[0] as $current |
-              $payload[0] as $status |
-              $current.state == $status.state and $current.description == $status.description and
-              ($current.target_url // "" | split("#")[1:] | join("#")) ==
-                ($status.target_url | split("#")[1:] | join("#"))
-            ' "$gate_tmp/latest-statuses.json" >/dev/null; then
-              return 0
-            fi
-            gh_api -X POST "repos/$REPO/statuses/$head_sha" --input "$gate_tmp/payload.json" >/dev/null
-          }
-
-          while IFS= read -r record; do
-            if ! publish_status_if_current "$record"; then
-              echo "::error::Cannot publish prepared feature-flag-gate status."
-              failures=$((failures + 1))
-            fi
-          done <"$gate_tmp/statuses.jsonl"
-          if [ "$failures" -gt 0 ]; then exit 2; fi
-
   feature-flag-gate:
-    needs: mark-pull-request-pending
-    if: always() && github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
+    if: github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
     name: feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -211,7 +107,7 @@ jobs:
           if ! gh_api "repos/$REPO/pulls/$PR_NUMBER" >"$pr_json"; then
             echo "::error::Cannot read pull request #$PR_NUMBER."
             publish_error_status "feature-flag-gate could not read pull request metadata" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
+              echo "::error::Cannot prepare the final feature-flag-gate status."
             exit 2
           fi
           if ! jq -e '
@@ -221,7 +117,7 @@ jobs:
           ' "$pr_json" >/dev/null; then
             echo "::error::Pull request #$PR_NUMBER metadata is incomplete."
             publish_error_status "feature-flag-gate found incomplete pull request metadata" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
+              echo "::error::Cannot prepare the final feature-flag-gate status."
             exit 2
           fi
 
@@ -231,7 +127,7 @@ jobs:
           head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
           export FEATURE_FLAG_PR_LABELS
           FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' "$pr_json")
-          fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
+          evaluated_head_pr_count=1
           result=2
 
           if [ "$api_head_sha" != "$head_sha" ]; then
@@ -247,7 +143,7 @@ jobs:
             >"$gate_tmp/npm-install.txt" 2>"$error_file"; then
             echo "::error::Cannot install the trusted TypeScript parser."
             publish_error_status "feature-flag-gate could not install its parser" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
+              echo "::error::Cannot prepare the final feature-flag-gate status."
             exit 2
           fi
           export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
@@ -255,15 +151,18 @@ jobs:
           if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$heads_json"; then
             echo "::error::Cannot check whether the head commit is shared by open production pull requests."
             publish_error_status "feature-flag-gate could not read open pull requests" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
+              echo "::error::Cannot prepare the final feature-flag-gate status."
             exit 2
           fi
           if ! head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$heads_json"); then
             echo "::error::Cannot parse open production pull-request heads."
             publish_error_status "feature-flag-gate could not parse pull-request heads" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
+              echo "::error::Cannot prepare the final feature-flag-gate status."
             exit 2
           fi
+
+          evaluated_head_pr_count=$head_pr_count
+          fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16).heads=$evaluated_head_pr_count"
 
           if [ "$head_pr_count" -ne 1 ]; then
             echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
@@ -292,17 +191,19 @@ jobs:
              ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
             echo "::error::Cannot re-check whether the head commit is shared before publishing its result."
             publish_error_status "feature-flag-gate could not refresh pull-request heads" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
+              echo "::error::Cannot prepare the final feature-flag-gate status."
             exit 2
           fi
           if [ "$fresh_head_pr_count" -ne 1 ]; then
+            evaluated_head_pr_count=$fresh_head_pr_count
             echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
             result=1
           fi
+          fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16).heads=$evaluated_head_pr_count"
           if ! GH_API_NO_WAIT=1 gh_api "repos/$REPO/pulls/$PR_NUMBER" >"$current_json"; then
             echo "::error::Cannot re-read pull request #$PR_NUMBER before publishing its result."
             publish_error_status "feature-flag-gate could not refresh this pull request" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
+              echo "::error::Cannot prepare the final feature-flag-gate status."
             exit 2
           fi
           if [ "$(jq -r '.state' "$current_json")" != "open" ] ||
@@ -313,7 +214,7 @@ jobs:
              ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' "$current_json" >/dev/null; then
             echo "Pull request #$PR_NUMBER changed during evaluation; its queued event will evaluate the new state."
             publish_error_status "feature-flag-gate is waiting for the updated pull request" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
+              echo "::error::Cannot prepare the final feature-flag-gate status."
             exit 0
           fi
 
@@ -324,8 +225,8 @@ jobs:
             state=failure
             description=$(head -1 "$reason_file" | cut -c1-130)
           elif [ "$result" -eq 3 ]; then
-            state=pending
-            description="feature-flag-gate is waiting for the run on the newer production commit"
+            echo "feature-flag-gate is waiting for the run on the newer production commit"
+            exit 0
           else
             state=error
             description="feature-flag-gate could not evaluate this pull request"
@@ -348,9 +249,6 @@ jobs:
           elif [ "$result" -eq 1 ]; then
             echo "::error::$(cat "$reason_file")"
             printf '## feature-flag-gate failed\n\n%s\n' "$(cat "$reason_file")" >>"$GITHUB_STEP_SUMMARY"
-          elif [ "$result" -eq 3 ]; then
-            echo "$description"
-            exit 0
           else
             echo "::error::feature-flag-gate could not evaluate this pull request."
           fi
@@ -363,7 +261,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
-      group: feature-flag-gate-publish
+      group: feature-flag-gate-publish-${{ github.event.pull_request.head.sha }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -383,67 +281,7 @@ jobs:
           PREPARED_STATUSES: ${{ needs.feature-flag-gate.outputs.statuses }}
           EVALUATION_FAILED: ${{ needs.feature-flag-gate.outputs.evaluation_failed }}
         run: |
-          set -uo pipefail
-          gate_tmp=$(mkdir -p "${RUNNER_TEMP:-/tmp}" && mktemp -d "${RUNNER_TEMP:-/tmp}/feature-flag-publish.XXXXXX") || exit 2
-          trap 'rm -rf "$gate_tmp"' EXIT
-          export GH_API_NO_WAIT=1
-          source .github/scripts/github-api-retry.sh
-          gh_api_failed=${EVALUATION_FAILED:-0}
-          failures=0
-          jq -c '.[]' <<<"$PREPARED_STATUSES" >"$gate_tmp/statuses.jsonl" || exit 2
-
-          publish_status_if_current() {
-            local record="$1"
-            local number head_sha job_started_at evaluated_fingerprint fingerprint title base_sha labels
-            number=$(jq -er '.pr_number' <<<"$record") || return 1
-            head_sha=$(jq -er '.head_sha' <<<"$record") || return 1
-            job_started_at=$(jq -er '.job_started_at' <<<"$record") || return 1
-            evaluated_fingerprint=$(jq -r '.fingerprint' <<<"$record") || return 1
-            gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || return 1
-            if ! jq -e --arg sha "$head_sha" '
-              .state == "open" and .base.ref == "production" and .head.sha == $sha
-            ' "$gate_tmp/current.json" >/dev/null; then
-              echo "skip #$number: pull request head or base moved before status publication"
-              return 0
-            fi
-            title=$(jq -er '.title' "$gate_tmp/current.json") || return 1
-            base_sha=$(jq -er '.base.sha' "$gate_tmp/current.json") || return 1
-            labels=$(jq -c '[.labels[]?.name // empty] | sort' "$gate_tmp/current.json") || return 1
-            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$labels" | sha256sum | cut -c1-16)"
-            if [ -n "$evaluated_fingerprint" ] && [ "$evaluated_fingerprint" != "$fingerprint" ]; then
-              echo "skip #$number: evaluation inputs changed before status publication"
-              return 0
-            fi
-            jq --arg target_url "$RUN_URL#$fingerprint" '.payload | .target_url = $target_url' <<<"$record" >"$gate_tmp/payload.json" || return 1
-            gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$gate_tmp/latest-statuses.json" || return 1
-            if jq -e --arg job_started_at "$job_started_at" --arg fingerprint "$fingerprint" '
-              map(select(.context == "feature-flag-gate"))[0] as $current |
-              ($current.state == "success" or $current.state == "failure") and
-              ($current.created_at // "") > $job_started_at and
-              ($current.target_url // "" | split("#")[1:] | join("#")) == $fingerprint
-            ' "$gate_tmp/latest-statuses.json" >/dev/null; then
-              echo "skip #$number: newer final feature-flag-gate status has the same fingerprint"
-              return 0
-            fi
-            if jq -e '.deduplicate' <<<"$record" >/dev/null && jq -e --slurpfile payload "$gate_tmp/payload.json" '
-              map(select(.context == "feature-flag-gate"))[0] as $current |
-              $payload[0] as $status |
-              $current.state == $status.state and $current.description == $status.description and
-              ($current.target_url // "" | split("#")[1:] | join("#")) ==
-                ($status.target_url | split("#")[1:] | join("#"))
-            ' "$gate_tmp/latest-statuses.json" >/dev/null; then
-              return 0
-            fi
-            gh_api -X POST "repos/$REPO/statuses/$head_sha" --input "$gate_tmp/payload.json" >/dev/null
-          }
-
-          while IFS= read -r record; do
-            if ! publish_status_if_current "$record"; then
-              echo "::error::Cannot publish prepared feature-flag-gate status."
-              failures=$((failures + 1))
-            fi
-          done <"$gate_tmp/statuses.jsonl"
-          if [ "$failures" -gt 0 ]; then exit 2; fi
+          bash .github/scripts/feature-flag-gate-publish.sh
 
   reconcile-open-pull-requests:
     if: github.event_name == 'push' || github.event_name == 'pull_request_target'
@@ -598,7 +436,8 @@ jobs:
             error_file="$gate_tmp/error-$number.txt"
             payload="$gate_tmp/status-$number.json"
             result=2
-            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
+            evaluated_head_pr_count=$head_pr_count
+            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16).heads=$evaluated_head_pr_count"
             statuses_file="$gate_tmp/latest-statuses-$number.json"
             if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
               echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; evaluating without deduplication."
@@ -647,9 +486,11 @@ jobs:
               continue
             fi
             if [ "$fresh_head_pr_count" -ne 1 ]; then
+              evaluated_head_pr_count=$fresh_head_pr_count
               echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
               result=1
             fi
+            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16).heads=$evaluated_head_pr_count"
             GH_API_NO_WAIT=1 gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || {
               echo "::error::Cannot re-read pull request #$number before publishing its result."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull request #$number" "$statuses_file" ||
@@ -677,8 +518,8 @@ jobs:
               state=failure
               description=$(head -1 "$reason_file" | cut -c1-130)
             elif [ "$result" -eq 3 ]; then
-              state=pending
-              description="feature-flag-gate is waiting for the run on the newer production commit"
+              echo "feature-flag-gate is waiting for the run on the newer production commit"
+              continue
             else
               state=error
               description="feature-flag-gate could not evaluate this pull request"
@@ -710,7 +551,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
-      group: feature-flag-gate-publish
+      group: feature-flag-gate-publish-reconcile
       cancel-in-progress: false
     permissions:
       contents: read
@@ -730,64 +571,4 @@ jobs:
           PREPARED_STATUSES: ${{ needs.reconcile-open-pull-requests.outputs.statuses }}
           EVALUATION_FAILED: ${{ needs.reconcile-open-pull-requests.outputs.evaluation_failed }}
         run: |
-          set -uo pipefail
-          gate_tmp=$(mkdir -p "${RUNNER_TEMP:-/tmp}" && mktemp -d "${RUNNER_TEMP:-/tmp}/feature-flag-publish.XXXXXX") || exit 2
-          trap 'rm -rf "$gate_tmp"' EXIT
-          export GH_API_NO_WAIT=1
-          source .github/scripts/github-api-retry.sh
-          gh_api_failed=${EVALUATION_FAILED:-0}
-          failures=0
-          jq -c '.[]' <<<"$PREPARED_STATUSES" >"$gate_tmp/statuses.jsonl" || exit 2
-
-          publish_status_if_current() {
-            local record="$1"
-            local number head_sha job_started_at evaluated_fingerprint fingerprint title base_sha labels
-            number=$(jq -er '.pr_number' <<<"$record") || return 1
-            head_sha=$(jq -er '.head_sha' <<<"$record") || return 1
-            job_started_at=$(jq -er '.job_started_at' <<<"$record") || return 1
-            evaluated_fingerprint=$(jq -r '.fingerprint' <<<"$record") || return 1
-            gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || return 1
-            if ! jq -e --arg sha "$head_sha" '
-              .state == "open" and .base.ref == "production" and .head.sha == $sha
-            ' "$gate_tmp/current.json" >/dev/null; then
-              echo "skip #$number: pull request head or base moved before status publication"
-              return 0
-            fi
-            title=$(jq -er '.title' "$gate_tmp/current.json") || return 1
-            base_sha=$(jq -er '.base.sha' "$gate_tmp/current.json") || return 1
-            labels=$(jq -c '[.labels[]?.name // empty] | sort' "$gate_tmp/current.json") || return 1
-            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$labels" | sha256sum | cut -c1-16)"
-            if [ -n "$evaluated_fingerprint" ] && [ "$evaluated_fingerprint" != "$fingerprint" ]; then
-              echo "skip #$number: evaluation inputs changed before status publication"
-              return 0
-            fi
-            jq --arg target_url "$RUN_URL#$fingerprint" '.payload | .target_url = $target_url' <<<"$record" >"$gate_tmp/payload.json" || return 1
-            gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$gate_tmp/latest-statuses.json" || return 1
-            if jq -e --arg job_started_at "$job_started_at" --arg fingerprint "$fingerprint" '
-              map(select(.context == "feature-flag-gate"))[0] as $current |
-              ($current.state == "success" or $current.state == "failure") and
-              ($current.created_at // "") > $job_started_at and
-              ($current.target_url // "" | split("#")[1:] | join("#")) == $fingerprint
-            ' "$gate_tmp/latest-statuses.json" >/dev/null; then
-              echo "skip #$number: newer final feature-flag-gate status has the same fingerprint"
-              return 0
-            fi
-            if jq -e '.deduplicate' <<<"$record" >/dev/null && jq -e --slurpfile payload "$gate_tmp/payload.json" '
-              map(select(.context == "feature-flag-gate"))[0] as $current |
-              $payload[0] as $status |
-              $current.state == $status.state and $current.description == $status.description and
-              ($current.target_url // "" | split("#")[1:] | join("#")) ==
-                ($status.target_url | split("#")[1:] | join("#"))
-            ' "$gate_tmp/latest-statuses.json" >/dev/null; then
-              return 0
-            fi
-            gh_api -X POST "repos/$REPO/statuses/$head_sha" --input "$gate_tmp/payload.json" >/dev/null
-          }
-
-          while IFS= read -r record; do
-            if ! publish_status_if_current "$record"; then
-              echo "::error::Cannot publish prepared feature-flag-gate status."
-              failures=$((failures + 1))
-            fi
-          done <"$gate_tmp/statuses.jsonl"
-          if [ "$failures" -gt 0 ]; then exit 2; fi
+          bash .github/scripts/feature-flag-gate-publish.sh

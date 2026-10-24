@@ -1168,7 +1168,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   const parserLock = JSON.parse(fs.readFileSync(path.join(root, ".github/scripts/feature-flag-parser/package-lock.json"), "utf8"));
   assert.equal(parserLock.packages["node_modules/typescript"].version, "6.0.3");
   assert.match(parserLock.packages["node_modules/typescript"].integrity, /^sha512-/);
-  assert.equal((workflow.match(/ref: production/g) || []).length, 5);
+  assert.equal((workflow.match(/ref: production/g) || []).length, 4);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
   assert.match(workflow, /git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production "refs\/pull\/\$PR_NUMBER\/head"/);
@@ -1187,11 +1187,12 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /queue_status/);
   assert.match(workflow, /commits\/\$head_sha\/statuses\?per_page=100/);
   assert.match(workflow, /evaluating without deduplication/);
-  assert.match(workflow, /\$current\.state == \$status\.state and \$current\.description == \$status\.description/);
+  const publisher = fs.readFileSync(path.join(root, ".github/scripts/feature-flag-gate-publish.sh"), "utf8");
+  assert.match(publisher, /\$current\.target_url[\s\S]*== \$fingerprint/);
   assert.doesNotMatch(workflow, /feature-flag-gate is reconciling this pull request/);
   assert.match(workflow, /could not refresh pull-request heads/);
   assert.ok(workflow.indexOf("open-heads.txt") < workflow.lastIndexOf('npm ci --prefix "$parser_dir"'));
-  assert.match(workflow, /statuses\/\$head_sha/);
+  assert.match(publisher, /statuses\/\$head_sha/);
   assert.match(workflow, /gh_api --paginate --slurp/);
   assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);
   assert.doesNotMatch(workflow, /^\s+node \.github\/scripts\/feature-flag-gate\.mjs/m);
@@ -1204,41 +1205,59 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.doesNotMatch(workflow, /pull-requests: write/);
 });
 
-test("both writers lock fresh fingerprint checks through POST, excluding success/pending interleaving", () => {
+test("trusted publishers use isolated queues and final-only membership-aware fingerprints without locks", () => {
   const workflow = fs.readFileSync(path.join(root, ".github/workflows/feature-flag-gate.yml"), "utf8");
+  const publisher = fs.readFileSync(path.join(root, ".github/scripts/feature-flag-gate-publish.sh"), "utf8");
   const job = (name) => workflow.split(`  ${name}:\n`)[1].split(/\n  [a-z][a-z-]*:\n/)[0];
+  assert.doesNotMatch(workflow, /mark-pull-request-pending|state[=:]\s*["']?pending|contents: write|actions: read/);
+  assert.equal(fs.existsSync(path.join(root, ".github/scripts/feature-flag-publish-guard.mjs")), false);
+  assert.doesNotMatch(workflow + publisher, /feature-flag-publish-guard|GUARD_OWNER|\/git\/refs/);
+  assert.match(job("feature-flag-gate"), /group: feature-flag-gate-pr-\$\{\{ github\.event\.pull_request\.number \}\}\s+cancel-in-progress: false/);
+  assert.match(job("reconcile-open-pull-requests"), /group: feature-flag-gate-production\s+cancel-in-progress: false/);
   for (const name of ["feature-flag-gate", "reconcile-open-pull-requests"]) {
     const evaluation = job(name);
     assert.match(evaluation, /JOB_STARTED_AT=\$\(date -u/);
     assert.match(evaluation, /steps\.evaluate\.outputs\.statuses/);
     assert.match(evaluation, /group_by\(\[\.pr_number, \.head_sha\]\) \| map\(last\)/);
     assert.match(evaluation, /elif node \.github\/scripts\/feature-flag-gate\.mjs/);
+    assert.match(evaluation, /\.heads=\$evaluated_head_pr_count/);
+    assert.match(evaluation, /evaluated_head_pr_count=\$fresh_head_pr_count/);
     assert.doesNotMatch(evaluation, /gh_api -X POST|statuses: write|group: feature-flag-gate-publish/);
-  }
-  for (const name of ["mark-pull-request-pending", "publish-pull-request", "publish-reconciliation"]) {
-    const publisher = job(name);
-    assert.match(publisher, /group: feature-flag-gate-publish\s+cancel-in-progress: false/);
-    if (name !== "mark-pull-request-pending") assert.match(publisher, /if: always\(\) && needs\./);
-    assert.doesNotMatch(publisher, /git fetch|npm ci|feature-flag-gate\.mjs/);
-    assert.match(publisher, /--arg job_started_at "\$job_started_at" --arg fingerprint "\$fingerprint"/);
-    assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure"\) and/);
-    assert.match(publisher, /\(\$current\.created_at \/\/ ""\) > \$job_started_at and/);
-    assert.match(publisher, /\(\$current\.target_url \/\/ "" \| split\("#"\)\[1:\] \| join\("#"\)\) == \$fingerprint/);
-    assert.match(publisher, /\$evaluated_fingerprint" != "\$fingerprint/);
-    const read = publisher.indexOf('/commits/$head_sha/statuses');
-    const skip = publisher.indexOf('newer final feature-flag-gate status has the same fingerprint');
-    const post = publisher.indexOf('gh_api -X POST');
-    assert.ok(publisher.indexOf('/pulls/$number') < read);
-    assert.ok(read < skip && skip < post);
-    assert.equal((publisher.match(/gh_api -X POST/g) || []).length, 1);
-    assert.match(publisher, /while IFS= read -r record; do\s+if ! publish_status_if_current "\$record"/);
-  }
-  assert.match(job("feature-flag-gate"), /needs: mark-pull-request-pending/);
-  assert.match(job("mark-pull-request-pending"), /state: "pending", context: "feature-flag-gate"/);
-  for (const evaluation of [job("feature-flag-gate"), job("reconcile-open-pull-requests")]) {
-    assert.match(evaluation, /elif \[ "\$result" -eq 3 \]; then\s+state=pending/);
     assert.match(evaluation, /if ! queue_status/);
   }
+  for (const name of ["publish-pull-request", "publish-reconciliation"]) {
+    const publication = job(name);
+    const group = name === "publish-reconciliation"
+      ? /group: feature-flag-gate-publish-reconcile\s+cancel-in-progress: false/
+      : /group: feature-flag-gate-publish-\$\{\{ github\.event\.pull_request\.head\.sha \}\}\s+cancel-in-progress: false/;
+    assert.match(publication, group);
+    assert.match(publication, /if: always\(\) && needs\./);
+    assert.doesNotMatch(publication, /git fetch|npm ci|feature-flag-gate\.mjs|publish_status_if_current|gh_api -X POST/);
+    assert.match(publication, /permissions:\s+contents: read\s+pull-requests: read\s+statuses: write\s+steps:/);
+    assert.match(publication, /persist-credentials: false/);
+    assert.match(publication, /bash \.github\/scripts\/feature-flag-gate-publish\.sh/);
+    assert.ok(publication.indexOf('ref: production') < publication.indexOf('bash .github/scripts/feature-flag-gate-publish.sh'));
+  }
+  assert.equal((workflow.match(/bash \.github\/scripts\/feature-flag-gate-publish\.sh/g) || []).length, 2);
+  assert.match(publisher, /\.payload\.state == "success" or \.payload\.state == "failure" or \.payload\.state == "error"/);
+  assert.match(publisher, /\(\$current\.state == "success" or \$current\.state == "failure" or \$current\.state == "error"\) and/);
+  assert.doesNotMatch(publisher, /job_started_at|created_at|deduplicate|state[=:]\s*["']?pending/);
+  assert.match(publisher, /flatten \| map\(select\(\.context == "feature-flag-gate"\)\)\[0\]/);
+  assert.match(publisher, /\(\$current\.target_url \/\/ "" \| split\("#"\)\[1:\] \| join\("#"\)\) == \$fingerprint/);
+  assert.match(publisher, /\[ "\$evaluated_fingerprint" != "\$fingerprint" \]/);
+  assert.match(publisher, /fingerprint="ffg=\$base_sha\.\$\(printf '%s\\n%s' "\$title" "\$labels" \| sha256sum \| cut -c1-16\)\.heads=\$head_pr_count"/);
+  assert.match(publisher, /head_pr_count=\$\(jq -er --arg sha "\$head_sha" '\[flatten\[\] \| select\(\.head\.sha == \$sha\)\] \| length'/);
+  const read = publisher.indexOf('/commits/$head_sha/statuses');
+  const skip = publisher.indexOf('final feature-flag-gate status has the same fingerprint');
+  const post = publisher.indexOf('gh_api -X POST');
+  assert.ok(publisher.indexOf('/pulls/$number') < read);
+  assert.ok(publisher.indexOf('/pulls?state=open') < read);
+  assert.ok(publisher.indexOf('evaluation inputs changed before status publication') < read);
+  assert.ok(read < skip && skip < post);
+  assert.equal((publisher.match(/gh_api -X POST/g) || []).length, 1);
+  assert.match(publisher, /while IFS= read -r record; do\s+if ! publish_status_if_current "\$record"/);
+  assert.match(job("feature-flag-gate"), /elif \[ "\$result" -eq 3 \]; then\s+echo [^\n]+\n\s+exit 0/);
+  assert.match(job("reconcile-open-pull-requests"), /elif \[ "\$result" -eq 3 \]; then\s+echo [^\n]+\n\s+continue/);
   assert.match(job("feature-flag-gate"), /publish_error_status\(\) \{[\s\S]*?queue_status "\$payload"/);
   assert.match(job("reconcile-open-pull-requests"), /publish_reconciliation_error\(\) \{[\s\S]*?queue_status "\$1" "\$2"/);
 });
