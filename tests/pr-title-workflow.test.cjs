@@ -22,16 +22,17 @@ const TAGS = [
 
 async function runTitleCheck(title) {
   const workflow = yaml.load(
-    await readFile(".github/workflows/pr-size.yml", "utf8"),
+    await readFile(".github/workflows/pr-guards-trusted.yml", "utf8"),
   );
-  const script = workflow.jobs["pr-title"].steps[0].with.script;
+  const script = workflow.jobs["pr-guards-trusted"].steps.find(step => step.id === "title").with.script;
   const failures = [];
+  const outputs = {};
 
   await new AsyncFunction("github", "context", "core", script)(
     {
       rest: {
         pulls: {
-          get: async () => ({ data: { title, user: { login: "owner" } } }),
+          get: async () => ({ data: { title, head: { sha: "a".repeat(40) }, user: { login: "owner" } } }),
         },
       },
     },
@@ -41,12 +42,14 @@ async function runTitleCheck(title) {
     },
     {
       info() {},
+      setOutput(name, value) { outputs[name] = value; },
       setFailed(message) {
         failures.push(message);
       },
     },
   );
 
+  assert.deepEqual(outputs, { sha: "a".repeat(40), title });
   return failures;
 }
 

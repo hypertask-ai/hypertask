@@ -1,4 +1,4 @@
-version: 8
+version: 9
 last_updated: 2026-10-24
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
@@ -27,10 +27,46 @@ topology:
   # so App Smoke depends on production remaining the default.
   repository_default_branch: production
   production_target: "Vercel project hypertasks-prod"
-  # Non-gating housekeeping workflows (pr-size, gitleaks, vercel-deploy-log,
+  # Housekeeping workflows (PR guards, push gitleaks, vercel-deploy-log,
   # app-smoke-request, parity-contract-trusted, preview-smoke) also run on
   # ubuntu-latest; their implementation lives in .github/workflows/ and is not
   # duplicated here.
+
+pr_job_budget:
+  parallel_job_limit: 20
+  normal_synchronize_before: 17
+  normal_synchronize_after: 15
+  opened_before: 18
+  opened_after: 15
+  excludes: [path_specific_jobs, previews, external_review]
+  measurement: scripts/ci-jobs-per-push.sh
+  pull_request_guards:
+    workflow: .github/workflows/pr-guards.yml
+    jobs: 1
+    published_statuses: [secret-scan, next-public-secrets]
+    read_only_pr_tokens: trusted_workflow_run_status_only_pass
+  trusted_pull_request_guards:
+    workflow: .github/workflows/pr-guards-trusted.yml
+    jobs: 1
+    published_statuses: [outside-pr-guard, pr-size, pr-title]
+    checkout: production_only
+    candidate_code_execution: false
+  serialized_reconciliation_guards:
+    - workflow: .github/workflows/feature-flag-gate.yml
+      jobs: 2
+      published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
+      concurrency_group: feature-flag-gate-production
+      cancel_in_progress: false
+    - workflow: .github/workflows/ux-signoff-gate.yml
+      jobs: 1
+      published_statuses: [ux-signoff-gate, ux-signoff]
+      concurrency_group: ux-signoff-gate
+      cancel_in_progress: false
+  context_publication: commit_status_per_guard_and_fail_closed_aggregate_job
+  isolated_guards:
+    node_version: vercel_secret_runner_separate_from_candidate_scripts
+    parity_contract: candidate_data_checkout_keeps_read_only_token_and_no_mcp_secret
+  codeql: default_setup_no_path_filter_without_advanced_setup
 
 review_first_gate:
   # Owner decision 2026-08-26 made CI wait for the full-ci label. Retired
@@ -213,6 +249,9 @@ policies:
   concurrency:
     cancel_superseded_pull_request_runs: true
     cancel_production_push_runs: false
+    app_smoke_production_cache_cancel_superseded: true
+    app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
+    non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-major-ticket]
     prefer_queue_over_oom: true
   review:
     # The reviewer repository owns provider order, models, and failover; this
@@ -283,6 +322,11 @@ ci_tests:
   checks: [dependencies, prisma, typescript, lint, tests]
   docs_only:
     jobs: [ci-tests, browser-smoke]
+    heavy_jobs: [app-smoke, browser-smoke]
+    heavy_output: heavy_needed
+    heavy_paths: ["docs/**", ".claude/**", "skills/**", ".agents/skills/**", "tests/**", "**/*.md"]
+    heavy_always_run_paths: ["src/**", ".github/**", "scripts/**", "package.json", "package-lock.json"]
+    app_smoke_success_description: "docs-only change, skipped"
     detector: .github/scripts/ci-change-scope.cjs
     paths: ["docs/**", ".claude/**", "scripts/self_hosted_agent/**", ".github/**", "*.md"]
     always_run_paths: [".github/workflows/ci-tests.yml", ".github/scripts/**"]
