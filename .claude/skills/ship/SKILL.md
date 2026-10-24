@@ -76,14 +76,14 @@ On failed live QA, any flag-owner agent can immediately run `ht-flag set KEY off
 
 ## Daily Flags reconciliation (YPER4-653)
 
-`ht-flags-sweep` reads board 15's Flags column once, discovers each ticket's description and PR flag references using the same rules as the Done guard, and reads live flag modes afresh for each ticket. It reports by default; `--go` moves only tickets whose identified flags are all Everyone. Unknown flags, no identifiable flag or an incomplete board list never finish a ticket. It rechecks the section before moving and skips tickets already moved out of Flags. The final reads and Done move are not atomic; a concurrent change in that last window can still race. The list is capped at 100 and refuses a partial result rather than issuing more board lists.
+`ht-flags-sweep` reads board 15's Flags column once, discovers each ticket's description and PR flag references using the same rules as the Done guard, and reads live flag modes afresh for each ticket. It reports by default; `--go` also folds in HTPR-7789 labelling: an unambiguous governing flag gets exactly one `flag:everyone`, `flag:owner-only`, `flag:qa-only`, `flag:off` or `flag:internal` label and a clickable admin flag link, preserving unrelated labels and description content. Missing, unknown or ambiguous declarations get one clarification comment, not a guessed label. Description declarations take precedence for labelling; registry ownership and then comments are fallbacks. Completion still checks every ticket/PR flag: `--go` moves only tickets whose identified flags are all Everyone. Unknown flags, no identifiable flag or an incomplete board list never finish a ticket. It rechecks the section before moving and skips tickets already moved out of Flags. The final reads and Done move are not atomic; a concurrent change in that last window can still race. The list is capped at 100 and refuses a partial result rather than issuing more board lists.
 
 After merge, install from the production checkout (not a feature worktree):
 ```sh
 scripts=.claude/skills/ship/scripts
 install -d ~/.agents/skills/ship/scripts ~/.config/systemd/user ~/.local/bin
 install -m 0755 "$scripts/ship-check" "$scripts/ht-flag" "$scripts/ht-flags-sweep" ~/.agents/skills/ship/scripts/
-install -m 0644 "$scripts/ticket_flags.py" ~/.agents/skills/ship/scripts/
+install -m 0644 "$scripts/ticket_flags.py" "$scripts/flags_triage.py" ~/.agents/skills/ship/scripts/
 install -m 0755 .claude/skills/vcc/bin/vcc ~/.local/bin/vcc
 # Refresh SKILL.md in each existing ~/.agents/skills and ~/.claude/skills live copy too:
 for root in ~/.agents/skills ~/.claude/skills; do
@@ -99,7 +99,7 @@ systemctl --user enable --now ht-flags-sweep.timer
 "$scripts/user-unit-check" --first-run ht-flags-sweep.service
 journalctl --user -u ht-flags-sweep.service -n 50 --no-pager
 ```
-Keep `ticket_flags.py` next to every installed `ship-check`, `ht-flag` and sweep; refresh other executable copies or hook targets if they are not symlinks to this directory. The timer uses the existing `ship-identity` selection and credential rules, with the normal Valentins Claude Code fallback; no new identity or token is installed. Verify that identity can read flags and move board 15 tickets. Disable writes with `systemctl --user disable --now ht-flags-sweep.timer`.
+Keep `ticket_flags.py` next to every installed `ship-check`, `ht-flag` and sweep, and `flags_triage.py` next to the sweep; refresh other executable copies or hook targets if they are not symlinks to this directory. The timer uses the existing `ship-identity` selection and credential rules, with the normal Valentins Claude Code fallback; no new identity or token is installed. The service-provided `SHIP_SESSION_NAME` is inherited by every `vcc` write; do not override it or install HTPR-7789's separate timer/service. Verify that identity can read flags, manage board 15 labels, update tickets, comment and move tickets. Disable writes with `systemctl --user disable --now ht-flags-sweep.timer`.
 
 ## Local premerge board click
 

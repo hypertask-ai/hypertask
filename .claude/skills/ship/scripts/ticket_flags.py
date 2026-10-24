@@ -26,13 +26,14 @@ def validate_flags(flags):
     return flags
 
 
-def ticket_flags(ticket, flags, references=""):
+def ticket_flags(ticket, flags, references="", *, include_owned=True, ticket_url=None):
     validate_flags(flags)
     if not re.fullmatch(r"(?:HTPR|YPER4|HYFA)-[1-9]\d*", ticket):
         raise ValueError("invalid ticket number")
     prefix = ticket.lower()
-    keys = {f["key"] for f in flags if f.get("ticketId") == ticket
-            or f["key"] == prefix or f["key"].startswith(prefix + "-")}
+    keys = {f["key"] for f in flags if include_owned and (
+        f.get("ticketId") == ticket or (ticket_url and f.get("ticketUrl") == ticket_url)
+        or f["key"] == prefix or f["key"].startswith(prefix + "-"))}
     keys.update(KEY.findall(references.lower()))
     # Non-ticket-named legacy flags can still be explicitly referenced.
     keys.update(f["key"] for f in flags if re.search(

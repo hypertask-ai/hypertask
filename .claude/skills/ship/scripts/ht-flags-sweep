@@ -7,30 +7,32 @@ import sys
 
 sys.dont_write_bytecode = True
 from ticket_flags import completion_flags
+from flags_triage import current_task, in_flags, triage
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--go", action="store_true", help="move all-Everyone tickets to Done")
+    parser.add_argument("--go", action="store_true", help="repair flag labels/links and move all-Everyone tickets to Done")
     args = parser.parse_args()
     board = json.loads(subprocess.check_output([
         "vcc", "task", "list", "--project", "15", "--section", "Flags",
         "--limit", "100", "--json"], text=True))
     tasks = board["tasks"]
-    if board.get("success") is not True or not isinstance(tasks, list) or len(tasks) != board["total"]:
+    if board.get("success") is not True or not isinstance(tasks, list) or len(tasks) != board["total"] or board.get("has_more") or board.get("nextCursor"):
         raise ValueError("Flags list is incomplete or invalid; no tickets moved (limit 100)")
+    board_labels = set()
     for task in tasks:
         ticket = task["ticketNumber"]
-        if task["section"] != "Flags":
+        if not in_flags(task):
             continue
         if args.go:
-            current = json.loads(subprocess.check_output(["vcc", "task", "get", ticket, "--json"], text=True))
-            if current.get("success") is not True or len(current["tasks"]) != 1:
-                raise ValueError(f"cannot read current section of {ticket}")
-            task = current["tasks"][0]
-            if task["section"] != "Flags":
+            task = current_task(ticket)
+            if not in_flags(task):
                 print(f"ht-flags-sweep: leave {ticket}: no longer in Flags")
                 continue
+        task = triage(task, args.go, board_labels)
+        if task is None:
+            continue
         try:
             completion_flags(ticket, task)
         except ValueError as error:
@@ -38,10 +40,7 @@ def main():
             continue
         if args.go:
             # Recheck the section so a human move since the list is not overwritten.
-            current = json.loads(subprocess.check_output(["vcc", "task", "get", ticket, "--json"], text=True))
-            if current.get("success") is not True or len(current["tasks"]) != 1:
-                raise ValueError(f"cannot read current section of {ticket}")
-            if current["tasks"][0]["section"] != "Flags":
+            if not in_flags(current_task(ticket)):
                 print(f"ht-flags-sweep: leave {ticket}: no longer in Flags")
                 continue
             subprocess.run(["vcc", "task", "move", ticket, "--section", "Done"], check=True)

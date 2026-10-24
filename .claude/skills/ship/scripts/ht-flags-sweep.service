@@ -1,5 +1,5 @@
 [Unit]
-Description=Move fully released board 15 tickets from Flags to Done
+Description=Label board 15 Flags tickets and move fully released tickets to Done
 
 [Service]
 Type=oneshot
