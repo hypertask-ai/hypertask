@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { buildCalendarTaskFilterSets, type CalendarTaskFilterSets } from "./calendarTaskFilters";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSetRecoilState, useRecoilValue, useRecoilState } from "@/lib/state";
@@ -963,6 +965,7 @@ function useCalendarFilters({
   accountId,
   taskFilters,
 }: { accountId: number } & Pick<CalendarState, "taskFilters">) {
+  const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const isPriorityFilter = useCallback((task: ITask, priorityIndices: ReadonlySet<number>): boolean => {
     if (priorityIndices.size === 0) return false;
     return priorityIndices.has(task.priority?.priority_index ?? 0);
@@ -980,8 +983,10 @@ function useCalendarFilters({
 
   const isAssigneesFilter = useCallback((task: ITask, assignees: ReadonlySet<number>): boolean => {
     if (assignees.size === 0) return false;
-    return task.assignees?.some((assignee) => assignees.has(assignee.userId)) ?? false;
-  }, []);
+    return task.assignees?.some((assignee) =>
+      (!assigneeFixEnabled || assignee.agentId == null) && assignees.has(assignee.userId)
+    ) ?? false;
+  }, [assigneeFixEnabled]);
 
   const isUpdatedByFilter = useCallback((task: ITask, updatedBy: ReadonlySet<number>): boolean => {
     if (updatedBy.size === 0) return false;

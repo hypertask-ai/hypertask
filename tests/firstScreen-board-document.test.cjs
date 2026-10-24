@@ -9,7 +9,7 @@ const mock = (name, exports) => {
   const id = name.startsWith('src/') ? path.join(root, name) : require.resolve(name);
   require.cache[id] = { id, filename: id, loaded: true, exports };
 };
-let cookieValues = {}, enabled = true, desktopChat = false, response, calls = [], delay = 0, failRead = false;
+let cookieValues = {}, enabled = true, desktopChat = false, response, calls = [], delay = 0, failRead = false, assigneeFix;
 const user = { id: 985, uid: 'qa', displayName: 'QA', email: 'qa@example.invalid', stripe_customer_id: 'billing-secret',
   UserSetting: { id: 1, onboardingTourStatus: true, snippets: 'private-settings' } };
 const Module = require('node:module');
@@ -18,7 +18,7 @@ Module._load = function (id, ...args) { return id === 'server-only' ? {} : origi
 mock('next/headers', { cookies: async () => ({ get: key => cookieValues[key] ? { value: cookieValues[key] } : undefined }),
   headers: async () => new Headers({ 'x-ht-board-document-route': '/project?id=15&view=default' }) });
 mock('src/lib/prisma.ts', { __esModule: true, default: { user: { findUnique: async ({ where }) => where.id === user.id ? user : null } } });
-mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'htpr-6934-server-first-screen': enabled, 'other-flag': true, 'htpr-7406-desktop-server-board': desktopChat }; } });
+mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'htpr-6934-server-first-screen': enabled, 'other-flag': true, 'htpr-7406-desktop-server-board': desktopChat, ...(assigneeFix === undefined ? {} : { 'htpr-7725-saved-view-assignee': assigneeFix }) }; } });
 mock('src/utils/controllers/projects/getBoardTasks.ts', { __esModule: true, default: async (...args) => {
   calls.push(args); if (failRead) throw Error('Disposable read failure');
   if (delay) await new Promise(resolve => setTimeout(resolve, delay)); return response;
@@ -42,7 +42,7 @@ const fixture = { project: { id: 15, title: 'Authorized board', section: [{ id: 
   tasks: [{ id: 1, title: 'Authorized card', projectId: 15, sectionId: 1, ranking: 'A0100', status: 'Normal',
     taskLabels: [], assignees: [], notifications: [], subTasks: [], description_: { content: '<p>API-flagged instant open</p>' } }], allViews: [] };
 function reset() {
-  enabled = true; desktopChat = false; calls = []; delay = 0; failRead = false; response = { status: 200, json: structuredClone(fixture) };
+  enabled = true; desktopChat = false; assigneeFix = undefined; calls = []; delay = 0; failRead = false; response = { status: 200, json: structuredClone(fixture) };
   cookieValues = { nookies_user: JSON.stringify({ id: 985 }), ht_session: signSession({ id: 985, email: user.email }), [BOARD_DISPLAY_COOKIE]: JSON.stringify(display) };
 }
 
@@ -155,7 +155,6 @@ test('personalized HTML and Flight are dynamic and explicitly private no-store; 
   assert.match(page, /export const revalidate = 0/);
 });
 
-
 test('desktop default-open and pinned chat board documents require the desktop server-board flag', async () => {
   for (const chat of [{ openChat: true, chatPinned: false }, { openChat: false, chatPinned: true, chatSuppressed: true }]) {
     reset();
@@ -172,7 +171,6 @@ test('desktop default-open and pinned chat board documents require the desktop s
   }
 });
 
-
 test('the board document is still allowed without the ticket flag and never produces a ticket shell', async () => {
   reset();
   const document = await getServerBoardDocument();
@@ -180,4 +178,36 @@ test('the board document is still allowed without the ticket flag and never prod
   assert.equal(document.flags.values['htpr-7627-ticket-first-screen'], undefined);
   const { getServerTicketShell } = require('../src/lib/firstScreen/serverTicketShell.ts');
   assert.equal(await getServerTicketShell(), null);
+});
+
+test('server first paint applies the URL human assignee filter by default and honors flag Off', async () => {
+  for (const flag of [undefined, true, false]) {
+    reset(); assigneeFix = flag;
+    const column = { ...fixture.project.section[0], visibility: true };
+    const defaultView = {
+      id: 'default-view', slug: 'all-tasks', board_columns_view: [column],
+      board_filters: { matchFilters: 'ANY', addedFilters: [] },
+      board_sorting_mode: 'Manual', board_subtask_setting: 'None', board_empty_sections: 'Show',
+    };
+    const humanView = {
+      ...defaultView, id: 'human-view', slug: 'human-only',
+      board_filters: { matchFilters: 'ANY', addedFilters: [
+        { type: 'Assignees', searchPayload: [{ id: 985, uid: 'qa' }] },
+      ] },
+    };
+    response.json.project.section = [column];
+    response.json.project.project_view = {
+      default_view_id: defaultView.id, default_view: defaultView, user_project_views: [],
+    };
+    response.json.allViews = [defaultView, humanView];
+    response.json.tasks = [
+      { ...fixture.tasks[0], id: 1, assignees: [{ userId: 985, agentId: 'runner-5' }] },
+      { ...fixture.tasks[0], id: 2, assignees: [{ userId: 985, agentId: null }] },
+    ];
+    const snapshot = await readBoardDocument('/project?id=15&view=human-only', JSON.stringify(display));
+    assert.ok(snapshot);
+    const project = snapshot.data.projects.updatedProjects[0];
+    assert.equal(project.project_view.user_project_views[0].appliedView.id, humanView.id);
+    assert.deepEqual(project.filteredSections.flatMap(section => section.items.map(task => task.id)), flag === false ? [1, 2] : [2]);
+  }
 });

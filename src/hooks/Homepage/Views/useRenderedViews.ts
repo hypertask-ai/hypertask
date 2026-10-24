@@ -15,9 +15,12 @@ import {
 } from '@/lib/constants/builtinViews'
 import useOrderedViews from './useOrderedViews'
 import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { DEFAULT_SUBTASK_SETTING } from '@/models/Views/model'
 
 const useRenderedViews = (project: IProject | null) => {
+  const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const orderedViews = useOrderedViews(project)
   const hiddenViewTabIds = useRecoilValue(hiddenViewTabIdsAtom)
   const showEmptyViewTabs = useRecoilValue(showEmptyViewTabsAtom)
@@ -25,8 +28,9 @@ const useRenderedViews = (project: IProject | null) => {
   const currentUser = useRecoilValue(currentUserAtom)
   const { timers: runningTimers } = useBoardRunningTimers(project?.id ?? null)
   const filterRuntimeContext = useMemo(() => ({
+    legacyAgentAssigneeMatch: !assigneeFixEnabled,
     runningTaskIds: new Set(runningTimers.keys()),
-  }), [runningTimers])
+  }), [assigneeFixEnabled, runningTimers])
   const defaultViewId = project?.project_view?.default_view_id
   const activeViewId = getActiveBoardViewId(project, activeBuiltinViews)
 

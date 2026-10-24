@@ -1,3 +1,4 @@
+import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { IProject, ISection, ITask } from "@/models/model";
 import { applyFilters } from "./FilterHelperFunctions";
 import { returnSortedItems } from "../helperFunctions";
@@ -14,6 +15,7 @@ export const getViewAppliedArchivedTasks = (
   archivedTasks: ITask[] | undefined,
   sectionId: number | undefined,
   project?: IProject | null,
+  runtimeContext?: IFilterRuntimeContext,
 ): ITask[] => {
   if (!archivedTasks?.length || sectionId === undefined) return [];
   const inSection = archivedTasks.filter((task) => task.sectionId === sectionId);
@@ -31,6 +33,7 @@ export const getViewAppliedArchivedTasks = (
       filters.addedFilters ?? [],
       filters.matchFilters,
       project,
+      runtimeContext,
     )[0]?.items ?? [];
 
   if (getActiveSortingModeFromProject(project) === "Manual") {

@@ -14,6 +14,9 @@ const { getViewFromProject, pinProjectToUrlView } = jiti(
     "src/utils/helperFunctions/Views/ViewsHelperFunctions.ts",
   ),
 );
+const { getFilteredSections } = jiti(
+  path.join(root, "src/utils/helperFunctions/Views/FilterHelperFunctions.ts"),
+);
 const {
   applyTransientTabSettings,
   canUseViewAsTabBase,
@@ -213,4 +216,42 @@ test("different tabs receive independent unsaved overlays without changing the s
   assert.equal(tabB.user_project_views[0].unsavedViewId, "tab-unsaved:view-b");
   assert.deepEqual(tabA.user_project_views[0].unsavedView.board_filters, { tab: "A" });
   assert.deepEqual(tabB.user_project_views[0].unsavedView.board_filters, { tab: "B" });
+});
+
+test("valentin-asignee URL loads its stored human filter without a toggle", () => {
+  const { project, viewB } = projectFixture();
+  viewB.slug = "valentin-asignee";
+  viewB.board_filters = JSON.parse(JSON.stringify({
+    addedFilters: [{
+      type: "Assignees",
+      searchPayload: [{ id: 6, uid: "GgKEgh9zldeyQyjed4YxS25wq9w1", displayName: "Valentin Yeo" }],
+    }],
+    matchFilters: "ANY",
+  }));
+  project.sections = [{ items: [
+    { id: 1, assignees: [{ userId: 6, agentId: "runner-5" }] },
+    { id: 2, assignees: [{ userId: 6, agentId: null }] },
+    { id: 3, assignees: [{ userId: 7, agentId: null }] },
+  ] }];
+  const pinned = pinProjectToUrlView(project, "valentin-asignee");
+
+  assert.equal(getViewFromProject(pinned).view.id, viewB.id);
+  assert.equal(getViewFromProject(pinned).type, "Applied");
+  assert.deepEqual(pinned.filteredSections[0].items.map(({ id }) => id), [2]);
+  const sections = getFilteredSections(pinned.sections, pinned);
+  assert.deepEqual(sections[0].items.map(({ id }) => id), [2]);
+});
+
+test("URL-pinned human assignee filters accept an explicit legacy runtime override", () => {
+  const { project, viewB } = projectFixture();
+  viewB.board_filters = {
+    matchFilters: "ANY",
+    addedFilters: [{ type: "Assignees", searchPayload: [{ id: 6, uid: "user-6" }] }],
+  };
+  project.sections = [{ items: [
+    { id: 1, assignees: [{ userId: 6, agentId: "runner-5" }] },
+    { id: 2, assignees: [{ userId: 6, agentId: null }] },
+  ] }];
+  const pinned = pinProjectToUrlView(project, viewB.slug, { legacyAgentAssigneeMatch: true });
+  assert.deepEqual(pinned.filteredSections[0].items.map(({ id }) => id), [1, 2]);
 });

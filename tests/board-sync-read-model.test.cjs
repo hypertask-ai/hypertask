@@ -1293,7 +1293,7 @@ test("the product integration restores, reconciles, measures, and clears", () =>
   assert.doesNotMatch(hook, /"indexeddb_miss",/);
   assert.match(
     landing,
-    /pinProjectToUrlView\(projects\[projectIndex\], currentView\)/,
+    /pinProjectToUrlView\(projects\[projectIndex\], currentView, \{ legacyAgentAssigneeMatch: !assigneeFixEnabled \}\)/,
   );
   assert.match(
     landing,
