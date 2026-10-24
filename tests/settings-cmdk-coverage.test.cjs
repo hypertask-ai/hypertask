@@ -303,8 +303,15 @@ for (const { keys, flag, dependency = flag, file, uiFlag } of gatedCommands) {
       onCalendar: false,
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),
     };
-    const derivedBinding = dependency === flag ? "" : `const ${dependency} = ${declaration(menuFile, dependency).getText()};`;
-    const js = ts.transpileModule(`${derivedBinding} const filter = ${predicate.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+    const setup = [];
+    if (dependency !== flag) {
+      walk(source(menuFile), (node) => {
+        if (ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => item.name.getText() === dependency)) setup.push(node.getText());
+        if (ts.isIfStatement(node) && ts.isExpressionStatement(node.thenStatement) && ts.isBinaryExpression(node.thenStatement.expression) && node.thenStatement.expression.left.getText() === dependency) setup.push(node.getText());
+      });
+      assert.equal(setup.length, 2, `${dependency}: missing derived command gate setup`);
+    }
+    const js = ts.transpileModule(`${setup.join("\n")} const filter = ${predicate.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
     const evaluate = () => new Function(...Object.keys(bindings), `${js}; return filter;`)(...Object.values(bindings));
     for (const key of keys) {
       assert.ok(commands.some((command) => command.key === key), `Missing gated settings command ${key}`);
