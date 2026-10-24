@@ -23,9 +23,19 @@ function acceptableReason(raw) {
   return reason.slice(0, 200);
 }
 
+function stripHtmlComments(input) {
+  let text = String(input ?? "");
+  let previous;
+  do {
+    previous = text;
+    text = text.replace(/<!--[\s\S]*?-->/g, "");
+  } while (text !== previous);
+  return text;
+}
+
 export function exemptionReason(labels, body) {
   if (!labelNames(labels).includes("no-regression-test")) return "";
-  const text = String(body ?? "").replace(/<!--[\s\S]*?-->/g, "");
+  const text = stripHtmlComments(body);
   const found = [];
   for (const pattern of [
     /No new automated test applies because:\s*`([^`\n]*)`/gi,

@@ -105,6 +105,14 @@ test("a bugfix with no changed test is flagged, and the escape hatch needs a rea
   });
   assert.equal(hidden.status, "flag");
 
+  const rejoined = classifyPullRequest({
+    title: "HTPR-9 [BUGFIX] Repair",
+    labels: ["no-regression-test"],
+    body: "<<!---->!--\nno-regression-test: this reason is only in a comment\n-->",
+    testFiles: [],
+  });
+  assert.equal(rejoined.status, "flag");
+
   const exempt = classifyPullRequest({
     title: "HTPR-9 [BUGFIX] Repair",
     labels: [{ name: "no-regression-test" }],
