@@ -35,7 +35,10 @@ test("Plex already has Next's size-adjust fallback enabled; swap is not a zero-s
 
 test("description smoke measures cold fonts and every first-paint box at the actual phone width", () => {
   const smoke = fs.readFileSync(path.join(root, "e2e/smoke/layout-lock.spec.ts"), "utf8");
-  const regression = smoke.slice(smoke.indexOf("type DescriptionFrame ="), smoke.indexOf("// HTPR-7074:"));
+  const start = smoke.indexOf("type DescriptionFrame =");
+  const end = smoke.indexOf("// HTPR-7074: a cold ticket open", start);
+  assert.ok(start >= 0 && end > start, "description regression block not found in layout-lock.spec.ts");
+  const regression = smoke.slice(start, end);
   assert.match(regression, /width: 390, height: 844/);
   assert.match(regression, /Network\.setCacheDisabled.*cacheDisabled: true/);
   assert.match(regression, /Network\.setBypassServiceWorker.*bypass: true/);
