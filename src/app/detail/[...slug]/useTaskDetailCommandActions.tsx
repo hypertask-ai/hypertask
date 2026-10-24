@@ -10,8 +10,7 @@ import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 import { LIKESHORTCUTEVENT } from "@/lib/constants/constants";
 import type { TaskDetailContext } from "./TaskDetailContext";
-function useTaskDetailCommandHandlers(getContext: () => TaskDetailContext) {
-  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+function createTaskDetailCommandActions(getContext: () => TaskDetailContext, blockerCommentEnabled: boolean) {
   const { currentId, comments, markAsDone, setCurrentTask, summarizeTicket, callBackHandlerSubtaskLinking, currentUser, currentTask, handleStarTask, navigateToNextTask, setShowRemindMeModal, callBackHandlerRemoveParent, PostFollower, queryClient, setAiChatAutoOpenSuppressed, showAiChatInterface, setAiChatExplicitOpenAt, setShowAiChatInterface, copyCommentToAiChat, summarizeComment, setEditMode, focusOn, copyTicketNumber, copyTitleAndTicketNumber, copyTaskURL, copyTaskFormattedURL, copySharedTaskURL, sharedLink, copySharedTaskFormattedURL } = getContext();
 
 
@@ -263,7 +262,8 @@ function useTaskDetailCommandHandlers(getContext: () => TaskDetailContext) {
 }
 
 export function useTaskDetailCommandActions(getContext: () => TaskDetailContext) {
-  const actions = useTaskDetailCommandHandlers(getContext);
+  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const actions = createTaskDetailCommandActions(getContext, blockerCommentEnabled);
   const { getCurrentCommentIndex } = actions;
   const { currentId, comments, toggleEmojiPicker, replyToCommentHandler } = getContext();
 
