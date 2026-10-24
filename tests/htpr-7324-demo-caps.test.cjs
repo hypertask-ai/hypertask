@@ -158,6 +158,11 @@ function fakeRedis() {
         for (const scope of scopes) zset(keys[scope.pairs[scope.writeIndex - 1][1] - 1]).set(args[4], Number(args[3]));
         return 1;
       }
+      if (script.includes('local remaining = tonumber(ARGV[1])')) {
+        let remaining = Number(args[0]) - get(keys[0]);
+        for (const member of zset(keys[1]).keys()) remaining -= Number(member.split("|").at(-1));
+        return remaining;
+      }
       if (script.includes('local window =')) {
         const set = zset(keys[0]);
         const now = Number(args[0]);

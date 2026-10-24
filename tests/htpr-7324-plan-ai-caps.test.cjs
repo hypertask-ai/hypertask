@@ -145,6 +145,11 @@ function fakeRedis() {
         if (!values.has(keys[0]) && !values.has(keys[1])) return null;
         return keys.reduce((sum, key) => sum + get(key), 0);
       }
+      if (script.includes('local remaining =')) {
+        let remaining = Number(args[0]) - get(keys[0]);
+        for (const member of zset(keys[1]).keys()) remaining -= heldAmount(member, keys[1]);
+        return remaining;
+      }
       if (script.includes('local scopes =')) {
         const scopes = JSON.parse(args[0]);
         if (script.includes('local removed =')) {
@@ -177,8 +182,7 @@ function fakeRedis() {
             for (const member of zset(keys[r - 1]).keys()) total += heldAmount(member, keys[r - 1]);
           }
           if (scope.pending) total += get(keys[scope.pending - 1]);
-          const held = scope.reason === "day" ? Math.min(Number(args[2]), scope.cap) : Number(args[2]);
-          if (total + held > scope.cap) return -index - 1;
+          if (total + Number(args[2]) > scope.cap) return -index - 1;
         }
         for (const scope of scopes) zset(keys[scope.pairs[scope.writeIndex - 1][1] - 1]).set(args[4], Number(args[3]));
         return 1;
@@ -396,58 +400,157 @@ test("day seed refuses before inference and retries neither reseed nor leave res
 });
 
 for (const backend of ["fake", "real Redis"]) {
-  test(`${backend}: Free default reservation holds the day cap, settles real spend and refuses at the daily boundary`, async (t) => {
+  for (const method of ["generate", "stream"]) {
+    test(`${backend} ${method}: Free default output fits the day budget, reuses settled headroom and refuses below the floor; paid output stays unchanged`, async (t) => {
+      if (backend === "real Redis") { redis = await realRedis(t); if (!redis) return; }
+      const pricing = await allowance.modelPricing("openai/gpt-6-luna");
+      assert.deepEqual(pricing, { inputUsdPerToken: 0.00001, outputUsdPerToken: 0.00004 });
+      const prompt = [{ role: "user", content: [{ type: "text", text: `Task Writer: write a task ${"x".repeat(1000)}` }] }];
+      const estimate = (maxOutputTokens) => allowance.estimateReservationMicroUsd({ prompt, pricing, maxOutputTokens });
+      assert.ok(estimate(16000) > 250000);
+      const calls = [];
+      const holds = [];
+      const period = constants.aiAllowancePeriod();
+      const dayKey = `ai-allowance:day:${period.endDate}:team:committed`;
+      const monthKey = `ai-allowance:${period.key}:team:committed`;
+      const pending = async (key) => backend === "fake" ? [...(redis.sets.get(key)?.keys() ?? [])] : redis.zrange(key, 0, -1);
+      const provider = async (params) => {
+        calls.push(params.maxOutputTokens);
+        const [id] = await pending(`ai-allowance:${period.key}:${params.providerOptions.gateway.tags[0].slice(5)}:reservations`);
+        assert.ok(id, "inference starts only after a reservation exists");
+        holds.push(id);
+        return { usage: { inputTokens: { total: 1000 }, outputTokens: { total: 500 } } };
+      };
+      const model = (teamPolicy) => require("ai").wrapLanguageModel({
+        model: {
+          specificationVersion: "v4", provider: "test", modelId: "gpt-6-luna", supportedUrls: {},
+          doGenerate: provider,
+          doStream: async (params) => {
+            const result = await provider(params);
+            return { stream: new ReadableStream({ start(controller) { controller.enqueue({ type: "finish", ...result }); controller.close(); } }) };
+          },
+        },
+        middleware: allowance.createSharedAllowanceMiddleware({
+          allowanceUsd: 1, gatewayApiKey: process.env.AI_GATEWAY_API_KEY, modelSlug: "openai/gpt-6-luna",
+          resolvePolicy: async () => teamPolicy,
+        }),
+      });
+      const call = async (wrapped, teamId = "team", maxOutputTokens) => {
+        const params = { prompt, maxOutputTokens, providerOptions: { gateway: { tags: [`team:${teamId}`] } } };
+        if (method === "generate") return wrapped.doGenerate(params);
+        const result = await wrapped.doStream(params);
+        const reader = result.stream.getReader();
+        while (!(await reader.read()).done) {}
+      };
+      const freeModel = model(free);
+      await call(freeModel);
+      assert.ok(calls[0] >= 256 && calls[0] < 16000);
+      assert.ok(estimate(calls[0]) <= 250000);
+      assert.ok(estimate(calls[0] + 1) > 250000, "largest affordable token limit");
+      const first = holds[0];
+      const originalScopes = JSON.parse(first.slice(first.indexOf("|") + 1, first.lastIndexOf("|")));
+      assert.deepEqual(originalScopes.map((scope) => scope.length), [3, 3], "7687 journal scope format has no clipped amounts");
+      assert.equal(Number(first.split("|").at(-1)), estimate(calls[0]));
+      assert.deepEqual(await Promise.all([redis.get(monthKey), redis.get(dayKey)]), ["30000", "30000"]);
+      await allowance.settlePlanAllowance({ id: first, scopes: originalScopes.map(([committedKey, reservationsKey, ttlSeconds]) => ({ committedKey, reservationsKey, ttlSeconds })) }, 0.9);
+      assert.equal(await redis.get(dayKey), "30000", "duplicate settlement is ignored");
+      for (const [, reservationsKey] of originalScopes) assert.deepEqual(await pending(reservationsKey), [], "settlement removes the entire scope hold");
+      const journalKey = monthKey.replace(/:committed$/, ":recent-settled");
+      const journal = backend === "fake" ? [...redis.journals.get(journalKey).keys()] : await redis.zrange(journalKey, 0, -1);
+      assert.deepEqual(journal, [`${first}|30000`]);
+
+      await call(freeModel);
+      assert.ok(calls[1] >= 256 && calls[1] < calls[0]);
+      assert.ok(estimate(calls[1]) <= 220000);
+      assert.ok(estimate(calls[1] + 1) > 220000);
+      assert.equal(Number(holds[1].split("|").at(-1)), estimate(calls[1]));
+      assert.deepEqual(await Promise.all([redis.get(monthKey), redis.get(dayKey)]), ["60000", "60000"]);
+      const belowFloor = 250000 - estimate(256) + 1;
+      if (backend === "fake") redis.values.set(dayKey, String(belowFloor));
+      else await redis.set(dayKey, String(belowFloor));
+      await assert.rejects(call(freeModel), refusal("day"));
+      await assert.rejects(call(freeModel, "team", 1), refusal("day"));
+      assert.equal(calls.length, 2, "below-floor refusal never reaches inference");
+      assert.deepEqual(await pending(dayKey.replace(/:committed$/, ":reservations")), []);
+      assert.deepEqual(await pending(monthKey.replace(/:committed$/, ":reservations")), []);
+
+      const paidModel = model(paid);
+      await call(paidModel, "paid-team");
+      await call(paidModel, "paid-team", 12000);
+      assert.deepEqual(calls.slice(2), [16000, 12000], "no daily cap leaves default and explicit output limits unchanged");
+      assert.equal(await redis.get(dayKey), String(belowFloor), "paid calls do not change Free daily spend");
+      assert.equal(await redis.get(`ai-allowance:day:${period.endDate}:paid-team:committed`), null);
+    });
+  }
+
+  test(`${backend}: concurrent default calls cannot reserve the same daily headroom; images refuse instead of clipping`, { timeout: 10000 }, async (t) => {
     if (backend === "real Redis") { redis = await realRedis(t); if (!redis) return; }
-    const first = await reserve({ amountUsd: 0.97 });
-    const day = first.scopes[1];
-    const originalScopes = JSON.parse(first.id.slice(first.id.indexOf("|") + 1, first.id.lastIndexOf("|")));
-    assert.deepEqual(originalScopes.map((scope) => scope[3]), [970000, 250000]);
-    await assert.rejects(reserve({ amountUsd: 0.01, lane: "system" }), refusal("day"));
-    await allowance.settlePlanAllowance(first, 0.03);
-    await allowance.settlePlanAllowance(first, 0.9);
-    assert.equal(await redis.get(day.committedKey), "30000");
-    assert.equal(await redis.get(first.scopes[0].committedKey), "30000");
-    for (const scope of first.scopes) {
-      const pending = backend === "fake" ? [...redis.sets.get(scope.reservationsKey).keys()] : await redis.zrange(scope.reservationsKey, 0, -1);
-      assert.deepEqual(pending, [], "settlement removes the entire scope hold");
-    }
-    const journalKey = first.scopes[0].committedKey.replace(/:committed$/, ":recent-settled");
-    const journal = backend === "fake" ? [...redis.journals.get(journalKey).keys()] : await redis.zrange(journalKey, 0, -1);
-    assert.deepEqual(journal, [`${first.id}|30000`]);
-
-    const atBoundary = await reserve({ amountUsd: 0.22, lane: "system" });
-    await allowance.settlePlanAllowance(atBoundary, 0.22);
-    assert.equal(await redis.get(day.committedKey), "250000");
-    await assert.rejects(reserve({ amountUsd: 0.01 }), refusal("day"));
-    for (const scope of atBoundary.scopes) {
-      const pending = backend === "fake" ? [...redis.sets.get(scope.reservationsKey).keys()] : await redis.zrange(scope.reservationsKey, 0, -1);
-      assert.deepEqual(pending, []);
-    }
-
-    const overrun = await reserve({ teamId: "real-cost-team", amountUsd: 0.97 });
-    await allowance.settlePlanAllowance(overrun, 0.3);
-    assert.equal(await redis.get(overrun.scopes[1].committedKey), "300000", "actual cost is not clipped to the day hold");
+    const middleware = allowance.createSharedAllowanceMiddleware({
+      allowanceUsd: 1, gatewayApiKey: process.env.AI_GATEWAY_API_KEY, modelSlug: "openai/gpt-6-luna", resolvePolicy: async () => free,
+    });
+    const params = () => ({ prompt: [], providerOptions: { gateway: { tags: ["team:team"] } } });
+    const warm = await reserve({ amountUsd: 0 });
+    await allowance.settlePlanAllowance(warm, 0);
+    const originalEval = redis.eval;
+    let reads = 0;
+    let bothRead;
+    const snapshotsRead = new Promise((resolve) => { bothRead = resolve; });
+    redis.eval = async function (script, ...args) {
+      const result = await originalEval.call(this, script, ...args);
+      if (script.includes("local remaining =")) {
+        if (++reads === 2) bothRead();
+        await snapshotsRead;
+      }
+      return result;
+    };
+    t.after(() => { redis.eval = originalEval; });
+    let finish;
+    const completion = new Promise((resolve) => { finish = resolve; });
+    let calls = 0;
+    let started;
+    const inferenceStarted = new Promise((resolve) => { started = resolve; });
+    const generate = () => middleware.wrapGenerate({ params: params(), doGenerate: async () => { calls++; started(); return completion; } });
+    const first = generate();
+    const second = generate();
+    const outcomes = Promise.allSettled([first, second]);
+    await inferenceStarted;
+    const dayReservations = `ai-allowance:day:${constants.aiAllowancePeriod().endDate}:team:reservations`;
+    const members = backend === "fake" ? [...redis.sets.get(dayReservations).keys()] : await redis.zrange(dayReservations, 0, -1);
+    assert.equal(members.length, 1);
+    assert.ok(members.reduce((sum, member) => sum + Number(member.split("|").at(-1)), 0) <= 250000);
+    finish({ usage: { inputTokens: { total: 0 }, outputTokens: { total: 6000 } } });
+    const results = await outcomes;
+    assert.equal(reads, 2, "both calls use the same pre-reservation daily snapshot");
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.ok(results.filter((result) => result.status === "rejected").every((result) => refusal("day")(result.reason)));
+    assert.equal(calls, 1);
+    await assert.rejects(reserve({ teamId: "unbounded", amountUsd: 0.97 }), refusal("day"));
+    const image = allowance.createImageAllowanceMiddleware({
+      allowanceUsd: 1, gatewayApiKey: process.env.AI_GATEWAY_API_KEY, modelSlug: "openai/gpt-6-luna", resolvePolicy: async () => free,
+    });
+    await assert.rejects(image.wrapGenerate({ params: { ...params(), n: 1 }, doGenerate: async () => { throw new Error("image inference must not run"); } }), (error) => refusal("day")(error) || refusal("month")(error));
   });
 
   test(`${backend}: expiry releases each original scope's hold and late settlement leaves no pending`, async (t) => {
     if (backend === "real Redis") { redis = await realRedis(t); if (!redis) return; }
     const guest = { ...free, demoGlobal: true };
-    const original = await reserve({ policy: guest, amountUsd: 0.97 });
+    const original = await reserve({ policy: guest, amountUsd: 0.2 });
     const originalScopes = JSON.parse(original.id.slice(original.id.indexOf("|") + 1, original.id.lastIndexOf("|")));
-    assert.deepEqual(originalScopes.map((scope) => scope[3]), [970000, 250000, 970000]);
+    assert.deepEqual(originalScopes.map((scope) => scope.length), [3, 3, 3]);
+    assert.equal(Number(original.id.split("|").at(-1)), 200000);
     for (const scope of original.scopes) {
       if (backend === "fake") redis.sets.get(scope.reservationsKey).set(original.id, Date.now() - 1);
       else await redis.zadd(scope.reservationsKey, Date.now() - 1, original.id);
     }
     const sweep = await reserve({ policy: guest, amountUsd: 0 });
-    assert.deepEqual(await Promise.all(original.scopes.map((scope) => redis.get(scope.committedKey))), ["970000", "250000", "970000"]);
+    assert.deepEqual(await Promise.all(original.scopes.map((scope) => redis.get(scope.committedKey))), ["200000", "200000", "200000"]);
     for (const scope of original.scopes) {
       const pending = backend === "fake" ? [...redis.sets.get(scope.reservationsKey).keys()] : await redis.zrange(scope.reservationsKey, 0, -1);
       assert.deepEqual(pending, [sweep.id], "only the new zero hold remains");
     }
     await allowance.settlePlanAllowance(original, 0.03);
     await allowance.settlePlanAllowance(sweep, 0);
-    assert.deepEqual(await Promise.all(original.scopes.map((scope) => redis.get(scope.committedKey))), ["970000", "250000", "970000"]);
+    assert.deepEqual(await Promise.all(original.scopes.map((scope) => redis.get(scope.committedKey))), ["200000", "200000", "200000"]);
     for (const scope of original.scopes) {
       const pending = backend === "fake" ? [...redis.sets.get(scope.reservationsKey).keys()] : await redis.zrange(scope.reservationsKey, 0, -1);
       assert.deepEqual(pending, []);

@@ -25,6 +25,7 @@ const MICRO_USD_PER_USD = 1_000_000;
 const RESERVATION_TTL_MS = 10 * 60 * 1000;
 const PRICING_CACHE_MS = 15 * 60 * 1000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
+const MIN_DAILY_OUTPUT_TOKENS = 256;
 const RESERVATION_SAFETY_USD = 0.01;
 const RESERVATION_SAFETY_MULTIPLIER = 1.5;
 const LEGACY_RECONCILIATION_WINDOW_MS = 15 * 60 * 1000;
@@ -718,10 +719,43 @@ async function initializeTeamMonth(args: { teamId: string; gatewayApiKey: string
   return { redis, month, visibleCommittedKey, visibleReservationsKey, systemCommittedKey, systemReservationsKey, legacyPendingKey };
 }
 
+async function boundDailyOutputTokens(args: {
+  dailyUsd: number;
+  gatewayApiKey: string;
+  maxOutputTokens?: number;
+  pricing: ModelPricing;
+  prompt: unknown;
+  teamId: string;
+}): Promise<number> {
+  const { month, redis } = await initializeTeamMonth(args);
+  const prefix = `ai-allowance:day:${month.endDate}:${args.teamId}`;
+  await seedAllowanceScope(prefix, 2 * 86_400, async () =>
+    (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId, month.endDate, month.endDate)).totalMicroUsd);
+  const remaining = Number(await redis.eval(`
+${EXPIRE_RESERVATION_SCRIPT}
+local remaining = tonumber(ARGV[1]) - tonumber(redis.call("GET", KEYS[1]) or "0")
+for _, member in ipairs(redis.call("ZRANGE", KEYS[2], 0, -1)) do
+  remaining = remaining - reservationHeldAmount(member, KEYS[2])
+end
+return remaining
+`, 2, `${prefix}:committed`, `${prefix}:reservations`, String(usdToMicroUsd(args.dailyUsd))));
+  let upper = Math.max(1, Math.floor(Math.min(args.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS)));
+  let lower = Math.min(MIN_DAILY_OUTPUT_TOKENS, upper);
+  const estimate = (maxOutputTokens: number) => estimateReservationMicroUsd({ ...args, maxOutputTokens });
+  if (estimate(MIN_DAILY_OUTPUT_TOKENS) > remaining) throw new SharedAiAllowanceExceededError(month.key, "day");
+  while (lower < upper) {
+    const middle = Math.ceil((lower + upper) / 2);
+    if (estimate(middle) <= remaining) lower = middle;
+    else upper = middle - 1;
+  }
+  return lower;
+}
+
 async function reserveSharedAllowance(args: {
   allowanceUsd: number;
   gatewayApiKey: string;
   lane: AllowanceLane;
+  languageModelParams?: { maxOutputTokens?: number };
   maxOutputTokens?: number;
   modelSlug: string;
   prompt: unknown;
@@ -732,8 +766,13 @@ async function reserveSharedAllowance(args: {
   const policy = await args.resolvePolicy?.(args.teamId);
   const legacy = policy?.mode === "plan" ? null : await initializeTeamMonth(args);
   const pricing = await modelPricing(args.modelSlug);
+  let maxOutputTokens = args.maxOutputTokens;
+  if (policy?.mode === "plan" && policy.dailyUsd !== null && args.languageModelParams) {
+    maxOutputTokens = await boundDailyOutputTokens({ ...args, dailyUsd: policy.dailyUsd, pricing });
+    args.languageModelParams.maxOutputTokens = maxOutputTokens;
+  }
   const amountMicroUsd = estimateReservationMicroUsd({
-    maxOutputTokens: args.maxOutputTokens,
+    maxOutputTokens,
     pricing,
     prompt: args.prompt,
   });
@@ -743,7 +782,7 @@ async function reserveSharedAllowance(args: {
   if (policy?.mode === "plan") {
     const scopes = await reservePlanAllowance({
       teamId: args.teamId, policy, gatewayApiKey: args.gatewayApiKey,
-      amountUsd: amountMicroUsd / MICRO_USD_PER_USD, lane: args.lane, userId: args.userId,
+      amountUsd: amountMicroUsd / MICRO_USD_PER_USD, amountMicroUsd, lane: args.lane, userId: args.userId,
     });
     const scope = scopes.scopes[0];
     return { amountMicroUsd, committedKey: scope.committedKey, id: scopes.id, inputOnlyMicroUsd: inputOnly, pricing, recentSettledKey: scope.committedKey.replace(/:committed$/, ":recent-settled"), reservationsKey: scope.reservationsKey, ttlSeconds: scope.ttlSeconds, scopes };
@@ -895,6 +934,7 @@ export function createSharedAllowanceMiddleware(args: {
       resolvePolicy: args.resolvePolicy,
       gatewayApiKey: args.gatewayApiKey,
       lane: allowanceLaneFromProviderOptions(params.providerOptions),
+      languageModelParams: params,
       maxOutputTokens: params.maxOutputTokens,
       modelSlug: args.modelSlug,
       prompt: params.prompt,
@@ -1073,8 +1113,7 @@ for index, scope in ipairs(scopes) do
     end
   end
   if scope.pending then total = total + tonumber(redis.call("GET", KEYS[scope.pending]) or "0") end
-  local held = scope.reason == "day" and math.min(amount, scope.cap) or amount
-  if total + held > scope.cap then return -index end
+  if total + amount > scope.cap then return -index end
 end
 for _, scope in ipairs(scopes) do
   local pair = scope.pairs[scope.writeIndex]
@@ -1146,10 +1185,12 @@ export async function reservePlanAllowance(args: {
   policy: TeamAllowancePolicy;
   gatewayApiKey: string;
   amountUsd: number;
+  amountMicroUsd?: number;
   lane?: AllowanceLane;
   userId?: number | null;
 }): Promise<PlanAllowanceReservation> {
-  if (args.policy.mode !== "plan" || !Number.isFinite(args.amountUsd) || args.amountUsd < 0) {
+  if (args.policy.mode !== "plan" || !Number.isFinite(args.amountUsd) || args.amountUsd < 0 ||
+    (args.amountMicroUsd !== undefined && (!Number.isSafeInteger(args.amountMicroUsd) || args.amountMicroUsd < 0))) {
     throw new Error("Plan AI allowance reservation requires a plan policy and a valid amount");
   }
   if (!args.teamId && !args.policy.demoGlobal) throw new Error("AI allowance reservation requires an owning team or demo scope");
@@ -1180,10 +1221,9 @@ export async function reservePlanAllowance(args: {
     pairs: scope.pairs.map((value) => [keys.push(value.committedKey), keys.push(value.reservationsKey)]),
     pending: scope.pendingKey ? keys.push(scope.pendingKey) : undefined,
   }));
-  const amount = usdToMicroUsd(args.amountUsd);
+  const amount = args.amountMicroUsd ?? usdToMicroUsd(args.amountUsd);
   const originalScopes = scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds }));
-  const id = `${randomUUID()}|${JSON.stringify(originalScopes.map((scope, index) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds,
-    scopes[index].reason === "day" ? Math.min(amount, scopes[index].cap) : amount]))}|${amount}`;
+  const id = `${randomUUID()}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds]))}|${amount}`;
   const redis = await getRedis();
   const followsRealSpend = await allowanceFollowsRealSpend(args.userId ?? null);
   const reserve = () => redis.eval(RESERVE_SCOPES_SCRIPT, keys.length, ...keys,
