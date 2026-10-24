@@ -142,8 +142,10 @@ test('from and assignee match the email shown for a user without a display name'
   const person = { displayName: null, email: 'kamila@example.com' }
   const task = { ...row(123), userId: 4, user: person, assignees: [{ userId: 4, user: person }] }
   for (const operator of ['from', 'assignee']) {
-    const { res } = await search(`${operator}:kamila@example.com`, { rows: [task] })
+    const { res, state } = await search(`${operator}:kamila@example.com`, { rows: [task] })
     assert.equal(res.statusCode, 200)
+    const predicate = state.where.AND[0].OR[0]
+    assert.deepEqual(operator === 'from' ? predicate.userId : predicate.assignees.some.userId, { in: [4] })
     assert.deepEqual(res.body.processedData.All.map((item) => item.taskId), [123])
   }
 })
