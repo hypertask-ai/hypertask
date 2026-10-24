@@ -24,6 +24,14 @@ def main():
         ticket = task["ticketNumber"]
         if task["section"] != "Flags":
             continue
+        if args.go:
+            current = json.loads(subprocess.check_output(["vcc", "task", "get", ticket, "--json"], text=True))
+            if current.get("success") is not True or len(current["tasks"]) != 1:
+                raise ValueError(f"cannot read current section of {ticket}")
+            task = current["tasks"][0]
+            if task["section"] != "Flags":
+                print(f"ht-flags-sweep: leave {ticket}: no longer in Flags")
+                continue
         try:
             require_everyone(ticket, flags, json.dumps(task), require_flags=True)
         except ValueError as error:
