@@ -17,8 +17,7 @@ const mocks = new Map([
     checkMcpRateLimit: async () => null,
   }],
   ['src/lib/flags.ts', {
-    HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : state.listFlag,
+    isFeatureEnabled: async () => state.listFlag,
   }],
   ['src/lib/mcp/readListQuery.ts', { readListQuery: (params) => ({ listQuery: state.listFlag
     ? { query: null, cursor: params.get('cursor'), filter: {}, fields: [], sortBy: state.sortBy, sortOrder: state.sortOrder }
@@ -56,7 +55,7 @@ const mocks = new Map([
     },
   } }],
 ])
-mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : state.listFlag
+mocks.get('src/lib/flags.ts').isFeatureEnabled = async () => state.listFlag
 mocks.get('src/lib/prisma.ts').default.project.findMany = async ({ select }) => select.title ? [{ title: 'Visible' }] : [{ id: 7 }]
 for (const [file, exports] of mocks) {
   const filename = path.join(root, file)

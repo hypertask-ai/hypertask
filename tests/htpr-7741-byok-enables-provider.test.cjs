@@ -47,6 +47,7 @@ function harness({ settings = {}, rows = {}, enabled = true, paid = true, owner 
       return enabled;
     } },
     "@/lib/flags/definitions/htpr-7741-byok-enables-provider": flag,
+    "@/lib/flags/definitions/htpr-7732-baseten-byok": { HTPR_7732_BASETEN_BYOK_FLAG: "htpr-7732-baseten-byok" },
     "@/utils/controllers/teams/updateTeamAiSettingsAtomically": {
       withLockedTeamAiSettings: async (teamId, run) => {
         assert.equal(teamId, "fixture-team");

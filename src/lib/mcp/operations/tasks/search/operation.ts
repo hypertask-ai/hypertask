@@ -10,7 +10,7 @@ import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from '@/lib/flags'
+import { HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from '@/lib/flags'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
 import { parseSearchWithChipNames } from '@/lib/search/serverOperators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
@@ -291,10 +291,9 @@ export async function GET(request: NextRequest) {
     let operatorPartial = false
     let commentById: Awaited<ReturnType<typeof rankedSearchWhere>>['commentById'] | undefined
 
-    const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, user.id)
     const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, user.id)
     const personProjectIds = targetProjectId != null ? [targetProjectId] : accessibleProjectIds
-    const parsedQuery = await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, logicEnabled)
+    const parsedQuery = await parseSearchWithChipNames(query, accessibleProjectIds, personProjectIds, logicEnabled)
     const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
     if (parsed) {
       const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,

@@ -132,6 +132,8 @@ async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSa
   const common = { "react-hot-toast": { default: noop }, "@/lib/configs/taskDetail.config": { default: {} }, "@/lib/constants": constants };
   const useActions = load("src/app/detail/[...slug]/useTaskDetailCommentActions.tsx", {
     ...common, "@prisma/client": {}, "@/utils/helperFunctions/hasFigmaEmbed": { hasFigmaEmbed: () => false },
+    "axios": { default: { post: async () => assert.fail("Unexpected blocker write") } },
+    "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
   }, "useTaskDetailCommentActions");
   const useNavigation = load("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", {
     ...common, "@/hooks/useFlag": { useFlag: () => false }, "@/lib/flags/keys": { HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes" }, "@/lib/api/typedClient": {},

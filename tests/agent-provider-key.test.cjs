@@ -362,3 +362,41 @@ test("agent identity reaches every AI key lookup, not just task writing", () => 
   const byokLookup = stream.indexOf("getByokOrTeamGatewayApiKeyForModelOption(");
   assert.ok(acting > 0 && stamped > acting && byokLookup > stamped);
 });
+
+test("agent provider-key rejects Baseten without storing or returning the supplied key", async () => {
+  const fs = require("node:fs");
+  const vm = require("node:vm");
+  const ts = require("typescript");
+  const writes = [];
+  const stubs = {
+    "next/server": { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
+    "@/lib/prisma": { default: { agent: { findFirst: async () => ({ id: "fixture-agent" }) } } },
+    "@/lib/crypto/byokCipher": { encryptByokSecret: (key) => `encrypted:${key}` },
+    "@/lib/crypto/maskByokSecret": { maskByokSecret: () => "masked" },
+    "@/lib/aiProviders": loadTs("src/lib/aiProviders.ts"),
+    "@/lib/agents/ownedSlugs": { resolveOwnedAgent: async () => ({ id: "fixture-agent" }) },
+    "@/lib/auth/cookieIdentity": { verifyCookieIdentity: async () => ({ status: "verified", id: 985 }) },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
+    "@/lib/auth/session": { SESSION_COOKIE: "fixture-session" },
+    "@/lib/agents/visibility": { upsertOwnedAgentProviderKey: async (value) => { writes.push(value); return { ok: true }; } },
+  };
+  const filename = path.join(root, "src/app/api/agents/[agentId]/provider-key/route.ts");
+  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false } }).outputText;
+  const loadedModule = { exports: {} };
+  vm.runInNewContext(code, { module: loadedModule, exports: loadedModule.exports, require: (id) => {
+    assert.ok(Object.hasOwn(stubs, id), `Unexpected dependency: ${id}`);
+    return stubs[id];
+  }, console }, { filename });
+  const request = (provider) => ({ cookies: { get: () => undefined }, headers: {}, json: async () => ({ provider, apiKey: "fake-agent-secret" }) });
+  const params = { params: Promise.resolve({ agentId: "fixture-agent" }) };
+  const rejected = await loadedModule.exports.PUT(request("baseten"), params);
+  assert.equal(rejected.status, 400);
+  assert.equal(rejected.body.error, "Unsupported provider");
+  assert.equal(writes.length, 0);
+  assert.ok(!JSON.stringify(rejected).includes("fake-agent-secret"));
+  const allowed = await loadedModule.exports.PUT(request("openrouter"), params);
+  assert.equal(allowed.status, 200);
+  assert.equal(allowed.body.success, true);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].provider, "openrouter");
+});

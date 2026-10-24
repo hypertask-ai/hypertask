@@ -6,8 +6,15 @@ import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { ViewVisibility } from "@prisma/client";
 import globalConstants from "@/lib/constants";
 import { hasFigmaEmbed } from "@/utils/helperFunctions/hasFigmaEmbed";
+import axios from "axios";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
+import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function useTaskDetailCommentActions(getContext: () => TaskDetailContext) {
+  const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  let blockerCommentEnabled = false;
+  if (blockerCommentFlag) blockerCommentEnabled = true;
   const { currentId, comments, editCommentHandler, handlePinComment, currentTask, toggleCreateTaskGlobally, refocusAndOpenTaskWriter, queryClient, _parsedTask, defaultCommentFocus, scrollVirtualize, _setActiveItem, setInViewObject, showAssignModal, setCurrentTask, updateTaskInCache, currentProject, setShowAssignModal, setShowTaskDeleteModal, setShowLinksModal, showMoveModal, navigate, setShowMoveModal } = getContext();
 
 
@@ -31,6 +38,25 @@ export function useTaskDetailCommentActions(getContext: () => TaskDetailContext)
     },
     [currentId, comments]
   );
+
+  const handleBlockerCommentFromHTC = async () => {
+    const { getCurrentCommentIndex, currentTask: task, currentUser } = getContext();
+    const commentIndex = getCurrentCommentIndex();
+    const comment = commentIndex == null ? undefined : comments[commentIndex];
+    if (!blockerCommentEnabled || !task || !comment || comment.activity) return;
+    try {
+      const response = await axios.post("/api/tasks/waiting-on", {
+        taskId: task.id,
+        blockerCommentId: task.blockerCommentId === Number(comment.id) ? null : Number(comment.id),
+      });
+      setCurrentTask((previous) => previous?.id === task.id ? { ...previous, ...response.data } : previous);
+      updateTaskInCache(response.data, task.id, task.projectId, task.sectionId, currentProject);
+      if (currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, task.id, response.data);
+      await queryClient.invalidateQueries({ queryKey: ["task-", task.id] });
+    } catch {
+      toast.error("Unable to update blocker comment");
+    }
+  };
 
   const createTaskFromCommentHTC = useCallback(() => {
     const { getCurrentCommentIndex } = getContext();
@@ -216,5 +242,5 @@ export function useTaskDetailCommentActions(getContext: () => TaskDetailContext)
     navigate("Refresh");
     setShowMoveModal((prev) => !prev);
   };
-  return { handleEditCommentFromHTC, handleStarCommentFromHTC, createTaskFromCommentHTC, processAttachmentsForNewTask, copyCommentURLFromHTC, copyCommentContentFromHTC, viewSubTasksfromHtc, openAifromHtc, deleteComment, updateActiveItemAndItemInView, toggleModal, toggleDeleteModal, linksModalToggle, toggleMoveModal };
+  return { handleBlockerCommentFromHTC, handleEditCommentFromHTC, handleStarCommentFromHTC, createTaskFromCommentHTC, processAttachmentsForNewTask, copyCommentURLFromHTC, copyCommentContentFromHTC, viewSubTasksfromHtc, openAifromHtc, deleteComment, updateActiveItemAndItemInView, toggleModal, toggleDeleteModal, linksModalToggle, toggleMoveModal };
 }
