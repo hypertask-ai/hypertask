@@ -26,7 +26,7 @@ function harness({ denied = true, failure, user = { id: 2343 } } = {}) {
     "@/utils/controllers/teams/hasTeamMembershipAccess": { hasTeamMembershipAccess: async () => true },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => assert.fail("No session lookup expected") },
     "@/lib/agentRuns/model": {},
-    "@/lib/ai/prompts/registry": {},
+    "@/lib/ai/prompts/registry": { renderPrompt: () => "" },
     "@/app/api/ai/_lib/modelProvider": {},
     "@/app/api/ai/_lib/byokKeys": {},
     "@/utils/controllers/turbopuffer/turbopufferHelper": {},
