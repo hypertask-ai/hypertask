@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { MAX_SEARCH_OPERATOR_CLAUSES, operatorMatches, parseSearchQuery, type NameOperator, type Names, type ParsedSearch } from './operators'
 
-export async function parseSearchWithNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds, logicEnabled = false): Promise<ParsedSearch> {
+export async function parseSearchWithNames(raw: string, projectIds: number[], personProjectIds = projectIds, logicEnabled = false): Promise<ParsedSearch> {
   const names: Names = {}
   const lookedUp = new Set<string>()
   for (const { operator, valueStart } of operatorMatches(raw).slice(0, MAX_SEARCH_OPERATOR_CLAUSES)) {
@@ -37,37 +37,35 @@ export async function parseSearchWithNames(raw: string, projectIds: number[], fu
     }
   }
   const parsed = parseSearchQuery(raw, names, true, logicEnabled)
-  if (fuzzyPersonEnabled) {
-    for (const [clauses, isCommenter] of [
-      [[...(parsed.filters.from ?? []), ...(parsed.filters.assignee ?? [])], false],
-      [parsed.filters.commenter ?? [], true],
-    ] as const) {
-      const filters = clauses.filter(({ value }) => !/^\d+$/.test(value.replace(/^@/, '').trim()))
-      if (!filters.length) continue
-      const people = await prisma.user.findMany({
-        where: { OR: [
-          { tasks: { some: { projectId: { in: personProjectIds } } } },
-          { assignees: { some: { task: { projectId: { in: personProjectIds } } } } },
-          { members: { some: { projectId: { in: personProjectIds } } } },
-          ...(isCommenter ? [{ comments: { some: { activity: { equals: Prisma.DbNull }, task: { projectId: { in: personProjectIds }, status: { in: ['Normal' as const, 'Archive' as const] } } } } }] : []),
-        ] },
-        select: { id: true, displayName: true, email: true },
-      })
-      const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-      for (const filter of filters) {
-        const value = normalize(filter.value.replace(/^@/, '').trim())
-        filter.userIds = value ? people.filter((person) =>
-          normalize(person.displayName ?? '').includes(value) || normalize(person.email).includes(value)
-        ).map((person) => person.id) : []
-      }
+  for (const [clauses, isCommenter] of [
+    [[...(parsed.filters.from ?? []), ...(parsed.filters.assignee ?? [])], false],
+    [parsed.filters.commenter ?? [], true],
+  ] as const) {
+    const filters = clauses.filter(({ value }) => !/^\d+$/.test(value.replace(/^@/, '').trim()))
+    if (!filters.length) continue
+    const people = await prisma.user.findMany({
+      where: { OR: [
+        { tasks: { some: { projectId: { in: personProjectIds } } } },
+        { assignees: { some: { task: { projectId: { in: personProjectIds } } } } },
+        { members: { some: { projectId: { in: personProjectIds } } } },
+        ...(isCommenter ? [{ comments: { some: { activity: { equals: Prisma.DbNull }, task: { projectId: { in: personProjectIds }, status: { in: ['Normal' as const, 'Archive' as const] } } } } }] : []),
+      ] },
+      select: { id: true, displayName: true, email: true },
+    })
+    const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    for (const filter of filters) {
+      const value = normalize(filter.value.replace(/^@/, '').trim())
+      filter.userIds = value ? people.filter((person) =>
+        normalize(person.displayName ?? '').includes(value) || normalize(person.email).includes(value)
+      ).map((person) => person.id) : []
     }
   }
   return parsed
 }
 
-export async function parseSearchWithChipNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds, logicEnabled = false) {
+export async function parseSearchWithChipNames(raw: string, projectIds: number[], personProjectIds = projectIds, logicEnabled = false) {
   const normalized = raw.replace(/(^|\s)(-?(?:in|board):)#(?=\S)/gi, '$1$2')
-  const parsed = await parseSearchWithNames(normalized, projectIds, fuzzyPersonEnabled, personProjectIds, logicEnabled)
+  const parsed = await parseSearchWithNames(normalized, projectIds, personProjectIds, logicEnabled)
   for (const key of ['in', 'board'] as const) {
     for (const filter of parsed.filters[key] ?? []) filter.value = filter.value.replace(/^#/, '')
   }
