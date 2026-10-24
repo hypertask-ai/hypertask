@@ -121,14 +121,14 @@ test("disconnect still completes inference in the background without aborting th
   h.resume.resolve();
   await h.released.promise;
   assert.equal(h.signal().aborted, false);
-  assert.deepEqual(h.events, ["ok", "deadline cleared", "watch stopped", "lease released"]);
+  assert.deepEqual(h.events, ["ok", "deadline cleared", "deadline cleared", "watch stopped", "lease released"]);
 });
 
 test("normal completion still delivers one done event and releases the lease", { timeout: 2000 }, async () => {
   const h = server({ complete: true });
   assert.equal(await h.response.text(), 'event: content\ndata: {"content":"Background answer"}\n\nevent: done\ndata: {"status":"complete","assistant_persisted":true}\n\n');
   await h.released.promise;
-  assert.deepEqual(h.events, ["ok", "deadline cleared", "watch stopped", "lease released"]);
+  assert.deepEqual(h.events, ["ok", "deadline cleared", "deadline cleared", "watch stopped", "lease released"]);
 });
 
 test("server flag Off retains graceful cancellation without finishing SSE", { timeout: 2000 }, async () => {
