@@ -12,6 +12,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/agents/rotate-token',
   '/api/mcp/agents/runtime-heartbeat',
   '/api/mcp/ai/improve',
+  '/api/mcp/ai/models/status',
   '/api/mcp/ai/sessions',
   '/api/mcp/ai/task-writer',
   '/api/mcp/ai/usage',

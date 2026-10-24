@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 
+const SELF_FOLLOW_FLAG = "yper4-651-self-follow-quiet";
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(
   path.join(root, "tests/agent-description-mention-invocation.test.cjs"),
@@ -58,6 +59,9 @@ function loadCreateFollowerService() {
   const modules = {
     "@/utils/controllers/FCM": { sendDataNewCommentFCM: async () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
+    [`@/lib/flags/definitions/${SELF_FOLLOW_FLAG}`]: {
+      YPER4_651_SELF_FOLLOW_QUIET_FLAG: SELF_FOLLOW_FLAG,
+    },
     "@/utils/controllers/notifications/creation-service/check-reminder_create-notification": {
       __esModule: true,
       default: async () => null,

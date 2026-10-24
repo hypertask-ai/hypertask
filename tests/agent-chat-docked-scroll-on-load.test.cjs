@@ -38,7 +38,7 @@ const message = (id, content) => ({
 
 // One reload: the panel mounts with no session yet, then the session list
 // arrives with the ticket's own chat and its messages paint in one go.
-async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
+async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = false, exercise } = {}) {
   const dom = new JSDOM('<div id="root"></div>', {
     url: "https://app.hypertask.ai/detail/project-15/6099",
   });
@@ -46,6 +46,7 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
     "window",
     "document",
     "HTMLElement",
+    "ResizeObserver",
     "IS_REACT_ACT_ENVIRONMENT",
     // jiti's JSX transform emits classic React.createElement calls, which
     // the component source itself never imports (Next uses the automatic
@@ -82,9 +83,12 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
   let listElement = null;
   const state = { scrollTop: 0, measuredDistanceFromBottom: null, scrollAttempts: 0 };
   let registeredBeforeFirstScroll = false;
+  let extraHeight = 0;
   const scrollHeight = (messageCount) =>
-    Math.max(listBox.clientHeight, messageCount * listBox.messageHeight);
+    Math.max(listBox.clientHeight, messageCount * listBox.messageHeight + extraHeight);
   let messageCount = 0;
+  const observers = new Set();
+  let props = sidebar ? { sidebarKey: "session-6099" } : {};
 
   try {
     global.window = dom.window;
@@ -92,6 +96,15 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
     global.HTMLElement = dom.window.HTMLElement;
     global.IS_REACT_ACT_ENVIRONMENT = true;
     global.React = React;
+    global.ResizeObserver = class {
+      constructor(callback) {
+        this.callback = callback;
+        this.targets = new Set();
+        observers.add(this);
+      }
+      observe(target) { this.targets.add(target); }
+      disconnect() { observers.delete(this); }
+    };
     for (const filename of stubbed) delete require.cache[filename];
 
     const context = {
@@ -118,7 +131,18 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
       },
       registerMessageListRef: (element) => {
         listElement = element;
-        if (element) registeredBeforeFirstScroll ||= state.scrollAttempts === 0;
+        if (element) {
+          registeredBeforeFirstScroll ||= state.scrollAttempts === 0;
+          Object.defineProperties(element, {
+            scrollTop: {
+              configurable: true,
+              get: () => state.scrollTop,
+              set: (top) => { state.scrollTop = top; },
+            },
+            scrollHeight: { configurable: true, get: () => scrollHeight(messageCount) },
+            clientHeight: { configurable: true, get: () => listBox.clientHeight },
+          });
+        }
       },
       copyResponse: () => {},
       createTaskFromResponse: () => {},
@@ -182,22 +206,63 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
       context.currentSession = { id: "session-6099", messages };
     };
 
+    const render = async () => {
+      await React.act(async () => {
+        reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MessageList, props)));
+      });
+    };
     context.chatMounted = true;
     // Opening an existing thread (and the reload QA reproduced) paints the
     // list and its whole history in ONE commit, so the mount is the only
     // chance to scroll. The two-step variant models the slower reload where
     // the panel is restored open first and the history arrives after.
     if (historyOnFirstPaint) showHistory();
-    await React.act(async () => {
-      reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MessageList)));
-    });
+    await render();
 
     if (!historyOnFirstPaint) {
       showHistory();
-      await React.act(async () => {
-        reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MessageList)));
-      });
+      await render();
     }
+
+    if (exercise) await exercise({
+      state,
+      async scroll(top = state.scrollTop) {
+        state.scrollTop = top;
+        await React.act(async () => listElement.dispatchEvent(new dom.window.Event("scroll")));
+      },
+      async resize(height, { notifyScroll = false, viewport = false } = {}) {
+        if (viewport) listBox.clientHeight = height;
+        else extraHeight += height;
+        if (notifyScroll) await React.act(async () => listElement.dispatchEvent(new dom.window.Event("scroll")));
+        await React.act(async () => {
+          for (const observer of observers) {
+            const target = viewport ? listElement : listElement.firstElementChild;
+            if (observer.targets.has(target)) observer.callback([{ target }]);
+          }
+        });
+      },
+      async append() {
+        messageCount += 1;
+        context.currentSession = {
+          ...context.currentSession,
+          messages: [...context.currentSession.messages, { ...message(`m${messageCount}`, "new assistant reply"), role: "assistant" }],
+        };
+        await render();
+      },
+      async stream() {
+        extraHeight += 100;
+        const previous = context.currentSession.messages;
+        context.currentSession = {
+          ...context.currentSession,
+          messages: [...previous.slice(0, -1), { ...previous.at(-1), content: "longer streamed reply" }],
+        };
+        await render();
+      },
+      async setActive(active) {
+        props = { ...props, active, hidden: !active };
+        await render();
+      },
+    });
 
     return {
       ...state,
@@ -272,4 +337,65 @@ test("a chat whose history paints on the first commit still lands at the bottom"
       "commit, so the mount-time auto-scroll is the only one that runs; it " +
       "must not be a no-op",
   );
+});
+
+for (const [surface, sidebar] of [["docked", true], ["full-screen", false]]) {
+  test(`${surface} chat follows content growth without mistaking a height-only scroll for user intent`, async () => {
+    await renderReloadAndMeasure({ sidebar, exercise: async ({ state, resize, stream, append }) => {
+      assert.equal(state.scrollTop, 100);
+      await resize(200, { notifyScroll: true });
+      assert.equal(state.scrollTop, 300);
+      await stream();
+      assert.equal(state.scrollTop, 400);
+      await append();
+      assert.equal(state.scrollTop, 500);
+    } });
+  });
+
+  test(`${surface} chat preserves reading position and re-arms follow when scrolled near the bottom`, async () => {
+    await renderReloadAndMeasure({ sidebar, exercise: async ({ state, scroll, resize, stream, append }) => {
+      await scroll(0);
+      await resize(200);
+      assert.equal(state.scrollTop, 0);
+      await stream();
+      assert.equal(state.scrollTop, 0);
+      await append();
+      assert.equal(state.scrollTop, 0);
+      await scroll(480);
+      await stream();
+      assert.equal(state.scrollTop, 600);
+    } });
+  });
+
+  test(`${surface} chat follows a shrinking viewport only while pinned`, async () => {
+    await renderReloadAndMeasure({ sidebar, exercise: async ({ state, resize, scroll }) => {
+      await resize(200, { viewport: true });
+      assert.equal(state.scrollTop, 200);
+      await scroll(20);
+      await resize(150, { viewport: true });
+      assert.equal(state.scrollTop, 20);
+    } });
+  });
+}
+
+test("inactive docked chat waits to follow new content until it is shown again", async () => {
+  await renderReloadAndMeasure({ sidebar: true, exercise: async ({ state, setActive, resize, append }) => {
+    await setActive(false);
+    await resize(200);
+    await append();
+    assert.equal(state.scrollTop, 100);
+    await setActive(true);
+    assert.equal(state.scrollTop, 400);
+  } });
+});
+
+test("docked chat still preserves a reader's position during message updates", async () => {
+  await renderReloadAndMeasure({ sidebar: true, exercise: async ({ state, scroll, stream, append }) => {
+    assert.equal(state.scrollTop, 100);
+    await scroll(0);
+    await stream();
+    assert.equal(state.scrollTop, 0);
+    await append();
+    assert.equal(state.scrollTop, 0);
+  } });
 });

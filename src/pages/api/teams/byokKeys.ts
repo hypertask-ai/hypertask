@@ -1,4 +1,3 @@
-import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
@@ -6,6 +5,8 @@ import { decryptByokSecret, encryptByokSecret } from "@/lib/crypto/byokCipher";
 import { maskByokSecret } from "@/lib/crypto/maskByokSecret";
 import {
   BYOK_PROVIDER_KEYS,
+  getAiProviderByByokKey,
+  isAiProviderKey,
   isByokProviderKey,
   isByokProviderRestrictedInGdprSafeMode,
   isGdprSafeModeEnabled,
@@ -14,6 +15,8 @@ import {
 import { assertUserCanManageTeamByok } from "@/utils/controllers/teams/assertTeamByokAccess";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isPaidTeam } from "@/lib/freeTier";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7741_BYOK_ENABLES_PROVIDER_FLAG } from "@/lib/flags/definitions/htpr-7741-byok-enables-provider";
 import { withLockedTeamAiSettings } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import type { Prisma } from "@prisma/client";
 import {
@@ -34,6 +37,7 @@ async function mutateByokWithSafeModeLock(
     transaction: Prisma.TransactionClient,
     currentSettings: unknown,
   ) => Promise<unknown>,
+  syncProviderEnabled = false,
 ) {
   return withLockedTeamAiSettings(
     teamId,
@@ -48,6 +52,44 @@ async function mutateByokWithSafeModeLock(
         );
       }
       await mutate(transaction, currentSettings);
+      const aiProvider = getAiProviderByByokKey(provider);
+      if (syncProviderEnabled && aiProvider) {
+        const key = await transaction.teamByokApiKey.findUnique({
+          where: { teamId_provider: { teamId, provider } },
+          select: { enabled: true, ciphertext: true },
+        });
+        if (key?.enabled && key.ciphertext?.trim()) {
+          const settings =
+            currentSettings &&
+            !Array.isArray(currentSettings) &&
+            typeof currentSettings === "object"
+              ? (currentSettings as Record<string, unknown>)
+              : {};
+          const providers =
+            settings.providers &&
+            !Array.isArray(settings.providers) &&
+            typeof settings.providers === "object"
+              ? (settings.providers as Record<string, unknown>)
+              : settings;
+          await transaction.team.update({
+            where: { id: teamId },
+            data: {
+              aiProviderSettings: {
+                ...settings,
+                providers: {
+                  ...Object.fromEntries(
+                    Object.entries(providers).filter(
+                      ([key, value]) =>
+                        isAiProviderKey(key) && typeof value === "boolean",
+                    ),
+                  ),
+                  [aiProvider.key]: true,
+                },
+              } as Prisma.InputJsonValue,
+            },
+          });
+        }
+      }
       return true;
     },
   );
@@ -248,6 +290,11 @@ const handler: NextApiHandler = async (
       });
     }
 
+    const syncProviderEnabled = await isFeatureEnabled(
+      HTPR_7741_BYOK_ENABLES_PROVIDER_FLAG,
+      user.id,
+    );
+
     if (
       provider === "custom" &&
       (apiKey || baseUrl || modelId || typeof gdprCompliant === "boolean")
@@ -358,6 +405,7 @@ const handler: NextApiHandler = async (
                 ...(typeof enabled === "boolean" ? { enabled } : {}),
               },
             }),
+          syncProviderEnabled,
         );
         return res.status(200).json({ ok: true });
       } catch (e) {
@@ -408,6 +456,7 @@ const handler: NextApiHandler = async (
               update: { enabled },
             });
           },
+          syncProviderEnabled,
         );
         return res.status(200).json({ ok: true });
       } catch (e) {

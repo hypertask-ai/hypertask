@@ -11,6 +11,7 @@ const providers = load(path.join(root, "src/lib/aiProviders.ts"));
 const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
 const customEndpoint = load(path.join(root, "src/lib/ai/customEndpoint.ts"));
 const flag = load(path.join(root, "src/lib/flags/definitions/htpr-7732-baseten-byok.ts"));
+const providerSyncFlag = load(path.join(root, "src/lib/flags/definitions/htpr-7741-byok-enables-provider.ts"));
 const flagKey = "htpr-7732-baseten-byok";
 const fakeKey = "fake-baseten-team-secret";
 const lookup = { trustedTeamId: "fixture-team", userId: 985 };
@@ -94,7 +95,8 @@ function settingsHarness({ enabled = true, paid = true, gdpr = false, allowed = 
     deleteMany: async (value) => writes.push(value),
   } };
   const api = loadModule("src/pages/api/teams/byokKeys.ts", {
-    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { assert.equal(key, flagKey); assert.equal(userId, 985); return enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { assert.ok([flagKey, providerSyncFlag.HTPR_7741_BYOK_ENABLES_PROVIDER_FLAG].includes(key)); assert.equal(userId, 985); return key === flagKey ? enabled : true; } },
+    "@/lib/flags/definitions/htpr-7741-byok-enables-provider": providerSyncFlag,
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
     "@/lib/prisma": { default: {
       user: { findUnique: async () => ({ id: 985 }) },
