@@ -564,9 +564,8 @@ for (const mode of ["update", "comment", "create", "writer-create"]) {
         assert.equal(result.confirmation_required, true);
         return { key: keys.at(-1), fields: creating ? result.affected[taskIndex] : result };
       };
-      const legacySubjects = taskIds.map((task_id) => ({ identifier: { task_id }, resolvedTaskId: task_id }));
       const legacyKey = creating ? buildBulkOperationKey("create-tasks", tasks.map((task) => ({ key: JSON.stringify(["project", task.project_id, writer ? "brief" : "title", writer ? task.brief : task.title]) })))
-        : buildBulkOperationKey(mode === "update" ? "update-tasks" : "comment-on-tasks", mode === "update" ? [] : legacySubjects, [[mode === "update" ? "description" : "text", html]]);
+        : buildBulkOperationKey(mode === "update" ? "update-tasks" : "comment-on-tasks", [], [[mode === "update" ? "description" : "text", html]]);
       const baseline = await preview();
       assert.equal(baseline.key, legacyKey);
       assert.equal(Object.hasOwn(baseline.fields, "image_urls"), false);
