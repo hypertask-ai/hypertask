@@ -14,7 +14,7 @@ const routeJavascript = ts.transpileModule(fs.readFileSync(routePath, "utf8"), {
   },
 }).outputText;
 
-function loadRoute() {
+function loadRoute(tasks = []) {
   const taskQueries = [];
   const prisma = {
     project: {
@@ -24,7 +24,9 @@ function loadRoute() {
       count: async () => 2,
       findMany: async (query) => {
         taskQueries.push(query);
-        return [];
+        return tasks.map((task) => Object.fromEntries(
+          Object.keys(query.select).map((key) => [key, task[key]]),
+        ));
       },
     },
   };
@@ -110,6 +112,36 @@ function loadRoute() {
 
   return { GET: routeModule.exports.GET, taskQueries };
 }
+
+test("task lists select and return stored blocker comment markers", async () => {
+  const route = loadRoute([101, null].map((blockerCommentId, index) => ({
+    id: 42 + index,
+    projectId: 15,
+    blockerCommentId,
+    title: "Blocked task",
+    section: "In Progress",
+    status: "Normal",
+    project: { id: 15, title: "Board" },
+    assignees: [],
+    taskLabels: [],
+    subTasks: [],
+    savedContent: [],
+    _count: { taskLabels: 0, comments: 1 },
+    createdAt: new Date("2026-10-24T12:00:00Z"),
+  })));
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ project_id: "15" }) },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+  assert.equal(route.taskQueries.length, 1);
+  assert.equal(route.taskQueries[0].select.blockerCommentId, true);
+  assert.deepEqual(response.body.tasks.map(({ id, blockerCommentId }) => ({ id, blockerCommentId })), [
+    { id: 42, blockerCommentId: 101 },
+    { id: 43, blockerCommentId: null },
+  ]);
+});
 
 test("archived task lists sort missing update timestamps after recent tasks", async () => {
   const route = loadRoute();

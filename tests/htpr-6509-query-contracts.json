@@ -483,6 +483,7 @@
             "sectionChangedAt": null,
             "lastCommentAt": null,
             "staleNudgedAt": null,
+            "blockerCommentId": null,
             "waitingOnUserId": null,
             "waitingOnSetById": null,
             "waitingOnSetAt": null,

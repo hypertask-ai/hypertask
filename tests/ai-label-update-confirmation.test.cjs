@@ -109,7 +109,7 @@ test("a null due date still counts as a non-label change", () => {
 
 test("the chat route decides the update gate through the shared helper", () => {
   const routeSource = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
+    path.join(root, "src/lib/ai/tools/updateTask.ts"),
     "utf8"
   );
 

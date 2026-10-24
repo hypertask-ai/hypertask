@@ -9,13 +9,22 @@ const root = path.resolve(__dirname, '..');
 const load = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, fsCache: false });
 const registry = load(path.join(root, 'src/lib/ai/prompts/registry.ts'));
 const { SharedAiAllowanceExceededError, sharedAiAllowanceErrorMessage, modelCostUsd } = load(path.join(root, 'src/app/api/ai/_lib/sharedAllowance.ts'));
+const providers = load(path.join(root, 'src/lib/aiProviders.ts'));
+const customEndpoint = load(path.join(root, 'src/lib/ai/customEndpoint.ts'));
 const { isHaiku55Model, isHaiku45Model, resolveHaikuModelId } = load(path.join(root, 'src/lib/aiModelOptions.ts'));
 
 function harness({ rejectTelemetry = false, rejectPricing = false, observationSink, teamSnapshot = null } = {}) {
-  const rows = [], captures = [], errors = [], pending = [], allowances = [];
+  const rows = [], captures = [], errors = [], pending = [], allowances = [], openAiConfigs = [];
   const usage = { inputTokens: { total: 100 }, outputTokens: { total: 20 } };
   const result = { content: [{ type: 'text', text: 'private reply' }], usage, finishReason: { unified: 'stop', raw: 'end_turn' } };
-  const factory = (provider) => (modelId) => ({ specificationVersion: 'v4', provider, modelId, supportedUrls: {}, doGenerate: async () => result });
+  const factory = (provider) => (modelId) => ({
+    specificationVersion: 'v4', provider, modelId, supportedUrls: {},
+    doGenerate: async () => result,
+    doStream: async () => ({ stream: new ReadableStream({ start(controller) {
+      controller.enqueue({ type: 'finish', usage, finishReason: { unified: 'stop' } });
+      controller.close();
+    } }) }),
+  });
   const stubs = {
     '@/lib/net/fetchWithoutBrotli': { fetchWithoutBrotli: async () => { throw new Error('Unexpected network request'); } },
     '@vercel/functions': { waitUntil: (promise) => pending.push(promise) },
@@ -24,7 +33,7 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
     '@/lib/telemetry/aiChatObservability': { recordAiChatTurn: async (row) => { captures.push(row); if (rejectTelemetry) throw new Error('capture unavailable'); await observationSink?.(row); } },
     '@/lib/errors/reportError': { reportError: async (report) => { errors.push(report); if (rejectTelemetry) throw new Error('tracker unavailable'); } },
     '@ai-sdk/anthropic': { createAnthropic: () => factory('anthropic') },
-    '@ai-sdk/openai': { createOpenAI: () => Object.assign(factory('openai'), { chat: factory('openai') }) },
+    '@ai-sdk/openai': { createOpenAI: (config) => { openAiConfigs.push(config); return Object.assign(factory('openai'), { chat: factory('openai') }); } },
     '@openrouter/ai-sdk-provider': { createOpenRouter: () => factory('openrouter') },
     ai: { ...require('ai'), createGateway: () => factory('gateway') },
     '@/app/api/ai/_lib/sharedAllowance': {
@@ -37,16 +46,16 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
     },
     '@/lib/aiModelOptions': { getAiModelDefinition: () => undefined, isHaiku55Model, isHaiku45Model, resolveHaikuModelId },
     '@/lib/flags/keys': {},
-    '@/lib/aiProviders': { getAiProviderInfo: () => ({ openAiCompatibleBaseUrl: 'https://example.test/v1' }) },
+    '@/lib/aiProviders': providers,
     '@/lib/aiAllowancePolicy': { FREE_TEAM_AI_ALLOWANCE_USD: 1, PAID_TEAM_AI_ALLOWANCE_USD: 5 },
     '@/lib/aiUsageClassification': { isSystemAiFeature: (feature) => feature === 'summary', INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: 'system' },
-    '@/lib/ai/customEndpoint': { isCustomEndpointConfig: (value) => typeof value === 'object', normalizeCustomEndpointConfig: (value) => value },
+    '@/lib/ai/customEndpoint': customEndpoint,
   };
   const filename = path.join(root, 'src/app/api/ai/_lib/modelProvider.ts');
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loadedModule = { exports: {} };
   vm.runInNewContext(code, { module: loadedModule, exports: loadedModule.exports, require: (id) => stubs[id] ?? require(id), process, performance, setTimeout, clearTimeout, ReadableStream, console }, { filename });
-  return { api: loadedModule.exports, rows, captures, errors, allowances, usage, result, flush: async () => { await Promise.all(pending.splice(0)); } };
+  return { api: loadedModule.exports, rows, captures, errors, allowances, openAiConfigs, usage, result, flush: async () => { await Promise.all(pending.splice(0)); } };
 }
 
 const params = { prompt: [{ role: 'system', content: registry.renderPrompt('task-summaries-system-2') }, { role: 'user', content: [{ type: 'text', text: 'private prompt' }] }] };
@@ -254,4 +263,52 @@ test('migration is additive and retains historical usage rows', () => {
   for (const field of ['costUsd', 'latencyMs', 'promptId', 'promptVersion', 'outcome', 'traceId']) assert.ok(migration.includes(`ADD COLUMN "${field}"`));
   assert.match(schema, /costUsd\s+Float\?/);
   assert.match(schema, /latencyMs\s+Int\?/);
+});
+
+test('Baseten model credentials reach the exact mapped chat endpoint and retain metadata-only tracing', async () => {
+  const catalog = load(path.join(root, 'src/lib/aiModelOptions.ts'));
+  const expected = {
+    'deepseek-v4.1-flash': 'deepseek-ai/DeepSeek-V4.1-Flash-1017',
+    'deepseek-v4.1-flash-fast': 'deepseek-ai/DeepSeek-V4.1-Flash-1017-Fast',
+    'kimi-k3': 'moonshotai/Kimi-K3',
+    'glm-5.3-flash': 'zai-org/GLM-5.3-Flash',
+  };
+  const h = harness({ rejectPricing: true });
+  for (const [modelKey, slug] of Object.entries(expected)) {
+    const option = catalog.getAiModelOptionById(modelKey);
+    const credential = { kind: 'baseten', apiKey: 'fake-baseten-secret', modelKey };
+    assert.equal(h.api.isCustomEndpointConfig(credential), false);
+    assert.equal(h.api.isVercelAiGatewayKey(credential), false);
+    assert.equal(h.api.aiUsageProviderForCredential('gateway', credential, option), 'byok:baseten');
+    const model = h.api.resolveAiModel('gateway', option.model, credential, option);
+    assert.equal(model.modelId, slug);
+    h.api.configureAiModelUsage(model, { teamId: 'fixture-team', userId: 985 });
+    assert.equal(await model.doGenerate(params), h.result);
+    const streamed = await model.doStream(params);
+    for await (const chunk of streamed.stream) assert.equal(chunk.type, 'finish');
+    assert.throws(() => h.api.resolveAiModel('gateway', option.model, { ...credential, modelKey: 'unmapped' }, option), (error) => {
+      assert.match(error.message, /does not match/);
+      assert.ok(!error.message.includes(credential.apiKey));
+      return true;
+    });
+    assert.throws(() => h.api.resolveAiModel('gateway', 'different-model', credential, option), /does not match/);
+    assert.throws(() => h.api.resolveAiModel('gateway', option.model, credential), /does not match/);
+  }
+  await h.flush();
+  assert.equal(h.rows.length, 8);
+  assert.equal(h.captures.length, 8);
+  assert.equal(h.allowances.length, 0);
+  assert.equal(h.errors.length, 0);
+  for (const config of h.openAiConfigs) {
+    assert.equal(config.baseURL, 'https://inference.baseten.co/v1');
+    assert.equal(config.apiKey, 'fake-baseten-secret');
+  }
+  for (const row of h.rows) {
+    assert.equal(row.provider, 'byok:baseten');
+    assert.equal(row.teamId, 'fixture-team');
+    assert.equal(row.totalTokens, 120);
+    assert.equal(row.costUsd, null);
+    assert.ok(Object.values(expected).includes(row.model));
+  }
+  assert.ok(!JSON.stringify([h.rows, h.captures, h.errors]).includes('fake-baseten-secret'));
 });

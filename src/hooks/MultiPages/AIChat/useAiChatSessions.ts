@@ -7,14 +7,15 @@ import { useFileUpload } from "@/components/Common/AttachmentsUpload/FileUploadH
 import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
+import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sessionMessageQueue";
 
-type Context = { agentSidebarChatsEnabled: boolean } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
+type Context = { agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
 
 export function useAiChatSessions(context: Context) {
   const {
   sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
   createSession, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
-  deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
+  deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
   currentAiOption, pathname, currentUser, taskId, sessionsRef,
   dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
   setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession,
@@ -25,15 +26,15 @@ export function useAiChatSessions(context: Context) {
     sessionIntentGenerationRef.current += 1;
     sessionSetupRef.current = null;
     resolvedBoardSessionRef.current = null;
-    clearMessageQueue();
+    if (!persistentQueue) clearMessageQueue();
     selectSessionInHistory(sessionId);
-  }, [clearMessageQueue, selectSessionInHistory]);
+  }, [clearMessageQueue, selectSessionInHistory, persistentQueue]);
   const startNewSession = useCallback(async () => {
     const generation = sessionIntentGenerationRef.current + 1;
     sessionIntentGenerationRef.current = generation;
     sessionSetupRef.current = null;
     resolvedBoardSessionRef.current = null;
-    clearMessageQueue();
+    if (!persistentQueue) clearMessageQueue();
     const createdSession = await createSession(
       () => sessionIntentGenerationRef.current === generation
     );
@@ -47,6 +48,7 @@ export function useAiChatSessions(context: Context) {
     return createdSession;
   }, [
     clearMessageQueue,
+    persistentQueue,
     createSession,
     currentProject?.id,
     isFullScreenChat,
@@ -68,19 +70,46 @@ export function useAiChatSessions(context: Context) {
   const handleSendMessageRef = useRef<
     (
       retryContent?: string,
-      options?: { htmlForAttachments?: string }
+      options?: { htmlForAttachments?: string; queuedMessage?: QueuedAiChatMessage; sessionId?: string; onQueueBusy?: (retryAfterMs: number) => void }
     ) => Promise<boolean>
   >(async () => false);
 
   const removeQueuedMessage = useCallback((id: string) => {
+    if (persistentQueue) {
+      const sessionId = persistentQueue.sessionId;
+      if (sessionId) persistentQueue.set(sessionId, persistentQueue.get(sessionId).filter((item) => item.id !== id));
+      return;
+    }
     messageQueueRef.current = messageQueueRef.current.filter(
       (item) => item.id !== id
     );
     setQueuedMessages(messageQueueRef.current);
-  }, []);
+  }, [persistentQueue]);
 
-  const drainQueuedMessage = useCallback(() => {
+  const drainingRef = useRef(false);
+  const retryAtRef = useRef(0);
+  const drainQueuedMessage = useCallback((finishedSessionId?: string) => {
     if (sendInFlightRef.current) return;
+    if (drainingRef.current || Date.now() < retryAtRef.current) return;
+    if (persistentQueue) {
+      const sessionId = persistentQueue.sessionId;
+      if (!sessionId || (finishedSessionId && sessionId !== finishedSessionId)) return;
+      const next = persistentQueue.get(sessionId)[0];
+      if (!next) return;
+      drainingRef.current = true;
+      let retryDelay = 15000;
+      void handleSendMessageRef.current(next.content, { queuedMessage: next, sessionId, onQueueBusy: (delay) => { retryDelay = delay; } })
+        .then((sent) => {
+          if (sent) persistentQueue.set(sessionId, persistentQueue.get(sessionId).filter((item) => item.id !== next.id));
+          else retryAtRef.current = Date.now() + retryDelay;
+        })
+        .catch((error) => {
+          retryAtRef.current = Date.now() + retryDelay;
+          console.error("Could not send queued chat message:", error);
+        })
+        .finally(() => { drainingRef.current = false; });
+      return;
+    }
     const queue = messageQueueRef.current;
     if (queue.length === 0) return;
     const [next, ...rest] = queue;
@@ -94,7 +123,14 @@ export function useAiChatSessions(context: Context) {
     void handleSendMessageRef.current(next.content, {
       htmlForAttachments: next.html,
     });
-  }, []);
+  }, [persistentQueue]);
+  useEffect(() => {
+    if (!persistentQueue) return;
+    retryAtRef.current = 0;
+    drainQueuedMessage();
+    const timer = window.setInterval(() => drainQueuedMessage(), 2000);
+    return () => window.clearInterval(timer);
+  }, [persistentQueue, persistentQueue?.sessionId, drainQueuedMessage]);
   const billing = modelBilling;
   const isApple = useDeviceContext();
   const isByokBlocked = shouldBlockAiDueToByokProvider(billing, currentAiOption?.source);

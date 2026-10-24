@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRecoilValue } from "@/lib/state"
 import type { IProject } from "@/models/model"
-import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
+import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, currentProjectAtom, currentUserAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient"
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild"
 import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
@@ -20,6 +20,25 @@ type TaskSessionSummary = {
   title: string;
   updatedAt: string;
 };
+
+export const taskSessionQueryOptions = (taskId: number | null | undefined, userId?: number) => ({
+  queryKey: ["task-sessions", taskId, userId],
+  queryFn: async (): Promise<TaskSessionSummary[]> => {
+    const response = await fetch(
+      `/api/ai-chat/task-sessions?taskId=${taskId}`,
+      { credentials: "include" }
+    );
+    if (!response.ok) {
+      throw new Error("Failed to load task chat sessions");
+    }
+    const data = (await response.json()) as {
+      sessions: TaskSessionSummary[];
+    };
+    return data.sessions;
+  },
+  staleTime: 60 * 1000,
+  refetchOnWindowFocus: false,
+});
 
 const TICKET_QUERIES = (ref: string) => [
   `Summarize ${ref}`,
@@ -97,6 +116,7 @@ export const WelcomeScreen = () => {
   const isDemo = (pathname?.startsWith("/demo") ?? false) || isGuestCookieUser();
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const inViewObject = useRecoilValue(inViewObjectAtom);
+  const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom) as IProject | null;
   const sections = currentProject?.sections ?? null;
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
@@ -138,23 +158,8 @@ export const WelcomeScreen = () => {
     enabled: Boolean(taskId) && taskDetailDataReady && !isEditMode && !hasPendingTicketQuestions,
   });
   const taskSessions = useQuery({
-    queryKey: ["task-sessions", taskId],
-    queryFn: async (): Promise<TaskSessionSummary[]> => {
-      const response = await fetch(
-        `/api/ai-chat/task-sessions?taskId=${taskId}`,
-        { credentials: "include" }
-      );
-      if (!response.ok) {
-        throw new Error("Failed to load task chat sessions");
-      }
-      const data = (await response.json()) as {
-        sessions: TaskSessionSummary[];
-      };
-      return data.sessions;
-    },
+    ...taskSessionQueryOptions(taskId, currentUser?.id),
     enabled: Boolean(taskId) && taskDetailDataReady,
-    staleTime: 60 * 1000,
-    refetchOnWindowFocus: false,
   });
   const suggestions = useMemo(() => {
     if (!hydrated) return SUGGESTED_QUERIES_POOL.slice(0, QUERIES_TO_SHOW);

@@ -55,7 +55,7 @@ stub('src/lib/mcp/auth.ts', {
   mcpUnauthorizedResponse: async () => Response.json({ error: 'Unauthorized' }, { status: 401 }),
   checkMcpRateLimit: async () => null,
 })
-stub('src/lib/mcp/inProcessClient.ts', { createInProcessMcpClient: async () => ({ auth: auth(), client: {} }) })
+stub('src/lib/mcp/directOperationClient.ts', { createDirectOperationClient: () => ({}) })
 stub('src/lib/mcp/mcpV2.ts', { isMcpV2Enabled: async () => false })
 stub('src/lib/telemetry/mcpSseAnalytics.ts', { recordLegacyMcpRequest: () => {} })
 stub('src/lib/mcp-server/legacy-sse.ts', { isLegacySseRequest: () => false })

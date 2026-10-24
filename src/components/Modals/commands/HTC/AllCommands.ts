@@ -690,6 +690,13 @@ const settings: CommandGroup = {
       keywords: "settings openrouter api key use byok",
     },
     {
+      key: "settingsApiKeysBasetenApiKey",
+      name: "Settings: Baseten API key",
+      commandMode: CommandMode.Setting,
+      payload: "apiKeys",
+      keywords: "settings baseten api key use byok aggregator",
+    },
+    {
       key: "settingsApiKeysVercelAiGatewayApiKey",
       name: "Settings: Vercel AI Gateway API key",
       commandMode: CommandMode.Setting,
@@ -1303,11 +1310,18 @@ export const getAllCommands = (
   roundedEnabled = false,
   keepAiChatClosedKeywords = "",
   aiChatAutoOpenCommandName = "",
+  blockerCommentEnabled = false,
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
   const bulk = getBulkTaskCommands({ ...commandOptions, kanbanSelectAllEnabled });
-  const comment = getCommentCommands(commandOptions);
+  const comment = getCommentCommands({
+    ...commandOptions,
+    commentOptions: commandOptions.commentOptions ? {
+      ...commandOptions.commentOptions,
+      blockerCommentEnabled: blockerCommentEnabled && commandOptions.commentOptions.blockerCommentEnabled,
+    } : undefined,
+  });
   const task = getTaskCommands(commandOptions);
   const board = getBoardCommands(commandOptions);
   const appShell = getAppShellCommands();

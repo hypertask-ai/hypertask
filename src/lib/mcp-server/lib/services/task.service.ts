@@ -975,7 +975,7 @@ export class TaskService {
     const body = SetTaskWaitingOnInputSchema.parse(params);
     return this.apiClient.makeRequest<{
       success: true;
-      task: { id: number; waitingOnUserId: number | null; waitingOnSetById: number | null; waitingOnSetAt: string | null };
+      task: { id: number; blockerCommentId?: number | null; waitingOnUserId: number | null; waitingOnSetById: number | null; waitingOnSetAt: string | null };
     }>('/mcp/tasks/waiting-on', {
       method: 'POST',
       body: JSON.stringify(body),
