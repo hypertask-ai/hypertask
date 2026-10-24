@@ -587,6 +587,7 @@ test("chat orchestration forwards the sidebar flag without coupling it to histor
   for (const enabled of [false, true]) {
     let resolution;
     const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
+      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
       react: { useState: (value) => [value, noop], useEffect: noop },
       "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
       "@/lib/state": { useRecoilState: () => [null, noop] }, "@/store": {},
