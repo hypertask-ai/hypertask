@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..");
 const mobile = React.createContext(false);
 let cachedLayout = true;
 let secondaryPanelsReady = false;
+let chatReminderShown = false;
 let late = false;
 let commentCount = 0;
 const noop = () => {};
@@ -83,7 +84,7 @@ const thread = load("src/components/PageComponents/TaskDetail/CommentAndDescript
   "./BaseCommentAndDescriptionContainer": { default: ({ children }) => React.createElement("main", null, children) },
   "@/components/Common/RichTextPersonHovercards": { default: marker("hovercards") },
   "./AgentRunActivityRow": { default: marker("activity") },
-  "./TicketChatSessionsReminder": { TicketChatSessionsReminder: marker("chat-reminder") },
+  "./TicketChatSessionsReminder": { TicketChatSessionsReminder: (props) => (chatReminderShown ? marker("chat-reminder")(props) : null) },
 }).default;
 
 function html(Component, isMobile, props = {}) {
@@ -690,6 +691,7 @@ test("the desktop Quote popover accepts pointer events despite a contact hoverca
 });
 
 test("ticket chat reminder appears once in the measured row above comments on desktop and mobile", () => {
+  chatReminderShown = true;
   cachedLayout = true;
   secondaryPanelsReady = true;
   commentCount = 1;
@@ -702,4 +704,5 @@ test("ticket chat reminder appears once in the measured row above comments on de
   secondaryPanelsReady = false;
   assert.equal(html(thread, false).includes('data-part="chat-reminder"'), false);
   commentCount = 0;
+  chatReminderShown = false;
 });

@@ -141,10 +141,7 @@ export const AI_Chat_Sidebar = ({
   useEffect(() => {
     const resumeTicketChat = (event: Event) => {
       const sessionId = (event as CustomEvent<{ sessionId: string }>).detail.sessionId;
-      ++intentRef.current;
-      setNativeSidebarChat(null);
-      aiSessionRef.current = sessionId;
-      setTarget({ kind: "ai" });
+      void selectTargetRef.current({ kind: "ai" }, sessionId);
     };
     window.addEventListener("ht-ticket-chat-resume", resumeTicketChat);
     return () => window.removeEventListener("ht-ticket-chat-resume", resumeTicketChat);
