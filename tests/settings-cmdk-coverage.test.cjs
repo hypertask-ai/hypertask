@@ -273,12 +273,12 @@ test("unresolved shared row labels fail rather than silently dropping a setting"
 });
 
 const gatedCommands = [
-  { keys: ["settingsApiKeysBasetenApiKey"], flag: "basetenByokEnabled", file: "ApiKeysSection.tsx", uiFlag: "basetenEnabled" },
+  { keys: ["settingsApiKeysBasetenApiKey"], flag: "basetenByokEnabled", dependency: "hiddenBasetenCommandKey", file: "ApiKeysSection.tsx", uiFlag: "basetenEnabled" },
   { keys: ["settingsCalendarKeepTasksUpdated"], flag: "googleCalendarSettingsEnabled", file: "CalendarSection.tsx", uiFlag: "enabled" },
   { keys: ["settingsTaskPageSuggestDescriptionsFromTaskTitles"], flag: "autoTaskDescriptionsEnabled", file: "src/components/sidebars/RightSidebar/UserPreference.tsx", uiFlag: "autoTaskDescriptionsEnabled" },
 ];
 
-for (const { keys, flag, file, uiFlag } of gatedCommands) {
+for (const { keys, flag, dependency = flag, file, uiFlag } of gatedCommands) {
   test(`settings commands respect the UI flag: ${flag}`, () => {
     const menuFile = "src/components/Modals/commands/HTC/commands.tsx";
     const flagKey = (file, name) => {
@@ -295,7 +295,7 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
       if (ts.isCallExpression(node) && node.expression.getText() === "useMemo" && /get(All)?Commands\(/.test(node.arguments[0].getText())) dependencies = node.arguments[1];
     });
     assert.ok(predicate, "Command availability filter missing");
-    assert.ok(dependencies.elements.some((item) => item.getText() === flag), `${flag}: missing memo dependency`);
+    assert.ok(dependencies.elements.some((item) => item.getText() === dependency), `${dependency}: missing memo dependency`);
     const bindings = {
       CommandMode: new Proxy({}, { get: (_, key) => key }), showByokApiKeys: true,
       isTicketPrefixCommandVisible: () => true, currentProject: {}, boardLayout: "table",
@@ -303,7 +303,8 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
       onCalendar: false,
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),
     };
-    const js = ts.transpileModule(`const filter = ${predicate.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+    const derivedBinding = dependency === flag ? "" : `const ${dependency} = ${declaration(menuFile, dependency).getText()};`;
+    const js = ts.transpileModule(`${derivedBinding} const filter = ${predicate.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
     const evaluate = () => new Function(...Object.keys(bindings), `${js}; return filter;`)(...Object.values(bindings));
     for (const key of keys) {
       assert.ok(commands.some((command) => command.key === key), `Missing gated settings command ${key}`);
