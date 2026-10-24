@@ -119,14 +119,16 @@ async function pagedSessions(request: NextRequest, userId: number) {
 export async function GET(request: NextRequest) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true);
-    if (!currentUser) return unauthorized();
-    const { user } = currentUser;
+    const cliBearerUser = currentUser || !request.headers.has("Authorization") ? null
+      : await (await import("@/app/api/ai/_lib/requestUser")).getCliBearerChatUser(request, "all-sessions");
+    const userId = currentUser?.userId ?? cliBearerUser?.id;
+    if (!userId) return unauthorized();
     if (sidebarChatProjectId(request.headers) !== undefined) {
       const sessionId = new URL(request.url).searchParams.get("sessionId") ?? "";
       const access = await loadSidebarChatRequest(request, sessionId);
       if (!access.ok) return NextResponse.json({ success: false, error: access.error }, { status: access.status });
       const session = await prisma.chatSession.findFirst({
-        where: { id: sessionId, userId: currentUser.userId, agent: { runtimeType: "NATIVE" } },
+        where: { id: sessionId, userId, agent: { runtimeType: "NATIVE" } },
         include: transcriptInclude,
       });
       return session ? NextResponse.json({ success: true, session }, { headers: { "Cache-Control": "private, no-store" } })
@@ -135,22 +137,22 @@ export async function GET(request: NextRequest) {
 
     let restCompat = false;
     try {
-      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, userId);
     } catch {
     }
     if (restCompat) {
-      const limited = await checkRestRateLimit(currentUser.userId, "read");
+      const limited = await checkRestRateLimit(userId, "read");
       if (limited) return limited;
     }
 
     if (restCompat && new URL(request.url).searchParams.get("compat") === "htpr-6924") {
-      return await pagedSessions(request, currentUser.userId);
+      return await pagedSessions(request, userId);
     }
 
     const sessions = await prisma.chatSession.findMany({
       relationLoadStrategy: "join",
       where: {
-        userId: user.id,
+        userId,
         OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" } } }],
       },
       include: {
@@ -173,7 +175,7 @@ export async function GET(request: NextRequest) {
       console.warn("No sessions found, creating new session");
       const session = await prisma.chatSession.create({
         data: {
-          userId: user.id,
+          userId,
         },
         include: {
           messages: {

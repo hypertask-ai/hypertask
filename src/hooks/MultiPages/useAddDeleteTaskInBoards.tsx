@@ -1,5 +1,5 @@
 
-import { currentProjectAtom, activeSectionAtom, currentUserAtom } from "@/store";
+import { aiChatNewTicketPathAtom, currentProjectAtom, activeSectionAtom, currentUserAtom } from "@/store";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRecoilValue } from "@/lib/state";
 import { useStore } from "jotai";
@@ -167,6 +167,7 @@ const useAddDeleteTaskInBoards = () => {
 
         task = res.data;
       }
+      store.set(aiChatNewTicketPathAtom, `/detail/project-${projectId}/${task.uniqueIndex}`);
       try {
       const targetSection = sections[sectionIndex];
 

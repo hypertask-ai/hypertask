@@ -98,10 +98,20 @@ const constants = load(path.join(root, "src/lib/aiAllowancePolicy.ts"));
 function fakeRedis() {
   const values = new Map();
   const sets = new Map();
+  const journals = new Map();
+  const rememberMonth = (committedKey, member, now, cutoff) => {
+    if (!/^ai-allowance:\d{4}-\d{2}:.+:committed$/.test(committedKey)) return;
+    const key = committedKey.replace(/:committed$/, ":recent-settled");
+    if (!journals.has(key)) journals.set(key, new Map());
+    const journal = journals.get(key);
+    journal.set(member, Number(now));
+    for (const [entry, time] of journal) if (time <= Number(cutoff)) journal.delete(entry);
+    if (!values.has(`${key}-since`)) values.set(`${key}-since`, String(now));
+  };
   const get = (key) => Number(values.get(key) ?? 0);
   const zset = (key) => { if (!sets.has(key)) sets.set(key, new Map()); return sets.get(key); };
   return {
-    values, sets,
+    values, sets, journals,
     get: async (key) => values.get(key) ?? null,
     exists: async (key) => Number(values.has(key)),
     set: async (key, value, ...options) => {
@@ -136,7 +146,9 @@ function fakeRedis() {
           let removed = 0;
           for (const [c, r] of scopes) {
             if (zset(keys[r - 1]).delete(args[1])) {
-              values.set(keys[c - 1], String(get(keys[c - 1]) + Number(args[2]))); removed++;
+              values.set(keys[c - 1], String(get(keys[c - 1]) + Number(args[2])));
+              rememberMonth(keys[c - 1], `${args[1]}|${args[2]}`, args[3], args[4]);
+              removed++;
             }
           }
           return removed;
@@ -146,8 +158,14 @@ function fakeRedis() {
           for (const [c, r] of scope.pairs) {
             for (const [member, expiry] of zset(keys[r - 1])) {
               if (expiry <= Number(args[1])) {
-                values.set(keys[c - 1], String(get(keys[c - 1]) + Number(member.split("|").at(-1))));
-                zset(keys[r - 1]).delete(member);
+                const encoded = member.slice(member.indexOf("|") + 1, member.lastIndexOf("|"));
+                const originals = encoded ? JSON.parse(encoded) : [[keys[c - 1], keys[r - 1]]];
+                for (const [committedKey, reservationsKey] of originals) {
+                  if (zset(reservationsKey).delete(member)) {
+                    values.set(committedKey, String(get(committedKey) + Number(member.split("|").at(-1))));
+                    rememberMonth(committedKey, member, args[1], Number(args[1]) - 15 * 60 * 1000);
+                  }
+                }
               }
             }
             total += get(keys[c - 1]);

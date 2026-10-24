@@ -108,7 +108,7 @@ async function run(operation, mode = 'OFF', options = {}) {
     '@/utils/controllers/users/fetch_preferences': { fetchUserPreferenceController: fn('preferencesGet', { res: { playGifs: true }, status: 200 }), invalidateUserPreferenceCache: fn('preferencesInvalidate', undefined) },
     '@/lib/aiModelPreferences': {}, '@/lib/aiModelOptions': {},
     '@/utils/helperFunctions/sanitizeRichHtml': {}, '@/lib/dictationProvider': {}, '@/lib/configs/allTasks.config': {}, '@/lib/configs/boardSortMode.config': {},
-    '@/lib/flags/definitions/htpr-7649-sidebar-view-saved': {}, '@/models/Calendar/model': {},
+    '@/lib/flags/definitions/htpr-7649-sidebar-view-saved': {}, '@/lib/flags/definitions/htpr-7650-ai-chat-open-switches': {}, '@/lib/aiChat/autoOpenPreferences': { AI_CHAT_AUTO_OPEN_KEYS: ['aiChatOpenNewTickets', 'aiChatOpenTickets', 'aiChatOpenBoards'] }, '@/models/Calendar/model': {},
     '@/lib/storage/uploadTaskAttachmentToS3': {
       resolveOwnAiChatAttachmentKey: () => null, getHypertasksObjectSize: fn('objectSize', 5),
       uploadAiChatAttachmentToS3: fn('upload', 'own-file'), deleteTaskAttachmentFromS3: fn('storageDelete', true),
@@ -1715,7 +1715,10 @@ const baseline = {
               "emojiFrequency": true,
               "calendarViews": true,
               "allTasksDateRange": true,
-              "boardSortMode": true
+              "boardSortMode": true,
+              "aiChatOpenNewTickets": true,
+              "aiChatOpenTickets": true,
+              "aiChatOpenBoards": true
             }
           }
         ]
@@ -1776,7 +1779,10 @@ const baseline = {
               "emojiFrequency": true,
               "calendarViews": true,
               "allTasksDateRange": true,
-              "boardSortMode": true
+              "boardSortMode": true,
+              "aiChatOpenNewTickets": true,
+              "aiChatOpenTickets": true,
+              "aiChatOpenBoards": true
             }
           }
         ]

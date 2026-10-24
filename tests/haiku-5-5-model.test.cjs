@@ -588,7 +588,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
       Object.assign(state, options);
       return reply.generateModelReply(state, { instructions: "fixture", messages: [], tools: {}, toolExecutions: [] });
     } },
-    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => state.dbUser },
+    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => state.dbUser, getCliBearerChatUser: async () => null },
     "@/app/api/ai/_lib/cronServiceAuth": {}, "@/lib/nativeAgent/heartbeatTurnEnvelope": {},
     "@/lib/prisma": { user: { findUnique: async () => state.dbUser } },
     "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/keys": keys,

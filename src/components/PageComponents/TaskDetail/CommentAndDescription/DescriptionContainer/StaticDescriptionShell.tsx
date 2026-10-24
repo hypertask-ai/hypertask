@@ -18,7 +18,7 @@ import { sanitizeDescriptionHtml } from "@/utils/helperFunctions/sanitizeHtml";
 const PROSEMIRROR_ROOT_STYLE: CSSProperties = {
   position: "relative",
   wordWrap: "break-word",
-  whiteSpace: "break-spaces",
+  whiteSpace: "normal",
   fontVariantLigatures: "none",
   fontFeatureSettings: '"liga" 0',
 };

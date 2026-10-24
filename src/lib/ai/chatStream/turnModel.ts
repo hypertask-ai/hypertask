@@ -5,7 +5,8 @@ import prisma from "@/lib/prisma";
 
 import { type LanguageModel } from "ai";
 import { type AiProviderOptions, type AiModelCredential, type AiGatewayTags, isCustomEndpointConfig, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
-import { type TAiModelOption, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan } from "@/lib/aiModelOptions";
+import { type TAiModelOption, type AiDefaultModelContext, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, isOpenAiOnlyPaidTeam } from "@/lib/aiModelOptions";
+import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
@@ -21,6 +22,16 @@ import { AuthedUser, ProviderId } from "@/lib/ai/chatStream/types";
 
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { resolveModelSelection, selectionFromModelOption, ModelSelection, defaultModelSelection, selectModel } from "@/lib/ai/chatStream/models";
+
+function isBrowserLunaDefaultUnqualifiedHere(body: ChatRequest, serverContext: AiDefaultModelContext, plan: StorePlanKind | null | undefined) {
+  if (body.modelFromDefault !== true) return false;
+  if (getAiModelOptionById(body.modelOptionId ?? body.model, true)?.modelKey !== "gpt-6-luna") return false;
+  return !isOpenAiOnlyPaidTeam({ ...serverContext, plan });
+}
+
+function isServerChosenDefaultTurn(body: ChatRequest, requested: { modelOptionId?: string | null; model?: string | null }) {
+  return body.modelFromDefault === true && !requested.modelOptionId && !requested.model;
+}
 
 export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
 
@@ -125,7 +136,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     }
     const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
     const defaultContext = haiku55Enabled
-      ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId)
+      ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId, body.byokProviderFlags)
       : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
@@ -134,14 +145,17 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       defaultContext.haikuDefaultEnabled,
       defaultContext,
     );
+    const requestedModel = isBrowserLunaDefaultUnqualifiedHere(body, defaultContext, storePlanId)
+      ? { modelOptionId: null, model: null, provider: null }
+      : body;
     const modelOptionIdForTurn = resolveAgentModelPin({
-      requestedModelOptionId: body.modelOptionId,
-      requestedModel: body.model,
-      agentModelOptionId: actingAgent?.modelOptionId,
+      requestedModelOptionId: requestedModel.modelOptionId,
+      requestedModel: requestedModel.model,
+      agentModelOptionId: isServerChosenDefaultTurn(body, requestedModel) ? null : actingAgent?.modelOptionId,
     });
     let selection = resolveModelSelection(
-      body.provider,
-      body.model,
+      requestedModel.provider,
+      requestedModel.model,
       modelOptionIdForTurn,
       teamProviderSettings,
       body.aiFeature,

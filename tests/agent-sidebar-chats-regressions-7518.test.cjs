@@ -455,6 +455,7 @@ test("native switching snapshots the latest draft and attachments after open, tr
     react: { ...react, default: react },
     "@/hooks/useFlag": { useFlag: () => sidebarFlag },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
+    "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },
     "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: (...args) => writes.push(args) },
     "@/lib/agents/chatViewerState": viewer,
@@ -525,6 +526,9 @@ test("sidebar command rows forward mobile context to the shared CommandList", ()
       "@/lib/contexts/mobileContext": { MobileViewContext: {} },
       "@/components/Modals/commands/HTC/CommandList": { default: "CommandList" },
       "@/components/Modals/commands/HTC/commandSelection": { findCommandPosition: noop },
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+      "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({}) },
       "@/models/enums": { CommandMode: { GoToAgentChat: 1 } },
     });
     const result = AgentSidebarChatCommands({ context: { target: { kind: "ai" }, agents: [] }, anchorRef: { current: null }, onClose: noop });
@@ -682,6 +686,9 @@ test("conversation Escape is captured even when the mobile sheet moved focus awa
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/components/Modals/commands/HTC/CommandList": { default: "CommandList" },
     "@/components/Modals/commands/HTC/commandSelection": { findCommandPosition: noop },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+    "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({}) },
     "@/models/enums": { CommandMode: { GoToAgentChat: 1 } },
   });
   try {
@@ -855,6 +862,7 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     "@/utils/aiChat/extractPastedImageFiles", "./AiChatComposerActionRow", "./AttachmentButton",
     "./AiComposerTextarea", "@/lib/flags/keys", "./ChatScopeChip", "./SendMessageButton",
     "@/components/Common/QueuedMessagesStrip", "react-hot-toast", "@/utils/aiChat/focusRequestWindow",
+    "@/hooks/MultiPages/AIChat/useDockedChatScope",
   ].map((specifier) => [specifier, {}]));
   const chat = {
     editor: { getHTML: () => "", getText: () => "" }, isTyping: false, isRecording: false,

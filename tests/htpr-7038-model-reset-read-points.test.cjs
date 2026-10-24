@@ -96,6 +96,7 @@ test("preferences API GET reaches the shared controller and POST resets before r
   const events = [];
   const api = load("src/app/api/users/preferences/route.ts", {
     [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); return "disabled"; } },
+    "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: ["aiChatOpenNewTickets", "aiChatOpenTickets", "aiChatOpenBoards"] },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => ({ userId: 7, user: { id: 7 } }) },
     "@/lib/flags": { isFeatureEnabled: async () => true },
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options.status }) } },
