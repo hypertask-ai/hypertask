@@ -116,7 +116,7 @@ for (const mobile of [false, true]) {
     }
     const clock = icon(nodes, "Clock");
     assert.equal(clock.size, 18);
-    assert.equal(clock.className, "task-option-icon h-[18px] w-[18px] text-[#696b6e] hover:text-[#95999e]");
+    assert.equal(clock.className, "h-[18px] w-[18px] task-option-icon text-[#696b6e] hover:text-[#95999e]");
     assert.doesNotMatch(clock.className, /\bkeep-stroke\b/);
     for (const type of ["Archive", "CircleCheck", "Clock"]) assert.equal(icon(nodes, type).strokeWidth, 1.75);
     const image = icon(nodes, "Image");
