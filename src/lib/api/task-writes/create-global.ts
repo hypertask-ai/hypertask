@@ -1,5 +1,5 @@
 import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
-import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import { isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
@@ -559,9 +559,13 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         "@/utils/controllers/urls/addIntoTaskDesc"
       );
       try {
-        await addIntoTaskDesc(urlsToAdd, newTask.id, "PUT", prisma, {
-          actorUserId: userId, agentId, entryPoint: "tasks.createGlobally.attachments",
-        });
+        if (await isPlanLimitsEnabled(userId)) {
+          await addIntoTaskDesc(urlsToAdd, newTask.id, "PUT", prisma, {
+            actorUserId: userId, agentId, entryPoint: "tasks.createGlobally.attachments",
+          });
+        } else {
+          await addIntoTaskDesc(urlsToAdd, newTask.id, "PUT");
+        }
       } catch (error) {
         if (isPlanLimitReachedError(error)) {
           const response = planLimitResponse(error);

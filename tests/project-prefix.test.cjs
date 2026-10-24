@@ -426,6 +426,10 @@ test("transaction locks and fresh prefix reads protect concurrent create and mov
   const single = read("src/utils/controllers/tasks/single.ts");
   assert.ok(single.indexOf("pg_advisory_xact_lock(9428471") < single.indexOf("await assertAgentAssignmentChangeAllowed"));
   assert.match(single, /requestedMutation.ticketNumber = `\$\{destination.uniqueIdentifier\}-/);
+  assert.match(single, /requestedMutation.projectId !== undefined && !enforceMoveLimits/);
+  const enforcedMove = single.indexOf("if (enforceMoveLimits)");
+  assert.ok(enforcedMove > single.indexOf("await assertTaskCountTransition"));
+  assert.ok(enforcedMove < single.indexOf("updateData.ticketNumber ="));
   assert.doesNotMatch(single, /ticketNumber: currentState.ticketNumber,\s+parentTaskId/);
 });
 

@@ -1,4 +1,4 @@
-import { assertTaskCountTransition, isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import { assertTaskCountTransition, isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
@@ -218,7 +218,19 @@ export async function updateTaskSingle(
       analyticsKey,
     } = await prisma.$transaction(
       async (tx) => {
-
+        const enforceMoveLimits = options.allowProjectChange && requestedMutation.projectId !== undefined && await isPlanLimitsEnabled(currentUser.id);
+        if (options.allowProjectChange && requestedMutation.projectId !== undefined && !enforceMoveLimits) {
+          const projectIds = [...new Set([oldTask.projectId, requestedMutation.projectId as number])].sort((a, b) => a - b);
+          for (const projectId of projectIds) {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
+          }
+          const destination = await tx.project.findUnique({
+            where: { id: requestedMutation.projectId as number },
+            select: { uniqueIdentifier: true },
+          });
+          if (!destination?.uniqueIdentifier) throw new Error("Destination board has no ticket prefix");
+          requestedMutation.ticketNumber = `${destination.uniqueIdentifier}-${requestedMutation.uniqueIndex ?? oldTask.uniqueIndex}`;
+        }
 
         if (typeof requestedMutation.cycleId === "number") {
           await assertCycleAssignable(
@@ -381,7 +393,7 @@ export async function updateTaskSingle(
           agentId,
           entryPoint: "task.update",
         });
-        if (options.allowProjectChange && requestedMutation.projectId !== undefined) {
+        if (enforceMoveLimits) {
           const projectIds = [...new Set([currentState.projectId, requestedMutation.projectId as number])].sort((a, b) => a - b);
           for (const projectId of projectIds) {
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
