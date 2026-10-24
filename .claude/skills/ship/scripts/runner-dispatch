@@ -20,6 +20,7 @@ CLAIMS = STATE / "runner-queue/claims"
 LOOP = STATE / "runner-loop"
 OWNER = "HT Product Lead"
 ACTIVE = {"In Progress", "AI Review", "QA"}
+MAINTENANCE = ACTIVE | {"Valentin Review", "UX Sign-off"}
 COLUMNS = ((15, "Bugs"), (15, "Todo"), (4060, "Backlog"))
 ELIGIBLE = {f"RUNNER {n}" for n in range(1, 8)}
 SPEED = "SPEED RUNNER"
@@ -96,7 +97,7 @@ def read_boards(reads=None):
 def read_comments(boards, cache=None, *, full_refresh=False, reads=None):
     comments, entries, seen = {}, {}, set()
     for project, tasks in boards.items():
-        wanted = ACTIVE | {column for board, column in COLUMNS if board == project}
+        wanted = MAINTENANCE | {column for board, column in COLUMNS if board == project}
         for task in tasks:
             ticket = task["ticketNumber"]
             key = f"{project}:{ticket}"
@@ -138,12 +139,12 @@ def claims(comments):
             if "Claimed." in (comment.get("text") or comment.get("commentText") or "")]
 
 
-def held_tickets(boards, comments):
+def held_tickets(boards, comments, sections=ACTIVE):
     held = {}
     for tasks in boards.values():
         for task in tasks:
             ticket = task["ticketNumber"]
-            if task["section"] not in ACTIVE:
+            if task["section"] not in sections:
                 continue
             claimed = claims(comments[ticket])
             if claimed:
@@ -188,12 +189,11 @@ def read_last(loop):
         return {}
 
 
-def write_last(loop, last):
-    loop.mkdir(parents=True, exist_ok=True)
-    path = loop / "last-dispatch.json"
-    temporary = loop / f"last-dispatch.json.tmp.{os.getpid()}"
+def write_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}.tmp.{os.getpid()}")
     try:
-        temporary.write_text(json.dumps(last) + "\n")
+        temporary.write_text(json.dumps(data) + "\n")
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -308,12 +308,19 @@ def session_metrics(row, home=None):
                     text = (block.get("input") or {}).get("command", "")
                     try:
                         words = shlex.split(text)
+                        # Preserve quotes and tokenize bare characters so even --text="..."
+                        # keeps quoted newlines/operators distinct from shell syntax.
+                        shell = shlex.shlex(text, posix=False)
+                        shell.wordchars, shell.whitespace, shell.commenters = "", " \t\r", ""
+                        operators = any(token in ";&|<>()`\\\n"
+                                        or (token.startswith('"') and re.search(r"`|\$\(", token))
+                                        for token in shell)
                     except ValueError:
                         words = []
                     comment = (name == "Bash" and len(words) >= 4
                                and words[:3] in (["vcc", "comment", "add"],
                                                 ["hypertask", "comment", "add"])
-                               and not re.search(r"[;&|`\n]|\$\(", text))
+                               and not operators)
                     if comment:
                         comment_tools.add(block.get("id"))
                     else:
@@ -348,17 +355,6 @@ def current_checkpoint(ticket, runner, comments, since):
     return (len(fields) == 4 and all(fields.values())
             and (fields["helpers"].casefold() == "none"
                  or bool(re.search(r"(?:^|\s)/[\w./-]+|\b[A-Z][A-Z0-9]*-\d+\b", fields["outputs"]))))
-
-
-def write_clear_state(loop, data):
-    loop.mkdir(parents=True, exist_ok=True)
-    path = loop / "runner-clear.json"
-    temporary = path.with_name(f"{path.name}.tmp.{os.getpid()}")
-    try:
-        temporary.write_text(json.dumps(data) + "\n")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def queue_clear_alarm(state, runner, text, now):
@@ -427,13 +423,13 @@ def maintain_runner(row, holding, comments, now, *, loop, state, allow_clear=Tru
         if queued:
             print(text, file=sys.stderr)
     if json.dumps(records) != before:
-        write_clear_state(loop, records)
+        write_json(path, records)
     if not allow_clear:
         return False
     trigger = "context_80k" if context is not None and context > CLEAR_CONTEXT else row["state"]
     if (row["state"] not in {"idle", "waiting_bg", "done", "waiting_valentin"}
             or row.get("input_box") not in {"empty", "dim"} or row.get("spinner")
-            or (row["state"] not in {"idle", "waiting_bg"} and trigger != "context_80k")
+            or context is None or context <= CLEAR_CONTEXT
             or not metrics["activity"] or metrics["usage_at"] <= last_clear
             or now - last_clear < 600
             or not all(current_checkpoint(t, runner, comments, max(metrics["activity"], last_clear))
@@ -452,7 +448,7 @@ def maintain_runner(row, holding, comments, now, *, loop, state, allow_clear=Tru
     command("tmux", "send-keys", "-t", row["pane"], "-l", "/clear")
     command("tmux", "send-keys", "-t", row["pane"], "Enter")
     record["last_clear"] = now
-    write_clear_state(loop, records)
+    write_json(path, records)
     print(f"cleared {runner} reason={trigger} context={context} held={','.join(holding) or 'none'}", file=sys.stderr)
     time.sleep(3)
     fresh = [r for r in snapshots() if r["pane"] == row["pane"] and r["runner"] == runner]
@@ -501,6 +497,7 @@ def send(pane, text, claim_path=None):
 
 def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, loop=LOOP, state=STATE):
     held = held_tickets(boards, comments)
+    maintenance_held = held_tickets(boards, comments, MAINTENANCE)
     last = read_last(loop)
     tasks = {task["ticketNumber"]: task for board in boards.values() for task in board}
     if go and load <= 12:
@@ -514,7 +511,8 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
         holding = held.get(runner.casefold(), [])
         result = dict(row, held=holding, ticket=None, action="planned")
         output.append(result)
-        if go and load <= 12 and maintain_runner(row, holding, comments, now, loop=loop, state=state):
+        if go and load <= 12 and maintain_runner(row, maintenance_held.get(runner.casefold(), []),
+                                               comments, now, loop=loop, state=state):
             result["action"] = "cleared"
             continue
         blocking = holding if row["state"] != "done" else []
@@ -552,7 +550,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 result["action"] = "sent"
             result["ticket"] = ticket
             if go and result["action"] == "sent":
-                write_last(loop, last)
+                write_json(loop / "last-dispatch.json", last)
                 with (loop / "dispatch.log").open("a", encoding="utf-8") as stream:
                     stream.write(json.dumps({"at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
                                              "runner": runner, "pane": pane, "ticket": result["ticket"],
@@ -585,7 +583,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 at = time.time()
                 send(pane, f"/ship {ticket}", claim_dir / f"{ticket}.json")
                 last[pane] = at
-                write_last(loop, last)
+                write_json(loop / "last-dispatch.json", last)
                 with (state / "fresh-session-trial.log").open("a", encoding="utf-8") as stream:
                     stream.write(f"{datetime.fromtimestamp(at).strftime('%H:%M')} {runner} before={before} {ticket} auto\n")
                 with (loop / "dispatch.log").open("a", encoding="utf-8") as stream:

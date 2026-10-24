@@ -118,6 +118,41 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(log.getvalue().count("cleared RUNNER 8 reason=context_80k context=90000"), 1)
         self.assertFalse((self.loop / "last-dispatch.json").exists())
 
+    def test_waiting_only_holdings_require_every_checkpoint_before_clear(self):
+        row = self.safe_runner(state="waiting_valentin")
+        self.boards[15][0]["section"] = "Valentin Review"
+        self.boards[15][1]["section"] = "UX Sign-off"
+        self.boards[15][2]["section"] = "Done"
+        for ticket in ("HTPR-1", "HTPR-2"):
+            with self.subTest(ticket=ticket):
+                checkpoint = self.comments[ticket].pop()
+                self.dispatch([row], go=True)
+                self.assertEqual(self.sent_texts(), [])
+                self.comments[ticket].append(checkpoint)
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, HTPR-2"])
+
+    def test_active_and_waiting_holdings_all_appear_in_resume(self):
+        row = self.safe_runner()
+        self.boards[15][1]["section"] = "Valentin Review"
+        self.boards[15][2]["section"] = "UX Sign-off"
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, HTPR-2, HTPR-3"])
+
+    def test_all_clearable_states_require_context_above_80k(self):
+        for state in ("idle", "waiting_bg", "done", "waiting_valentin"):
+            for context in (None, 30_000, 80_000):
+                with self.subTest(state=state, context=context):
+                    row = self.safe_runner(context=context, state=state)
+                    self.dispatch([row], go=True)
+                    self.assertEqual(self.sent_texts(), [])
+            with self.subTest(state=state, context=80_001):
+                row = self.safe_runner(context=80_001, state=state)
+                self.dispatch([row], go=True)
+                self.assertEqual(self.sent_texts()[0], "/clear")
+                self.commands.reset_mock()
+                (self.loop / "runner-clear.json").unlink()
+
     def test_one_held_ticket_without_fresh_state_prevents_clear(self):
         row = self.safe_runner()
         for invalid in ([], [claim(row["runner"])],
@@ -169,7 +204,7 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(self.clear_records()[row["runner"]]["last_alarm"], self.now)
 
     def test_self_pulled_ticket_clears_without_dispatch_history_or_claim_file(self):
-        row = self.safe_runner(context=30_000)
+        row = self.safe_runner(context=90_000)
         self.assertFalse(self.claim_dir.exists())
         self.assertFalse(self.loop.exists())
         self.dispatch([row], go=True)
@@ -284,6 +319,32 @@ class DispatchTests(unittest.TestCase):
                       input=dict(command="vcc comment add HTPR-1 --text note; touch /tmp/result"))]))
         self.transcript_fixture(events)
         self.assertEqual(self.metrics_reader(row, home)["activity"], self.now - 10)
+
+    def test_multiline_quoted_checkpoint_write_and_result_do_not_stale_checkpoint(self):
+        row = self.safe_runner()
+        checkpoint = self.comments["HTPR-1"][-1]["text"]
+        events = [self.event(-40, content=[dict(type="tool_use", name="Write", id="work", input={})]),
+                  self.event(-39, "user", [dict(type="tool_result", tool_use_id="work")])]
+        for n, executable in enumerate(("vcc", "hypertask")):
+            events.extend([self.event(-12 + n * 4, content=[dict(type="tool_use", name="Bash", id=f"c{n}",
+                           input=dict(command=f'{executable} comment add HTPR-1 --text "{checkpoint}\nQA; ready & waiting | review"'))]),
+                           self.event(-9 + n * 4, "user", [dict(type="tool_result", tool_use_id=f"c{n}")])])
+        events[-2]["message"]["usage"] = dict(input_tokens=90_000)
+        home, path = self.transcript_fixture(events)
+        self.metrics.return_value = self.metrics_reader(row, home)
+        self.assertEqual(self.metrics.return_value["activity"], self.now - 39)
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts()[0], "/clear")
+
+    def test_unquoted_shell_operators_in_checkpoint_command_count_as_activity(self):
+        row = dict(runner="RUNNER 8", pane="%8")
+        for operator in (";", "&&", "||", "|", "&", "\n", ">", "$(touch /tmp/result)", "`touch /tmp/result`"):
+            with self.subTest(operator=operator):
+                event = self.event(-10, content=[dict(type="tool_use", name="Bash", id="batch",
+                                   input=dict(command=f"vcc comment add HTPR-1 --text note {operator} touch /tmp/result"))])
+                result = self.event(-9, "user", [dict(type="tool_result", tool_use_id="batch")])
+                home, path = self.transcript_fixture([event, result])
+                self.assertEqual(self.metrics_reader(row, home)["activity"], self.now - 9)
 
     def test_local_transcript_clear_and_compaction_reset_stale_usage(self):
         usage = self.event(-40)
@@ -589,6 +650,20 @@ class DispatchTests(unittest.TestCase):
                 self.assertEqual(json.loads(path.read_text())[row["pane"]], self.now)
                 self.assertEqual(list(self.loop.glob("*.tmp.*")), [])
 
+    def test_clear_and_dispatch_state_use_shared_atomic_json_writer(self):
+        row = self.safe_runner()
+        with patch.object(m, "write_json", wraps=m.write_json) as writer:
+            self.dispatch([row], go=True)
+            self.assertTrue(writer.call_args_list)
+            self.assertTrue(all(call.args[0] == self.loop / "runner-clear.json"
+                                for call in writer.call_args_list))
+        self.metrics.return_value = None
+        self.ready_go()
+        with patch.object(m, "write_json", wraps=m.write_json) as writer:
+            self.dispatch(self.rows[:1], go=True)
+            writer.assert_called_once_with(self.loop / "last-dispatch.json", {"%1": self.now})
+        self.assertEqual(list(self.loop.glob("*.tmp.*")), [])
+
     def test_dispatch_state_write_failure_preserves_old_state_and_cleans_temp(self):
         self.loop.mkdir()
         path = self.loop / "last-dispatch.json"
@@ -605,7 +680,7 @@ class DispatchTests(unittest.TestCase):
                 else:
                     mocked = patch.object(m.os, "replace", side_effect=OSError("replace failed"))
                 with mocked, self.assertRaises(OSError):
-                    m.write_last(self.loop, {"%1": self.now})
+                    m.write_json(path, {"%1": self.now})
                 self.assertEqual(path.read_text(), old)
                 self.assertEqual(list(self.loop.glob("*.tmp.*")), [])
 
@@ -982,7 +1057,7 @@ class DispatchTests(unittest.TestCase):
                                {"ticketNumber":"HTPR-99", "section":"Done"},
                                {"ticketNumber":"HTPR-98", "section":"Valentin Review"}])
         cache = m.read_comments(self.boards)
-        self.assertEqual(set(cache), set(self.comments))
+        self.assertEqual(set(cache), set(self.comments) | {"HTPR-98"})
         self.assertEqual(len(calls), len(cache))
         self.assertTrue(all(c[-3:] == ("--limit", "50", "--json") for c in calls))
 

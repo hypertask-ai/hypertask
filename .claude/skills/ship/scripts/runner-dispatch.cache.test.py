@@ -131,6 +131,19 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(set(self.cache()), {"schema", "runs", "entries"})
         self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-1", "15:HTPR-2", "4060:YPER4-1"})
 
+    def test_waiting_ticket_comments_are_fetched_and_cached_for_maintenance(self):
+        self.boards[15][0]["section"] = "Valentin Review"
+        self.boards[4060][0]["section"] = "UX Sign-off"
+        self.run_dispatch()
+        self.assertEqual(set(self.fetched()), set(self.comments))
+        self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-1", "15:HTPR-2", "4060:YPER4-1"})
+        self.run_dispatch()
+        self.assertEqual(self.fetched(), [])
+        self.assertEqual(self.summary[2], "3")
+        self.boards[4060][0]["updatedAt"] = "v2"
+        self.run_dispatch()
+        self.assertEqual(self.fetched(), ["YPER4-1"])
+
     def test_count_change_refreshes_only_one(self):
         self.run_dispatch()
         self.boards[15][1]["commentCount"] = 1
