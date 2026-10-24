@@ -48,6 +48,11 @@ function capitalizeTypedSentenceStart(
     return false;
   }
 
+  const textAfter = view.state.doc.resolve(to).nodeAfter;
+  if (undoEnabled() && textAfter?.isText && /^[\p{L}\p{N}]/u.test(textAfter.text ?? "")) {
+    return false;
+  }
+
   const textBefore = $from.parent.textBetween(
     0,
     $from.parentOffset,
