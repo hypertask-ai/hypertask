@@ -266,7 +266,7 @@ const Commands = (props: Props) => {
           (command) =>
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
-            (command.key !== "settingsApiKeysBasetenApiKey" || basetenByokEnabled) &&
+            (basetenByokEnabled ? true : command.key !== "settingsApiKeysBasetenApiKey") &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&

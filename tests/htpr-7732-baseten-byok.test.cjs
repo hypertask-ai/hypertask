@@ -24,7 +24,7 @@ const expectedMap = {
 function loadModule(relativePath, stubs) {
   const filename = path.join(root, relativePath);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false },
   }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(code, {
@@ -149,7 +149,7 @@ function testKeyHarness({ enabled = true, paid = true, gdpr = false, allowed = t
   return { calls, request: (body = {}) => api.POST({ json: async () => ({ teamId: "fixture-team", provider: "baseten", ...body }) }) };
 }
 
-test("Baseten is BYOK-only with exactly four installed mappings and an Everyone new-feature flag", () => {
+test("Baseten is BYOK-only with exactly four installed mappings and a money-risk Owner + QA feature flag", () => {
   assert.deepEqual(providers.BASETEN_MODEL_SLUGS, expectedMap);
   assert.equal(providers.BYOK_PROVIDER_KEYS.filter((key) => key === "baseten").length, 1);
   assert.equal(providers.isByokProviderKey("baseten"), true);
@@ -162,10 +162,10 @@ test("Baseten is BYOK-only with exactly four installed mappings and an Everyone 
   assert.equal(flag.HTPR_7732_BASETEN_BYOK_FLAG, flagKey);
   assert.equal(definition.key, flagKey);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
   assert.equal(definition.releaseRisk.risk, "new");
   assert.match(definition.releaseRisk.reason, /Only teams that save a Baseten key/);
-  assert.equal(Object.hasOwn(definition.releaseRisk, "highRisk"), false);
+  assert.equal(definition.releaseRisk.highRisk, "money");
 });
 
 test("all four options use only the enabled saved paid-team Baseten key before platform funding", async () => {
