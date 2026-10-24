@@ -60,7 +60,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       if (persistentQueue) {
         if (!queueSessionId) return false;
         try {
-          await persistentQueue.enqueue(queueSessionId, queued, () => processAttachments(queued.html, files));
+          if (!await persistentQueue.enqueue(queueSessionId, queued, () => processAttachments(queued.html, files))) return false;
         } catch {
           toast.error("Could not save the queued message. Your draft is still in the composer.");
           return false;

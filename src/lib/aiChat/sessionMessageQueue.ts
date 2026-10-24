@@ -12,7 +12,7 @@ export type QueuedAiChatMessage = {
 
 export function createSessionMessageQueue(userId: number, storage: Storage | null, onChange: () => void) {
   const queues = new Map<string, QueuedAiChatMessage[]>();
-  const preparing = new Map<string, number>();
+  const preparing = new Map<string, QueuedAiChatMessage[]>();
   const key = (sessionId: string) => `ht:aiChatQueue:${userId}:${sessionId}`;
   let pending = Promise.resolve();
   const queue = {
@@ -36,19 +36,25 @@ export function createSessionMessageQueue(userId: number, storage: Storage | nul
       onChange();
     },
     hasPending(sessionId: string): boolean {
-      return (preparing.get(sessionId) ?? 0) > 0;
+      return (preparing.get(sessionId)?.length ?? 0) > 0;
     },
-    enqueue(sessionId: string, message: QueuedAiChatMessage, prepare: () => Promise<AiChatProcessedAttachment[]>): Promise<void> {
-      preparing.set(sessionId, (preparing.get(sessionId) ?? 0) + 1);
+    enqueue(sessionId: string, message: QueuedAiChatMessage, prepare: () => Promise<AiChatProcessedAttachment[]>): Promise<boolean> {
+      const submissions = preparing.get(sessionId) ?? [];
+      if (submissions.some((item) => item.content === message.content && item.html === message.html &&
+          item.files.length === message.files.length && item.files.every((file, index) => file === message.files[index]))) {
+        return Promise.resolve(false);
+      }
+      preparing.set(sessionId, [...submissions, message]);
       const addition = pending.then(async () => {
         try {
           const attachments = await prepare();
           queue.set(sessionId, [...queue.get(sessionId), { ...message, attachments }]);
+          return true;
         } finally {
-          preparing.set(sessionId, (preparing.get(sessionId) ?? 1) - 1);
+          preparing.set(sessionId, (preparing.get(sessionId) ?? []).filter((item) => item !== message));
         }
       });
-      pending = addition.catch(() => {});
+      pending = addition.then(() => {}, () => {});
       return addition;
     },
   };

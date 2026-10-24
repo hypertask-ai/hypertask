@@ -68,6 +68,7 @@ async function withTransport(fixture, check, statuses = []) {
   global.fetch = async (_url, options) => {
     fixture.sent.push(JSON.parse(options.body));
     const status = statuses.shift() ?? 200;
+    if (status instanceof Error) throw status;
     return new Response(status === 409 ? 'event: error\ndata: {"content":"Another AI reply is already in progress."}\n\n' : "stream", { status });
   };
   console.log = () => {};
@@ -189,3 +190,93 @@ test("slow attachment preparation preserves enqueue order and storage failure le
   assert.equal(broken.draft(), "keep this draft");
   assert.equal(broken.clears(), 0);
 });
+
+for (const failure of [500, new TypeError("network unavailable"), 429]) {
+  test(`a ${failure} refusal resumes the same session FIFO after backoff`, async () => {
+    const fixture = chatFixture();
+    fixture.queue.set("A", [message("one", "retry first"), message("two", "then second")]);
+    fixture.bind();
+    const originalNow = Date.now;
+    let now = 100000;
+    Date.now = () => now;
+    try {
+      await withTransport(fixture, async () => {
+        fixture.controls.drainQueuedMessage("A"); await flush();
+        assert.deepEqual(fixture.queue.get("A").map((item) => item.id), ["one", "two"]);
+        assert.equal(fixture.added.filter((item) => item.role === "human").length, 0);
+        const delay = failure === 429 ? 60000 : 15000;
+        now += delay - 1;
+        fixture.controls.drainQueuedMessage("A"); await flush();
+        assert.equal(fixture.sent.length, 1);
+        now++;
+        fixture.controls.drainQueuedMessage("A"); await flush();
+        fixture.controls.drainQueuedMessage("A"); await flush();
+      }, [failure, 200, 200]);
+    } finally { Date.now = originalNow; }
+    assert.deepEqual(fixture.sent.map((item) => [item.session_id, item.message]), [
+      ["A", "retry first"], ["A", "retry first"], ["A", "then second"],
+    ]);
+    assert.deepEqual(fixture.added.filter((item) => item.role === "human").map((item) => item.id), ["one", "two"]);
+    assert.deepEqual(fixture.queue.get("A"), []);
+  });
+}
+
+test("unchanged pending drafts enqueue once while edited drafts remain independently sendable", async () => {
+  const fixture = chatFixture();
+  let resolvePreparation;
+  let preparations = 0;
+  const preparation = new Promise((resolve) => { resolvePreparation = resolve; });
+  fixture.context.processAttachments = async () => { preparations++; return preparation; };
+  const first = fixture.enqueue("pending draft");
+  const duplicate = fixture.bind(false).handleSendMessage();
+  assert.equal(await duplicate, false);
+  assert.equal(fixture.draft(), "pending draft");
+  fixture.setDraft("edited draft");
+  const edited = fixture.bind(false).handleSendMessage();
+  resolvePreparation([]);
+  assert.deepEqual(await Promise.all([first, edited]), [true, true]);
+  assert.equal(preparations, 2);
+  assert.deepEqual(fixture.queue.get("A").map((item) => item.content), ["pending draft", "edited draft"]);
+  fixture.bind();
+  await withTransport(fixture, async () => {
+    fixture.controls.drainQueuedMessage("A"); await flush();
+    fixture.controls.drainQueuedMessage("A"); await flush();
+  });
+  assert.deepEqual(fixture.sent.map((item) => item.message), ["pending draft", "edited draft"]);
+  assert.deepEqual(fixture.queue.get("A"), []);
+});
+
+test("a pending draft with changed attachments permits its own submission", async () => {
+  const fixture = chatFixture();
+  let resolvePreparation;
+  const preparation = new Promise((resolve) => { resolvePreparation = resolve; });
+  fixture.context.processAttachments = () => preparation;
+  fixture.context.fileUpload.fileItems = [{ id: "first-file" }];
+  const first = fixture.enqueue("same text");
+  fixture.context.fileUpload.fileItems = [{ id: "second-file" }];
+  const edited = fixture.bind(false).handleSendMessage();
+  resolvePreparation([]);
+  assert.deepEqual(await Promise.all([first, edited]), [true, true]);
+  assert.deepEqual(fixture.queue.get("A").map((item) => item.files[0].id), ["first-file", "second-file"]);
+});
+
+for (const enabled of [false, true]) {
+  test(`manual and deferred sends obey the synchronous mutex with persistence ${enabled}`, async () => {
+    const fixture = chatFixture({ enabled });
+    let resolveSession;
+    fixture.context.waitForChatSession = () => new Promise((resolve) => { resolveSession = resolve; });
+    const { handleSendMessage } = fixture.bind();
+    await withTransport(fixture, async () => {
+      const first = handleSendMessage("deferred first");
+      assert.equal(fixture.context.sendInFlightRef.current, true);
+      assert.equal(await handleSendMessage("concurrent deferred"), false);
+      fixture.controls.drainQueuedMessage("A");
+      assert.equal(fixture.sent.length, 0);
+      resolveSession({ id: "A", messages: [] });
+      assert.equal(await first, true);
+      await flush();
+    });
+    assert.equal(fixture.context.sendInFlightRef.current, false);
+    assert.deepEqual(fixture.sent.map((item) => item.message), ["deferred first"]);
+  });
+}

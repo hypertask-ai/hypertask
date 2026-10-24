@@ -87,23 +87,26 @@ export function useAiChatSessions(context: Context) {
   }, [persistentQueue]);
 
   const drainingRef = useRef(false);
-  const blockedQueueIdRef = useRef<string | null>(null);
   const retryAtRef = useRef(0);
   const drainQueuedMessage = useCallback((finishedSessionId?: string) => {
-    if (sendInFlightRef.current || drainingRef.current || Date.now() < retryAtRef.current) return;
+    if (sendInFlightRef.current) return;
+    if (drainingRef.current || Date.now() < retryAtRef.current) return;
     if (persistentQueue) {
       const sessionId = persistentQueue.sessionId;
       if (!sessionId || (finishedSessionId && sessionId !== finishedSessionId)) return;
       const next = persistentQueue.get(sessionId)[0];
-      if (!next || blockedQueueIdRef.current === next.id) return;
+      if (!next) return;
       drainingRef.current = true;
-      let busy = false;
-      void handleSendMessageRef.current(next.content, { queuedMessage: next, sessionId, onQueueBusy: (delay) => { busy = true; retryAtRef.current = Date.now() + delay; } })
+      let retryDelay = 15000;
+      void handleSendMessageRef.current(next.content, { queuedMessage: next, sessionId, onQueueBusy: (delay) => { retryDelay = delay; } })
         .then((sent) => {
           if (sent) persistentQueue.set(sessionId, persistentQueue.get(sessionId).filter((item) => item.id !== next.id));
-          else if (!busy) blockedQueueIdRef.current = next.id;
+          else retryAtRef.current = Date.now() + retryDelay;
         })
-        .catch((error) => console.error("Could not send queued chat message:", error))
+        .catch((error) => {
+          retryAtRef.current = Date.now() + retryDelay;
+          console.error("Could not send queued chat message:", error);
+        })
         .finally(() => { drainingRef.current = false; });
       return;
     }
@@ -123,7 +126,7 @@ export function useAiChatSessions(context: Context) {
   }, [persistentQueue]);
   useEffect(() => {
     if (!persistentQueue) return;
-    blockedQueueIdRef.current = null;
+    retryAtRef.current = 0;
     drainQueuedMessage();
     const timer = window.setInterval(() => drainQueuedMessage(), 2000);
     return () => window.clearInterval(timer);
