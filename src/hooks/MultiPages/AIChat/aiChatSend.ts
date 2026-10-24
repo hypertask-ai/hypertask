@@ -39,15 +39,18 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     if (isByokBlocked) return false;
     if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     const preserveComposer = options?.preserveComposer;
+    if (preserveComposer && sendInFlightRef.current) return false;
 
-    if (retryContent === undefined && isTyping) {
-      const content = (editor?.getText() ?? "").trim();
+    if (sendInFlightRef.current || (retryContent === undefined && isTyping)) {
+      const content = (retryContent ?? editor?.getText() ?? "").trim();
       if (!content) return false;
       const files = [...fileUpload.fileItems];
       const queued = {
         id: crypto.randomUUID(),
         content,
-        html: editor?.getHTML() ?? "",
+        html: retryContent === undefined
+          ? editor?.getHTML() ?? ""
+          : options?.htmlForAttachments ?? "",
         files,
       };
       messageQueueRef.current = [...messageQueueRef.current, queued];
@@ -56,8 +59,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       fileUpload.clearFiles();
       return true;
     }
-
-    if (sendInFlightRef.current) return false;
 
     const htmlContent = retryContent ?? editor?.getHTML() ?? "";
     const editorHtmlForAttachments = retryContent
