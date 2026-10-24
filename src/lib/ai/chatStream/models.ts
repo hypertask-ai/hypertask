@@ -1,4 +1,4 @@
-import { type TAiModelOption, defaultAiModelOption, getAiModelOptionById } from "@/lib/aiModelOptions";
+import { type TAiModelOption, defaultAiModelOption, getAiModelOptionById, resolveAiModelOption } from "@/lib/aiModelOptions";
 import { type UserFacingModelFeature, resolveUserFacingModelOption } from "@/lib/systemModelLadder";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 import { type AiModelCredential, type AiGatewayTags, type AiProviderOptions, aiUsageProviderForCredential, isVercelAiGatewayKey, resolveAiModel, providerOptionsForAiModel, isCustomEndpointConfig } from "@/app/api/ai/_lib/modelProvider";
@@ -39,6 +39,7 @@ export function defaultModelSelection(
   customEndpointConfigured = true,
   defaultModelOption = defaultAiModelOption,
   haiku55Enabled = defaultModelOption.modelKey === "claude-haiku-5-5",
+  deepseekFlashFastEnabled = false,
 ) {
   const option = resolveUserFacingModelOption(
     feature,
@@ -47,7 +48,7 @@ export function defaultModelSelection(
     { customEndpointConfigured, defaultModelOption, haiku55Enabled },
   );
   if (!option) throw new Error("This AI feature is turned off for your team");
-  return selectionFromModelOption(filterModelOptionForTeam(option, settings, haiku55Enabled));
+  return selectionFromModelOption(filterModelOptionForTeam(resolveAiModelOption([option.id], defaultModelOption, haiku55Enabled, deepseekFlashFastEnabled), settings, haiku55Enabled));
 }
 
 export function normalizeProviderId(provider: string | null | undefined): ProviderId {
@@ -73,6 +74,7 @@ export function resolveModelSelection(
   personalModelOptionId: string | null,
   defaultModelOption: TAiModelOption,
   haiku55Enabled = defaultModelOption.modelKey === "claude-haiku-5-5",
+  deepseekFlashFastEnabled = false,
 ): ModelSelection {
   const provider = normalizeProviderId(providerInput);
   const requestedModel = modelInput?.trim();
@@ -85,7 +87,7 @@ export function resolveModelSelection(
     haiku55Enabled
       ? getAiModelOptionById(modelOptionId, true) ?? getAiModelOptionById(requestedModel, true)
       : getAiModelOptionById(modelOptionId) ?? getAiModelOptionById(requestedModel);
-  if (modelOption) return selectionFromModelOption(modelOption);
+  if (modelOption) return selectionFromModelOption(resolveAiModelOption([modelOption.id], defaultModelOption, haiku55Enabled, deepseekFlashFastEnabled));
 
   return defaultModelSelection(
     settings,
@@ -94,6 +96,7 @@ export function resolveModelSelection(
     true,
     defaultModelOption,
     haiku55Enabled,
+    deepseekFlashFastEnabled,
   );
 }
 

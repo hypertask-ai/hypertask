@@ -1,5 +1,5 @@
 import { resolveTeamAllowancePolicy } from "@/app/api/ai/_lib/planAllowancePolicy";
-import { teamAllowanceSnapshot } from "@/app/api/ai/_lib/sharedAllowance";
+import { billedCostEnabled, teamAllowanceSnapshot } from "@/app/api/ai/_lib/sharedAllowance";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -404,8 +404,11 @@ export async function GET(request: Request) {
       aggregateGatewaySystemSpend(tagPayload),
       totalPlatformUsd,
     );
-    const snapshot = policy.mode === "plan" ? await teamAllowanceSnapshot(teamId, allowanceUsd, policy) : undefined;
-    const usedUsd = policy.mode === "plan" ? snapshot?.usedUsd ?? null : Math.max(totalPlatformUsd - systemUsedUsd, 0);
+    const billed = funding.source !== "customer" && await billedCostEnabled(user.id);
+    const snapshot = policy.mode === "plan" || billed ? await teamAllowanceSnapshot(teamId, allowanceUsd, policy,
+      { userId: user.id, gatewayApiKey: funding.apiKey, fundingSource: funding.source === "customer" ? undefined : funding.source, billed }) : undefined;
+    const gatewayUsedUsd = policy.mode === "plan" ? totalPlatformUsd : Math.max(totalPlatformUsd - systemUsedUsd, 0);
+    const usedUsd = policy.mode === "plan" || billed ? snapshot?.usedUsd ?? (billed ? gatewayUsedUsd : null) : gatewayUsedUsd;
     const pct = usedUsd === null ? 0 : Math.round((usedUsd / allowanceUsd) * 100);
     const daysElapsed = now.getUTCDate();
     const daysInMonth = new Date(

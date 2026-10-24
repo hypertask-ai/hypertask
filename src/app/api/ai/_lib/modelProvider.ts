@@ -222,6 +222,9 @@ function resolveUntracedAiModel(
     typeof byokCredential === "string" ? byokCredential : undefined;
 
   if (provider === "gateway") {
+    if (model === "deepseek/deepseek-v4.1-flash-1017-fast") {
+      return resolveUntracedGatewayModel(model, byokApiKey);
+    }
     const directApiKey = byokApiKey?.trim();
     if (directApiKey && !isVercelAiGatewayKey(directApiKey)) {
       const definition = modelOption

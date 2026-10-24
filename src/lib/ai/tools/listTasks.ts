@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from "@/lib/flags/keys";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { tool } from "ai";
 import { z } from "zod";
@@ -60,8 +62,9 @@ export function createListTasksTool(context: ToolContext) {
         }
         if (input.section) where.section = input.section;
         if (input.assigned_to) {
+          const assigneeFixEnabled = await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id);
           if (input.assigned_to === "me") {
-            where.assignees = { some: { userId: user.id } };
+            where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } };
           } else if (input.assigned_to === "unassigned") {
             where.assignees = { none: {} };
           } else {
@@ -70,7 +73,7 @@ export function createListTasksTool(context: ToolContext) {
               .map((id) => parseInt(id.trim(), 10))
               .filter(Number.isInteger);
             if (userIds.length > 0) {
-              where.assignees = { some: { userId: { in: userIds } } };
+              where.assignees = { some: { userId: { in: userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } };
             }
           }
         }

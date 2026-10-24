@@ -22,7 +22,7 @@ import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tas
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG } from '@/lib/flags/keys'
+import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from '@/lib/flags/keys'
 import {
   hasPrWhere,
   normalizeTaskStatus,
@@ -512,15 +512,16 @@ export async function GET(request: NextRequest) {
     }
 
     if (assignedTo) {
+      const assigneeFixEnabled = await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id)
       if (assignedTo === 'me') {
-        where.assignees = { some: { userId: user.id } }
+        where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
       } else if (assignedTo === 'unassigned') {
         where.assignees = { none: {} }
       } else {
         const userIds = assignedTo.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
         if (findIdParamOutOfRange({ assigned_to: userIds })) return validationError(idOutOfRangeMessage('assigned_to'))
         if (userIds.length > 0) {
-          where.assignees = { some: { userId: { in: userIds } } }
+          where.assignees = { some: { userId: { in: userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
         }
       }
     }

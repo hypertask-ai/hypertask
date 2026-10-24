@@ -120,7 +120,7 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.doesNotMatch(source, /HTPR_7010_HAIKU_5_5_FLAG/);
-    assert.match(source, /isAiModelOptionVisible\(option, false\)/);
+    assert.match(source, /isAiModelOptionVisible\(option, false(?:, true)?\)/);
     const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let visibilityExpression;
     function visit(node) {
@@ -136,10 +136,10 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
         const visible = vm.runInNewContext(visibilityExpression, {
           haiku55Enabled,
           haikuDefaultEnabled,
-          aiModelOptions: catalog.aiModelOptions,
+          flagModelOptions: catalog.aiModelOptions,
           isAiModelOptionVisible: catalog.isAiModelOptionVisible,
         });
-        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled)));
+        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true)));
       }
     }
   }
@@ -393,7 +393,7 @@ test("plan defaults, automatic replacements, fast ladder and stream fallbacks re
   assert.equal(catalog.getDefaultAiModelOptionForPlan("Free", false).id, "gpt-6-luna");
   assert.deepEqual(ladder.SYSTEM_MODEL_LADDERS.fast.map((entry) => entry.model), [
     "google/gemini-3.5-flash-lite", "openai/gpt-6-luna", "anthropic/claude-haiku-4.5",
-    "deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k2.5", "alibaba/qwen3.7-plus", "zai/glm-5.3-flash",
+    "deepseek/deepseek-v4.1-flash-1017", "moonshotai/kimi-k2.5", "alibaba/qwen3.7-plus", "zai/glm-5.3-flash",
   ]);
   assert.equal(ladder.resolveUserFacingModelOption("aiChat", {}).id, "gemini-3.5-flash-lite");
   assert.equal(ladder.resolveUserFacingModelOption("aiChat", {}, option.id).id, option.id);
