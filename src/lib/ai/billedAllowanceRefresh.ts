@@ -15,10 +15,10 @@ export async function refreshActiveBilledAllowances() {
   if ((await featureFlagCandidateUserIds(HTPR_7692_BILLED_COST_FLAG))?.length === 0) return;
   const deadline = Date.now() + 30_000;
   let offset = Number(await redis.get(`${BILLED_ALLOWANCE_SCOPE_INDEX}:cursor`) ?? 0);
-  let members = await redis.zrange(BILLED_ALLOWANCE_SCOPE_INDEX, offset, offset + 99);
+  let members = await redis.zrange(BILLED_ALLOWANCE_SCOPE_INDEX, String(offset), String(offset + 99));
   if (!members.length && offset > 0) {
     offset = 0;
-    members = await redis.zrange(BILLED_ALLOWANCE_SCOPE_INDEX, 0, 99);
+    members = await redis.zrange(BILLED_ALLOWANCE_SCOPE_INDEX, "0", "99");
   }
   const token = randomUUID();
   const lease = `${BILLED_ALLOWANCE_SCOPE_INDEX}:lease`;

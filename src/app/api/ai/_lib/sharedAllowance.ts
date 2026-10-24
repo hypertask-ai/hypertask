@@ -154,12 +154,17 @@ export async function teamAllowanceSnapshot(
         funding: await resolveBilledFunding({ teamId, ...context }) });
       if (source.mode === "billed") return { allowanceUsd: policy?.mode === "plan" ? policy.monthlyUsd : allowanceUsd,
         usedUsd: (policy?.mode === "plan" ? source.total! : source.visible!) / MICRO_USD_PER_USD };
+      if (!context?.gatewayApiKey) return null;
+      await initializeTeamMonth({ teamId, gatewayApiKey: context.gatewayApiKey });
       if (policy?.mode !== "plan") {
         const prefix = `ai-allowance:${aiAllowancePeriod().key}:${teamId}`;
         const total = await redis.eval(`
-return tonumber(redis.call("GET", KEYS[1]) or "0") + tonumber(redis.call("GET", KEYS[2]) or "0")
-`, 2, `${prefix}:committed`, `${prefix}:legacy-pending`);
-        return { allowanceUsd, usedUsd: Number(total) / MICRO_USD_PER_USD };
+if redis.call("EXISTS", KEYS[3]) == 0 then return nil end
+local visible = redis.call("GET", KEYS[1])
+if not visible then return nil end
+return tonumber(visible) + tonumber(redis.call("GET", KEYS[2]) or "0")
+`, 3, `${prefix}:committed`, `${prefix}:legacy-pending`, `${prefix}:system-split-v1`);
+        return total == null ? null : { allowanceUsd, usedUsd: Number(total) / MICRO_USD_PER_USD };
       }
     }
     if (policy?.mode === "plan") {
@@ -167,9 +172,10 @@ return tonumber(redis.call("GET", KEYS[1]) or "0") + tonumber(redis.call("GET", 
       const total = await redis.eval(`
 local visible = redis.call("GET", KEYS[1])
 local system = redis.call("GET", KEYS[2])
+${billed ? `if redis.call("EXISTS", KEYS[4]) == 0 or not visible or not system then return nil end` : ""}
 if not visible and not system then return nil end
 return tonumber(visible or "0") + tonumber(system or "0") + tonumber(redis.call("GET", KEYS[3]) or "0")
-`, 3, `${prefix}:committed`, `${prefix}:system:committed`, `${prefix}:legacy-pending`);
+`, billed ? 4 : 3, `${prefix}:committed`, `${prefix}:system:committed`, `${prefix}:legacy-pending`, ...(billed ? [`${prefix}:system-split-v1`] : []));
       return total == null ? null : { allowanceUsd: policy.monthlyUsd, usedUsd: Number(total) / MICRO_USD_PER_USD };
     }
     const committed = await redis.get(
@@ -1068,18 +1074,14 @@ async function boundDailyOutputTokens(args: {
   observe: boolean;
   billed: boolean;
   call: BilledCall;
-}): Promise<number> {
+}, retry = false): Promise<number> {
   const period = aiAllowancePeriod();
   const source = args.billed ? await effectiveAccountingSource({ teamId: args.teamId, kind: "day", period: period.endDate,
     funding: await resolveBilledFunding(args) }) : null;
   const { month, redis } = await initializeTeamMonth(args, new Date(), source?.mode === "billed");
   const prefix = `ai-allowance:day:${month.endDate}:${args.teamId}`;
-  try {
-    await seedAllowanceScope(prefix, 2 * 86_400, async () =>
-      (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId, month.endDate, month.endDate, args.billed ? AbortSignal.timeout(3_000) : undefined)).totalMicroUsd);
-  } catch (error) {
-    if (source?.mode !== "billed") throw error;
-  }
+  await seedAllowanceScope(prefix, 2 * 86_400, async () => source?.mode === "billed" ? source.total! :
+    (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId, month.endDate, month.endDate, args.billed ? AbortSignal.timeout(3_000) : undefined)).totalMicroUsd, args.billed);
   if (args.billed && aiAllowancePeriod().endDate !== period.endDate) return boundDailyOutputTokens(args);
   const dailySnapshot = await redis.eval(`
 ${EXPIRE_RESERVATION_SCRIPT}
@@ -1089,9 +1091,10 @@ end` : ""}
 local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
 local mode = "v1"
 ${source?.mode === "billed" ? `if redis.call("HGET", KEYS[3], "funding") == ARGV[3] and redis.call("HGET", KEYS[3], "unusable") ~= "1" then
-  committed = tonumber(redis.call("HGET", KEYS[3], "total") or committed)
-  mode = "billed"
+  local billed = redis.call("HGET", KEYS[3], "total")
+  if billed then committed = tonumber(billed); mode = "billed" end
 end` : ""}
+${args.billed ? `if mode == "v1" and redis.call("EXISTS", (string.gsub(KEYS[1], ":committed$", ":seeded"))) == 0 then return "shadow-uninitialized" end` : ""}
 local remaining = tonumber(ARGV[1]) - committed
 for _, member in ipairs(redis.call("ZRANGE", KEYS[2], 0, -1)) do
   remaining = remaining - reservationHeldAmount(member, KEYS[2])
@@ -1100,6 +1103,10 @@ ${args.billed ? `return {remaining, committed, tonumber(ARGV[1]) - committed - r
 return remaining`}
 `, source?.mode === "billed" ? 3 : 2, `${prefix}:committed`, `${prefix}:reservations`, ...(source?.mode === "billed" ? [source.key] : []),
     String(usdToMicroUsd(args.dailyUsd)), ...(source?.mode === "billed" ? ["1", source.funding!] : args.observe ? ["1"] : []));
+  if (dailySnapshot === "shadow-uninitialized") {
+    if (retry) throw new Error("AI allowance shadow unavailable");
+    return boundDailyOutputTokens(args, true);
+  }
   if (args.billed && Array.isArray(dailySnapshot)) {
     for (const call of JSON.parse(String(dailySnapshot[4])) as BilledCall[]) logBilledRelease(call, "expiry");
   }
@@ -1140,7 +1147,7 @@ async function reserveSharedAllowance(args: {
   teamId: string;
   userId: number | null;
   resolvePolicy?: (teamId: string) => Promise<TeamAllowancePolicy>;
-}): Promise<AllowanceReservation> {
+}, retry = false): Promise<AllowanceReservation> {
   const policy = await args.resolvePolicy?.(args.teamId);
   const observe = await observeAllowanceAttempt({ ...args, policy: policy ?? { mode: "legacy", monthlyUsd: args.allowanceUsd } });
   const billed = await billedCostEnabled(args.userId);
@@ -1210,14 +1217,21 @@ async function reserveSharedAllowance(args: {
     }
     return decision;
   };
-  if (billed && aiAllowancePeriod().endDate !== selectedMonth.endDate) return reserveSharedAllowance(args);
+  if (billed && aiAllowancePeriod().endDate !== selectedMonth.endDate) {
+    if (retry) throw new Error("AI allowance period unavailable");
+    return reserveSharedAllowance(args, true);
+  }
   const billedScopes: AllowanceScope[] = billed ? [{ reason: "month", cap: usdToMicroUsd(args.allowanceUsd * (args.lane === "system" ? SYSTEM_AI_ALLOWANCE_MULTIPLIER : 1)),
     pairs: [{ committedKey, reservationsKey }], pendingKey: args.lane === "visible" ? legacyPendingKey : undefined,
-    writeIndex: 1, ttlSeconds: month.ttlSeconds, source: source!, field: args.lane, endsAt: billedAllowancePeriod("month", month.key).endsAt, billedTtlSeconds: billedAllowancePeriod("month", month.key).ttlSeconds }] : [];
+    writeIndex: 1, ttlSeconds: month.ttlSeconds, seedKey: `ai-allowance:${month.key}:${args.teamId}:system-split-v1`, source: source!, field: args.lane, endsAt: billedAllowancePeriod("month", month.key).endsAt, billedTtlSeconds: billedAllowancePeriod("month", month.key).ttlSeconds }] : [];
   const reserveOn = () => reserveBilledScopes({ keys: [committedKey, reservationsKey, legacyPendingKey],
     encoded: billedScopes.map((scope) => ({ ...scope, pairs: [[1, 2]], pending: scope.pendingKey ? 3 : undefined })),
     amount: amountMicroUsd, id: member, call, month: month.key, day: month.endDate });
   let billedDecision = billed ? await reserveOn() : null;
+  if (billedDecision?.retry) {
+    if (retry) throw new Error(`AI allowance unavailable: ${billedDecision.retry}`);
+    return reserveSharedAllowance(args, true);
+  }
   let decision = billedDecision?.decision ?? await reserve();
   let accepted = Number(Array.isArray(decision) ? decision[0] : decision) === 1;
   if (
@@ -1240,6 +1254,10 @@ async function reserveSharedAllowance(args: {
     billedDecision = billed ? await reserveOn() : null;
     decision = billedDecision?.decision ?? await reserve();
     accepted = Number(Array.isArray(decision) ? decision[0] : decision) === 1;
+  }
+  if (billedDecision?.retry) {
+    if (retry) throw new Error(`AI allowance unavailable: ${billedDecision.retry}`);
+    return reserveSharedAllowance(args, true);
   }
   if (billedDecision) for (const detail of billedDecision.details) console.info(JSON.stringify({
     event: "ai-allowance-billed-decision", ...call, decision: accepted ? "allow" : "refuse", ...detail,
@@ -1519,6 +1537,7 @@ type AllowanceScope = {
   writeIndex: number;
   ttlSeconds: number;
   source?: EffectiveAccountingSource;
+  seedKey?: string;
   field?: "visible" | "system" | "total";
   endsAt?: number;
   billedTtlSeconds?: number;
@@ -1568,10 +1587,16 @@ return 1
 const RESERVE_BILLED_SCOPES_SCRIPT = `
 ${EXPIRE_RESERVATION_SCRIPT}
 local scopes = cjson.decode(ARGV[1])
-local now = tonumber(ARGV[2])
+local clock = redis.call("TIME")
+local now = tonumber(clock[1]) * 1000 + math.floor(tonumber(clock[2]) / 1000)
 local amount = tonumber(ARGV[3])
 local details = {}
 local refused = 0
+for _, scope in ipairs(scopes) do
+  if now >= scope.endsAt then return "period-rolled" end
+  local billed = scope.source.mode == "billed" and redis.call("HGET", scope.source.key, "funding") == scope.source.funding and redis.call("HGET", scope.source.key, "unusable") ~= "1" and redis.call("HGET", scope.source.key, scope.field)
+  if (not billed or scope.reason ~= "month") and redis.call("EXISTS", scope.seedKey) == 0 then return "shadow-uninitialized" end
+end
 for index, scope in ipairs(scopes) do
   local total = 0
   local held = 0
@@ -1591,7 +1616,7 @@ for index, scope in ipairs(scopes) do
     if billed then total = tonumber(billed); mode = "billed" end
   end
   table.insert(details, {scope = scope.source.key, mode = mode, billed = total, holds = held, requested = amount, cap = scope.cap})
-  if now < scope.endsAt and total + held + amount > scope.cap and refused == 0 then refused = -index end
+  if total + held + amount > scope.cap and refused == 0 then refused = -index end
 end
 if refused == 0 then
   for _, scope in ipairs(scopes) do
@@ -1622,12 +1647,13 @@ async function reserveBilledScopes(args: {
   const result = await redis.eval(RESERVE_BILLED_SCOPES_SCRIPT, args.keys.length, ...args.keys,
     JSON.stringify(args.encoded), String(Date.now()), String(args.amount), String(Date.now() + RESERVATION_TTL_MS), args.id,
     BILLED_ALLOWANCE_SCOPE_INDEX, `${args.call.teamId}|${args.month}|${args.day}`, String(args.call.userId), `demo|${args.month}|${args.day}`);
+  if (result === "period-rolled" || result === "shadow-uninitialized") return { retry: result, decision: [0], details: [] };
   if (!Array.isArray(result)) throw new Error("Invalid billed allowance reservation response");
   const accepted = Number(result[0]);
   const details = JSON.parse(String(result[1])) as Array<{ scope: string; mode: string; billed: number; holds: number; requested: number; cap: number }>;
   for (const call of JSON.parse(String(result[2])) as BilledCall[]) logBilledRelease(call, "expiry");
   const refused = details[-accepted - 1];
-  return { decision: accepted === 1 ? [1] : [accepted, refused.billed, refused.holds], details };
+  return { retry: null, decision: accepted === 1 ? [1] : [accepted, refused.billed, refused.holds], details };
 }
 
 const SETTLE_SCOPES_SCRIPT = `
@@ -1653,8 +1679,12 @@ return removed
 
 const SEED_SCOPE_SCRIPT = `
 if not redis.call("SET", KEYS[2], "1", "EX", ARGV[2], "NX") then return 0 end
-redis.call("INCRBY", KEYS[1], ARGV[1])
-redis.call("EXPIRE", KEYS[1], ARGV[2])
+if ARGV[3] == "1" then
+  redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2], "NX")
+else
+  redis.call("INCRBY", KEYS[1], ARGV[1])
+  redis.call("EXPIRE", KEYS[1], ARGV[2])
+end
 return 1
 `;
 
@@ -1662,11 +1692,12 @@ async function seedAllowanceScope(
   prefix: string,
   ttlSeconds: number,
   loadSpend: () => Promise<number>,
+  billed = false,
 ) {
   const redis = await getRedis();
   if (await redis.exists(`${prefix}:seeded`)) return;
   const spend = await loadSpend();
-  await redis.eval(SEED_SCOPE_SCRIPT, 2, `${prefix}:committed`, `${prefix}:seeded`, String(spend), String(ttlSeconds));
+  await redis.eval(SEED_SCOPE_SCRIPT, 2, `${prefix}:committed`, `${prefix}:seeded`, String(spend), String(ttlSeconds), billed ? "1" : "0");
 }
 
 async function demoGatewaySpendMicroUsd(gatewayApiKey: string, month: { startDate: string; endDate: string }, signal?: AbortSignal) {
@@ -1698,7 +1729,7 @@ export async function reservePlanAllowance(args: {
   observe?: boolean;
   billed?: boolean;
   billedCall?: BilledCall;
-}): Promise<PlanAllowanceReservation> {
+}, retry = false): Promise<PlanAllowanceReservation> {
   if (args.policy.mode !== "plan" || !Number.isFinite(args.amountUsd) || args.amountUsd < 0 ||
     (args.amountMicroUsd !== undefined && (!Number.isSafeInteger(args.amountMicroUsd) || args.amountMicroUsd < 0))) {
     throw new Error("Plan AI allowance reservation requires a plan policy and a valid amount");
@@ -1723,23 +1754,16 @@ export async function reservePlanAllowance(args: {
       pendingKey: initialized.legacyPendingKey, writeIndex: args.lane === "system" ? 2 : 1, ttlSeconds: month.ttlSeconds });
     if (args.policy.dailyUsd !== null) {
       const prefix = `ai-allowance:day:${month.endDate}:${args.teamId}`;
-      try {
-        await seedAllowanceScope(prefix, 2 * 86_400, async () =>
-          (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId!, month.endDate, month.endDate, billed ? AbortSignal.timeout(3_000) : undefined)).totalMicroUsd);
-      } catch (error) {
-        if (daySource?.mode !== "billed") throw error;
-      }
+      await seedAllowanceScope(prefix, 2 * 86_400, async () => daySource?.mode === "billed" ? daySource.total! :
+        (await gatewaySpendBreakdownMicroUsd(args.gatewayApiKey, args.teamId!, month.endDate, month.endDate, billed ? AbortSignal.timeout(3_000) : undefined)).totalMicroUsd, billed);
       scopes.push({ reason: "day", cap: usdToMicroUsd(args.policy.dailyUsd), pairs: [pair(prefix)], writeIndex: 1, ttlSeconds: 2 * 86_400 });
     }
   }
   if (args.policy.demoGlobal) {
     const prefix = `ai-allowance:demo:${month.key}`;
     const demoKey = process.env.DEMO_AI_GATEWAY_API_KEY?.trim();
-    try {
-      if (demoKey) await seedAllowanceScope(prefix, month.ttlSeconds, () => demoGatewaySpendMicroUsd(demoKey, month, billed ? AbortSignal.timeout(3_000) : undefined));
-    } catch (error) {
-      if (demoSource?.mode !== "billed") throw error;
-    }
+    if (demoKey) await seedAllowanceScope(prefix, month.ttlSeconds, async () => demoSource?.mode === "billed" ? demoSource.total! :
+      demoGatewaySpendMicroUsd(demoKey, month, billed ? AbortSignal.timeout(3_000) : undefined), billed);
     scopes.push({ reason: "demo", cap: usdToMicroUsd(DEMO_GLOBAL_AI_ALLOWANCE_USD), pairs: [pair(prefix)], writeIndex: 1, ttlSeconds: month.ttlSeconds });
   }
   if (billed) {
@@ -1747,11 +1771,16 @@ export async function reservePlanAllowance(args: {
       const kind = scope.reason === "day" ? "day" : "month";
       const period = kind === "day" ? month.endDate : month.key;
       scope.source = (scope.reason === "demo" ? demoSource : scope.reason === "day" ? daySource : monthSource)!;
+      scope.seedKey = scope.reason === "month" ? `ai-allowance:${month.key}:${args.teamId}:system-split-v1`
+        : scope.pairs[0].committedKey.replace(/:committed$/, ":seeded");
       scope.field = "total";
       scope.endsAt = billedAllowancePeriod(kind, period).endsAt;
       scope.billedTtlSeconds = billedAllowancePeriod(kind, period).ttlSeconds;
     }
-    if (aiAllowancePeriod().endDate !== month.endDate) return reservePlanAllowance({ ...args, billed });
+    if (aiAllowancePeriod().endDate !== month.endDate) {
+      if (retry) throw new Error("AI allowance period unavailable");
+      return reservePlanAllowance({ ...args, billed }, true);
+    }
   }
   const keys: string[] = [];
   const encoded = scopes.map((scope) => ({ ...scope,
@@ -1773,6 +1802,10 @@ export async function reservePlanAllowance(args: {
     return decision;
   };
   let billedDecision = call ? await reserveBilledScopes({ keys, encoded, amount, id, call, month: month.key, day: month.endDate }) : null;
+  if (billedDecision?.retry) {
+    if (retry) throw new Error(`AI allowance unavailable: ${billedDecision.retry}`);
+    return reservePlanAllowance({ ...args, billed }, true);
+  }
   let decision = billedDecision?.decision ?? await reserve();
   let accepted = Number(Array.isArray(decision) ? decision[0] : decision);
   if (accepted !== 1 && scopes[-accepted - 1]?.reason === "month" && args.teamId && followsRealSpend && (!billed || scopes[-accepted - 1].source?.mode === "v1")) {
@@ -1793,6 +1826,10 @@ export async function reservePlanAllowance(args: {
       decision = billedDecision?.decision ?? await reserve();
       accepted = Number(Array.isArray(decision) ? decision[0] : decision);
     }
+  }
+  if (billedDecision?.retry) {
+    if (retry) throw new Error(`AI allowance unavailable: ${billedDecision.retry}`);
+    return reservePlanAllowance({ ...args, billed }, true);
   }
   if (billedDecision) for (const detail of billedDecision.details) console.info(JSON.stringify({
     event: "ai-allowance-billed-decision", ...call, decision: accepted === 1 ? "allow" : "refuse", ...detail,

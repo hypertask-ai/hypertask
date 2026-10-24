@@ -18,7 +18,7 @@ const nativeFetch = global.fetch;
 const nativeInfo = console.info;
 const nativeDemoKey = process.env.DEMO_AI_GATEWAY_API_KEY;
 let now, redis, enabled, restricted, resync, drift, policy, funding, fundingReads;
-let reports, failReport, reportHook, logs, alerts, flagActors, evals, spend, daySpend, systemSpend, demoSpend;
+let reports, failReport, reportHook, evalHook, logs, alerts, flagActors, evals, spend, daySpend, systemSpend, demoSpend;
 const stub = (file, exports) => {
   const filename = fs.realpathSync(path.join(root, file));
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
@@ -128,6 +128,12 @@ function fakeRedis() {
       if (script.includes("local details = {}")) {
         const scopes = JSON.parse(args[0]), details = [], expired = [];
         let refused = 0;
+        for (const scope of scopes) {
+          if (now >= scope.endsAt) return "period-rolled";
+          const saved = await client.hgetall(scope.source.key);
+          const billed = scope.source.mode === "billed" && saved.funding === scope.source.funding && saved.unusable !== "1" && saved[scope.field] !== undefined;
+          if ((!billed || scope.reason !== "month") && !values.has(scope.seedKey)) return "shadow-uninitialized";
+        }
         for (const [i, scope] of scopes.entries()) {
           let total = scope.pending ? n(keys[scope.pending - 1]) : 0, holds = 0;
           for (const [c, r] of scope.pairs) { expire(keys[r - 1], expired); total += n(keys[c - 1]); holds += held(keys[r - 1]); }
@@ -137,7 +143,7 @@ function fakeRedis() {
             total = Number(saved[scope.field]); mode = "billed";
           }
           details.push({ scope: scope.source.key, mode, billed: total, holds, requested: Number(args[2]), cap: scope.cap });
-          if (now < scope.endsAt && total + holds + Number(args[2]) > scope.cap && !refused) refused = -i - 1;
+          if (total + holds + Number(args[2]) > scope.cap && !refused) refused = -i - 1;
         }
         if (!refused) for (const scope of scopes) z(keys[scope.pairs[scope.writeIndex - 1][1] - 1]).set(args[4], Number(args[3]));
         for (const scope of scopes) {
@@ -168,9 +174,10 @@ function fakeRedis() {
         const expired = [];
         if (script.includes('redis.call("ZRANGEBYSCORE", KEYS[2]')) expire(keys[1], expired);
         let committed = n(keys[0]), mode = "v1";
-        if (keys.length === 3 && h(keys[2]).get("funding") === args[2] && h(keys[2]).get("unusable") !== "1") {
+        if (keys.length === 3 && h(keys[2]).get("funding") === args[2] && h(keys[2]).get("unusable") !== "1" && h(keys[2]).has("total")) {
           committed = Number(h(keys[2]).get("total")); mode = "billed";
         }
+        if (script.includes('return "shadow-uninitialized"') && mode === "v1" && !values.has(keys[0].replace(/:committed$/, ":seeded"))) return "shadow-uninitialized";
         const remaining = Number(args[0]) - committed - held(keys[1]);
         if (script.includes(", mode,")) return [remaining, committed, held(keys[1]), mode, JSON.stringify(expired)];
         return args[1] === "1" ? [remaining, committed, held(keys[1])] : remaining;
@@ -200,11 +207,15 @@ function fakeRedis() {
       }
       if (script.includes('if not redis.call("SET", KEYS[2]')) {
         if (values.has(keys[1])) return 0;
-        values.set(keys[1], "1"); values.set(keys[0], String(n(keys[0]) + Number(args[0]))); return 1;
+        values.set(keys[1], "1");
+        if (args[2] !== "1" || !values.has(keys[0])) values.set(keys[0], String((args[2] === "1" ? 0 : n(keys[0])) + Number(args[0])));
+        return 1;
       }
       if (script.includes("local visible =")) {
+        if (script.includes('redis.call("EXISTS", KEYS[4])') && (!values.has(keys[3]) || !values.has(keys[0]) || !values.has(keys[1]))) return null;
+        if (script.includes('redis.call("EXISTS", KEYS[3])') && (!values.has(keys[2]) || !values.has(keys[0]))) return null;
         if (!values.has(keys[0]) && !values.has(keys[1])) return null;
-        return script.includes("return {visible") ? keys.map((key) => values.get(key) ?? "0") : keys.reduce((sum, key) => sum + n(key), 0);
+        return script.includes("return {visible") ? keys.map((key) => values.get(key) ?? "0") : keys.slice(0, script.includes("local system =") ? 3 : 2).reduce((sum, key) => sum + n(key), 0);
       }
       if (script.trim().startsWith('return tonumber(redis.call("GET"')) return keys.reduce((sum, key) => sum + n(key), 0);
       if (script.includes('~= ARGV[1]')) {
@@ -286,11 +297,17 @@ for (const backend of ["fake", "real Redis"]) {
       funding = { source: "managed", apiKey: "fixture-private-gateway-credential", managedKeyId: "managed-row-7", managedKeyUpdatedAt: "2026-10-01T00:00:00Z" };
       fundingReads = []; reports = []; logs = []; alerts = []; flagActors = []; evals = [];
       spend = 100_000; daySpend = 10_000; systemSpend = 0; demoSpend = 100_000;
-      failReport = false; reportHook = null;
+      failReport = false; reportHook = null; evalHook = null;
       console.info = (line) => logs.push(JSON.parse(line));
       process.env.DEMO_AI_GATEWAY_API_KEY = "fixture-private-demo-credential";
       const originalEval = backend === "fake" ? redis.eval.bind(redis) : connection.constructor.prototype.eval.bind(redis);
-      redis.eval = async (script, ...args) => { evals.push({ script, args }); return originalEval(script, ...args); };
+      redis.eval = async (script, ...args) => {
+        const entry = { script, args }; evals.push(entry);
+        if (evalHook) await evalHook(script, ...args);
+        const fixtureClock = `{${Math.floor(now / 1000)}, ${(now % 1000) * 1000}}`;
+        entry.result = await originalEval(script.replace('redis.call("TIME")', fixtureClock), ...args);
+        return entry.result;
+      };
       allowance.resetGatewayPricingCacheForTests();
       fetchFixture();
       await warm();
@@ -299,6 +316,163 @@ for (const backend of ["fake", "real Redis"]) {
       global.Date = NativeDate; global.fetch = nativeFetch; console.info = nativeInfo;
       if (nativeDemoKey === undefined) delete process.env.DEMO_AI_GATEWAY_API_KEY; else process.env.DEMO_AI_GATEWAY_API_KEY = nativeDemoKey;
     });
+
+    test("F1: refresh cursor uses string Redis bounds including wraparound", async () => {
+      await redis.zadd(INDEX, String(now), `${TEAM}|${MONTH}|${DAY}`);
+      await redis.set(`${INDEX}:cursor`, "100");
+      const zrange = redis.zrange.bind(redis), bounds = [];
+      redis.zrange = async (key, start, end) => {
+        if (key === INDEX) {
+          assert.equal(typeof start, "string"); assert.equal(typeof end, "string");
+          bounds.push([start, end]);
+        }
+        return zrange(key, start, end);
+      };
+      try {
+        await drain();
+        assert.deepEqual(bounds, [["100", "199"], ["0", "99"]]);
+        assert.equal(await redis.hget(BILLED, "total"), "100000");
+      } finally { redis.zrange = zrange; }
+    });
+
+    for (const rollover of ["month", "day", "legacy month"]) {
+      test(`F2: ${rollover} rollover after JS check inserts no old hold and retries current scopes`, async () => {
+        now = new NativeDate(rollover === "day" ? "2026-10-24T23:59:59Z" : "2026-10-31T23:59:59Z").getTime();
+        if (rollover === "day") policy.dailyUsd = 1;
+        let crossed = false;
+        evalHook = (script) => {
+          if (!crossed && script.includes("local details = {}")) { now += 2000; crossed = true; }
+        };
+        if (rollover === "legacy month") {
+          await middleware().wrapGenerate({ params: params(), model: {}, doGenerate: async () => ({}) });
+        } else {
+          const reservation = await plan(800_000);
+          assert.ok(reservation.id.includes(rollover === "day" ? "ai-allowance:day:2026-10-25:" : "ai-allowance:2026-11:"));
+          await allowance.settlePlanAllowance(reservation, 0);
+        }
+        const reservations = evals.filter(({ script }) => script.includes("local details = {}"));
+        assert.equal(reservations.length, 2);
+        assert.equal(reservations[0].result, "period-rolled");
+        assert.match(reservations[0].script, /redis.call\("TIME"\)/);
+        const oldKeys = JSON.parse(reservations[0].args[reservations[0].args[0] + 1]).flatMap((scope) => scope.pairs.map(([, r]) => reservations[0].args[r]));
+        for (const key of oldKeys) assert.deepEqual(await redis.zrange(key, 0, -1), []);
+        assert.equal(decisions().at(-1).decision, "allow");
+        assert.ok(!decisions().some((entry) => entry.scope === (rollover === "day" ? DAILY : BILLED)));
+      });
+    }
+
+    test("F2: a second Lua rollover fails closed after exactly one retry", async () => {
+      evalHook = (script, count, ...args) => {
+        if (script.includes("local details = {}")) now = JSON.parse(args[count])[0].endsAt + 1;
+      };
+      await assert.rejects(plan(), /AI allowance unavailable: period-rolled/);
+      assert.equal(evals.filter(({ result }) => result === "period-rolled").length, 2);
+      for (const key of (await redis.keys("*")).filter((key) => key.endsWith(":reservations"))) assert.deepEqual(await redis.zrange(key, 0, -1), []);
+    });
+
+    for (const scope of ["day", "demo"]) {
+      test(`F3: ${scope} shadow seeds before admission and $0.10 settlement plus late seed stays $0.10`, async () => {
+        const prefix = scope === "day" ? `ai-allowance:day:${DAY}:${TEAM}` : `ai-allowance:demo:${MONTH}`;
+        await redis.del(`${prefix}:seeded`, `${prefix}:committed`);
+        daySpend = 0; demoSpend = 0;
+        const overrides = { policy: { ...policy, dailyUsd: scope === "day" ? 1 : null, demoGlobal: scope === "demo" } };
+        let matchingReports = 0;
+        reportHook = (url) => {
+          const query = new URL(String(url)).searchParams;
+          if (scope === "day" ? query.get("start_date") === query.get("end_date") : !query.has("tags")) {
+            if (++matchingReports > 1) throw new Error("fixture redundant seed report failure");
+          }
+        };
+        const first = await plan(100_000, overrides);
+        assert.equal(await redis.get(`${prefix}:seeded`), "1");
+        await allowance.settlePlanAllowance(first, 0.1);
+        assert.equal(await redis.get(`${prefix}:committed`), "100000");
+        reportHook = null; daySpend = 100_000; demoSpend = 100_000; now += 60_001;
+        await redis.del(`${prefix}:seeded`);
+        const next = await plan(0, overrides);
+        assert.equal(await redis.get(`${prefix}:committed`), "100000");
+        assert.equal(await redis.get(`${prefix}:seeded`), "1");
+        await allowance.settlePlanAllowance(next, 0);
+      });
+
+      test(`F3: ${scope} failed shadow seed cannot admit a billed call`, async () => {
+        const prefix = scope === "day" ? `ai-allowance:day:${DAY}:${TEAM}` : `ai-allowance:demo:${MONTH}`;
+        await redis.del(`${prefix}:seeded`, `${prefix}:committed`);
+        evalHook = (script, _count, key) => {
+          if (script.includes('if not redis.call("SET", KEYS[2]') && key === `${prefix}:committed`) throw new Error("fixture seed unavailable");
+        };
+        await assert.rejects(plan(100_000, { policy: { ...policy, dailyUsd: scope === "day" ? 1 : null, demoGlobal: scope === "demo" } }), /fixture seed unavailable/);
+        assert.deepEqual(await redis.zrange(`${prefix}:reservations`, 0, -1), []);
+        assert.deepEqual(await redis.zrange(`${PREFIX}:reservations`, 0, -1), []);
+      });
+    }
+
+    for (const scope of ["month", "day", "demo", "legacy month"]) {
+      test(`F4: ${scope} billed invalidation before Lua requires atomic v1 seed and recovers fail-closed`, async () => {
+        const prefix = scope === "day" ? `ai-allowance:day:${DAY}:${TEAM}` : scope === "demo" ? `ai-allowance:demo:${MONTH}` : PREFIX;
+        const snapshot = scope === "day" ? DAILY : scope === "demo" ? `ai-allowance-billed:v1:month:${MONTH}:demo` : BILLED;
+        const marker = scope.includes("month") ? `${prefix}:system-split-v1` : `${prefix}:seeded`;
+        const overrides = { policy: { ...policy, dailyUsd: scope === "day" ? 1 : null, demoGlobal: scope === "demo" } };
+        let invalidated = false;
+        evalHook = async (script) => {
+          if (!invalidated && script.includes("local details = {}")) {
+            invalidated = true;
+            await redis.del(marker, `${prefix}:committed`, `${prefix}:system:committed`);
+            await redis.hset(snapshot, "unusable", "1");
+            failReport = true;
+          }
+        };
+        const invoke = () => scope === "legacy month"
+          ? middleware().wrapGenerate({ params: params(), model: {}, doGenerate: async () => ({}) })
+          : plan(20_000, overrides);
+        await assert.rejects(invoke(), (error) => !(error instanceof allowance.SharedAiAllowanceExceededError));
+        assert.equal(evals.find(({ script }) => script.includes("local details = {}")).result, "shadow-uninitialized");
+        assert.deepEqual(await redis.zrange(`${prefix}:reservations`, 0, -1), []);
+        assert.deepEqual(await redis.zrange(`${PREFIX}:reservations`, 0, -1), []);
+        assert.equal(decisions().length, 0);
+        evalHook = null; failReport = false;
+        const recovered = await invoke();
+        assert.equal(await redis.exists(marker), 1);
+        const decision = decisions().findLast((entry) => entry.scope === snapshot);
+        assert.equal(decision.mode, "v1"); assert.equal(decision.billed, scope === "day" ? daySpend : scope === "demo" ? demoSpend : spend);
+        if (scope !== "legacy month") await allowance.settlePlanAllowance(recovered, 0);
+      });
+    }
+
+    for (const mode of ["plan", "legacy"]) {
+      test(`F5: ${mode} cold and Redis-lost Settings equals initialized admission when billed refresh fails`, async () => {
+        policy = { ...policy, mode }; systemSpend = 20_000;
+        reportHook = (_url, options) => { if (options.signal) throw new Error("fixture bounded refresh unavailable"); };
+        for (const state of ["cold", "Redis loss"]) {
+          const keys = (await redis.keys("*")).filter((key) => key.startsWith("ai-allowance:") || key.startsWith("ai-allowance-billed:"));
+          if (keys.length) await redis.del(...keys);
+          const used = await settingsUsed();
+          assert.equal(used, mode === "plan" ? 100_000 : 80_000, state);
+          if (mode === "plan") await plan();
+          else await middleware().wrapGenerate({ params: { ...params(), maxOutputTokens: 256 }, model: {}, doGenerate: async () => ({}) });
+          assert.equal(decisions().at(-1).mode, "v1");
+          assert.equal(used, decisions().at(-1).billed, state);
+        }
+      });
+
+      test(`F5: ${mode} Settings retains fetched Gateway spend when cold shadow initialization also fails`, async () => {
+        policy = { ...policy, mode }; systemSpend = 20_000;
+        const keys = (await redis.keys("*")).filter((key) => key.startsWith("ai-allowance:"));
+        if (keys.length) await redis.del(...keys);
+        let reads = 0;
+        reportHook = () => { if (++reads > 3) throw new Error("fixture reports unavailable after Settings fetch"); };
+        const used = await settingsUsed();
+        assert.equal(used, mode === "plan" ? 100_000 : 80_000);
+        assert.equal(await redis.get(`${PREFIX}:system-split-v1`), null);
+        if (mode === "plan") await assert.rejects(plan());
+        else await assert.rejects(middleware().wrapGenerate({ params: params(), model: {}, doGenerate: async () => { throw new Error("must not infer"); } }));
+        assert.deepEqual(await redis.zrange(`${PREFIX}:reservations`, 0, -1), []);
+        reportHook = (_url, options) => { if (options.signal) throw new Error("fixture bounded refresh unavailable"); };
+        if (mode === "plan") await plan();
+        else await middleware().wrapGenerate({ params: { ...params(), maxOutputTokens: 256 }, model: {}, doGenerate: async () => ({}) });
+        assert.equal(used, decisions().at(-1).billed);
+      });
+    }
 
     test("T1: abort releases exactly 800000 live hold; only report adds 13000; next admission uses 113000", async () => {
       const abort = new AbortController();
