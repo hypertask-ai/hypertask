@@ -606,6 +606,7 @@ async function sendAfterIntro(session, question) {
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
     "@/lib/aiChat/transportRetry": {},
     "@/lib/aiModelOptions": { chatModelRequestFields: load("src/lib/aiModelOptions.ts").chatModelRequestFields },
+    "./aiChatInteraction": load("src/hooks/MultiPages/AIChat/aiChatInteraction.ts"),
   });
   const ref = () => ({ current: null });
   const noop = () => {};
