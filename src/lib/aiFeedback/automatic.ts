@@ -3,19 +3,20 @@ import { ZodError } from 'zod'
 import { HTPR_7498_EXPIRED_KEY_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7498-expired-key-feedback'
 import { automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
+import { getMcpExecutionContext } from '@/lib/mcp/operationContext'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 
-function fileAutomaticFeedback(input: AutomaticFeedbackInput, userId?: number) {
+function fileAutomaticFeedback(input: AutomaticFeedbackInput, userId?: number, agentId?: string | null) {
   const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
   for (const field of ['tool', 'client', 'errorCode', 'field'] as const) {
     if (!automaticFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
   }
-  return import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId, { origin: 'automatic' })).catch(() => {})
+  return import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId, { origin: 'automatic', agentId })).catch(() => {})
 }
 
-export function queueAiFeedback(input: AutomaticFeedbackInput, userId?: number): void {
+export function queueAiFeedback(input: AutomaticFeedbackInput, userId?: number, agentId?: string | null): void {
   try {
-    waitUntil(fileAutomaticFeedback(input, userId))
+    waitUntil(fileAutomaticFeedback(input, userId, agentId))
   } catch {
   }
 }
@@ -126,7 +127,10 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
         return text
       } catch (error) {
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
-        if (status !== 403) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...feedbackErrorDetails(error) }, userId)
+        if (status !== 403) {
+          const auth = getMcpExecutionContext(token)
+          queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...feedbackErrorDetails(error) }, userId, auth?.agentId)
+        }
         throw error
       }
     },

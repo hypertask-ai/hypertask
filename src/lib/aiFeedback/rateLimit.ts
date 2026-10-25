@@ -30,12 +30,20 @@ export async function reserveFeedbackQuota(userId: number | undefined, deduped: 
 }
 
 export const VALIDATION_REFUSAL_SCRIPT = `
+local expired = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1] - 86400000)
+for _, reporter in ipairs(expired) do redis.call('HDEL', KEYS[3], reporter) end
 redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1] - 86400000)
 redis.call('ZADD', KEYS[1], ARGV[1], ARGV[2])
+redis.call('HSET', KEYS[3], ARGV[2], ARGV[4])
 redis.call('PEXPIRE', KEYS[1], 86400000)
+redis.call('PEXPIRE', KEYS[3], 86400000)
 if redis.call('ZCARD', KEYS[1]) < 3 then return {} end
 if not redis.call('SET', KEYS[2], ARGV[3], 'PX', 86400000, 'NX') then return {} end
-return redis.call('ZRANGE', KEYS[1], 0, 9)
+local names = {}
+for _, reporter in ipairs(redis.call('ZRANGE', KEYS[1], 0, 9)) do
+  table.insert(names, redis.call('HGET', KEYS[3], reporter) or reporter)
+end
+return names
 `
 
 export const RELEASE_VALIDATION_REFUSAL_SCRIPT = `
@@ -43,11 +51,11 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) 
 return 0
 `
 
-export async function reserveValidationRefusal(fingerprint: string, reporter: string) {
+export async function reserveValidationRefusal(fingerprint: string, reporterId: string, reporterName: string) {
   const redis = await getRedis()
   const key = `ai-feedback:validation-refusal:{${fingerprint}}`
   const token = randomUUID()
-  const reporters = await redis.eval(VALIDATION_REFUSAL_SCRIPT, 2, `${key}:reporters`, `${key}:filed`, Date.now(), reporter, token) as string[]
+  const reporters = await redis.eval(VALIDATION_REFUSAL_SCRIPT, 3, `${key}:reporters`, `${key}:filed`, `${key}:names`, Date.now(), reporterId, token, reporterName) as string[]
   return reporters.length ? { token, reporters } : undefined
 }
 

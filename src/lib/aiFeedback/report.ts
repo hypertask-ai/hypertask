@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma'
 import { aiFeedbackEnabled } from './enabled'
 import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7536-plain-ai-feedback'
+import { HTPR_7887_VALIDATION_REFUSALS_FLAG } from '@/lib/flags/definitions/htpr-7887-validation-refusals'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
@@ -108,7 +109,7 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
   }
 }
 
-export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { origin: 'agent' | 'automatic'; agentName?: string | null } = { origin: 'agent' }) {
+export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { origin: 'agent' | 'automatic'; agentName?: string | null; agentId?: string | null } = { origin: 'agent' }) {
   if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
   const parsed = (reporter.origin === 'automatic' ? automaticFeedbackSchema : aiFeedbackSchema).safeParse(raw)
   if (!parsed.success) {
@@ -125,6 +126,15 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
       ? await featureFlagCandidateUserIds(HTPR_7536_PLAIN_AI_FEEDBACK_FLAG) === null
       : await isFeatureEnabled(HTPR_7536_PLAIN_AI_FEEDBACK_FLAG, userId)
   } catch {}
+  let suppressValidationRefusals = false
+  if (reporter.origin === 'automatic' && validationRefusal(input)) {
+    try {
+      const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
+      suppressValidationRefusals = userId === undefined
+        ? await featureFlagCandidateUserIds(HTPR_7887_VALIDATION_REFUSALS_FLAG) === null
+        : await isFeatureEnabled(HTPR_7887_VALIDATION_REFUSALS_FLAG, userId)
+    } catch {}
+  }
   const fingerprint = feedbackFingerprint(input)
   const marker = `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p>`
   const doneSections = await prisma.section.findMany({ where: { projectId: PROJECT_ID, OR: [{ isDone: true }, { section_title: { equals: 'Done', mode: 'insensitive' } }] }, select: { id: true, section_title: true } })
@@ -166,10 +176,11 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
         }
         let refusalReporters: string[] | undefined
-        if (plain && reporter.origin === 'automatic' && validationRefusal(input)) {
+        if (suppressValidationRefusals) {
           const agentName = scrubFeedbackText(reporter.agentName ?? '').replace(/,/g, ' ').slice(0, 60)
           const reporterName = agentName ? `${agentName}${displayName ? ` (owned by ${displayName})` : ''}` : displayName ?? `User ${reporterId}`
-          const reservation = await reserveValidationRefusal(fingerprint, reporterName)
+          const reporterMember = `${userId === undefined ? 'anonymous' : 'user'}:${reporterId}${reporter.agentId ? `:agent:${reporter.agentId}` : ''}`
+          const reservation = await reserveValidationRefusal(fingerprint, reporterMember, reporterName)
           if (!reservation) {
             return { success: false as const, filed: false as const, reason: 'validation_refused' as const, error: 'Normal input refusal; no new ticket was filed.' }
           }
