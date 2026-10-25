@@ -301,15 +301,14 @@ test('thrown 400, 404 and 500 errors still file AI feedback and are rethrown unc
   }
 })
 
-test('schema rejections thrown inside a tool file as 400, not a 500 crash (HTPR-7207)', async () => {
+test('schema rejections thrown inside a tool file are a refused call that files nothing (HTPR-7207, HTPR-7920)', async () => {
   const schema = z.object({ task_id: z.array(z.number()) })
   const tools = observeFeedbackTools([
     { name: 'hypertask_tasks', description: 'bad input', parameters: z.object({}), execute: async (args) => { schema.parse(args); return '{}' } },
   ], 985)
   await assert.rejects(tools[0].execute({ task_id: 'HTPR-1' }, 'fixture'), z.ZodError)
   await drain()
-  assert.equal(files.length, 1)
-  assert.match(files[0].description, /HTTP status: 400/)
+  assert.equal(files.length, 0)
 })
 
 test('an empty real MCP catalog reports even when deferred discovery helpers prevent a literally empty wire list', async () => {
