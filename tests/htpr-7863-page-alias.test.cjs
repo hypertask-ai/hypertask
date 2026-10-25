@@ -22,7 +22,7 @@ const load = (file) => jiti(path.join(root, file))
 const { selectMcpTools } = load('src/lib/mcp-server/consolidated-tools.ts')
 const { executeToolResult } = load('src/lib/mcp-server/tool-response.ts')
 
-function spyTasks() {
+function spyTasks(pageAlias = true) {
   const calls = []
   const rows = Array.from({ length: 12 }, (_, id) => ({ id, title: `Task ${id}` }))
   const tools = selectMcpTools([{
@@ -38,7 +38,7 @@ function spyTasks() {
       calls.push(args)
       return JSON.stringify({ tasks: rows.slice(args.offset, args.offset + args.limit), has_more: args.offset + args.limit < rows.length })
     },
-  }], true)
+  }], true, {}, false, false, pageAlias)
   return { calls, tasks: tools.find((tool) => tool.name === 'hypertask_tasks') }
 }
 
@@ -131,4 +131,30 @@ test('offset alone still works', async () => {
   assert.equal(calls.at(-1).offset, 0)
   await tasks.execute({ action: 'list', input: { project_id: 15, offset: 9 }, offset: 7, limit: 5 }, 'fixture-token')
   assert.equal(calls.at(-1).offset, 9)
+})
+
+test('page 2 with an action limit of 5 starts at row 5', async () => {
+  const { calls, tasks } = spyTasks()
+  const result = JSON.parse(await tasks.execute({ action: 'list', input: { project_id: 15, limit: 5 }, page: 2 }, 'fixture-token'))
+  assert.equal(calls.at(-1).offset, 5)
+  assert.equal(calls.at(-1).limit, 5)
+  assert.equal(result.pagination.offset, 5)
+  assert.equal(result.pagination.next_offset, 10)
+  assert.deepEqual(result.data.tasks.map(({ id }) => id), [5, 6, 7, 8, 9])
+})
+
+test('page and offset are refused only when the page alias is on', async () => {
+  const { calls, tasks } = spyTasks(false)
+  assert.equal(Object.hasOwn(tasks.inputSchema.properties, 'page'), false)
+  for (const fields of [{}, { offset: 3 }]) {
+    await assert.rejects(tasks.execute({ action: 'list', input: { project_id: 15 }, page: 2, ...fields }, 'fixture-token'), (error) => {
+      assert.ok(error instanceof z.ZodError)
+      assert.equal(error.issues[0].code, 'unrecognized_keys')
+      assert.deepEqual(error.issues[0].keys, ['page'])
+      return true
+    })
+  }
+  assert.equal(calls.length, 0)
+  await tasks.execute({ action: 'list', input: { project_id: 15 }, offset: 7, limit: 5 }, 'fixture-token')
+  assert.equal(calls.at(-1).offset, 7)
 })

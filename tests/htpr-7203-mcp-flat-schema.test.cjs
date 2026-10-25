@@ -27,7 +27,7 @@ for (const Validator of [Ajv, Ajv2020]) {
   test(`${Validator.name}: every advertised consolidated schema is flat, valid and retains all action variants`, () => {
     const ajv = new Validator({ strict: false })
     require('ajv-formats')(ajv)
-    const tools = visible(selectMcpTools(legacy, true, {}, true, true))
+    const tools = visible(selectMcpTools(legacy, true, {}, true, true, true))
     assert.equal(tools.length, definitions.length)
     for (const tool of tools) {
       const schema = tool.inputSchema
