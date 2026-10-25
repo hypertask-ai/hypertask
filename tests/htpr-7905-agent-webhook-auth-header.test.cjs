@@ -118,7 +118,7 @@ test('rejects reserved names, bad names, newlines and mixed inputs', async () =>
   }
 });
 
-function delivery({ enabled, header }) {
+function delivery({ enabled, header, corrupt }) {
   const sent = [];
   const row = {
     id: 'd1', subscriptionId: 's1', status: 'pending', attemptCount: 0, processingAt: null, nextAttemptAt: new Date(0),
@@ -126,8 +126,8 @@ function delivery({ enabled, header }) {
     subscription: {
       id: 's1', agentId: 'agent', projectId: null, url: 'https://receiver.example.invalid/hook', secret: 'whsec_x', active: true,
       agent: { revokedAt: null, userId: 42 },
-      authHeaderName: header ? 'Authorization' : null,
-      authHeaderValue: header ? store.sealWebhookSigningKey('Bearer live-key') : null,
+      authHeaderName: header || corrupt ? 'Authorization' : null,
+      authHeaderValue: corrupt ? 'garbage' : header ? store.sealWebhookSigningKey('Bearer live-key') : null,
     },
   };
   const update = async ({ data }) => { Object.assign(row, data); return row; };
@@ -154,6 +154,14 @@ test('delivery sends the opened header when the flag is on', async () => {
   const d = delivery({ enabled: true, header: true });
   assert.equal((await d.run()).status, 'delivered');
   assert.deepEqual(d.sent[0].authHeader, { name: 'Authorization', value: 'Bearer live-key' });
+});
+
+test('an unreadable saved header fails the delivery instead of sending without it', async () => {
+  const d = delivery({ enabled: true, corrupt: true });
+  const result = await d.run();
+  assert.equal(result.status, 'retrying');
+  assert.equal(d.sent.length, 0);
+  assert.equal(result.error, 'Saved auth header could not be read');
 });
 
 test('delivery sends no header when the flag is off or none is saved', async () => {
