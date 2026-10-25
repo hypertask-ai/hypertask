@@ -6,6 +6,7 @@ import { WelcomeScreen } from "@/components/AI_CHAT/WelcomeScreen";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG } from "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch";
 import { useAiChatContext, type ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   buildFullScreenChatPath,
@@ -325,8 +326,55 @@ function ChatRailFilterRow({
   );
 }
 
+function CtrlTabSessionSwitch({
+  groups,
+  currentSessionId,
+  onSelect,
+  router,
+  returnPath,
+  editor,
+}: {
+  groups: { title: string; sessions: { id: string }[] }[];
+  currentSessionId?: string;
+  onSelect: (sessionId: string) => void;
+  router: ReturnType<typeof useRouter>;
+  returnPath: string;
+  editor: ChatContextType["editor"];
+}) {
+  useEffect(() => {
+    const handleSessionKeydown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        window.innerWidth < 768 ||
+        event.key !== "Tab" ||
+        !event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) return;
+
+      event.preventDefault();
+      const visibleSessions = groups.flatMap((group) => group.sessions);
+      const currentIndex = visibleSessions.findIndex(
+        (session) => session.id === currentSessionId
+      );
+      if (currentIndex < 0) return;
+      const nextSession = visibleSessions[currentIndex + (event.shiftKey ? -1 : 1)];
+      if (!nextSession) return;
+
+      onSelect(nextSession.id);
+      router.replace(buildFullScreenChatPath(returnPath, nextSession.id));
+      setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
+    };
+
+    document.addEventListener("keydown", handleSessionKeydown);
+    return () => document.removeEventListener("keydown", handleSessionKeydown);
+  }, [groups, currentSessionId, onSelect, router, returnPath, editor]);
+  return null;
+}
+
 export default function Chat({ initialSessionId }: ChatProps) {
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -451,12 +499,12 @@ export default function Chat({ initialSessionId }: ChatProps) {
     railSessions,
     fullScreenChatScope,
   ]);
-  const displayedSessionGroups = [
+  const displayedSessionGroups = useMemo(() => [
     ...(pinnedSessions.length > 0
       ? [{ title: "Pinned" as const, sessions: pinnedSessions }]
       : []),
     ...sessionGroups,
-  ];
+  ], [pinnedSessions, sessionGroups]);
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
@@ -501,6 +549,16 @@ export default function Chat({ initialSessionId }: ChatProps) {
 
   return (
     <main className="flex h-SVH-full min-h-0 w-full overflow-hidden bg-ai-chat text-white-black">
+      {ctrlTabSessionSwitchEnabled && (
+        <CtrlTabSessionSwitch
+          groups={displayedSessionGroups}
+          currentSessionId={currentSession?.id}
+          onSelect={selectSession}
+          router={router}
+          returnPath={returnPath}
+          editor={editor}
+        />
+      )}
       <aside
         className="relative hidden h-full shrink-0 flex-col border-r border-light-black-border-1 bg-modalBackground md:flex"
         style={{ width: clampFullScreenChatRailWidth(railWidthPx) }}

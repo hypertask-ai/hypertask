@@ -70,6 +70,7 @@ function fullScreenNewChat(chat) {
     "react/jsx-runtime": require("react/jsx-runtime"),
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/keys": {},
+    "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch": { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: "htpr-7763-ctrl-tab-session-switch" },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: "Composer" },
     "@/components/AI_CHAT/MessageList": { MessageList: "Messages" },
     "@/components/AI_CHAT/WelcomeScreen": { WelcomeScreen: "Welcome" },
