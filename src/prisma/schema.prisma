@@ -1192,6 +1192,8 @@ model Task {
   sectionChangedAt    DateTime        @default(now())
   lastCommentAt       DateTime?
   staleNudgedAt       DateTime?
+  blockerCommentId    Int?            @unique
+  blockerComment      Comment?        @relation("TaskBlockerComment", fields: [blockerCommentId], references: [id], onDelete: SetNull)
   waitingOnUserId     Int?
   waitingOnSetById    Int?
   waitingOnSetAt      DateTime?
@@ -1854,6 +1856,7 @@ model Follower {
 }
 
 model Comment {
+  blockerForTask Task?          @relation("TaskBlockerComment")
   kind          String?
   id            Int            @id @default(autoincrement())
   text          String

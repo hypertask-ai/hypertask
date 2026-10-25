@@ -188,6 +188,7 @@ export function createCommandDispatcher(context: Context) {
       case CommandMode.StarTask:
       case CommandMode.StarComment:
       case CommandMode.PinComment:
+      case CommandMode.BlockerComment:
       case CommandMode.ReplyToComment:
       case CommandMode.ReactToComment:
       case CommandMode.EditComment:
@@ -794,6 +795,9 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
         return;
       case CommandMode.PinComment:
         commentFunctionHandler("StarComment", "Public");
+        return;
+      case CommandMode.BlockerComment:
+        commentFunctionHandler("BlockerComment");
         return;
       case CommandMode.ReplyToComment:
         commentFunctionHandler("ReplyToComment");

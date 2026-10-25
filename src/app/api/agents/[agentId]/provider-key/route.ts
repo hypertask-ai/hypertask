@@ -12,7 +12,7 @@ import {
   upsertOwnedAgentProviderKey,
 } from "@/lib/agents/visibility";
 
-const UNSUPPORTED_AGENT_PROVIDERS = new Set<string>(["custom"]);
+const UNSUPPORTED_AGENT_PROVIDERS = new Set<string>(["custom", "baseten"]);
 
 function isAgentProviderKey(value: unknown): value is TByokProviderKey {
   return isByokProviderKey(value) && !UNSUPPORTED_AGENT_PROVIDERS.has(value);

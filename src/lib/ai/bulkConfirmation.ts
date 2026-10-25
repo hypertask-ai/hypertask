@@ -29,6 +29,7 @@ type RequireCrossMessageConfirmationInput = {
   operationKey: string;
   subjectKeys?: string[];
   confirmed?: boolean;
+  scopePreviewsThisRequest?: Map<string, { pending: number; changed: boolean }>;
   previewsIssuedThisRequest: Set<string>;
   getRedisClient?: () => Promise<BulkConfirmationRedis>;
 };
@@ -50,27 +51,46 @@ async function requireScopedConfirmation(
   operationKey: string,
   subjectKeys: string[],
   confirmed: boolean | undefined,
-  previewsIssuedThisRequest: Set<string>
+  previewsIssuedThisRequest: Set<string>,
+  scopePreviewsThisRequest: Map<string, { pending: number; changed: boolean }> | undefined
 ): Promise<"preview" | "proceed"> {
   const subjects = [...new Set(subjectKeys)];
   const preview = async () => {
     previewsIssuedThisRequest.add(operationKey);
-    if (subjects.length > 0) {
-      const results = await redis
-        .multi()
-        .sadd(scopeKey, ...subjects)
-        .expire(scopeKey, PREVIEW_TOKEN_TTL_SECONDS)
-        .exec();
-      const failed = !results || results.some(([error]) => error);
-      if (failed) {
-        await redis.del(scopeKey);
-        throw new Error("bulk confirmation scope was not stored with its expiry");
-      }
+    const state = scopePreviewsThisRequest
+      ? scopePreviewsThisRequest.get(operationKey) ?? { pending: 0, changed: false }
+      : undefined;
+    if (state) {
+      scopePreviewsThisRequest?.set(operationKey, state);
+      state.pending++;
     }
-    return "preview" as const;
+    try {
+      if (subjects.length > 0) {
+        const results = await redis
+          .multi()
+          .sadd(scopeKey, ...subjects)
+          .expire(scopeKey, PREVIEW_TOKEN_TTL_SECONDS)
+          .exec();
+        const failed = !results || results.some(([error]) => error);
+        if (failed) {
+          await redis.del(scopeKey);
+          throw new Error("bulk confirmation scope was not stored with its expiry");
+        }
+        if (state && Number(results[0][1]) > 0) state.changed = true;
+      }
+      return "preview" as const;
+    } catch (error) {
+      if (state) state.changed = true;
+      throw error;
+    } finally {
+      if (state) state.pending--;
+    }
   };
 
-  if (!confirmed || previewsIssuedThisRequest.has(operationKey) || subjects.length === 0) {
+  const state = scopePreviewsThisRequest?.get(operationKey);
+  const newPreviewThisRequest = previewsIssuedThisRequest.has(operationKey) &&
+    (!state || state.changed || state.pending > 0);
+  if (!confirmed || newPreviewThisRequest || subjects.length === 0) {
     return await preview();
   }
   const consumed = await redis.srem(scopeKey, ...subjects);
@@ -84,6 +104,7 @@ export async function requireCrossMessageConfirmation({
   operationKey,
   subjectKeys,
   confirmed,
+  scopePreviewsThisRequest,
   previewsIssuedThisRequest,
   getRedisClient = getRedis,
 }: RequireCrossMessageConfirmationInput): Promise<"preview" | "proceed"> {
@@ -99,7 +120,8 @@ export async function requireCrossMessageConfirmation({
         operationKey,
         subjectKeys,
         confirmed,
-        previewsIssuedThisRequest
+        previewsIssuedThisRequest,
+        scopePreviewsThisRequest
       );
     }
     if (previewsIssuedThisRequest.has(operationKey)) {

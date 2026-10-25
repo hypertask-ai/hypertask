@@ -2,6 +2,7 @@
 export { type AiChatProcessedAttachment } from "./aiChatShared";
 
 import { useEffect, useState } from "react";
+import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { useAiChatState } from "./useAiChatState";
 import { useAiChatSessions } from "./useAiChatSessions";
 import { createAiChatKeyboard } from "./aiChatKeyboard";
@@ -9,12 +10,14 @@ import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
+import { HTPR_7756_CHAT_OPENS_TASK_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 
 import { useRecoilState } from "@/lib/state";
 import { aiChatEditTaskIdAtom } from "@/store";
 
 export function useAiChat() {
+  const { navigateToTask } = useHypertasksNavigate();
+  const chatOpensTask = useFlag(HTPR_7756_CHAT_OPENS_TASK_FLAG);
   const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   let agentSidebarChatsEnabled = false;
   if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
@@ -33,7 +36,7 @@ export function useAiChat() {
   setIsSidebarMode, showMentionList, inViewObject, dockedChatScope, setDockedChatScope,
   pathname, isDetailPage, isFullScreenChat, surface, spansAllBoards,
   chatMounted, setChatMounted, minimized, setMinimized, isTyping,
-  setIsTyping, queuedMessages, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
+  setIsTyping, queuedMessages, persistentQueue, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
   setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption,
   streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, currentStreamingSession,
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
@@ -57,8 +60,8 @@ export function useAiChat() {
 
   const sessionContext = {
     agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
-    createSession, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
-    deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
+    createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
+    deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, taskId, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
     setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
@@ -82,7 +85,7 @@ export function useAiChat() {
   handleSendMessage,
   } = createAiChatSend({
     sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession,
-    isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
+    isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
     scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
@@ -92,6 +95,7 @@ export function useAiChat() {
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
     appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry,
+    navigateToTask: chatOpensTask ? navigateToTask : undefined,
   }, askAiFullscreenEnabled ? {
     preserveComposer: true,
     onSettled: () => setSendSettledVersion((version) => version + 1),

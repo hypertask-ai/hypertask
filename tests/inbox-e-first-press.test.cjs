@@ -170,6 +170,7 @@ function makeFlow(t, {
   }
   return { queryClient, archived, navigations, cachedOpens, toasts, context, activeElement, keyboard, pressE,
     archiveNotification: (...args) => useFocus().archiveNotificationGetter(...args),
+    navigateToNextTask: (...args) => useArchive().navigateToNextTask(...args),
     ...useNavigate(),
   };
 }
@@ -677,3 +678,35 @@ test("cached Inbox mount refresh prevents replaying the source URL", async t => 
   await getTask();
   assert.deepEqual(flow.navigations, [["Refresh"]], "native detail still refreshes normally");
 });
+
+for (const mobile of [false, true]) {
+  test(`visible inbox order advances through three blocked and two normal tickets on ${mobile ? "phone" : "desktop"}`, t => {
+    const { buildInboxTasksPlaylist } = load("src/lib/inbox/inboxTasksPlaylist.ts", {});
+    const rows = [3, 2, 1, 5, 4].map((uniqueIndex) => ({
+      id: String(uniqueIndex <= 3 ? -uniqueIndex : uniqueIndex),
+      projectId: 15,
+      type: "Comment",
+      waitingOnSynthetic: uniqueIndex <= 3,
+      createdAt: `2026-10-24T${String(20 - uniqueIndex).padStart(2, "0")}:00:00.000Z`,
+      task: { id: uniqueIndex, projectId: 15, uniqueIndex, waitingOnUserId: uniqueIndex <= 3 ? 2343 : null },
+    }));
+    const playlist = buildInboxTasksPlaylist(rows, false, {
+      oldestFirst: false,
+      snapshot: { now: "2026-10-24T20:00:00.000Z", display: { timeZone: "UTC" } },
+    });
+    const flow = makeFlow(t, { mobile, playlist, currentTask: rows[2].task });
+    for (const uniqueIndex of [1, 2, 3, 4, 5]) {
+      flow.context.currentTask = rows.find((row) => row.task.uniqueIndex === uniqueIndex).task;
+      flow.context.currentItemInTasksPlaylist = flow.context.currentTask;
+      assert.equal(flow.navigateToNextTask(false, true), "navigated");
+    }
+    assert.deepEqual(flow.navigations, [
+      ["Replace", "/detail/project-15/2?inboxFlow=true"],
+      ["Replace", "/detail/project-15/3?inboxFlow=true"],
+      ["Replace", "/detail/project-15/4?inboxFlow=true"],
+      ["Replace", "/detail/project-15/5?inboxFlow=true"],
+      ["Back"],
+    ]);
+    assert.deepEqual(flow.toasts, []);
+  });
+}

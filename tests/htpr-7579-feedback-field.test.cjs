@@ -43,7 +43,8 @@ function setup({ plain = true } = {}) {
       return comment
     } },
     '@/lib/realtime/server': { broadcastTaskChange: async () => {} },
-    '@/lib/mcp/inProcessClient': { createInProcessMcpClient: async () => ({ auth: { user: { id: 42 }, agentDisplayName: 'Fable' } }) },
+    '@/lib/mcp/directOperationClient': { createDirectOperationClient: () => ({}) },
+    '@/lib/mcp/operationContext': { getMcpExecutionContext: () => ({ user: { id: 42 }, agentDisplayName: 'Fable' }), withMcpExecutionContext: (t, a, fn) => fn() },
     '@/lib/aiFeedback/clientInfo': { getFeedbackClient: async () => undefined },
     '../config/tool-metadata': { TOOL_METADATA: { REPORT_FEEDBACK: { name: 'hypertask_report_feedback' } } },
     '../config/tool-annotations': { TOOL_ANNOTATIONS: { hypertask_report_feedback: {} } },

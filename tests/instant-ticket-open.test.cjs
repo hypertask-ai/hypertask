@@ -16,6 +16,7 @@ const mocks = {
   "@/store": { currentUserAtom: {} },
   "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
   "@/lib/flags/keys": {},
+  "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
   "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },

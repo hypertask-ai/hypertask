@@ -46,6 +46,7 @@ async function withHistory(config, check) {
   let resolver, history;
   const mapChanges = [];
   const useAiChatSessions = config.boardMap ? load('src/hooks/MultiPages/AIChat/useAiChatSessions.ts', {
+    '@/lib/flags/definitions/htpr-7762-chat-new-session-focus': { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: 'htpr-7762-chat-new-session-focus' },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/constants': { default: {} }, '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
     '@/components/Common/AttachmentsUpload/FileUploadHandler': { useFileUpload: () => ({}) },
@@ -220,8 +221,13 @@ test('OFF uses only legacy request/cache and demo never persists or negotiates',
   await withHistory({ demo: true }, async ({ history, requests }) => {
     assert.equal(history().isSuccess, true);
     assert.equal(history().sessions.length, 1);
+    const firstId = history().currentSession.id;
+    assert.match(firstId, /^demo-chat-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.equal(requests.length, 0);
     await React.act(async () => history().startNewSession());
+    assert.notEqual(history().currentSession.id, firstId);
+    assert.equal(history().currentSession.userId, 6);
+    assert.equal(history().sessions.length, 2);
     assert.equal(requests.length, 0);
   });
 });
@@ -431,6 +437,7 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
     './AgentSidebarChatCommands': { AgentSidebarChatCommands: () => null },
     '@/lib/configs/general.config': { MOBILE_TARGET: 'min-h-[44px] min-w-[44px]' },
     '@/utils/undoActions/helperFuncs': { cn: (...values) => values.filter(Boolean).join(' ') },
+    '@/lib/flags/definitions/htpr-7773-chat-header-name': { HTPR_7773_CHAT_HEADER_NAME_FLAG: 'htpr-7773-chat-header-name' },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
     '../Common/Tooltip': { __esModule: true, default: () => null },
@@ -1207,6 +1214,7 @@ test('chat orchestration passes the live ticket flag into resolution and send gu
   for (const enabled of [false, true]) for (const available of [false, true]) {
     let resolution, sending;
     const { useAiChat } = load('src/hooks/MultiPages/AIChat/useAiChat.ts', {
+      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
       '@/lib/state': { useRecoilState: () => [null, () => {}] },
       '@/store': {},
       '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },

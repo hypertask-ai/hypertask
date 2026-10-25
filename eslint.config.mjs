@@ -58,6 +58,7 @@ export default defineConfig([
       "src/app/qa/login/page.tsx",
       // Server component; gates ticket-number detail URL resolution.
       "src/app/detail/\\[...slug\\]/page.tsx",
+      "src/app/\\[...boardURL\\]/page.tsx",
       // HTPR-7278: server root layout; reads the memory-only tracking flag for PostHog.
       "src/app/layout.tsx",
     ],

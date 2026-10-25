@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { NextResponse } from "next/server";
@@ -70,6 +72,13 @@ export async function POST(request: Request) {
       { message: gate.message },
       { status: gate.status },
     );
+  }
+
+  if (
+    body.provider === "baseten" &&
+    !(await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, user.id))
+  ) {
+    return NextResponse.json({ message: "Baseten is unavailable" }, { status: 403 });
   }
 
   if (!(await isPaidTeam(teamId))) {

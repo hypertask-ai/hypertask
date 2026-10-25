@@ -179,6 +179,7 @@ for (const enabled of [false, true]) {
     test(`chat hook forwards ticket scope ${ticketScopeSelected} with flag ${enabled}`, () => {
       let sending;
       const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
+        "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
         react: { useState: () => [0, noop], useEffect: noop },
         "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
         "@/lib/state": { useRecoilState: () => [null, noop] },

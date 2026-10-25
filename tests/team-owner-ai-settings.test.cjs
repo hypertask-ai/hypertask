@@ -76,7 +76,7 @@ test("GDPR safe mode is enforced across provider and BYOK mutations", () => {
     /const snapshot = await withLockedTeamAiSettings/,
   );
   assert.match(aiModelsSectionSource, /settings-gdpr-safe-mode/);
-  assert.match(apiKeysSectionSource, /!gdprSafeMode \|\| !row\.chinaHosted/);
+  assert.match(apiKeysSectionSource, /!gdprSafeMode \|\| !isByokProviderRestrictedInGdprSafeMode\(row\.source\)/);
   assert.match(
     apiKeysSectionSource,
     /Custom endpoint operates under an EU\/US data agreement/,
