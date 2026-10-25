@@ -14,7 +14,7 @@ export async function generateTaskWriterDraft(
   abortSignal?: AbortSignal,
   teamScope?: AgentTokenTeamScope | null,
 ) {
-  const startedAt = performance.now();
+  const startedAt = Date.now();
   const {
     selected,
     instructions,
@@ -26,7 +26,7 @@ export async function generateTaskWriterDraft(
     customFieldDefinitions,
     boardLabelIds,
   } = await prepareTaskWriterRun(body, userId, agentId, teamScope);
-  const preparedAt = performance.now();
+  const preparedAt = Date.now();
 
   configureAiModelUsage(selected.model, {
     userId,
@@ -50,7 +50,7 @@ export async function generateTaskWriterDraft(
     ...(abortSignal ? { abortSignal } : {}),
   });
 
-  const generatedAt = performance.now();
+  const generatedAt = Date.now();
   const filtered = allowedImgSrcs
     ? filterOneImagePass(text, allowedImgSrcs).emit
     : text;
@@ -66,7 +66,7 @@ export async function generateTaskWriterDraft(
         })
       : { title: null, description: draftHtml };
 
-  const parsedAt = performance.now();
+  const parsedAt = Date.now();
   console.info(`[ai/task-writer] stages ${JSON.stringify({
     projectId: body.projectId,
     requestKind: body.requestKind,
