@@ -529,23 +529,30 @@ check_proof() {
 }
 
 is_done_section() {
-  local t=$1 title=$2 board sections
+  local t=$1 title=$2 board sections is_done
   title=${title//\"/}
   title=${title//\'/}
+  title=${title//\\/}
   [ "$title" = Done ] && return 0
   board=$(hypertask tasks get "$t" --json 2>/dev/null |
     jq -r '.tasks[0].boardId // .tasks[0].projectId // empty')
-  [ -n "$board" ] ||
-    fail "cannot read the board of $t to tell whether \"$title\" is its done column; retry when the board answers"
-  sections=$(hypertask section list --project "$board" --json 2>/dev/null) ||
-    fail "cannot read the columns of board $board for $t; retry when the board answers"
-  [ "$(jq -r --arg title "$title" '.sections[] | select(.section_title == $title) | .isDone' <<<"$sections")" = true ]
+  [ -n "$board" ] || return 3
+  sections=$(hypertask section list --project "$board" --json 2>/dev/null) || return 3
+  is_done=$(jq -r --arg title "$title" '
+    ([.sections[] | select(.section_title == $title)] | length) as $matches |
+    if $matches == 0 then "unknown" else ([.sections[] | select(.section_title == $title) | .isDone] | tostring) end
+  ' <<<"$sections")
+  [ "$is_done" != unknown ] || return 3
+  [ "$is_done" = true ]
 }
 
 check_done() {
-  local section; section=$(hypertask tasks get "$1" --json 2>/dev/null | jq -r '.tasks[0].section // empty')
-  [ -n "$section" ] && is_done_section "$1" "$section" ||
-    fail "$1 is in \"$section\", which is not the board's done column"
+  local section rc
+  section=$(hypertask tasks get "$1" --json 2>/dev/null | jq -r '.tasks[0].section // empty')
+  [ -n "$section" ] || fail "cannot read the section of $1"
+  is_done_section "$1" "$section"; rc=$?
+  [ "$rc" = 3 ] && fail "cannot match \"$section\" against the columns of the board holding $1; retry when the board answers"
+  [ "$rc" = 0 ] || fail "$1 is in \"$section\", which is not the board's done column"
   echo "done ok"
 }
 
@@ -620,7 +627,7 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false section_title
+  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false section_title done_section
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
   local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-} deploy=${SHIP_DEPLOY:-}
@@ -730,7 +737,9 @@ PY
       [[ $rest =~ $section_flag ]]; section_title=${BASH_REMATCH[2]}
       section_title=${section_title#\"}; section_title=${section_title%\"}
       section_title=${section_title#\'}; section_title=${section_title%\'}
-      if is_done_section "$t" "$section_title"; then
+      is_done_section "$t" "$section_title"; done_section=$?
+      [ "$done_section" = 3 ] && { echo "ship-check blocked moving $t to \"$section_title\": cannot match it against the columns of the ticket's board; retry when the board answers, or name the column exactly as the board shows it." >&2; exit 2; }
+      if [ "$done_section" = 0 ]; then
         checks="merged deployed docs"; [[ $t == HTPR-* ]] && checks="merged deployed proof docs"
         for c in $checks; do
           if [ "$c" = docs ]; then
