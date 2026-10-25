@@ -166,10 +166,11 @@ export function selectMcpTools(
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
-        if (pageAlias && args.page !== undefined && ((args.offset ?? 0) !== 0 || Number(input.offset ?? 0) !== 0)) {
+        const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined
+        if (requestedPage !== undefined && (args.offset !== 0 || Number(input.offset ?? 0) !== 0)) {
           throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or offset, not both.' }])
         }
-        if (pageAlias && args.page !== undefined && input.cursor !== undefined) {
+        if (requestedPage !== undefined && input.cursor !== undefined) {
           throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or cursor, not both.' }])
         }
         const cursorPaginated = supportsCursor && Boolean(input.cursor)
@@ -183,7 +184,7 @@ export function selectMcpTools(
             maximum = limitSchema.maximum ?? 50
             readLimit = Math.min(requestedLimit, args.limit, maximum)
           }
-          const offset = cursorPaginated ? 0 : pageAlias && args.page !== undefined ? (args.page - 1) * readLimit : Number(input.offset ?? args.offset)
+          const offset = cursorPaginated ? 0 : requestedPage !== undefined ? (requestedPage - 1) * readLimit : Number(input.offset ?? args.offset)
           if (maximum !== undefined) {
             const prefix = supportsOffset || cursorPaginated ? 0 : offset
             const lookahead = !supportsOffset && !supportsCursor ? 1 : 0
