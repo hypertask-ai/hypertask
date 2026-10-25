@@ -108,7 +108,7 @@ export function buildByokTestRequest(
       apiKey,
       haiku55Enabled
         ? { id: "anthropic/claude-haiku-5.5", label: "Haiku 5.5" }
-        : { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
+        : { id: "openai/gpt-6-luna", label: "GPT Luna 6" }
     );
   }
 
@@ -118,7 +118,7 @@ export function buildByokTestRequest(
       apiKey,
       haiku55Enabled
         ? { id: "anthropic/claude-haiku-5.5", label: "Haiku 5.5" }
-        : { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
+        : { id: "openai/gpt-6-luna", label: "GPT Luna 6" }
     );
   }
 
