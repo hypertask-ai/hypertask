@@ -48,8 +48,6 @@ function harness() {
     notification: { findMany: async () => [] },
   };
   const mocks = {
-    axios: { default: {} },
-    "@/utils/api/fcmConfig": { default: {} },
     "@prisma/client": { Status: { Deleted: "Deleted" } },
     "@/lib/prisma": { default: db },
     "@/lib/auth/agentScope": { agentScopeEnforced: () => true },
