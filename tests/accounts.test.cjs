@@ -234,7 +234,7 @@ test("all-account sign-out uses server browser revocation and invalidates auth s
   assert.deepEqual(calls, ["server", "$sessionSignal"]);
 });
 
-test("both generic sign-out surfaces use the multi-account confirmation", () => {
+test("generic sign-out surfaces keep the browser-wide action and gate the new copy", () => {
   const commandSource = fs.readFileSync(
     path.join(__dirname, "../src/components/commands.tsx"),
     "utf8",
@@ -258,6 +258,9 @@ test("both generic sign-out surfaces use the multi-account confirmation", () => 
   assert.match(sidebarSource, /<SignOutModal/);
   assert.match(modalSource, /Sign out of all accounts/);
   assert.match(modalSource, /signOutCurrentAccount/);
-  assert.doesNotMatch(modalSource, /You’ll switch to/);
+  assert.match(
+    modalSource,
+    /projectEntryEnabled[\s\S]*?Sign out of every account on this browser\?[\s\S]*?!projectEntryEnabled && nextAccount[\s\S]*?Sign out of all accounts/,
+  );
   assert.match(modalSource, /projectEntryEnabled \? handleAllSignOut\(\) : handleCurrentSignOut\(\)/);
 });
