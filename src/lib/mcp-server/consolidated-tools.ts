@@ -140,6 +140,7 @@ export function selectMcpTools(
   boardAlias = false,
   topLevelInputFields = false,
   inputWrapperFields = false,
+  ticketNumberShapeHint = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -225,6 +226,7 @@ export function selectMcpTools(
       ...(topLevelInputFields || inputWrapperFields ? {
         normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, pageAlias }),
       } : {}),
+      ...(ticketNumberShapeHint ? { errorHints: { ticketNumberShape: true } } : {}),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
         const rawArgs = (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
         const args = parameters.parse(raw)
