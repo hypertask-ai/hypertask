@@ -411,9 +411,21 @@ export default function Chat({ initialSessionId }: ChatProps) {
 
     sessionsBeforeNewSession.current = null;
     const path = buildFullScreenChatPath(returnPath, newSession.id);
-    if (newSessionFocusEnabled) window.history.replaceState(null, "", path);
-    else router.replace(path);
-  }, [activeSession, newSessionFocusEnabled, returnPath, router, sessions]);
+    if (!newSessionFocusEnabled) {
+      router.replace(path);
+      return;
+    }
+    window.history.replaceState(null, "", path);
+    const focusComposer = () => { try { editor?.view.dom.focus(); } catch {} };
+    const frame = requestAnimationFrame(focusComposer);
+    const timer = setTimeout(() => {
+      if (!(editor?.view.hasFocus?.() ?? false)) focusComposer();
+    }, 120);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [activeSession, editor, newSessionFocusEnabled, returnPath, router, sessions]);
 
   useEffect(() => {
     if (fullScreenChatScopeState !== fullScreenChatScope) {
