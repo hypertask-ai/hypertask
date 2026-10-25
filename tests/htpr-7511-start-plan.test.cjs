@@ -410,3 +410,17 @@ for (const selection of ["none", "different team"]) {
     }, backend);
   });
 }
+
+for (const trialDays of [7, 14]) {
+  test(`Start plan shows the real ${trialDays}-day preview and sends matching terms to Stripe`, async () => {
+    const backend = harness(); backend.fourteenDayTrial = trialDays === 14;
+    await withButton(async ({ state, render, container, getQuery, click, pushes }) => {
+      await render(); state.data = await getQuery().queryFn(); await render();
+      assert.equal(state.data.trialDays, trialDays);
+      assert.ok(container.textContent.includes(`$20 per user/month after ${trialDays} days`));
+      await click();
+      assert.equal(backend.calls[0].payload.subscription_data.trial_period_days, trialDays);
+      assert.deepEqual(pushes, ["https://checkout.stripe.test/cs_1"]);
+    }, backend);
+  });
+}
