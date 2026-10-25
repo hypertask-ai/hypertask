@@ -133,6 +133,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }
 
     const sidebarHeaders = sidebarChatHeaders(session.id);
+    const acceptedFiles = preserveComposer || queuedMessage ? [] : [...fileUpload.fileItems];
     const processedAttachments = queuedMessage?.attachments ?? (preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
       fileUpload.fileItems
@@ -298,7 +299,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             addMessageToSessionQuery(session.id, userMessage, false, false, scopedProjectId);
           }
           queueAccepted = true;
-          if (ownsSend() && !preserveComposer && !queuedMessage) fileUpload.clearFiles();
+          if (acceptedFiles.length > 0) {
+            fileUpload.setFileItems((currentFiles) => currentFiles.filter((file) => !acceptedFiles.includes(file)));
+          } else if (ownsSend() && !preserveComposer && !queuedMessage) {
+            fileUpload.clearFiles();
+          }
 
           if (!assistantPlaceholderAdded) {
             const initialAssistantMessage: IChatMessage = {

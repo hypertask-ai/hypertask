@@ -197,7 +197,11 @@ function client(t, { enabled = true, cancelStatus = 200, cancelResult = { succes
     stopClosesStream: enabled, connectionRetry: true,
     isByokBlocked: false, isTyping: false,
     editor: { getHTML: () => "<p>Hello</p>", getText: () => "Hello", commands: { clearContent() {} } },
-    fileUpload: { fileItems: [], clearFiles() {} },
+    fileUpload: {
+      fileItems: [],
+      clearFiles() { this.fileItems = []; },
+      setFileItems(update) { this.fileItems = update(this.fileItems); },
+    },
     messageQueueRef: { current: [] }, setQueuedMessages() {}, sendInFlightRef: { current: false }, settleSendRef: { current: null },
     surface: "chat", inViewObject: {}, waitForChatSession: async () => ({ id: "session", messages: [] }),
     currentProject: { id: 1 }, processAttachments: async () => [],
@@ -263,8 +267,8 @@ function client(t, { enabled = true, cancelStatus = 200, cancelResult = { succes
       sessions.drainQueuedMessage();
     };
   }
-  const send = () => createAiChatSend(context, {
-    preserveComposer: true,
+  const send = ({ preserveComposer = true } = {}) => createAiChatSend(context, {
+    preserveComposer,
     onSettled: () => { handoffs += 1; },
   }).handleSendMessage();
   const stop = () => useAiChatAttachments(context).handleCancelStream();
@@ -389,6 +393,22 @@ test("graceful Stop before the first word shows cancellation text", { timeout: 2
   h.releaseResponse(0);
   assert.equal(await first, true);
   assert.equal(h.messages.get(h.requests[0].assistant_message_id).content, "Stream cancelled.");
+});
+
+test("Stop before response headers drops the sent files and keeps a newer draft file", { timeout: 2000 }, async (t) => {
+  const h = client(t, { delayResponse: true });
+  const sent = { name: "invoice.pdf" };
+  const newer = { name: "draft.png" };
+  h.context.fileUpload.fileItems = [sent];
+  const first = h.send({ preserveComposer: false });
+  await h.waitForRequest(0);
+  await h.stop();
+  h.context.fileUpload.fileItems = [sent, newer];
+  h.releaseResponse(0);
+  await h.waitForReader(0);
+  h.done(0);
+  assert.equal(await first, true);
+  assert.deepEqual(h.context.fileUpload.fileItems, [newer]);
 });
 
 test("late content and done update only their own reply without clearing the newer send status", { timeout: 2000 }, async (t) => {
