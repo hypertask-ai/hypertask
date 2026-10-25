@@ -34,7 +34,7 @@ function canCall(action: Action, caller: ToolCaller): boolean {
   return !permissions || hasDataPermission(permissions)
 }
 
-function inputSchema(tool: PortableTool, action: Action): Record<string, unknown> {
+function inputSchema(tool: PortableTool, action: Action, boardAlias = false): Record<string, unknown> {
   const schema = z.toJSONSchema(tool.parameters, { target: 'draft-7', unrepresentable: 'any', io: 'input' }) as Record<string, unknown>
   delete schema.$schema
   const properties = schema.properties as Record<string, unknown>
@@ -55,6 +55,14 @@ function inputSchema(tool: PortableTool, action: Action): Record<string, unknown
     }
   }
   document(schema)
+  const inputProperties = schema.properties as Record<string, unknown>
+  if (boardAlias && inputProperties.project_id) {
+    inputProperties.board_id = { ...(inputProperties.project_id as Record<string, unknown>), description: 'Alias for project_id.' }
+    if (Array.isArray(schema.required) && schema.required.includes('project_id')) {
+      schema.required = schema.required.filter((key) => key !== 'project_id')
+      schema.anyOf = [{ required: ['project_id'] }, { required: ['board_id'] }]
+    }
+  }
   return schema
 }
 
@@ -144,16 +152,16 @@ export function selectMcpTools(
         input: {
           type: 'object',
           description: `${properties.input.description} Fields depend on action; use the variant whose title is the action.`,
-          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name]) })),
+          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name], boardAliasEnabled) })),
         },
       },
     } : {
       ...baseSchema,
       oneOf: names.map((name) => {
-        const input = inputSchema(byName.get(actions[name].tool)!, actions[name])
+        const input = inputSchema(byName.get(actions[name].tool)!, actions[name], boardAliasEnabled)
         return {
           properties: { action: { const: name }, input },
-          required: Array.isArray(input.required) && input.required.length ? ['action', 'input'] : ['action'],
+          required: (Array.isArray(input.required) && input.required.length) || input.anyOf ? ['action', 'input'] : ['action'],
         }
       }),
     }

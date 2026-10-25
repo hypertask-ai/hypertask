@@ -1,7 +1,11 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { z } = require('zod')
+const Ajv = require('ajv')
 const { load } = require('./task-route-loader.cjs')
+
+const ajv = new Ajv({ strict: false })
+require('ajv-formats')(ajv)
 
 const stubs = {}
 const tasks = load('src/lib/mcp-server/validations/task.validation.ts', stubs)
@@ -17,8 +21,14 @@ const variants = [
   ['add', 'hypertask_add_comment_to_task', comments.getAddCommentCrudBaseSchema(), { unique_index: 7893, text: 'Comment' }],
 ]
 
+const publishedVariants = [
+  ...variants,
+  ['context', 'hypertask_task_context', tasks.getTaskContextInputSchema(), { task_id: 42 }],
+  ['next', 'hypertask_next_tasks', tasks.getNextTasksInputSchema(), {}],
+]
+
 function harness(flatSchema = false, boardAlias = true) {
-  const tools = selectMcpTools(variants.map(([, name, parameters]) => ({
+  const tools = selectMcpTools(publishedVariants.map(([, name, parameters]) => ({
     name, parameters, description: name,
     execute: async (args) => JSON.stringify({ success: true, args }),
   })), true, {}, true, flatSchema, false, boardAlias)
@@ -40,6 +50,61 @@ for (const flatSchema of [false, true]) {
       assert.deepEqual(matching, result)
     })
   }
+}
+
+for (const flatSchema of [false, true]) {
+  for (const [action, , , fields] of publishedVariants) {
+    test(`${action}, flat=${flatSchema}: published schemas accept board_id only with the flag On and keep other fields strict`, () => {
+      for (const boardAlias of [false, true]) {
+        const schema = harness(flatSchema, boardAlias)(action).inputSchema
+        const validate = ajv.compile(schema)
+        const inputSchema = flatSchema
+          ? schema.properties.input.anyOf.find((variant) => variant.title === action)
+          : schema.oneOf.find((variant) => variant.properties.action.const === action).properties.input
+        const validateInput = ajv.compile(inputSchema)
+        const canonical = { ...fields, project_id: 15 }
+        const alias = { ...fields, board_id: 15 }
+        assert.equal(validate({ action, input: canonical }), true, JSON.stringify(validate.errors))
+        assert.equal(validateInput(canonical), true, JSON.stringify(validateInput.errors))
+        assert.equal(validate({ action, input: alias }), boardAlias, JSON.stringify(validate.errors))
+        assert.equal(validateInput(alias), boardAlias, JSON.stringify(validateInput.errors))
+        assert.equal(validate({ action, input: { ...canonical, board_id: 15 } }), boardAlias)
+        assert.equal(validate({ action, input: { ...alias, board_ids: [15] } }), false)
+        assert.equal(validateInput({ ...canonical, board_ids: [15] }), false)
+        assert.equal(validate({ action, input: canonical, board_ids: [15] }), false)
+        assert.equal(inputSchema.additionalProperties, false)
+        if (!boardAlias) {
+          assert.doesNotMatch(JSON.stringify(schema), /board_id/)
+          continue
+        }
+        const offSchema = harness(flatSchema, false)(action).inputSchema
+        const offInput = flatSchema
+          ? offSchema.properties.input.anyOf.find((variant) => variant.title === action)
+          : offSchema.oneOf.find((variant) => variant.properties.action.const === action).properties.input
+        assert.deepEqual(inputSchema.required, offInput.required?.filter((key) => key !== 'project_id'))
+        for (const key of offInput.required ?? []) {
+          const missing = { ...alias }
+          delete missing[key]
+          if (key === 'project_id') delete missing.board_id
+          assert.equal(validateInput(missing), false, `${action} still requires ${key}`)
+        }
+        if (offInput.required?.includes('project_id') && !flatSchema) {
+          assert.equal(validate({ action }), false)
+        }
+      }
+    })
+  }
+
+  test(`flat=${flatSchema}: actions without project_id have identical published schemas in both flag states`, () => {
+    const schemas = [false, true].map((boardAlias) => selectMcpTools([{
+      name: 'hypertask_get_task_tree', parameters: tasks.getGetTaskTreeInputSchema(), description: 'Task tree',
+      execute: async () => '{}',
+    }], true, {}, true, flatSchema, false, boardAlias).find((tool) => tool.name === 'hypertask_tasks').inputSchema)
+    assert.equal(JSON.stringify(schemas[1]), JSON.stringify(schemas[0]))
+    const validate = ajv.compile(schemas[1])
+    assert.equal(validate({ action: 'tree', input: { task_id: 42 } }), true)
+    assert.equal(validate({ action: 'tree', input: { task_id: 42, board_id: 15 } }), false)
+  })
 }
 
 test('get keeps the project_id + unique_index requirement and single identification method', async () => {
