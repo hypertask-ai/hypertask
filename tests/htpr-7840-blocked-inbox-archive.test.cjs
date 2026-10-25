@@ -213,7 +213,7 @@ test("undo after a real archive brings the blocked row back once", async () => {
   assert.deepEqual((await f.reload()).json.notifications, []);
   assert.equal((await f.archive({ id: "701", intent: undefined })).status, 200);
   assert.deepEqual(f.rows.filter((row) => row.message === "htpr-7840-blocked-inbox-dismissal"), []);
-  assert.deepEqual((await f.reload()).json.notifications.map((row) => row.id).sort(), [-42, 701].sort());
+  assert.deepEqual((await f.reload()).json.notifications.map((row) => row.id).sort(), ["-42", 701].sort());
 });
 
 test("undoing a later real archive keeps the dismissal marker archived and the blocked row out", async () => {
