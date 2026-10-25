@@ -840,7 +840,7 @@ test("task writer option ids map to provider options and legacy model strings fa
       byokProviderFlags: [],
       teamContext: { teamId: "team_pro", settings: {} },
     });
-    assert.notEqual(flagOff.modelId, getAiModelOptionById(modelKey).model);
+    assert.notEqual(flagOff.modelId, modelKey === "grok-4.7" ? "spacexai/grok-4.7" : "google/gemini-4-argon");
   }
   stubModule("src/lib/flags.ts", {
     isFeatureEnabled: async (key) => key === "htpr-7939-grok-gemini4-models",
