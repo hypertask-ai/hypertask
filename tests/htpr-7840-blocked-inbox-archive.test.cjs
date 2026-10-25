@@ -38,6 +38,13 @@ function fixture({ flagOn = true, rows = [], tasks = [blockedTask], accessible =
       writes.push({ where, data });
       return { count: selected.length };
     },
+    delete: async ({ where }) => {
+      const index = rows.findIndex(row => matches(row, where));
+      assert.notEqual(index, -1);
+      const [row] = rows.splice(index, 1);
+      writes.push({ where, deleted: true });
+      return row;
+    },
     create: async ({ data }) => {
       const row = { id: rows.length + 700, agentId: null, createdAt: new Date(), task: blockedTask, project, fromUserId: null, ...data };
       rows.push(row);
@@ -119,12 +126,40 @@ test("a still-blocked unarchived ticket keeps its marker data and split/playlist
   assert.deepEqual(buildInboxTasksPlaylist(notifications, false).map(task => task.uniqueIndex), [7002, 7003]);
 });
 
-test("Undo restores the blocked Inbox entry without changing the blocker", async () => {
+test("Undo deletes a synthetic dismissal marker and restores the exact original Inbox notification set", async () => {
   const f = fixture();
+  const original = structuredClone((await f.reload()).json.notifications);
+  assert.deepEqual(original.map(row => row.id), ["-42"]);
+  assert.deepEqual(f.rows, []);
   await f.archive();
+  assert.equal(f.rows.length, 1);
+  assert.deepEqual((await f.reload()).json.notifications, []);
+  const response = await f.archive({ intent: undefined });
+  assert.equal(response.status, 200);
+  const { notificationResponseSchema } = load("src/lib/api/contracts/notificationWrites.ts", {});
+  assert.equal(notificationResponseSchema.safeParse(await response.json()).success, true);
+  assert.deepEqual((await f.reload()).json.notifications, original);
+  assert.deepEqual(f.rows, []);
+  assert.equal(blockedTask.waitingOnUserId, userId);
+  assert.equal(blockedTask.waitingOnSetAt, since);
+});
+
+test("Undo restores only pre-existing active notifications, including a real TaskReminder", async () => {
+  const f = fixture({ rows: [
+    ...["TaskReminder", "Comment"].map((type, index) => ({
+      id: 701 + index, taskId: 42, userId, projectId: 15, agentId: null, type, seen: false,
+      status: "Normal", archivedAt: null, createdAt: since, task: blockedTask, project, fromUserId: null,
+    })),
+    { id: 600, taskId: 42, userId, agentId: null, type: "TaskReminder", status: "Archive", archivedAt: new Date(since.getTime() - 1) },
+  ] });
+  const originalRows = structuredClone(f.rows);
+  const original = structuredClone((await f.reload()).json.notifications);
+  assert.equal(original.length, 3);
+  await f.archive();
+  assert.deepEqual((await f.reload()).json.notifications, []);
   assert.equal((await f.archive({ intent: undefined })).status, 200);
-  assert.equal(f.rows[0].status, "Normal");
-  assert.equal((await f.reload()).json.notifications.some(row => row.id === "-42"), true);
+  assert.deepEqual(f.rows, originalRows);
+  assert.deepEqual((await f.reload()).json.notifications, original);
 });
 
 for (const options of [{ accessible: false }, { tasks: [{ ...blockedTask, waitingOnUserId: 985 }] }]) {

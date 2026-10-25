@@ -58,6 +58,9 @@ const route = taskWriteRoute({
           orderBy: { archivedAt: "desc" },
         });
         if (intent !== "archive" && archived) {
+          if (archived.type === "TaskReminder" && archived.message === "htpr-7840-blocked-inbox-dismissal") {
+            return tx.notification.delete({ where: { id: archived.id } });
+          }
           await tx.notification.updateMany({
             where: { taskId: task.id, userId, agentId: null, status: "Archive", archivedAt: archived.archivedAt },
             data: { status: "Normal", archivedAt: null },
@@ -78,6 +81,7 @@ const route = taskWriteRoute({
           data: {
             taskId: task.id, projectId: task.projectId, userId,
             type: "TaskReminder", status: "Archive", archivedAt: timeNow, seen: true,
+            message: "htpr-7840-blocked-inbox-dismissal",
           },
         });
       });
