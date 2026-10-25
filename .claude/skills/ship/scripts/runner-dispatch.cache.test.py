@@ -45,7 +45,7 @@ class CacheTests(unittest.TestCase):
                     "updatedAt": "v1", "commentCount": 1}],
         }
         self.comments = {"HTPR-1": [comment()], "HTPR-2": [], "YPER4-1": [comment()]}
-        self.rows = []
+        self.rows = [{"runner": "HAX ht-hax-runner-13", "pane": "%13", "state": "busy"}]
         self.calls = []
         self.replies = {}
         self.load = 1
@@ -120,6 +120,49 @@ class CacheTests(unittest.TestCase):
 
     def fetched(self):
         return [c[3] for c in self.calls if c[:3] == ("hypertask", "comment", "list")]
+
+    def test_zero_panes_warns_each_tick_and_queues_once_per_hour(self):
+        self.rows = []
+        self.now += 3590
+        self.run_dispatch()
+        self.assertIn("runner-dispatch: 0 runner panes found", self.stderr.getvalue())
+        inbox = self.state / "runner-inbox/infra-manager.events.jsonl"
+        event = json.loads(inbox.read_text())
+        self.assertEqual(event["id"], "runner-zero:500000")
+        self.assertEqual(event["text"], "runner-dispatch: 0 runner panes found")
+        self.now += 60
+        self.run_dispatch()
+        self.assertIn("runner-dispatch: 0 runner panes found", self.stderr.getvalue())
+        self.assertEqual(len(inbox.read_text().splitlines()), 1)
+        self.now += 3600
+        self.run_dispatch()
+        self.assertEqual(len(inbox.read_text().splitlines()), 2)
+
+    def test_zero_alarm_skips_load_pause_and_dry_run(self):
+        self.rows = []
+        inbox = self.state / "runner-inbox/infra-manager.events.jsonl"
+        self.load = 13
+        self.run_dispatch()
+        self.assertNotIn("0 runner panes found", self.stderr.getvalue())
+        self.assertFalse(inbox.exists())
+        self.load = 1
+        reserve = self.state / "token-ladder/reserve.json"
+        reserve.parent.mkdir()
+        reserve.write_text('{"runners_paused":true}')
+        self.run_dispatch()
+        self.assertNotIn("0 runner panes found", self.stderr.getvalue())
+        self.assertFalse(inbox.exists())
+        reserve.write_text('{"runners_paused":false}')
+        self.run_dispatch(go=False)
+        self.assertIn("0 runner panes found", self.stderr.getvalue())
+        self.assertFalse(inbox.exists())
+
+    def test_hax_pane_prevents_alarm_and_never_receives_commands(self):
+        self.rows = [{"runner": "HAX ht-hax-runner-13", "pane": "%13", "state": "busy"}]
+        self.run_dispatch()
+        self.assertNotIn("0 runner panes found", self.stderr.getvalue())
+        self.assertFalse((self.state / "runner-inbox/infra-manager.events.jsonl").exists())
+        self.assertTrue(all(c[0] == "hypertask" for c in self.calls))
 
     def test_warm_unchanged_only_task_lists(self):
         self.run_dispatch()

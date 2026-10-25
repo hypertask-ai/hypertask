@@ -85,7 +85,20 @@ def snapshot_script():
 
 
 def snapshots():
-    return [json.loads(line) for line in command(str(snapshot_script())).splitlines() if line.strip()]
+    rows = [json.loads(line) for line in command(str(snapshot_script())).splitlines() if line.strip()]
+    try:
+        panes = command("tmux", "list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{pane_title}")
+    except RuntimeError as error:
+        if not any(message in str(error) for message in ("no server running", "(No such file or directory)")):
+            raise
+        panes = ""
+    by_pane = {row["pane"]: row for row in rows}
+    for line in panes.splitlines():
+        pane, session, title = line.split("\t", 2)
+        if (re.match(r"^(hax-pool-|(?:ht-)?hax-runner-|tl-.*-hax(?:$|-))", session)
+                or re.fullmatch(r"RUNNER [1-9][0-9]* hax", title)):
+            by_pane[pane] = {"runner": f"HAX {session}", "pane": pane, "state": "busy"}
+    return list(by_pane.values())
 
 
 def read_boards(reads=None):
@@ -357,19 +370,19 @@ def current_checkpoint(ticket, runner, comments, since):
                  or bool(re.search(r"(?:^|\s)/[\w./-]+|\b[A-Z][A-Z0-9]*-\d+\b", fields["outputs"]))))
 
 
-def queue_clear_alarm(state, runner, text, now):
-    # Reuse runner-deliver's exact inbox, lock, dedupe and hook-consumed event schema.
+def queue_clear_alarm(state, runner, text, now, *, key=None, every=ALARM_EVERY):
     inbox = state / "runner-inbox"
     inbox.mkdir(parents=True, exist_ok=True)
-    ident = f"runner-clear:{runner}:{int(now // ALARM_EVERY)}"
+    key = key or f"runner-clear:{runner}"
+    ident = f"{key}:{int(now // every)}"
     path = inbox / "infra-manager.events.jsonl"
     with (inbox / "infra-manager.events.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         raw = path.read_text() if path.exists() else ""
         for line in raw.splitlines():
             event = json.loads(line)
-            if (event.get("id", "").startswith(f"runner-clear:{runner}:")
-                    and type(event.get("ts")) in (int, float) and now - event["ts"] < ALARM_EVERY):
+            if (event.get("id", "").startswith(f"{key}:")
+                    and type(event.get("ts")) in (int, float) and now - event["ts"] < every):
                 return False
         temporary = path.with_name(f"{path.name}.tmp.{os.getpid()}")
         try:
@@ -681,6 +694,14 @@ def run(go, *, cache_path, claim_dir=CLAIMS, loop=LOOP, state=STATE):
             full_refresh = True
         full_refresh = full_refresh or (go and (cache["runs"] + 1) % 12 == 0)
         rows = snapshots()
+        if not rows:
+            reserve_path = state / "token-ladder/reserve.json"
+            reserve = json.loads(reserve_path.read_text()) if reserve_path.exists() else {}
+            if reserve.get("runners_paused") is not True:
+                text = "runner-dispatch: 0 runner panes found"
+                print(text, file=sys.stderr)
+                if go:
+                    queue_clear_alarm(state, "", text, time.time(), key="runner-zero", every=3600)
         if go:
             for row in rows:
                 maintain_runner(row, [], {}, time.time(), loop=loop, state=state, allow_clear=False)
