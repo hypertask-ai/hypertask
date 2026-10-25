@@ -21,10 +21,12 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7575_PHONE_CHAT_DELETE_FLAG } from "@/lib/flags/definitions/htpr-7575-phone-chat-delete";
 import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-7773-chat-header-name";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -68,17 +70,19 @@ function ChatSessionRow({
   chat,
   isActive,
   onSelect,
+  children,
 }: {
   chat: HistorySession;
   isActive: boolean;
   onSelect: () => void;
+  children?: ReactNode;
 }) {
   return (
-    <li>
+    <li className={children ? "flex items-center" : undefined}>
       <button
         type="button"
         onClick={onSelect}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
+        className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors", children && "min-w-0 flex-1")}
       >
         <span className="min-w-0 flex-1 truncate font-normal">
           {chat.title}
@@ -92,6 +96,7 @@ function ChatSessionRow({
           />
         )}
       </button>
+      {children}
     </li>
   );
 }
@@ -114,6 +119,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   const router = useRouter();
   const pathname = usePathname();
   const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
   const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
   const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
@@ -221,8 +227,44 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     }
   };
 
-  const renderSessionMenu = (alignmentClass: string) =>
-    isDropdownOpen ? (
+  const handleDeleteSession = (sessionId: string) => {
+    if (window.confirm("Delete this chat?")) {
+      void deleteSession(sessionId);
+    }
+  };
+
+  const renderSessionMenu = (alignmentClass: string) => {
+    if (!isDropdownOpen) return null;
+    const sessionRows = (chats: HistorySession[]) => {
+      const rows: ReactNode[] = [];
+      for (const chat of chats) {
+        rows.push(
+          <ChatSessionRow
+            key={chat.id}
+            chat={chat}
+            isActive={chat.id === resolvedSessionId}
+            onSelect={() => {
+              setIsDropdownOpen(false);
+              sidebarChats?.onSelect({ kind: "ai" });
+              selectSession(chat.id);
+            }}
+          >
+            {phoneChatDelete && isMbl && (
+              <button
+                type="button"
+                aria-label="Delete chat"
+                onClick={() => handleDeleteSession(chat.id)}
+                className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
+              >
+                <Trash2 size={16} strokeWidth={1.75} />
+              </button>
+            )}
+          </ChatSessionRow>
+        );
+      }
+      return rows;
+    };
+    return (
       <div
         id="ai-chat-session-history"
         className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-[1200] ${alignmentClass}`}
@@ -244,18 +286,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               Previous 7 days
             </div>
             <ul className="pb-1">
-              {previous7Days.map((chat: HistorySession) => (
-                <ChatSessionRow
-                  key={chat.id}
-                  chat={chat}
-                  isActive={chat.id === resolvedSessionId}
-                  onSelect={() => {
-                    setIsDropdownOpen(false);
-                    sidebarChats?.onSelect({ kind: "ai" });
-                    selectSession(chat.id);
-                  }}
-                />
-              ))}
+              {sessionRows(previous7Days)}
             </ul>
           </div>
         )}
@@ -268,24 +299,14 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               Older
             </div>
             <ul>
-              {older.map((chat: HistorySession) => (
-                <ChatSessionRow
-                  key={chat.id}
-                  chat={chat}
-                  isActive={chat.id === resolvedSessionId}
-                  onSelect={() => {
-                    setIsDropdownOpen(false);
-                    sidebarChats?.onSelect({ kind: "ai" });
-                    selectSession(chat.id);
-                  }}
-                />
-              ))}
+              {sessionRows(older)}
             </ul>
           </div>
         )}
         {sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
-    ) : null;
+    );
+  };
 
   const historyButton = (
     <button type="button" onMouseDown={sidebarChats ? (event) => event.stopPropagation() : undefined}
