@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { PortableTool } from './stateless-http'
+import { describeFieldSuggestions } from './fieldSuggestion'
 
 export const CONSOLIDATED_OUTPUT_SCHEMA = {
   type: 'object',
@@ -45,7 +46,9 @@ export function actionableToolError(error: unknown): string {
         return 'project_id is required when unique_index is given; pass the project id or use ticket_number.'
       }
       if (issue.code === 'unrecognized_keys') {
-        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.`
+        const suggestions = (issue as { suggestions?: Record<string, string> }).suggestions
+        const hint = suggestions ? describeFieldSuggestions(suggestions) : ''
+        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${hint ? ` ${hint}` : ''}`
       }
       return `Change ${field}: ${issue.message.replace(/[.!]$/, '')}. Pass a value matching this action's input schema.`
     }).join(' ')

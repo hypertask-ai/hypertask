@@ -4,6 +4,7 @@ import parameterDocs from './config/descriptions/parameters.json'
 import { hasDataPermission, hasManagementReadPermission, hasManagementWritePermission, type ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { PortableTool } from './stateless-http'
 import { CONSOLIDATED_OUTPUT_SCHEMA, formatToolResponse } from './tool-response'
+import { suggestKnownFields } from './fieldSuggestion'
 import { createMetaTools } from './deferred-tools'
 import { annotationsForActions } from './config/tool-annotations'
 import type { AgentRole } from '@/lib/mcp/agents/scopes'
@@ -82,6 +83,7 @@ export function selectMcpTools(
   flatSchema = false,
   pageAlias = false,
   taskNumberAlias = false,
+  unknownFieldHint = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -173,7 +175,13 @@ export function selectMcpTools(
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
-        const inputIssues = (error: z.ZodError) => new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] })))
+        const inputIssues = (error: z.ZodError) => new z.ZodError(error.issues.map((issue) => ({
+          ...issue,
+          path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)],
+          ...(unknownFieldHint && issue.code === 'unrecognized_keys'
+            ? { suggestions: suggestKnownFields(issue.keys, Object.keys(tool.parameters.shape)) }
+            : {}),
+        })))
         const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined
         if (requestedPage !== undefined && input.cursor !== undefined) {
           throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or cursor, not both.' }])
