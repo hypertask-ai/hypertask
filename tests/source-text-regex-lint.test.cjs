@@ -239,10 +239,61 @@ test("a source path template binding is detected", (t) => {
 });
 
 test("an assertion helper that reads source inline is detected", (t) => {
-  const { file } = writeFixture(t, "assertMount(fs.readFileSync(path.join(root, 'src/x.tsx'), 'utf8'));");
+  const { file } = writeFixture(t, "assertMount(fs.readFileSync(path.join(root, 'src/x.tsx'), 'utf8'), /title=/);");
   assert.deepEqual(detectSourceTextRegex(fs.readFileSync(file, "utf8")), {
     offender: true,
     matchedVariables: ["readFileSync"],
+  });
+});
+
+test("inline assert.match and assert.doesNotMatch on a source read are detected", (t) => {
+  for (const source of [
+    "assert.match(readFileSync('src/x.ts', 'utf8'), /x/);",
+    "assert.doesNotMatch(readFileSync('src/x.ts', 'utf8'), /x/);",
+  ]) {
+    const { file } = writeFixture(t, source);
+    assert.deepEqual(detectSourceTextRegex(fs.readFileSync(file, "utf8")), {
+      offender: true,
+      matchedVariables: ["readFileSync"],
+    });
+  }
+});
+
+test("an assertion helper that only parses source is not a regex offence", (t) => {
+  const { file } = writeFixture(t, "assert(YAML.load(readFileSync('src/config.yml', 'utf8')).enabled);");
+  assert.deepEqual(detectSourceTextRegex(fs.readFileSync(file, "utf8")), {
+    offender: false,
+    matchedVariables: [],
+  });
+});
+
+test("a variable name reused in another test does not implicate its assertion", (t) => {
+  const { file } = writeFixture(t, [
+    "test('reads source', () => {",
+    "  const source = readFileSync('src/x.ts', 'utf8');",
+    "  assert.match(source, /x/);",
+    "});",
+    "test('reads a fixture', () => {",
+    "  const source = 'plain';",
+    "  assert.match(source, /plain/);",
+    "});",
+  ].join("\n"));
+  assert.deepEqual(detectSourceTextRegex(fs.readFileSync(file, "utf8")), {
+    offender: true,
+    matchedVariables: ["source"],
+  });
+  const clean = writeFixture(t, [
+    "test('reads source', () => {",
+    "  const source = readFileSync('src/x.ts', 'utf8');",
+    "});",
+    "test('reads a fixture', () => {",
+    "  const source = 'plain';",
+    "  assert.match(source, /plain/);",
+    "});",
+  ].join("\n"));
+  assert.deepEqual(detectSourceTextRegex(fs.readFileSync(clean.file, "utf8")), {
+    offender: false,
+    matchedVariables: [],
   });
 });
 

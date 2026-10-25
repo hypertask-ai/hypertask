@@ -50,6 +50,22 @@ function declarationsOf(code) {
   return found;
 }
 
+function enclosingBlock(code, index) {
+  const open = [];
+  for (let at = 0; at <= index; at++) {
+    if (code[at] === "{") open.push(at);
+    else if (code[at] === "}") open.pop();
+  }
+  if (open.length === 0) return [0, code.length];
+  const start = open[open.length - 1];
+  let depth = 0;
+  for (let at = start; at < code.length; at++) {
+    if (code[at] === "{") depth++;
+    else if (code[at] === "}" && --depth === 0) return [start, at];
+  }
+  return [start, code.length];
+}
+
 function detectSourceTextRegex(source) {
   const literals = [];
   const code = source.replace(
@@ -82,7 +98,7 @@ function detectSourceTextRegex(source) {
     return false;
   }
 
-  const sourceVariables = new Set();
+  const sourceVariables = new Map();
   const inlineSourceReads = [];
   for (const read of code.matchAll(/\breadFileSync\s*\(/g)) {
     const readAt = read.index;
@@ -95,15 +111,26 @@ function detectSourceTextRegex(source) {
       before.lastIndexOf("}"),
     ) + 1);
     const target = statement.match(/\b([$A-Z_a-z][\w$]*)\s*=(?!=)/);
-    if (target) sourceVariables.add(target[1]);
-    else inlineSourceReads.push(readAt);
+    if (!target) {
+      inlineSourceReads.push(readAt);
+      continue;
+    }
+    const [scopeStart, scopeEnd] = enclosingBlock(code, readAt);
+    if (!sourceVariables.has(target[1])) sourceVariables.set(target[1], []);
+    sourceVariables.get(target[1]).push([scopeStart, scopeEnd]);
   }
 
+  const regexLiteral = /\/(?![/*])(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[dgimsuvy]*/;
   for (const readAt of [...inlineSourceReads]) {
-    const statementStart = Math.max(0, readAt - 240);
-    const statement = code.slice(statementStart, readAt);
-    const opensAssertion = /\bassert\w*\s*\([^;]*$/.test(statement);
-    if (!opensAssertion) inlineSourceReads.splice(inlineSourceReads.indexOf(readAt), 1);
+    const statementStart = Math.max(0, readAt - 240, code.lastIndexOf(";", readAt) + 1, code.lastIndexOf("{", readAt) + 1);
+    const before = code.slice(statementStart, readAt);
+    const statementEnd = code.indexOf(";", readAt);
+    const wholeStatement = code.slice(statementStart, statementEnd === -1 ? readAt + 240 : statementEnd);
+    const opensRegexAssertion = /\bassert\.(?:match|doesNotMatch)\s*\([^;]*$/.test(before);
+    const opensAssertionHelper = /\bassert[\w$]*\s*\([^;]*$/.test(before) && regexLiteral.test(wholeStatement);
+    if (!opensRegexAssertion && !opensAssertionHelper) {
+      inlineSourceReads.splice(inlineSourceReads.indexOf(readAt), 1);
+    }
   }
 
   const matchedVariables = new Set();
@@ -111,7 +138,8 @@ function detectSourceTextRegex(source) {
   for (const assertion of code.matchAll(/\bassert\.(?:match|doesNotMatch)\s*\(/g)) {
     const [start, end] = firstArgumentRange(code, assertion.index + assertion[0].length);
     const argument = code.slice(start, end);
-    for (const name of sourceVariables) {
+    for (const [name, scopes] of sourceVariables) {
+      if (!scopes.some(([scopeStart, scopeEnd]) => assertion.index >= scopeStart && assertion.index <= scopeEnd)) continue;
       const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       if (new RegExp(`(?<![\\w$.])${escapedName}(?![\\w$])`).test(argument)) {
         matchedVariables.add(name);
