@@ -23,6 +23,10 @@
 
 Record the before/after `tools/list` HTTP statuses and the newly issued token's successful response. Never record token values.
 
+### Automated evidence
+
+`node --test tests/revoke-all-survives-page-token-6995.test.cjs` exercises the revoke-all and page-token routes with mocked storage: old tokens stay rejected after a new working token is minted.
+
 ## Cleanup
 
 Revoke any tokens issued for the test on account 985.
