@@ -23,8 +23,9 @@ export function fallbackTitle(message: string) {
 
 async function chatTitleTokenCap(userId: number | null | undefined): Promise<number | undefined> {
   try {
-    const { aiThinkingOptInEnabled, CHAT_TITLE_MAX_OUTPUT_TOKENS } = require("@/app/api/ai/_lib/reasoningEffort") as typeof import("@/app/api/ai/_lib/reasoningEffort");
-    return await aiThinkingOptInEnabled(userId) ? CHAT_TITLE_MAX_OUTPUT_TOKENS : undefined;
+    const loaded = require("@/app/api/ai/_lib/reasoningEffort") as Partial<typeof import("@/app/api/ai/_lib/reasoningEffort")> | null;
+    if (!loaded || typeof loaded.aiThinkingOptInEnabled !== "function") return undefined;
+    return await loaded.aiThinkingOptInEnabled(userId) ? loaded.CHAT_TITLE_MAX_OUTPUT_TOKENS : undefined;
   } catch {
     return undefined;
   }
@@ -62,7 +63,7 @@ export async function generateConversationTitle(
     const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, feature: "chat" }) : resolveLegacyAiModel("openai", "gpt-6-luna", byokApiKey);
     const thinkingOptIn = await chatTitleTokenCap(usageContext?.userId ?? tags?.userId);
     configureAiModelUsage(model, {
-      ...(usageContext ?? {}),
+      ...usageContext,
       userId: usageContext?.userId ?? tags?.userId,
       teamId: tags?.teamId ?? null,
       provider: useHaiku ? aiUsageProviderForCredential(provider, modelInput) : provider,

@@ -182,7 +182,7 @@ function loadTs(relativePath, stubs) {
   return loadedModule.exports;
 }
 
-function loadProvider({ flagOn }) {
+function loadProvider({ flagOn, reasoningModule }) {
   const filename = path.join(root, "src/app/api/ai/_lib/modelProvider.ts");
   const extra = {};
   const stubs = withStubs({
@@ -206,7 +206,7 @@ function loadProvider({ flagOn }) {
     "@/lib/aiUsageClassification": { INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: "included", isSystemAiFeature: () => false },
     "@/lib/ai/customEndpoint": { isCustomEndpointConfig: () => false, normalizeCustomEndpointConfig: (value) => value },
   }, extra);
-  extra["@/app/api/ai/_lib/reasoningEffort"] = loadTs("src/app/api/ai/_lib/reasoningEffort.ts", stubs);
+  extra["@/app/api/ai/_lib/reasoningEffort"] = reasoningModule ?? loadTs("src/app/api/ai/_lib/reasoningEffort.ts", stubs);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -294,6 +294,21 @@ test("flag on sends the mapped effort and flag off keeps today's Haiku default",
   });
   assert.equal(other.providerOptions, undefined);
   assert.equal(other.temperature, 1);
+  const missing = loadProvider({ flagOn: true, reasoningModule: {} });
+  const untouched = await sent(missing, {
+    flagContext: { userId: 7, provider: "openai", reasoningFeature: "chat" },
+    modelId: "gpt-6-luna",
+    params: { temperature: 1 },
+  });
+  assert.equal(untouched.providerOptions, undefined);
+  assert.equal(untouched.temperature, 1);
+  const haikuUntouched = await sent(missing, {
+    flagContext: { userId: 7, provider: "anthropic", reasoningFeature: "chat" },
+    modelId: haiku,
+    params: { maxOutputTokens: 4000 },
+  });
+  assert.equal(haikuUntouched.providerOptions.anthropic.thinking.type, "adaptive");
+  assert.equal(haikuUntouched.providerOptions.anthropic.effort, "medium");
 });
 
 test("chat title caps output at 64 tokens only when the flag is on", async () => {

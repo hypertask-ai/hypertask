@@ -323,7 +323,9 @@ const modelUsageContexts = new WeakMap<object, ModelUsageContext>();
 
 function reasoningApi(): typeof import("@/app/api/ai/_lib/reasoningEffort") | null {
   try {
-    return require("@/app/api/ai/_lib/reasoningEffort") as typeof import("@/app/api/ai/_lib/reasoningEffort");
+    const loaded = require("@/app/api/ai/_lib/reasoningEffort") as Partial<typeof import("@/app/api/ai/_lib/reasoningEffort")> | null;
+    if (!loaded || typeof loaded.aiThinkingOptInEnabled !== "function" || typeof loaded.applyReasoningToParams !== "function") return null;
+    return loaded as typeof import("@/app/api/ai/_lib/reasoningEffort");
   } catch {
     return null;
   }
