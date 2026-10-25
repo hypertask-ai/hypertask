@@ -23,12 +23,9 @@ test("browser-smoke restores only the matching Next.js incremental build cache b
 });
 
 test("browser-smoke runs on pushes and on ready pull requests, never on drafts", () => {
-  assert.equal(
-    workflow.jobs["browser-smoke"].if.replace(/\s+/g, " ").trim(),
-    "github.event_name == 'push' || github.event.pull_request.draft == false",
-  );
   for (const [github, expected] of [
     [{ event_name: "push" }, true],
+    [{ event_name: "push", event: {} }, true],
     [{ event_name: "push", event: { pull_request: { draft: true } } }, true],
     [{ event_name: "pull_request", event: { pull_request: { draft: false } } }, true],
     [{ event_name: "pull_request", event: { pull_request: { draft: true } } }, false],
