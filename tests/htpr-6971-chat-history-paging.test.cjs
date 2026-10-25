@@ -441,6 +441,7 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
     '@/lib/flags/definitions/htpr-7773-chat-header-name': { HTPR_7773_CHAT_HEADER_NAME_FLAG: 'htpr-7773-chat-header-name' },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
+    '@/lib/flags/definitions/htpr-7575-phone-chat-delete': { HTPR_7575_PHONE_CHAT_DELETE_FLAG: 'htpr-7575-phone-chat-delete' },
     '../Common/Tooltip': { __esModule: true, default: () => null },
     '@/lib/contexts/mobileContext': { MobileViewContext: React.createContext(false) },
     '@/lib/contexts/deviceContext': { useDeviceContext: () => false },

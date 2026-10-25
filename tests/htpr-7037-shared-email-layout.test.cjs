@@ -138,8 +138,6 @@ async function sendFixture({ name, args }, mode, recipientUserId) {
     }),
   };
   const flags = {
-    FEATURE_FLAG_QA_USER_ID: 985,
-    HTPR_7026_AGENT_CONNECT_CHECK_FLAG: "htpr-7026-agent-connect-check",
     HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: flag,
     isFeatureEnabled: async (key, userId) => {
       flagReads.push({ key, userId });
@@ -156,8 +154,6 @@ async function sendFixture({ name, args }, mode, recipientUserId) {
     "@/lib/flags": flags,
     "@/lib/flags/keys": { HTPR_7549_FIRST_TASK_POINTER_FLAG: "htpr-7549-first-task-pointer", HTPR_7550_CONNECT_OVERLAY_FLAG: "htpr-7550-connect-overlay" },
     "@/lib/telemetry/activationAnalytics": { trackActivation: async () => {} },
-    "@/lib/redis": { getRedis: async () => ({}) },
-    "@/lib/onboarding/qaArm": { isOnboardingQaArmed: async () => true },
     "@/lib/email/sendEmail": { sendEmail: async (mail) => sent.push(mail) },
     "@/lib/email/unsubscribe": { unsubscribeHeaders: () => ({ "List-Unsubscribe": "existing-header" }) },
     "@/lib/mcp/boards/columnRole": load("src/lib/mcp/boards/columnRole.ts"),
@@ -182,7 +178,7 @@ async function sendFixture({ name, args }, mode, recipientUserId) {
   assert.equal(sent[0].from, "Hypertask <notifications@hypertask.ai>");
   assert.deepEqual(flagReads.filter(({ key }) => key === flag), [{ key: flag, userId: recipientUserId }]);
   if (name === "agentConnected") {
-    assert.deepEqual(flagReads[0], { key: flags.HTPR_7026_AGENT_CONNECT_CHECK_FLAG, userId: 985 });
+    assert.deepEqual(flagReads, [{ key: flag, userId: recipientUserId }]);
   } else {
     assert.deepEqual(sent[0].headers, { "List-Unsubscribe": "existing-header" });
   }

@@ -74,7 +74,7 @@ export function ConnectAgentOverlay({ sectionId, onClose }: Props) {
           Skip
         </button>
       </div>
-      <ConnectAIOnboardingScreen compact visible={visible} serverEligible overlay onConnected={() => void onClose()} onNextScreen={() => void dismiss()} />
+      <ConnectAIOnboardingScreen compact visible={visible} overlay onConnected={() => void onClose()} onNextScreen={() => void dismiss()} />
       {error && <p role="alert" className="mt-2 text-meta text-text-light-gray">{error}</p>}
     </ModalContainerCustom>
   );
