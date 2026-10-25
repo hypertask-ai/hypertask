@@ -22,14 +22,14 @@ import { inboxDataQueryKey } from "@/lib/inboxQueryKeys";
 import type { INotificationsFromTQ } from "@/hooks/Inbox/useGlobalFocusHandler";
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContext) {
-  const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setChatHandoffOpen, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, isInboxFlow, inInbox: renderedInInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
+  const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setChatHandoffOpen, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, isInboxFlow, inInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
 
 
   const toggleHighlightHandler = (state: boolean) => {
     return setToggleHighlight(state);
   };
 
-  const handleCallback = async (mode_?: "moveToNext", inbox?: boolean, markAsDone?: boolean) => {
+  const handleCallback = async (mode_?: "moveToNext", inbox?: boolean, markAsDone?: boolean, refreshInbox = false) => {
     if (!handleSave || saveInFlightRef.current) return;
     if (mobileEditSavingRef.current) return;
 
@@ -97,9 +97,23 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
             ];
     }
     try {
+      const content = editor?.getHTML()!;
+      const text = editor?.getText() || "";
+      if (refreshInbox && !inbox && currentUser?.id) {
+        const { prefetchInboxQuery } = await import("@/hooks/Inbox/useGetNotifications");
+        const queryKey = inboxDataQueryKey(currentUser.id);
+        await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+        await prefetchInboxQuery(queryClient, currentUser.id);
+        inbox = !!inboxMessageForTask(
+          queryClient.getQueryData<INotificationsFromTQ>(queryKey)?.notifications,
+          currentTask,
+          currentUser.id,
+        );
+        if (inbox && isInboxFlow && advanceOnSend) mode_ = "moveToNext";
+      }
       const result = await handleSave({
-        content: editor?.getHTML()!,
-        text: editor?.getText() || "",
+        content,
+        text,
         id: mode === "read-edit-comments" ? commentId! : id,
         mode: mode as RedirectMode,
         attachments_: attachmentFilesForSave,
@@ -146,7 +160,7 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
   };
 
   const replyInbox = useFlag(HTPR_7792_REPLY_INBOX_FLAG);
-  const sendComment = async (alwaysAdvance = false) => {
+  const sendComment = (alwaysAdvance = false) => {
     const tutorialState = currentUser?.id
       ? parseLearnTutorialState(
           window.sessionStorage.getItem(
@@ -158,18 +172,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
       tutorialState,
       currentTask?.id,
     );
-    let inInbox = renderedInInbox;
-    if (replyInbox && !preserveTutorialInbox && !inInbox && currentUser?.id) {
-      const { prefetchInboxQuery } = await import("@/hooks/Inbox/useGetNotifications");
-      const queryKey = inboxDataQueryKey(currentUser.id);
-      await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
-      await prefetchInboxQuery(queryClient, currentUser.id);
-      inInbox = !!inboxMessageForTask(
-        queryClient.getQueryData<INotificationsFromTQ>(queryKey)?.notifications,
-        currentTask,
-        currentUser.id,
-      );
-    }
     return handleCallback(
       !preserveTutorialInbox &&
         ((alwaysAdvance && isInboxFlow) ||
@@ -177,6 +179,8 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
         ? "moveToNext"
         : undefined,
       !preserveTutorialInbox && inInbox,
+      undefined,
+      replyInbox && !preserveTutorialInbox,
     );
   };
 

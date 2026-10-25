@@ -10,18 +10,20 @@ for (const missingCache of [false, true]) for (const enabled of [false, true]) f
   test(`reply uses current inbox membership: missing=${missingCache}, flag=${enabled}, flow=${inboxFlow}, advance=${advance}`, async () => {
     const view = mount();
     const saves = [];
+    let editable = true;
+    let html = "<p>Reply</p>";
     let notifications = missingCache ? undefined : [];
     const client = { getQueryData: () => notifications && ({ notifications }), setQueryData: () => {}, invalidateQueries: async () => {} };
     const mocks = {
       "@/lib/flags/keys": { HTPR_7792_REPLY_INBOX_FLAG: flag, HTPR_7659_ARCHIVE_EVERY_SEND_FLAG: "old-archive" },
       "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === "old-archive" },
       "@tanstack/react-query": { useQueryClient: () => client },
-      "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: async () => { notifications = [row]; } },
+      "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: async () => { assert.equal(editable, false); html = "<p>Late change</p>"; notifications = [row]; } },
       "@/lib/state": { useRecoilState: () => [{ id: 985 }, () => {}], useSetRecoilState: () => () => {} },
       "@/store": {},
       "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: { inboxAdvanceOnSend: advance } }) },
       "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
-      "./Tiptap": { default: () => ({ editor: { isEmpty: false, getHTML: () => "<p>Reply</p>", getText: () => "Reply", setEditable: () => {}, commands: { blur: () => {}, setContent: () => {} } } }) },
+      "./Tiptap": { default: () => ({ editor: { isEmpty: false, getHTML: () => html, getText: () => "Reply", setEditable: value => { editable = value; }, commands: { blur: () => {}, setContent: () => {} } } }) },
       "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ parsedTask: JSON.stringify(task) }) },
       "next/navigation": { useRouter: () => ({}), useSearchParams: () => new URLSearchParams(inboxFlow ? `inboxFlow=${inboxFlow}` : "") },
       "@/lib/contexts/TaskDetail/DescriptionProvider": { useDescriptionAndCommentsContext: () => ({}) },
@@ -46,6 +48,8 @@ for (const missingCache of [false, true]) for (const enabled of [false, true]) f
       assert.equal(context.inInbox, false);
       await React.act(async () => { assert.equal(await actions.sendComment(), true); });
       assert.equal(saves.length, 1);
+      assert.equal(saves[0].content, "<p>Reply</p>");
+      assert.equal(editable, true);
       assert.equal(saves[0].inbox, enabled);
       assert.equal(saves[0].navigateToNext, enabled && inboxFlow === "true" && advance);
       assert.equal(saves[0].inboxFlow, inboxFlow);
