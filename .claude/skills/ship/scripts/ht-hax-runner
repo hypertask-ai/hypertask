@@ -98,8 +98,65 @@ case "${1:-}" in
       clear; tmux clear-history -t "$TMUX_PANE"
       tmux select-pane -t "$TMUX_PANE" -T "RUNNER $n hax"
       : > "$runlog"
-      hax --provider=codex --model=gpt-6.1-sol --effort=high -p "$brief" 2>&1 | tee -a "$rlog" "$runlog"
+      : > "$STATE/runner-$n.result"
+      (
+        sleep 15
+        tmux send-keys -t "$TMUX_PANE" -l "$brief"
+        sleep 1
+        tmux send-keys -t "$TMUX_PANE" C-m
+        result=TIMEOUT
+        for _ in $(seq 1 480); do
+          sleep 30
+          if completed=$(python3 - "$$" "$REPO" <<'PYTHON'
+import json
+import os
+from pathlib import Path
+import re
+import sys
+
+proc = Path(os.environ.get('HT_HAX_PROC_ROOT', '/proc'))
+try:
+    children = (proc / sys.argv[1] / 'task' / sys.argv[1] / 'children').read_text().split()
+    for child in children:
+        for fd in (proc / child / 'fd').iterdir():
+            path = fd.resolve()
+            if path.suffix != '.jsonl':
+                continue
+            with path.open() as stream:
+                header = json.loads(next(stream))
+                if header.get('type') != 'session' or header.get('version') != 1 or header.get('cwd') != sys.argv[2]:
+                    continue
+                last = tail = None
+                for line in stream:
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    tail = item
+                    if item.get('kind') not in ('turn_usage', 'reasoning'):
+                        last = item
+                if tail and tail.get('kind') == 'turn_usage' and last and last.get('kind') == 'assistant' and not last.get('origin'):
+                    final = last.get('text', '').strip().splitlines()
+                    if final and re.fullmatch(r'(?:[•*-] )?RUNNER (?:DONE (?:(?:HTPR|YPER4|HYFA)-[0-9]+|https://\S+) .+|IDLE .+)', final[-1]):
+                        print('IDLE' if 'RUNNER IDLE ' in final[-1] else 'DONE')
+                        sys.exit(0)
+except (OSError, ValueError, StopIteration):
+    pass
+sys.exit(1)
+PYTHON
+          ); then
+            result=$completed
+            break
+          fi
+        done
+        printf '%s\n' "$result" > "$STATE/runner-$n.result"
+        tmux capture-pane -p -t "$TMUX_PANE" -S - | tee -a "$rlog" > "$runlog"
+        tmux send-keys -t "$TMUX_PANE" C-d
+      ) </dev/null >/dev/null 2>&1 &
+      watcher=$!
+      hax --provider=codex --model=gpt-6.1-sol --effort=high
+      kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null
       echo "$(date -u +%FT%TZ) end" >> "$rlog"
-      if grep -q '^RUNNER IDLE' "$runlog"; then sleep 900; else sleep 30; fi
+      if grep -qx IDLE "$STATE/runner-$n.result"; then sleep 900; else sleep 30; fi
     done ;;
 esac

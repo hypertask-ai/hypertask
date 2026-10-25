@@ -1,4 +1,5 @@
 import fcntl
+import json
 import os
 from pathlib import Path
 import shutil
@@ -133,7 +134,7 @@ esac''')
         self.assertEqual(self.run_keeper('top-up').returncode, 0)
         self.assertEqual(self.events.read_text().splitlines(), ['login RUNNER 6', 'start ht-hax-runner-6'])
 
-    def test_hax_startup_failure_reaches_retry_without_a_watcher(self):
+    def test_hax_startup_failure_reaches_retry_and_reaps_watcher(self):
         self.env['TMUX_PANE'] = '%fixture'
         (self.state / 'runner-6.log').write_text('RUNNER IDLE previous run\n')
         self.command('clear', 'exit 0')
@@ -155,7 +156,124 @@ esac''')
                 pass
             process.wait()
         self.assertEqual(self.events.read_text().splitlines(), [
-            'hax --provider=codex --model=gpt-6.1-sol --effort=high -p', 'retry'])
+            'hax --provider=codex --model=gpt-6.1-sol --effort=high ', 'retry'])
+
+    def test_interactive_run_sends_brief_records_final_output_and_closes(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        self.env['HAX_SUBAGENT_DEPTH'] = '1'
+        self.command('clear', 'exit 0')
+        self.command('hax', """
+printf 'hax %s depth=%s identity=%s\\n' "$*" "${HAX_SUBAGENT_DEPTH-unset}" "$SHIP_SESSION_NAME" >> "$HOME/events"
+mkdir -p "$HT_HAX_PROC_ROOT/$PPID/task/$PPID" "$HT_HAX_PROC_ROOT/$$/fd"
+echo $$ > "$HT_HAX_PROC_ROOT/$PPID/task/$PPID/children"
+ln -s "$HOME/session.jsonl" "$HT_HAX_PROC_ROOT/$$/fd/3"
+touch "$HOME/started"
+while [ ! -f "$HOME/closed" ]; do /bin/sleep 0.01; done
+""")
+        self.command('tmux', """
+case "$1" in
+  select-pane|clear-history) : ;;
+  send-keys)
+    case "$*" in
+      *' -l '*) echo brief >> "$HOME/events" ;;
+      *C-m) echo submitted >> "$HOME/events" ;;
+      *C-d) echo closed >> "$HOME/events"; touch "$HOME/closed" ;;
+    esac ;;
+  capture-pane)
+    printf '  %s\\n' "$FINAL_LINE"
+    echo capture >> "$HOME/events" ;;
+  *) exit 99 ;;
+esac
+""")
+        self.command('sleep', """
+case "$1" in
+  30|900)
+    if [ -f "$HOME/closed" ]; then
+      echo "retry $1" >> "$HOME/events"; kill -TERM "$PPID"
+    elif [ -f "$HOME/started" ]; then
+      if [ ! -f "$HOME/tool-phase" ]; then
+        echo tool-phase >> "$HOME/events"; touch "$HOME/tool-phase"
+      else
+        printf '{"kind":"assistant","text":"%s"}\\n{"kind":"turn_usage"}\\n' "$FINAL_LINE" >> "$HOME/session.jsonl"
+        echo final-phase >> "$HOME/events"
+      fi
+    fi ;;
+esac
+exec /bin/sleep 0.01
+""")
+        for final_line, cooldown in [
+            ('RUNNER DONE YPER4-776 Done', 30),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30),
+            ('• RUNNER IDLE no free tickets', 900),
+        ]:
+            with self.subTest(final_line=final_line):
+                self.events.write_text('')
+                for name in ['closed', 'started', 'tool-phase']:
+                    (self.home / name).unlink(missing_ok=True)
+                self.env['FINAL_LINE'] = final_line
+                records = [
+                    {'type': 'session', 'version': 1, 'cwd': str(self.home / 'projects/hypertask')},
+                    {'kind': 'user', 'text': final_line},
+                    {'kind': 'assistant', 'text': final_line},
+                    {'kind': 'tool_call', 'tool_name': 'bash'},
+                    {'kind': 'tool_result', 'output': final_line},
+                    {'kind': 'turn_usage'},
+                ]
+                (self.home / 'session.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in records))
+                process = subprocess.Popen(['bash', str(SCRIPT), '8', '--loop'], env=self.env,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, start_new_session=True)
+                try:
+                    process.communicate(timeout=3)
+                finally:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
+                events = self.events.read_text().splitlines()
+                self.assertIn('hax --provider=codex --model=gpt-6.1-sol --effort=high depth=unset identity=RUNNER 8', events)
+                self.assertLess(events.index('brief'), events.index('submitted'))
+                self.assertLess(events.index('tool-phase'), events.index('final-phase'))
+                self.assertLess(events.index('final-phase'), events.index('capture'))
+                self.assertLess(events.index('capture'), events.index('closed'))
+                self.assertIn(f'retry {cooldown}', events)
+                self.assertIn(final_line, (self.state / 'runner-8.latest.log').read_text())
+                self.assertIn(final_line, (self.state / 'runner-8.log').read_text())
+
+    def test_unreadable_completion_times_out_records_screen_and_retries(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        self.command('clear', 'exit 0')
+        self.command('python3', 'echo poll >> "$HOME/events"; exit 1')
+        self.command('hax', 'while [ ! -f "$HOME/closed" ]; do /bin/sleep 0.01; done')
+        self.command('tmux', """
+case "$1" in
+  select-pane|clear-history) : ;;
+  send-keys) case "$*" in *C-d) touch "$HOME/closed" ;; esac ;;
+  capture-pane) echo 'unfinished fixture screen' ;;
+  *) exit 99 ;;
+esac
+""")
+        self.command('sleep', """
+if [ -f "$HOME/closed" ]; then
+  echo "retry $1" >> "$HOME/events"; kill -TERM "$PPID"
+fi
+""")
+        process = subprocess.Popen(['bash', str(SCRIPT), '8', '--loop'], env=self.env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+        try:
+            process.communicate(timeout=10)
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+        self.assertEqual(self.events.read_text().splitlines(), ['poll'] * 480 + ['retry 30'])
+        self.assertEqual((self.state / 'runner-8.result').read_text(), 'TIMEOUT\n')
+        self.assertEqual((self.state / 'runner-8.latest.log').read_text(), 'unfinished fixture screen\n')
+        self.assertIn('unfinished fixture screen', (self.state / 'runner-8.log').read_text())
 
     def test_invalid_targets_fail_before_launch(self):
         for target, cap in [('0', '20'), ('21', '21'), ('3', '2'), ('oops', '20'), ('9999999999999', '20')]:
