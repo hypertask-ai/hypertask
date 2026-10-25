@@ -973,7 +973,16 @@ printf "master\n" > "$E2/evidence/YPER4-999/base"
 cat > "$E2/bin/gh" <<MOCK
 #!/usr/bin/env bash
 case "\$1:\$2" in
-  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"$inert_sha"},"baseRefName":"master"}\n' ;;
+  pr:view)
+    if [[ "\$*" != *'-R valentinyeo/ceo '* && "\$*" != *'-R valentinyeo/other '* ]]; then
+      echo '{"title":"YPER4-998 [INFRA] Other repo","baseRefName":"production"}'
+      exit 0
+    fi
+    if [[ "\$*" == *'--json title --jq .title'* ]]; then
+      echo 'YPER4-999 [INFRA] Fixture'
+    else
+      printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"%s","mergeCommit":{"oid":"$inert_sha"},"baseRefName":"master"}\n' "\${INERT_PR_STATE:-MERGED}"
+    fi ;;
   release:view) exit 1 ;;
   release:list) echo "\${INERT_RELEASES:-[]}" ;;
   api:*/compare/*) echo behind ;;
@@ -1025,6 +1034,36 @@ N() {
 N 0 'deployed ok (recorded live proof, merged'
 N 1 'FAIL: no release found' SHIP_REPO=valentinyeo/other
 unset -f N
+B() {
+  local want=$1 expected=$2 cmd=$3 out got; shift 3
+  out=$(jq -nc --arg c "$cmd" '{tool_input:{command:$c}}' |
+    env -u SHIP_REPO -u SHIP_BASE -u SHIP_DEPLOY PATH="$E2/bin:$PATH" VCC_EVIDENCE_DIR="$E2/evidence" "$@" ./ship-check guard 2>&1); got=$?
+  [ "$got" = "$want" ] && [[ $out == *"$expected"* ]] && ok "bound Done guard: $cmd $expected" || bad "bound Done guard: want $want $expected got $got $out"
+}
+B 0 '' 'vcc task move YPER4-999 --section "Done"'
+B 0 '' 'vcc task update YPER4-999 --section=Done'
+B 0 '' 'SHIP_REPO=valentinyeo/ceo vcc task move YPER4-999 --section "Done"'
+B 0 '' 'SHIP_BASE=master vcc task move YPER4-999 --section "Done"'
+B 2 'no PR titled' 'SHIP_BASE=production vcc task move YPER4-999 --section "Done"'
+B 2 'no PR titled' 'SHIP_REPO=hypertask-ai/hypertask vcc task move YPER4-999 --section "Done"'
+B 2 'no PR titled' 'vcc task move YPER4-999 --section "Done"' SHIP_REPO=hypertask-ai/hypertask
+B 2 'no PR titled' 'vcc task move YPER4-999 --section "Done"' SHIP_BASE=production
+B 2 'no PR titled' 'SHIP_REPO=valentinyeo/ceo vcc task move YPER4-999 --section Done; vcc task move YPER4-999 --section Done' SHIP_REPO=hypertask-ai/hypertask
+B 2 'no PR titled' 'SHIP_BASE=master vcc task move YPER4-999 --section Done; vcc task move YPER4-999 --section Done' SHIP_BASE=production
+mv "$E2/evidence/YPER4-999/repo" "$E2/bound-repo"
+B 2 'no PR titled' 'vcc task move YPER4-999 --section "Done"'
+B 2 'into production' 'SHIP_REPO=valentinyeo/ceo vcc task move YPER4-999 --section "Done"'
+mv "$E2/bound-repo" "$E2/evidence/YPER4-999/repo"
+B 2 'not merged' 'vcc task move YPER4-999 --section "Done"' INERT_PR_STATE=OPEN
+B 2 'no successful push' 'vcc task move YPER4-999 --section "Done"' INERT_RESULT=failure
+B 2 'no successful push' 'vcc task move YPER4-999 --section "Done"' INERT_STATUS=1
+mv "$proof" "$E2/bound-live-proof"
+B 2 'no successful push' 'vcc task move YPER4-999 --section "Done"'
+printf 'sha: 0123456789abcdef0123456789abcdef01234567\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\n' "$E2/src" > "$proof"
+B 2 'no successful push' 'vcc task move YPER4-999 --section "Done"'
+mv "$E2/bound-live-proof" "$proof"
+B 0 '' 'vcc task move YPER4-999 --section "Done"'
+unset -f B
 rm -rf "$E2"
 
 if [ "${1:-}" = --premerge-only ]; then
