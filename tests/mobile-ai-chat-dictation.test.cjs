@@ -71,6 +71,7 @@ stubSourceModule("src/components/Global/ModelSelectorDropdown.tsx", {
 stubSourceModule("src/components/Common/Tooltip.tsx", {
   default: () => null,
 });
+stubSourceModule("src/components/Modals/OptionPicker/index.tsx", { default: () => null });
 stubModule(require.resolve("react-hot-toast"), {
   default: { error: () => {} },
 });

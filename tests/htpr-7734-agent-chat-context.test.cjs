@@ -29,6 +29,7 @@ function ui({ enabled = true, mobile = false, external = true, embedded = true, 
     "@tiptap/react": { EditorContent: () => null, useEditorState: () => true },
     "@/lib/controlledComposerEditor": { ControlledComposerEditor: () => null },
     "../Common/Tooltip": { default: () => null },
+    "@/components/Modals/OptionPicker": { default: ({ options, onSelect }) => React.createElement("div", { role: "dialog" }, options.map((option) => React.createElement("button", { key: option.id ?? "current", "aria-checked": option.checked, onClick: () => onSelect(option) }, option.label))) },
     "../Global/ModelSelectorDropdown": { default: () => null },
     "../RTE/Components/AudioButton": { default: () => null },
     "../Common/AttachmentsUpload/ImageGalleryView": { default: () => null },
@@ -54,7 +55,7 @@ function ui({ enabled = true, mobile = false, external = true, embedded = true, 
   render();
   return { ...view, render, scope: () => scope,
     trigger: () => view.container.querySelector("[data-ai-chat-scope] button"),
-    rows: () => [...view.container.querySelectorAll('[role="menuitemradio"]')], click,
+    rows: () => [...view.container.querySelectorAll('[role="dialog"] button')], click,
   };
 }
 

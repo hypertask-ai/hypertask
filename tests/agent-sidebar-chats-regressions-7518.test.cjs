@@ -864,7 +864,7 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     "./mobileAudioButtonPresentation": { mobileMicPresentation: () => ({ prominent: false }) },
   });
   const composerMocks = Object.fromEntries([
-    "../Global/ModelSelectorDropdown", "../Common/Tooltip", "@/lib/configs/aiTaskWriter.config",
+    "../Global/ModelSelectorDropdown", "../Common/Tooltip", "@/components/Modals/OptionPicker", "@/lib/configs/aiTaskWriter.config",
     "@/lib/controlledComposerEditor", "lucide-react", "../Common/AttachmentsUpload/ImageGalleryView",
     "@/lib/contexts/deviceContext", "@/lib/contexts/mobileContext", "@/store",
     "@/hooks/MultiPages/useGetAllTeamsMinimal", "@/utils/aiChat/sortBoardsByRecent",

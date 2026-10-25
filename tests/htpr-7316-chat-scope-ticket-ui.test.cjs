@@ -29,6 +29,7 @@ function ui({ enabled = true, pathname = "/detail/project-15/42", taskId = 42, s
     "@tiptap/react": { EditorContent: () => null, useEditorState: ({ editor, selector }) => selector({ editor }) },
     "@/lib/controlledComposerEditor": { ControlledComposerEditor: () => null },
     "../Common/Tooltip": { default: () => null },
+    "@/components/Modals/OptionPicker": { default: ({ options, onSelect }) => React.createElement("div", { role: "dialog" }, options.map((option) => React.createElement("button", { key: option.id ?? "current", "aria-checked": option.checked, onClick: () => onSelect(option) }, option.label))) },
     "../Global/ModelSelectorDropdown": { default: () => null },
     "../RTE/Components/AudioButton": { default: () => null },
     "../Common/AttachmentsUpload/ImageGalleryView": { default: () => null },
@@ -53,9 +54,9 @@ function ui({ enabled = true, pathname = "/detail/project-15/42", taskId = 42, s
   const view = mount();
   const render = () => view.render(React.createElement(Probe));
   render();
-  const trigger = () => view.container.querySelector('[aria-haspopup="menu"]');
+  const trigger = () => view.container.querySelector('[aria-haspopup="dialog"]');
   const click = (element) => { assert.ok(element); React.act(() => element.click()); render(); };
-  const rows = () => [...view.container.querySelectorAll('[role="menuitemradio"]')];
+  const rows = () => [...view.container.querySelectorAll('[role="dialog"] button')];
   return {
     ...view, render, trigger, click, rows, state: () => state, scope: () => scope, recent: () => recent,
     open: () => click(trigger()),
