@@ -34,13 +34,22 @@ G 2 vcc task move YPER4-118 $DONE
 ./ship-check bind HTPR-6570 809 >/dev/null && ok "bind HTPR-6570 to 809" || bad "bind HTPR-6570"
 ./ship-check bind HTPR-6570 822 >/dev/null && bad "bind to another ticket's PR accepted" || ok "bind to another ticket's PR rejected"
 
-# Done moves, per command segment.
+# Done moves, by task move and by task update, per command segment.
 G 0 vcc task move YPER4-118 $DONE
 G 2 vcc task move HTPR-6570 --section 'Done""'
 G 2 vcc task move HTPR-6570 --section '"Done"'
 G 2 vcc task move HTPR-6570 --section 'Done\'
 G 2 vcc task move HTPR-6570 --section NoSuchColumn
 G 2 vcc task move HTPR-6570 --section '"Flag: Everyone"'
+# The same move written as a task update gets the same checks (YPER4-742).
+G 2 vcc task update HTPR-6570 --section '"Flag: Everyone"'
+G 2 vcc task update HTPR-6570 --section Done
+G 2 vcc task update HTPR-6570 --section=Done
+G 0 vcc task update HTPR-6570 --section '"In Progress"'
+G 0 vcc task update HTPR-6570 --title 'Ship it'
+# The done column named by its board id, and a working column by id.
+G 2 vcc task move HTPR-6570 --section 4312
+G 0 vcc task move HTPR-6570 --section 4309
 G 2 vcc task move '"HTPR-6570"' $DONE
 G 2 vcc task move "'HTPR-6570'" --section Done
 G 2 echo hi '&&' vcc task move HTPR-6570 --section=Done

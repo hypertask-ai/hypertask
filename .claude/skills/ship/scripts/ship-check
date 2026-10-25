@@ -20,7 +20,7 @@
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
 #   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
-#   ship-check done <T>          ticket is in Done
+#   ship-check done <T>          ticket is in the done column its own board names
 #   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
 # CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...; non-releasing repos can opt in with SHIP_DEPLOY=none.
@@ -539,7 +539,7 @@ is_done_section() {
   [ -n "$board" ] || return 3
   sections=$(hypertask section list --project "$board" --json 2>/dev/null) || return 3
   is_done=$(jq -r --arg title "$title" '
-    [.sections[] | select(.section_title == $title)] as $matches |
+    [.sections[] | select(.section_title == $title or (.id | tostring) == $title)] as $matches |
     if ($matches | length) == 0 then "unknown" else ($matches[0].isDone | tostring) end
   ' <<<"$sections") || return 3
   [ -n "$is_done" ] || return 3
@@ -636,7 +636,7 @@ guard() {
   export SHIP_CHECKOUT SHIP_WORKER SHIP_DEPLOY
   local merge='gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
   local section_flag="--section([[:space:]]+|=)(\"[^\"]*\"|'[^']*'|[^[:space:]]+)"
-  local done="vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*$section_flag"
+  local done="vcc[[:space:]]+tasks?[[:space:]]+(move|update)[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*$section_flag"
   input=$(cat)
   cmd=$(jq -er '.tool_input.command | select(type == "string")' <<<"$input") || {
     echo "ship-check blocked: cannot read the hook command." >&2; exit 2;
@@ -732,7 +732,8 @@ PY
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
     fi
-    # Move to the board's done column: needs merge, deploy and docs (FEATURE/IMPROVE); app tickets also need proof.md.
+    # Move to the board's done column, by task move or task update --section: needs merge, deploy and
+    # docs (FEATURE/IMPROVE); app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then
       [[ $rest =~ (HTPR|HYFA|YPER4)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
       [[ $rest =~ $section_flag ]]; section_title=${BASH_REMATCH[2]}
