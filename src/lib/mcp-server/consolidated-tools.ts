@@ -250,6 +250,7 @@ export function selectMcpTools(
       ...(topLevelInputFields || inputWrapperFields || taskIdTicketReference ? {
         normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, taskIdTicketReference, pageAlias }),
       } : {}),
+      ...(renamedFieldHint ? { documentedFields: [...new Set([...Object.keys(parameters.shape), ...names.flatMap((name) => Object.keys(byName.get(actions[name].tool)!.parameters.shape)).map((field) => RENAMED_PARAMETERS[field] ?? field)])] } : {}),
       ...(ticketNumberShapeHint || renamedFieldHint ? {
         errorHints: {
           ...(ticketNumberShapeHint ? { ticketNumberShape: true } : {}),
