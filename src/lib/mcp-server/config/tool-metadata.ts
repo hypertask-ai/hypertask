@@ -40,7 +40,7 @@ const RAW_TOOL_METADATA = {
   AGENT_WEBHOOK: {
     name: buildToolName('agent_webhook'),
     description:
-      'Gets or manages the signed outbound webhook for one managed agent. Actions: get, configure, test, replay, rotate, or delete. Agent credentials use agent_id=self; a human supplies an owned agent UUID. Configure accepts an HTTPS url, optional project_id filter, events, and active. Test sends a real signed webhook.test delivery. Replay requires delivery_id. Configure and rotate return the signing secret once; store it securely.',
+      'Gets or manages the signed outbound webhook for one managed agent. Actions: get, configure, test, replay, rotate, or delete. Agent credentials use agent_id=self; a human supplies an owned agent UUID. Configure accepts an HTTPS url, optional project_id filter, events, active, and an optional receiver auth header (auth_header_name with auth_header_value, or bearer_secret; clear_auth_header removes it). Test sends a real signed webhook.test delivery. Replay requires delivery_id. Configure and rotate return the signing secret once; store it securely.',
   },
 
   CREATE_AGENT: {

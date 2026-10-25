@@ -3,6 +3,7 @@ import { SEALED_WEBHOOK_KEYS_FLAG } from "@/lib/flags/definitions/htpr-7624-seal
 import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
 import { agentWithinTeamWhere } from "@/lib/mcp/managementKeyTeamScope";
 import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
+import { AuthHeaderInputError, authHeaderColumns, parseAuthHeaderChange } from "./authHeader";
 import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -43,6 +44,8 @@ export function serializeAgentWebhookSubscription(sub: {
   projectId: number | null;
   url: string;
   secret: string;
+  authHeaderName?: string | null;
+  authHeaderValue?: string | null;
   events: string[];
   active: boolean;
   createdAt: Date;
@@ -58,6 +61,8 @@ export function serializeAgentWebhookSubscription(sub: {
     events: sub.events,
     active: sub.active,
     secretHint: webhookSigningKeyHint(sub.secret),
+    authHeaderName: sub.authHeaderName ?? null,
+    authHeaderSet: Boolean(sub.authHeaderName && sub.authHeaderValue),
     createdAt: sub.createdAt.toISOString(),
     updatedAt: sub.updatedAt.toISOString(),
     lastDeliveryAt: sub.lastDeliveryAt?.toISOString() ?? null,
@@ -188,6 +193,13 @@ export async function upsertAgentWebhook(input: {
     throw new AgentWebhookInputError("active must be a boolean", "active");
   }
 
+  const authHeaderChange = await parseAuthHeaderChange(input.body, input.userId).catch((error) => {
+    if (error instanceof AuthHeaderInputError) {
+      throw new AgentWebhookInputError(error.message, error.field);
+    }
+    throw error;
+  });
+
   const transactionLockId = crypto
     .createHash("sha256")
     .update(`agent-webhook:${input.agentId}`)
@@ -237,8 +249,10 @@ export async function upsertAgentWebhook(input: {
           events: parsedEvents.events,
           active,
           secret: storedSecret,
+          ...authHeaderColumns(authHeaderChange),
         },
         update: {
+          ...authHeaderColumns(authHeaderChange),
           projectId,
           url,
           events: parsedEvents.events,
@@ -283,6 +297,10 @@ export async function manageAgentWebhook(input: {
   events?: unknown;
   active?: unknown;
   deliveryId?: unknown;
+  authHeaderName?: unknown;
+  authHeaderValue?: unknown;
+  bearerSecret?: unknown;
+  clearAuthHeader?: unknown;
 }) {
   await assertAgentWebhookOwner(input.userId, input.agentId, input.principal);
 
@@ -300,6 +318,10 @@ export async function manageAgentWebhook(input: {
           events: input.events,
           active: input.active,
           rotateSecret: input.action === "rotate",
+          authHeaderName: input.authHeaderName,
+          authHeaderValue: input.authHeaderValue,
+          bearerSecret: input.bearerSecret,
+          clearAuthHeader: input.clearAuthHeader,
         },
       })),
     };
