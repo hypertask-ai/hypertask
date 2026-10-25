@@ -203,30 +203,40 @@ export async function prepareTaskWriterRun(
     taskWriterAgentId: agentId,
     teamScope,
   });
-  const projectLabelsEnabled = body.aiMode === "AiTaskWriter" &&
-    await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId);
-  const boardLabels = projectLabelsEnabled ? await prisma.label.findMany({
-    where: { projectId: body.projectId },
-    select: { id: true, value: true },
-  }) : undefined;
-  const boardFormatEnabled = body.aiMode === "AiTaskWriter" &&
-    await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId);
-  const customInstructions = boardFormatEnabled && !body.customInstructions.trim()
-    ? await (await import("@/app/api/ai/_lib/customInstructions")).loadCustomInstructionText(body.projectId)
-    : body.customInstructions;
-  const customFieldDefinitions: TaskWriterCustomFieldDefinition[] | undefined = boardFormatEnabled
-    ? await prisma.customField.findMany({
-        where: { projectId: body.projectId },
-        orderBy: { ranking: "asc" },
-        take: 50,
-        select: { id: true, name: true, type: true, options: true },
-      })
-    : undefined;
-
-  const skillResolution = await resolveSkills(body.PROMPT, {
-    userId, agentId, teamScope,
-    projectId: body.projectId,
-  });
+  const loadBoardLabels = async () => {
+    const enabled = body.aiMode === "AiTaskWriter" &&
+      await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId);
+    return enabled ? prisma.label.findMany({
+      where: { projectId: body.projectId },
+      select: { id: true, value: true },
+    }) : undefined;
+  };
+  const loadBoardFormat = async () => {
+    const enabled = body.aiMode === "AiTaskWriter" &&
+      await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId);
+    const [customInstructions, customFieldDefinitions] = await Promise.all([
+      enabled && !body.customInstructions.trim()
+        ? import("@/app/api/ai/_lib/customInstructions").then((mod) => mod.loadCustomInstructionText(body.projectId))
+        : body.customInstructions,
+      enabled
+        ? prisma.customField.findMany({
+            where: { projectId: body.projectId },
+            orderBy: { ranking: "asc" },
+            take: 50,
+            select: { id: true, name: true, type: true, options: true },
+          }) as Promise<TaskWriterCustomFieldDefinition[]>
+        : undefined,
+    ]);
+    return { customInstructions, customFieldDefinitions };
+  };
+  const [boardLabels, { customInstructions, customFieldDefinitions }, skillResolution] = await Promise.all([
+    loadBoardLabels(),
+    loadBoardFormat(),
+    resolveSkills(body.PROMPT, {
+      userId, agentId, teamScope,
+      projectId: body.projectId,
+    }),
+  ]);
   const composeSkillsEnabled = body.requestKind === "compose-task" && body.invokeSkills &&
     await isFeatureEnabled(HTPR_7312_CTRLJ_SKILLS_FLAG, userId);
   if (composeSkillsEnabled) {
