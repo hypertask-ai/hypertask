@@ -325,13 +325,17 @@ function inviteEffect(overrides = {}) {
   const end = source.indexOf("const readyBoardRender =", start);
   assert.ok(start > 0 && end > start);
   const code = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-  assert.doesNotMatch(code, /\buseFlag\s*\(/);
+  assert.doesNotMatch(code, /HTPR_7028_FIRST_TASK_EMAIL_FLAG/);
   const calls = [];
   const context = {
     searchParams: new URLSearchParams(overrides.params ?? "id=15&invite=1&view=default"),
     useSetRecoilState: () => (value) => calls.push(value), showCommandsAtom: {},
+    useRecoilState: () => [{ show: false, mode: 0 }, (value) => calls.push(value)], useFlag: () => false,
+    HTPR_7885_INVITE_LINK_DIALOG_FLAG: "htpr-7885-invite-link-dialog",
+    useState: (initial) => [initial, () => {}],
     useRecoilValue: () => ({ id: overrides.atomProjectId ?? 15 }), currentProjectAtom: {},
     useRef: () => overrides.ref ?? { current: null },
+    isMblForChat: false,
     useEffect: (effect) => { effect(); effect(); },
     authenticated: true, isGuest: false, boardDataReady: true, currentBoardAccessStatus: "authorized",
     readyProject: { id: 15 }, requestedProjectId: 15, user: { id: 985 },
@@ -346,7 +350,7 @@ function inviteEffect(overrides = {}) {
   return JSON.parse(JSON.stringify(calls));
 }
 
-test("invite param opens existing dialog once without a flag read and keeps board URL state", () => {
+test("invite param opens existing dialog once without the removed email flag and keeps board URL state", () => {
   assert.deepEqual(inviteEffect(), [
     { show: true, mode: "existing-invite-command" },
     { state: { preserved: true }, url: "/project?id=15&view=default" },
