@@ -6,6 +6,8 @@ import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { HTPR_7691_IDEMPOTENT_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7691-idempotent-archive";
 
 const route = taskWriteRoute({
@@ -27,6 +29,60 @@ const route = taskWriteRoute({
       return NextResponse.json({
         message: "Tutorial notification id is required",
       }, { status: 400 });
+    }
+
+    if (
+      parsedTaskId !== null &&
+      parsedTaskId > 0 &&
+      Number(id) === -parsedTaskId &&
+      await isFeatureEnabled(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG, userId)
+    ) {
+      const task = await prisma.task.findFirst({
+        where: {
+          id: parsedTaskId,
+          waitingOnUserId: userId,
+          status: "Normal",
+          project: projectContentAccessWhere(userId, session.agentId, session.teamScope),
+        },
+        select: { id: true, projectId: true, waitingOnSetAt: true, createdAt: true },
+      });
+      if (!task) {
+        return NextResponse.json({ message: "Notification not found" }, { status: 404 });
+      }
+      const result = await prisma.$transaction(async (tx) => {
+        const archived = await tx.notification.findFirst({
+          where: {
+            taskId: task.id, userId, agentId: null, status: "Archive",
+            archivedAt: { gte: task.waitingOnSetAt ?? task.createdAt },
+          },
+          orderBy: { archivedAt: "desc" },
+        });
+        if (intent !== "archive" && archived) {
+          await tx.notification.updateMany({
+            where: { taskId: task.id, userId, agentId: null, status: "Archive", archivedAt: archived.archivedAt },
+            data: { status: "Normal", archivedAt: null },
+          });
+          return { ...archived, status: "Normal", archivedAt: null };
+        }
+        const updated = await tx.notification.updateMany({
+          where: { taskId: task.id, userId, agentId: null, status: "Normal" },
+          data: { status: "Archive", archivedAt: timeNow },
+        });
+        if (updated.count) {
+          return tx.notification.findFirst({
+            where: { taskId: task.id, userId, agentId: null, status: "Archive", archivedAt: timeNow },
+          });
+        }
+        if (archived) return archived;
+        return tx.notification.create({
+          data: {
+            taskId: task.id, projectId: task.projectId, userId,
+            type: "TaskReminder", status: "Archive", archivedAt: timeNow, seen: true,
+          },
+        });
+      });
+      void broadcastInboxChange(userId, { originUserId: userId }, excludeSocketId);
+      return NextResponse.json(result, { status: 200 });
     }
 
     if (!id) {

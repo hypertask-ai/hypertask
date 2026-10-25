@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -222,6 +224,7 @@ const notificationGetAll = async (
 ) => {
   const parsedUserId = parseInt(userId as string);
   try {
+    const blockedInboxArchive = await isFeatureEnabled(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG, parsedUserId);
     const inboxWhere: Prisma.NotificationWhereInput = agentId || teamScope != null
       ? { AND: [visibleUserInboxWhere(parsedUserId), notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] }
       : visibleUserInboxWhere(parsedUserId);
@@ -260,6 +263,12 @@ const notificationGetAll = async (
         orderBy: { waitingOnSetAt: "asc" },
         select: {
           ...inboxTaskSelect(parsedUserId),
+          notifications: {
+            where: { userId: parsedUserId, agentId: null, status: "Archive", archivedAt: { not: null } },
+            orderBy: { archivedAt: "desc" },
+            take: 1,
+            select: { archivedAt: true },
+          },
           project: {
             select: {
               id: true,
@@ -649,7 +658,11 @@ const notificationGetAll = async (
       };
     });
 
-    const blockedByYouRows = blockedTasks.map((task) => {
+    const blockedByYouRows = blockedTasks.filter((task) =>
+      !blockedInboxArchive || !task.notifications.some((notification) =>
+        notification.archivedAt && notification.archivedAt >= (task.waitingOnSetAt ?? task.createdAt)
+      )
+    ).map(({ notifications: _archivedNotifications, ...task }) => {
       const fromUser =
         (task.waitingOnSetById
           ? waitingOnSetByUserMap.get(task.waitingOnSetById)
