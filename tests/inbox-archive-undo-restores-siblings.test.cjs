@@ -89,7 +89,9 @@ async function loadMarkAsDone({ row }) {
     "src/lib/api/task-writes/route.ts",
     "src/lib/realtime/server.ts",
     "src/lib/prisma.ts",
+    "src/lib/flags.ts",
   ]);
+  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => ({ userId: 6 }),
   });

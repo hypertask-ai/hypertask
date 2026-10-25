@@ -112,6 +112,7 @@ function fixture(name, scenario = {}) {
       return session;
     } },
     "@/lib/prisma": { default: db },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: userId => ({ ownerId: userId }) },
     "@/lib/realtime/server": realtime,
     "@/utils/controllers/tasks/assertTaskAccess": { userCanAccessTaskContent: async (...args) => { step("task-access", ...args); return !scenario.denied; } },

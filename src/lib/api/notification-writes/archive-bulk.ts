@@ -4,7 +4,35 @@ import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route
 import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7952_BULK_ARCHIVE_TWO_UPDATES_FLAG } from "@/lib/flags/definitions/htpr-7952-bulk-archive-two-updates";
 import type { Status } from "@prisma/client";
+
+async function archiveInTwoUpdates(
+  entries: { notificationId: number; taskId?: number | null }[],
+  userId: number,
+  archiveStatus: Status,
+) {
+  const restoreInbox = archiveStatus === "Normal";
+  const archivedAt = restoreInbox ? null : new Date();
+  const notificationIds = entries.map(({ notificationId }) => notificationId);
+  const taskIds = restoreInbox
+    ? []
+    : [...new Set(entries.map(({ taskId }) => taskId).filter((taskId): taskId is number => Boolean(taskId)))];
+  return prisma.$transaction(async (tx) => {
+    const archived = await tx.notification.updateMany({
+      where: { id: { in: notificationIds }, userId, status: { not: "Deleted" } },
+      data: { status: archiveStatus, archivedAt },
+    });
+    const siblings = taskIds.length === 0
+      ? { count: 0 }
+      : await tx.notification.updateMany({
+        where: { taskId: { in: taskIds }, userId, id: { notIn: notificationIds }, status: { not: "Deleted" } },
+        data: { status: "Archive", archivedAt },
+      });
+    return { totalArchived: archived.count, totalDeleted: siblings.count };
+  });
+}
 
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -38,7 +66,9 @@ const route = taskWriteRoute({
 
     const restoreInbox = archiveStatus === "Normal";
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await isFeatureEnabled(HTPR_7952_BULK_ARCHIVE_TWO_UPDATES_FLAG, session.userId)
+      ? await archiveInTwoUpdates(validEntries, session.userId, archiveStatus)
+      : await prisma.$transaction(async (tx) => {
       const operations = validEntries.map(({ notificationId, taskId }) => {
         const archivedAt = restoreInbox ? null : new Date();
         const ops = [

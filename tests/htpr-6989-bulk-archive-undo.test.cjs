@@ -62,6 +62,7 @@ function fixture(api, original = false) {
   const mocks = {
     "@/lib/prisma": { default: db },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/lib/realtime/server": {
       socketIdFromHeader: () => "123.456",
       broadcastInboxChange: async (...args) => broadcasts.push(args),
