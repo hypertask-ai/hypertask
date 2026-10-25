@@ -59,14 +59,14 @@ function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true
   global.setTimeout = callback => { timers.push(callback); return timers.length; };
   const composer = document.getElementById("composer");
   const slots = [], effects = [], routes = [], selections = [];
-  let cursor = 0, cleanups = [], tree;
+  let cursor = 0, cleanups = [], tree, activeSlots = slots;
   const react = {
     useMemo: callback => callback(),
-    useRef: current => slots[cursor++] ??= { current },
+    useRef: current => activeSlots[cursor++] ??= { current },
     useState: initial => {
       const index = cursor++;
-      if (!(index in slots)) slots[index] = initial;
-      return [slots[index], next => { slots[index] = typeof next === "function" ? next(slots[index]) : next; }];
+      if (!(index in activeSlots)) activeSlots[index] = initial;
+      return [activeSlots[index], next => { activeSlots[index] = typeof next === "function" ? next(activeSlots[index]) : next; }];
     },
     useEffect: callback => { effects.push(callback); },
   };
@@ -112,8 +112,11 @@ function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true
     const props = node.props ?? {};
     if (typeof node.type === "function") {
       const savedCursor = cursor;
+      const savedSlots = activeSlots;
       cursor = 0;
+      activeSlots = [];
       renderChildren(node.type({ ...props, children: undefined }));
+      activeSlots = savedSlots;
       cursor = savedCursor;
     }
     [props.children].flat(Infinity).forEach(renderChildren);
@@ -122,6 +125,7 @@ function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true
     cleanups.forEach(cleanup => cleanup?.());
     cleanups = [];
     cursor = 0;
+    activeSlots = slots;
     tree = Chat({});
     renderChildren(tree);
     cleanups = effects.splice(0).map(effect => effect());
