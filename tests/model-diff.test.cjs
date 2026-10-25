@@ -46,7 +46,7 @@ test("approved examples are discovered, with one finding per model class and no 
 
 test("stale detection still fires for a catalogue that keeps two versions of one class", () => {
   const stale = staleFinding();
-  assert.equal(stale.model, "claude-haiku-4.5");
+  assert.equal(stale.model, "anthropic/claude-haiku-4.5");
   assert.equal(stale.action, "remove stale entry; migrate saved picks to the current model of its class");
 });
 
