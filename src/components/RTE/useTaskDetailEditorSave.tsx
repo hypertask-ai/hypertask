@@ -180,7 +180,7 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
         : undefined,
       !preserveTutorialInbox && inInbox,
       undefined,
-      replyInbox && !preserveTutorialInbox,
+      replyInbox && mode === "create-comment" && !preserveTutorialInbox,
     );
   };
 
