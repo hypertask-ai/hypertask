@@ -121,7 +121,10 @@ function normalizeInputPlacement(
     }
   }
   if (options.taskIdTicketReference && documented.has('task_id') && documented.has('ticket_number') && input.task_id !== undefined) {
-    const reference = ticketReferenceFromTaskId(input.task_id)
+    let reference = ticketReferenceFromTaskId(input.task_id)
+    if (Array.isArray(reference) && !z.safeParse(tool.parameters.shape.ticket_number, reference).success) {
+      reference = reference.length === 1 ? reference[0] : undefined
+    }
     if (reference !== undefined) {
       if (input.ticket_number !== undefined && JSON.stringify(input.ticket_number) !== JSON.stringify(reference)) throw placementConflict('task_id')
       input.ticket_number = reference

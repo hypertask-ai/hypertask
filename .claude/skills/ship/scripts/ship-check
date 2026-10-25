@@ -23,13 +23,13 @@
 #   ship-check done <T>          ticket is in the done column its own board names
 #   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
-# CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...; non-releasing repos can opt in with SHIP_DEPLOY=none.
+# CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...; a repo listed in NON_RELEASING_REPOS, or any repo with SHIP_DEPLOY=none, is checked against its workflow runs instead of a release.
 # Every gate binds to the PR recorded with `bind` (required), so another
 # PR's merge never stands in for this fix, and every GitHub lookup fails closed.
 set -uo pipefail
 REPO=${SHIP_REPO:-hypertask-ai/hypertask}
 BASE=${SHIP_BASE:-production}
-readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node)
+readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node valentinyeo/ceo)
 EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
 TITLE_RE='^(HTPR|HYFA|YPER4)-[0-9]+ \[(BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] [^ ]'
 
@@ -317,6 +317,40 @@ docs_deploy_ok() {
     || fail "no successful production deploy job for $sha"
 }
 
+live_proof_ok() {
+  local t=$1 sha=$2 f="$EVID/$1/live-proof" psha source check unit fragment out
+  [ -s "$f" ] || return 1
+  psha=$(sed -n 's/^sha:[[:space:]]*//p' "$f" | head -1)
+  source=$(sed -n 's/^source:[[:space:]]*//p' "$f" | head -1)
+  check=$(sed -n 's/^check:[[:space:]]*//p' "$f" | head -1)
+  [ "$psha" = "$sha" ] && [[ $sha =~ ^[0-9a-f]{40}$ ]] || return 1
+  [[ $source == /* && $source != *..* ]] && [ -d "$source" ] || return 1
+  git -C "$source" cat-file -e "$sha^{commit}" 2>/dev/null || return 1
+  git -C "$source" merge-base --is-ancestor "$sha" HEAD 2>/dev/null || return 1
+  case $check in
+    systemd-user-unit\ *)
+      unit=${check#systemd-user-unit }
+      [[ $unit =~ ^[A-Za-z0-9@._-]+\.service$ ]] || return 1
+      fragment=$(systemctl --user show "$unit" -p FragmentPath --value 2>/dev/null) || return 1
+      [ -f "$fragment" ] || return 1
+      tmp=$(mktemp -d) || return 1
+      if ! git -C "$source" show "$sha:systemd/$unit" > "$tmp/unit" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
+      if ! cmp -s "$fragment" "$tmp/unit"; then rm -rf "$tmp"; return 1; fi
+      exec=$(sed -n 's/^ExecStart=//p' "$tmp/unit" | head -1)
+      target=${exec%% *}
+      target=${target/#\%h/$HOME}
+      if [[ $target != "$source"/* ]]; then rm -rf "$tmp"; return 1; fi
+      relative=${target#"$source"/}
+      if ! git -C "$source" show "$sha:$relative" > "$tmp/payload" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
+      if ! cmp -s "$target" "$tmp/payload"; then rm -rf "$tmp"; return 1; fi
+      rm -rf "$tmp"
+      out=$(systemctl --user show "$unit" -p Result -p ExecMainStatus 2>/dev/null) || return 1
+      grep -qx 'Result=success' <<<"$out" && grep -qx 'ExecMainStatus=0' <<<"$out"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 check_deployed() {
   dropped_ok deployed "$1" && return 0
   nochange_ok deployed "$1" && return 0
@@ -350,7 +384,12 @@ check_deployed() {
           and (.event == "push" or .event == "workflow_dispatch") and .head_branch == $base
           and .conclusion == "success")] | first | .html_url // empty' <<<"$runs") \
           || fail "could not read successful workflow run for $sha"
-        [ -n "$run_url" ] || fail "no successful push or workflow_dispatch run for merge $sha on $BASE"
+        [ -n "$run_url" ] || {
+          if ! jq -e 'length > 0' <<<"$runs" >/dev/null && live_proof_ok "$1" "$sha"; then
+            echo "deployed ok (recorded live proof, merged ${sha:0:9} on $BASE)"; return
+          fi
+          fail "no successful push or workflow_dispatch run for merge $sha on $BASE; record the live proof in $EVID/$1/live-proof with sha:, source: and check: lines"
+        }
         echo "deployed ok (no release: merged ${sha:0:9} on $BASE, green run $run_url)"; return
       fi
       if [ -n "${SHIP_WORKER:-}" ]; then
@@ -752,7 +791,21 @@ PY
         done
       fi
     fi
-  done < <(sed -E 's/(&&|\|\||;|\||&|\(|\))/\n/g' <<<"$cmd")
+  done < <(awk '
+    BEGIN { sq = "\047" }
+    {
+      line = $0; out = ""; n = length(line); q = ""
+      for (i = 1; i <= n; i++) {
+        c = substr(line, i, 1); two = substr(line, i, 2)
+        if (two == "&&" || two == "||") { print out; out = ""; i++; q = ""; continue }
+        if (c == ";" || c == "|" || c == "&") { print out; out = ""; q = ""; continue }
+        if (q == "" && (c == "(" || c == ")")) { print out; out = ""; continue }
+        if (q == "" && (c == "\"" || c == sq)) { q = c; out = out c; continue }
+        if (q != "" && c == q) { q = ""; out = out c; continue }
+        out = out c
+      }
+      print out
+    }' <<<"$cmd")
   exit 0
 }
 

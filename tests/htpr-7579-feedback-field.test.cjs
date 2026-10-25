@@ -31,7 +31,7 @@ function setup({ plain = true } = {}) {
     '@/lib/prisma': { __esModule: true, default: db },
     './enabled': { aiFeedbackEnabled: async () => true },
     './rateLimit': { reserveFeedbackAttempt: async () => true, reserveFeedbackQuota: async () => true },
-    '@/lib/flags': { isFeatureEnabled: async () => plain },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key !== 'htpr-7941-quiet-fixable-reports' && plain },
     '@/utils/controllers/tasks/createTaskCore': { createProvisionedTaskCore: async options => {
       const task = { ...options, id: created.length + 1, ticketNumber: `HTPR-${8001 + created.length}`, uniqueIndex: 8001 + created.length }
       created.push(task)

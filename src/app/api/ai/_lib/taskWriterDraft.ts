@@ -14,6 +14,7 @@ export async function generateTaskWriterDraft(
   abortSignal?: AbortSignal,
   teamScope?: AgentTokenTeamScope | null,
 ) {
+  const startedAt = Date.now();
   const {
     selected,
     instructions,
@@ -25,6 +26,7 @@ export async function generateTaskWriterDraft(
     customFieldDefinitions,
     boardLabelIds,
   } = await prepareTaskWriterRun(body, userId, agentId, teamScope);
+  const preparedAt = Date.now();
 
   configureAiModelUsage(selected.model, {
     userId,
@@ -48,6 +50,7 @@ export async function generateTaskWriterDraft(
     ...(abortSignal ? { abortSignal } : {}),
   });
 
+  const generatedAt = Date.now();
   const filtered = allowedImgSrcs
     ? filterOneImagePass(text, allowedImgSrcs).emit
     : text;
@@ -62,6 +65,17 @@ export async function generateTaskWriterDraft(
             body.taskTitle.trim() || taskTitleFromBrief(body.PROMPT),
         })
       : { title: null, description: draftHtml };
+
+  const parsedAt = Date.now();
+  console.info(`[ai/task-writer] stages ${JSON.stringify({
+    projectId: body.projectId,
+    requestKind: body.requestKind,
+    model: selected.modelId,
+    prepareMs: Math.round(preparedAt - startedAt),
+    writerMs: Math.round(generatedAt - preparedAt),
+    parseMs: Math.round(parsedAt - generatedAt),
+    totalMs: Math.round(parsedAt - startedAt),
+  })}`);
 
   if (validateDraft && !hasUsableTaskWriterDraft(properties.description)) {
     return { success: false as const, error: TASK_WRITER_EMPTY_DRAFT_MESSAGE };

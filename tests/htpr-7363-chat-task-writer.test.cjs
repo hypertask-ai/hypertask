@@ -27,7 +27,7 @@ function moduleWithStubs(file, stubs) {
   const loadedModule = { exports: {} };
   vm.runInNewContext(code, {
     module: loadedModule, exports: loadedModule.exports, Error, Date, AbortController,
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
       if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
