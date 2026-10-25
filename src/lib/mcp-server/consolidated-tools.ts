@@ -121,14 +121,13 @@ function normalizeInputPlacement(
     }
   }
   if (options.taskIdTicketReference && documented.has('task_id') && documented.has('ticket_number') && input.task_id !== undefined) {
-    const reference = ticketReferenceFromTaskId(input.task_id)
-    const ticketNumberShape = tool.parameters.shape.ticket_number
-    const acceptsArray = ticketNumberShape !== undefined && JSON.stringify(z.toJSONSchema(ticketNumberShape as z.ZodType, { io: 'input', unrepresentable: 'any' })).includes('"array"')
-    const single = Array.isArray(reference) ? (reference.length === 1 ? reference[0] : undefined) : reference
-    const converted = Array.isArray(reference) ? (acceptsArray ? reference : single) : reference
-    if (converted !== undefined) {
-      if (input.ticket_number !== undefined && JSON.stringify(input.ticket_number) !== JSON.stringify(converted)) throw placementConflict('task_id')
-      input.ticket_number = converted
+    let reference = ticketReferenceFromTaskId(input.task_id)
+    if (Array.isArray(reference) && !tool.parameters.shape.ticket_number.safeParse(reference).success) {
+      reference = reference.length === 1 ? reference[0] : undefined
+    }
+    if (reference !== undefined) {
+      if (input.ticket_number !== undefined && JSON.stringify(input.ticket_number) !== JSON.stringify(reference)) throw placementConflict('task_id')
+      input.ticket_number = reference
       delete input.task_id
     }
   }
