@@ -135,3 +135,15 @@ test("a nested unknown field is not confused with an action's top-level field", 
   const text = await errorText(tool, { action: "tasks", input: { filter: { projectId: 15 } } });
   assert.equal(text, "Remove unsupported fields projectId from input.filter; use only fields documented for this action.");
 });
+
+test("a camelCase field next to action, outside input, still names the documented field", async () => {
+  const tools = searchCatalog(true, [{
+    name: "hypertask_section",
+    description: "Sections",
+    parameters: z.object({ action: z.enum(["list"]), project_id: z.number().optional() }).strict(),
+    execute: async (args) => JSON.stringify({ success: true, args }),
+  }]);
+  const sections = tools.find(({ name }) => name === "hypertask_sections");
+  const text = await errorText(sections, { action: "list", projectId: 15 });
+  assert.equal(text, "Remove unsupported fields projectId from input; use only fields documented for this action. Use project_id instead of projectId.");
+});
