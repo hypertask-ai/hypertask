@@ -1259,6 +1259,7 @@ E2="$E/inert"; mkdir -p "$E2/bin" "$E2/evidence/YPER4-999" "$E2/src/systemd" "$E
 git -C "$E2/src" init -q; git -C "$E2/src" config user.email t@t; git -C "$E2/src" config user.name t
 printf '[Service]\nExecStart=/bin/true\n' > "$E2/src/systemd/fast-lane-close.service"
 git -C "$E2/src" add -A; git -C "$E2/src" commit -qm fixture; inert_sha=$(git -C "$E2/src" rev-parse HEAD)
+printf 'later\n' > "$E2/src/later.txt"; git -C "$E2/src" add -A; git -C "$E2/src" commit -qm later
 cp "$E2/src/systemd/fast-lane-close.service" "$E2/units/fast-lane-close.service"
 printf "838\n" > "$E2/evidence/YPER4-999/pr"
 printf "valentinyeo/ceo\n" > "$E2/evidence/YPER4-999/repo"

@@ -325,7 +325,8 @@ live_proof_ok() {
   check=$(sed -n 's/^check:[[:space:]]*//p' "$f" | head -1)
   [ "$psha" = "$sha" ] && [[ $sha =~ ^[0-9a-f]{40}$ ]] || return 1
   [[ $source == /* && $source != *..* ]] && [ -d "$source" ] || return 1
-  [ "$(git -C "$source" rev-parse HEAD 2>/dev/null)" = "$sha" ] || return 1
+  git -C "$source" cat-file -e "$sha^{commit}" 2>/dev/null || return 1
+  git -C "$source" merge-base --is-ancestor "$sha" HEAD 2>/dev/null || return 1
   case $check in
     systemd-user-unit\ *)
       unit=${check#systemd-user-unit }
