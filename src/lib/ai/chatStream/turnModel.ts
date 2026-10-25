@@ -313,15 +313,20 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       byokApiKey,
     );
 
-    titleByokApiKey =
-      selection.provider === "openai" && typeof byokApiKey === "string"
-        ? byokApiKey
-        : await getByokOrTeamGatewayApiKeyForProvider(
+    if (selection.provider === "openai" && typeof byokApiKey === "string") {
+      titleByokApiKey = byokApiKey;
+    } else {
+      try {
+        titleByokApiKey = await getByokOrTeamGatewayApiKeyForProvider(
           "openai",
           body.byokProviderFlags,
           keyLookupContext,
           { resolveOpenRouterWithoutFlag: false }
         );
+      } catch (error) {
+        if (!(typeof TeamKeyOnlyRefusal === "function" && error instanceof TeamKeyOnlyRefusal)) throw error;
+      }
+    }
     streamCredential = byokApiKey;
     streamModelOption = selection.modelOption;
     const resolvedModel = selectModel(

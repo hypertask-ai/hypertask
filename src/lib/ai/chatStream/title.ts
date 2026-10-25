@@ -45,9 +45,6 @@ export async function generateConversationTitle(
   abortSignal?: AbortSignal,
 ) {
   const fallback = fallbackTitle(message);
-  if (!byokApiKey && !isAiGatewayEnabled()) {
-    return fallback;
-  }
   try {
     const funded = tags?.teamId && typeof keyOnlySideCallModel === "function"
       ? await keyOnlySideCallModel(
@@ -55,6 +52,7 @@ export async function generateConversationTitle(
           "openai",
         )
       : null;
+    if (!funded && !byokApiKey && !isAiGatewayEnabled()) return fallback;
     const defaultContext = { ...(typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }) : { haiku55Enabled: false, byok: undefined }), openaiOnlyDefaultEnabled: false };
     if (!funded && "anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return fallback;
     const useHaiku = defaultModelKeyFor(defaultContext, "gpt-6-luna") === "claude-haiku-5-5";

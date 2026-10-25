@@ -22,7 +22,7 @@ function stubModule(relativePath, exports) {
   };
 }
 
-function loadByok(flagOn, extraKeys = {}) {
+function loadByok(flagOn, extraKeys = {}, options = {}) {
   for (const relativePath of [
     "src/lib/flags.ts",
     "src/lib/prisma.ts",
@@ -39,7 +39,7 @@ function loadByok(flagOn, extraKeys = {}) {
   });
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     storePlanIdForProject: async () => "BYOK",
-    haikuDefaultModelEnabled: async () => false,
+    haikuDefaultModelEnabled: async () => options.haikuDefault === true,
     haiku55ModelEnabled: async () => false,
     backgroundClaudeModelEnabled: async () => false,
   });
@@ -68,7 +68,7 @@ function loadByok(flagOn, extraKeys = {}) {
           return extraKeys[provider] ? { enabled: true, ciphertext: extraKeys[provider] } : null;
         },
       },
-      agentByokApiKey: { findUnique: async () => null },
+      agentByokApiKey: { findUnique: async () => options.agentClaude ? { enabled: true, ciphertext: options.agentClaude } : null },
     },
   });
   const jiti = require("jiti")(__filename, {
@@ -128,6 +128,27 @@ test("key-only chat does not use a saved openai key or a customer gateway key", 
     );
     assert.equal(await byok.getTeamGatewayFunding(lookup), undefined);
     assert.equal(await byok.getByokOrTeamGatewayApiKey("claude", undefined, lookup), TEAM_KEY);
+  });
+});
+
+test("key-only model options and the haiku shortcut stay on the team claude key", async () => {
+  await withPlatformKeys(async () => {
+    const byok = loadByok(true, {}, { haikuDefault: true, agentClaude: "sk-ant-agent-other" });
+    const catalog = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } })(path.join(root, "src/lib/aiModelOptions.ts"));
+    const lookup = { trustedTeamId: TEAM_ID, userId: 7, agentId: "agent-1" };
+    await assert.rejects(
+      () => byok.getByokOrTeamGatewayApiKeyForModelOption(catalog.getAiModelOptionById("gpt-6-luna"), undefined, lookup),
+      (error) => error.name === "TeamKeyOnlyRefusal" && !error.message.includes("sk-ant-agent-other"),
+    );
+    await assert.rejects(
+      () => byok.getByokOrTeamGatewayApiKeyForModelOption({ source: "custom", modelKey: "custom-endpoint" }, undefined, lookup),
+      (error) => error.name === "TeamKeyOnlyRefusal",
+    );
+    const haiku = catalog.getAiModelOptionById("claude-haiku-4.5") ?? catalog.getAiModelOptionById("claude-haiku-5-5");
+    assert.equal(await byok.getByokOrTeamGatewayApiKeyForModelOption(haiku, undefined, lookup), TEAM_KEY);
+    const context = await byok.getAiDefaultModelContext(lookup);
+    assert.equal(context.byok.provider, "claude");
+    assert.equal(context.byok.credential, TEAM_KEY);
   });
 });
 

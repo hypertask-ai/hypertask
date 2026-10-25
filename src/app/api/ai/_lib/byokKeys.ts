@@ -510,6 +510,24 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   flags?: ByokProviderFlag[] | null,
   lookup?: ByokLookupContext
 ): Promise<AiModelCredential | undefined> {
+  const keyOnlyTeamId = await resolveLookupTeamId(lookup);
+  if (keyOnlyTeamId && typeof resolveTeamAiFunding === "function") {
+    const definition = option.source === "custom" ? undefined : getAiModelDefinition(option.modelKey);
+    const provider = option.source === "custom" || definition?.provider === "custom"
+      ? "custom"
+      : definition
+        ? getAiProviderInfo(definition.provider)?.byokKey ?? definition.provider
+        : "gateway";
+    const decision = await resolveTeamAiFunding(keyOnlyTeamId, { provider, feature: "chat" });
+    if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
+    if (decision.mode === "byok") {
+      if (isPlatformAiCredential(decision.apiKey) || isVercelAiGatewayKey(decision.apiKey)) {
+        throw new TeamKeyOnlyRefusal();
+      }
+      return decision.apiKey;
+    }
+  }
+
   if (option.source === "custom") {
     const plan = await resolveLookupPlan(lookup);
     if (!plan || plan === "Free") return undefined;
@@ -622,18 +640,18 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
   let byok: { provider: "claude" | "gateway" | "openrouter"; credential: string } | undefined;
   if (enabled && storePlanId && storePlanId !== "Free") {
     for (const provider of ["claude", "gateway", "openrouter"] as const) {
-      const credential = await getByokApiKeyForProvider(provider, undefined, lookup, { resolveWithoutFlag: true });
-      if (!credential) continue;
       const teamId = await resolveLookupTeamId(lookup);
       const sideCall = teamId && typeof resolveSideCallFunding === "function"
         ? await resolveSideCallFunding(teamId, provider)
         : { mode: "unrestricted" as const };
-      if (
-        sideCall.mode !== "unrestricted" &&
-        (provider !== "claude" || isPlatformAiCredential(credential) || isVercelAiGatewayKey(credential))
-      ) {
-        continue;
+      if (sideCall.mode === "refused") continue;
+      if (sideCall.mode === "byok") {
+        if (sideCall.provider !== "claude" || isPlatformAiCredential(sideCall.apiKey) || isVercelAiGatewayKey(sideCall.apiKey)) continue;
+        byok = { provider: "claude", credential: sideCall.apiKey };
+        break;
       }
+      const credential = await getByokApiKeyForProvider(provider, undefined, lookup, { resolveWithoutFlag: true });
+      if (!credential) continue;
       byok = { provider, credential };
       break;
     }

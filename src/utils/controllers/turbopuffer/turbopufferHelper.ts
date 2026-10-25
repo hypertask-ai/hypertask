@@ -1142,18 +1142,20 @@ async function ensureNamespaceSchema(
   });
 }
 
-async function teamIdForEmbedding(
-  rows: Array<{ teamId?: string; projectId?: number }>,
+async function embeddingTeamId(
+  row: { teamId?: string; projectId?: number },
+  projectTeams: Map<number, string | null>,
 ): Promise<string | null> {
-  const direct = rows.find((row) => typeof row.teamId === "string" && row.teamId && row.teamId !== "__schema__")?.teamId;
-  if (direct) return direct;
-  const projectId = rows.find((row) => typeof row.projectId === "number" && row.projectId > 0)?.projectId;
-  if (!projectId) return null;
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { teamId: true },
-  });
-  return project?.teamId ?? null;
+  if (typeof row.teamId === "string" && row.teamId && row.teamId !== "__schema__") return row.teamId;
+  if (typeof row.projectId !== "number" || row.projectId <= 0) return null;
+  if (!projectTeams.has(row.projectId)) {
+    const project = await prisma.project.findUnique({
+      where: { id: row.projectId },
+      select: { teamId: true },
+    });
+    projectTeams.set(row.projectId, project?.teamId ?? null);
+  }
+  return projectTeams.get(row.projectId) ?? null;
 }
 
 async function embedRowsForWrite<T extends { searchText: string; teamId?: string; projectId?: number }>(
@@ -1161,11 +1163,26 @@ async function embedRowsForWrite<T extends { searchText: string; teamId?: string
   context: string
 ): Promise<{ rows: Array<TurbopufferVectorRow<T>>; hasVectors: boolean }> {
   try {
-    const embeddings = await embedTexts(rows.map((row) => row.searchText), await teamIdForEmbedding(rows));
+    const projectTeams = new Map<number, string | null>();
+    const groups = new Map<string, number[]>();
+    for (let index = 0; index < rows.length; index += 1) {
+      const teamId = await embeddingTeamId(rows[index], projectTeams);
+      const key = teamId ?? "";
+      const indexes = groups.get(key) ?? [];
+      indexes.push(index);
+      groups.set(key, indexes);
+    }
+    const vectors: number[][] = new Array(rows.length);
+    for (const [teamId, indexes] of groups) {
+      const embeddings = await embedTexts(indexes.map((index) => rows[index].searchText), teamId || null);
+      indexes.forEach((rowIndex, embeddingIndex) => {
+        vectors[rowIndex] = embeddings[embeddingIndex];
+      });
+    }
     return {
       rows: rows.map((row, index) => ({
         ...row,
-        vector: embeddings[index],
+        vector: vectors[index],
       })),
       hasVectors: true,
     };
