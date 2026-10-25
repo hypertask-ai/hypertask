@@ -96,27 +96,27 @@ function observedClient({ beforeTransaction, afterRead, afterCommit } = {}) {
   } });
 }
 
-async function assertMoveBlocked(table, id) {
+async function assertMoveBlocked(table, id, destination) {
+  const field = table === 'Project' ? 'teamId' : 'projectId';
   await assert.rejects(prisma.$transaction(async tx => {
     await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '150ms'");
-    await tx.$executeRawUnsafe(`UPDATE "${table}" SET id = id WHERE id = $1`, id);
+    await tx.$executeRawUnsafe(`UPDATE "${table}" SET "${field}" = $2 WHERE id = $1`, id, destination);
   }), error => error.code === 'P2010' && /55P03/.test(JSON.stringify(error)));
 }
 
-for (const kind of ['report', 'view', 'page']) {
-  for (const ordering of ['move-first', 'write-first']) {
+for (const [kind, table] of [['report', 'Project'], ['view', 'Project'], ['page', 'Page'], ['page', 'Project']]) {
+  for (const ordering of kind === 'page' && table === 'Project' ? ['move-first'] : ['move-first', 'write-first']) {
     for (const actor of ['bound', 'unbound']) {
-      test(`real PG ${kind} ${ordering} ${actor}`, async t => {
+      test(`real PG ${kind} ${table} ${ordering} ${actor}`, async t => {
         if (skipReason) return t.skip(skipReason);
         const f = await fixture(actor);
-        const table = kind === 'page' ? 'Page' : 'Project';
         let witnessed = false;
         const db = observedClient({
           beforeTransaction: ordering === 'move-first' ? f.move[table] : undefined,
           afterRead: ordering === 'write-first' && actor === 'bound' ? async (model, result) => {
             if (model !== table.toLowerCase() || witnessed || !result) return;
             witnessed = true;
-            await assertMoveBlocked(table, kind === 'page' ? f.page.id : f.project.id);
+            await assertMoveBlocked(table, kind === 'page' ? f.page.id : f.project.id, table === 'Project' ? f.other.teamId : f.other.id);
           } : undefined,
         });
         if (kind === 'report' && actor === 'unbound' && ordering === 'move-first') await f.move.Project();
@@ -141,8 +141,8 @@ for (const kind of ['report', 'view', 'page']) {
           assert.equal((await prisma.page.findUniqueOrThrow({ where: { id: f.page.id } })).title, denied ? 'Before move' : 'Changed');
           assert.equal(await prisma.docVersion.count({ where: { entityType: 'page', entityId: f.page.id } }), denied ? 0 : 1);
         }
-        if (ordering === 'write-first' && actor === 'bound') {
-          assert.equal(witnessed, true);
+        if (ordering === 'write-first') {
+          assert.equal(witnessed, actor === 'bound');
           await f.move[table]();
         }
       });
@@ -151,29 +151,50 @@ for (const kind of ['report', 'view', 'page']) {
 }
 
 for (const action of ['claim', 'heartbeat', 'release']) {
-  for (const actor of ['bound', 'unbound']) {
-    test(`real PG lease ${action} move-first ${actor}`, async t => {
-      if (skipReason) return t.skip(skipReason);
-      const f = await fixture(actor);
-      const token = require('node:crypto').randomUUID();
-      if (action !== 'claim') await prisma.taskLease.create({ data: { taskId: f.task.id, holder: f.user.id, agentId: f.agent.id, token, expiresAt: new Date(Date.now() + 60_000), heartbeatAt: new Date(0) } });
-      const before = await prisma.taskLease.findUnique({ where: { taskId: f.task.id } });
-      if (actor === 'unbound') await f.move.Task();
-      const db = observedClient({ beforeTransaction: f.move.Task });
-      const route = f.load(`src/app/api/mcp/tasks/lease/${action}/route.ts`, { '@/lib/prisma': { default: db } });
-      const response = await route.POST(new NextRequest('http://localhost/api/mcp/tasks/lease', { method: 'POST', body: JSON.stringify({ task_id: f.task.id, lease_token: token }) }));
-      assert.equal(response.status, actor === 'bound' ? 404 : 200, await response.text());
-      const after = await prisma.taskLease.findUnique({ where: { taskId: f.task.id } });
-      if (actor === 'bound') assert.deepEqual(after, before);
-      else if (action === 'release') assert.equal(after, null);
-      else { assert.equal(after.agentId, f.agent.id); assert.equal(after.token, token); }
-    });
+  for (const [ordering, table] of [['move-first', 'Task'], ['move-first', 'Project'], ['write-first', 'Task']]) {
+    for (const actor of ['bound', 'unbound']) {
+      test(`real PG lease ${action} ${table} ${ordering} ${actor}`, async t => {
+        if (skipReason) return t.skip(skipReason);
+        const f = await fixture(actor);
+        const token = require('node:crypto').randomUUID();
+        if (action !== 'claim') await prisma.taskLease.create({ data: { taskId: f.task.id, holder: f.user.id, agentId: f.agent.id, token, expiresAt: new Date(Date.now() + 60_000), heartbeatAt: new Date(0) } });
+        const before = await prisma.taskLease.findUnique({ where: { taskId: f.task.id } });
+        if (actor === 'unbound' && ordering === 'move-first') await f.move[table]();
+        let witnessed = false;
+        const db = observedClient({
+          beforeTransaction: ordering === 'move-first' ? f.move[table] : undefined,
+          afterRead: ordering === 'write-first' && actor === 'bound' ? async (model, result) => {
+            if (model === 'task' && result && !witnessed) {
+              witnessed = true;
+              await assertMoveBlocked('Task', f.task.id, f.other.id);
+            }
+          } : undefined,
+        });
+        const route = f.load(`src/app/api/mcp/tasks/lease/${action}/route.ts`, { '@/lib/prisma': { default: db } });
+        const response = await route.POST(new NextRequest('http://localhost/api/mcp/tasks/lease', { method: 'POST', body: JSON.stringify({ task_id: f.task.id, lease_token: token, ttl_seconds: 300 }) }));
+        const denied = actor === 'bound' && ordering === 'move-first';
+        assert.equal(response.status, denied ? 404 : 200, await response.text());
+        const after = await prisma.taskLease.findUnique({ where: { taskId: f.task.id } });
+        if (denied) assert.deepEqual(after, before);
+        else if (action === 'release') assert.equal(after, null);
+        else {
+          assert.equal(after.agentId, f.agent.id);
+          assert.equal(after.token, token);
+          assert.ok(after.heartbeatAt > (before?.heartbeatAt ?? new Date(0)));
+          if (before) assert.ok(after.expiresAt > before.expiresAt);
+        }
+        if (ordering === 'write-first') {
+          assert.equal(witnessed, actor === 'bound');
+          await f.move.Task();
+        }
+      });
+    }
   }
 }
 
-for (const phase of ['move-first', 'write-first', 'reconcile']) {
+for (const [phase, table] of [['move-first', 'Task'], ['move-first', 'Project'], ['write-first', 'Task'], ['reconcile', 'Task'], ['reconcile', 'Project']]) {
   for (const actor of ['bound', 'unbound']) {
-    test(`real PG upload ${phase} ${actor}`, async t => {
+    test(`real PG upload ${table} ${phase} ${actor}`, async t => {
       if (skipReason) return t.skip(skipReason);
       const f = await fixture(actor);
       let transactions = 0;
@@ -181,12 +202,12 @@ for (const phase of ['move-first', 'write-first', 'reconcile']) {
       const db = observedClient({
         beforeTransaction: async () => {
           transactions++;
-          if (phase === 'move-first' || phase === 'reconcile' && transactions === 2) await f.move.Task();
+          if (phase === 'move-first' || phase === 'reconcile' && transactions === 2) await f.move[table]();
         },
         afterRead: phase === 'write-first' && actor === 'bound' ? async (model, result) => {
           if (model === 'task' && result && !witnessed) {
             witnessed = true;
-            await assertMoveBlocked('Task', f.task.id);
+            await assertMoveBlocked('Task', f.task.id, f.other.id);
           }
         } : undefined,
         afterCommit: async () => { if (phase === 'reconcile' && transactions === 1) throw new Error('Lost commit acknowledgement'); },
@@ -203,8 +224,8 @@ for (const phase of ['move-first', 'write-first', 'reconcile']) {
       else assert.equal((await upload()).length, 1);
       assert.equal(await prisma.attachment.count({ where: { taskId: f.task.id } }), phase === 'move-first' && actor === 'bound' ? 0 : 1);
       if (phase === 'reconcile') assert.equal(transactions, 2);
-      if (phase === 'write-first' && actor === 'bound') {
-        assert.equal(witnessed, true);
+      if (phase === 'write-first') {
+        assert.equal(witnessed, actor === 'bound');
         await f.move.Task();
       }
     });
@@ -212,9 +233,9 @@ for (const phase of ['move-first', 'write-first', 'reconcile']) {
 }
 
 for (const kind of ['board', 'agent']) {
-  for (const moved of [false, true]) {
+  for (const moved of ['unchanged', 'before-send', 'after-send']) {
     for (const actor of ['bound', 'unbound']) {
-      test(`real PG ${kind} delayed send and retry ${moved ? 'moved' : 'unchanged'} ${actor}`, async t => {
+      test(`real PG ${kind} delayed send and retry ${moved} ${actor}`, async t => {
         if (skipReason) return t.skip(skipReason);
         const f = await fixture(actor);
         const board = kind === 'board';
@@ -231,17 +252,19 @@ for (const kind of ['board', 'agent']) {
         };
         const outbox = f.load(board ? 'src/lib/mcp/webhooks/outbox.ts' : 'src/lib/agentWebhooks/outbox.ts', extra);
         const sender = f.load(board ? 'src/lib/mcp/webhooks/outboxDelivery.ts' : 'src/lib/agentWebhooks/delivery.ts', extra);
-        if (moved) await f.move.Project();
-        const allowed = !moved || actor === 'unbound';
+        if (moved === 'before-send') await f.move.Project();
+        const allowed = moved !== 'before-send' || actor === 'unbound';
         const result = await (board ? sender.deliverBoardWebhook(delivery.id) : sender.deliverAgentWebhook(delivery.id));
         assert.equal(result.status, allowed ? 'delivered' : 'skipped');
         assert.equal(calls.length, allowed ? 1 : 0);
         const stored = await deliveryModel.findUniqueOrThrow({ where: { id: delivery.id } });
         assert.equal(stored.status, allowed ? 'delivered' : 'cancelled');
         assert.equal(stored.attemptCount, allowed ? 1 : 0);
+        if (moved === 'after-send') await f.move.Project();
+        const retryAllowed = moved === 'unchanged' || actor === 'unbound';
         const retry = await (board ? outbox.retryBoardWebhookDelivery({ deliveryId: delivery.id, subscriptionId: subscription.id, idempotencyKey: delivery.id }) : outbox.replayAgentWebhookDelivery({ deliveryId: delivery.id, subscriptionId: subscription.id }));
-        assert.equal(Boolean(retry), allowed);
-        assert.equal(await deliveryModel.count({ where: { subscriptionId: subscription.id } }), allowed ? 2 : 1);
+        assert.equal(Boolean(retry), retryAllowed);
+        assert.equal(await deliveryModel.count({ where: { subscriptionId: subscription.id } }), retryAllowed ? 2 : 1);
       });
     }
   }
