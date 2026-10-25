@@ -5,6 +5,17 @@ import { automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackIn
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 import { callerCanFix, refusalFromZodIssues, quietFixableReports } from './callerFixable'
+import { HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7838-conflict-no-feedback'
+
+async function conflictIsExpected(status: number, userId: number): Promise<boolean> {
+  if (status !== 409) return false
+  try {
+    const { isFeatureEnabled } = await import('@/lib/flags')
+    return await isFeatureEnabled(HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG, userId)
+  } catch {
+    return false
+  }
+}
 
 function fileAutomaticFeedback(input: AutomaticFeedbackInput, userId?: number) {
   const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
@@ -127,7 +138,7 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
         return text
       } catch (error) {
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
-        if (status !== 403) {
+        if (status !== 403 && !await conflictIsExpected(status, userId)) {
           const callerCanFixRefusal = error instanceof ZodError && callerCanFix(refusalFromZodIssues(error.issues))
           if (callerCanFixRefusal && await quietFixableReports(userId)) {
             console.info('AI feedback not filed: the refusal tells the caller what to fix', { tool: tool.name })
