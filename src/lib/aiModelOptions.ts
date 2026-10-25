@@ -25,6 +25,8 @@ export type TAiModelKey =
   | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
+  | "gemini-4-argon"
+  | "grok-4.7"
   | "claude-haiku-4.5"
   | "claude-haiku-5-5"
   | "custom";
@@ -54,6 +56,8 @@ export type TAiModelOptionId =
   | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
+  | "gemini-4-argon"
+  | "grok-4.7"
   | "claude-haiku-4.5"
   | "claude-haiku-5-5"
   | "custom";
@@ -206,6 +210,20 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     modelClass: "gemini-flash",
     label: "Gemini 3.8 Flash",
     provider: "google",
+    priceTier: 2,
+  },
+  {
+    key: "gemini-4-argon",
+    modelClass: "gemini-argon",
+    label: "Gemini 4 Argon",
+    provider: "google",
+    priceTier: 2,
+  },
+  {
+    key: "grok-4.7",
+    modelClass: "grok",
+    label: "Grok 4.7",
+    provider: "xai",
     priceTier: 2,
   },
   {
@@ -527,6 +545,24 @@ export const aiModelOptions: TAiModelOption[] = [
     desc: "Newest fast Gemini",
     reasoning: "instant",
     modelKey: "gemini-3.8-flash",
+  },
+  {
+    id: "gemini-4-argon",
+    source: "gateway",
+    title: "Gemini 4 Argon",
+    model: "google/gemini-4-argon",
+    desc: "Newest Gemini",
+    reasoning: "instant",
+    modelKey: "gemini-4-argon",
+  },
+  {
+    id: "grok-4.7",
+    source: "gateway",
+    title: "Grok 4.7",
+    model: "spacexai/grok-4.7",
+    desc: "Newest Grok from xAI",
+    reasoning: "instant",
+    modelKey: "grok-4.7",
   },
   {
     id: "custom",

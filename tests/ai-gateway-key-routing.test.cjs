@@ -832,6 +832,20 @@ test("task writer option ids map to provider options and legacy model strings fa
   });
   assert.equal(paidTeamGemini.modelId, "google/gemini-3.8-flash");
 
+  for (const [modelKey, modelId] of [
+    ["gemini-4-argon", "google/gemini-4-argon"],
+    ["grok-4.7", "spacexai/grok-4.7"],
+  ]) {
+    const paidTeam = await selectTaskWriterModel({
+      sourceSelected: "gateway",
+      modelSelected: modelKey,
+      modelOptionId: modelKey,
+      byokProviderFlags: [],
+      teamContext: { teamId: "team_pro", settings: {} },
+    });
+    assert.equal(paidTeam.modelId, modelId);
+  }
+
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "gateway",
@@ -1020,6 +1034,8 @@ test("model and effort dimensions resolve every supported provider configuration
     ["glm-5.3-flash", undefined, undefined],
     ["gemini-3.5-flash-lite", undefined, undefined],
     ["gemini-3.8-flash", undefined, undefined],
+    ["gemini-4-argon", undefined, undefined],
+    ["grok-4.7", undefined, undefined],
     ["claude-haiku-4.5", undefined, undefined],
     ["claude-haiku-5-5", undefined, claudeThinking("adaptive", "medium")],
     ["custom", undefined, undefined],
@@ -1057,6 +1073,8 @@ test("model and effort dimensions resolve every supported provider configuration
     "gemini-3.1-flash-lite": ["gemini-3.5-flash-lite", undefined],
     "gemini-3.5-flash": ["gemini-3.8-flash", undefined],
     "gemini-3.6-flash": ["gemini-3.8-flash", undefined],
+    "gemini-4-argon": ["gemini-4-argon", undefined],
+    "grok-4.7": ["grok-4.7", undefined],
     "grok-4.1-fast-instant": ["gpt-6-luna", "standard"],
     "grok-4.1-fast-thinking": ["gpt-6-luna", "standard"],
     "grok-4.20-instant": ["gpt-6-luna", "standard"],
@@ -1187,6 +1205,7 @@ test("provider defaults and explicit team settings resolve consistently", () => 
     "openai",
     "anthropic",
     "google",
+    "xai",
   ]);
   assert.equal(resolveTeamProviderEnabled(undefined, "deepseek"), false);
   assert.equal(
@@ -1223,7 +1242,7 @@ test("provider defaults and explicit team settings resolve consistently", () => 
       gdprSafeMode: true,
       providers: { openai: true, deepseek: true, moonshot: true },
     }),
-    ["openai", "anthropic", "google"],
+    ["openai", "anthropic", "google", "xai"],
   );
 
   const { shouldBlockAiDueToByokProvider } = loadTs(

@@ -18,7 +18,7 @@ function assertPickerModelsListed(sources) {
 
 test("approved examples are discovered, with one finding per model class and old Haiku stale", () => {
   const findings = report().findings;
-  for (const model of ["claude-fable-5.1", "gpt-6-astra", "gemini-4-argon", "kimi-k3.1-pro", "qwen3.8-plus"]) {
+  for (const model of ["claude-fable-5.1", "gpt-6-astra", "kimi-k3.1-pro", "qwen3.8-plus"]) {
     assert.ok(findings.some((finding) => finding.model.endsWith(`/${model}`)), model);
   }
   assert.equal(findings.find((finding) => finding.model === "claude-haiku-4.5").kind, "stale");
@@ -28,6 +28,7 @@ test("approved examples are discovered, with one finding per model class and old
   assert.equal(findings.find((finding) => finding.model.endsWith("/gpt-6-astra")).action, "ask Valentin before shipping");
   assert.equal(findings.filter((finding) => finding.model.includes("claude-sonnet")).length, 1);
   assert.ok(!findings.some((finding) => finding.model.includes("image")));
+  assert.ok(!findings.some((finding) => /gemini-4-argon|grok-4\.7/.test(finding.model)));
 });
 
 test("serving variants share their base model family without changing name or version", () => {
