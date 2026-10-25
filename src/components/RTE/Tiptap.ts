@@ -92,6 +92,8 @@ const useTiptap = ({
   mentionProjectId,
   placeholder,
 }: IProps) => {
+  const skillProjectIdRef = useRef(mentionProjectId);
+  skillProjectIdRef.current = mentionProjectId;
   const isApple = useDeviceContext();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
@@ -171,7 +173,7 @@ const useTiptap = ({
       }),
       Underline,
 
-      SlashCommands(mode, editorId),
+      SlashCommands(mode, editorId, () => skillProjectIdRef.current),
       Snippets,
       Link.extend({ inclusive: false }).configure({
         openOnClick: true,

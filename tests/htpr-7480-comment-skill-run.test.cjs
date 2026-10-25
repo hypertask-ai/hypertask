@@ -141,7 +141,7 @@ test("task detail passes its event target id through Tiptap into slash command s
   const path = require("node:path");
   const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
   assert.match(read("src/components/RTE/useTaskDetailEditorState.tsx"), /useTiptap\(\{\s*mode,\s*editorId: id,/);
-  assert.match(read("src/components/RTE/Tiptap.ts"), /SlashCommands\(mode, editorId\)/);
+  assert.match(read("src/components/RTE/Tiptap.ts"), /SlashCommands\(mode, editorId, \(\) => skillProjectIdRef\.current\)/);
 });
 
 test("skill prompts reach AITaskWriter rather than the draft editor that drops initialPrompt", () => {
