@@ -473,7 +473,20 @@ export async function getByokOrTeamGatewayApiKey(
 
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
-  let byokApiKey =
+
+  const keyOnlyTeamId = await resolveLookupTeamId(lookup);
+  if (keyOnlyTeamId && typeof resolveTeamAiFunding === "function") {
+    const decision = await resolveTeamAiFunding(keyOnlyTeamId, { provider, feature: "chat" });
+    if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
+    if (decision.mode === "byok") {
+      if (isPlatformAiCredential(decision.apiKey) || isVercelAiGatewayKey(decision.apiKey)) {
+        throw new TeamKeyOnlyRefusal();
+      }
+      return decision.apiKey;
+    }
+  }
+
+  const byokApiKey =
     plan === "Free"
       ? undefined
       : await getByokApiKeyForProvider(
@@ -482,29 +495,12 @@ export async function getByokOrTeamGatewayApiKey(
           lookup,
           { ...options, resolveWithoutFlag: true }
         );
-  if (
-    byokApiKey &&
-    isPlatformAiCredential(byokApiKey) &&
-    (await resolveTeamAiFunding(
-      (await resolveLookupTeamId(lookup)) ?? "",
-      { provider, feature: "chat" },
-    )).mode !== "unrestricted"
-  ) {
-    byokApiKey = undefined;
-  }
 
   if (byokApiKey && !isVercelAiGatewayKey(byokApiKey)) return byokApiKey;
 
   if (provider === "openrouter" || provider === "custom") return undefined;
 
   if (isVercelAiGatewayKey(byokApiKey) && !isPlatformAiCredential(byokApiKey)) return byokApiKey;
-
-  const keyOnlyTeamId = await resolveLookupTeamId(lookup);
-  if (keyOnlyTeamId) {
-    const decision = await resolveTeamAiFunding(keyOnlyTeamId, { provider, feature: "chat" });
-    if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
-    if (decision.mode === "byok") return decision.apiKey;
-  }
 
   return getTeamGatewayApiKey(lookup);
 }
@@ -608,7 +604,12 @@ export async function getOpenAiOnlyDefaultContext(lookup: ByokLookupContext, pla
     (Boolean(await requestKey("openrouter")) && await teamOpenRouterEnabled(lookup)) ||
     isVercelAiGatewayKey(storedTeamKey) ||
     isVercelAiGatewayKey(await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, teamLookup));
-  const lunaCredential = await getByokOrTeamGatewayApiKeyForModelOption(getAiModelOptionById("gpt-6-luna")!, suppliedFlags, lookup);
+  let lunaCredential: AiModelCredential | undefined;
+  try {
+    lunaCredential = await getByokOrTeamGatewayApiKeyForModelOption(getAiModelOptionById("gpt-6-luna")!, suppliedFlags, lookup);
+  } catch (error) {
+    if (!(typeof TeamKeyOnlyRefusal === "function" && error instanceof TeamKeyOnlyRefusal)) throw error;
+  }
   const lunaRunsOnStoredDirectTeamKey = typeof storedTeamKey === "string" && !isVercelAiGatewayKey(storedTeamKey) && lunaCredential === storedTeamKey;
   return { openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: lunaRunsOnStoredDirectTeamKey, hasClaudeRoute };
 }
@@ -623,11 +624,15 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
     for (const provider of ["claude", "gateway", "openrouter"] as const) {
       const credential = await getByokApiKeyForProvider(provider, undefined, lookup, { resolveWithoutFlag: true });
       if (!credential) continue;
-      if (isPlatformAiCredential(credential)) {
-        const teamId = await resolveLookupTeamId(lookup);
-        if (teamId && (await resolveTeamAiFunding(teamId, { provider, feature: "side-call" })).mode !== "unrestricted") {
-          continue;
-        }
+      const teamId = await resolveLookupTeamId(lookup);
+      const sideCall = teamId && typeof resolveSideCallFunding === "function"
+        ? await resolveSideCallFunding(teamId, provider)
+        : { mode: "unrestricted" as const };
+      if (
+        sideCall.mode !== "unrestricted" &&
+        (provider !== "claude" || isPlatformAiCredential(credential) || isVercelAiGatewayKey(credential))
+      ) {
+        continue;
       }
       byok = { provider, credential };
       break;
@@ -668,6 +673,10 @@ export function resolveAutomaticAiModel(
           }
           const teamId = await resolveLookupTeamId(context.lookup);
           if (!teamId) throw error;
+          if (typeof resolveTeamAiFunding === "function") {
+            const keyOnlyChat = await resolveTeamAiFunding(teamId, { provider: "openai", feature: "chat" });
+            if (keyOnlyChat.mode !== "unrestricted") throw error;
+          }
           const team = await prisma.team.findUnique({
             where: { id: teamId },
             select: { aiProviderSettings: true },

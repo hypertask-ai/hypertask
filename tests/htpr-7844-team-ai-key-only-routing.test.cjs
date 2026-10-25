@@ -22,7 +22,7 @@ function stubModule(relativePath, exports) {
   };
 }
 
-function loadByok(flagOn) {
+function loadByok(flagOn, extraKeys = {}) {
   for (const relativePath of [
     "src/lib/flags.ts",
     "src/lib/prisma.ts",
@@ -55,13 +55,17 @@ function loadByok(flagOn) {
         findUnique: async () => ({
           aiKeyOnly: true,
           aiProviderSettings: null,
-          byokApiKeys: [{ provider: "claude", ciphertext: TEAM_KEY }],
+          byokApiKeys: [
+            { provider: "claude", ciphertext: TEAM_KEY },
+            ...Object.entries(extraKeys).map(([provider, ciphertext]) => ({ provider, ciphertext })),
+          ],
         }),
       },
       teamByokApiKey: {
         findUnique: async (args) => {
           const provider = args.where.teamId_provider.provider;
-          return provider === "claude" ? { enabled: true, ciphertext: TEAM_KEY } : null;
+          if (provider === "claude") return { enabled: true, ciphertext: TEAM_KEY };
+          return extraKeys[provider] ? { enabled: true, ciphertext: extraKeys[provider] } : null;
         },
       },
       agentByokApiKey: { findUnique: async () => null },
@@ -111,6 +115,19 @@ test("key-only routing never returns a platform key", async () => {
     assert.equal(JSON.stringify(side).includes(PLATFORM.AI_GATEWAY_API_KEY), false);
     assert.equal(JSON.stringify(side).includes(PLATFORM.TURBOPUFFER_EMBEDDINGS_API_KEY), false);
     assert.equal(JSON.stringify(side).includes(PLATFORM.DEEPGRAM_API_KEY), false);
+  });
+});
+
+test("key-only chat does not use a saved openai key or a customer gateway key", async () => {
+  await withPlatformKeys(async () => {
+    const byok = loadByok(true, { openai: "sk-team-openai", gateway: "vck_customer_gateway" });
+    const lookup = { trustedTeamId: TEAM_ID, userId: 7 };
+    await assert.rejects(
+      () => byok.getByokOrTeamGatewayApiKey("openai", undefined, lookup),
+      (error) => error.name === "TeamKeyOnlyRefusal" && !error.message.includes("sk-team-openai") && !error.message.includes("vck_customer_gateway"),
+    );
+    assert.equal(await byok.getTeamGatewayFunding(lookup), undefined);
+    assert.equal(await byok.getByokOrTeamGatewayApiKey("claude", undefined, lookup), TEAM_KEY);
   });
 });
 
