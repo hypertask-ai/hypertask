@@ -49,8 +49,17 @@ class PendingFlags(ValueError):
     """A valid rollout is not yet ready to complete its ticket."""
 
 
-def require_everyone(ticket, flags, references="", require_flags=False):
-    matched = ticket_flags(ticket, flags, references)
+def ticket_url_for(task):
+    if isinstance(task, dict) and isinstance(task.get("tasks"), list) and len(task["tasks"]) == 1:
+        task = task["tasks"][0]
+    path = task.get("url") if isinstance(task, dict) else None
+    if not isinstance(path, str) or not re.fullmatch(r"/detail/project-[1-9]\d*/[1-9]\d*", path):
+        return None
+    return "https://app.hypertask.ai" + path
+
+
+def require_everyone(ticket, flags, references="", require_flags=False, ticket_url=None):
+    matched = ticket_flags(ticket, flags, references, ticket_url=ticket_url)
     if require_flags and not matched:
         raise ValueError(f"{ticket} has no identifiable flags; leave it in Flags")
     pending = [f'{f["key"]}={f["mode"]}' for f in matched if f["mode"] != "EVERYONE"]
@@ -111,7 +120,8 @@ def completion_flags(ticket, task):
         pr = str(max(matches, key=lambda row: row["createdAt"])["number"]) if matches else ""
     references = json.dumps(task) + pr_references(repo, pr)
     # Fetch modes after PR discovery, not once at the start of a board sweep.
-    return require_everyone(ticket, read_flags(), references, require_flags=True)
+    return require_everyone(ticket, read_flags(), references, require_flags=True,
+                            ticket_url=ticket_url_for(task))
 
 
 def main():
@@ -126,10 +136,11 @@ def main():
             references = ""
         if not isinstance(references, str):
             raise ValueError("invalid ticket description")
+        ticket_url = ticket_url_for(current["tasks"][0])
     except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.SubprocessError) as error:
         raise ValueError(f"cannot read current ticket {ticket}") from error
     references += pr_references(repo, pr)
-    require_everyone(ticket, read_flags(), references)
+    require_everyone(ticket, read_flags(), references, ticket_url=ticket_url)
     print("flags ok (Everyone or no ticket flag)")
 
 

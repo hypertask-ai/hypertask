@@ -149,7 +149,7 @@ case "$1:$2" in
     if [ "${TEST_REREAD_ERROR:-0}" = 1 ] && [ "$(grep -c '^task get ' "$HOME/vcc-log")" = 2 ]; then exit 1; fi
     section=${TEST_SECTION:-Flags}
     if [ -f "$HOME/section" ]; then section=$(cat "$HOME/section"); fi
-    jq -nc --arg section "$section" '{success:true,tasks:[{section:$section}]}' ;;
+    jq -nc --arg section "$section" --arg url "${TEST_TASK_URL:-}" '{success:true,tasks:[{section:$section,url:$url}]}' ;;
   task:move) [ "$*" = 'task move HTPR-6136 --section Done' ] || exit 93; [ "${TEST_MOVE_ERROR:-0}" = 0 ] ;;
   *) exit 94 ;;
 esac
@@ -193,9 +193,21 @@ regression_pr_flags() {
   done
   echo 'ok ht-flag enforces PR-only body, definition and code flags'
 }
+regression_url_flag() {
+  local owned='{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"},{"key":"legacy-url-flag","mode":"OFF","ticketUrl":"https://app.hypertask.ai/detail/project-4060/6136"}]}'
+  : > "$HOME/vcc-log"
+  TEST_TASK_URL='/detail/project-4060/6136' TEST_FLAGS="$owned" "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1 # gitleaks:allow
+  if grep -q '^task move ' "$HOME/vcc-log"; then echo 'FAIL: URL-owned flag ignored'; exit 1; fi
+  grep -q 'legacy-url-flag=OFF' "$tmp/output"
+  : > "$HOME/vcc-log"
+  TEST_TASK_URL='/detail/project-4060/6136' TEST_FLAGS='{"flags":[{"key":"htpr-6136-figma-connect","mode":"EVERYONE"},{"key":"legacy-url-flag","mode":"EVERYONE","ticketUrl":"https://app.hypertask.ai/detail/project-4060/6136"}]}' "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1 # gitleaks:allow
+  grep -q '^task move HTPR-6136 --section Done$' "$HOME/vcc-log"
+  echo 'ok ht-flag enforces flags owned only through ticketUrl'
+}
 case "${1:-}" in
   --pending-only) regression_pending; exit ;;
   --pr-only) regression_pr_flags; exit ;;
+  --url-flag) regression_url_flag; exit ;;
 esac
 : > "$HOME/vcc-log"
 "$script" set "$key" everyone --reason "$reason" > "$tmp/output" 2>&1
@@ -223,6 +235,7 @@ for section in 'In Progress' 'Valentin Review' Done; do
 done
 regression_pending
 regression_pr_flags
+regression_url_flag
 : > "$HOME/vcc-log"
 if TEST_PR_ERROR=1 "$script" set "$key" everyone --review 42 > "$tmp/output" 2>&1; then exit 1; fi
 ! grep -q '^task move ' "$HOME/vcc-log"
