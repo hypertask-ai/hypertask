@@ -16,7 +16,7 @@ async function backfillManagedTeamGatewayKeys({ apply = false } = {}) {
   const { ensureManagedTeamGatewayKeyWithTeamLockHeld } = jiti(
     path.join(root, "src/lib/provisionManagedTeamGatewayKey.ts"),
   );
-  const counts = { created: 0, missing: 0, existing: 0, ineligible: 0 };
+  const counts = { created: 0, missing: 0, existing: 0, ineligible: 0, disabled: 0 };
   let cursor;
   try {
     for (;;) {

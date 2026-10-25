@@ -34,9 +34,13 @@ function fixture() {
     requests: [],
     writes: [],
     held: true,
+    flagEnabled: true,
+    ownerUserId: 42,
+    flagCalls: [],
     response: { ok: true, status: 200, json: async () => ({ apiKeyString: "vck_new_team_key" }) },
   };
   const prisma = {
+    team: { findUnique: async () => state.ownerUserId === null ? null : { googleAccount: { userId: state.ownerUserId } } },
     teamByokApiKey: {
       findUnique: async ({ where }) => {
         assert.deepEqual(where, { teamId_provider: { teamId: "team_paid", provider: "managed_gateway" } });
@@ -53,6 +57,10 @@ function fixture() {
   const provision = load("src/lib/provisionManagedTeamGatewayKey.ts", {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => state.plan },
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+      state.flagCalls.push({ key, userId });
+      return state.flagEnabled;
+    } },
   });
   return {
     state,
@@ -111,6 +119,10 @@ test("new Pro and AI teams receive encrypted, dedicated managed keys", async () 
       } },
       "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan },
       "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
+      "@/app/api/ai/_lib/modelProvider": {
+        isVercelAiGatewayKey: (key) => typeof key === "string" && key.startsWith("vck_"),
+        registerManagedGatewayKey: () => {},
+      },
     });
     assert.deepEqual(await getTeamGatewayFunding({ trustedTeamId: "team_paid" }), {
       apiKey: "vck_new_team_key", source: "managed",
@@ -235,7 +247,7 @@ test("backfill defaults to dry run, paginates, and applies only when requested",
       },
     });
     const counts = await backfillManagedTeamGatewayKeys(apply === undefined ? undefined : { apply });
-    assert.deepEqual(counts, { created: apply ? 1 : 0, missing: apply ? 0 : 1, existing: 0, ineligible: 1 });
+    assert.deepEqual(counts, { created: apply ? 1 : 0, missing: apply ? 0 : 1, existing: 0, ineligible: 1, disabled: 0 });
     assert.deepEqual(calls, [
       ["team_paid", "held"], ["team_paid", { dryRun: !apply }],
       ["team_free", "held"], ["team_free", { dryRun: !apply }],
@@ -258,4 +270,29 @@ test("a failed persistence attempt remains retryable without storing a partial k
   assert.equal(await ensure(), "created");
   assert.equal(await ensure(), "existing");
   assert.equal(state.requests.length, 2);
+});
+
+
+test("provisioning is gated by the server-derived team owner and fails closed when disabled", async () => {
+  const { state, ensure } = fixture();
+  mockFetch(state);
+  state.flagEnabled = false;
+  assert.equal(await ensure(), "disabled");
+  assert.equal(state.requests.length, 0);
+  assert.equal(state.writes.length, 0);
+  assert.deepEqual(state.flagCalls, [{ key: "htpr-7949-managed-ai-key-provisioning", userId: 42 }]);
+  state.flagEnabled = true;
+  assert.equal(await ensure(), "created");
+  assert.equal(state.requests.length, 1);
+});
+
+test("a deleted team cannot get a funded key even when the flag is enabled", async () => {
+  const { state, ensure } = fixture();
+  mockFetch(state);
+  state.ownerUserId = null;
+  assert.equal(await ensure(), "disabled");
+  assert.equal(state.requests.length, 0);
+  assert.equal(state.writes.length, 0);
+  state.ownerUserId = 42;
+  assert.equal(await ensure(), "created");
 });

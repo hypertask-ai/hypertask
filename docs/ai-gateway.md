@@ -143,7 +143,10 @@ Turbopuffer embeddings do not use the gateway at all
   the registry, encrypts each secret, writes `managed_gateway`, and removes the
   matching obsolete customer-visible rows while preserving any different
   customer-owned BYOK secret. It never returns plaintext keys.
-- **Automatic paid-team keys:** subscription creation and renewal ensure that
+- **Automatic paid-team keys:** behind
+  [`htpr-7949-managed-ai-key-provisioning`](https://app.hypertask.ai/admin/flags/htpr-7949-managed-ai-key-provisioning)
+  (Owner + QA by default, evaluated against the team owner), subscription
+  creation and renewal ensure that
   an entitled Pro or AI team has a `managed_gateway` row before returning
   success. Provisioning uses Vercel's `POST /v1/api-keys` with
   `purpose: "ai-gateway"` and team spend attribution. Configure the server-only
@@ -161,6 +164,8 @@ Turbopuffer embeddings do not use the gateway at all
   Then run the same command with `--apply` to create missing keys. It scans
   teams with subscription history, rechecks each current plan under the same
   team billing lease as the webhook, and reports only team IDs and statuses.
+  Apply respects the same owner-scoped flag and reports `disabled` outside its
+  audience; dry run inventories missing keys without enabling provisioning.
   It stops on failure; rerunning safely skips existing rows. No live backfill
   runs as part of the build or deployment.
 - **Missing keys:** Premium, legacy AI, and Pro-comped teams still fail closed when

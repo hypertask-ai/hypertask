@@ -1,4 +1,6 @@
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7949_MANAGED_AI_KEY_PROVISIONING_FLAG } from "@/lib/flags/definitions/htpr-7949-managed-ai-key-provisioning";
 import { encryptByokSecret } from "@/lib/crypto/byokCipher";
 import { MANAGED_TEAM_GATEWAY_PROVIDER } from "@/app/api/ai/_lib/managedGatewayKeys";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
@@ -21,6 +23,15 @@ export async function ensureManagedTeamGatewayKeyWithTeamLockHeld(
   });
   if (existing) return "existing";
   if (options.dryRun) return "missing";
+
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { googleAccount: { select: { userId: true } } },
+  });
+  if (!team || !(await isFeatureEnabled(
+    HTPR_7949_MANAGED_AI_KEY_PROVISIONING_FLAG,
+    team.googleAccount.userId,
+  ))) return "disabled";
 
   const token = process.env.MANAGED_GATEWAY_VERCEL_TOKEN?.trim();
   const vercelTeamId = process.env.MANAGED_GATEWAY_VERCEL_TEAM_ID?.trim();
