@@ -8,6 +8,7 @@ import { createCommentService } from '@/utils/controllers/comments/createComment
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
+import { filedRecently, quietFixableReports } from './callerFixable'
 
 export { aiFeedbackEnabled } from './enabled'
 
@@ -194,6 +195,21 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           }
           changedTaskId = existing.id
           return receipt(existing, true, count, project.uniqueIdentifier)
+        }
+        const quietFixable = reporter.origin === 'automatic' ? await quietFixableReports(userId) : false
+        const recentlyClosed = quietFixable
+          ? await tx.task.findFirst({
+            where: {
+              projectId: PROJECT_ID, status: 'Normal',
+              OR: [{ sectionId: { in: doneSections.map((item) => item.id) } }, { section: { in: doneSections.map((item) => item.section_title) } }],
+              description_: { is: { content: { contains: marker } } },
+            },
+            orderBy: { id: 'desc' }, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true, createdAt: true },
+          })
+          : null
+        if (filedRecently(recentlyClosed)) {
+          console.info('AI feedback not filed: the same fingerprint was filed in the last day', { fingerprint: `ai-fb-${fingerprint.slice(0, 12)}`, ticket: recentlyClosed.ticketNumber })
+          return receipt(recentlyClosed, true, 0, project.uniqueIdentifier)
         }
         let label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
         if (!label) {
