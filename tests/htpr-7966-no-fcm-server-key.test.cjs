@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..");
 test("no legacy FCM server key is tracked in app code", () => {
   const result = spawnSync(
     "git",
-    ["grep", "-n", "-E", "key=AAAA[A-Za-z0-9_-]{6,}:APA91", "--", "src", "public"],
+    ["grep", "-n", "-F", "key=AAAA", "--", "src", "public"],
     { cwd: root, encoding: "utf8" },
   );
   assert.equal(result.status, 1, result.stdout);
@@ -21,6 +21,6 @@ test("the legacy FCM config file is gone", () => {
 
 test("push still sends through firebase-admin", () => {
   const source = fs.readFileSync(path.join(root, "src/utils/controllers/FCM/index.ts"), "utf8");
-  assert.match(source, /getMessaging\(getFirebaseAdmin\(\)\)\.send\(message\)/);
-  assert.doesNotMatch(source, /fcm\.googleapis\.com\/fcm\/send/);
+  assert.ok(source.includes("getMessaging(getFirebaseAdmin()).send(message)"));
+  assert.equal(source.includes("fcm.googleapis.com/fcm/send"), false);
 });
