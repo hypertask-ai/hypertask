@@ -1,5 +1,7 @@
 # Feature map: automatic AI feedback tickets
 
+## How a customer reaches it
+
 An agent's MCP, CLI or API call can file a board-15 ticket in Bugs by itself.
 `src/lib/aiFeedback/automatic.ts` queues the report, `fileAiFeedback` in
 `src/lib/aiFeedback/report.ts` decides whether it becomes a ticket, bumps an
@@ -31,7 +33,7 @@ after: a refusal that opens a ticket is the bug this page exists for.
 - The opposite failure is worse: a 5xx, an expired key or a 400 the API itself
   returned must keep filing. The unit tests pin both sides.
 
-## Proof to collect
+## What proof to collect
 
 The MCP reply text, the board ticket count before and after, and the unit test
 output. No screenshot is meaningful for this area; a screenshot of the ticket
