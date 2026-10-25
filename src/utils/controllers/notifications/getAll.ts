@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { BLOCKED_INBOX_DISMISSAL_MESSAGE } from "@/lib/inbox/blockedInboxDismissal";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
@@ -659,11 +661,16 @@ const notificationGetAll = async (
       };
     });
 
-    const blockedByYouRows = blockedTasks.filter((task) =>
-      !task.notifications.some((notification) =>
+    const dismissedBlockedTasks = blockedTasks.filter((task) =>
+      task.notifications.some((notification) =>
         notification.archivedAt && notification.archivedAt >= (task.waitingOnSetAt ?? task.createdAt)
       )
-    ).map(({ notifications: _archivedNotifications, ...task }) => {
+    );
+    const blockedInboxArchive = dismissedBlockedTasks.length > 0
+      && await isFeatureEnabled(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG, parsedUserId).catch(() => false);
+    const dismissedBlockedTaskIds = new Set(blockedInboxArchive ? dismissedBlockedTasks.map((task) => task.id) : []);
+    const blockedByYouRows = blockedTasks.filter((task) => !dismissedBlockedTaskIds.has(task.id))
+      .map(({ notifications: _archivedNotifications, ...task }) => {
       const fromUser =
         (task.waitingOnSetById
           ? waitingOnSetByUserMap.get(task.waitingOnSetById)
