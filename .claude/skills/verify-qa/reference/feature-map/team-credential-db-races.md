@@ -6,7 +6,7 @@ The CI Tests check runs `tests/htpr-7660-team-races-postgres.test.cjs`. These ar
 
 ## How to drive it
 
-1. Open the ticket PR's CI Tests run. Require the current head SHA, successful `ci-tests`, and all 54 `real PG` cases passing without skips. Local runs intentionally skip database provisioning; they are not concurrency proof.
+1. Open the ticket PR's CI Tests run. Require the current head SHA, successful `ci-tests`, and all 62 `real PG` cases passing without skips. Local runs intentionally skip database provisioning; they are not concurrency proof.
 2. Read the shard log, not only the aggregate check. Move-first cases commit a task/page/board move before the final transaction guard. Write-first cases attempt the actual `teamId`/`projectId` update from another connection while the protected row remains locked; PostgreSQL must return SQLSTATE 55P03. The move must succeed after commit.
 3. Require bound same-team and unbound controls, lease heartbeat/expiry advancement, no denied report/view/page/lease/upload side effects, and upload reconciliation after a lost commit acknowledgement.
 4. Require delayed board and agent sends to cancel after a team move. Retries must also refuse a formerly delivered source after movement, not only an already cancelled source.
@@ -22,7 +22,7 @@ The CI Tests check runs `tests/htpr-7660-team-races-postgres.test.cjs`. These ar
 
 ## What proof to collect
 
-Record exact-head CI metadata and the shard's 54 results, then deployment SHA/state, signed-in QA 985 desktop/phone shots, video, read-only MCP results, and core inbox evidence. Race tests run only in the disposable CI database; live evidence checks unchanged app paths, not destructive races. These cases do not claim hierarchy-wide serializability after a child's final read: parent-board moves are covered before that guard, and lock contention is proven on the locked row itself.
+Record exact-head CI metadata and the shard's 62 results, then deployment SHA/state, signed-in QA 985 desktop/phone shots, video, read-only MCP results, and core inbox evidence. Race tests run only in the disposable CI database; live evidence checks unchanged app paths, not destructive races. These cases do not claim hierarchy-wide serializability after a child's final read: parent-board moves are covered before that guard, and lock contention is proven on the locked row itself.
 
 ### Automated evidence
 

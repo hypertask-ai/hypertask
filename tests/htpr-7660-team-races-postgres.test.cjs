@@ -241,9 +241,9 @@ for (const [phase, table] of [['move-first', 'Task'], ['move-first', 'Project'],
 }
 
 for (const kind of ['board', 'agent']) {
-  for (const moved of ['unchanged', 'before-send', 'after-send']) {
+  for (const [moved, table] of [['unchanged', 'Project'], ['before-send', 'Project'], ['after-send', 'Project'], ['before-send', 'Task'], ['after-send', 'Task']]) {
     for (const actor of ['bound', 'unbound']) {
-      test(`real PG ${kind} delayed send and retry ${moved} ${actor}`, async t => {
+      test(`real PG ${kind} delayed send and retry ${table} ${moved} ${actor}`, async t => {
         if (skipReason) return t.skip(skipReason);
         const f = await fixture(actor);
         const board = kind === 'board';
@@ -260,16 +260,16 @@ for (const kind of ['board', 'agent']) {
         };
         const outbox = f.load(board ? 'src/lib/mcp/webhooks/outbox.ts' : 'src/lib/agentWebhooks/outbox.ts', extra);
         const sender = f.load(board ? 'src/lib/mcp/webhooks/outboxDelivery.ts' : 'src/lib/agentWebhooks/delivery.ts', extra);
-        if (moved === 'before-send') await f.move.Project();
-        const allowed = moved !== 'before-send' || actor === 'unbound';
+        if (moved === 'before-send') await f.move[table]();
+        const allowed = moved !== 'before-send' || actor === 'unbound' && table === 'Project';
         const result = await (board ? sender.deliverBoardWebhook(delivery.id) : sender.deliverAgentWebhook(delivery.id));
         assert.equal(result.status, allowed ? 'delivered' : 'skipped');
         assert.equal(calls.length, allowed ? 1 : 0);
         const stored = await deliveryModel.findUniqueOrThrow({ where: { id: delivery.id } });
         assert.equal(stored.status, allowed ? 'delivered' : 'cancelled');
         assert.equal(stored.attemptCount, allowed ? 1 : 0);
-        if (moved === 'after-send') await f.move.Project();
-        const retryAllowed = moved === 'unchanged' || actor === 'unbound';
+        if (moved === 'after-send') await f.move[table]();
+        const retryAllowed = moved === 'unchanged' || actor === 'unbound' && table === 'Project';
         const retry = await (board ? outbox.retryBoardWebhookDelivery({ deliveryId: delivery.id, subscriptionId: subscription.id, idempotencyKey: delivery.id }) : outbox.replayAgentWebhookDelivery({ deliveryId: delivery.id, subscriptionId: subscription.id }));
         assert.equal(Boolean(retry), retryAllowed);
         assert.equal(await deliveryModel.count({ where: { subscriptionId: subscription.id } }), retryAllowed ? 2 : 1);
