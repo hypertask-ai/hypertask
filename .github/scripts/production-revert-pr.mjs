@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const sha = /^[a-f0-9]{40}$/;
 const infrastructure = /(?:HTTP (?:429|503)|rate limit exceeded|API rate limit|testTimeoutFailure|ERR_TEST_TIMEOUT|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up|service unavailable)/i;
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const api = route => JSON.parse(execFileSync('gh', ['api', route], { encoding: 'utf8' }));
+const api = route => JSON.parse(execFileSync('gh', ['api', route], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }));
 const infraFailure = output => infrastructure.test(output.split('\n').filter(line => !/(?:[✔✓✖]|(?:^|\s)(?:not )?ok \d+|# Subtest:)/.test(line)).join('\n'));
 
 export function testFiles(jobs, logs) {
