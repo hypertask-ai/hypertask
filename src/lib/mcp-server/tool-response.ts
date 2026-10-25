@@ -37,7 +37,9 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   ),
 ])
 
-export function actionableToolError(error: unknown, hints: { ticketNumberShape?: boolean; renamedField?: boolean; fields?: readonly string[] } = {}): string {
+export type ErrorHints = { ticketNumberShape?: boolean; renamedField?: boolean; fields?: readonly string[] }
+
+export function actionableToolError(error: unknown, hints: ErrorHints = {}): string {
   if (error instanceof z.ZodError) {
     return error.issues.slice(0, 4).map((issue) => {
       const field = issue.path.join('.') || 'input'
@@ -103,7 +105,7 @@ function redactModelFacingMessage(raw: string): string {
   return message.replace(/(?:Bearer\s+\S+|\b(?:htmk_|htk_)[\w-]+|\beyJ[\w.-]+)/gi, '[redacted]').slice(0, 600)
 }
 
-export function toolErrorResult(error: unknown, hints: { ticketNumberShape?: boolean } = {}): CallToolResult {
+export function toolErrorResult(error: unknown, hints: ErrorHints = {}): CallToolResult {
   return { content: [{ type: 'text', text: actionableToolError(error, hints) }], isError: true }
 }
 
