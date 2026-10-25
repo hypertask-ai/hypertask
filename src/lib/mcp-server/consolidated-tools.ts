@@ -117,6 +117,7 @@ export function selectMcpTools(
       response_format: z.enum(['concise', 'detailed']).default('concise').describe('Concise summarizes reads; detailed includes full fields. Writes always retain their receipts.'),
       limit: z.number().int().min(1).max(50).default(20).describe('Maximum rows per read collection; default 20, maximum 50.'),
       offset: z.number().int().min(0).default(0).describe('Rows to skip for paginated or locally bounded reads; default 0. Prefer an input cursor when supplied.'),
+      page: z.number().int().min(1).optional().describe('1-based page number; page 1 is the first page. Pass page or offset, not both.'),
     }).strict()
     const baseSchema = z.toJSONSchema(parameters, { target: 'draft-7', io: 'input' }) as Record<string, unknown>
     delete baseSchema.$schema
@@ -164,8 +165,14 @@ export function selectMcpTools(
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
+        if (args.page !== undefined && ((args.offset ?? 0) !== 0 || Number(input.offset ?? 0) !== 0)) {
+          throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or offset, not both.' }])
+        }
+        if (args.page !== undefined && input.cursor !== undefined) {
+          throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or cursor, not both.' }])
+        }
         const cursorPaginated = supportsCursor && Boolean(input.cursor)
-        const offset = cursorPaginated ? 0 : Number(input.offset ?? args.offset)
+        const offset = cursorPaginated ? 0 : args.page !== undefined ? (args.page - 1) * args.limit : Number(input.offset ?? args.offset)
         let readLimit = args.limit
         let endpointCap: number | undefined
         try {

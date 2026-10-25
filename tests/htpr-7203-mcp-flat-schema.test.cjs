@@ -35,7 +35,7 @@ for (const Validator of [Ajv, Ajv2020]) {
       for (const keyword of forbidden) assert.equal(Object.hasOwn(schema, keyword), false, `${tool.name}/${keyword}`)
       assert.deepEqual(schema.required, ['action'], tool.name)
       assert.equal(schema.additionalProperties, false)
-      assert.deepEqual(Object.keys(schema.properties), ['action', 'input', 'response_format', 'limit', 'offset'])
+      assert.deepEqual(Object.keys(schema.properties), ['action', 'input', 'response_format', 'limit', 'offset', 'page'])
       const names = Object.keys(definitions.find((definition) => definition.name === tool.name).actions)
       assert.deepEqual(schema.properties.action.enum, names)
       assert.equal(schema.properties.input.type, 'object')
