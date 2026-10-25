@@ -7,7 +7,8 @@ import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskC
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
-import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
+import { ZodIssueCode } from 'zod'
+import { reserveFeedbackAttempt, reserveFeedbackQuota, reserveValidationRefusal, releaseValidationRefusal } from './rateLimit'
 
 export { aiFeedbackEnabled } from './enabled'
 
@@ -53,6 +54,11 @@ function description(input: AutomaticFeedbackInput, fingerprint: string, display
     `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p><p>Last seen: ${new Date().toISOString()}</p>` +
     reporterLine('Reporting display names', displayName ? [displayName] : []) +
     reporterLine('Clients', input.client ? [input.client] : [])
+}
+
+function validationRefusal(input: AutomaticFeedbackInput): boolean {
+  return input.status === 400 && input.category === 'call_failed' &&
+    (input.errorCode === 'tool-exception' || Object.values(ZodIssueCode).some((code) => code === input.errorCode))
 }
 
 function scopeRefusal(input: AiFeedbackInput): boolean {
@@ -132,6 +138,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
   }
   const key = BigInt.asIntN(64, BigInt(`0x${fingerprint.slice(0, 16)}`))
   let changedTaskId: number | undefined
+  let refusalReservation: string | undefined
   const deadline = Date.now() + 30000
   try {
     while (Date.now() < deadline) {
@@ -158,6 +165,21 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
         }
+        let refusalReporters: string[] | undefined
+        if (plain && reporter.origin === 'automatic' && validationRefusal(input)) {
+          const agentName = scrubFeedbackText(reporter.agentName ?? '').replace(/,/g, ' ').slice(0, 60)
+          const reporterName = agentName ? `${agentName}${displayName ? ` (owned by ${displayName})` : ''}` : displayName ?? `User ${reporterId}`
+          const reservation = await reserveValidationRefusal(fingerprint, reporterName)
+          if (!reservation) {
+            return { success: false as const, filed: false as const, reason: 'validation_refused' as const, error: 'Normal input refusal; no new ticket was filed.' }
+          }
+          refusalReservation = reservation.token
+          refusalReporters = reservation.reporters
+        }
+        const repeatedRefusal = refusalReporters
+          ? `<p>The same input refusal keeps repeating across distinct reporters within 24 hours. This may indicate schema drift.</p>` +
+            reporterLine('Reporters', refusalReporters) + `<p>Field: ${escapeHtml(input.field ?? 'not supplied')}</p>`
+          : ''
         if (!await reserveFeedbackQuota(userId, Boolean(existing))) {
           throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
         }
@@ -170,7 +192,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
         if (existing) {
           const count = storedCount + 1
-          const text = tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client)
+          const text = tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client) + repeatedRefusal
           if (comment) {
             await tx.comment.update({ where: { id: comment.id }, data: { text, summary: null } })
           } else {
@@ -191,7 +213,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
             if (!label) throw error
           }
         }
-        const count = 1
+        const count = refusalReporters?.length ?? 1
         const readable = plain ? plainFeedback(input, fingerprint, {
           agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
           ownerName: displayName,
@@ -199,8 +221,8 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         }) : undefined
         const { task } = await createProvisionedTaskCore({
           creationChannel: "agent",
-          title: readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
-          description: readable?.description ?? description(input, fingerprint, displayName),
+          title: refusalReporters ? `The same ${input.surface.toUpperCase()} input refusal keeps repeating${input.tool ? ` in ${input.tool}` : ''}` : readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
+          description: repeatedRefusal + (readable?.description ?? description(input, fingerprint, displayName)),
           userId: actorId, projectId: PROJECT_ID, sectionId: section.id, sectionTitle: section.section_title,
           projectIdentifier: project.uniqueIdentifier, createDrafts: false, labelIds: [label.id],
           priorityIndex: PriorityConstants.find((priority) => priority.Priority_Value === 'Medium')!.priority_index,
@@ -221,6 +243,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
     }
     throw new AiFeedbackError(503, 'Feedback timed out, try again shortly')
   } catch (error) {
+    if (refusalReservation) await releaseValidationRefusal(fingerprint, refusalReservation).catch(() => {})
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2028') {
       throw new AiFeedbackError(503, 'Feedback timed out, try again shortly')
     }
