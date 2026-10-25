@@ -1,4 +1,5 @@
 import fcntl
+import json
 import os
 from pathlib import Path
 import shutil
@@ -163,6 +164,10 @@ esac''')
         self.command('clear', 'exit 0')
         self.command('hax', """
 printf 'hax %s depth=%s identity=%s\\n' "$*" "${HAX_SUBAGENT_DEPTH-unset}" "$SHIP_SESSION_NAME" >> "$HOME/events"
+mkdir -p "$HT_HAX_PROC_ROOT/$PPID/task/$PPID" "$HT_HAX_PROC_ROOT/$$/fd"
+echo $$ > "$HT_HAX_PROC_ROOT/$PPID/task/$PPID/children"
+ln -s "$HOME/session.jsonl" "$HT_HAX_PROC_ROOT/$$/fd/3"
+touch "$HOME/started"
 while [ ! -f "$HOME/closed" ]; do /bin/sleep 0.01; done
 """)
         self.command('tmux', """
@@ -175,21 +180,24 @@ case "$1" in
       *C-d) echo closed >> "$HOME/events"; touch "$HOME/closed" ;;
     esac ;;
   capture-pane)
-    if [ ! -f "$HOME/captured" ]; then
-      echo '▌ RUNNER DONE YPER4-999 Done'
-      echo 'tool output: RUNNER DONE YPER4-999 Done'
-      echo first-capture >> "$HOME/events"
-      touch "$HOME/captured"
-    else
-      printf '  %s\\n' "$FINAL_LINE"
-      echo final-capture >> "$HOME/events"
-    fi ;;
+    printf '  %s\\n' "$FINAL_LINE"
+    echo capture >> "$HOME/events" ;;
   *) exit 99 ;;
 esac
 """)
         self.command('sleep', """
 case "$1" in
-  30|900) if [ -f "$HOME/closed" ]; then echo "retry $1" >> "$HOME/events"; kill -TERM "$PPID"; fi ;;
+  30|900)
+    if [ -f "$HOME/closed" ]; then
+      echo "retry $1" >> "$HOME/events"; kill -TERM "$PPID"
+    elif [ -f "$HOME/started" ]; then
+      if [ ! -f "$HOME/tool-phase" ]; then
+        echo tool-phase >> "$HOME/events"; touch "$HOME/tool-phase"
+      else
+        printf '{"kind":"assistant","text":"%s"}\\n{"kind":"turn_usage"}\\n' "$FINAL_LINE" >> "$HOME/session.jsonl"
+        echo final-phase >> "$HOME/events"
+      fi
+    fi ;;
 esac
 exec /bin/sleep 0.01
 """)
@@ -200,9 +208,18 @@ exec /bin/sleep 0.01
         ]:
             with self.subTest(final_line=final_line):
                 self.events.write_text('')
-                for name in ['closed', 'captured']:
+                for name in ['closed', 'started', 'tool-phase']:
                     (self.home / name).unlink(missing_ok=True)
                 self.env['FINAL_LINE'] = final_line
+                records = [
+                    {'type': 'session', 'version': 1, 'cwd': str(self.home / 'projects/hypertask')},
+                    {'kind': 'user', 'text': final_line},
+                    {'kind': 'assistant', 'text': final_line},
+                    {'kind': 'tool_call', 'tool_name': 'bash'},
+                    {'kind': 'tool_result', 'output': final_line},
+                    {'kind': 'turn_usage'},
+                ]
+                (self.home / 'session.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in records))
                 process = subprocess.Popen(['bash', str(SCRIPT), '8', '--loop'], env=self.env,
                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            text=True, start_new_session=True)
@@ -217,8 +234,9 @@ exec /bin/sleep 0.01
                 events = self.events.read_text().splitlines()
                 self.assertIn('hax --provider=codex --model=gpt-6.1-sol --effort=high depth=unset identity=RUNNER 8', events)
                 self.assertLess(events.index('brief'), events.index('submitted'))
-                self.assertLess(events.index('first-capture'), events.index('final-capture'))
-                self.assertLess(events.index('final-capture'), events.index('closed'))
+                self.assertLess(events.index('tool-phase'), events.index('final-phase'))
+                self.assertLess(events.index('final-phase'), events.index('capture'))
+                self.assertLess(events.index('capture'), events.index('closed'))
                 self.assertIn(f'retry {cooldown}', events)
                 self.assertIn(final_line, (self.state / 'runner-8.latest.log').read_text())
                 self.assertIn(final_line, (self.state / 'runner-8.log').read_text())
