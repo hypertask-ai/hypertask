@@ -19,6 +19,10 @@ Merge to `production`, then read the commit's `Vercel` status (`gh api repos/hyp
 - The build log lines for the CPU count, compile time, static pages and `Build Completed`, with no SIGKILL or Out of Memory.
 - For a fix, the matching lines from the last failing build.
 
+### Automated evidence
+
+`node --test tests/build-memory-config.test.cjs` checks the build worker, memory optimizations and single-CPU settings with smoke and PostHog on and off; it does not run a production build or prove deployment success.
+
 ## Cleanup
 
 None.
