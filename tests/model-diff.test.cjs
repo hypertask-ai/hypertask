@@ -13,8 +13,8 @@ const response = (body, status = 200) => ({ ok: status < 400, status, json: asyn
 
 const twoVersionCatalog = {
   definitions: [
-    { key: "anthropic/claude-haiku-4.5", modelClass: "claude-haiku", label: "Haiku 4.5", provider: "anthropic", priceTier: 1 },
-    { key: "anthropic/claude-haiku-5.5", modelClass: "claude-haiku", label: "Haiku 5.5", provider: "anthropic", priceTier: 1 },
+    { key: "claude-haiku-4.5", modelClass: "claude-haiku", label: "Haiku 4.5", provider: "anthropic", priceTier: 1 },
+    { key: "claude-haiku-5-5", modelClass: "claude-haiku", label: "Haiku 5.5", provider: "anthropic", priceTier: 1 },
   ],
   options: [
     { id: "claude-haiku-4.5", modelKey: "claude-haiku-4.5", model: "claude-haiku-4.5", source: "claude" },
@@ -46,7 +46,9 @@ test("approved examples are discovered, with one finding per model class and no 
 
 test("stale detection still fires for a catalogue that keeps two versions of one class", () => {
   const stale = staleFinding();
-  assert.equal(stale.model, "anthropic/claude-haiku-4.5");
+  assert.equal(stale.model, "claude-haiku-4.5");
+  assert.deepEqual(stale.current, ["claude-haiku-5-5"]);
+  assert.equal(stale.reason, "superseded by claude-haiku-5-5");
   assert.equal(stale.action, "remove stale entry; migrate saved picks to the current model of its class");
 });
 
@@ -75,7 +77,7 @@ test("gateway failure falls back to authenticated provider lists without claimin
   assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
   assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 0);
   const stale = diffModels(twoVersionCatalog, sources).findings.filter((finding) => finding.kind === "stale");
-  assert.deepEqual(stale.map((finding) => finding.model), ["anthropic/claude-haiku-4.5"]);
+  assert.deepEqual(stale.map((finding) => finding.model), ["claude-haiku-4.5"]);
   assert.equal(stale[0].action, "remove stale entry; migrate saved picks to the current model of its class");
   assert.equal(calls.find(([url]) => url === "https://api.openai.com/v1/models")[1].Authorization, "Bearer fixture-openai");
   assert.equal(calls.find(([url]) => url === "https://api.anthropic.com/v1/models")[1]["x-api-key"], "fixture-anthropic");
