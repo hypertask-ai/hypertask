@@ -1309,7 +1309,9 @@ test("disabled provider selections fall back and gateway-only models keep full s
     userId: 1000,
   });
   assert.equal(fallback.provider, "claude");
-  assert.equal(fallback.modelId, "claude-haiku-5-5");
+  assert.equal(fallback.modelId, "claude-haiku-5.5");
+  assert.equal(fallback.model.modelId, "anthropic/claude-haiku-5.5");
+  assert.equal(fallback.model.config.provider, "gateway");
 
   settings = {
     providers: { openai: false, anthropic: false, google: false, xai: false },
