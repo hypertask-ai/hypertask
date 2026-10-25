@@ -8,6 +8,8 @@ import { createCommentService } from '@/utils/controllers/comments/createComment
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
+import { filedWithinLastDay } from './callerFixable'
+import { HTPR_7941_QUIET_FIXABLE_REPORTS_FLAG } from '@/lib/flags/definitions/htpr-7941-quiet-fixable-reports'
 
 export { aiFeedbackEnabled } from './enabled'
 
@@ -111,6 +113,15 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
   }
 }
 
+async function quietFixableReportsFlag(userId?: number): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('@/lib/flags')
+    return await isFeatureEnabled(HTPR_7941_QUIET_FIXABLE_REPORTS_FLAG, userId ?? Number(process.env.AI_FEEDBACK_AGENT_USER_ID))
+  } catch {
+    return false
+  }
+}
+
 export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { origin: 'agent' | 'automatic'; agentName?: string | null } = { origin: 'agent' }) {
   if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
   const parsed = (reporter.origin === 'automatic' ? automaticFeedbackSchema : aiFeedbackSchema).safeParse(raw)
@@ -194,6 +205,21 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           }
           changedTaskId = existing.id
           return receipt(existing, true, count, project.uniqueIdentifier)
+        }
+        const quietFixable = reporter.origin === 'automatic' ? await quietFixableReportsFlag(userId) : false
+        const recentlyClosed = quietFixable
+          ? await tx.task.findFirst({
+            where: {
+              projectId: PROJECT_ID, status: 'Normal',
+              OR: [{ sectionId: { in: doneSections.map((item) => item.id) } }, { section: { in: doneSections.map((item) => item.section_title) } }],
+              description_: { is: { content: { contains: marker } } },
+            },
+            orderBy: { id: 'desc' }, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true, updatedAt: true },
+          })
+          : null
+        if (recentlyClosed && filedWithinLastDay(recentlyClosed.updatedAt)) {
+          console.info('AI feedback not filed: the same fingerprint was filed in the last day', { fingerprint: `ai-fb-${fingerprint.slice(0, 12)}`, ticket: recentlyClosed.ticketNumber })
+          return receipt(recentlyClosed, true, 0, project.uniqueIdentifier)
         }
         let label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
         if (!label) {

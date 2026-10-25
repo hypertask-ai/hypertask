@@ -4,6 +4,8 @@ import { HTPR_7498_EXPIRED_KEY_FEEDBACK_FLAG } from '@/lib/flags/definitions/htp
 import { automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
+import { HTPR_7941_QUIET_FIXABLE_REPORTS_FLAG } from '@/lib/flags/definitions/htpr-7941-quiet-fixable-reports'
+import { callerCanFix, refusalFromZodIssues } from './callerFixable'
 
 function fileAutomaticFeedback(input: AutomaticFeedbackInput, userId?: number) {
   const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
@@ -112,6 +114,15 @@ function feedbackErrorDetails(value: unknown, depth = 0): Pick<AutomaticFeedback
   }
 }
 
+async function quietFixableReports(userId: number): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('@/lib/flags')
+    return await isFeatureEnabled(HTPR_7941_QUIET_FIXABLE_REPORTS_FLAG, userId)
+  } catch {
+    return false
+  }
+}
+
 export function observeFeedbackTools(tools: readonly PortableTool[], userId: number): PortableTool[] {
   return tools.map((tool) => ({
     ...tool,
@@ -126,7 +137,14 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
         return text
       } catch (error) {
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
-        if (status !== 403) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...feedbackErrorDetails(error) }, userId)
+        if (status !== 403) {
+          const callerCanFixRefusal = error instanceof ZodError && callerCanFix(refusalFromZodIssues(error.issues))
+          if (callerCanFixRefusal && await quietFixableReports(userId)) {
+            console.info('AI feedback not filed: the refusal tells the caller what to fix', { tool: tool.name })
+          } else {
+            queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...feedbackErrorDetails(error) }, userId)
+          }
+        }
         throw error
       }
     },
