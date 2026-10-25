@@ -683,7 +683,7 @@ jobs:
           MCP_CLI_API_CONTRACT: '1'
         run: |
           npx prisma migrate deploy
-          node scripts/seed-browser-smoke.mjs
+          node scripts/seed-browser-smoke.mjs --qa-journeys
       - name: Download checksum-verified pinned native CLI
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         env:
@@ -746,7 +746,6 @@ jobs:
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --live-like-control
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/inbox-cycle.spec.ts
-          # YPER4-673: one feature-map journey on this same build. Report only, so a red journey never fails browser-smoke.
           set +e
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
           reseed_status=$?
@@ -759,6 +758,15 @@ jobs:
             export VERIFY_QA_OUT=verify-qa-premerge
             timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
             verify_qa_status=$?
+            if grep -Eq '^(.github/scripts/verify-qa-premerge.mjs|tests/verify-qa-premerge.test.cjs)$' "$VERIFY_QA_CHANGED_FILES"; then
+              printf '%s\n' 'src/lib/auth/session.ts' > "$RUNNER_TEMP/verify-qa-matched-files.txt"
+              VERIFY_QA_CHANGED_FILES="$RUNNER_TEMP/verify-qa-matched-files.txt" VERIFY_QA_OUT=verify-qa-premerge/matched-control \
+                timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+              control_status=$?
+              if [ "$control_status" -ne 0 ]; then
+                echo "::warning::verify-qa matched control exited ${control_status}; evidence is report-only"
+              fi
+            fi
           else
             verify_qa_status=$reseed_status
             echo "::warning::inbox reseed failed (${reseed_status}); skipped premerge verify-qa"
@@ -778,7 +786,7 @@ jobs:
           retention-days: 7
       - name: Upload premerge verify-qa evidence
         id: verify-qa-evidence
-        if: always() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verify-qa-premerge

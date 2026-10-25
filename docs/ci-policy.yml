@@ -158,8 +158,10 @@ premerge_verify_qa:
   blocks_merge: false
   script: .github/scripts/verify-qa-premerge.mjs
   artifact: verify-qa-premerge
-  default_journey: inbox-cycle
-  default_feature_map: .claude/skills/verify-qa/reference/feature-map/inbox.md
+  selection: most_changed_feature_map_page
+  unmatched_verdict: "UNREACHABLE: no driver"
+  tagged_journeys: e2e/smoke/journeys.spec.ts
+  tagged_journeys_opt_in: HT_QA_JOURNEYS=1
   app_smoke_build_reuse: deferred
 
 ai_model_watch:
