@@ -31,7 +31,7 @@ function harness(flatSchema = false, boardAlias = true) {
   const tools = selectMcpTools(publishedVariants.map(([, name, parameters]) => ({
     name, parameters, description: name,
     execute: async (args) => JSON.stringify({ success: true, args }),
-  })), true, {}, true, flatSchema, false, boardAlias)
+  })), true, {}, true, flatSchema, false, false, boardAlias)
   return (action) => tools.find((tool) => tool.name === (action === 'add' ? 'hypertask_comments' : 'hypertask_tasks'))
 }
 
@@ -99,7 +99,7 @@ for (const flatSchema of [false, true]) {
     const schemas = [false, true].map((boardAlias) => selectMcpTools([{
       name: 'hypertask_get_task_tree', parameters: tasks.getGetTaskTreeInputSchema(), description: 'Task tree',
       execute: async () => '{}',
-    }], true, {}, true, flatSchema, false, boardAlias).find((tool) => tool.name === 'hypertask_tasks').inputSchema)
+    }], true, {}, true, flatSchema, false, false, boardAlias).find((tool) => tool.name === 'hypertask_tasks').inputSchema)
     assert.equal(JSON.stringify(schemas[1]), JSON.stringify(schemas[0]))
     const validate = ajv.compile(schemas[1])
     assert.equal(validate({ action: 'tree', input: { task_id: 42 } }), true)
