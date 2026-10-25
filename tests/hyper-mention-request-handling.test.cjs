@@ -33,11 +33,11 @@ test("HyperAI mention clients reject missing task context without a request", ()
   assert.doesNotMatch(hook, /taskIds\[0\] \?\? -1/);
   assert.equal(
     (hook.match(/HyperAI could not reply: missing task context/g) || []).length,
-    2,
+    1,
   );
   assert.ok(
     (hook.match(/console\.warn\(/g) || []).length >= 2,
-    "both mention request paths should warn about missing task context",
+    "the mention request warns about missing task context and a failed request",
   );
   assert.match(hook, /\.\.\.\(ownerId !== undefined \? \{ ownerId \} : \{\}\)/);
   assert.doesNotMatch(hook, /processedAttachments:/);
@@ -46,10 +46,10 @@ test("HyperAI mention clients reject missing task context without a request", ()
 test("HyperAI mention clients report every failed response and network error", () => {
   const hook = read("src/hooks/MultiPages/Tasks/useHyperMention.ts");
 
-  assert.equal((hook.match(/if \(!response\.ok\)/g) || []).length, 2);
+  assert.equal((hook.match(/if \(!response\.ok\)/g) || []).length, 1);
   assert.match(hook, /data\?\.error \|\| data\?\.message/);
   assert.match(hook, /HyperAI could not reply\. Try again\./);
-  assert.equal((hook.match(/toast\.error\(DEFAULT_HYPERAI_ERROR\)/g) || []).length, 2);
+  assert.equal((hook.match(/toast\.error\(DEFAULT_HYPERAI_ERROR\)/g) || []).length, 1);
   assert.doesNotMatch(hook, /if \(response\.status === 403\)/);
 });
 
@@ -59,7 +59,7 @@ test("HyperAI mention clients never send the masked MCP token as Bearer", () => 
 
   assert.match(utils, /export function mcpAuthorizationHeaders/);
   assert.match(hook, /mcpAuthorizationHeaders\(token\)/);
-  assert.equal((hook.match(/mcpAuthorizationHeaders\(token\)/g) || []).length, 2);
+  assert.equal((hook.match(/mcpAuthorizationHeaders\(token\)/g) || []).length, 1);
   assert.doesNotMatch(
     hook,
     /\.\.\.\(token \? \{ Authorization: `Bearer \$\{token\}` \} : \{\}\)/,
