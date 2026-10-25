@@ -30,7 +30,7 @@ function sourceNode(file, predicate) {
 
 function inviteLinkComponent(atoms, flags) {
   const source = read("src/app/[...boardURL]/LandingPage.tsx");
-  const start = source.indexOf("const firstTaskEmailEnabled =");
+  const start = source.indexOf("const inviteRequested =");
   const end = source.indexOf("const readyBoardRender =", start);
   assert.ok(start >= 0 && end > start, "Load the real invite hooks and effect, not a copied implementation");
   const code = compile(`
@@ -62,7 +62,7 @@ async function withInvite(options, check) {
   const commandDeclaration = sourceNode("src/store/index.ts", (node, tree) => ts.isVariableDeclaration(node) && node.name.getText(tree) === "showCommandsAtom");
   const showCommandsAtom = new Function("atom", "CommandMode", compile(`return ${commandDeclaration.slice(commandDeclaration.indexOf("=") + 1)};`))(state.atom, CommandMode);
   const currentProjectAtom = state.atom({ key: "invite-link-project", default: { id: 7 } });
-  const flags = { [flagKey]: options.enabled !== false, "htpr-7028-first-task-email": options.emailEnabled !== false };
+  const flags = { [flagKey]: options.enabled !== false };
   const InviteLink = inviteLinkComponent({ showCommandsAtom, currentProjectAtom }, flags);
   const resetEffect = sourceNode("src/components/ProviderGlobal/GloablProviders.tsx", (node, tree) =>
     ts.isCallExpression(node) && node.expression.getText(tree) === "useEffect" && node.arguments[0]?.getText(tree).trim() === "() => {\n    resetShowCommands();\n  }");
@@ -169,7 +169,6 @@ test("a ready desktop link without the startup race opens once and does not reop
 
 for (const [name, options] of [
   ["no invite parameter", { url: "https://fixture.test/project?id=7" }],
-  ["email flag off", { emailEnabled: false }],
   ["unauthenticated", { settings: { authenticated: false } }],
   ["guest", { settings: { isGuest: true } }],
   ["unhydrated board", { settings: { boardDataReady: false } }],
