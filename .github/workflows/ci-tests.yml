@@ -97,6 +97,7 @@ jobs:
         run: |
           python3 .claude/skills/ship/scripts/runner-dispatch.test.py
           python3 .claude/skills/ship/scripts/runner-dispatch.cache.test.py
+          python3 .claude/skills/ship/scripts/runner-snapshot.test.py
           bash .claude/skills/ship/scripts/runner-selfupdate.test.sh
 
       - name: Guard CI image sources
