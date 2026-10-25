@@ -1,0 +1,49 @@
+# Command palette (Ctrl+K)
+
+## How a customer reaches it
+
+`Ctrl+K` (or `Cmd+K`) anywhere in the app opens the command palette. On phones
+the same palette lists the commands but hides the key chips
+(`CommandList.tsx` renders `keyboardCommands` only when `isMobile` is false).
+
+## How to drive it
+
+- Open any task at `/detail/project-<board>/<number>`, press `Ctrl+K`, type
+  `copy private`, and read the key chips on the right of each row.
+- The shortcut help list lives in Settings → Shortcuts and in the `?` help
+  sheet; it reads `getKeyboardShortcuts()` in
+  `src/lib/constants/shortcuts.ts`.
+- The Share Task modal shows the same keys in each row's hover tooltip while
+  `htpr-7839-share-shortcut-tooltips` is on.
+- The palette's four share rows read `src/lib/shortcuts/shareTaskShortcuts.ts`
+  while `htpr-7891-palette-share-key-labels` is on, so the printed key and the
+  key that copies cannot disagree.
+
+## What usually breaks
+
+- A palette label drifting from the key that actually works: the palette
+  printed `CTRL :` and `CTRL SHIFT :` while the help list, the docs page and
+  the Share Task tooltips printed `;` for the same physical key
+  ([HTPR-7891](https://app.hypertask.ai/detail/project-15/7891)). The merged
+  HTPR-7839 pull request said it had fixed this, but its diff never touched
+  `taskCommands.ts`, so check the palette itself after any shortcut work.
+- On Apple devices `CTRL` must render as `CMD`; `SingleKey` in
+  `CommandList.tsx` does that mapping, so a label that hard-codes `CMD` would
+  print `CMD` on Windows too.
+
+## What proof to collect
+
+Screenshots of the palette rows with the key chips, the matching help-list
+rows, and one Share Task tooltip, then compare the glyphs by eye. Shoot the
+desktop viewport at 1440x900; all four themes when row styling changed.
+`tests/htpr-7891-palette-share-key-labels.test.cjs` pins the palette labels to
+the shared module and the help list.
+
+## Cleanup
+
+None; reading the palette and the help list writes nothing.
+
+## Gap
+
+Phone shots cannot prove the key chips, because the phone palette hides them;
+they only prove the rows still render.
