@@ -103,7 +103,7 @@ function fixture(options = {}) {
       calls.scheduled.push(work);
     } },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/flags": { HTPR_7028_FIRST_TASK_EMAIL_FLAG: "htpr-7028-first-task-email", HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: "htpr-7037-shared-email-layout", isFeatureEnabled: async () => true },
+    "@/lib/flags": { HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: "htpr-7037-shared-email-layout", isFeatureEnabled: async () => true },
     "@/lib/mcp/boards/columnRole": load("src/lib/mcp/boards/columnRole.ts", {}),
     "@/lib/telemetry/activationAnalytics": { trackActivation: () => {} },
     "@/lib/email/sendEmail": { sendEmail: async (input) => {

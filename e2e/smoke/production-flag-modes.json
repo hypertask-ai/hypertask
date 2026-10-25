@@ -75,7 +75,6 @@
     "htpr-7009-dedupe-task-detail-reads": "EVERYONE",
     "htpr-7020-tag-full-name": "EVERYONE",
     "htpr-7026-agent-connect-check": "EVERYONE",
-    "htpr-7028-first-task-email": "EVERYONE",
     "htpr-7029-keep-demo-board-on-email-signup": "EVERYONE",
     "htpr-7030-google-signup-starter-board": "EVERYONE",
     "htpr-7031-invite-email": "EVERYONE",

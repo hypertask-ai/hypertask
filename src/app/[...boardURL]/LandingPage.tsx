@@ -25,7 +25,7 @@ import nookies from "nookies"
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
+import { HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { CommandMode } from "@/models/enums";
 import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -1106,8 +1106,7 @@ const readyProject = data?.updatedProjects?.[projectIndex]
 const boardDataReady = Boolean(
   readyProject && isBoardPayloadHydrated(readyProject),
 )
-const firstTaskEmailEnabled = useFlag(HTPR_7028_FIRST_TASK_EMAIL_FLAG)
-const inviteRequested = firstTaskEmailEnabled ? searchParams?.get("invite") === "1" : false
+const inviteRequested = searchParams?.get("invite") === "1"
 const setShowCommands = useSetRecoilState(showCommandsAtom)
 const inviteProject = useRecoilValue(currentProjectAtom)
 const inviteHandledRef = useRef<string | null>(null)

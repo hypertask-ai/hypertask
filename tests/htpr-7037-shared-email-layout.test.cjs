@@ -140,7 +140,6 @@ async function sendFixture({ name, args }, mode, recipientUserId) {
   const flags = {
     FEATURE_FLAG_QA_USER_ID: 985,
     HTPR_7026_AGENT_CONNECT_CHECK_FLAG: "htpr-7026-agent-connect-check",
-    HTPR_7028_FIRST_TASK_EMAIL_FLAG: "htpr-7028-first-task-email",
     HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: flag,
     isFeatureEnabled: async (key, userId) => {
       flagReads.push({ key, userId });
