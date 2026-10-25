@@ -108,6 +108,7 @@ export async function POST(request: NextRequest) {
       configureAiModelUsage(selected.model, {
         userId, teamId: selected.teamId, projectId: body.projectId,
         taskId: usageTaskId, provider: selected.usageProvider, feature: "task-writer",
+        reasoningFeature: "task-writer",
       });
       const result = await generateText({
         experimental_download: downloadWithoutBrotli,
@@ -171,6 +172,7 @@ export async function POST(request: NextRequest) {
             taskId: usageTaskId,
             provider: selected.usageProvider,
             feature: "task-writer",
+            reasoningFeature: "task-writer",
           });
           const result = streamText({
             experimental_download: downloadWithoutBrotli,

@@ -22,9 +22,15 @@ concurrency:
   # test report and warning path.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# One knob for the Test step. 2 is the cap from YPER4-554 (HT Product Lead,
+# 2026-10-24): the free hosted pool is 20 jobs, and 3 or more shards queued
+# other pulls. The required check stays the aggregate job named ci-tests.
+env:
+  CI_TEST_SHARDS: "2"
+
 jobs:
-  ci-tests:
-    name: ci-tests
+  ci-prepare:
+    name: ci-prepare
     # Skip drafts; pushes always run. HR-04 (Valentin, 2026-09-29): no author
     # is exempted from the gate any more. The "Vercel bot" author skip this
     # replaced was ported wholesale from a private-repo template (9f074926b)
@@ -57,11 +63,9 @@ jobs:
       # for GitHub AI Review; without this the gh call 403s and aborts the job.
       statuses: read
       packages: read
-    env:
-      HTPR_PG_IMAGE: ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     outputs:
-      test_failed: ${{ steps.test-outcome.outputs.failed }}
-      failed_tests: ${{ steps.test-outcome.outputs.failed_tests }}
+      run_tests: ${{ steps.shards.outputs.run_tests }}
+      shard_indexes: ${{ steps.shards.outputs.indexes }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -292,6 +296,7 @@ jobs:
             SELECTED=ALL
           fi
           echo "$SELECTED"
+          printf '%s\n' "$SELECTED" > "$RUNNER_TEMP/selected-tests.txt"
           if [ "$SELECTED" = "ALL" ]; then
             echo "files=" >> "$GITHUB_OUTPUT"
             echo "require_pg=1" >> "$GITHUB_OUTPUT"
@@ -304,8 +309,109 @@ jobs:
             fi
           fi
 
+      - name: Write test shards
+        id: shards
+        env:
+          BUILD_NEEDED: ${{ steps.scope.outputs.build_needed }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "push" ] && [ "$BUILD_NEEDED" != "true" ]; then
+            echo "run_tests=false" >> "$GITHUB_OUTPUT"
+            echo 'indexes=["0"]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          OUT="$RUNNER_TEMP/ci-shards"
+          mkdir -p "$OUT"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] || grep -qx ALL "$RUNNER_TEMP/selected-tests.txt"; then
+            node .github/scripts/shard-tests.mjs --discover --count "$CI_TEST_SHARDS" --out "$OUT"
+          elif ! grep -q '[^[:space:]]' "$RUNNER_TEMP/selected-tests.txt"; then
+            echo "selected test list is empty; refusing to skip the suite" >&2
+            exit 1
+          else
+            node .github/scripts/shard-tests.mjs --count "$CI_TEST_SHARDS" --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
+          fi
+          node .github/scripts/shard-tests.mjs --check --out "$OUT"
+          echo "run_tests=true" >> "$GITHUB_OUTPUT"
+          indexes=$(node -e 'const n=Number(process.argv[1]); if (!Number.isInteger(n)||n<1) process.exit(1); process.stdout.write(JSON.stringify([...Array(n).keys()].map(String)))' "$CI_TEST_SHARDS")
+          echo "indexes=${indexes}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload test shard lists
+        if: steps.shards.outputs.run_tests == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ci-test-shards
+          path: ${{ runner.temp }}/ci-shards
+          retention-days: 7
+
+  ci-test:
+    name: test-shard
+    needs: ci-prepare
+    if: needs.ci-prepare.outputs.run_tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.ci-prepare.outputs.shard_indexes || '["0"]') }}
+    # Same read-only token as ci-prepare. That job already uploads artifacts
+    # without actions: write, and a write token would reach PR-controlled tests
+    # through the Docker login that follows.
+    permissions:
+      contents: read
+      packages: read
+    env:
+      HTPR_PG_IMAGE: ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Download test shard lists
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: ci-test-shards
+          path: ci-test-shards
+
+      - name: Decide shard postgres
+        id: pg
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q -- '-postgres.test.cjs' "ci-test-shards/shard-${{ matrix.shard }}.txt"; then
+            echo "need=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "need=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Authenticate CI image pulls
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: steps.pg.outputs.need == '1'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -313,35 +419,120 @@ jobs:
           password: ${{ github.token }}
 
       - name: Pull PostgreSQL test image
-        if: github.event_name == 'push' || steps.select.outputs.require_pg == '1'
+        if: steps.pg.outputs.need == '1'
         run: docker pull "$HTPR_PG_IMAGE"
 
-      - name: Test
-        if: github.event_name != 'push' && steps.scope.outputs.build_needed == 'true'
-        env:
-          HT_REQUIRE_PG_TESTS: ${{ steps.select.outputs.require_pg }}
-        run: npm test -- ${{ steps.select.outputs.files }}
+      # Comparison tests `git show origin/production:<file>`. The old single
+      # job fetched the base ref while selecting tests; a fresh shard checkout
+      # does not, and fetch-depth 1 leaves that name missing.
+      - name: Fetch base branch for comparison tests
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_BASE_REF:-production}"
+          git fetch --depth=1 origin "+refs/heads/${ref}:refs/remotes/origin/${ref}"
 
-      - name: Test full suite
+      - name: Test shard
         id: push-test
-        if: github.event_name == 'push'
         shell: bash
         env:
-          HT_REQUIRE_PG_TESTS: "1"
-        run: npm test 2>&1 | tee "$RUNNER_TEMP/push-test.log"
+          SHARD: ${{ matrix.shard }}
+          HT_REQUIRE_PG_TESTS: ${{ github.event_name == 'push' && '1' || steps.pg.outputs.need }}
+          GITHUB_TOKEN: ""
+          GH_TOKEN: ""
+        run: |
+          set -euo pipefail
+          LIST="ci-test-shards/shard-${SHARD}.txt"
+          mkdir -p "$RUNNER_TEMP/ci-shard-upload"
+          cp "$LIST" "$RUNNER_TEMP/ci-shard-upload/shard-${SHARD}.txt"
+          mapfile -t FILES < "$LIST"
+          echo "shard ${SHARD} files=${#FILES[@]}"
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "shard ${SHARD} empty" | tee "$RUNNER_TEMP/ci-shard-upload/shard-${SHARD}.log"
+            exit 0
+          fi
+          npm test -- "${FILES[@]}" 2>&1 | tee "$RUNNER_TEMP/ci-shard-upload/shard-${SHARD}.log"
+
+      - name: Upload shard result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ci-test-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ci-shard-upload
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ci-tests:
+    name: ci-tests
+    needs: [ci-prepare, ci-test]
+    if: always() && (github.event_name == 'push' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      test_failed: ${{ steps.test-outcome.outputs.failed }}
+      failed_tests: ${{ steps.test-outcome.outputs.failed_tests }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download planned shard lists
+        if: always() && needs.ci-prepare.outputs.run_tests == 'true'
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: ci-test-shards
+          path: ci-test-shards
+
+      - name: Download shard results
+        if: always() && needs.ci-prepare.outputs.run_tests == 'true'
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          pattern: ci-test-shard-*
+          path: ci-shard-results
+
+      - name: Prove every test file ran once
+        id: prove
+        if: always() && needs.ci-prepare.outputs.run_tests == 'true'
+        run: node .github/scripts/shard-tests.mjs --prove --out ci-test-shards --results ci-shard-results
+
+      - name: Combine shard logs
+        if: always() && needs.ci-prepare.outputs.run_tests == 'true'
+        shell: bash
+        run: |
+          set +e
+          : > "$RUNNER_TEMP/push-test.log"
+          find ci-shard-results -name 'shard-*.log' -print | sort | while read -r log; do
+            cat "$log" >> "$RUNNER_TEMP/push-test.log"
+          done
 
       - name: Record push test outcome
         id: test-outcome
         if: always() && github.event_name == 'push'
         shell: bash
         run: |
-          echo "failed=${{ steps.push-test.outcome == 'failure' }}" >> "$GITHUB_OUTPUT"
+          echo "failed=${{ needs.ci-test.result == 'failure' }}" >> "$GITHUB_OUTPUT"
           failures=""
           if [ -f "$RUNNER_TEMP/push-test.log" ]; then
             failures=$(sed -nE 's/^[[:space:]]*not ok [0-9]+ - (.*)$/\1/p; s/^[[:space:]]*✖ (.*) \([0-9.]+ms\)$/\1/p' "$RUNNER_TEMP/push-test.log" \
               | awk 'BEGIN { ORS="" } NR <= 3 { if (NR > 1) printf "; "; printf "%s", $0 }')
           fi
           echo "failed_tests=${failures:-test command failed before naming a test}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish ci-tests result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.ci-prepare.result }}" = "success"
+          if [ "${{ needs.ci-prepare.outputs.run_tests }}" = "true" ]; then
+            test "${{ needs.ci-test.result }}" = "success"
+            test "${{ steps.prove.outcome }}" = "success"
+          else
+            test "${{ needs.ci-test.result }}" = "skipped"
+          fi
 
   browser-smoke:
     name: browser-smoke
@@ -492,7 +683,7 @@ jobs:
           MCP_CLI_API_CONTRACT: '1'
         run: |
           npx prisma migrate deploy
-          node scripts/seed-browser-smoke.mjs
+          node scripts/seed-browser-smoke.mjs --qa-journeys
       - name: Download checksum-verified pinned native CLI
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         env:
@@ -507,6 +698,15 @@ jobs:
           echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check
           chmod 755 "$CLI_BINARY"
           printf 'MCP_CONTRACT_CLI=%s\n' "$CLI_BINARY" >> "$GITHUB_ENV"
+      - name: Restore Next.js build cache
+        id: restore-nextjs-cache
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-
       - name: Build the local app (no migrations)
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         # YPER4-363: next/font downloads Google fonts at build time and about
@@ -519,6 +719,12 @@ jobs:
             echo "::warning::Google font download failed during next build (attempt $attempt)"
           done
           exit 1
+      - name: Save Next.js build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/production' && steps.restore-nextjs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .next/cache
+          key: ${{ steps.restore-nextjs-cache.outputs.cache-primary-key }}
       - name: Serve and check logged-in pages and layout lock
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: smoke
@@ -555,7 +761,6 @@ jobs:
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --live-like-control
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/inbox-cycle.spec.ts
-          # YPER4-673: one feature-map journey on this same build. Report only, so a red journey never fails browser-smoke.
           set +e
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
           reseed_status=$?
@@ -568,6 +773,15 @@ jobs:
             export VERIFY_QA_OUT=verify-qa-premerge
             timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
             verify_qa_status=$?
+            if grep -Eq '^(.github/scripts/verify-qa-premerge.mjs|tests/verify-qa-premerge.test.cjs)$' "$VERIFY_QA_CHANGED_FILES"; then
+              printf '%s\n' 'src/lib/auth/session.ts' > "$RUNNER_TEMP/verify-qa-matched-files.txt"
+              VERIFY_QA_CHANGED_FILES="$RUNNER_TEMP/verify-qa-matched-files.txt" VERIFY_QA_OUT=verify-qa-premerge/matched-control \
+                timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+              control_status=$?
+              if [ "$control_status" -ne 0 ]; then
+                echo "::warning::verify-qa matched control exited ${control_status}; evidence is report-only"
+              fi
+            fi
           else
             verify_qa_status=$reseed_status
             echo "::warning::inbox reseed failed (${reseed_status}); skipped premerge verify-qa"
@@ -587,7 +801,7 @@ jobs:
           retention-days: 7
       - name: Upload premerge verify-qa evidence
         id: verify-qa-evidence
-        if: always() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verify-qa-premerge

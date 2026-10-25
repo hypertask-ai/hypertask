@@ -66,6 +66,75 @@ function inputSchema(tool: PortableTool, action: Action, boardAlias = false): Re
   return schema
 }
 
+const TOP_LEVEL_FIELDS = new Set(['action', 'input', 'response_format', 'limit', 'offset', 'page'])
+const CALL_WRAPPER_FIELDS = ['response_format', 'limit', 'offset', 'page']
+
+type PlacementOptions = { topLevelInputFields: boolean; inputWrapperFields: boolean; taskIdTicketReference: boolean; pageAlias: boolean }
+
+function placementConflict(key: string): z.ZodError {
+  return new z.ZodError([{ code: 'custom', path: ['input', key], message: `Pass ${key} inside input or at the top level, not both with different values.` }])
+}
+
+const TICKET_REFERENCE = /^[A-Z0-9]{2,}-\d+$/i
+
+function ticketReferenceFromTaskId(value: unknown): string | string[] | undefined {
+  const reference = (entry: unknown) => typeof entry === 'string' && TICKET_REFERENCE.test(entry.trim()) ? entry.trim().toUpperCase() : undefined
+  if (Array.isArray(value)) {
+    const references = value.map(reference)
+    return references.length && references.every((entry): entry is string => entry !== undefined) ? references : undefined
+  }
+  return reference(value)
+}
+
+function normalizeInputPlacement(
+  raw: unknown,
+  actions: Record<string, Action>,
+  byName: Map<string, PortableTool>,
+  legacyShape: Record<string, unknown>,
+  options: PlacementOptions,
+): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const requested = (raw as Record<string, unknown>).action
+  const action = typeof requested === 'string' ? actions[requested] : undefined
+  const tool = action ? byName.get(action.tool) : undefined
+  if (!tool) return raw
+  const rawFields = raw as Record<string, unknown>
+  const nested = rawFields.input
+  if (nested !== undefined && (typeof nested !== 'object' || nested === null || Array.isArray(nested))) return raw
+  const input = { ...(nested as Record<string, unknown> | undefined) }
+  const documented = new Set(Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field))
+  const placed = { ...rawFields }
+  if (options.topLevelInputFields) {
+    for (const [key, value] of Object.entries(rawFields)) {
+      if (TOP_LEVEL_FIELDS.has(key) || key in legacyShape || !documented.has(key)) continue
+      if (input[key] !== undefined && JSON.stringify(input[key]) !== JSON.stringify(value)) throw placementConflict(key)
+      input[key] = value
+      delete placed[key]
+    }
+  }
+  if (options.inputWrapperFields) {
+    for (const key of CALL_WRAPPER_FIELDS) {
+      if (input[key] === undefined || documented.has(key) || (key === 'page' && !options.pageAlias)) continue
+      if (placed[key] !== undefined && JSON.stringify(placed[key]) !== JSON.stringify(input[key])) throw placementConflict(key)
+      placed[key] = input[key]
+      delete input[key]
+    }
+  }
+  if (options.taskIdTicketReference && documented.has('task_id') && documented.has('ticket_number') && input.task_id !== undefined) {
+    let reference = ticketReferenceFromTaskId(input.task_id)
+    if (Array.isArray(reference) && !z.safeParse(tool.parameters.shape.ticket_number, reference).success) {
+      reference = reference.length === 1 ? reference[0] : undefined
+    }
+    if (reference !== undefined) {
+      if (input.ticket_number !== undefined && JSON.stringify(input.ticket_number) !== JSON.stringify(reference)) throw placementConflict('task_id')
+      input.ticket_number = reference
+      delete input.task_id
+    }
+  }
+  placed.input = input
+  return placed
+}
+
 function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool, taskNumberAlias = false): Record<string, unknown> {
   const shape = tool.parameters.shape
   const args = Object.fromEntries(Object.entries(input).map(([key, value]) => {
@@ -91,6 +160,11 @@ export function selectMcpTools(
   pageAlias = false,
   taskNumberAlias = false,
   boardAlias = false,
+  topLevelInputFields = false,
+  inputWrapperFields = false,
+  ticketNumberShapeHint = false,
+  taskIdTicketReference = false,
+  renamedFieldHint = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -173,17 +247,30 @@ export function selectMcpTools(
       ...(v2 ? { annotations: annotationsForActions(Object.values(actions)) } : {}),
       outputSchema: CONSOLIDATED_OUTPUT_SCHEMA,
       input_examples: definition.input_examples.filter((example) => names.includes((example as { action: string }).action)),
+      ...(topLevelInputFields || inputWrapperFields || taskIdTicketReference ? {
+        normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, taskIdTicketReference, pageAlias }),
+      } : {}),
+      ...(ticketNumberShapeHint || renamedFieldHint ? {
+        errorHints: {
+          ...(ticketNumberShapeHint ? { ticketNumberShape: true } : {}),
+          ...(renamedFieldHint ? { renamedField: true } : {}),
+        },
+      } : {}),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
+        const rawArgs = (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
         const args = parameters.parse(raw)
         const action = actions[args.action]
         const tool = byName.get(action.tool)!
-        const oldArgs = raw as Record<string, unknown>
+        const oldArgs = rawArgs
         const oldInput = Object.fromEntries(Object.keys(legacyShape).filter((key) => oldArgs[key] !== undefined).map((key) => [key, oldArgs[key]]))
         const input = { ...oldInput, ...legacyArguments(args.input, action, tool, taskNumberAlias) }
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
-        const inputIssues = (error: z.ZodError) => new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] })))
+        const inputIssues = (error: z.ZodError) => Object.assign(
+          new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] }))),
+          { documentedFields: Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field) },
+        )
         const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined
         if (requestedPage !== undefined && input.cursor !== undefined) {
           throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or cursor, not both.' }])

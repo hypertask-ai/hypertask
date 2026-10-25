@@ -35,7 +35,7 @@ function moduleWithStubs(file, stubs) {
     require: (id) => stubs[id] ?? (id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
     process: { env: { AI_GATEWAY_API_KEY: sharedKey } },
     performance, setTimeout, clearTimeout, ReadableStream, Response, Headers, TextEncoder, Error,
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
   }, { filename });
   return loadedModule.exports;
 }

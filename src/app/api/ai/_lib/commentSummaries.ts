@@ -91,6 +91,7 @@ export async function generateAndStoreCommentSummary(commentId: number) {
       agentId: comment.agentId,
       provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "summary",
+      reasoningFeature: "tldr",
     });
     const openQuestionRules = await isFeatureEnabled(HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG, comment.creatorId ?? comment.task.userId);
     const result = await generateText({

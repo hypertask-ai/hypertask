@@ -17,6 +17,10 @@ import { HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG, isFeatureEnab
 import { HTPR_7893_BOARD_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7893-board-alias'
 import { HTPR_7863_MCP_PAGE_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7863-mcp-page-alias'
 import { HTPR_7895_TASK_NUMBER_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7895-task-number-alias'
+import { HTPR_7897_MCP_INPUT_FIELDS_FLAG } from '@/lib/flags/definitions/htpr-7897-mcp-input-fields'
+import { HTPR_7917_MCP_INPUT_WRAPPERS_FLAG } from '@/lib/flags/definitions/htpr-7917-mcp-input-wrappers'
+import { HTPR_7914_TICKET_NUMBER_HINT_FLAG } from '@/lib/flags/definitions/htpr-7914-ticket-number-hint'
+import { HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG } from '@/lib/flags/definitions/htpr-7894-task-id-ticket-reference'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
@@ -198,7 +202,7 @@ export async function handleLegacySseRequest(
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
                 ...(v2 && ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
-              }, v2, enabled && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), enabled && Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId)), userId)
+              }, v2, enabled && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), enabled && Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, userId)), userId)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

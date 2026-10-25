@@ -853,6 +853,7 @@ test("BYOK titles use shared or customer credentials", async () => {
     "@/app/api/ai/_lib/modelProvider": {
       isAiGatewayEnabled: () => true, resolveAiModel: (_provider, _model, credential) => { credentials.push(credential); return {}; },
       providerOptionsForAiModel: () => ({}),
+      configureAiModelUsage: () => {},
     },
     "@/lib/aiModelOptions": { defaultModelKeyFor: () => "gpt-6-luna" },
     "@/lib/ai/prompts/registry": { renderPrompt: () => "title instructions" },

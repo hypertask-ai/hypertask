@@ -1,5 +1,6 @@
 import { CommandMode } from "@/models/enums";
 import { IAllCommands } from "@/models/model";
+import { ShareShortcutId, shareTaskShortcutKeys } from "@/lib/shortcuts/shareTaskShortcuts";
 import { CommandGroup, ICommandList } from "./HTCTypes";
 
 
@@ -289,7 +290,9 @@ export const getCommentCommands = (commandOptions?: IAllCommands): CommandGroup 
 };
 
 
-export const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => {
+export const getTaskCommands = (commandOptions?: IAllCommands, shareKeyLabels = false): CommandGroup => {
+  const shareKeys = (id: ShareShortcutId, legacyLabels: string[]): string[] =>
+    shareKeyLabels ? shareTaskShortcutKeys(id, false) : legacyLabels;
   const taskProps = commandOptions?.taskOptions;
   const browsableTaskCommands = commandOptions?.context === "Task"
     ? baseTaskCommands.filter((command) =>
@@ -357,28 +360,28 @@ export const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => 
     {
       key: "copyformattedTaskLink",
       name: "Copy private task link (title + URL)",
-      keyboard: ["CTRL", ":"],
+      keyboard: shareKeys("privateFormatted", ["CTRL", ":"]),
       commandMode: CommandMode.CopyFormattedURLTask,
       keywords: "copy private task link title url formatted share internal address",
     },
     {
       key: "copyLink",
       name: "Copy private task URL",
-      keyboard: ["CTRL", "SHIFT", ":"],
+      keyboard: shareKeys("privateUrl", ["CTRL", "SHIFT", ":"]),
       commandMode: CommandMode.CopyUrlTask,
       keywords: "copy private task ticket issue url link address share internal",
     },
     {
       key: "copypublicformattedTaskLink",
       name: "Copy public task link (title + URL)",
-      keyboard: ["CTRL", "."],
+      keyboard: shareKeys("publicFormatted", ["CTRL", "."]),
       commandMode: CommandMode.CopyPublicFormattedUrlTask,
       keywords: "copy public task link title url formatted share external address",
     },
     {
       key: "copyPublicLink",
       name: "Copy public task URL",
-      keyboard: ["CTRL", "SHIFT", "."],
+      keyboard: shareKeys("publicUrl", ["CTRL", "SHIFT", "."]),
       commandMode: CommandMode.CopyPublicUrlTask,
       keywords: "copy public task ticket issue url link address share external",
     },
