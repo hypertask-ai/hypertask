@@ -104,6 +104,24 @@
         "section_id": 42,
         "due_date": "2026-10-05"
       }
+    },
+    {
+      "action": "assign",
+      "input": {
+        "ticket_number": "HTPR-1234",
+        "user_id": 6
+      }
+    },
+    {
+      "action": "assign",
+      "input": {
+        "ticket_number": "HTPR-1234",
+        "user_ids": [
+          6,
+          7
+        ],
+        "intent": "assign"
+      }
     }
   ]
 }
