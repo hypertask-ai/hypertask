@@ -73,6 +73,7 @@ async function open(page: Page, lane: string) {
   expect(enabledFlags[PAST_CHATS_FLAG], 'past chats flag in disposable fixture').toBe(true)
   await expect(page.getByTestId('agent-sidebar-conversations')).toBeVisible()
   await choose(page, fixture.personalChats.find(chat => chat.lane === lane)!.title)
+  return enabledFlags
 }
 async function settledBox(locator: ReturnType<Page['locator']>) {
   let previous = await locator.boundingBox()
@@ -294,7 +295,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     expect(clearedDraft.status()).toBe(200)
     await heartbeat(request, a)
     await page.context().addCookies([{ name: 'theme', value: theme, url: process.env.BASE_URL! }])
-    await open(page, info.project.name)
+    const flags = await open(page, info.project.name)
     const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
     const list = page.getByTestId('agent-sidebar-conversations')
     if (!await list.isVisible()) await title.click()
@@ -365,12 +366,23 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     await aEditor.fill(prompt)
     const sentResponse = page.waitForResponse((response) => response.url().endsWith(`/api/agent-chat/${a.sessionId}/messages`) && response.request().method() === 'POST')
     await aEditor.press('Enter')
-    expect((await sentResponse).status()).toBe(200)
+    const sent = await sentResponse
+    expect(sent.status()).toBe(200)
+    const sentMessage = (await sent.json()).message
     await expect(page.getByText(prompt, { exact: true })).toBeVisible()
     const pending = await request.get('/api/mcp/chat/pending', { headers: { Authorization: `Bearer ${a.token}` } })
     expect(pending.status()).toBe(200)
-    const claimed = (await pending.json()).messages.find((message: { text: string }) => message.text === prompt)
+    const claimed = (await pending.json()).messages.find((message: { id: string }) => message.id === sentMessage.id)
     expect(claimed?.sessionId).toBe(a.sessionId)
+    if (flags['htpr-7734-agent-chat-context']) {
+      expect(claimed.context).toBeDefined()
+      expect(claimed.context.scope).toBe('board')
+      expect(claimed.context.project_id).toBe(fixture.projectId)
+      expect(claimed.text).toBe(`Context: board ${fixture.projectId} ${JSON.stringify(claimed.context.title)}\n\n${prompt}`)
+    } else {
+      expect(claimed).not.toHaveProperty('context')
+      expect(claimed.text).toBe(prompt)
+    }
     const second = await request.get('/api/mcp/chat/pending', { headers: { Authorization: `Bearer ${a.token}` } })
     expect((await second.json()).messages.some((message: { id: string }) => message.id === claimed.id)).toBe(false)
     await choose(page, b.name)

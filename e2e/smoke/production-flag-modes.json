@@ -217,6 +217,7 @@
     "htpr-7560-flag-reader-subscribe": "OFF",
     "htpr-7649-sidebar-view-saved": "EVERYONE",
     "htpr-7650-ai-chat-open-switches": "EVERYONE",
-    "htpr-7723-task-waiting-on": "EVERYONE"
+    "htpr-7723-task-waiting-on": "EVERYONE",
+    "htpr-7734-agent-chat-context": "OWNER_AND_QA"
   }
 }

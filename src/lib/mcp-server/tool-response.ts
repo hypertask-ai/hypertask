@@ -45,7 +45,10 @@ export function actionableToolError(error: unknown): string {
         return 'project_id is required when unique_index is given; pass the project id or use ticket_number.'
       }
       if (issue.code === 'unrecognized_keys') {
-        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.`
+        const boardHint = issue.keys.some((key) => ['board_id', 'boardId', 'board'].includes(key))
+          ? ' This tool calls the board field project_id.'
+          : ''
+        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}`
       }
       return `Change ${field}: ${issue.message.replace(/[.!]$/, '')}. Pass a value matching this action's input schema.`
     }).join(' ')

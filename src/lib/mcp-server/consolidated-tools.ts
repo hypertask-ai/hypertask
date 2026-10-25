@@ -34,7 +34,7 @@ function canCall(action: Action, caller: ToolCaller): boolean {
   return !permissions || hasDataPermission(permissions)
 }
 
-function inputSchema(tool: PortableTool, action: Action): Record<string, unknown> {
+function inputSchema(tool: PortableTool, action: Action, boardAlias = false): Record<string, unknown> {
   const schema = z.toJSONSchema(tool.parameters, { target: 'draft-7', unrepresentable: 'any', io: 'input' }) as Record<string, unknown>
   delete schema.$schema
   const properties = schema.properties as Record<string, unknown>
@@ -55,7 +55,35 @@ function inputSchema(tool: PortableTool, action: Action): Record<string, unknown
     }
   }
   document(schema)
+  const inputProperties = schema.properties as Record<string, unknown>
+  if (boardAlias && inputProperties.project_id) {
+    inputProperties.board_id = { ...(inputProperties.project_id as Record<string, unknown>), description: 'Alias for project_id.' }
+    if (Array.isArray(schema.required) && schema.required.includes('project_id')) {
+      schema.required = schema.required.filter((key) => key !== 'project_id')
+      schema.anyOf = [{ required: ['project_id'] }, { required: ['board_id'] }]
+    }
+  }
   return schema
+}
+
+const TOP_LEVEL_FIELDS = new Set(['action', 'input', 'response_format', 'limit', 'offset', 'page'])
+
+function hoistTopLevelInputFields(raw: Record<string, unknown>, tool: PortableTool, legacyShape: Record<string, unknown>): Record<string, unknown> {
+  const nested = raw.input
+  if (nested !== undefined && (typeof nested !== 'object' || nested === null || Array.isArray(nested))) return raw
+  const input = { ...(nested as Record<string, unknown> | undefined) }
+  const documented = new Set(Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field))
+  const hoisted = { ...raw }
+  for (const [key, value] of Object.entries(raw)) {
+    if (TOP_LEVEL_FIELDS.has(key) || key in legacyShape || !documented.has(key)) continue
+    if (input[key] !== undefined && JSON.stringify(input[key]) !== JSON.stringify(value)) {
+      throw new z.ZodError([{ code: 'custom', path: ['input', key], message: `Pass ${key} inside input or at the top level, not both with different values.` }])
+    }
+    input[key] = value
+    delete hoisted[key]
+  }
+  hoisted.input = input
+  return hoisted
 }
 
 function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool, taskNumberAlias = false): Record<string, unknown> {
@@ -82,6 +110,8 @@ export function selectMcpTools(
   flatSchema = false,
   pageAlias = false,
   taskNumberAlias = false,
+  boardAlias = false,
+  topLevelInputFields = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -115,6 +145,7 @@ export function selectMcpTools(
   const catalog: PortableTool[] = definitions.flatMap((definition) => {
     const actions = Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => byName.has(action.tool) && canCall(action, caller)))
     const names = Object.keys(actions)
+    const boardAliasEnabled = boardAlias && (definition.name === 'hypertask_tasks' || definition.name === 'hypertask_comments')
     if (!names.length) return []
     const sameNameLegacy = byName.get(definition.name)
     const legacyShape = sameNameLegacy ? Object.fromEntries(Object.entries(sameNameLegacy.parameters.shape).filter(([key]) => key !== 'action').map(([key, schema]) => [key, z.optional(schema as z.ZodType)])) : {}
@@ -142,32 +173,34 @@ export function selectMcpTools(
         input: {
           type: 'object',
           description: `${properties.input.description} Fields depend on action; use the variant whose title is the action.`,
-          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name]) })),
+          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name], boardAliasEnabled) })),
         },
       },
     } : {
       ...baseSchema,
       oneOf: names.map((name) => {
-        const input = inputSchema(byName.get(actions[name].tool)!, actions[name])
+        const input = inputSchema(byName.get(actions[name].tool)!, actions[name], boardAliasEnabled)
         return {
           properties: { action: { const: name }, input },
-          required: Array.isArray(input.required) && input.required.length ? ['action', 'input'] : ['action'],
+          required: (Array.isArray(input.required) && input.required.length) || input.anyOf ? ['action', 'input'] : ['action'],
         }
       }),
     }
     return [{
       name: definition.name,
-      description: `Does: ${definition.does}\nUse when: ${definition.use_when}\nDo not use when: ${definition.do_not_use_when}\nParameters and caveats: ${definition.parameters_and_caveats}`,
+      description: `Does: ${definition.does}\nUse when: ${definition.use_when}\nDo not use when: ${definition.do_not_use_when}\nParameters and caveats: ${definition.parameters_and_caveats}${boardAliasEnabled ? ' board_id is an alias for project_id.' : ''}`,
       parameters,
       inputSchema: schema,
       ...(v2 ? { annotations: annotationsForActions(Object.values(actions)) } : {}),
       outputSchema: CONSOLIDATED_OUTPUT_SCHEMA,
       input_examples: definition.input_examples.filter((example) => names.includes((example as { action: string }).action)),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
-        const args = parameters.parse(raw)
+        const rawArgs = (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
+        const requestedTool = actions[String(rawArgs.action)] && byName.get(actions[String(rawArgs.action)].tool)
+        const args = parameters.parse(topLevelInputFields && requestedTool ? hoistTopLevelInputFields(rawArgs, requestedTool, legacyShape) : raw)
         const action = actions[args.action]
         const tool = byName.get(action.tool)!
-        const oldArgs = raw as Record<string, unknown>
+        const oldArgs = rawArgs
         const oldInput = Object.fromEntries(Object.keys(legacyShape).filter((key) => oldArgs[key] !== undefined).map((key) => [key, oldArgs[key]]))
         const input = { ...oldInput, ...legacyArguments(args.input, action, tool, taskNumberAlias) }
         const supportsOffset = 'offset' in tool.parameters.shape
@@ -183,6 +216,13 @@ export function selectMcpTools(
         let maximum: number | undefined
         let endpointCap: number | undefined
         try {
+          if (boardAliasEnabled && 'board_id' in input) {
+            if (input.project_id !== undefined && Number(input.board_id) !== Number(input.project_id)) {
+              throw new z.ZodError([{ code: 'custom', path: ['board_id'], message: 'board_id and project_id must identify the same board when both are provided.' }])
+            }
+            if (input.project_id === undefined) input.project_id = input.board_id
+            delete input.board_id
+          }
           if (action.read_only && supportsLimit) {
             const requestedLimit = input.limit === undefined ? args.limit : Number(z.object({ limit: tool.parameters.shape.limit }).parse({ limit: input.limit }).limit)
             const limitSchema = z.toJSONSchema(tool.parameters.shape.limit, { unrepresentable: 'any', io: 'input' }) as { maximum?: number }

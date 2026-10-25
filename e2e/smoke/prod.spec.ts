@@ -264,7 +264,7 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   await switchBoard(b)
   await assertScope(b.title)
   await chip.click()
-  await sidebar.getByRole('menuitemradio', { name: a.title, exact: true }).click()
+  await page.locator('#option-picker').getByText(a.title, { exact: true }).click()
   await expect(chip).toHaveAttribute('title', a.title)
   await expect(chip).toContainText(a.title)
   await switchBoard(a)

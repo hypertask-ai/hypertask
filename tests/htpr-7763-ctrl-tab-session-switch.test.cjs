@@ -94,6 +94,7 @@ function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true
     "@/hooks/useFlag": { useFlag: key => key === FLAG ? enabled : paging },
     "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "paging" },
     "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch": flag,
+    "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => context },
     "@/lib/aiChatDisplayMode": displayMode,
     "@/lib/state": {

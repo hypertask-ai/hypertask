@@ -22,7 +22,7 @@ const deferred = () => {
 };
 
 function chat({ enabled = true, fullscreen = true } = {}) {
-  const dom = new JSDOM('<button id="new-chat">New chat</button><div id="composer" tabindex="0" contenteditable="true"></div>');
+  const dom = new JSDOM('<button id="new-chat">New chat</button><div id="composer" tabindex="0" contenteditable="true"></div>', { url: "https://app.hypertask.ai/chat/old-session" });
   const composer = dom.window.document.getElementById("composer");
   const button = dom.window.document.getElementById("new-chat");
   button.focus();
@@ -63,29 +63,47 @@ function chat({ enabled = true, fullscreen = true } = {}) {
   };
 }
 
-function fullScreenNewChat(chat) {
+function fullScreenNewChat(chat, { enabled = false, sessions = [], activeSession } = {}) {
+  const state = { sessions, activeSession };
+  const refs = [];
+  const navigations = [];
+  let refIndex = 0;
+  let effects = [];
   const file = path.join(__dirname, "../src/app/chat/Chat.tsx");
   const mocks = {
-    react: hooks,
+    react: {
+      ...hooks,
+      useRef: (current) => refs[refIndex++] ??= { current },
+      useEffect: (effect) => effects.push(effect),
+    },
     "react/jsx-runtime": require("react/jsx-runtime"),
-    "@/hooks/useFlag": { useFlag: () => false },
+    "@/hooks/useFlag": { useFlag: (key) => key === flag.default.key && enabled },
     "@/lib/flags/keys": {},
+    "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": flag,
     "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch": { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: "htpr-7763-ctrl-tab-session-switch" },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: "Composer" },
     "@/components/AI_CHAT/MessageList": { MessageList: "Messages" },
     "@/components/AI_CHAT/WelcomeScreen": { WelcomeScreen: "Welcome" },
     "@/hooks/MultiPages/useGetAllTeamsMinimal": { useGetAllTeamsMinimal: () => ({ data: [] }) },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {
-      useAiChatContext: () => ({ sessions: [], historySessions: [], startNewSession: chat.startNewSession, editor: { view: { dom: chat.composer } } }),
+      useAiChatContext: () => ({ ...state, historySessions: [], selectSession: chat.sessions.selectSession, startNewSession: chat.startNewSession, editor: { view: { dom: chat.composer } } }),
     },
-    "@/lib/aiChatDisplayMode": { resolveFullScreenChatReturnPath: () => "/my-tasks" },
+    "@/lib/aiChatDisplayMode": load("src/lib/aiChatDisplayMode.ts", {}),
     "@/lib/state": { useRecoilState: () => [[], noop], useRecoilValue: () => null },
     "@/store": {},
     "@/utils/aiChat/sortBoardsByRecent": { sortBoardsByRecent: (teams) => teams },
     "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
-    "@/utils/generateTime": { default: () => "" },
+    "@/utils/generateTime": { __esModule: true, default: () => "" },
     "lucide-react": new Proxy({}, { get: (_, name) => String(name) }),
-    "next/navigation": { useRouter: () => ({}), useSearchParams: () => new URLSearchParams() },
+    "next/navigation": {
+      useRouter: () => ({ replace: (url) => {
+        navigations.push(url);
+        chat.composer.replaceWith(chat.composer.cloneNode(true));
+        chat.button.replaceWith(chat.button.cloneNode(true));
+        chat.dom.window.history.replaceState(null, "", url);
+      } }),
+      useSearchParams: () => new URLSearchParams("return_to=%2Fmy-tasks"),
+    },
   };
   const compiled = ts.transpileModule(fs.readFileSync(file, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
@@ -100,14 +118,30 @@ function fullScreenNewChat(chat) {
     if (element.type === "button" && [element.props.children].flat(Infinity).some((child) => child?.props?.children === "New chat")) return element;
     return [element.props?.children].flat(Infinity).map(findButton).find(Boolean);
   };
-  return findButton(loaded.exports.default({}));
+  return {
+    state, navigations,
+    render: () => {
+      refIndex = 0;
+      effects = [];
+      const previousWindow = global.window;
+      global.window = chat.dom.window;
+      try {
+        const button = findButton(loaded.exports.default({ initialSessionId: "old-session" }));
+        for (const effect of effects) effect();
+        return button;
+      } finally {
+        if (previousWindow === undefined) delete global.window;
+        else global.window = previousWindow;
+      }
+    },
+  };
 }
 
 for (const entry of ["button", "Ctrl+Shift+O", "Ctrl+Shift+J"]) {
   test(`${entry} focuses the full-screen composer after delayed session creation`, async () => {
     const view = chat();
     try {
-      if (entry === "button") fullScreenNewChat(view).props.onClick();
+      if (entry === "button") fullScreenNewChat(view).render().props.onClick();
       else view.keyboard.layoutKeydown({ keyCode: entry.endsWith("O") ? 79 : 74, ctrlKey: true, shiftKey: true, preventDefault: noop });
       await new Promise((resolve) => setTimeout(resolve, 0));
       view.button.focus();
@@ -118,6 +152,30 @@ for (const entry of ["button", "Ctrl+Shift+O", "Ctrl+Shift+J"]) {
     } finally { view.dom.window.close(); }
   });
 }
+
+test("New chat keeps composer focus when the completed session updates the rail URL", async () => {
+  for (const enabled of [true, false]) {
+    const view = chat({ enabled });
+    const oldSession = { id: "old-session", title: "Existing chat", updatedAt: new Date(), messages: [{ role: "human", content: "Hello" }] };
+    const newSession = { id: "new-session", title: "New chat", updatedAt: new Date(), messages: [] };
+    const screen = fullScreenNewChat(view, { enabled, sessions: [oldSession], activeSession: oldSession.id });
+    try {
+      screen.render().props.onClick();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      view.button.focus();
+      assert.deepEqual(await view.finish(newSession), newSession);
+      screen.state.sessions = [newSession, oldSession];
+      screen.state.activeSession = newSession.id;
+      screen.render();
+      assert.equal(view.dom.window.location.pathname, "/chat/new-session");
+      assert.equal(view.dom.window.location.search, "?return_to=%2Fmy-tasks");
+      assert.equal(view.dom.window.document.activeElement, enabled ? view.composer : view.dom.window.document.body);
+      assert.equal(view.composer.isConnected, enabled);
+      assert.deepEqual(screen.navigations, enabled ? [] : ["/chat/new-session?return_to=%2Fmy-tasks"]);
+      assert.deepEqual(view.positions, enabled ? ["end"] : []);
+    } finally { view.dom.window.close(); }
+  }
+});
 
 test("flag off and docked chat preserve existing focus and scope behavior", async () => {
   for (const options of [{ enabled: false }, { fullscreen: false }]) {

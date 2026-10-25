@@ -22,7 +22,15 @@ import useCopyURL from "@/hooks/General/useCopyURL";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import axios from "axios";
-import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import Tooltip from "@/components/Common/Tooltip";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7839_SHARE_SHORTCUT_TOOLTIPS_FLAG } from "@/lib/flags/definitions/htpr-7839-share-shortcut-tooltips";
+import {
+  SHARE_TASK_SHORTCUTS,
+  shareTaskShortcutFor,
+  shareTaskShortcutKeys,
+  type ShareShortcutId,
+} from "@/lib/shortcuts/shareTaskShortcuts";
 
 type TProps = {
   closeHandler: () => void;
@@ -49,6 +57,9 @@ const ShareTaskModal: React.FC<TProps> = ({ closeHandler }) => {
     copyTaskURL,
   } = useCopyURL({ plainTextOnly: mbl });
   const isApple = useDeviceContext();
+  const showShortcutTooltips = useFlag(
+    HTPR_7839_SHARE_SHORTCUT_TOOLTIPS_FLAG
+  );
 
   const closeMobileSheet = useCallback(
     (fromHistory = false) => {
@@ -95,41 +106,33 @@ const ShareTaskModal: React.FC<TProps> = ({ closeHandler }) => {
 
   const handleKeyDown = (e: KeyboardEvent) => {
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    if (cmdControl && e.keyCode === KeyCodes.PERIOD && !e.shiftKey) {
-      e.preventDefault();
-      if (linkObj?.id) {
-        copySharedTaskFormattedURL(
-          linkObj.id,
-          currentTask?.title ?? "",
-          currentTask?.ticketNumber ?? ""
-        );
-      }
-    }
+    const shortcutId = shareTaskShortcutFor({
+      cmdControl,
+      keyCode: e.keyCode,
+      shiftKey: e.shiftKey,
+    });
+    if (!shortcutId) return;
+    e.preventDefault();
 
-    if (cmdControl && e.keyCode === KeyCodes.PERIOD && e.shiftKey) {
-      e.preventDefault();
-      if (linkObj?.id) {
-        copySharedTaskURL(linkObj.id);
-      }
-    }
-
-    if (
-      cmdControl &&
-      (e.keyCode === KeyCodes.COMMA || e.keyCode === KeyCodes.SEMICOLON) &&
-      !e.shiftKey
-    ) {
-      e.preventDefault();
+    if (shortcutId === "privateFormatted") {
       copyTaskFormattedURL(
         currentTask?.title ?? "",
         currentTask?.ticketNumber!,
         currentTask?.uniqueIndex,
         currentTask?.projectId
       );
-    }
-
-    if (cmdControl && e.keyCode === KeyCodes.SEMICOLON && e.shiftKey) {
-      e.preventDefault();
+    } else if (shortcutId === "privateUrl") {
       copyTaskURL(currentTask?.uniqueIndex, currentTask?.projectId);
+    } else if (linkObj?.id) {
+      if (shortcutId === "publicFormatted") {
+        copySharedTaskFormattedURL(
+          linkObj.id,
+          currentTask?.title ?? "",
+          currentTask?.ticketNumber ?? ""
+        );
+      } else {
+        copySharedTaskURL(linkObj.id);
+      }
     }
   };
 
@@ -245,6 +248,14 @@ const ShareTaskModal: React.FC<TProps> = ({ closeHandler }) => {
       <ModalBody className="p-0 rounded-b-[5px]">
         <ShareSection
           type="private"
+          titleShortcut={
+            showShortcutTooltips ? (
+              <ShortcutTooltip id="privateFormatted" />
+            ) : null
+          }
+          urlShortcut={
+            showShortcutTooltips ? <ShortcutTooltip id="privateUrl" /> : null
+          }
           icon={<Lock strokeWidth={1.75} size={13} />}
           title="PRIVATE (TEAM ONLY)"
           titlePlusUrlText={getPrivateFormattedText()}
@@ -263,6 +274,14 @@ const ShareTaskModal: React.FC<TProps> = ({ closeHandler }) => {
         />
         <ShareSection
           type="public"
+          titleShortcut={
+            showShortcutTooltips ? (
+              <ShortcutTooltip id="publicFormatted" />
+            ) : null
+          }
+          urlShortcut={
+            showShortcutTooltips ? <ShortcutTooltip id="publicUrl" /> : null
+          }
           icon={<Globe strokeWidth={1.75} size={13} />}
           title="PUBLIC (ANYONE WITH LINK)"
           titlePlusUrlText={getPublicFormattedText()}
@@ -397,9 +416,24 @@ const MobileShareRow = ({
   );
 };
 
+const ShortcutTooltip = ({ id }: { id: ShareShortcutId }) => {
+  const isApple = useDeviceContext();
+  return (
+    <Tooltip
+      portal
+      left={0}
+      bottom={0}
+      text={SHARE_TASK_SHORTCUTS[id].tooltip}
+      keyCombination={shareTaskShortcutKeys(id, isApple)}
+    />
+  );
+};
+
 const ShareSection = ({
   icon,
   title,
+  titleShortcut,
+  urlShortcut,
   titlePlusUrlText,
   urlOnlyText,
   onCopyTitlePlusUrl,
@@ -408,6 +442,8 @@ const ShareSection = ({
   type: "private" | "public";
   icon: React.ReactNode;
   title: string;
+  titleShortcut: React.ReactNode;
+  urlShortcut: React.ReactNode;
   titlePlusUrlText: string;
   urlOnlyText: string;
   onCopyTitlePlusUrl: () => void;
@@ -421,11 +457,17 @@ const ShareSection = ({
       </div>
       <div className="flex flex-col gap-2">
         <ShareRow
+          shortcutTooltip={titleShortcut}
           label="Title + URL"
           value={titlePlusUrlText}
           onCopy={onCopyTitlePlusUrl}
         />
-        <ShareRow label="URL only" value={urlOnlyText} onCopy={onCopyUrlOnly} />
+        <ShareRow
+          shortcutTooltip={urlShortcut}
+          label="URL only"
+          value={urlOnlyText}
+          onCopy={onCopyUrlOnly}
+        />
       </div>
     </div>
   );
@@ -435,10 +477,12 @@ const ShareRow = ({
   label,
   value,
   onCopy,
+  shortcutTooltip,
 }: {
   label: string;
   value: string;
   onCopy: () => void;
+  shortcutTooltip?: React.ReactNode;
 }) => {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -452,6 +496,7 @@ const ShareRow = ({
   }, [copied]);
   return (
     <div className="flex items-center gap-3 w-full">
+      {shortcutTooltip}
       <span className="w-[76px] shrink-0 text-content text-text-light-gray">
         {label}
       </span>
