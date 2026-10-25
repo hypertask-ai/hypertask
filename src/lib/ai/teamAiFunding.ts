@@ -95,12 +95,10 @@ function refused(): TeamAiFunding {
   return { mode: "refused", message: TEAM_KEY_ONLY_MESSAGE };
 }
 
-function customerGatewayKey(keys: Partial<Record<string, string>>): string | undefined {
-  for (const provider of ["gateway", "openai", "claude"]) {
-    const value = keys[provider]?.trim();
-    if (value && value.startsWith("vck_") && !isPlatformAiCredential(value)) return value;
-  }
-  return undefined;
+function anthropicKey(keys: Partial<Record<string, string>>): string | undefined {
+  const value = savedKey(keys, "claude");
+  if (!value || value.startsWith("vck_")) return undefined;
+  return value;
 }
 
 export function decideTeamAiFunding(
@@ -108,26 +106,30 @@ export function decideTeamAiFunding(
   request: TeamAiFundingRequest,
 ): TeamAiFunding {
   if (!snapshot.flagOn || !snapshot.aiKeyOnly) return { mode: "unrestricted" };
-  if (request.feature === "dictation") return refused();
-  if (request.feature === "images" || request.feature === "gateway") {
-    const gateway = customerGatewayKey(snapshot.keys);
-    return gateway ? byok("gateway", gateway) : refused();
+  if (
+    request.feature === "dictation" ||
+    request.feature === "images" ||
+    request.feature === "embeddings" ||
+    request.feature === "gateway"
+  ) {
+    return refused();
   }
-  if (request.feature === "embeddings") {
-    const openai = savedKey(snapshot.keys, "openai");
-    return openai ? byok("openai", openai) : refused();
-  }
-  if (request.provider === "gateway") {
-    const gateway = customerGatewayKey(snapshot.keys);
-    return gateway ? byok("gateway", gateway) : refused();
-  }
-  const direct = savedKey(snapshot.keys, request.provider);
-  if (direct) return byok(request.provider, direct);
-  if (request.feature === "labels" || request.feature === "side-call") {
-    const claude = savedKey(snapshot.keys, "claude");
-    if (claude) return byok("claude", claude);
+  const claude = anthropicKey(snapshot.keys);
+  const anthropicRequest = request.provider === "anthropic" || request.provider === "claude";
+  if (request.feature === "labels" || request.feature === "side-call" || anthropicRequest) {
+    return claude ? byok("claude", claude) : refused();
   }
   return refused();
+}
+
+export function keyOnlyReplacementModelKey(
+  decision: TeamAiFunding,
+  provider: string | null | undefined,
+  haiku55Enabled: boolean,
+): "claude-haiku-5-5" | "claude-haiku-4.5" | null {
+  if (decision.mode !== "byok" || decision.provider !== "claude") return null;
+  if (provider === "claude" || provider === "anthropic") return null;
+  return haiku55Enabled ? "claude-haiku-5-5" : "claude-haiku-4.5";
 }
 
 export function sideCallDecision(
@@ -212,7 +214,10 @@ export function applyKeyOnlyProviderVisibility<T extends { key: string; enabled:
 ): T[] {
   if (!keyOnly) return rows.map((row) => ({ ...row }));
   const saved = new Set(savedProviders);
-  return rows.map((row) => ({ ...row, enabled: row.enabled && saved.has(row.key) }));
+  return rows.map((row) => ({
+    ...row,
+    enabled: row.key === "anthropic" && row.enabled && saved.has("anthropic"),
+  }));
 }
 
 export function modelOptionsForKeyOnlyTeam<T extends { modelKey: string }>(
@@ -220,11 +225,8 @@ export function modelOptionsForKeyOnlyTeam<T extends { modelKey: string }>(
   savedProviders: readonly string[],
   definitionOf: (modelKey: string) => { provider?: string } | null | undefined,
 ): T[] {
-  const saved = new Set(savedProviders);
-  return options.filter((option) => {
-    const provider = definitionOf(option.modelKey)?.provider;
-    return Boolean(provider && provider !== "custom" && saved.has(provider));
-  });
+  if (!savedProviders.includes("anthropic")) return [];
+  return options.filter((option) => definitionOf(option.modelKey)?.provider === "anthropic");
 }
 
 async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingSnapshot | null> {

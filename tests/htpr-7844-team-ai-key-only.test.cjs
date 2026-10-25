@@ -98,6 +98,42 @@ test("a key-only team without a provider key is refused instead of falling back"
   });
 });
 
+test("a key-only team ignores other saved keys and gateway keys", () => {
+  withPlatformKeys(() => {
+    const snapshot = {
+      flagOn: true,
+      aiKeyOnly: true,
+      keys: {
+        claude: TEAM_KEY,
+        openai: "sk-team-openai",
+        gateway: "vck_customer_gateway",
+      },
+    };
+    const openaiChat = funding.decideTeamAiFunding(snapshot, { provider: "openai", feature: "chat" });
+    assert.equal(openaiChat.mode, "refused");
+    const images = funding.decideTeamAiFunding(snapshot, { provider: "gateway", feature: "images" });
+    assert.equal(images.mode, "refused");
+    const embeddings = funding.decideTeamAiFunding(snapshot, { provider: "openai", feature: "embeddings" });
+    assert.equal(embeddings.mode, "refused");
+    const gateway = funding.decideTeamAiFunding(snapshot, { provider: "gateway", feature: "gateway" });
+    assert.equal(gateway.mode, "refused");
+    const sideCall = funding.decideTeamAiFunding(snapshot, { provider: "openai", feature: "side-call" });
+    assert.equal(sideCall.mode, "byok");
+    assert.equal(sideCall.apiKey, TEAM_KEY);
+    assert.equal(sideCall.provider, "claude");
+    const gatewaySideCall = funding.decideTeamAiFunding(snapshot, { provider: "gateway", feature: "side-call" });
+    assert.equal(gatewaySideCall.apiKey, TEAM_KEY);
+    const copiedGateway = funding.decideTeamAiFunding(
+      { flagOn: true, aiKeyOnly: true, keys: { claude: "vck_customer_gateway" } },
+      { provider: "claude", feature: "chat" },
+    );
+    assert.equal(copiedGateway.mode, "refused");
+    assert.equal(funding.keyOnlyReplacementModelKey(sideCall, "openai", false), "claude-haiku-4.5");
+    assert.equal(funding.keyOnlyReplacementModelKey(sideCall, "claude", true), null);
+    assert.equal(funding.keyOnlyReplacementModelKey({ mode: "unrestricted" }, "openai", false), null);
+  });
+});
+
 test("the picker lists only Anthropic models when that is the only saved key", () => {
   const saved = funding.aiProvidersForSavedByokKeys(["claude"]);
   assert.deepEqual(saved, ["anthropic"]);
@@ -118,4 +154,15 @@ test("the picker lists only Anthropic models when that is the only saved key", (
   }
   assert.equal(models.some((option) => option.modelKey === "gpt-6-luna"), false);
   assert.equal(models.some((option) => catalog.getAiModelDefinition(option.modelKey).provider === "anthropic"), true);
+  const mixed = funding.modelOptionsForKeyOnlyTeam(
+    catalog.aiModelOptions,
+    ["anthropic", "openai"],
+    (modelKey) => catalog.getAiModelDefinition(modelKey),
+  );
+  assert.ok(mixed.length > 0);
+  for (const option of mixed) {
+    assert.equal(catalog.getAiModelDefinition(option.modelKey).provider, "anthropic");
+  }
+  const mixedRows = funding.applyKeyOnlyProviderVisibility(rows, ["anthropic", "openai"], true);
+  assert.deepEqual(mixedRows.filter((row) => row.enabled).map((row) => row.key), ["anthropic"]);
 });
