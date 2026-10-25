@@ -20,6 +20,7 @@ import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG
 import { HTPR_7893_BOARD_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7893-board-alias'
 import { HTPR_7863_MCP_PAGE_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7863-mcp-page-alias'
 import { HTPR_7895_TASK_NUMBER_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7895-task-number-alias'
+import { HTPR_7897_MCP_INPUT_FIELDS_FLAG } from '@/lib/flags/definitions/htpr-7897-mcp-input-fields'
 import { HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7390-mcp-handshake-feedback'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
@@ -153,6 +154,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
       consolidated && await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, ctx.user.id),
       consolidated && await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, ctx.user.id),
       consolidated && Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, ctx.user.id),
+      consolidated && await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, ctx.user.id),
     ), ctx.user.id)
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)

@@ -66,6 +66,26 @@ function inputSchema(tool: PortableTool, action: Action, boardAlias = false): Re
   return schema
 }
 
+const TOP_LEVEL_FIELDS = new Set(['action', 'input', 'response_format', 'limit', 'offset', 'page'])
+
+function hoistTopLevelInputFields(raw: Record<string, unknown>, tool: PortableTool, legacyShape: Record<string, unknown>): Record<string, unknown> {
+  const nested = raw.input
+  if (nested !== undefined && (typeof nested !== 'object' || nested === null || Array.isArray(nested))) return raw
+  const input = { ...(nested as Record<string, unknown> | undefined) }
+  const documented = new Set(Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field))
+  const hoisted = { ...raw }
+  for (const [key, value] of Object.entries(raw)) {
+    if (TOP_LEVEL_FIELDS.has(key) || key in legacyShape || !documented.has(key)) continue
+    if (input[key] !== undefined && JSON.stringify(input[key]) !== JSON.stringify(value)) {
+      throw new z.ZodError([{ code: 'custom', path: ['input', key], message: `Pass ${key} inside input or at the top level, not both with different values.` }])
+    }
+    input[key] = value
+    delete hoisted[key]
+  }
+  hoisted.input = input
+  return hoisted
+}
+
 function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool, taskNumberAlias = false): Record<string, unknown> {
   const shape = tool.parameters.shape
   const args = Object.fromEntries(Object.entries(input).map(([key, value]) => {
@@ -91,6 +111,7 @@ export function selectMcpTools(
   pageAlias = false,
   taskNumberAlias = false,
   boardAlias = false,
+  topLevelInputFields = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -174,10 +195,12 @@ export function selectMcpTools(
       outputSchema: CONSOLIDATED_OUTPUT_SCHEMA,
       input_examples: definition.input_examples.filter((example) => names.includes((example as { action: string }).action)),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
-        const args = parameters.parse(raw)
+        const rawArgs = (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
+        const requestedTool = actions[String(rawArgs.action)] && byName.get(actions[String(rawArgs.action)].tool)
+        const args = parameters.parse(topLevelInputFields && requestedTool ? hoistTopLevelInputFields(rawArgs, requestedTool, legacyShape) : raw)
         const action = actions[args.action]
         const tool = byName.get(action.tool)!
-        const oldArgs = raw as Record<string, unknown>
+        const oldArgs = rawArgs
         const oldInput = Object.fromEntries(Object.keys(legacyShape).filter((key) => oldArgs[key] !== undefined).map((key) => [key, oldArgs[key]]))
         const input = { ...oldInput, ...legacyArguments(args.input, action, tool, taskNumberAlias) }
         const supportsOffset = 'offset' in tool.parameters.shape
