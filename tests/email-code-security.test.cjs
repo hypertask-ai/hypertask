@@ -167,7 +167,6 @@ test('send-email-link never returns authentication secrets', async () => {
         '@/lib/prisma': { user: { findFirst: async () => null } },
         '@/lib/flags': {
           HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
-          HTPR_7032_FIRST_TIME_EMAIL_FLAG: 'htpr-7032-first-time-email',
           isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
         },
         '@/lib/services/verificationCodeService': {
@@ -222,7 +221,6 @@ test('send-email-link keeps the stored code when Resend times out', async () => 
         '@/lib/prisma': { user: { findFirst: async () => null } },
         '@/lib/flags': {
           HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
-          HTPR_7032_FIRST_TIME_EMAIL_FLAG: 'htpr-7032-first-time-email',
           isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
         },
         '@/lib/services/verificationCodeService': {
