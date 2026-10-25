@@ -27,7 +27,7 @@ function moduleWithStubs(file, stubs, globals = {}) {
       return require(id);
     },
     ReadableStream, Response, TextEncoder, TextDecoder, Error, AbortController,
-    console: { log() {}, warn() {}, error() {} }, ...globals,
+    console: { log() {}, info() {}, warn() {}, error() {} }, ...globals,
   }, { filename });
   return loadedModule.exports;
 }

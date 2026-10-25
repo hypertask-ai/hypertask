@@ -39,7 +39,7 @@ function moduleWithStubs(file, stubs) {
     module: loaded, exports: loaded.exports,
     require: (id) => stubs[id] ?? (id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
     process: { env: { DEMO_AI_GATEWAY_API_KEY: "demo-key" } },
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
     Error, Promise, Object, Array, Set, Map,
   }, { filename: path.join(root, file) });
   return loaded.exports;
