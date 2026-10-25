@@ -23,6 +23,7 @@ import { HTPR_7895_TASK_NUMBER_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7
 import { HTPR_7897_MCP_INPUT_FIELDS_FLAG } from '@/lib/flags/definitions/htpr-7897-mcp-input-fields'
 import { HTPR_7917_MCP_INPUT_WRAPPERS_FLAG } from '@/lib/flags/definitions/htpr-7917-mcp-input-wrappers'
 import { HTPR_7914_TICKET_NUMBER_HINT_FLAG } from '@/lib/flags/definitions/htpr-7914-ticket-number-hint'
+import { HTPR_7910_RENAMED_FIELD_HINT_FLAG } from '@/lib/flags/definitions/htpr-7910-renamed-field-hint'
 import { HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG } from '@/lib/flags/definitions/htpr-7894-task-id-ticket-reference'
 import { HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7390-mcp-handshake-feedback'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
@@ -161,6 +162,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
       consolidated && await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, ctx.user.id),
       consolidated && await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, ctx.user.id),
       consolidated && await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, ctx.user.id),
+      consolidated && await isFeatureEnabled(HTPR_7910_RENAMED_FIELD_HINT_FLAG, ctx.user.id),
     ), ctx.user.id)
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)
