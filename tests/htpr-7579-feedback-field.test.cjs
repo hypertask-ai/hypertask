@@ -59,6 +59,8 @@ function setup({ plain = true } = {}) {
   return { load, created, reports, pending, ...report, ...load('src/lib/aiFeedback/automatic.ts') }
 }
 
+const refusalCodes = /^(unrecognized_keys|invalid_type|invalid_literal|invalid_union|invalid_enum_value|invalid_string|invalid_date|invalid_key|too_small|too_big|not_multiple_of|unrecognized|custom)$/
+
 async function observe(error, options) {
   const f = setup(options)
   const [tool] = f.observeFeedbackTools([{
@@ -66,13 +68,15 @@ async function observe(error, options) {
   }], 42)
   await assert.rejects(tool.execute(privateArgs, 'private-auth-token'), original => original === error)
   await Promise.all(f.pending)
-  assert.equal(f.created.length, 1)
   assert.equal(f.reports.length, 1)
   assert.equal(f.reports[0][1], 42)
   assert.deepEqual(f.reports[0][2], { origin: 'automatic' })
+  const input = f.reports[0][0]
+  const refused = input.status === 400 && refusalCodes.test(input.errorCode ?? '')
+  assert.equal(f.created.length, refused ? 0 : 1)
   const filed = JSON.stringify(f.created)
   for (const secret of [...Object.values(privateArgs), 'private-auth-token', 'private-error-message']) assert.equal(filed.includes(secret), false, secret)
-  return { ...f, input: f.reports[0][0], description: f.created[0].description }
+  return { ...f, input, description: f.created[0]?.description ?? '' }
 }
 
 for (const plain of [false, true]) {
@@ -83,18 +87,26 @@ for (const plain of [false, true]) {
     assert.deepEqual(f.input, {
       surface: 'mcp', tool: 'hypertask_tasks', status: 400, errorCode: 'invalid_type', field: 'project_id', category: 'call_failed',
     })
-    assert.match(f.description, /<p>Error code: invalid_type<\/p><p>Field: project_id<\/p>/)
-    assert.equal(f.description.includes('<h2>Details for engineers</h2>'), plain)
+    assert.equal(f.created.length, 0)
   })
 }
+
+test('a refused field still renders both engineer fields once the same tool fails on the server', async () => {
+  const error = Object.assign(new Error('private-error-message'), { status: 500, details: { field: 'project_id', code: 'invalid_type' } })
+  const f = await observe(error)
+  assert.equal(f.input.errorCode, 'invalid_type')
+  assert.equal(f.input.field, 'project_id')
+  assert.match(f.description, /<p>Error code: invalid_type<\/p><p>Field: project_id<\/p>/)
+  assert.equal(f.description.includes('<h2>Details for engineers</h2>'), true)
+})
 
 test('automatic nested Zod issue preserves tasks.0.title without its input value or message', async () => {
   const result = z.object({ tasks: z.array(z.object({ title: z.string() })) }).safeParse({ tasks: [{ title: 12 }] })
   const f = await observe(result.error)
   assert.equal(f.input.errorCode, 'invalid_type')
   assert.equal(f.input.field, 'tasks.0.title')
-  assert.match(f.description, /Field: tasks\.0\.title/)
-  assert.equal(f.description.includes(result.error.issues[0].message), false)
+  assert.equal(f.created.length, 0)
+  assert.equal(JSON.stringify(f.reports).includes(result.error.issues[0].message), false)
 })
 
 test('automatic Zod too_small and unrecognized_keys keep only the first issue code and refused key', async () => {
@@ -130,7 +142,7 @@ for (const [name, wrap] of [
     assert.equal(f.input.status, 400)
     assert.equal(f.input.errorCode, 'invalid_type')
     assert.equal(f.input.field, 'project_id')
-    assert.match(f.description, /Error code: invalid_type<\/p><p>Field: project_id/)
+    assert.equal(f.created.length, 0)
   })
 }
 
@@ -268,4 +280,17 @@ test('automatic REST reporting still ignores 400 responses and reports only serv
   assert.equal(f.created.length, 1)
   assert.match(f.created[0].description, /Error code: http-server-error/)
   assert.doesNotMatch(f.created[0].description, /<p>Field:/)
+})
+
+test('automatic input refusals open no ticket and server errors still file', async t => {
+  t.mock.method(console, 'info', () => {})
+  const f = setup()
+  const refusal = { surface: 'mcp', tool: 'hypertask_tasks', status: 400, errorCode: 'unrecognized_keys', field: 'nonsense_field', category: 'call_failed' }
+  const result = await f.fileAiFeedback(refusal, 42, { origin: 'automatic' })
+  assert.deepEqual(result, { success: false, filed: false, reason: 'input_refused', error: 'Tool input refusal; no new ticket was filed.' })
+  assert.equal(f.created.length, 0)
+  const serverError = { surface: 'mcp', tool: 'hypertask_tasks', status: 500, errorCode: 'tool-exception', category: 'call_failed' }
+  const filed = await f.fileAiFeedback(serverError, 42, { origin: 'automatic' })
+  assert.equal(filed.success, true)
+  assert.equal(f.created.length, 1)
 })
