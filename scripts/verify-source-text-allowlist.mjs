@@ -13,101 +13,36 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { detectSourceTextRegex, sampleEvenly } from "./lib/source-text-regex-detector.cjs";
+
+const args = process.argv.slice(2);
+const sampleIndex = args.findIndex(arg => arg === "--sample-size" || arg.startsWith("--sample-size="));
+const rawSampleSize = sampleIndex === -1 ? "15" : args[sampleIndex] === "--sample-size"
+  ? args[sampleIndex + 1]
+  : args[sampleIndex].slice("--sample-size=".length);
+const sampleSize = Number(rawSampleSize);
+if (!/^\d+$/.test(rawSampleSize ?? "") || !Number.isSafeInteger(sampleSize) || sampleSize <= 0) {
+  console.error("--sample-size must be a positive integer");
+  process.exit(2);
+}
 
 const root = process.cwd();
 const allowlistPath = join(root, "tests/source-text-regex-allowlist.json");
 const { allowlist } = JSON.parse(readFileSync(allowlistPath, "utf8"));
 
-const sampleSize = parseInt(process.argv.find(arg => arg.startsWith('--sample-size='))?.split('=')[1] || '15');
-
-/**
- * Uses the same detector logic as the generator for consistency.
- * Returns { isTrue: boolean, reason: string, evidence: string[] }
- */
-function analyzeTrueFalsePositive(testPath) {
-  const content = readFileSync(join(root, testPath), "utf8");
-  
-  // Find all variables assigned from readFileSync
-  const varPattern = /(?:const|let|var)\s+(\w+)\s*=\s*[^;{]*?readFileSync/g;
-  const allVars = [];
-  let match;
-  while ((match = varPattern.exec(content)) !== null) {
-    allVars.push(match[1]);
-  }
-  
-  if (allVars.length === 0) {
-    return {
-      isTrue: false,
-      reason: "No readFileSync variables found",
-      evidence: []
-    };
-  }
-  
-  // Check if any readFileSync call reads a source file
-  const readsSource = /readFileSync\s*\([^)]*(?:src\/|lib\/|components\/|pages\/|app\/|\.github\/workflows|eslint-local-rules\/|scripts\/[^/]+\.(?:m?js|tsx?)|tsconfig)/g.test(content);
-  
-  if (!readsSource) {
-    return {
-      isTrue: false,
-      reason: "Only reads non-source files (fixtures/config)",
-      evidence: [`Found ${allVars.length} readFileSync calls`]
-    };
-  }
-  
-  // Check if any of those variables are used with assert.match or assert.doesNotMatch
-  const matchingVars = [];
-  for (const varName of allVars) {
-    const assertPattern = new RegExp(`assert\\.(?:match|doesNotMatch)\\s*\\([^,]*\\b${varName}\\b`, 'g');
-    if (assertPattern.test(content)) {
-      matchingVars.push(varName);
-    }
-  }
-  
-  if (matchingVars.length === 0) {
-    return {
-      isTrue: false,
-      reason: "Reads source but no assert.match on those variables",
-      evidence: [`Variables: ${allVars.join(', ')}`]
-    };
-  }
-  
-  return {
-    isTrue: true,
-    reason: "Reads source AND applies assert.match to it",
-    evidence: [`Matched variables: ${matchingVars.join(', ')}`]
-  };
-}
-
-// Sample evenly across the allowlist
-function sampleAllowlist(list, n) {
-  if (list.length <= n) return list;
-  
-  const step = (list.length - 1) / (n - 1);
-  const samples = [];
-  for (let i = 0; i < n; i++) {
-    const index = Math.round(i * step);
-    samples.push(list[index]);
-  }
-  return samples;
-}
-
-// Main execution
 console.log(`Sampling ${sampleSize} files from ${allowlist.length} allowlisted tests...\n`);
 
-const samples = sampleAllowlist(allowlist, sampleSize);
-const results = [];
-
-for (const testPath of samples) {
-  const analysis = analyzeTrueFalsePositive(testPath);
-  results.push({
+const samples = sampleEvenly(allowlist, sampleSize);
+const results = samples.map(testPath => {
+  const { offender, matchedVariables } = detectSourceTextRegex(readFileSync(join(root, testPath), "utf8"));
+  return {
     file: testPath,
-    truePositive: analysis.isTrue,
-    reason: analysis.reason,
-    evidence: analysis.evidence
-  });
-}
+    truePositive: offender,
+    reason: offender ? "Reads source AND applies assert.match to it" : "No source read is regex-matched by its own binding",
+    evidence: matchedVariables.length > 0 ? [`Matched variables: ${matchedVariables.join(', ')}`] : []
+  };
+});
 
-// Print results table
 console.log("| File | True Positive? | Reason | Evidence |");
 console.log("|------|----------------|--------|----------|");
 
@@ -119,11 +54,12 @@ for (const r of results) {
 
 const trueCount = results.filter(r => r.truePositive).length;
 const falseCount = results.filter(r => !r.truePositive).length;
+const percentage = count => results.length === 0 ? 0 : Math.round(count / results.length * 100);
 
 console.log(`\n## Summary`);
-console.log(`- Sampled: ${sampleSize} files`);
-console.log(`- True positives: ${trueCount} (${Math.round(trueCount/sampleSize*100)}%)`);
-console.log(`- False positives: ${falseCount} (${Math.round(falseCount/sampleSize*100)}%)`);
+console.log(`- Sampled: ${results.length} files`);
+console.log(`- True positives: ${trueCount} (${percentage(trueCount)}%)`);
+console.log(`- False positives: ${falseCount} (${percentage(falseCount)}%)`);
 console.log(`\nTotal allowlist size: ${allowlist.length}`);
 
 if (falseCount > 0) {
