@@ -58,10 +58,11 @@ case "${1:-}" in
     exec 9>"$STATE/.keeper.lock"; flock -n 9 || exit 0
     [ -f "$STATE/PAUSED" ] && exit 0
     validate_targets || exit 2
-    live=0; started=0
+    live=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | awk '/^ht-hax-runner-[0-9]+$/ {n++} END {print n+0}')
+    started=0
     for n in $(seq $FIRST $((FIRST + $(maxcap) + 9))); do
       [ "$live" -ge "$t" ] && break
-      tmux has-session -t "ht-hax-runner-$n" 2>/dev/null && { live=$((live+1)); continue; }
+      tmux has-session -t "ht-hax-runner-$n" 2>/dev/null && continue
       [ -f "$STATE/stop-$n" ] && continue
       [ "$started" -ge 2 ] && break
       if green; then start_one "$n" && { started=$((started+1)); live=$((live+1)); sleep 20; } || break
@@ -84,6 +85,7 @@ case "${1:-}" in
     [[ "$n" =~ ^[1-9][0-9]*$ ]] && [ "$n" -ge $FIRST ] || { echo "runner number must be >= $FIRST"; exit 2; }
     [ "${2:-}" = --loop ] || { start_one "$n"; exit; }
     rlog="$STATE/runner-$n.log"
+    runlog="$STATE/runner-$n.latest.log"
     unset HAX_SUBAGENT_DEPTH
     export SHIP_SESSION_NAME="RUNNER $n" SHIP_CLAIM_RESUME="tmux attach -t ht-hax-runner-$n (hax RUNNER $n)"
     brief="Token ladder mode: CODEX. You are RUNNER $n, a standing Hypertask runner on Codex (hax). Codex only: never call Claude or any other provider, never start Claude helpers. No fast mode. Your board identity is RUNNER $n: SHIP_SESSION_NAME is set, so vcc writes as you; check with ~/.agents/skills/ship/scripts/ship-identity before any write. Read ~/projects/hypertask/.claude/skills/ship/SKILL.md fully and follow it end to end from Before anything else, with no ticket given: run its board check, respect claims and stale-ticket rules, pick the top free ticket of any type on boards 15/4060, claim it FIRST with ship-claim (resume command: \"$SHIP_CLAIM_RESUME\"), work in your own worktree, one small PR per ticket, QA, merge, deploy, live proof, Done, clean-up. Exactly one ticket this run. Use the unlazy skill (~/.agents/skills/unlazy/SKILL.md): write GATES.md first and prove every gate before your final answer. Run targeted tests only; CI runs the full suite. Never message Valentin directly. Final line: the word RUNNER, then either DONE <ticket> <state>, or IDLE <reason> when nothing can be picked."
@@ -95,20 +97,9 @@ case "${1:-}" in
       echo "$(date -u +%FT%TZ) start" >> "$rlog"
       clear; tmux clear-history -t "$TMUX_PANE"
       tmux select-pane -t "$TMUX_PANE" -T "RUNNER $n hax"
-      (
-        sleep 15
-        tmux send-keys -t "$TMUX_PANE" -l "$brief"; sleep 1; tmux send-keys -t "$TMUX_PANE" C-m
-        for _ in $(seq 1 360); do
-          sleep 30
-          screen=$(tmux capture-pane -p -t "$TMUX_PANE" -S -40 | grep -v '^▌')
-          if grep -qE 'RUNNER (DONE [A-Z0-9]+-[0-9]+|IDLE)' <<<"$screen"; then sleep 20; break; fi
-        done
-        tmux capture-pane -p -t "$TMUX_PANE" -S - >> "$rlog"
-        tmux send-keys -t "$TMUX_PANE" C-d
-      ) &
-      hax --provider=codex --model=gpt-6.1-sol --effort=high
-      wait
+      : > "$runlog"
+      hax --provider=codex --model=gpt-6.1-sol --effort=high -p "$brief" 2>&1 | tee -a "$rlog" "$runlog"
       echo "$(date -u +%FT%TZ) end" >> "$rlog"
-      if tail -5 "$rlog" | grep -q 'RUNNER IDLE'; then sleep 900; else sleep 30; fi
+      if grep -q '^RUNNER IDLE' "$runlog"; then sleep 900; else sleep 30; fi
     done ;;
 esac

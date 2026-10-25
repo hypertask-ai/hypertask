@@ -2,6 +2,7 @@ import fcntl
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -31,9 +32,10 @@ class KeeperTests(unittest.TestCase):
         self.command('token-ladder', 'echo quota-called >> "$HOME/events"; exit 99')
         self.command('tmux', '''
 case "$1" in
+  list-sessions|ls) cat "$HOME/live" 2>/dev/null || true ;;
   has-session) grep -qx -- "$3" "$HOME/live" 2>/dev/null ;;
   new-session) [ "${TMUX_START_EXIT:-0}" = 0 ] || exit 1; echo "start $4" >> "$HOME/events"; echo "$4" >> "$HOME/live" ;;
-  select-pane) : ;;
+  select-pane|clear-history) : ;;
   *) exit 99 ;;
 esac''')
         self.command('systemctl', 'echo "systemctl $*" >> "$HOME/events"')
@@ -119,6 +121,41 @@ esac''')
         self.assertEqual(self.run_keeper('top-up').returncode, 0)
         self.assertEqual(self.events.read_text(), '')
         self.assertEqual((self.state / 'target').read_text().strip(), '2')
+
+    def test_gaps_below_existing_sessions_do_not_exceed_target(self):
+        (self.home / 'live').write_text('ht-hax-runner-7\nht-hax-runner-8\n')
+        (self.state / 'target').write_text('2')
+        (self.state / 'max').write_text('2')
+        self.assertEqual(self.run_keeper('top-up').returncode, 0)
+        self.assertEqual(self.events.read_text(), '')
+        (self.state / 'target').write_text('3')
+        (self.state / 'max').write_text('3')
+        self.assertEqual(self.run_keeper('top-up').returncode, 0)
+        self.assertEqual(self.events.read_text().splitlines(), ['login RUNNER 6', 'start ht-hax-runner-6'])
+
+    def test_hax_startup_failure_reaches_retry_without_a_watcher(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        (self.state / 'runner-6.log').write_text('RUNNER IDLE previous run\n')
+        self.command('clear', 'exit 0')
+        self.command('hax', 'echo "hax $1 $2 $3 $4" >> "$HOME/events"; exit 42')
+        self.command('sleep', '''
+case "$1" in
+  30) echo retry >> "$HOME/events"; kill -TERM "$PPID" ;;
+  *) exec /bin/sleep 30 ;;
+esac''')
+        process = subprocess.Popen(['bash', str(SCRIPT), '6', '--loop'], env=self.env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+        try:
+            process.communicate(timeout=3)
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+        self.assertEqual(self.events.read_text().splitlines(), [
+            'hax --provider=codex --model=gpt-6.1-sol --effort=high -p', 'retry'])
 
     def test_invalid_targets_fail_before_launch(self):
         for target, cap in [('0', '20'), ('21', '21'), ('3', '2'), ('oops', '20'), ('9999999999999', '20')]:
