@@ -27,6 +27,14 @@ test("browser-smoke runs on pushes and on ready pull requests, never on drafts",
     workflow.jobs["browser-smoke"].if.replace(/\s+/g, " ").trim(),
     "github.event_name == 'push' || github.event.pull_request.draft == false",
   );
+  for (const [github, expected] of [
+    [{ event_name: "push" }, true],
+    [{ event_name: "push", event: { pull_request: { draft: true } } }, true],
+    [{ event_name: "pull_request", event: { pull_request: { draft: false } } }, true],
+    [{ event_name: "pull_request", event: { pull_request: { draft: true } } }, false],
+  ]) {
+    assert.equal(runInNewContext(workflow.jobs["browser-smoke"].if, { github }), expected, JSON.stringify(github));
+  }
 });
 
 test("browser-smoke saves the rebuilt cache under the restore primary key, only after a successful build", () => {
