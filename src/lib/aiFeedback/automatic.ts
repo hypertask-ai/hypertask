@@ -4,8 +4,7 @@ import { HTPR_7498_EXPIRED_KEY_FEEDBACK_FLAG } from '@/lib/flags/definitions/htp
 import { automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
-import { HTPR_7941_QUIET_FIXABLE_REPORTS_FLAG } from '@/lib/flags/definitions/htpr-7941-quiet-fixable-reports'
-import { callerCanFix, refusalFromZodIssues } from './callerFixable'
+import { callerCanFix, refusalFromZodIssues, quietFixableReports } from './callerFixable'
 
 function fileAutomaticFeedback(input: AutomaticFeedbackInput, userId?: number) {
   const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
@@ -111,15 +110,6 @@ function feedbackErrorDetails(value: unknown, depth = 0): Pick<AutomaticFeedback
     return feedbackErrorDetails(result.data, depth + 1) ?? feedbackErrorDetails(result.error, depth + 1) ?? feedbackErrorDetails(result.details, depth + 1)
   } catch {
     return undefined
-  }
-}
-
-async function quietFixableReports(userId: number): Promise<boolean> {
-  try {
-    const { isFeatureEnabled } = await import('@/lib/flags')
-    return await isFeatureEnabled(HTPR_7941_QUIET_FIXABLE_REPORTS_FLAG, userId)
-  } catch {
-    return false
   }
 }
 

@@ -28,3 +28,19 @@ export function filedWithinLastDay(filedAt: Date | string | null | undefined, no
   if (Number.isNaN(time)) return false;
   return now.getTime() - time < RECENTLY_FILED_HOURS * 60 * 60 * 1000;
 }
+
+export function filedRecently(ticket: { createdAt: Date | string } | null | undefined, now: Date = new Date()): boolean {
+  return filedWithinLastDay(ticket?.createdAt, now);
+}
+
+export async function quietFixableReports(userId?: number): Promise<boolean> {
+  try {
+    const [{ isFeatureEnabled }, { HTPR_7941_QUIET_FIXABLE_REPORTS_FLAG }] = await Promise.all([
+      import("@/lib/flags"),
+      import("@/lib/flags/definitions/htpr-7941-quiet-fixable-reports"),
+    ]);
+    return await isFeatureEnabled(HTPR_7941_QUIET_FIXABLE_REPORTS_FLAG, userId ?? Number(process.env.AI_FEEDBACK_AGENT_USER_ID));
+  } catch {
+    return false;
+  }
+}

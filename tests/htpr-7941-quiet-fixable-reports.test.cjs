@@ -39,3 +39,10 @@ test('a fingerprint filed in the last day is quiet, an older one is not', () => 
   assert.equal(fixable.filedWithinLastDay('2026-10-24T11:00:00Z', now), false)
   assert.equal(fixable.filedWithinLastDay(null, now), false)
 })
+
+test('an old ticket edited today does not keep a fresh fingerprint quiet', () => {
+  const now = new Date('2026-10-25T12:00:00Z')
+  assert.equal(fixable.filedRecently({ createdAt: '2026-10-25T09:00:00Z' }, now), true)
+  assert.equal(fixable.filedRecently({ createdAt: '2026-10-20T09:00:00Z', updatedAt: '2026-10-25T11:59:00Z' }, now), false)
+  assert.equal(fixable.filedRecently(null, now), false)
+})
