@@ -168,9 +168,9 @@ test("403 rate limit waits until reset then verifies settings", () => {
 });
 
 test("403 reset beyond the wait cap fails without claiming verification", () => {
-  const result = runSettings({ httpStatus: 403, resetSeconds: 600 });
+  const result = runSettings({ httpStatus: 403, resetSeconds: 4000 });
   assertRejected(result);
-  assert.match(result.output, /wait cap exceeded.*settings were not verified/);
+  assert.match(result.output, /not a test failure: wait cap exceeded.*settings were not verified/);
   assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 1);
 });
 

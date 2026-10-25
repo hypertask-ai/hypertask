@@ -66,7 +66,7 @@ jobs:
     name: validate app-smoke request
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 65
     permissions:
       actions: write
       contents: read
@@ -137,7 +137,17 @@ jobs:
             echo "pr=$REQUEST_PR"
             echo "base-sha=$(jq -r '.base.sha' <<<"$pr_json")"
           } >>"$GITHUB_OUTPUT"
-          gh api --method POST "repos/$REPO/statuses/$head_sha" \
+          post_status() {
+            for attempt in $(seq 1 20); do
+              gh api --method POST "$@" && return 0
+              echo "::warning::Status publish failed (attempt $attempt of 20); GitHub API rate limit may be the cause. Retrying in 180s."
+              sleep 180
+            done
+            echo "### GitHub API rate limit, not a test failure" >>"$GITHUB_STEP_SUMMARY"
+            echo "The app-smoke status could not be published after 20 tries over 60 minutes." >>"$GITHUB_STEP_SUMMARY"
+            return 1
+          }
+          post_status "repos/$REPO/statuses/$head_sha" \
             -f state=pending \
             -f context=app-smoke \
             -f description='Building and testing the real app'
@@ -312,7 +322,17 @@ jobs:
             description='docs-only change, skipped'
             echo "$description"
           fi
-          gh api --method POST "repos/$REPO/statuses/$HEAD_SHA" \
+          post_status() {
+            for attempt in $(seq 1 20); do
+              gh api --method POST "$@" && return 0
+              echo "::warning::Status publish failed (attempt $attempt of 20); GitHub API rate limit may be the cause. Retrying in 180s."
+              sleep 180
+            done
+            echo "### GitHub API rate limit, not a test failure" >>"$GITHUB_STEP_SUMMARY"
+            echo "The app-smoke status could not be published after 20 tries over 60 minutes." >>"$GITHUB_STEP_SUMMARY"
+            return 1
+          }
+          post_status "repos/$REPO/statuses/$HEAD_SHA" \
             -f state="$state" \
             -f context=app-smoke \
             -f description="$description"

@@ -108,8 +108,10 @@ to preserve these assertions. Neither can replace the full ruleset read safely.
 Reads use `gh api --include`. A rate-limited 403 or 429 waits for
 `x-ratelimit-reset` / `retry-after` (the later time when both apply), logging
 `rate limited, waiting Ns until reset`, then retries only that failed read.
-Cumulative sleeps are capped at **300 seconds**, with a six-minute overall
-budget and a seven-minute step timeout inside the 40-minute job. Missing usable
+Cumulative sleeps are capped at **3900 seconds**, longer than one full
+installation window, with a 4,000-second overall budget and a 70-minute step
+timeout inside the 80-minute job. A cap failure names the GitHub API rate limit in the
+error and the step summary, so it is not mistaken for a test failure. Missing usable
 rate-limit timing, an exceeded budget, other API errors, malformed settings, or a
 settings mismatch fail the check; nothing passes without reading the settings
 when verification is required. No paid runner, service, or dependency is added.

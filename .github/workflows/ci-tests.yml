@@ -51,7 +51,7 @@ jobs:
     # newer than a failed one would read as passing again.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 80
     # This job checks out and executes pull request code, so it never holds a
     # write token. The production warning is a separate push-only job.
     permissions:
@@ -72,7 +72,7 @@ jobs:
           fetch-depth: 1
 
       - name: Verify live required-check settings
-        timeout-minutes: 7
+        timeout-minutes: 70
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}

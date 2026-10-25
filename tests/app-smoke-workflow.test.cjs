@@ -377,7 +377,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.equal(settingsStep.run, "node .github/scripts/verify-required-check-settings.mjs");
   assert.equal(settingsStep.if, undefined);
   assert.equal(settingsStep["continue-on-error"], undefined);
-  assert.equal(settingsStep["timeout-minutes"], 7);
+  assert.equal(settingsStep["timeout-minutes"], 70);
   assert.equal(settingsStep.env.GH_TOKEN, "${{ github.token }}");
   assert.equal(settingsStep.env.REPO, "${{ github.repository }}");
   assert.match(steps[0].uses, /^actions\/checkout@/);
@@ -395,7 +395,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(settingsScript, /x-ratelimit-reset/);
   assert.match(settingsScript, /retry-after/);
   assert.match(settingsScript, /status === 403 \|\| status === 429/);
-  assert.match(settingsScript, /maxWaitSeconds = 300/);
+  assert.match(settingsScript, /maxWaitSeconds = 3900/);
   assert.match(settingsScript, /waitedSeconds \+ seconds > maxWaitSeconds/);
   assert.match(settingsScript, /rate limited, waiting \$\{seconds\}s until reset/);
   assert.match(settingsScript, /spawnSync\("sleep"/);
