@@ -114,11 +114,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
       socketIdFromHeader: () => null,
       broadcastInboxChange: async (...args) => broadcasts.push(args),
     },
-    "@/lib/flags": { isFeatureEnabled: async () => true },
-    "@/lib/prisma": { default: { task: { findFirst: async () => null }, notification: {
-      findFirst: async () => null,
-      create: async ({ data }) => ({ id: 900, ...data }),
-      delete: async ({ where }) => rows.find((row) => Number(row.id) === where.id),
+    "@/lib/prisma": { default: { notification: {
       findUnique: async ({ where }) => rows.find((row) => Number(row.id) === where.id),
       updateMany: async ({ where, data }) => {
         const matches = rows.filter((row) => row.taskId === where.taskId && row.userId === where.userId

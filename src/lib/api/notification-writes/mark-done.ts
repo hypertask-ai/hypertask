@@ -210,36 +210,6 @@ const route = taskWriteRoute({
         })
       }
       const updatedNotifiction = await prisma.notification.update({ where: { id: notification_.id }, data: { status: "Archive", archivedAt: timeNow } })
-      if (parsedTaskId !== null && await isFeatureEnabled(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG, userId).catch(() => false)) {
-        const blockedTask = await prisma.task.findFirst({
-          where: {
-            id: parsedTaskId,
-            waitingOnUserId: userId,
-            status: "Normal",
-            project: projectContentAccessWhere(userId, session.agentId, session.teamScope),
-          },
-          select: { projectId: true, waitingOnSetAt: true, createdAt: true },
-        });
-        if (blockedTask) {
-          const marker = await prisma.notification.findFirst({
-            where: {
-              taskId: parsedTaskId, userId, agentId: null, status: "Archive",
-              type: "TaskReminder", message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
-              archivedAt: { gte: blockedTask.waitingOnSetAt ?? blockedTask.createdAt },
-            },
-            select: { id: true },
-          });
-          if (!marker) {
-            await prisma.notification.create({
-              data: {
-                taskId: parsedTaskId, projectId: blockedTask.projectId, userId,
-                type: "TaskReminder", status: "Archive", archivedAt: timeNow, seen: true,
-                message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
-              },
-            });
-          }
-        }
-      }
       void broadcastInboxChange(notification_.userId, { originUserId: notification_.userId }, excludeSocketId);
       return NextResponse.json(updatedNotifiction, { status: 200 });
 
@@ -281,15 +251,6 @@ const route = taskWriteRoute({
             archivedAt: null
           }
         })
-        const marker = await prisma.notification.findFirst({
-          where: {
-            taskId: parsedTaskId, userId, agentId: null,
-            type: "TaskReminder", message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
-            archivedAt: notification_.archivedAt,
-          },
-          select: { id: true },
-        });
-        if (marker) await prisma.notification.delete({ where: { id: marker.id } });
       }
       void broadcastInboxChange(onlySingleNotificationUpdate.userId, { originUserId: onlySingleNotificationUpdate.userId }, excludeSocketId);
       return NextResponse.json(onlySingleNotificationUpdate, { status: 200 });

@@ -38,6 +38,13 @@ function fixture({ flagOn = true, rows = [], tasks = [blockedTask], accessible =
       writes.push({ where, data });
       return { count: selected.length };
     },
+    update: async ({ where, data }) => {
+      const row = rows.find(candidate => candidate.id === where.id);
+      assert.ok(row, "single notification update must find its row");
+      Object.assign(row, data);
+      writes.push({ where, data });
+      return row;
+    },
     delete: async ({ where }) => {
       const index = rows.findIndex(row => matches(row, where));
       assert.notEqual(index, -1);
@@ -46,7 +53,7 @@ function fixture({ flagOn = true, rows = [], tasks = [blockedTask], accessible =
       return row;
     },
     create: async ({ data }) => {
-      const row = { id: rows.length + 700, agentId: null, createdAt: new Date(), task: blockedTask, project, fromUserId: null, ...data };
+      const row = { id: 900 + rows.length, agentId: null, createdAt: new Date(), task: blockedTask, project, fromUserId: null, ...data };
       rows.push(row);
       writes.push({ data });
       return row;
@@ -187,26 +194,30 @@ test("the bugfix flag defaults to Everyone with a small release risk", () => {
 });
 
 
-test("archiving a real notification of a blocked ticket also writes the dismissal marker", async () => {
-  const f = fixture({ rows: [{
-    id: 701, taskId: 42, userId, projectId: 15, agentId: null, type: "Comment",
-    seen: false, status: "Normal", archivedAt: null, createdAt: since,
-  }] });
+const realNotification = () => ({
+  id: 701, taskId: 42, userId, projectId: 15, agentId: null, type: "Comment",
+  seen: false, status: "Normal", archivedAt: null, createdAt: since,
+});
+
+test("archiving a real notification of a blocked ticket dismisses its blocked row", async () => {
+  const f = fixture({ rows: [realNotification()] });
   assert.equal((await f.reload()).json.notifications.length, 2, "real row plus the blocked row");
   assert.equal((await f.archive({ id: "701" })).status, 200);
-  const marker = f.rows.find((row) => row.message === "htpr-7840-blocked-inbox-dismissal");
-  assert.ok(marker);
-  assert.equal(marker.status, "Archive");
   assert.deepEqual((await f.reload()).json.notifications, [], "the blocked row stays out after a real archive");
 });
 
-test("with the flag off a real archive leaves the blocked row visible", async () => {
-  const f = fixture({ flagOn: false, rows: [{
-    id: 701, taskId: 42, userId, projectId: 15, agentId: null, type: "Comment",
-    seen: false, status: "Normal", archivedAt: null, createdAt: since,
-  }] });
+test("undo after a real archive brings the blocked row back once", async () => {
+  const f = fixture({ rows: [realNotification()] });
   assert.equal((await f.archive({ id: "701" })).status, 200);
-  assert.ok(!f.rows.some((row) => row.message === "htpr-7840-blocked-inbox-dismissal"));
+  assert.deepEqual((await f.reload()).json.notifications, []);
+  assert.equal((await f.archive({ id: "701", intent: undefined })).status, 200);
+  assert.deepEqual(f.rows.filter((row) => row.message === "htpr-7840-blocked-inbox-dismissal"), []);
+  assert.deepEqual((await f.reload()).json.notifications.map((row) => row.id).sort(), [-42, 701].sort());
+});
+
+test("with the flag off a real archive leaves the blocked row visible", async () => {
+  const f = fixture({ flagOn: false, rows: [realNotification()] });
+  assert.equal((await f.archive({ id: "701" })).status, 200);
   assert.deepEqual((await f.reload()).json.notifications.map((row) => row.id), ["-42"]);
 });
 

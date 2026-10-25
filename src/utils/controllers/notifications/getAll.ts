@@ -1,6 +1,5 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
-import { BLOCKED_INBOX_DISMISSAL_MESSAGE } from "@/lib/inbox/blockedInboxDismissal";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -264,10 +263,7 @@ const notificationGetAll = async (
         select: {
           ...inboxTaskSelect(parsedUserId),
           notifications: {
-            where: {
-              userId: parsedUserId, agentId: null, status: "Archive", archivedAt: { not: null },
-              type: "TaskReminder", message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
-            },
+            where: { userId: parsedUserId, agentId: null, status: "Archive", archivedAt: { not: null } },
             orderBy: { archivedAt: "desc" },
             take: 1,
             select: { archivedAt: true },
