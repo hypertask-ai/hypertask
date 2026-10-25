@@ -44,6 +44,7 @@ function harness() {
       'better-auth/cookies': cookieHelpers,
       '@/lib/auth/session': session,
       '@/lib/auth/sessionRevocation': revocation,
+      '@/lib/auth/betterAuth': { auth: { api: { signOut: async () => NextResponse.json({ success: true }) } } },
     },
   }
 }
