@@ -299,10 +299,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             addMessageToSessionQuery(session.id, userMessage, false, false, scopedProjectId);
           }
           queueAccepted = true;
-          if (acceptedFiles.length > 0) {
+          if (ownsSend()) {
+            if (!preserveComposer && !queuedMessage) fileUpload.clearFiles();
+          } else if (acceptedFiles.length > 0) {
             fileUpload.setFileItems((currentFiles) => currentFiles.filter((file) => !acceptedFiles.includes(file)));
-          } else if (ownsSend() && !preserveComposer && !queuedMessage) {
-            fileUpload.clearFiles();
           }
 
           if (!assistantPlaceholderAdded) {
