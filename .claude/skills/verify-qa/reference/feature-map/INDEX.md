@@ -3,7 +3,7 @@
 One file per customer-facing area. Each file says how a customer reaches the
 area, how to drive it, what usually breaks there, what proof to collect, and
 the cleanup. Read the file for the area a ticket touches before verifying it;
-don't read all ten for a one-line fix.
+don't read them all for a one-line fix.
 
 Pattern borrowed from
 [poteto/verification-skill-example](https://github.com/poteto/verification-skill-example):

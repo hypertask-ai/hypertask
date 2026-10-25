@@ -31,6 +31,10 @@ Record merge sha, deployment success, doctor screenshot, verified account ids, r
 
 Live Slack parity (`/ht` commands, `@mention`, DM, and assistant panel) needs a real Slack workspace with the official app installed and a human Slack user, so it cannot be driven headless. Record this as UNREACHABLE with the missing workspace access and human-session requirement. The closest reachable path is the production install and support UI plus manifest checks; none proves live parity, event delivery, or that the Worker bot can be retired.
 
-## Cleanup and safety
+### Automated evidence
+
+`node --test tests/slack-marketplace.test.cjs` renders install/support pages with mocked flags and checks server gating, /ht copy, legal/support links and retention text; it does not prove live Slack parity or event delivery.
+
+## Cleanup
 
 These page and redirect checks need no fixtures or board writes. Do not install or uninstall an app, connect or disconnect an account/team, send Slack messages, call Slack APIs, change flags, or retire the Worker bot. Never print storage state, env files, cookies, tokens, or OAuth state. Close browser contexts after recording. Workspace parity and destructive lifecycle checks require a separately authorized human run.

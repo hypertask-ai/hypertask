@@ -22,6 +22,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7575_PHONE_CHAT_DELETE_FLAG } from "@/lib/flags/definitions/htpr-7575-phone-chat-delete";
+import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-7773-chat-header-name";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -113,7 +114,6 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   const titleRef = useRef<HTMLButtonElement>(null);
   const closeConversations = useCallback(() => setConversationsOpen(false), []);
   const aiSessionActionsAvailable = !sidebarChats || sidebarChats.target.kind === "ai";
-  const sidebarTitle = sidebarChats?.target.kind === "ai" ? "AI chat" : sidebarChats?.target.agent.displayName;
   useEffect(() => { setConversationsOpen(false); }, [sidebarChats?.projectId]);
   const searchParams = useSearchParams();
   const openFromLink = searchParams?.get("agentSidebar");
@@ -128,6 +128,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   const pathname = usePathname();
   const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
+  const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
   const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
     togglePopover,
@@ -144,6 +145,9 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     editor,
     currentAiOption,
   } = useAiChatContext();
+  const sidebarTitle = sidebarChats?.target.kind === "ai"
+    ? (chatHeaderNameEnabled && currentSession?.title) || "AI chat"
+    : sidebarChats?.target.agent.displayName;
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);

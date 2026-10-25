@@ -32,7 +32,7 @@ export function getMoveTaskToInboxInputSchema() {
           data.ticket_number !== undefined,
           data.unique_index !== undefined,
         ].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple task identification methods. Use one of: task_id, ticket_number, or (project_id + unique_index).',

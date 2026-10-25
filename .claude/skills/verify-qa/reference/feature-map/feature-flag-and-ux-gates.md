@@ -25,6 +25,11 @@ The positive control is the per-PR feature-flag-gate job in the same run: it sti
 
 The run ids and reconcile job logs for the first full judge and the following skipping run, with the `evaluated N, skipped M` lines and a search for `::error::` and `API rate limit exceeded` in both. Doctor: the merge sha on origin/production. Record run ids, never tokens.
 
+### Automated evidence
+
+`node --test tests/feature-flag-reconcile-workflow.test.cjs` exercises unchanged-PR skipping, metadata invalidation, rate-limit handling and genuine API failures with workflow fixtures.
+`node --test tests/ux-signoff-gate.test.cjs` exercises UX verdicts and reconciliation, including rate-limit skips without stale approval and refusal of ordinary API failures.
+
 ## Cleanup
 
 None. Nothing is created.

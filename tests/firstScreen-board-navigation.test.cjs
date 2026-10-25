@@ -26,6 +26,10 @@ for (const seeded of [true, false]) {
     }
     const noop = () => {};
     const load = createRefactoredModuleRequire(path.join(__dirname, ".."), {
+      "@/lib/prisma": { __esModule: true, default: {} },
+      "@/lib/flags": { isFeatureEnabled: async () => false },
+      "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+      "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
       "@/lib/firstScreen/serverBoardDocument": { getServerBoardDocument: async () => firstScreen },
       "next/headers": { cookies: async () => ({ get: key => key === "nookies_user" ? { value: JSON.stringify(user) } : undefined }) },
       "next/navigation": { notFound: () => { throw Error("Unexpected not found"); }, redirect: () => { throw Error("Unexpected redirect"); } },

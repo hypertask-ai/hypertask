@@ -97,6 +97,8 @@ test("embedded selection clears the old lock but an old completion cannot unlock
 });
 
 const sessionsHook = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
   react: hooks,
   "@/lib/agents/chatViewerState": viewer,
   "@/lib/constants": { default: {} },
@@ -453,8 +455,9 @@ test("native switching snapshots the latest draft and attachments after open, tr
   };
   const mocks = {
     react: { ...react, default: react },
-    "@/hooks/useFlag": { useFlag: () => sidebarFlag },
+    "@/hooks/useFlag": { useFlag: key => key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
+    "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },
@@ -587,6 +590,7 @@ test("chat orchestration forwards the sidebar flag without coupling it to histor
   for (const enabled of [false, true]) {
     let resolution;
     const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
+      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
       react: { useState: (value) => [value, noop], useEffect: noop },
       "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
       "@/lib/state": { useRecoilState: () => [null, noop] }, "@/store": {},
