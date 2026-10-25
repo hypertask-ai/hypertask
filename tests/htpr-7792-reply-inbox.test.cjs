@@ -39,6 +39,7 @@ for (const missingCache of [false, true]) for (const enabled of [false, true]) f
       context = {
         ...useTaskDetailEditorState({ mode: "create-comment", allowEdit: true, id: "comment", handleSave: async params => { saves.push(params); return true; } }),
         invalidateUserDrafts: () => {},
+        cancelDebounceRef: { current: null },
       };
       actions = useTaskDetailEditorSave(() => context);
       return null;
