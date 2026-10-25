@@ -200,7 +200,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
   };
   let stopClosesStream = false;
   try {
-    stopClosesStream = await isFeatureEnabled(HTPR_7794_STOP_CLOSES_STREAM_FLAG, dbUser.id);
+    stopClosesStream = await isFeatureEnabled(HTPR_7794_STOP_CLOSES_STREAM_FLAG, dbUser.id).catch(() => false);
     const skillResolution = await resolveSkillsForAiRequest(
       requestMessage,
       {
