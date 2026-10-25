@@ -197,6 +197,7 @@ test("the bugfix flag defaults to Everyone with a small release risk", () => {
 const realNotification = () => ({
   id: 701, taskId: 42, userId, projectId: 15, agentId: null, type: "Comment",
   seen: false, status: "Normal", archivedAt: null, createdAt: since,
+  task: blockedTask, project, fromUserId: null,
 });
 
 test("archiving a real notification of a blocked ticket dismisses its blocked row", async () => {
