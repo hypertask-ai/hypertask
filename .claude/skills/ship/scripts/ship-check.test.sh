@@ -1254,5 +1254,39 @@ else bad "other repo: $got $out"; fi
 unset -f gh hypertask
 unset CI_FIXTURE_DIR CI_CALL_LOG CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
 
+# A repo with no release and no workflow run for the merge accepts a recorded live proof.
+mkdir -p "$E/inert-bin" "$E/inert-evidence/YPER4-999"
+printf "838\n" > "$E/inert-evidence/YPER4-999/pr"
+printf "valentinyeo/ceo\n" > "$E/inert-evidence/YPER4-999/repo"
+printf "master\n" > "$E/inert-evidence/YPER4-999/base"
+cat > "$E/inert-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"master"}\n' ;;
+  release:view) exit 1 ;;
+  release:list) echo '[]' ;;
+  api:*/compare/*) echo behind ;;
+  api:*/actions/runs?*) printf '{"total_count":1,"workflow_runs":%s}\n' "${INERT_RUNS:-[]}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+chmod +x "$E/inert-bin/gh"
+L() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env PATH="$E/inert-bin:$PATH" VCC_EVIDENCE_DIR="$E/inert-evidence" SHIP_REPO=valentinyeo/ceo SHIP_BASE=master SHIP_DEPLOY=none "$@" ./ship-check deployed YPER4-999); got=$?
+  [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
+}
+L 1 'FAIL: no successful push or workflow_dispatch run for merge ec45678a2 on master; record the live proof'
+printf 'sha: ec45678a2\ncommand: printf "Result=success\\n"\nexpect: Result=success\n' > "$E/inert-evidence/YPER4-999/live-proof"
+L 0 'deployed ok (recorded live proof, merged ec45678a2 on master)'
+L 1 'FAIL: no successful push' INERT_RUNS='[{"head_sha":"ec45678a2","event":"push","head_branch":"master","conclusion":"neutral","status":"completed"}]'
+printf 'sha: ec45678a2\ncommand: printf "Result=failed\\n"\nexpect: Result=success\n' > "$E/inert-evidence/YPER4-999/live-proof"
+L 1 'FAIL: no successful push'
+printf 'sha: 0123456789abcdef\ncommand: printf "Result=success\\n"\nexpect: Result=success\n' > "$E/inert-evidence/YPER4-999/live-proof"
+L 1 'FAIL: no successful push'
+printf 'sha: ec45678a2\ncommand: false\nexpect: Result=success\n' > "$E/inert-evidence/YPER4-999/live-proof"
+L 1 'FAIL: no successful push'
+rm -rf "$E/inert-bin" "$E/inert-evidence"
+
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
