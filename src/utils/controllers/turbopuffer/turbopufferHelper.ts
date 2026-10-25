@@ -389,10 +389,16 @@ export function buildCustomInstructionFileRows(args: {
 export async function embedTexts(texts: string[], teamId?: string | null): Promise<number[][]> {
   if (texts.length === 0) return [];
 
-  const decision = teamId
+  const decision = teamId && typeof resolveTeamAiFunding === "function"
     ? await resolveTeamAiFunding(teamId, { provider: "openai", feature: "embeddings" })
     : { mode: "unrestricted" as const };
-  const auth = embeddingAuthorization(decision, process.env.TURBOPUFFER_EMBEDDINGS_API_KEY);
+  const auth = typeof embeddingAuthorization === "function"
+    ? embeddingAuthorization(decision, process.env.TURBOPUFFER_EMBEDDINGS_API_KEY)
+    : {
+        apiKey: process.env.TURBOPUFFER_EMBEDDINGS_API_KEY ?? "",
+        endpoint: "https://ai-gateway.vercel.sh/v1/embeddings",
+        model: "openai/text-embedding-3-small",
+      };
 
   const inputs = texts.map(toEmbeddingInput);
   if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], auth);

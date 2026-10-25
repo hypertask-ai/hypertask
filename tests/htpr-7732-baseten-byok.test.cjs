@@ -82,6 +82,7 @@ function routingHarness({ enabled = true, plan = "Pro", saved = true, keyEnabled
     "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
     "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan },
     "@/app/api/ai/chat/stream/modelFallback": {},
+    "@/lib/ai/teamAiFunding": require("./helpers/team-ai-funding-stub.cjs"),
   });
   return { api, calls };
 }

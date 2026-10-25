@@ -338,7 +338,7 @@ export async function getTeamGatewayApiKeyForProvider(
   if (!plan) return undefined;
 
   const fundingTeamId = await resolveLookupTeamId(lookup);
-  if (fundingTeamId) {
+  if (fundingTeamId && typeof resolveTeamAiFunding === "function") {
     const decision = await resolveTeamAiFunding(fundingTeamId, { provider, feature: "gateway" });
     if (decision.mode === "byok") return decision.apiKey;
     if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
@@ -376,7 +376,7 @@ export async function getTeamGatewayFunding(
   if (!plan) return undefined;
 
   const fundingTeamId = await resolveLookupTeamId(lookup);
-  if (fundingTeamId) {
+  if (fundingTeamId && typeof resolveTeamAiFunding === "function") {
     const decision = await resolveTeamAiFunding(fundingTeamId, { provider: "gateway", feature: "gateway" });
     if (decision.mode === "byok") return { apiKey: decision.apiKey, source: "customer" };
     if (decision.mode === "refused") return undefined;
@@ -423,7 +423,7 @@ export async function getTeamGatewayApiKey(lookup?: ByokLookupContext) {
   const funding = await getTeamGatewayFunding(lookup);
   if (funding?.apiKey) return funding.apiKey;
   const teamId = await resolveLookupTeamId(lookup);
-  if (teamId) {
+  if (teamId && typeof resolveTeamAiFunding === "function") {
     const decision = await resolveTeamAiFunding(teamId, { provider: "gateway", feature: "gateway" });
     if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);
   }
@@ -435,7 +435,7 @@ export async function keyOnlySideCallModel(
   requestedProvider: string,
 ): Promise<{ model: LanguageModel; usageProvider: string } | null> {
   const teamId = await resolveLookupTeamId(lookup);
-  if (!teamId) return null;
+  if (!teamId || typeof resolveSideCallFunding !== "function") return null;
   const decision = await resolveSideCallFunding(teamId, requestedProvider);
   if (decision.mode === "unrestricted") return null;
   if (decision.mode === "refused") throw new TeamKeyOnlyRefusal(decision.message);

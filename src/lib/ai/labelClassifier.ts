@@ -67,7 +67,9 @@ export async function classifyTaskAgainstLabels(
     return null;
   }
 
-  const keyOnly = await resolveTeamAiFunding(tags.teamId, { provider: "anthropic", feature: "labels" });
+  const keyOnly = typeof resolveTeamAiFunding === "function"
+    ? await resolveTeamAiFunding(tags.teamId, { provider: "anthropic", feature: "labels" })
+    : { mode: "unrestricted" as const };
   if (keyOnly.mode === "refused") {
     console.error(`[labelClassifier] ${keyOnly.message}`);
     return null;
