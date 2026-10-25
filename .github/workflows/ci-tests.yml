@@ -71,13 +71,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Verify live required-check settings
-        timeout-minutes: 70
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: node .github/scripts/verify-required-check-settings.mjs
-
       # Never build a commit whose review already failed (owner, 2026-08-26).
       # This does NOT wait: a pending or absent verdict builds in parallel as
       # normal; only an existing red verdict stops the build before it starts.

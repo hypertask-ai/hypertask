@@ -141,6 +141,14 @@ test("pull_request with only app code skips all settings API reads", () => {
   assert.deepEqual(result.calls.map(([tool]) => tool), ["git", "git"]);
 });
 
+for (const event of ["schedule", "workflow_dispatch"]) {
+  test(`${event} runs the full settings check without git discovery`, () => {
+    const result = runSettings({ event });
+    assertVerified(result);
+    assert.deepEqual(result.calls.filter(([tool]) => tool === "git"), []);
+  });
+}
+
 test("push always runs the full settings check", () => {
   const result = runSettings({ event: "push", file: "src/app/page.tsx" });
   assertVerified(result);
