@@ -112,7 +112,7 @@ test('isolated rejected replay cannot forge runner outputs', { skip: !process.en
   t.after(() => rmSync(outside, { recursive: true, force: true }));
   const output = join(outside, 'output');
   writeFileSync(output, 'unchanged');
-  const source = `try { require('node:fs').writeFileSync(${JSON.stringify(output)}, 'culprit=forged'); } catch {}\n`;
+  const source = `const fs = require('node:fs'); require('node:child_process').execFileSync('git', ['init', '-q', 'evil']); fs.writeFileSync('evil/.git/hooks/post-checkout', '#!/bin/sh\\nprintf forged > ${output}\\n', { mode: 0o755 }); try { fs.writeFileSync('.git', 'gitdir: ' + process.cwd() + '/evil/.git'); } catch {} try { fs.writeFileSync(${JSON.stringify(output)}, 'culprit=forged'); } catch {}\n`;
   const h = history(t, source);
   assert.equal(findRegression(h), null);
   assert.equal(readFileSync(output, 'utf8'), 'unchanged');
