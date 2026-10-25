@@ -233,8 +233,38 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     }
   };
 
-  const renderSessionMenu = (alignmentClass: string) =>
-    isDropdownOpen ? (
+  const renderSessionMenu = (alignmentClass: string) => {
+    if (!isDropdownOpen) return null;
+    const sessionRows = (chats: HistorySession[]) => {
+      const rows: ReactNode[] = [];
+      for (const chat of chats) {
+        rows.push(
+          <ChatSessionRow
+            key={chat.id}
+            chat={chat}
+            isActive={chat.id === resolvedSessionId}
+            onSelect={() => {
+              setIsDropdownOpen(false);
+              sidebarChats?.onSelect({ kind: "ai" });
+              selectSession(chat.id);
+            }}
+          >
+            {phoneChatDelete && isMbl && (
+              <button
+                type="button"
+                aria-label="Delete chat"
+                onClick={() => handleDeleteSession(chat.id)}
+                className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
+              >
+                <Trash2 size={16} strokeWidth={1.75} />
+              </button>
+            )}
+          </ChatSessionRow>
+        );
+      }
+      return rows;
+    };
+    return (
       <div
         id="ai-chat-session-history"
         className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-[1200] ${alignmentClass}`}
@@ -256,29 +286,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               Previous 7 days
             </div>
             <ul className="pb-1">
-              {previous7Days.map((chat: HistorySession) => (
-                <ChatSessionRow
-                  key={chat.id}
-                  chat={chat}
-                  isActive={chat.id === resolvedSessionId}
-                  onSelect={() => {
-                    setIsDropdownOpen(false);
-                    sidebarChats?.onSelect({ kind: "ai" });
-                    selectSession(chat.id);
-                  }}
-                >
-                  {phoneChatDelete && isMbl && (
-                    <button
-                      type="button"
-                      aria-label="Delete chat"
-                      onClick={() => handleDeleteSession(chat.id)}
-                      className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
-                    >
-                      <Trash2 size={16} strokeWidth={1.75} />
-                    </button>
-                  )}
-                </ChatSessionRow>
-              ))}
+              {sessionRows(previous7Days)}
             </ul>
           </div>
         )}
@@ -291,35 +299,14 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               Older
             </div>
             <ul>
-              {older.map((chat: HistorySession) => (
-                <ChatSessionRow
-                  key={chat.id}
-                  chat={chat}
-                  isActive={chat.id === resolvedSessionId}
-                  onSelect={() => {
-                    setIsDropdownOpen(false);
-                    sidebarChats?.onSelect({ kind: "ai" });
-                    selectSession(chat.id);
-                  }}
-                >
-                  {phoneChatDelete && isMbl && (
-                    <button
-                      type="button"
-                      aria-label="Delete chat"
-                      onClick={() => handleDeleteSession(chat.id)}
-                      className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
-                    >
-                      <Trash2 size={16} strokeWidth={1.75} />
-                    </button>
-                  )}
-                </ChatSessionRow>
-              ))}
+              {sessionRows(older)}
             </ul>
           </div>
         )}
         {sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
-    ) : null;
+    );
+  };
 
   const historyButton = (
     <button type="button" onMouseDown={sidebarChats ? (event) => event.stopPropagation() : undefined}
