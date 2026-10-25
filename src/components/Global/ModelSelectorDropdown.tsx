@@ -1,5 +1,6 @@
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/definitions/htpr-7939-grok-gemini4-models";
 import { useAiDefaultModelContext, useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
@@ -8,6 +9,7 @@ import {
   aiModelDefinitions,
   aiModelOptions,
   isAiModelOptionVisible,
+  isGrokGemini4ModelKey,
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelDefinition,
@@ -99,8 +101,10 @@ const AIModelDropDownList = ({
 }) => {
   const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
   const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
+  const grokGemini4Loaded = useFlagLoaded(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const modelFlagsLoaded = haikuDefaultLoaded &&
-    (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded);
+    (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded) &&
+    (!isGrokGemini4ModelKey(aiSelected?.id) || grokGemini4Loaded);
   const quickModelIds = haiku55Enabled
     ? ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS]
     : MOBILE_AI_CHAT_QUICK_MODEL_IDS;
@@ -803,14 +807,15 @@ type AIModelDropDownButtonProps = Omit<
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
+  const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const flagModelOptions = deepseekFlashFastEnabled
     ? aiModelOptions
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true))
-    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true));
+    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, grokGemini4Enabled))
+    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, grokGemini4Enabled));
   return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} />;
 };
 

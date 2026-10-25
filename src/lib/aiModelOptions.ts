@@ -869,12 +869,18 @@ export function isHaiku55Model(modelId: string): boolean {
   return /(?:^|\/)claude-haiku-5[.-]5$/.test(modelId);
 }
 
+export function isGrokGemini4ModelKey(modelKey: string | null | undefined): boolean {
+  return modelKey === "grok-4.7" || modelKey === "gemini-4-argon";
+}
+
 export function isAiModelOptionVisible(
   option: TAiModelOption,
   haiku55Enabled: boolean,
   deepseekFlashFastEnabled = false,
+  grokGemini4Enabled = false,
 ): boolean {
   if (option.modelKey === "deepseek-v4.1-flash-fast" && !deepseekFlashFastEnabled) return false;
+  if (isGrokGemini4ModelKey(option.modelKey) && !grokGemini4Enabled) return false;
   return haiku55Enabled
     ? option.modelKey !== "claude-haiku-4.5"
     : option.modelKey !== "claude-haiku-5-5";

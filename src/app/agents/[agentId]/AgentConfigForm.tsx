@@ -2,6 +2,7 @@
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/definitions/htpr-7939-grok-gemini4-models";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
@@ -55,14 +56,15 @@ export function AgentConfigForm({
   handleImportantToggle, currentUser,
 }: Props) {
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
+  const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const flagModelOptions = deepseekFlashFastEnabled
     ? aiModelOptions
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true))
-    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true));
+    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, grokGemini4Enabled))
+    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, grokGemini4Enabled));
   return (
     <>
                 <section className="bg-comment-description rounded-[4px] px-4 py-3 shadow-md flex flex-col gap-1.5">

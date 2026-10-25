@@ -51,6 +51,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/definitions/htpr-7939-grok-gemini4-models";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG } from "@/lib/flags/definitions/htpr-7891-palette-share-key-labels";
@@ -187,6 +188,7 @@ const Commands = (props: Props) => {
   const basetenByokEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
   let hiddenBasetenCommandKey: string | undefined;
   if (!basetenByokEnabled) hiddenBasetenCommandKey = "settingsApiKeysBasetenApiKey";
+  const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -275,6 +277,7 @@ const Commands = (props: Props) => {
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
             command.key !== hiddenBasetenCommandKey &&
+            (grokGemini4Enabled || (command.key !== "settingsApiKeysXaiApiKey" && command.key !== "settingsAiModelsXai")) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -421,6 +424,7 @@ const Commands = (props: Props) => {
     pageActions,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
+    grokGemini4Enabled,
     autoTaskDescriptionsEnabled,
     currentProject,
     frequentlyUsed,

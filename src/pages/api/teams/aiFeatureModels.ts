@@ -29,7 +29,8 @@ import { assertUserCanManageTeamByok } from "@/utils/controllers/teams/assertTea
 import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiSettingsForViewer";
 import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import { getAiDefaultModelContext, resolveTeamCustomEndpoint } from "@/app/api/ai/_lib/byokKeys";
-import { getDefaultAiModelOptionForPlan, type AiDefaultModelContext, getAiModelOptionById, resolveAiModelOption } from "@/lib/aiModelOptions";
+import { getDefaultAiModelOptionForPlan, type AiDefaultModelContext, getAiModelOptionById, resolveAiModelOption, isGrokGemini4ModelKey } from "@/lib/aiModelOptions";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/definitions/htpr-7939-grok-gemini4-models";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -40,6 +41,7 @@ function effectiveModel(
   haiku55Enabled = false,
   context: AiDefaultModelContext = {},
   deepseekFlashFastEnabled = false,
+  grokGemini4Enabled = false,
 ): string | null {
   const enabledSettings = updateAiFeatureToggleSettings(
     settings,
@@ -63,12 +65,17 @@ function effectiveModel(
     null,
     { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, true, context.haikuDefaultEnabled, context) } : {}) },
   );
-  return option ? filterModelOptionForTeam(resolveAiModelOption(
+  const planDefault = getDefaultAiModelOptionForPlan(context.plan, context.hasByok, haiku55Enabled, context.haikuDefaultEnabled, context);
+  const resolved = option ? filterModelOptionForTeam(resolveAiModelOption(
     [option.id],
-    getDefaultAiModelOptionForPlan(context.plan, context.hasByok, haiku55Enabled, context.haikuDefaultEnabled, context),
+    planDefault,
     haiku55Enabled,
     deepseekFlashFastEnabled,
-  ), settings, haiku55Enabled).id : null;
+  ), settings, haiku55Enabled) : null;
+  if (resolved && !grokGemini4Enabled && isGrokGemini4ModelKey(resolved.modelKey)) {
+    return filterModelOptionForTeam(planDefault, settings, haiku55Enabled).id;
+  }
+  return resolved?.id ?? null;
 }
 
 function featureRow(
@@ -78,6 +85,7 @@ function featureRow(
   haiku55Enabled = false,
   context: AiDefaultModelContext = {},
   deepseekFlashFastEnabled = false,
+  grokGemini4Enabled = false,
 ) {
   const kind = AI_FEATURES[feature].modelKind;
   const savedOverride =
@@ -85,7 +93,9 @@ function featureRow(
       ? null
       : getAiFeatureModelOverride(feature as ModelAiFeature, settings, haiku55Enabled);
 
-  const override = !deepseekFlashFastEnabled && getAiModelOptionById(savedOverride)?.modelKey === "deepseek-v4.1-flash-fast"
+  const savedModelKey = getAiModelOptionById(savedOverride)?.modelKey;
+  const override = (!deepseekFlashFastEnabled && savedModelKey === "deepseek-v4.1-flash-fast") ||
+    (!grokGemini4Enabled && isGrokGemini4ModelKey(savedModelKey))
     ? null : savedOverride;
 
   return {
@@ -109,6 +119,7 @@ function featureRow(
       haiku55Enabled,
       context,
       deepseekFlashFastEnabled,
+      grokGemini4Enabled,
     ),
     ...(feature === "dictation"
       ? { provider: resolveDictationProvider(settings) }
@@ -122,11 +133,12 @@ function featureModelsResponse(
   haiku55Enabled = false,
   context: AiDefaultModelContext = {},
   deepseekFlashFastEnabled = false,
+  grokGemini4Enabled = false,
 ) {
   return Object.fromEntries(
     (Object.keys(AI_FEATURES) as AiFeature[]).map((feature) => [
       feature,
-      featureRow(feature, settings, customEndpointConfigured, haiku55Enabled, context, deepseekFlashFastEnabled),
+      featureRow(feature, settings, customEndpointConfigured, haiku55Enabled, context, deepseekFlashFastEnabled, grokGemini4Enabled),
     ]),
   );
 }
@@ -147,6 +159,9 @@ const handler: NextApiHandler = async (
   const user = { id: row.id, accountId: row.accountId ?? undefined };
   const deepseekFlashFastEnabled = await import("@/lib/flags")
     .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, user.id))
+    .catch(() => false);
+  const grokGemini4Enabled = await import("@/lib/flags")
+    .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7939_GROK_GEMINI4_MODELS_FLAG, user.id))
     .catch(() => false);
   const haiku55Enabled = await haiku55ModelEnabled(user.id);
 
@@ -170,7 +185,7 @@ const handler: NextApiHandler = async (
     const defaultContext = await getAiDefaultModelContext({ trustedTeamId: teamId, userId: user.id }, haiku55Enabled);
     return res
       .status(200)
-      .json(featureModelsResponse(lookup.settings, customEndpointConfigured, haiku55Enabled, defaultContext, deepseekFlashFastEnabled));
+      .json(featureModelsResponse(lookup.settings, customEndpointConfigured, haiku55Enabled, defaultContext, deepseekFlashFastEnabled, grokGemini4Enabled));
   }
 
   if (req.method === "POST") {
@@ -242,8 +257,9 @@ const handler: NextApiHandler = async (
           typeof requestedModel === "string"
             ? requestedModel.trim()
             : requestedModel;
-        const normalizedModel = !deepseekFlashFastEnabled && typeof selectedModel === "string" &&
-          getAiModelOptionById(selectedModel)?.modelKey === "deepseek-v4.1-flash-fast"
+        const selectedModelKey = typeof selectedModel === "string" ? getAiModelOptionById(selectedModel)?.modelKey : undefined;
+        const normalizedModel = (!deepseekFlashFastEnabled && selectedModelKey === "deepseek-v4.1-flash-fast") ||
+          (!grokGemini4Enabled && isGrokGemini4ModelKey(selectedModelKey))
           ? null : selectedModel;
         if (
           normalizedModel !== null &&
@@ -282,7 +298,7 @@ const handler: NextApiHandler = async (
     const defaultContext = await getAiDefaultModelContext({ trustedTeamId: normalizedTeamId, userId: user.id }, haiku55Enabled);
     return res
       .status(200)
-      .json(featureModelsResponse(nextSettings, customEndpointConfigured, haiku55Enabled, defaultContext, deepseekFlashFastEnabled));
+      .json(featureModelsResponse(nextSettings, customEndpointConfigured, haiku55Enabled, defaultContext, deepseekFlashFastEnabled, grokGemini4Enabled));
   }
 
   res.setHeader("Allow", "GET, POST");
