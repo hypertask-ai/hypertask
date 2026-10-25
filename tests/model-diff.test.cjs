@@ -11,6 +11,19 @@ const catalog = readCatalog(fs.readFileSync(path.join(root, "src/lib/aiModelOpti
 const report = () => diffModels(catalog, structuredClone(fixture));
 const response = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
 
+const twoVersionCatalog = {
+  definitions: [
+    { key: "anthropic/claude-haiku-4.5", modelClass: "claude-haiku", label: "Haiku 4.5", provider: "anthropic", priceTier: 1 },
+    { key: "anthropic/claude-haiku-5.5", modelClass: "claude-haiku", label: "Haiku 5.5", provider: "anthropic", priceTier: 1 },
+  ],
+  options: [
+    { id: "claude-haiku-4.5", modelKey: "claude-haiku-4.5", model: "claude-haiku-4.5", source: "claude" },
+    { id: "claude-haiku-5-5", modelKey: "claude-haiku-5-5", model: "claude-haiku-5.5", source: "claude" },
+  ],
+};
+const staleFinding = () => diffModels(twoVersionCatalog, structuredClone(fixture)).findings.find((finding) => finding.kind === "stale");
+const findingOfKind = (kind) => kind === "stale" ? staleFinding() : report().findings.find((item) => item.kind === kind);
+
 function assertPickerModelsListed(sources) {
   const missing = diffModels(catalog, sources).findings.filter((finding) => finding.reason === "picker model missing from gateway list");
   assert.deepEqual(missing, [], "Every picker model must exist in the gateway fixture");
@@ -32,17 +45,7 @@ test("approved examples are discovered, with one finding per model class and no 
 });
 
 test("stale detection still fires for a catalogue that keeps two versions of one class", () => {
-  const twoVersionCatalog = {
-    definitions: [
-      { key: "anthropic/claude-haiku-4.5", modelClass: "claude-haiku", label: "Haiku 4.5", provider: "anthropic", priceTier: 1 },
-      { key: "anthropic/claude-haiku-5.5", modelClass: "claude-haiku", label: "Haiku 5.5", provider: "anthropic", priceTier: 1 },
-    ],
-    options: [
-      { id: "claude-haiku-4.5", modelKey: "claude-haiku-4.5", model: "claude-haiku-4.5", source: "claude" },
-      { id: "claude-haiku-5-5", modelKey: "claude-haiku-5-5", model: "claude-haiku-5.5", source: "claude" },
-    ],
-  };
-  const stale = diffModels(twoVersionCatalog, structuredClone(fixture)).findings.find((finding) => finding.kind === "stale");
+  const stale = staleFinding();
   assert.equal(stale.model, "claude-haiku-4.5");
   assert.equal(stale.action, "remove stale entry; migrate saved picks to the current model of its class");
 });
@@ -260,7 +263,7 @@ test("watcher does not search or create an empty rollup", async () => {
 
 for (const kind of ["new-class", "new-version", "stale"]) {
   test(`watcher finds an exact ${kind} title on the second page without creating`, async () => {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     const now = new Date("2026-10-25T12:00:00Z");
     const ticket = kind === "new-class" ? rollupTicket([finding], now) : ticketFor(finding);
     const cursors = [];
@@ -282,7 +285,7 @@ for (const kind of ["new-class", "new-version", "stale"]) {
   });
 
   test(`watcher exhausts ${kind} pages before creating once with the stable marker idempotency key`, async () => {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     const now = new Date("2026-10-25T12:00:00Z");
     const ticket = kind === "new-class" ? rollupTicket([finding], now) : ticketFor(finding);
     const calls = [];
@@ -346,7 +349,7 @@ test("watcher CLI refuses incomplete or failing later pages with non-zero exit a
 
 test("watcher refuses writes on failed, partial, malformed or truncated searches, and with no discovery sources", async () => {
   for (const kind of ["new-class", "new-version", "stale"]) {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     for (const page of [response({}, 500), response({ success: false }), response({ success: true }),
       response({ success: true, tasks: [], total: 1 }), response({ success: true, tasks: [], total: 0, partial: true }),
       response({ success: true, tasks: [], total: 0, nextCursor: "123" })]) {

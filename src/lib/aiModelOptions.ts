@@ -662,13 +662,14 @@ export function isClaude55Model(modelId: string): boolean {
 
 export function getAiModelOptionById(
   id: string | null | undefined,
-  _haiku55Enabled = false,
+  haiku55Enabled = false,
 ): TAiModelOption | undefined {
   const trimmed = id?.trim();
   if (!trimmed) return undefined;
   const haiku = isHaiku45Model(trimmed) || isHaiku55Model(trimmed) ? "claude-haiku-5-5" : trimmed;
   const aliased = RETIRED_OPTION_ID_ALIASES[haiku] ?? haiku;
-  return aiModelOptions.find((option) => option.id === upgradeLegacyClaudeOptionId(aliased));
+  const resolved = haiku55Enabled ? upgradeLegacyClaudeOptionId(aliased) : aliased;
+  return aiModelOptions.find((option) => option.id === resolved);
 }
 
 export function getAiModelDefinition(modelKey: TAiModelKey) {
