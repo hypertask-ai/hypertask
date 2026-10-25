@@ -630,19 +630,19 @@ export async function createAuthorizedCheckoutSession(
       mode = team.team_activity?.hasCompletedTrial || hasHistoricalTrial(subscriptions) || hasCompletedTrialCheckout
         ? "Normal" : "Trial";
     }
-    const sameSavedEntry = attempt && attempt.desired.ownerUserId === userId &&
+    const savedDesired = attempt && attempt.desired.ownerUserId === userId &&
       (signupIntent ? attempt.desired.checkoutIntent === "signup-straight-to-board"
         : attempt.desired.checkoutIntent !== "signup-straight-to-board") &&
       attempt.desired.checkoutMode === mode && attempt.desired.priceId === priceId &&
       attempt.desired.returnUrl === returnUrl && attempt.desired.cancelUrl === cancelUrl &&
-      reservedSession?.status !== "expired";
+      reservedSession?.status !== "expired" ? attempt.desired : null;
     let trialDays = 0;
     if (mode === "Trial") {
       trialDays = fourteenDayTrial ? 14 : 7;
-      if (sameSavedEntry) trialDays = effectiveTrialDays(attempt.desired);
+      if (savedDesired) trialDays = effectiveTrialDays(savedDesired);
     }
     let checkoutIntent: CheckoutAttemptDesired["checkoutIntent"];
-    if (sameSavedEntry) checkoutIntent = attempt.desired.checkoutIntent;
+    if (savedDesired) checkoutIntent = savedDesired.checkoutIntent;
     else if (signupIntent) checkoutIntent = "signup-straight-to-board";
     else if (enabled && fourteenDayTrial) checkoutIntent = "start-plan";
     const desired: CheckoutAttemptDesired = {
