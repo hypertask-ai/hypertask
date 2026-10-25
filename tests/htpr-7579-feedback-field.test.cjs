@@ -269,3 +269,16 @@ test('automatic REST reporting still ignores 400 responses and reports only serv
   assert.match(f.created[0].description, /Error code: http-server-error/)
   assert.doesNotMatch(f.created[0].description, /<p>Field:/)
 })
+
+test('automatic input refusals open no ticket and server errors still file', async t => {
+  t.mock.method(console, 'info', () => {})
+  const f = setup()
+  const refusal = { surface: 'mcp', tool: 'hypertask_tasks', status: 400, errorCode: 'unrecognized_keys', field: 'nonsense_field', category: 'call_failed' }
+  const result = await f.fileAiFeedback(refusal, 42, { origin: 'automatic' })
+  assert.deepEqual(result, { success: false, filed: false, reason: 'input_refused', error: 'Tool input refusal; no new ticket was filed.' })
+  assert.equal(f.created.length, 0)
+  const serverError = { surface: 'mcp', tool: 'hypertask_tasks', status: 500, errorCode: 'tool-exception', category: 'call_failed' }
+  const filed = await f.fileAiFeedback(serverError, 42, { origin: 'automatic' })
+  assert.equal(filed.success, true)
+  assert.equal(f.created.length, 1)
+})

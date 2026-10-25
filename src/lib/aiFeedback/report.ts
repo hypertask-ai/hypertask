@@ -63,6 +63,15 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
 }
 
+const INPUT_REFUSAL_CODES = new Set([
+  'unrecognized_keys', 'invalid_type', 'invalid_literal', 'invalid_union', 'invalid_enum_value',
+  'invalid_string', 'invalid_date', 'invalid_key', 'too_small', 'too_big', 'not_multiple_of', 'unrecognized', 'custom',
+])
+
+function inputRefusal(input: AiFeedbackInput): boolean {
+  return input.status === 400 && INPUT_REFUSAL_CODES.has((input.errorCode ?? '').toLowerCase())
+}
+
 export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
@@ -157,6 +166,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
+        }
+        if (reporter.origin === 'automatic' && inputRefusal(input) && !existing) {
+          console.info('AI feedback not filed: tool input refusal', { surface: input.surface, tool: input.tool, errorCode: input.errorCode, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
+          return { success: false as const, filed: false as const, reason: 'input_refused' as const, error: 'Tool input refusal; no new ticket was filed.' }
         }
         if (!await reserveFeedbackQuota(userId, Boolean(existing))) {
           throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
