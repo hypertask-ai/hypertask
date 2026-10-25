@@ -430,13 +430,14 @@ export async function listReport(
     orderBy: [
       { endedAt: { sort: "asc", nulls: "first" } },
       { startedAt: "desc" },
+      { id: "asc" },
     ],
     take: 1000,
   });
 
   entries.sort((a, b) => {
     const runningDifference = Number(a.endedAt !== null) - Number(b.endedAt !== null);
-    return runningDifference || b.startedAt.getTime() - a.startedAt.getTime();
+    return runningDifference || b.startedAt.getTime() - a.startedAt.getTime() || a.id - b.id;
   });
 
   entries.forEach(entry => recordAgentBoardScopeMiss(entry.task.projectId, "read"));
