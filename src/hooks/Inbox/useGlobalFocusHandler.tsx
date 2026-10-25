@@ -1,5 +1,6 @@
 import { archiveNotifications, toggleNotificationArchive } from "@/lib/api/typedClient";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import {
   globalNotificationFocusAtom,
@@ -57,6 +58,7 @@ const isWaitingOnSynthetic = (notification: unknown) => {
 };
 
 const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
+  const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   let typedArchive: typeof toggleNotificationArchive | undefined;
   let typedBulkArchive: typeof archiveNotifications | undefined;
@@ -87,7 +89,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     cmdControl: TRemoveFromInboxMode,
     undoHandler: any,
   ): Promise<boolean> => {
-    if (isWaitingOnSynthetic(notification_reminder)) return false;
+    if (isWaitingOnSynthetic(notification_reminder) && (!blockedInboxArchive || cmdControl === "Remind")) return false;
 
     if (cmdControl === "Remind") {
       removeElementFromState(notification_reminder, undoHandler, cmdControl);
@@ -234,7 +236,12 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
           queryClient,
           queryKey: resolvedQueryKey,
           accountId: currentUser.id,
-          mutation: createInboxRemovalMutation([elementToRemove]),
+          mutation: {
+            ...createInboxRemovalMutation([elementToRemove]),
+            ...(blockedInboxArchive && cmdControl !== "Remind"
+              ? { notificationIds: [String(elementToRemove.id), `-${elementToRemove.taskId}`] }
+              : {}),
+          },
         })
       : null;
     const restoreAnchors =

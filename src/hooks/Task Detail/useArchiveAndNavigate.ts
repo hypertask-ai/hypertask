@@ -11,6 +11,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from '../MultiPages/Route/useHypertasksNavigate';
 import { useSearchParams } from 'next/navigation';
 import { useFlag } from '@/hooks/useFlag';
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from '@/lib/flags/definitions/htpr-7840-blocked-inbox-archive';
 import { HTPR_7311_DECISION_COMMENT_LINK_FLAG, HTPR_7659_ARCHIVE_EVERY_SEND_FLAG } from "@/lib/flags/keys";
 import { withDecisionCommentAnchor } from '@/lib/inboxDecisions';
 import { inboxDataQueryKey } from '../Inbox/useGetNotifications';
@@ -24,6 +25,7 @@ import {
 
 const useArchiveAndNavigate = () => {
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
+  const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
   const archiveEverySend = useFlag(HTPR_7659_ARCHIVE_EVERY_SEND_FLAG);
   const queryClient = useQueryClient();
   const { undoAction} = useUndoContext();
@@ -51,13 +53,14 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
   const indexOf = tasksPlayList?.findIndex(obj =>obj.projectId === currentItemInTasksPlaylist.projectId && obj.uniqueIndex === currentItemInTasksPlaylist.uniqueIndex);
   const activeInboxFlow = inboxFlow ?? searchParams?.get("inboxFlow")
   const earlyInboxMembership = archiveNotification && activeInboxFlow === "true" &&
-    (archiveEverySend || currentTask?._count?.notifications === undefined)
+    ((blockedInboxArchive && currentTask?.waitingOnUserId === currentUser.id) || archiveEverySend || currentTask?._count?.notifications === undefined)
   const inInbox = earlyInboxMembership
     ? inboxMessageForTask(
         queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser.id))?.notifications,
         currentTask,
         currentUser.id,
-      ) ?? (archiveEverySend && currentTask?._count?.notifications ? currentTask?.notifications?.[0] : undefined)
+        blockedInboxArchive,
+      ) ?? ((blockedInboxArchive || archiveEverySend) && currentTask?._count?.notifications ? currentTask?.notifications?.[0] : undefined)
     : currentTask?.notifications&&currentTask?.notifications[0]
   const missingInboxTarget = activeInboxFlow && indexOf === -1 && tasksPlayList
     ? nextRemainingInboxTask(tasksPlayList, currentItemInTasksPlaylist)
