@@ -29,7 +29,7 @@ export function filedWithinLastDay(filedAt: Date | string | null | undefined, no
   return now.getTime() - time < RECENTLY_FILED_HOURS * 60 * 60 * 1000;
 }
 
-export function filedRecently(ticket: { createdAt: Date | string } | null | undefined, now: Date = new Date()): boolean {
+export function filedRecently<T extends { createdAt: Date | string }>(ticket: T | null | undefined, now: Date = new Date()): ticket is T {
   return filedWithinLastDay(ticket?.createdAt, now);
 }
 
