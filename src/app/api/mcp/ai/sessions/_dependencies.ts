@@ -4,7 +4,7 @@ import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from '@/lib/prisma';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from '@/lib/flags/definitions/htpr-7734-agent-chat-context';
-import { agentChatContextPayload } from '@/lib/agents/chatContext';
+import { agentChatContextPayload, readableAgentChatContextIds } from '@/lib/agents/chatContext';
 import { checkMcpRateLimit, validateMcpAuth, type McpAuthContext } from '@/lib/mcp/auth';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 import { validateProjectAccess } from '@/lib/mcp/tasks/services';
@@ -46,12 +46,12 @@ const messageSelect = {
 
 type MessageRecord = Prisma.ChatMessageGetPayload<{ select: typeof messageSelect }>;
 
-function serializeMessage(message: MessageRecord & { context?: Prisma.JsonValue }, contextEnabled: boolean) {
+function serializeMessage(message: MessageRecord & { context?: Prisma.JsonValue }, contextVisible: boolean) {
   return {
     id: message.id,
     role: message.role,
-    content: contextEnabled && message.role === 'human' ? agentChatContextPayload(message.content, message.context).text : message.content,
-    ...(contextEnabled && message.role === 'human' && message.context ? { context: message.context } : {}),
+    content: contextVisible && message.role === 'human' ? agentChatContextPayload(message.content, message.context).text : message.content,
+    ...(contextVisible && message.role === 'human' && message.context ? { context: message.context } : {}),
     created_at: message.createdAt.toISOString(),
     attachments: message.attachments.map((attachment) => ({
       id: attachment.id,
@@ -120,7 +120,10 @@ export const aiSessionDependencies: AiSessionHandlerDependencies<McpAuthContext>
       }),
       prisma.chatMessage.count({ where: { sessionId: id, session: where } }),
     ]);
-    return session ? { session: { ...serializeSession(session), messages: messages.map((message) => serializeMessage(message, contextEnabled)) }, total } : null;
+    const readableContextIds = contextEnabled
+      ? await readableAgentChatContextIds(prisma, { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }, messages)
+      : new Set<string>();
+    return session ? { session: { ...serializeSession(session), messages: messages.map((message) => serializeMessage(message, contextEnabled && readableContextIds.has(message.id))) }, total } : null;
   },
   create: async ({ context, userId, agentId, id, projectId, title }) => {
     const create = async (db: Prisma.TransactionClient) => {

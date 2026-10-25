@@ -6,7 +6,7 @@ import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
-import { agentChatContextPayload } from "@/lib/agents/chatContext";
+import { agentChatContextPayload, readableAgentChatContextIds } from "@/lib/agents/chatContext";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,20 +46,21 @@ export async function GET(request: NextRequest) {
 
     const contextEnabled = await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id);
     const result = await prisma.$transaction(async (tx) => {
-      const agents = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id"
+      const agents = await tx.$queryRaw<Array<{ id: string; userId: number }>>`
+        SELECT "id", "userId"
         FROM "Agent"
         WHERE "id" = ${agentId}
           AND "revokedAt" IS NULL
         FOR UPDATE
       `;
-      if (agents.length !== 1) return { found: false, messages: [] };
+      if (agents.length !== 1) return { found: false, messages: [], readableContextIds: new Set<string>() };
+      const agent = agents[0];
 
       const subscription = await tx.agentWebhookSubscription.findUnique({
         where: { agentId: agentId },
         select: { active: true },
       });
-      if (subscription?.active) return { found: true, messages: [] };
+      if (subscription?.active) return { found: true, messages: [], readableContextIds: new Set<string>() };
 
       const allowedSessions = ctx.teamScope != null ? await tx.chatSession.findMany({
         where: { agentId, ...await chatContentScopeWhere({ userId: ctx.user.id, agentId, teamScope: ctx.teamScope }, tx) }, select: { id: true },
@@ -102,7 +103,10 @@ export async function GET(request: NextRequest) {
         JOIN delivered ON delivered."id" = pending."id"
         ORDER BY pending."createdAt" ASC, pending."id" ASC
       `;
-      return { found: true, messages };
+      const readableContextIds = contextEnabled
+        ? await readableAgentChatContextIds(tx, { userId: agent.userId, agentId, teamScope: ctx.teamScope }, messages)
+        : new Set<string>();
+      return { found: true, messages, readableContextIds };
     }, ctx.teamScope != null ? { isolationLevel: "Serializable" } : undefined);
 
     if (!result.found) {
@@ -113,7 +117,7 @@ export async function GET(request: NextRequest) {
     }
     const messages = result.messages.map(({ context, ...message }) => ({
       ...message,
-      ...(contextEnabled ? agentChatContextPayload(message.text, context) : {}),
+      ...(result.readableContextIds.has(message.id) ? agentChatContextPayload(message.text, context) : {}),
     }));
     return NextResponse.json({ success: true, messages });
   } catch (error) {

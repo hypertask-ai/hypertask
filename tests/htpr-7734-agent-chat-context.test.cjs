@@ -176,8 +176,9 @@ test("queued messages keep their picked ticket after navigation and flag off str
   } finally { global.fetch = originalFetch; }
 });
 
-function server({ enabled = true, readable = true, agentReadable = true, validBinding = true, sidebar = true, webhook = false } = {}) {
-  const rows = [], webhooks = [], queries = [];
+function server({ enabled = true, readable = true, agentReadable: initialAgentReadable = true, validBinding = true, sidebar = true, webhook = false } = {}) {
+  let agentReadable = initialAgentReadable;
+  const rows = [], webhooks = [], queries = [], accessChecks = [];
   const session = { id: "11111111-1111-4111-8111-111111111111", userId: 7, agentId: "agent", user: { displayName: "Sender" }, createdAt: new Date(), updatedAt: new Date() };
   const access = { OR: [{ ownerId: 7 }, { members: { some: { userId: 7 } } }] };
   const recipientAccess = { members: { some: { agentId: "agent", status: "Accepted", agent: { userId: 9, revokedAt: null } } }, teamId: "agent-team" };
@@ -188,14 +189,17 @@ function server({ enabled = true, readable = true, agentReadable = true, validBi
   };
   const prisma = {
     user: { findUnique: async () => ({ displayName: "Sender" }) },
-    task: { findFirst: async (query) => { queries.push(query); return (!query.where.project || canRead(query.where.project)) && query.where.id === 42 && query.where.projectId === 15 ? { id: 42, projectId: 15, ticketNumber: "HTPR-42", title: "Ticket title" } : null; } },
-    project: { findMany: async () => [{ id: 15 }], findFirst: async (query) => { queries.push(query); return canRead(query.where) ? { id: query.where.id, title: "Board title" } : null; } },
+    task: {
+      findFirst: async (query) => { queries.push(query); return (!query.where.project || canRead(query.where.project)) && query.where.id === 42 && query.where.projectId === 15 ? { id: 42, projectId: 15, ticketNumber: "HTPR-42", title: "Ticket title" } : null; },
+      findMany: async ({ where }) => where.id.in.includes(42) && canRead(where.project) ? [{ id: 42, projectId: 15 }] : [],
+    },
+    project: { findMany: async ({ where }) => where.id ? canRead(where) ? where.id.in.map((id) => ({ id })) : [] : [{ id: 15 }], findFirst: async (query) => { queries.push(query); return canRead(query.where) ? { id: query.where.id, title: "Board title" } : null; } },
     chatSession: { update: async () => ({}), findMany: async () => [], findFirst: async () => session },
     chatSessionParticipant: { updateMany: async () => ({ count: 1 }) },
     chatMessage: { create: async ({ data }) => { const row = { id: "message", createdAt: new Date(), attachments: [], ...data }; rows.push(row); return row; }, update: async () => ({}), findMany: async () => [...rows].reverse(), count: async () => rows.length },
     agentWebhookSubscription: { findUnique: async () => null },
     $transaction: async (fn) => fn(prisma),
-    $queryRaw: async (strings) => strings.join("").includes("WITH pending AS") ? rows.map((row) => ({ id: row.id, sessionId: row.sessionId, text: row.content, context: row.context, userName: "Sender" })) : [{ id: "agent", heartbeatAt: new Date() }],
+    $queryRaw: async (strings) => strings.join("").includes("WITH pending AS") ? rows.map((row) => ({ id: row.id, sessionId: row.sessionId, text: row.content, context: row.context, userName: "Sender" })) : [{ id: "agent", userId: 7, heartbeatAt: new Date() }],
   };
   const mocks = {
     "@/lib/prisma": { default: prisma },
@@ -215,10 +219,11 @@ function server({ enabled = true, readable = true, agentReadable = true, validBi
     },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { assert.equal(userId, 7); return key === flag && enabled; } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => access, projectContentAccessWhere: (userId, agentId, teamScope) => {
+      accessChecks.push({ userId, agentId, teamScope });
       if (!agentId) { assert.equal(userId, 7); return access; }
-      assert.equal(userId, 9);
       assert.equal(agentId, "agent");
-      assert.deepEqual(teamScope, { teamId: "agent-team", accessBinding: "binding" });
+      if (userId === 9) assert.deepEqual(teamScope, { teamId: "agent-team", accessBinding: "binding" });
+      else assert.equal(userId, 7);
       return recipientAccess;
     } },
     "@/lib/agents/chatBrief": {}, "@/lib/agents/chatBroadcast": { broadcastChatSession: async () => {} },
@@ -233,7 +238,7 @@ function server({ enabled = true, readable = true, agentReadable = true, validBi
     "@/lib/mcp/tasks/services": {}, "@/lib/agents/chatTicketProposal": { serializeChatTicketProposal: () => null },
   };
   const { POST } = load("src/app/api/agent-chat/[sessionId]/messages/route.ts", mocks);
-  return { rows, webhooks, queries, access, contextAccess, disable() { enabled = false; },
+  return { rows, webhooks, queries, accessChecks, access, contextAccess, disable() { enabled = false; }, setAgentReadable(value) { agentReadable = value; },
     send: (context) => POST(new Request("https://app.hypertask.ai/api/agent-chat/session/messages", {
       method: "POST", headers: sidebar ? { "x-hypertask-sidebar-project": "15" } : {},
       body: JSON.stringify({ text: "Which ticket?", ...(context !== undefined ? { default_context: context } : {}) }),
@@ -285,6 +290,38 @@ for (const webhook of [false, true]) {
     const humanHistory = (await h.history(false)).session.messages[0];
     assert.equal(humanHistory.content, "Which ticket?");
     assert.equal(Object.hasOwn(humanHistory, "context"), false);
+  });
+}
+
+for (const delivery of ["revoked after send", "still allowed"]) {
+  test(`queued context is re-checked at delivery: ${delivery}`, async () => {
+    const h = server();
+    assert.equal((await h.send({ project_id: 15, task_id: 42, scope: "ticket" })).status, 200);
+    assert.deepEqual(h.accessChecks.filter(({ agentId }) => agentId), [
+      { userId: 9, agentId: "agent", teamScope: { teamId: "agent-team", accessBinding: "binding" } },
+    ]);
+    const context = { scope: "ticket", project_id: 15, task_id: 42, ticket_number: "HTPR-42", title: "Ticket title" };
+    assert.deepEqual(h.rows[0].context, context);
+    if (delivery === "revoked after send") h.setAgentReadable(false);
+    for (const read of [
+      async () => { const response = await h.pending(); assert.equal(response.status, 200); return response.json(); },
+      async () => { const response = await h.agentTranscript(); assert.equal(response.status, 200); return response.json(); },
+      () => h.history(),
+    ]) {
+      const start = h.accessChecks.length;
+      const response = await read();
+      assert.deepEqual(h.accessChecks.slice(start), [{ userId: 7, agentId: "agent", teamScope: undefined }]);
+      const message = (response.messages ?? response.session.messages)[0];
+      assert.equal(message.text ?? message.content, delivery === "revoked after send"
+        ? "Which ticket?"
+        : 'Context: HTPR-42 "Ticket title" on board 15\n\nWhich ticket?');
+      if (delivery === "revoked after send") {
+        assert.equal(Object.hasOwn(message, "context"), false);
+        assert.doesNotMatch(JSON.stringify(response), /Ticket title|HTPR-42/);
+      } else {
+        assert.deepEqual(message.context, context);
+      }
+    }
   });
 }
 
