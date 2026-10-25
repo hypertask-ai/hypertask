@@ -281,7 +281,7 @@ jobs:
     if: always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'
     needs: [validate, app-smoke]
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 65
     permissions:
       actions: write
       contents: read
