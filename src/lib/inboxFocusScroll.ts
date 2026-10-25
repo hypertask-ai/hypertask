@@ -5,18 +5,12 @@ export type InboxFocusScroll = {
 
 export const resolveInboxFocusScroll = ({
   keepsScroll,
-  focusedNotificationId,
-  previousFocusedNotificationId,
-  hasFocusedRow,
+  focusedRowStillListed,
 }: {
   keepsScroll: boolean;
-  focusedNotificationId: string | null;
-  previousFocusedNotificationId: string | null;
-  hasFocusedRow: boolean;
+  focusedRowStillListed: boolean;
 }): InboxFocusScroll => {
   if (!keepsScroll) return { scroll: true, block: "center" };
-  const focusStayed =
-    hasFocusedRow &&
-    focusedNotificationId === previousFocusedNotificationId;
-  return { scroll: !focusStayed, block: "nearest" };
+  if (focusedRowStillListed) return { scroll: false, block: "nearest" };
+  return { scroll: true, block: "nearest" };
 };
