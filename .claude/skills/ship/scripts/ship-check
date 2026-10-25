@@ -23,13 +23,13 @@
 #   ship-check done <T>          ticket is in the done column its own board names
 #   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
-# CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...; non-releasing repos can opt in with SHIP_DEPLOY=none.
+# CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...; a repo listed in NON_RELEASING_REPOS, or any repo with SHIP_DEPLOY=none, is checked against its workflow runs instead of a release.
 # Every gate binds to the PR recorded with `bind` (required), so another
 # PR's merge never stands in for this fix, and every GitHub lookup fails closed.
 set -uo pipefail
 REPO=${SHIP_REPO:-hypertask-ai/hypertask}
 BASE=${SHIP_BASE:-production}
-readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node)
+readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node valentinyeo/ceo)
 EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
 TITLE_RE='^(HTPR|HYFA|YPER4)-[0-9]+ \[(BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] [^ ]'
 
