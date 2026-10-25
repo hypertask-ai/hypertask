@@ -22,14 +22,17 @@ const load = (file) => jiti(path.join(root, file))
 const { selectMcpTools } = load('src/lib/mcp-server/consolidated-tools.ts')
 const { executeToolResult } = load('src/lib/mcp-server/tool-response.ts')
 
-function spyComments(taskIdTicketReference = true, { ticketNumber = true } = {}) {
+function spyComments({ taskIdTicketReference = true, ticketNumber = 'string' } = {}) {
   const calls = []
+  const ticketNumberSchema = ticketNumber === 'array'
+    ? z.array(z.string())
+    : ticketNumber === 'both' ? z.union([z.string(), z.array(z.string())]) : z.string()
   const tools = selectMcpTools([{
     name: 'hypertask_get_comments_for_task',
     description: 'Get comments.',
     parameters: z.object({
       task_id: z.union([z.number().int().positive(), z.array(z.number().int().positive())]).optional(),
-      ...(ticketNumber ? { ticket_number: z.union([z.string(), z.array(z.string())]).optional() } : {}),
+      ticket_number: ticketNumberSchema.optional(),
     }).strict(),
     execute: async (args) => {
       calls.push(args)
@@ -53,19 +56,34 @@ test('a ticket reference in task_id reaches ticket_number', async () => {
   assert.equal(body.data.comments[0].ticket, 'HTPR-7894')
 })
 
-test('a list of ticket references in task_id reaches ticket_number', async () => {
+test('a one-item list unwraps when ticket_number takes a single string', async () => {
   const { calls, tools } = spyComments()
+  const { result } = await call(tools, { action: 'list', input: { task_id: ['HTPR-7894'] } })
+  assert.equal(result.isError, undefined)
+  assert.equal(calls[0].ticket_number, 'HTPR-7894')
+  assert.equal(Object.hasOwn(calls[0], 'task_id'), false)
+})
+
+test('a list of ticket references reaches ticket_number where it takes a list', async () => {
+  const { calls, tools } = spyComments({ ticketNumber: 'both' })
   const { result } = await call(tools, { action: 'list', input: { task_id: ['HTPR-7894', 'htpr-7895'] } })
   assert.equal(result.isError, undefined)
   assert.deepEqual(calls[0].ticket_number, ['HTPR-7894', 'HTPR-7895'])
   assert.equal(Object.hasOwn(calls[0], 'task_id'), false)
 })
 
+test('a list of ticket references is refused where ticket_number takes one string', async () => {
+  const { calls, tools } = spyComments()
+  const { result } = await call(tools, { action: 'list', input: { task_id: ['HTPR-7894', 'HTPR-7895'] } })
+  assert.equal(result.isError, true)
+  assert.equal(calls.length, 0)
+})
+
 test('a numeric task_id keeps working unchanged', async () => {
   const { calls, tools } = spyComments()
-  const { result } = await call(tools, { action: 'list', input: { task_id: 76336 } })
+  const { result } = await call(tools, { action: 'list', input: { task_id: 76292 } })
   assert.equal(result.isError, undefined)
-  assert.equal(calls[0].task_id, 76336)
+  assert.equal(calls[0].task_id, 76292)
   assert.equal(Object.hasOwn(calls[0], 'ticket_number'), false)
 })
 
@@ -86,15 +104,7 @@ test('an explicit ticket_number that disagrees with task_id is refused', async (
 })
 
 test('with the fix off a ticket reference in task_id is refused as before', async () => {
-  const { calls, tools } = spyComments(false)
-  const { result } = await call(tools, { action: 'list', input: { task_id: 'HTPR-7894' } })
-  assert.equal(result.isError, true)
-  assert.match(result.content[0].text, /task_id/)
-  assert.equal(calls.length, 0)
-})
-
-test('a tool without ticket_number keeps refusing the ticket reference', async () => {
-  const { calls, tools } = spyComments(true, { ticketNumber: false })
+  const { calls, tools } = spyComments({ taskIdTicketReference: false })
   const { result } = await call(tools, { action: 'list', input: { task_id: 'HTPR-7894' } })
   assert.equal(result.isError, true)
   assert.equal(calls.length, 0)
