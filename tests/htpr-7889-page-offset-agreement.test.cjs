@@ -67,7 +67,7 @@ test('page 2 with an agreeing offset inside input is accepted', async () => {
 
 test('page 2 with an offset that points somewhere else is still refused', async () => {
   const { calls, tasks } = spyTasks()
-  for (const fields of [{ offset: 3 }, { offset: 15 }, { input: { project_id: 15, offset: 10 } }]) {
+  for (const fields of [{ offset: 3 }, { offset: 15 }, { input: { project_id: 15, offset: 10 } }, { offset: 15, input: { project_id: 15, offset: 5 } }]) {
     await assert.rejects(tasks.execute({ action: 'list', input: { project_id: 15 }, page: 2, limit: 5, ...fields }, 'fixture-token'), (error) => {
       assert.ok(error instanceof z.ZodError)
       assert.match(error.message, /Pass either page or offset/)

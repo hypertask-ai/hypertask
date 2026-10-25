@@ -186,13 +186,15 @@ export function selectMcpTools(
           if (error instanceof z.ZodError) throw inputIssues(error)
           throw error
         }
-        const requestedOffset = Number(input.offset ?? args.offset)
+        const topLevelOffset = Number(args.offset)
+        const suppliedOffset = input.offset === undefined ? topLevelOffset : Number(input.offset)
         const pageOffset = requestedPage === undefined ? undefined : (requestedPage - 1) * readLimit
-        if (pageOffset !== undefined && requestedOffset !== 0 && requestedOffset !== pageOffset) {
+        const offsets = input.offset === undefined ? [topLevelOffset] : [topLevelOffset, suppliedOffset]
+        if (pageOffset !== undefined && offsets.some((offset) => offset !== 0 && offset !== pageOffset)) {
           throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or offset, not both.' }])
         }
         try {
-          const offset = cursorPaginated ? 0 : pageOffset ?? requestedOffset
+          const offset = cursorPaginated ? 0 : pageOffset ?? suppliedOffset
           if (maximum !== undefined) {
             const prefix = supportsOffset || cursorPaginated ? 0 : offset
             const lookahead = !supportsOffset && !supportsCursor ? 1 : 0
