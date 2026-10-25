@@ -4,6 +4,7 @@ import parameterDocs from './config/descriptions/parameters.json'
 import { hasDataPermission, hasManagementReadPermission, hasManagementWritePermission, type ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { PortableTool } from './stateless-http'
 import { CONSOLIDATED_OUTPUT_SCHEMA, formatToolResponse } from './tool-response'
+import { nearestFieldName } from './nearest-field'
 import { createMetaTools } from './deferred-tools'
 import { annotationsForActions } from './config/tool-annotations'
 import type { AgentRole } from '@/lib/mcp/agents/scopes'
@@ -141,6 +142,7 @@ export function selectMcpTools(
   topLevelInputFields = false,
   inputWrapperFields = false,
   ticketNumberShapeHint = false,
+  nearestFieldHint = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -226,7 +228,10 @@ export function selectMcpTools(
       ...(topLevelInputFields || inputWrapperFields ? {
         normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, pageAlias }),
       } : {}),
-      ...(ticketNumberShapeHint ? { errorHints: { ticketNumberShape: true } } : {}),
+      ...(ticketNumberShapeHint || nearestFieldHint ? { errorHints: {
+        ...(ticketNumberShapeHint ? { ticketNumberShape: true } : {}),
+        ...(nearestFieldHint ? { nearestField: true } : {}),
+      } } : {}),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
         const rawArgs = (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
         const args = parameters.parse(raw)
@@ -238,7 +243,16 @@ export function selectMcpTools(
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
-        const inputIssues = (error: z.ZodError) => new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] })))
+        const inputIssues = (error: z.ZodError) => new z.ZodError(error.issues.map((issue) => {
+          const suggestions = nearestFieldHint && issue.code === 'unrecognized_keys'
+            ? issue.keys.map((key) => nearestFieldName(key, Object.keys(tool.parameters.shape))).filter((field): field is string => field !== undefined)
+            : []
+          return {
+            ...issue,
+            path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)],
+            ...(suggestions.length ? { fieldHint: `Did you mean ${suggestions.join(' or ')}?` } : {}),
+          }
+        }))
         const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined
         if (requestedPage !== undefined && input.cursor !== undefined) {
           throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or cursor, not both.' }])

@@ -37,7 +37,7 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   ),
 ])
 
-export function actionableToolError(error: unknown, hints: { ticketNumberShape?: boolean } = {}): string {
+export function actionableToolError(error: unknown, hints: { ticketNumberShape?: boolean; nearestField?: boolean } = {}): string {
   if (error instanceof z.ZodError) {
     return error.issues.slice(0, 4).map((issue) => {
       const field = issue.path.join('.') || 'input'
@@ -51,7 +51,8 @@ export function actionableToolError(error: unknown, hints: { ticketNumberShape?:
         const boardHint = issue.keys.some((key) => ['board_id', 'boardId', 'board'].includes(key))
           ? ' This tool calls the board field project_id.'
           : ''
-        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}`
+        const fieldHint = hints.nearestField ? (issue as typeof issue & { fieldHint?: unknown }).fieldHint : undefined
+        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}${typeof fieldHint === 'string' && fieldHint.trim() ? ` ${fieldHint}` : ''}`
       }
       if (field === 'input.user_id.user_ids.agent_id.assign_self') {
         return issue.message.replace(/\.$/, '')
@@ -96,7 +97,7 @@ function redactModelFacingMessage(raw: string): string {
   return message.replace(/(?:Bearer\s+\S+|\b(?:htmk_|htk_)[\w-]+|\beyJ[\w.-]+)/gi, '[redacted]').slice(0, 600)
 }
 
-export function toolErrorResult(error: unknown, hints: { ticketNumberShape?: boolean } = {}): CallToolResult {
+export function toolErrorResult(error: unknown, hints: { ticketNumberShape?: boolean; nearestField?: boolean } = {}): CallToolResult {
   return { content: [{ type: 'text', text: actionableToolError(error, hints) }], isError: true }
 }
 

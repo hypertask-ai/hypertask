@@ -33,7 +33,7 @@ export type PortableTool = {
   annotations?: ToolAnnotations
   inputSchema?: Record<string, unknown>
   normalizeArguments?: (args: unknown) => unknown
-  errorHints?: { ticketNumberShape?: boolean }
+  errorHints?: { ticketNumberShape?: boolean; nearestField?: boolean }
   outputSchema?: Record<string, unknown>
   input_examples?: unknown[]
   hidden?: boolean
