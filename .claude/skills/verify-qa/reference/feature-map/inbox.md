@@ -18,6 +18,13 @@ and that archiving/undo works.
 
 - Opening a row by mouse click dropped `?inboxFlow=true` (counter "3 / 3" instead of "1 / 3"), so sending a comment saved but stayed on the ticket ([HTPR-7655](https://app.hypertask.ai/detail/project-15/7655)). Keyboard Enter still worked, so always test the click path.
 
+- Bulk archive used one or two database writes per selected item and could
+  exceed the transaction deadline ([HTPR-7953](https://app.hypertask.ai/detail/project-15/7953)).
+  Check a large selection through `POST /api/notifications/(un)archiveBulk`,
+  then archive two QA-created reminders, reload, undo and reload again.
+  Missing notification IDs must not fail the batch; other users' rows and
+  deleted notifications must stay unchanged.
+
 - Undo restore skipping rows that are missing by the time undo runs
   ([HTPR-6527](https://app.hypertask.ai/detail/project-15/6527), "skip missing inbox rows during undo restore").
 - Archive undo not taking effect immediately, fixed once already

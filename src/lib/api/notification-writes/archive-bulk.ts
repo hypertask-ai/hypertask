@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import type { Status } from "@prisma/client";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7953_INBOX_BULK_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7953-inbox-bulk-archive";
 
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -37,8 +39,25 @@ const route = taskWriteRoute({
     }
 
     const restoreInbox = archiveStatus === "Normal";
+    const batchArchive = await isFeatureEnabled(HTPR_7953_INBOX_BULK_ARCHIVE_FLAG, session.userId);
 
     const result = await prisma.$transaction(async (tx) => {
+      if (batchArchive) {
+        const notificationIds = validEntries.map(({ notificationId }) => notificationId);
+        const taskIds = validEntries.filter(({ taskId }) => taskId).map(({ taskId }) => taskId);
+        const archivedAt = restoreInbox ? null : new Date();
+        const archived = await tx.notification.updateMany({
+          where: { id: { in: notificationIds }, userId: session.userId, status: { not: "Deleted" } },
+          data: { status: archiveStatus, archivedAt },
+        });
+        const siblings = !restoreInbox && taskIds.length > 0
+          ? await tx.notification.updateMany({
+            where: { taskId: { in: taskIds }, id: { notIn: notificationIds }, userId: session.userId, status: { not: "Deleted" } },
+            data: { status: "Archive", archivedAt },
+          })
+          : { count: 0 };
+        return { totalArchived: archived.count, totalDeleted: siblings.count };
+      }
       const operations = validEntries.map(({ notificationId, taskId }) => {
         const archivedAt = restoreInbox ? null : new Date();
         const ops = [
