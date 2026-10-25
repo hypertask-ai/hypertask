@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { BLOCKED_INBOX_DISMISSAL_MESSAGE, HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { HTPR_7691_IDEMPOTENT_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7691-idempotent-archive";
 
@@ -58,30 +58,35 @@ const route = taskWriteRoute({
           orderBy: { archivedAt: "desc" },
         });
         if (intent !== "archive" && archived) {
-          if (archived.type === "TaskReminder" && archived.message === "htpr-7840-blocked-inbox-dismissal") {
-            return tx.notification.delete({ where: { id: archived.id } });
-          }
           await tx.notification.updateMany({
             where: { taskId: task.id, userId, agentId: null, status: "Archive", archivedAt: archived.archivedAt },
             data: { status: "Normal", archivedAt: null },
           });
+          const marker = await tx.notification.findFirst({
+            where: { taskId: task.id, userId, agentId: null, message: BLOCKED_INBOX_DISMISSAL_MESSAGE },
+          });
+          if (marker) await tx.notification.delete({ where: { id: marker.id } });
           return { ...archived, status: "Normal", archivedAt: null };
         }
-        const updated = await tx.notification.updateMany({
+        await tx.notification.updateMany({
           where: { taskId: task.id, userId, agentId: null, status: "Normal" },
           data: { status: "Archive", archivedAt: timeNow },
         });
-        if (updated.count) {
-          return tx.notification.findFirst({
-            where: { taskId: task.id, userId, agentId: null, status: "Archive", archivedAt: timeNow },
-          });
-        }
-        if (archived) return archived;
+        const marker = archived?.type === "TaskReminder" && archived.message === BLOCKED_INBOX_DISMISSAL_MESSAGE
+          ? archived
+          : await tx.notification.findFirst({
+              where: {
+                taskId: task.id, userId, agentId: null, status: "Archive",
+                type: "TaskReminder", message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
+                archivedAt: { gte: task.waitingOnSetAt ?? task.createdAt },
+              },
+            });
+        if (marker) return marker;
         return tx.notification.create({
           data: {
             taskId: task.id, projectId: task.projectId, userId,
             type: "TaskReminder", status: "Archive", archivedAt: timeNow, seen: true,
-            message: "htpr-7840-blocked-inbox-dismissal",
+            message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
           },
         });
       });
