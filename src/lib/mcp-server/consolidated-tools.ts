@@ -69,10 +69,21 @@ function inputSchema(tool: PortableTool, action: Action, boardAlias = false): Re
 const TOP_LEVEL_FIELDS = new Set(['action', 'input', 'response_format', 'limit', 'offset', 'page'])
 const CALL_WRAPPER_FIELDS = ['response_format', 'limit', 'offset', 'page']
 
-type PlacementOptions = { topLevelInputFields: boolean; inputWrapperFields: boolean; pageAlias: boolean }
+type PlacementOptions = { topLevelInputFields: boolean; inputWrapperFields: boolean; taskIdTicketReference: boolean; pageAlias: boolean }
 
 function placementConflict(key: string): z.ZodError {
   return new z.ZodError([{ code: 'custom', path: ['input', key], message: `Pass ${key} inside input or at the top level, not both with different values.` }])
+}
+
+const TICKET_REFERENCE = /^[A-Z0-9]{2,}-\d+$/i
+
+function ticketReferenceFromTaskId(value: unknown): string | string[] | undefined {
+  const reference = (entry: unknown) => typeof entry === 'string' && TICKET_REFERENCE.test(entry.trim()) ? entry.trim().toUpperCase() : undefined
+  if (Array.isArray(value)) {
+    const references = value.map(reference)
+    return references.length && references.every((entry): entry is string => entry !== undefined) ? references : undefined
+  }
+  return reference(value)
 }
 
 function normalizeInputPlacement(
@@ -109,6 +120,14 @@ function normalizeInputPlacement(
       delete input[key]
     }
   }
+  if (options.taskIdTicketReference && documented.has('task_id') && documented.has('ticket_number') && input.task_id !== undefined) {
+    const reference = ticketReferenceFromTaskId(input.task_id)
+    if (reference !== undefined) {
+      if (input.ticket_number !== undefined && JSON.stringify(input.ticket_number) !== JSON.stringify(reference)) throw placementConflict('task_id')
+      input.ticket_number = reference
+      delete input.task_id
+    }
+  }
   placed.input = input
   return placed
 }
@@ -141,6 +160,7 @@ export function selectMcpTools(
   topLevelInputFields = false,
   inputWrapperFields = false,
   ticketNumberShapeHint = false,
+  taskIdTicketReference = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -223,8 +243,8 @@ export function selectMcpTools(
       ...(v2 ? { annotations: annotationsForActions(Object.values(actions)) } : {}),
       outputSchema: CONSOLIDATED_OUTPUT_SCHEMA,
       input_examples: definition.input_examples.filter((example) => names.includes((example as { action: string }).action)),
-      ...(topLevelInputFields || inputWrapperFields ? {
-        normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, pageAlias }),
+      ...(topLevelInputFields || inputWrapperFields || taskIdTicketReference ? {
+        normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, taskIdTicketReference, pageAlias }),
       } : {}),
       ...(ticketNumberShapeHint ? { errorHints: { ticketNumberShape: true } } : {}),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
