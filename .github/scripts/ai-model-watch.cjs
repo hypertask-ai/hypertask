@@ -34,11 +34,32 @@ async function fileFindings(report, { fetchImpl = fetch, token = process.env.HYP
   const results = [];
   for (const finding of report.findings) {
     const ticket = ticketFor(finding);
-    const search = await api(`search?project_id=15&status=open&limit=50&q=${encodeURIComponent(ticket.marker)}`);
-    if (!Array.isArray(search.tasks) || search.partial || !Number.isInteger(search.total) || search.total !== search.tasks.length || search.nextCursor) {
-      throw new Error("Ticket search is incomplete; refusing duplicate creation");
-    }
-    if (search.tasks.some((task) => task.title === ticket.title)) {
+    let cursor;
+    let total;
+    let searched = 0;
+    let exists = false;
+    const cursors = new Set();
+    do {
+      const search = await api(`search?project_id=15&status=open&limit=50&q=${encodeURIComponent(ticket.marker)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      if (!Array.isArray(search.tasks) || search.partial || !Number.isInteger(search.total) || search.total < 0 ||
+        (total !== undefined && search.total !== total) ||
+        (search.nextCursor != null && (typeof search.nextCursor !== "string" || !search.nextCursor.trim()))) {
+        throw new Error("Ticket search is incomplete; refusing duplicate creation");
+      }
+      total = search.total;
+      searched += search.tasks.length;
+      if (searched > total) throw new Error("Ticket search is incomplete; refusing duplicate creation");
+      if (search.tasks.some((task) => task.title === ticket.title)) {
+        exists = true;
+        break;
+      }
+      cursor = search.nextCursor;
+      if (cursor ? !search.tasks.length || cursors.has(cursor) : searched !== total) {
+        throw new Error("Ticket search is incomplete; refusing duplicate creation");
+      }
+      if (cursor) cursors.add(cursor);
+    } while (cursor);
+    if (exists) {
       results.push({ title: ticket.title, action: "exists" });
       continue;
     }
@@ -54,5 +75,5 @@ module.exports = { ticketFor, fileFindings };
 if (require.main === module) {
   fileFindings(JSON.parse(fs.readFileSync(process.argv[2], "utf8")))
     .then((results) => console.log(JSON.stringify(results, null, 2)))
-    .catch(() => { console.error("AI model ticket filing failed; check discovery, credentials and API availability before retrying"); process.exitCode = 1; });
+    .catch((error) => { console.error(`AI model ticket filing failed: ${error.message}`); process.exitCode = 1; });
 }
