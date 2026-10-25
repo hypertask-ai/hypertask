@@ -9,7 +9,7 @@ export function callerCanFix(refusal: FeedbackRefusal): boolean {
   return Boolean(refusal.field);
 }
 
-export function refusalFromZodIssues(issues: readonly { code: string; path?: readonly (string | number)[]; keys?: readonly string[]; options?: readonly unknown[] }[]): FeedbackRefusal {
+export function refusalFromZodIssues(issues: readonly { code: string; path?: readonly PropertyKey[]; keys?: readonly string[]; options?: readonly unknown[] }[]): FeedbackRefusal {
   const issue = issues[0];
   if (!issue) return {};
   const field = issue.code === "unrecognized_keys" ? issue.keys?.[0] : issue.path?.filter((part) => typeof part === "string").join(".") || undefined;
