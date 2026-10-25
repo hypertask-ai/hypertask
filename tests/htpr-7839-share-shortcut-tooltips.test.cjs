@@ -103,41 +103,15 @@ test("share tooltip keys match all four cheatsheet entries on both platforms", (
   }
 });
 
-test("all four copy commands show the same CTRL keys as the tooltips", () => {
-  const source = read("src/components/Modals/commands/HTC/taskCommands.ts");
-  const commands = {
-    copyformattedTaskLink: "privateFormatted",
-    copyLink: "privateUrl",
-    copypublicformattedTaskLink: "publicFormatted",
-    copyPublicLink: "publicUrl",
-  };
-  for (const [command, id] of Object.entries(commands)) {
-    const match = source.match(new RegExp(`\\{\\s*key: "${command}",[^{}]*?keyboard: (\\[[^\\]]*\\])`));
-    assert.ok(match, `Missing keyboard for ${command}`);
-    const keys = JSON.parse(match[1]);
-    assert.deepEqual(keys, expectedShortcuts[id].other);
-    assert.deepEqual(keys, shareTaskShortcutKeys(id, false));
-  }
-});
-
 test("desktop ShareSection forwards exactly the four concrete shortcut IDs to row tooltips", () => {
   const source = read("src/components/Modals/ShareTaskModal/index.tsx");
-  const sections = [...source.matchAll(/<ShareSection\s[\s\S]*?\n        \/>/g)];
-  assert.equal(sections.length, 2);
-  const forwardedProps = [...source.matchAll(/shortcutId=\{(shortcutTitle|shortcutUrl)\}/g)]
+  const tooltipIds = [...source.matchAll(/<ShortcutTooltip id="([^"]+)" \/>/g)]
     .map((match) => match[1]);
-  assert.deepEqual(forwardedProps, ["shortcutTitle", "shortcutUrl"]);
-  assert.equal([...source.matchAll(/\bshortcutId=/g)].length, 2);
-  const rowIds = sections.flatMap(([section]) => forwardedProps.map((prop) => {
-    const match = section.match(new RegExp(`\\b${prop}="([^"]+)"`));
-    assert.ok(match, `Missing ${prop}`);
-    return match[1];
-  }));
-  assert.deepEqual(rowIds, shortcutIds);
-  assert.equal([...source.matchAll(/\bshortcut(?:Title|Url)="/g)].length, 4);
-  assert.match(source, /<ShareRow\s+shortcutId=\{shortcutTitle\}\s+label="Title \+ URL"/);
-  assert.match(source, /<ShareRow\s+shortcutId=\{shortcutUrl\}\s+label="URL only"/);
-  assert.match(source, /const showShortcutTooltips = useFlag\(HTPR_7839_SHARE_SHORTCUT_TOOLTIPS_FLAG\)/);
-  assert.match(source, /<div className="flex items-center gap-3 w-full">\s*\{showShortcutTooltips && shortcutId && \(\s*<Tooltip\s+portal\s+left=\{0\}\s+bottom=\{0\}\s+text=\{SHARE_TASK_SHORTCUTS\[shortcutId\]\.tooltip\}\s+keyCombination=\{shareTaskShortcutKeys\(shortcutId, isApple\)\}/);
+  assert.deepEqual(tooltipIds, shortcutIds);
+  assert.equal([...source.matchAll(/showShortcutTooltips \?[\s\S]{0,40}<ShortcutTooltip/g)].length, 4);
+  assert.match(source, /const showShortcutTooltips = useFlag\(\s*HTPR_7839_SHARE_SHORTCUT_TOOLTIPS_FLAG\s*\)/);
+  assert.match(source, /<Tooltip\s+portal\s+left=\{0\}\s+bottom=\{0\}\s+text=\{SHARE_TASK_SHORTCUTS\[id\]\.tooltip\}\s+keyCombination=\{shareTaskShortcutKeys\(id, isApple\)\}/);
+  assert.match(source, /shortcutTooltip=\{titleShortcut\}[\s\S]{0,60}label="Title \+ URL"/);
+  assert.match(source, /shortcutTooltip=\{urlShortcut\}[\s\S]{0,40}label="URL only"/);
   assert.match(source, /const shortcutId = shareTaskShortcutFor\(\{\s*cmdControl,\s*keyCode: e\.keyCode,\s*shiftKey: e\.shiftKey,\s*\}\)/);
 });

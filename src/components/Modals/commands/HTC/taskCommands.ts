@@ -357,14 +357,14 @@ export const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => 
     {
       key: "copyformattedTaskLink",
       name: "Copy private task link (title + URL)",
-      keyboard: ["CTRL", ";"],
+      keyboard: ["CTRL", ":"],
       commandMode: CommandMode.CopyFormattedURLTask,
       keywords: "copy private task link title url formatted share internal address",
     },
     {
       key: "copyLink",
       name: "Copy private task URL",
-      keyboard: ["CTRL", "SHIFT", ";"],
+      keyboard: ["CTRL", "SHIFT", ":"],
       commandMode: CommandMode.CopyUrlTask,
       keywords: "copy private task ticket issue url link address share internal",
     },

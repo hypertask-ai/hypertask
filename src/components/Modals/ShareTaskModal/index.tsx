@@ -24,7 +24,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import axios from "axios";
 import Tooltip from "@/components/Common/Tooltip";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7839_SHARE_SHORTCUT_TOOLTIPS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7839_SHARE_SHORTCUT_TOOLTIPS_FLAG } from "@/lib/flags/definitions/htpr-7839-share-shortcut-tooltips";
 import {
   SHARE_TASK_SHORTCUTS,
   shareTaskShortcutFor,
@@ -57,6 +57,9 @@ const ShareTaskModal: React.FC<TProps> = ({ closeHandler }) => {
     copyTaskURL,
   } = useCopyURL({ plainTextOnly: mbl });
   const isApple = useDeviceContext();
+  const showShortcutTooltips = useFlag(
+    HTPR_7839_SHARE_SHORTCUT_TOOLTIPS_FLAG
+  );
 
   const closeMobileSheet = useCallback(
     (fromHistory = false) => {
@@ -245,8 +248,14 @@ const ShareTaskModal: React.FC<TProps> = ({ closeHandler }) => {
       <ModalBody className="p-0 rounded-b-[5px]">
         <ShareSection
           type="private"
-          shortcutTitle="privateFormatted"
-          shortcutUrl="privateUrl"
+          titleShortcut={
+            showShortcutTooltips ? (
+              <ShortcutTooltip id="privateFormatted" />
+            ) : null
+          }
+          urlShortcut={
+            showShortcutTooltips ? <ShortcutTooltip id="privateUrl" /> : null
+          }
           icon={<Lock strokeWidth={1.75} size={13} />}
           title="PRIVATE (TEAM ONLY)"
           titlePlusUrlText={getPrivateFormattedText()}
@@ -265,8 +274,14 @@ const ShareTaskModal: React.FC<TProps> = ({ closeHandler }) => {
         />
         <ShareSection
           type="public"
-          shortcutTitle="publicFormatted"
-          shortcutUrl="publicUrl"
+          titleShortcut={
+            showShortcutTooltips ? (
+              <ShortcutTooltip id="publicFormatted" />
+            ) : null
+          }
+          urlShortcut={
+            showShortcutTooltips ? <ShortcutTooltip id="publicUrl" /> : null
+          }
           icon={<Globe strokeWidth={1.75} size={13} />}
           title="PUBLIC (ANYONE WITH LINK)"
           titlePlusUrlText={getPublicFormattedText()}
@@ -401,11 +416,24 @@ const MobileShareRow = ({
   );
 };
 
+const ShortcutTooltip = ({ id }: { id: ShareShortcutId }) => {
+  const isApple = useDeviceContext();
+  return (
+    <Tooltip
+      portal
+      left={0}
+      bottom={0}
+      text={SHARE_TASK_SHORTCUTS[id].tooltip}
+      keyCombination={shareTaskShortcutKeys(id, isApple)}
+    />
+  );
+};
+
 const ShareSection = ({
   icon,
   title,
-  shortcutTitle,
-  shortcutUrl,
+  titleShortcut,
+  urlShortcut,
   titlePlusUrlText,
   urlOnlyText,
   onCopyTitlePlusUrl,
@@ -414,8 +442,8 @@ const ShareSection = ({
   type: "private" | "public";
   icon: React.ReactNode;
   title: string;
-  shortcutTitle: ShareShortcutId;
-  shortcutUrl: ShareShortcutId;
+  titleShortcut: React.ReactNode;
+  urlShortcut: React.ReactNode;
   titlePlusUrlText: string;
   urlOnlyText: string;
   onCopyTitlePlusUrl: () => void;
@@ -429,13 +457,13 @@ const ShareSection = ({
       </div>
       <div className="flex flex-col gap-2">
         <ShareRow
-          shortcutId={shortcutTitle}
+          shortcutTooltip={titleShortcut}
           label="Title + URL"
           value={titlePlusUrlText}
           onCopy={onCopyTitlePlusUrl}
         />
         <ShareRow
-          shortcutId={shortcutUrl}
+          shortcutTooltip={urlShortcut}
           label="URL only"
           value={urlOnlyText}
           onCopy={onCopyUrlOnly}
@@ -449,15 +477,13 @@ const ShareRow = ({
   label,
   value,
   onCopy,
-  shortcutId,
+  shortcutTooltip,
 }: {
   label: string;
   value: string;
   onCopy: () => void;
-  shortcutId?: ShareShortcutId;
+  shortcutTooltip?: React.ReactNode;
 }) => {
-  const showShortcutTooltips = useFlag(HTPR_7839_SHARE_SHORTCUT_TOOLTIPS_FLAG);
-  const isApple = useDeviceContext();
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     onCopy();
@@ -470,15 +496,7 @@ const ShareRow = ({
   }, [copied]);
   return (
     <div className="flex items-center gap-3 w-full">
-      {showShortcutTooltips && shortcutId && (
-        <Tooltip
-          portal
-          left={0}
-          bottom={0}
-          text={SHARE_TASK_SHORTCUTS[shortcutId].tooltip}
-          keyCombination={shareTaskShortcutKeys(shortcutId, isApple)}
-        />
-      )}
+      {shortcutTooltip}
       <span className="w-[76px] shrink-0 text-content text-text-light-gray">
         {label}
       </span>
