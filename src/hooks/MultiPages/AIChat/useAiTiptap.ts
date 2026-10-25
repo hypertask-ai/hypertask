@@ -87,7 +87,7 @@ const useTiptapForAI = ({
           () => projectIdRef.current
         ),
       }),
-      SlashCommands("ai-chat"),
+      SlashCommands("ai-chat", undefined, () => projectIdRef.current),
       DisableEnter,
       SafeSplitBlock,
       LocalWritingAssistance.configure({

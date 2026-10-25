@@ -33,7 +33,7 @@ test("Agent Chat skill UI stays available with typed transport and comment skill
     stubModule("src/hooks/useFlag.tsx", {
       useFlag: (key) => {
         flagChecks.add(key);
-        assert.ok(["htpr-6925-typed-api-client", "htpr-7480-comment-skill-run", "htpr-7393-comment-inline-ai"].includes(key), "Skill availability is not flag-gated");
+        assert.ok(["htpr-6925-typed-api-client", "htpr-7480-comment-skill-run", "htpr-7393-comment-inline-ai", "htpr-7879-skill-menu"].includes(key), "Skill availability is not flag-gated");
         return false;
       },
     });
@@ -129,7 +129,7 @@ test("Agent Chat skill UI stays available with typed transport and comment skill
     });
     assert.match(container.textContent, /Unslop/);
     assert.equal(fetches, 1);
-    assert.deepEqual([...flagChecks].sort(), ["htpr-7393-comment-inline-ai", "htpr-7480-comment-skill-run"], "Only comment execution flags are read without hiding slash skills");
+    assert.deepEqual([...flagChecks].sort(), ["htpr-7393-comment-inline-ai", "htpr-7480-comment-skill-run", "htpr-7879-skill-menu"], "Execution and project-scoping flags do not hide slash skills");
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     dom?.window.close();
