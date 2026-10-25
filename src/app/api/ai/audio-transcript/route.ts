@@ -72,14 +72,10 @@ async function transcribeAudio(
     : null;
   const language = resolveDictationLanguage(prefs?.dictationLanguage);
 
-<<<<<<< HEAD
   return transcribeAudioFile(provider, file, {
-    language, tags,
+    language, tags, teamId: context.teamId,
     usage: { userId: context.userId, teamId: context.teamId, projectId: context.projectId },
   });
-=======
-  return transcribeAudioFile(provider, file, { language, tags, teamId: context.teamId });
->>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
 }
 
 async function improveTranscript(

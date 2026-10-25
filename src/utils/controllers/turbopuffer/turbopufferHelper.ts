@@ -3,11 +3,8 @@ import { createHash } from "crypto";
 import { TextNode } from "node-html-parser";
 
 import prisma from "@/lib/prisma";
-<<<<<<< HEAD
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
-=======
 import { embeddingAuthorization, resolveTeamAiFunding } from "@/lib/ai/teamAiFunding";
->>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   parseTicketSearchQuery,
@@ -398,21 +395,22 @@ export async function embedTexts(texts: string[], teamId?: string | null): Promi
   const auth = embeddingAuthorization(decision, process.env.TURBOPUFFER_EMBEDDINGS_API_KEY);
 
   const inputs = texts.map(toEmbeddingInput);
-  if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], apiKey);
-  return embedInputs(inputs, apiKey);
+  if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], auth);
+  return embedInputs(inputs, auth);
 }
 
 const inFlightSingleEmbeddings = new Map<string, Promise<number[][]>>();
 
-function shareInFlightEmbedding(input: string, apiKey: string) {
-  const running = inFlightSingleEmbeddings.get(input);
+function shareInFlightEmbedding(input: string, auth: ReturnType<typeof embeddingAuthorization>) {
+  const key = JSON.stringify([input, auth.apiKey, auth.endpoint, auth.model]);
+  const running = inFlightSingleEmbeddings.get(key);
   if (running) return running;
-  const started = embedInputs([input], apiKey).finally(() => inFlightSingleEmbeddings.delete(input));
-  inFlightSingleEmbeddings.set(input, started);
+  const started = embedInputs([input], auth).finally(() => inFlightSingleEmbeddings.delete(key));
+  inFlightSingleEmbeddings.set(key, started);
   return started;
 }
 
-async function embedInputs(inputs: string[], apiKey: string) {
+async function embedInputs(inputs: string[], auth: ReturnType<typeof embeddingAuthorization>) {
   const embeddings: number[][] = [];
 
   for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
@@ -449,49 +447,21 @@ async function embedBatchWithRetry(
     let usage: OpenAIEmbeddingResponse["usage"];
     let succeeded = false;
     try {
-<<<<<<< HEAD
       let response: Response;
       try {
-        response = await fetch(EMBEDDINGS_ENDPOINT, {
+        response = await fetch(endpoint, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: EMBEDDING_MODEL,
+            model,
             input: batch,
           }),
         });
       } catch (networkError) {
         lastError = networkError;
-=======
-      response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          input: batch,
-        }),
-      });
-    } catch (networkError) {
-      lastError = networkError;
-      continue;
-    }
-
-    if (!response.ok) {
-      const responseText = await response
-        .text()
-        .catch(() => response.statusText);
-      const error = new Error(
-        `OpenAI embeddings request failed (${response.status}): ${responseText}`
-      );
-      if (response.status === 429 || response.status >= 500) {
-        lastError = error;
->>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
         continue;
       }
 
@@ -535,7 +505,7 @@ async function embedBatchWithRetry(
       return batchEmbeddings;
     } finally {
       await logAiUsage({
-        userId: null, provider: "gateway-embeddings", model: EMBEDDING_MODEL, feature: "embeddings",
+        userId: null, provider: "gateway-embeddings", model, feature: "embeddings",
         outcome: succeeded ? "ok" : "failed", inputTokens: usage?.prompt_tokens, totalTokens: usage?.total_tokens,
         costUsd: null, latencyMs: Date.now() - startedAt,
       });

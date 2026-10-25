@@ -9,11 +9,8 @@ export { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 export type TranscribeOptions = {
   language?: string;
   tags?: string[];
-<<<<<<< HEAD
   usage?: { userId: number; teamId: string | null; projectId: number };
-=======
   teamId?: string | null;
->>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
 };
 
 export class DictationAudioTooLargeError extends Error {

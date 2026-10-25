@@ -320,13 +320,11 @@ async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
       ? result.output.followup.trim() : undefined;
     return NextResponse.json({ questions, ...(followup ? { followup } : {}) });
   } catch (error) {
-<<<<<<< HEAD
-    if (allowanceFallbacksEnabled && warnIfAllowanceRefused(error, "ai/task-questions")) {
-      return NextResponse.json({ questions: [] });
-=======
     if (error instanceof Error && error.name === "TeamKeyOnlyRefusal") {
       return NextResponse.json({ error: error.message }, { status: 403 });
->>>>>>> b224d2610 (HTPR-7844 [FEATURE] Keep key-only teams on their own AI keys)
+    }
+    if (allowanceFallbacksEnabled && warnIfAllowanceRefused(error, "ai/task-questions")) {
+      return NextResponse.json({ questions: [] });
     }
     if (NoOutputGeneratedError.isInstance(error) ||
       (NoObjectGeneratedError.isInstance(error) && !error.text?.trim())) {
