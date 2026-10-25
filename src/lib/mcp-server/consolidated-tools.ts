@@ -58,12 +58,18 @@ function inputSchema(tool: PortableTool, action: Action): Record<string, unknown
   return schema
 }
 
-function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool): Record<string, unknown> {
+function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool, taskNumberAlias = false): Record<string, unknown> {
   const shape = tool.parameters.shape
   const args = Object.fromEntries(Object.entries(input).map(([key, value]) => {
     const original = Object.keys(shape).find((field) => RENAMED_PARAMETERS[field] === key) ?? key
     return [original, value]
   }))
+  if (taskNumberAlias && 'ticket_number' in shape && 'task_number' in args) {
+    const alias = args.task_number
+    delete args.task_number
+    if (args.ticket_number === undefined) args.ticket_number = alias
+    else if (String(args.ticket_number) !== String(alias)) throw new z.ZodError([{ code: 'custom', path: ['task_number'], message: 'Pass either ticket_number or task_number, not both with different values.' }])
+  }
   if (action.legacy_action) args.action = action.legacy_action
   return args
 }
@@ -75,6 +81,7 @@ export function selectMcpTools(
   v2 = false,
   flatSchema = false,
   pageAlias = false,
+  taskNumberAlias = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -162,7 +169,7 @@ export function selectMcpTools(
         const tool = byName.get(action.tool)!
         const oldArgs = raw as Record<string, unknown>
         const oldInput = Object.fromEntries(Object.keys(legacyShape).filter((key) => oldArgs[key] !== undefined).map((key) => [key, oldArgs[key]]))
-        const input = { ...oldInput, ...legacyArguments(args.input, action, tool) }
+        const input = { ...oldInput, ...legacyArguments(args.input, action, tool, taskNumberAlias) }
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape

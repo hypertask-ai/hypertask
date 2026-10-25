@@ -86,7 +86,7 @@
   "task_identifier": "Numeric ticket id or full ticket key such as HTPR-1234 for timer actions.",
   "team_id": "Team or workspace identifier discovered through user_context.",
   "text": "Comment, draft or related-search text; comment formatting uses content_type.",
-  "ticket_number": "Stable full ticket key such as HTPR-1234; tasks get accepts an array of keys.",
+  "ticket_number": "Stable full ticket key such as HTPR-1234; tasks get accepts an array of keys. task_number is accepted as an alias.",
   "title": "Human-readable title of the ticket, board, column, page or view.",
   "to": "End date of the time-report range in ISO 8601 form.",
   "token": "Signed account MCP token to revoke; never include it in user-visible output.",
