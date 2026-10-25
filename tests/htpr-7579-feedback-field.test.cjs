@@ -31,7 +31,7 @@ function setup({ plain = true } = {}) {
     '@/lib/prisma': { __esModule: true, default: db },
     './enabled': { aiFeedbackEnabled: async () => true },
     './rateLimit': { reserveFeedbackAttempt: async () => true, reserveFeedbackQuota: async () => true },
-    '@/lib/flags': { isFeatureEnabled: async () => plain },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key === 'htpr-7887-validation-refusals' ? false : plain },
     '@/utils/controllers/tasks/createTaskCore': { createProvisionedTaskCore: async options => {
       const task = { ...options, id: created.length + 1, ticketNumber: `HTPR-${8001 + created.length}`, uniqueIndex: 8001 + created.length }
       created.push(task)
@@ -69,7 +69,7 @@ async function observe(error, options) {
   assert.equal(f.created.length, 1)
   assert.equal(f.reports.length, 1)
   assert.equal(f.reports[0][1], 42)
-  assert.deepEqual(f.reports[0][2], { origin: 'automatic' })
+  assert.deepEqual(f.reports[0][2], { origin: 'automatic', agentName: 'Fable' })
   const filed = JSON.stringify(f.created)
   for (const secret of [...Object.values(privateArgs), 'private-auth-token', 'private-error-message']) assert.equal(filed.includes(secret), false, secret)
   return { ...f, input: f.reports[0][0], description: f.created[0].description }

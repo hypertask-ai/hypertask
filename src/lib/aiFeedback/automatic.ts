@@ -11,7 +11,7 @@ function fileAutomaticFeedback(input: AutomaticFeedbackInput, userId?: number, a
   for (const field of ['tool', 'client', 'errorCode', 'field'] as const) {
     if (!automaticFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
   }
-  return import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId, { origin: 'automatic', agentId, agentName })).catch(() => {})
+  return import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId, { origin: 'automatic', ...(agentId ? { agentId } : {}), ...(agentName ? { agentName } : {}) })).catch(() => {})
 }
 
 export function queueAiFeedback(input: AutomaticFeedbackInput, userId?: number, agentId?: string | null, agentName?: string | null): void {
