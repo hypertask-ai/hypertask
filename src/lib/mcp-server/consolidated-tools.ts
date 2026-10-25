@@ -58,12 +58,18 @@ function inputSchema(tool: PortableTool, action: Action): Record<string, unknown
   return schema
 }
 
-function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool): Record<string, unknown> {
+function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool, taskNumberAlias = false): Record<string, unknown> {
   const shape = tool.parameters.shape
   const args = Object.fromEntries(Object.entries(input).map(([key, value]) => {
     const original = Object.keys(shape).find((field) => RENAMED_PARAMETERS[field] === key) ?? key
     return [original, value]
   }))
+  if (taskNumberAlias && 'ticket_number' in shape && 'task_number' in args) {
+    const alias = args.task_number
+    delete args.task_number
+    if (args.ticket_number === undefined) args.ticket_number = alias
+    else if (String(args.ticket_number) !== String(alias)) throw new z.ZodError([{ code: 'custom', path: ['task_number'], message: 'Pass either ticket_number or task_number, not both with different values.' }])
+  }
   if (action.legacy_action) args.action = action.legacy_action
   return args
 }
@@ -74,6 +80,8 @@ export function selectMcpTools(
   caller: ToolCaller = {},
   v2 = false,
   flatSchema = false,
+  pageAlias = false,
+  taskNumberAlias = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -117,6 +125,7 @@ export function selectMcpTools(
       response_format: z.enum(['concise', 'detailed']).default('concise').describe('Concise summarizes reads; detailed includes full fields. Writes always retain their receipts.'),
       limit: z.number().int().min(1).max(50).default(20).describe('Maximum rows per read collection; default 20, maximum 50.'),
       offset: z.number().int().min(0).default(0).describe('Rows to skip for paginated or locally bounded reads; default 0. Prefer an input cursor when supplied.'),
+      ...(pageAlias ? { page: z.number().int().min(1).optional().describe('1-based page number; page 1 is the first page. An offset that equals the page start is accepted; any other offset is refused.') } : {}),
     }).strict()
     const baseSchema = z.toJSONSchema(parameters, { target: 'draft-7', io: 'input' }) as Record<string, unknown>
     delete baseSchema.$schema
@@ -160,20 +169,40 @@ export function selectMcpTools(
         const tool = byName.get(action.tool)!
         const oldArgs = raw as Record<string, unknown>
         const oldInput = Object.fromEntries(Object.keys(legacyShape).filter((key) => oldArgs[key] !== undefined).map((key) => [key, oldArgs[key]]))
-        const input = { ...oldInput, ...legacyArguments(args.input, action, tool) }
+        const input = { ...oldInput, ...legacyArguments(args.input, action, tool, taskNumberAlias) }
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
+        const inputIssues = (error: z.ZodError) => new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] })))
+        const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined
+        if (requestedPage !== undefined && input.cursor !== undefined) {
+          throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or cursor, not both.' }])
+        }
         const cursorPaginated = supportsCursor && Boolean(input.cursor)
-        const offset = cursorPaginated ? 0 : Number(input.offset ?? args.offset)
         let readLimit = args.limit
+        let maximum: number | undefined
         let endpointCap: number | undefined
         try {
           if (action.read_only && supportsLimit) {
             const requestedLimit = input.limit === undefined ? args.limit : Number(z.object({ limit: tool.parameters.shape.limit }).parse({ limit: input.limit }).limit)
             const limitSchema = z.toJSONSchema(tool.parameters.shape.limit, { unrepresentable: 'any', io: 'input' }) as { maximum?: number }
-            const maximum = limitSchema.maximum ?? 50
+            maximum = limitSchema.maximum ?? 50
             readLimit = Math.min(requestedLimit, args.limit, maximum)
+          }
+        } catch (error) {
+          if (error instanceof z.ZodError) throw inputIssues(error)
+          throw error
+        }
+        const topLevelOffset = Number(args.offset)
+        const suppliedOffset = input.offset === undefined ? topLevelOffset : Number(input.offset)
+        const pageOffset = requestedPage === undefined ? undefined : (requestedPage - 1) * readLimit
+        const offsets = input.offset === undefined ? [topLevelOffset] : [topLevelOffset, suppliedOffset]
+        if (pageOffset !== undefined && offsets.some((offset) => offset !== 0 && offset !== pageOffset)) {
+          throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or offset, not both.' }])
+        }
+        try {
+          const offset = cursorPaginated ? 0 : pageOffset ?? suppliedOffset
+          if (maximum !== undefined) {
             const prefix = supportsOffset || cursorPaginated ? 0 : offset
             const lookahead = !supportsOffset && !supportsCursor ? 1 : 0
             input.limit = Math.min(readLimit + prefix + lookahead, maximum)
@@ -184,9 +213,7 @@ export function selectMcpTools(
           const text = await dispatch(action, validated, token, invocation)
           return formatToolResponse(text, args.response_format, action.read_only, readLimit, offset, supportsOffset || cursorPaginated, endpointCap)
         } catch (error) {
-          if (error instanceof z.ZodError) {
-            throw new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] })))
-          }
+          if (error instanceof z.ZodError) throw inputIssues(error)
           throw error
         }
       },

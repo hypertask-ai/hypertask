@@ -28,6 +28,11 @@ attachment rendered correctly (border, background, light and dark theme if
 the ticket is theme-related). Reload the task and confirm the comment
 persisted with the same formatting.
 
+### Automated evidence
+
+`node --test tests/comment-attachment-background.test.cjs` checks comment attachment surface, border and theme-token source rules; screenshots still prove the rendered appearance.
+`node --test tests/linkable-mention.test.cjs` round-trips task and page mentions as links and person mentions as spans in the rich-text extension; it does not drive the picker or save a comment.
+
 ## Cleanup
 
 Delete any test comment you posted on the account's own board. Comments

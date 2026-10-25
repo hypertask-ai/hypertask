@@ -9,7 +9,6 @@ const root = path.resolve(__dirname, "..");
 const emailFile = "src/utils/controllers/notifications/agentFirstTaskEmail.ts";
 const templateFile = "src/lib/onboarding/emails/agentFirstTask.ts";
 const boardFile = "src/app/[...boardURL]/LandingPage.tsx";
-const flag = "htpr-7028-first-task-email";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 function load(file, stubs = {}) {
@@ -107,9 +106,9 @@ function fixture(options = {}) {
     } },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": {
-      HTPR_7028_FIRST_TASK_EMAIL_FLAG: flag,
       HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: "htpr-7037-shared-email-layout",
       isFeatureEnabled: async (key, userId) => {
+        assert.equal(key, "htpr-7037-shared-email-layout");
         calls.flags.push({ key, userId });
         if (options.flagFailure) throw new Error("Flag read failed");
         return options.enabled !== false;
@@ -124,7 +123,10 @@ function fixture(options = {}) {
     } },
     "@/lib/email/unsubscribe": { unsubscribeHeaders: () => ({ "List-Unsubscribe": "<https://example.invalid/unsubscribe>" }) },
     "@/lib/onboarding/emails/agentFirstTask": templates(),
-    "./emailTemplates": {},
+    "./emailTemplates": load("src/utils/controllers/notifications/emailTemplates.ts", {
+      "./commentPreview": { commentPreview: () => "" },
+      "./mentionText": { mentionQuoteHtml: () => "" },
+    }),
   });
   const schedule = (oldTask = before, task = after, userId = options.userId ?? 985, agentId = "authenticated-agent") =>
     scheduleAgentFirstTaskEmail(oldTask, task, userId, agentId);
@@ -139,7 +141,7 @@ test("agent completion sends once to the board and agent owner", async () => {
   assert.equal(f.calls.sent.length, 1);
   assert.equal(f.calls.sent[0].to, "qa@example.invalid");
   assert.equal(f.calls.sent[0].subject, "Your agent just finished its first task");
-  assert.deepEqual(f.calls.flags, [{ key: flag, userId: 985 }, { key: "htpr-7037-shared-email-layout", userId: 985 }]);
+  assert.deepEqual(f.calls.flags, [{ key: "htpr-7037-shared-email-layout", userId: 985 }]);
   assert.equal(f.store.length, 1);
 });
 
@@ -179,12 +181,13 @@ test("human completion never starts email work even on an agent-created task", a
   assert.equal(f.store.length, 0);
 });
 
-test("flag off sends nothing and does not consume the marker", async () => {
+test("email sends permanently when the shared layout flag is off", async () => {
   const f = fixture({ enabled: false });
   f.schedule();
   await f.settle();
-  assert.equal(f.calls.sent.length, 0);
-  assert.equal(f.store.length, 0);
+  assert.equal(f.calls.sent.length, 1);
+  assert.equal(f.store.length, 1);
+  assert.deepEqual(f.calls.flags, [{ key: "htpr-7037-shared-email-layout", userId: 985 }]);
 });
 
 test("non-owner board and mismatched agent owner email neither user", async () => {
@@ -219,12 +222,13 @@ test("email failure does not throw and retains marker against ambiguous delivery
   assert.equal(f.store.length, 1);
 });
 
-test("flag, marker and scheduling failures never reject the task-side work", async () => {
+test("shared layout flag, marker and scheduling failures never reject the task-side work", async () => {
   for (const options of [{ flagFailure: true }, { markerFailure: true }, { suppressionFailure: true }, { schedulerFailure: true }]) {
     const f = fixture(options);
     assert.doesNotThrow(() => f.schedule());
     await assert.doesNotReject(f.settle());
-    assert.equal(f.calls.sent.length, options.schedulerFailure ? 1 : 0);
+    assert.equal(f.calls.sent.length, options.schedulerFailure || options.flagFailure ? 1 : 0);
+    assert.ok(f.calls.flags.every(({ key }) => key === "htpr-7037-shared-email-layout"));
   }
 });
 
@@ -270,7 +274,7 @@ test("integration uses committed fenced task state and excludes trusted backgrou
   assert.match(read("src/lib/api/task-writes/update.ts"), /updateTaskSingle\(newTask, currentUser, actingAgentId, \{ teamScope: session\.teamScope \}\)/);
 });
 
-test("email models stay unchanged and flag defaults to Owner + QA", () => {
+test("email models stay unchanged and first-task email flag removal is permanent", () => {
   const { execFileSync } = require("node:child_process");
   const baseline = execFileSync("git", ["show", "origin/production:src/prisma/schema.prisma"], { cwd: root, encoding: "utf8" });
   const schema = read("src/prisma/schema.prisma");
@@ -287,8 +291,14 @@ test("email models stay unchanged and flag defaults to Owner + QA", () => {
     assert.match(schema, pattern, name);
     assert.equal(fields(schema.match(pattern)[0], name), fields(baseline.match(pattern)[0], name), `${name} email model stays unchanged`);
   }
-  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
-  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
+  const retiredKey = ["htpr", "7028", "first", "task", "email"].join("-");
+  const flagDirectory = path.join(root, "src/lib/flags");
+  for (const file of fs.readdirSync(flagDirectory, { recursive: true })) {
+    const fullPath = path.join(flagDirectory, file);
+    assert.equal(file.includes(retiredKey), false, file);
+    if (fs.statSync(fullPath).isFile()) assert.equal(fs.readFileSync(fullPath, "utf8").includes(retiredKey), false, file);
+  }
+  assert.doesNotMatch(read(emailFile), /isFeatureEnabled\(HTPR_7028/);
 });
 
 test("changed-file typecheck has no diagnostics in feature code", { skip: !process.env.HTPR_7028_TYPECHECK }, () => {
@@ -311,18 +321,21 @@ test("changed-file typecheck has no diagnostics in feature code", { skip: !proce
 
 function inviteEffect(overrides = {}) {
   const source = read(boardFile);
-  const start = source.indexOf("const firstTaskEmailEnabled = useFlag(HTPR_7028_FIRST_TASK_EMAIL_FLAG)");
+  const start = source.indexOf('const inviteRequested = searchParams?.get("invite") === "1"');
   const end = source.indexOf("const readyBoardRender =", start);
   assert.ok(start > 0 && end > start);
   const code = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  assert.doesNotMatch(code, /HTPR_7028_FIRST_TASK_EMAIL_FLAG/);
   const calls = [];
   const context = {
-    useFlag: (key) => { assert.equal(key, flag); return overrides.enabled !== false; },
-    HTPR_7028_FIRST_TASK_EMAIL_FLAG: flag,
     searchParams: new URLSearchParams(overrides.params ?? "id=15&invite=1&view=default"),
     useSetRecoilState: () => (value) => calls.push(value), showCommandsAtom: {},
+    useRecoilState: () => [{ show: false, mode: 0 }, (value) => calls.push(value)], useFlag: () => false,
+    HTPR_7885_INVITE_LINK_DIALOG_FLAG: "htpr-7885-invite-link-dialog",
+    useState: (initial) => [initial, () => {}],
     useRecoilValue: () => ({ id: overrides.atomProjectId ?? 15 }), currentProjectAtom: {},
     useRef: () => overrides.ref ?? { current: null },
+    isMblForChat: false,
     useEffect: (effect) => { effect(); effect(); },
     authenticated: true, isGuest: false, boardDataReady: true, currentBoardAccessStatus: "authorized",
     readyProject: { id: 15 }, requestedProjectId: 15, user: { id: 985 },
@@ -337,13 +350,13 @@ function inviteEffect(overrides = {}) {
   return JSON.parse(JSON.stringify(calls));
 }
 
-test("invite param opens existing dialog once only with flag on and keeps board URL state", () => {
+test("invite param opens existing dialog once without the removed email flag and keeps board URL state", () => {
   assert.deepEqual(inviteEffect(), [
     { show: true, mode: "existing-invite-command" },
     { state: { preserved: true }, url: "/project?id=15&view=default" },
   ]);
   for (const overrides of [
-    { enabled: false }, { params: "id=15" }, { params: "id=15&invite=0" },
+    { params: "id=15" }, { params: "id=15&invite=0" },
     { authenticated: false }, { isGuest: true }, { boardDataReady: false },
     { currentBoardAccessStatus: "denied" }, { currentBoardAccessStatus: "pending" },
     { readyProject: { id: 99 } }, { atomProjectId: 99 },
@@ -386,25 +399,6 @@ test("template button hierarchy has one primary and a borderless muted secondary
   }
   assert.match(html, /\.secondary-cta \{ color: #8e9093 !important; \}/);
   assert.ok(html.indexOf('class="secondary-cta"') < html.indexOf('class="cta"'), "primary action comes last");
-});
-
-test("commit scope preserves the requested worktree, trailers and forbidden-file constraints", { skip: !process.env.HTPR_7028_VERIFY_COMMIT }, () => {
-  const { execFileSync } = require("node:child_process");
-  const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
-  assert.equal(fs.realpathSync(root), "/home/valentin/projects/wt-7028");
-  assert.equal(git("branch", "--show-current").trim(), "htpr-7028-first-task-email");
-  const message = git("log", "-1", "--format=%B");
-  assert.equal(message.split("\n")[0], "HTPR-7028 [FEATURE] One primary button in the first task email, fewer bulk lookups");
-  assert.match(message, /Co-Authored-By: Claude Opus 5\.5 <noreply@anthropic\.com>\nClaude-Session: https:\/\/claude.ai\/code\/session_015vvpfaf3Uj77guJJ6A7SwJ\n*$/);
-  const allowed = new Set([emailFile, templateFile, "src/utils/controllers/section/sectionService.ts", "tests/first-agent-task-email.test.cjs", "tests/first-agent-task-email-coverage.test.cjs"]);
-  const changed = git("diff", "--name-only", "HEAD^", "HEAD").trim().split("\n");
-  assert.equal(changed.length, allowed.size);
-  for (const file of changed) assert.ok(allowed.has(file), file);
-  assert.equal(git("ls-files", "node_modules").trim(), "");
-  assert.equal(fs.lstatSync(path.join(root, "node_modules")).isSymbolicLink(), true);
-  const additions = git("diff", "--unified=0", "HEAD^", "HEAD").split("\n").filter(line => line.startsWith("+") && !line.startsWith("+++"));
-  assert.equal(additions.some(line => line.includes("\u2014")), false);
-  assert.equal(git("diff", "--name-only", "HEAD", "--", ".", ":!GATES.md").trim(), "");
 });
 
 test("screenshot renders the actual email HTML locally without sending", { skip: !process.env.HTPR_7028_RENDER_EVIDENCE }, async () => {

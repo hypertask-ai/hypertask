@@ -97,21 +97,21 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
   {
     key: "gpt-6-luna",
     modelClass: "gpt-luna",
-    label: "6 Luna",
+    label: "Luna 6",
     provider: "openai",
     priceTier: 2,
   },
   {
     key: "gpt-5.6-terra",
     modelClass: "gpt-terra",
-    label: "5.6 Terra",
+    label: "Terra 5.6",
     provider: "openai",
     priceTier: 2,
   },
   {
     key: "gpt-6.1-sol",
     modelClass: "gpt-sol",
-    label: "6.1 Sol",
+    label: "Sol 6.1",
     provider: "openai",
     priceTier: 3,
     premium: true,
@@ -256,7 +256,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6-luna",
     source: "openai",
-    title: "GPT 6 Luna",
+    title: "GPT Luna 6",
     model: "gpt-6-luna",
     desc: "Cheap and fast",
     reasoning: "instant",
@@ -271,7 +271,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6-luna-light",
     source: "openai",
-    title: "GPT 6 Luna Light",
+    title: "GPT Luna 6 Light",
     model: "gpt-6-luna",
     desc: "Fastest Luna replies",
     reasoning: "instant",
@@ -282,7 +282,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6-luna-high",
     source: "openai",
-    title: "GPT 6 Luna High",
+    title: "GPT Luna 6 High",
     model: "gpt-6-luna",
     desc: "Deep Luna reasoning",
     reasoning: "thinking",
@@ -293,7 +293,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-5.6-terra",
     source: "openai",
-    title: "GPT 5.6 Terra",
+    title: "GPT Terra 5.6",
     model: "gpt-5.6-terra",
     desc: "Balanced mid tier",
     reasoning: "instant",
@@ -304,7 +304,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-5.6-terra-light",
     source: "openai",
-    title: "GPT 5.6 Terra Light",
+    title: "GPT Terra 5.6 Light",
     model: "gpt-5.6-terra",
     desc: "Fastest Terra replies",
     reasoning: "instant",
@@ -315,7 +315,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-5.6-terra-high",
     source: "openai",
-    title: "GPT 5.6 Terra High",
+    title: "GPT Terra 5.6 High",
     model: "gpt-5.6-terra",
     desc: "Deep Terra reasoning",
     reasoning: "thinking",
@@ -326,7 +326,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6.1-sol",
     source: "openai",
-    title: "GPT 6.1 Sol",
+    title: "GPT Sol 6.1",
     model: "gpt-6.1-sol",
     desc: "OpenAI flagship",
     reasoning: "thinking",
@@ -337,7 +337,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6.1-sol-light",
     source: "openai",
-    title: "GPT 6.1 Sol Light",
+    title: "GPT Sol 6.1 Light",
     model: "gpt-6.1-sol",
     desc: "Fastest Sol replies",
     reasoning: "instant",
@@ -348,7 +348,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6.1-sol-high",
     source: "openai",
-    title: "GPT 6.1 Sol High",
+    title: "GPT Sol 6.1 High",
     model: "gpt-6.1-sol",
     desc: "Deep Sol reasoning",
     reasoning: "thinking",

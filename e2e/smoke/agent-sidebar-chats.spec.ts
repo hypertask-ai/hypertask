@@ -73,6 +73,7 @@ async function open(page: Page, lane: string) {
   expect(enabledFlags[PAST_CHATS_FLAG], 'past chats flag in disposable fixture').toBe(true)
   await expect(page.getByTestId('agent-sidebar-conversations')).toBeVisible()
   await choose(page, fixture.personalChats.find(chat => chat.lane === lane)!.title)
+  return enabledFlags
 }
 async function settledBox(locator: ReturnType<Page['locator']>) {
   let previous = await locator.boundingBox()
@@ -120,7 +121,7 @@ async function reveal(list: Locator, row: Locator) {
     return false
   }, { timeout: 15_000 }).toBe(true)
 }
-async function choose(page: Page, name: string, error?: string) {
+async function choose(page: Page, name: string, error?: string, expectedTitle = name) {
   const list = page.getByTestId('agent-sidebar-conversations')
   if (!await list.isVisible()) await page.getByRole('button', { name: 'Switch conversation', exact: true }).click()
   const agent = Object.values(fixture.lanes).flat().find(agent => agent.name === name)
@@ -134,7 +135,7 @@ async function choose(page: Page, name: string, error?: string) {
     await expect(page.getByText(error, { exact: true })).toBeVisible()
     return
   }
-  await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toHaveText(agent?.name ?? 'AI chat')
+  await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toHaveText(agent?.name ?? chat?.title ?? expectedTitle)
   if (agent) await expect(page.getByTestId('ai-sidebar').getByText(`${agent.name} history 1`, { exact: true })).toBeVisible()
   else if (chat) await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
   await expect(agent && !agent.name.endsWith('Native')
@@ -151,7 +152,7 @@ test('phone conversation list leaves the composer clear and typing taps never sw
   const list = page.getByTestId('agent-sidebar-conversations')
   const [external, , native] = fixture.lanes[info.project.name]
   for (const name of ['AI chat', external.name, native.name]) {
-    await choose(page, name)
+    await choose(page, name, undefined, name === 'AI chat' ? fixture.personalChats.find(chat => chat.lane === info.project.name)!.title : name)
     const selectedTitle = await title.textContent()
     const composer = sidebar.locator('[data-ai-chat-composer-root]:not([inert]):visible')
     const editor = composer.locator('[contenteditable="true"]')
@@ -223,6 +224,7 @@ test('conversation rows contain two-line titles without overlap on desktop and p
   if (info.project.name === 'Desktop') expect(longBox.height).toBeGreaterThan(36)
   await longRow.click()
   await expect(list).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toHaveText(longChat!.title)
   await expect(page.getByTestId('ai-sidebar').getByText(longChat!.message, { exact: true })).toBeVisible()
 })
 
@@ -252,11 +254,31 @@ test('past chats are listed newest first above agents and reopen', async ({ page
     await choose(page, chat.title)
     await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
     await expect(page.locator('#ai-chat-tiptap-editor .ProseMirror:visible')).toBeVisible()
-    await expect(title).toHaveText('AI chat')
+    await expect(title).toHaveText(chat.title)
     await choose(page, native.name)
-    await choose(page, 'AI chat')
+    await choose(page, 'AI chat', undefined, chat.title)
     await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
   }
+})
+
+test('an unnamed personal conversation falls back to AI chat in the header', async ({ page }, info) => {
+  const chat = fixture.personalChats.find(chat => chat.lane === info.project.name)!
+  await page.route('**/api/ai-chat/all-sessions*', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json()
+    if (body.session?.id === chat.id) body.session.title = ''
+    if (body.sessions) body.sessions = body.sessions.map((session: { id: string; title: string }) => session.id === chat.id ? { ...session, title: '' } : session)
+    await route.fulfill({ response, json: body })
+  })
+  await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board&agentSidebar=1`))
+  const list = page.getByTestId('agent-sidebar-conversations')
+  await expect(list).toBeVisible()
+  const row = list.locator(`[data-command-key="session:${chat.id}"]`)
+  await reveal(list, row)
+  await row.click()
+  await expect(list).toBeHidden()
+  await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toHaveText('AI chat')
 })
 
 for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
@@ -273,7 +295,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     expect(clearedDraft.status()).toBe(200)
     await heartbeat(request, a)
     await page.context().addCookies([{ name: 'theme', value: theme, url: process.env.BASE_URL! }])
-    await open(page, info.project.name)
+    const flags = await open(page, info.project.name)
     const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
     const list = page.getByTestId('agent-sidebar-conversations')
     if (!await list.isVisible()) await title.click()
@@ -344,12 +366,23 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     await aEditor.fill(prompt)
     const sentResponse = page.waitForResponse((response) => response.url().endsWith(`/api/agent-chat/${a.sessionId}/messages`) && response.request().method() === 'POST')
     await aEditor.press('Enter')
-    expect((await sentResponse).status()).toBe(200)
+    const sent = await sentResponse
+    expect(sent.status()).toBe(200)
+    const sentMessage = (await sent.json()).message
     await expect(page.getByText(prompt, { exact: true })).toBeVisible()
     const pending = await request.get('/api/mcp/chat/pending', { headers: { Authorization: `Bearer ${a.token}` } })
     expect(pending.status()).toBe(200)
-    const claimed = (await pending.json()).messages.find((message: { text: string }) => message.text === prompt)
+    const claimed = (await pending.json()).messages.find((message: { id: string }) => message.id === sentMessage.id)
     expect(claimed?.sessionId).toBe(a.sessionId)
+    if (flags['htpr-7734-agent-chat-context']) {
+      expect(claimed.context).toBeDefined()
+      expect(claimed.context.scope).toBe('board')
+      expect(claimed.context.project_id).toBe(fixture.projectId)
+      expect(claimed.text).toBe(`Context: board ${fixture.projectId} ${JSON.stringify(claimed.context.title)}\n\n${prompt}`)
+    } else {
+      expect(claimed).not.toHaveProperty('context')
+      expect(claimed.text).toBe(prompt)
+    }
     const second = await request.get('/api/mcp/chat/pending', { headers: { Authorization: `Bearer ${a.token}` } })
     expect((await second.json()).messages.some((message: { id: string }) => message.id === claimed.id)).toBe(false)
     await choose(page, b.name)
@@ -365,7 +398,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     const persisted = await request.get(`/api/agent-chat/${a.sessionId}`, { headers: { 'x-hypertask-sidebar-project': String(fixture.projectId) } })
     expect((await persisted.json()).messages.some((message: { content: string }) => message.content === replyText)).toBe(true)
     await page.screenshot({ path: info.outputPath(`${theme}-${info.project.name}-agent.png`) })
-    await choose(page, 'AI chat')
+    await choose(page, 'AI chat', undefined, fixture.personalChats.find(chat => chat.lane === info.project.name)!.title)
     await expect(aiEditor).toHaveText('AI draft stays here')
     const aiAfter = (await aiEditor.boundingBox())!
     expect(Math.abs(aiAfter.y - aiComposer.y)).toBeLessThan(2)
@@ -394,7 +427,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
 test('open error retries the same selected agent; outside click and native transport preserve the board', async ({ page }, info) => {
   const [a, , native] = fixture.lanes[info.project.name]
   await open(page, info.project.name)
-  await choose(page, 'AI chat')
+  await choose(page, 'AI chat', undefined, fixture.personalChats.find(chat => chat.lane === info.project.name)!.title)
   const aiDraft = `General draft ${randomUUID()}`
   await page.locator('#ai-chat-tiptap-editor .ProseMirror:visible').fill(aiDraft)
   let fail = true

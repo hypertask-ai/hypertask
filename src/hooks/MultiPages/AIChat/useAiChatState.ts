@@ -112,6 +112,7 @@ export function useAiChatState() {
   const streamingAssistantMessageRef = useRef<string | null>(null);
   const streamingRequestRef = useRef<string | null>(null);
   const sendInFlightRef = useRef(false);
+  const settleSendRef = useRef<(() => void) | null>(null);
   const [currentStreamingSession, setCurrentStreamingSession] = useState<
     string | null
   >(null);
@@ -267,7 +268,7 @@ export function useAiChatState() {
   chatMounted, setChatMounted, minimized, setMinimized, isTyping,
   setIsTyping, queuedMessages: visibleQueuedMessages, persistentQueue, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
   setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption,
-  streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, currentStreamingSession,
+  streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, settleSendRef, currentStreamingSession,
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,

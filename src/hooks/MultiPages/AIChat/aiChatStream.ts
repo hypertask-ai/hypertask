@@ -6,6 +6,7 @@ import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
 type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "navigateToTask"> & {
+  isCurrentStream?: () => boolean;
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
   assistantMessageId: string;
@@ -14,7 +15,7 @@ type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQu
 
 export async function consumeAiChatStream(context: Context) {
   const {
-  response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
+  isCurrentStream, response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
   updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, navigateToTask,
   } = context;
 
@@ -68,7 +69,7 @@ export async function consumeAiChatStream(context: Context) {
                 switch (currentEventType) {
                   case "status":
                     console.log(`🔥 Received status: ${parsed.content}`);
-                    setAgentStatus(parsed.content);
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(parsed.content);
                     break;
                   case "thinking":
                     console.log(`🔥 Received thinking: ${parsed.content}`);
@@ -106,7 +107,7 @@ export async function consumeAiChatStream(context: Context) {
                   }
                   case "content":
                     if (navigationFailed) break;
-                    setAgentStatus(undefined);
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     aiContent += parsed.content;
 
                     const initialAssistantMessage: IChatMessage = {
@@ -138,7 +139,7 @@ export async function consumeAiChatStream(context: Context) {
                   case "complete":
                     break;
                   case "error": {
-                    setAgentStatus(undefined);
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     streamErrorHandled = true;
                     const rawError =
                       typeof parsed.content === "string" ? parsed.content : "";
@@ -158,11 +159,11 @@ export async function consumeAiChatStream(context: Context) {
                       false,
                       true
                     );
-                    setIsTyping(false);
+                    if (!isCurrentStream || isCurrentStream()) setIsTyping(false);
                     break;
                   }
                   case "done":
-                    setAgentStatus(undefined);
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     sawDone = true;
                     console.log("🔥 Stream complete:", parsed);
                     void queryClient
@@ -171,7 +172,26 @@ export async function consumeAiChatStream(context: Context) {
                         console.warn("[AI chat] inbox refresh failed", error)
                       );
                     if (parsed.status === "error") {
-                      if (!streamErrorHandled) {
+                      if (!streamErrorHandled && parsed.cancelled === true) {
+                        const stoppedMessage: IChatMessage = {
+                          id: assistantMessageId,
+                          content:
+                            aiContent.trim().length > 0
+                              ? aiContent
+                              : "Stream cancelled.",
+                          role: "assistant",
+                          createdAt: new Date(),
+                          isDelivered: true,
+                          sessionId: session.id,
+                        };
+                        addMessageToSessionQuery(
+                          session.id,
+                          stoppedMessage,
+                          false,
+                          true
+                        );
+                        streamErrorHandled = true;
+                      } else if (!streamErrorHandled) {
                         const rawDone =
                           typeof parsed.content === "string"
                             ? parsed.content
@@ -231,10 +251,10 @@ export async function consumeAiChatStream(context: Context) {
                         );
                       }
                     }
-                    setIsTyping(false);
+                    if (!isCurrentStream || isCurrentStream()) setIsTyping(false);
                     break;
                   default:
-                    setAgentStatus(undefined);
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     console.warn(
                       "🔥 Unknown event type:",
                       currentEventType,
@@ -244,7 +264,7 @@ export async function consumeAiChatStream(context: Context) {
                 }
               }
             } catch (error) {
-              setAgentStatus(undefined);
+              if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
               console.error(
                 "🔥 Error processing stream line:",
                 error,
@@ -258,7 +278,7 @@ export async function consumeAiChatStream(context: Context) {
 
       if (!sawDone && !streamErrorHandled) {
         const partial = aiContent.trim().length > 0;
-        setAgentStatus(undefined);
+        if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
         addMessageToSessionQuery(
           session.id,
           {

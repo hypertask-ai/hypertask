@@ -15,6 +15,11 @@ const deferred = () => {
 const viewer = load("src/lib/agents/chatViewerState.ts", {});
 const sendHook = load("src/app/agents/chat/useAgentChatSend.ts", {
   react: hooks,
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/hooks/MultiPages/AIChat/useDockedChatScope": { useDockedChatScope: () => [null, noop] },
+  "@/lib/state": { useRecoilValue: () => null },
+  "@/store": {},
+  "next/navigation": { usePathname: () => "/project" },
   "react-hot-toast": { default: { error: assert.fail } },
 }).useAgentChatSend;
 const sessionHook = load("src/app/agents/chat/useAgentChatSession.ts", {
@@ -455,8 +460,9 @@ test("native switching snapshots the latest draft and attachments after open, tr
   };
   const mocks = {
     react: { ...react, default: react },
-    "@/hooks/useFlag": { useFlag: () => sidebarFlag },
+    "@/hooks/useFlag": { useFlag: key => key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
+    "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },
@@ -758,6 +764,8 @@ test("switching away cancels the recorder and clears retained recording state be
   }
   const { AgentChatPane } = loadChatComponent("src/app/agents/chat/AgentChatPane.tsx", {
     react: React,
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "@/components/Agents/AgentAvatar": { default: () => null },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: Composer },
     "@/components/AI_CHAT/TypingIndicator": { TypingIndicator: () => null },
@@ -863,7 +871,7 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     "./mobileAudioButtonPresentation": { mobileMicPresentation: () => ({ prominent: false }) },
   });
   const composerMocks = Object.fromEntries([
-    "../Global/ModelSelectorDropdown", "../Common/Tooltip", "@/lib/configs/aiTaskWriter.config",
+    "../Global/ModelSelectorDropdown", "../Common/Tooltip", "@/components/Modals/OptionPicker", "@/lib/configs/aiTaskWriter.config",
     "@/lib/controlledComposerEditor", "lucide-react", "../Common/AttachmentsUpload/ImageGalleryView",
     "@/lib/contexts/deviceContext", "@/lib/contexts/mobileContext", "@/store",
     "@/hooks/MultiPages/useGetAllTeamsMinimal", "@/utils/aiChat/sortBoardsByRecent",
@@ -879,6 +887,8 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
   };
   const { AI_Tiptap_Container } = loadChatComponent("src/components/AI_CHAT/AI_Tiptap_Container.tsx", {
     ...composerMocks,
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
+    "@/hooks/MultiPages/AIChat/dockedChatScope": load("src/hooks/MultiPages/AIChat/dockedChatScope.ts", {}),
     react: { ...hooks, useContext: () => false, useMemo: (callback) => callback(), useState: (value) => [value, noop], useId: () => "general" },
     "@tiptap/react": { useEditorState: () => true },
     "@/styles/tiptap.module.scss": { default: {} },

@@ -86,6 +86,7 @@ function runWorkflow(t, {
   job = reconciliation, drift = false, missingHead = false, apiFailure,
   gateScript = 'console.log("ok");\n', statuses = () => ({}), sharedHead = false,
   refreshedPull = (pull) => pull, freshSharedHead = false, forkHead = false,
+  extraPulls = null,
 } = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -176,6 +177,10 @@ function runWorkflow(t, {
   fs.writeFileSync(env.FIXTURE_PR, JSON.stringify(pull));
   fs.writeFileSync(env.FIXTURE_STATUSES, JSON.stringify(statuses(pull)));
   fs.writeFileSync(env.FIXTURE_CURRENT_PR, JSON.stringify(refreshedPull(pull)));
+  if (extraPulls) {
+    env.FIXTURE_EXTRA_PULLS = path.join(fixture, "extra-pulls.json");
+    fs.writeFileSync(env.FIXTURE_EXTRA_PULLS, JSON.stringify(extraPulls(pull)));
+  }
   fs.writeFileSync(path.join(bin, "gh"), `#!/usr/bin/env node
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
@@ -198,23 +203,33 @@ if (failure && (!failure.endpoint || endpoint.includes(failure.endpoint)) &&
   process.exit(1);
 }
 console.log("HTTP/2.0 200 OK\\nContent-Type: application/json\\n");
+const commitSha = endpoint && endpoint.match(/\\/commits\\/([0-9a-f]{40})\\/statuses\\?per_page=100$/);
+const pullNumber = endpoint && endpoint.match(/\\/pulls\\/(\\d+)$/);
 if (args.includes("POST")) {
   assert.equal(args[args.indexOf("-X") + 1], "POST");
-  assert.equal(endpoint, repo + "/statuses/" + pull.head.sha);
+  assert.match(endpoint, new RegExp("^" + repo + "/statuses/[0-9a-f]{40}$"));
   const payload = JSON.parse(fs.readFileSync(args[args.indexOf("--input") + 1], "utf8"));
   fs.appendFileSync(process.env.FIXTURE_POSTS, JSON.stringify({ endpoint, payload }) + "\\n");
   console.log("{}");
 } else if (endpoint === repo + "/pulls?state=open&base=production&per_page=100") {
   assert.ok(args.includes("--paginate") && args.includes("--slurp"));
+  const priorList = previous.some((call) => call.endpoint === endpoint);
   const shared = process.env.FIXTURE_SHARED_HEAD === "true" ||
-    (process.env.FIXTURE_FRESH_SHARED_HEAD === "true" && previous.some((call) => call.endpoint === endpoint));
-  console.log(JSON.stringify([shared ? [pull, { ...pull, number: 43 }] : [pull]]));
-} else if (endpoint === repo + "/pulls/42" || endpoint === repo + "/pulls/43") {
+    (process.env.FIXTURE_FRESH_SHARED_HEAD === "true" && priorList);
+  const row = priorList ? JSON.parse(fs.readFileSync(process.env.FIXTURE_CURRENT_PR, "utf8")) : pull;
+  const rows = [row];
+  if (process.env.FIXTURE_EXTRA_PULLS) rows.push(...JSON.parse(fs.readFileSync(process.env.FIXTURE_EXTRA_PULLS, "utf8")));
+  if (shared) rows.push({ ...row, number: 43 });
+  console.log(JSON.stringify([rows]));
+} else if (pullNumber) {
+  const number = Number(pullNumber[1]);
   const current = JSON.parse(fs.readFileSync(process.env.FIXTURE_CURRENT_PR, "utf8"));
-  console.log(JSON.stringify({ ...current, number: endpoint.endsWith("/43") ? 43 : 42 }));
-} else if (endpoint === repo + "/commits/" + pull.head.sha + "/statuses?per_page=100") {
+  const extras = process.env.FIXTURE_EXTRA_PULLS ? JSON.parse(fs.readFileSync(process.env.FIXTURE_EXTRA_PULLS, "utf8")) : [];
+  const found = extras.find((item) => item.number === number);
+  console.log(JSON.stringify(found || { ...current, number }));
+} else if (commitSha) {
   const statuses = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATUSES, "utf8"));
-  console.log(JSON.stringify(statuses[pull.head.sha] || []));
+  console.log(JSON.stringify(statuses[commitSha[1]] || []));
 } else {
   throw new Error("Unexpected gh arguments: " + JSON.stringify(args));
 }
@@ -306,7 +321,7 @@ for (const change of ["base", "title", "head", "error", "pending", "missing fing
     assert.equal(posts[0].description, "ok");
     assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
     assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 1);
-    assert.equal(calls.filter((call) => call.endpoint.endsWith("/pulls/42")).length, 1);
+    assert.equal(calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).length, 0);
     assert.equal(calls.filter((call) => call.endpoint.includes("/pulls?")).length, 2);
   });
 }
@@ -460,7 +475,7 @@ for (const job of [reconciliation, singlePullRequest]) {
     assert.ok(posts.every((post) => post.state === 'pending'), 'no stale verdict published');
   });
 
-  for (const endpoint of ['/pulls/42', '/pulls?', '/statuses/']) {
+  for (const endpoint of job === singlePullRequest ? ['/pulls/42', '/pulls?', '/statuses/'] : ['/pulls?', '/statuses/']) {
     test(`${name}: evaluation exit 2 before rate limit at ${endpoint} remains exit 2`, (t) => {
       const after = job === singlePullRequest || endpoint === '/pulls?' ? 1 : 0;
       const { result, output, posts } = runWorkflow(t, {
@@ -483,10 +498,10 @@ for (const job of [reconciliation, singlePullRequest]) {
   }
 }
 
-for (const endpoint of ['/commits/', '/pulls/42', '/statuses/']) {
+for (const endpoint of ['/commits/', '/pulls?', '/statuses/']) {
   test(`reconcile: rate limit at ${endpoint} exits the parent shell without publishing an error`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
-      apiFailure: { endpoint, status: 403, rate: true, reset: 3600 },
+      apiFailure: { endpoint, after: endpoint === '/pulls?' ? 1 : 0, status: 403, rate: true, reset: 3600 },
     });
     assert.equal(result.status, 0, output);
     assert.match(output, /::warning::skipped: GitHub rate limited/);
@@ -500,6 +515,54 @@ test('all feature-flag API calls use the wrapper in the main shell and concurren
   assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
   assert.match(workflow, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
   assert.doesNotMatch(singlePullRequest, /cancel-in-progress: true/);
+});
+
+function openPullFleet(pull) {
+  const pulls = [];
+  const statuses = {};
+  for (let index = 0; index < 32; index += 1) {
+    const skip = {
+      number: 3000 + index,
+      state: "open",
+      title: `YPER4-678 [SPEED] unchanged ${index}`,
+      base: { ref: "production", sha: pull.base.sha },
+      head: { sha: index.toString(16).padStart(40, "a"), repo: { full_name: pull.head.repo.full_name } },
+      labels: [],
+    };
+    pulls.push(skip);
+    statuses[skip.head.sha] = [featureFlagStatus(skip)];
+  }
+  for (let index = 0; index < 32; index += 1) {
+    pulls.push({
+      number: 4000 + index,
+      state: "open",
+      title: `YPER4-678 [SPEED] stale ${index}`,
+      base: { ref: "production", sha: pull.base.sha },
+      head: { sha: index.toString(16).padStart(40, "b"), repo: { full_name: pull.head.repo.full_name } },
+      labels: [],
+    });
+  }
+  return { pulls, statuses };
+}
+
+test("reconcile: 32 skipped and 33 evaluated pull requests list open pulls twice and do not re-read each one", (t) => {
+  const { result, output, calls } = runWorkflow(t, {
+    extraPulls: (pull) => openPullFleet(pull).pulls,
+    statuses: (pull) => openPullFleet(pull).statuses,
+  });
+  const counts = {
+    status: result.status,
+    list: calls.filter((call) => call.endpoint.includes("/pulls?")).length,
+    perPull: calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).length,
+    statuses: calls.filter((call) => call.endpoint.includes("/commits/")).length,
+    posts: calls.filter((call) => call.args.includes("POST")).length,
+  };
+  assert.equal(result.status, 2, output);
+  assert.match(output, /evaluated 33, skipped 32/);
+  assert.equal(counts.statuses, 65, JSON.stringify(counts));
+  assert.equal(counts.list, 2, JSON.stringify(counts));
+  assert.equal(counts.perPull, 0, JSON.stringify(counts));
+  assert.equal(counts.posts, 33, JSON.stringify(counts));
 });
 
 test('a genuine evaluation error is not hidden by rate limiting its error-status post', (t) => {

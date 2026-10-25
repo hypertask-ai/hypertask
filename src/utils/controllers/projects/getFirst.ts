@@ -1,7 +1,9 @@
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getProjectWhere, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { createProvisionedProjectWithStableName } from "./createProjectWithStableName";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
 import { createProjectViewAndCreateDefault } from "./create";
 import { getProjectViewInclude } from "./getAll";
 import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
@@ -32,9 +34,11 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
                 project_view: getProjectViewInclude({ currentUserId: userId }),
             };
 
+            const projectEntryEnabled = await isFeatureEnabled(HTPR_7799_PROJECT_ENTRY_FLAG, userId);
+            const accessWhere = projectEntryEnabled ? getProjectWhere(userId) : projectContentAccessWhere(userId);
             let project = await prisma.project.findFirst({
                 where: {
-                    ...projectContentAccessWhere(userId),
+                    ...accessWhere,
                     status: "Normal",
                     googleAccount: { isNot: null },
                     teamId: { not: null },
@@ -45,7 +49,7 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
             if (!project) {
                 project = await prisma.project.findFirst({
                     where: {
-                        ...projectContentAccessWhere(userId),
+                        ...accessWhere,
                         status: "Normal",
                     },
                     include: projectInclude,
@@ -54,6 +58,7 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
             }
 
             console.log("🚀 ~ getFirst ~ project:", project)
+            if (!project && projectEntryEnabled) return { status: 200, json: null };
             if (!project) {
                 const { created, analyticsKey } = await prisma.$transaction(async (tx) => {
                     const created = await createProvisionedProjectWithStableName({

@@ -1,6 +1,8 @@
 
 
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
 
 import { releaseAiChatStreamLease, createTurnDeadline, AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS, isAiChatCancellationRequested, AI_CHAT_TURN_DEADLINE_USER_MESSAGE, AI_CHAT_TURN_DEADLINE_REASON, watchAiChatCancellation } from "@/app/api/ai/chat/stream/streamLease";
 import { failHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
@@ -196,8 +198,9 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       );
     }
   };
+  let stopClosesStream = false;
   try {
-
+    stopClosesStream = await isFeatureEnabled(HTPR_7794_STOP_CLOSES_STREAM_FLAG, dbUser.id).catch(() => false);
     const skillResolution = await resolveSkillsForAiRequest(
       requestMessage,
       {
@@ -249,7 +252,10 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       state.heartbeatExecutionTerminal = true;
     }
   } finally {
-    if (state.cancelled) state.recordTurnOutcome("cancelled");
+    if (state.cancelled) {
+      if (stopClosesStream) state.finish("error", { cancelled: true, content: "Stream cancelled." });
+      state.recordTurnOutcome("cancelled");
+    }
     state.turnDeadline?.clear();
     stopCancellationWatch();
     await releaseAiChatStreamLease(streamLease);

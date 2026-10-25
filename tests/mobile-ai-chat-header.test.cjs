@@ -41,8 +41,14 @@ stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
 stubSourceModule("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
   AgentSidebarChatCommands: () => null,
 });
+stubSourceModule("src/lib/flags/definitions/htpr-7773-chat-header-name.ts", {
+  HTPR_7773_CHAT_HEADER_NAME_FLAG: "htpr-7773-chat-header-name",
+});
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: () => false,
+});
+stubSourceModule("src/lib/flags/definitions/htpr-7575-phone-chat-delete.ts", {
+  HTPR_7575_PHONE_CHAT_DELETE_FLAG: "htpr-7575-phone-chat-delete",
 });
 stubModule(require.resolve("react-hot-toast"), {
   default: { error: (message) => toastErrors.push(message) },
@@ -66,7 +72,7 @@ stubSourceModule("src/lib/configs/aiTaskWriter.config.ts", {
 });
 stubSourceModule("src/components/Global/ModelSelectorDropdown.tsx", {
   default: () => React.createElement("button", { "data-control": "model" }),
-  getMobileAiChatModelLabel: () => "6 Luna · High",
+  getMobileAiChatModelLabel: () => "Luna 6 · High",
 });
 stubSourceModule("src/lib/state.tsx", {
   useRecoilState: () => [false, () => {}],
@@ -187,7 +193,7 @@ test("mobile new chat blocks repeated requests and recovers after rejection", as
     assert.doesNotMatch(container.textContent, /First chat/);
     assert.match(
       container.querySelector("[data-ai-chat-mobile-model-label]").textContent,
-      /6 Luna · High/,
+      /Luna 6 · High/,
     );
     assert.equal(
       container.querySelector('[data-control="model"]'),

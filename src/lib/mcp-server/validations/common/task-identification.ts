@@ -50,7 +50,7 @@ export function createTaskIdentificationSchema() {
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',
@@ -99,7 +99,7 @@ export function createTaskIdentificationArraySchema() {
         const hasTicketNumber = data.ticket_number !== undefined && data.ticket_number.length > 0;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',

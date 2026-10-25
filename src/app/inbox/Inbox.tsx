@@ -66,7 +66,7 @@ import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
 import RemindMeInbox from "@/components/notifications/inboxSplit/RemindMeInbox";
 import { InboxSelectedCount } from "@/app/inbox/InboxSelectedCount";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7111_INBOX_SELECTED_COUNT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7111_INBOX_SELECTED_COUNT_FLAG, HTPR_7841_INBOX_KEEPS_SCROLL_FLAG } from "@/lib/flags/keys";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useInboxZeroStyling } from "@/hooks/Inbox/useInboxZeroStyling";
@@ -74,6 +74,7 @@ import InboxZeroState from "@/components/Common/InboxZeroState";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 
 import { useWarmProjectsAllQuery } from "@/hooks/Homepage/useGetBoards";
+import { resolveInboxFocusScroll } from "@/lib/inboxFocusScroll";
 import SplitTitle from "@/components/notifications/inboxSplit/SplitTitle";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { useMobileView } from "@/lib/contexts/mobileContext";
@@ -106,6 +107,7 @@ const Inbox = ({
   originProject: string;
 }) => {
   const showSelectedCount = useFlag(HTPR_7111_INBOX_SELECTED_COUNT_FLAG);
+  const inboxKeepsScroll = useFlag(HTPR_7841_INBOX_KEEPS_SCROLL_FLAG);
   const snapshot = useFirstScreenSurface(currentUser.id);
   const queryClient = useQueryClient();
   const [inboxDocument] = useState(() => {
@@ -610,6 +612,8 @@ const Inbox = ({
     }
   };
 
+  const lastFocusedNotificationId = useRef<string | null>(null);
+
   const newCommentsHandler = () => {
     try {
       const splits = _notificationsTQ?.structuredData?.data;
@@ -631,19 +635,37 @@ const Inbox = ({
           _notificationsTQ?.structuredData?.data[0][globalFocus.currIdx ?? 0],
         );
 
-      const inboxElement = document.getElementById(
-        `inbox-${splits?.[effectiveSplit]?.[globalFocus.currIdx ?? 0]?.id}`,
-      );
+      const focusedNotification =
+        splits?.[effectiveSplit]?.[globalFocus.currIdx ?? 0];
+      const focusedNotificationId = focusedNotification
+        ? String(focusedNotification.id)
+        : null;
+      const previousFocusedNotificationId = lastFocusedNotificationId.current;
+      lastFocusedNotificationId.current = focusedNotificationId;
+      const focusedRowStillListed =
+        previousFocusedNotificationId !== null &&
+        splits?.[effectiveSplit]?.some(
+          (notification) => String(notification.id) === previousFocusedNotificationId,
+        ) === true;
+
+      const inboxElement = focusedNotificationId
+        ? document.getElementById(`inbox-${focusedNotificationId}`)
+        : null;
+      const focusScroll = resolveInboxFocusScroll({
+        keepsScroll: inboxKeepsScroll,
+        focusedRowStillListed,
+      });
+      if (!focusScroll.scroll) return;
       if (!inboxElement)
         document.getElementById(`tab-${effectiveSplit}`)?.scrollIntoView({
           behavior: "instant" as ScrollBehavior,
           inline: "center",
-          block: "center",
+          block: focusScroll.block,
         });
       else {
-        inboxElement?.scrollIntoView({
+        inboxElement.scrollIntoView({
           behavior: "instant" as ScrollBehavior,
-          block: "center",
+          block: focusScroll.block,
         });
       }
     } catch (error) {
@@ -656,7 +678,7 @@ const Inbox = ({
     if (initialDocumentRows.current === _notificationsTQ?.structuredData?.data && inboxDocument) return;
     initialDocumentRows.current = undefined;
     newCommentsHandler();
-  }, [_notificationsTQ?.structuredData?.data, trigger]);
+  }, [_notificationsTQ?.structuredData?.data, trigger, inboxKeepsScroll]);
 
   useEffect(() => {
     if (window.location.pathname.startsWith("/detail/") && window.history.state?.cachedTaskDetail) return;

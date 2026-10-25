@@ -436,7 +436,7 @@ export function getUpdateTaskInputSchema() {
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',
@@ -497,7 +497,7 @@ export function getAssignUserBaseSchema() {
       .describe('User ID to assign or unassign (use intent: unassign to remove).'),
     user_ids: z
       .array(z.coerce.number().int().positive())
-      .min(1)
+      .min(1, 'user_ids is empty: name at least one user id, or use user_id, agent_id, or assign_self')
       .optional()
       .describe('For multiple mode: user IDs; each user follows intent (assign = idempotent, unassign = remove).'),
     agent_id: z
@@ -534,7 +534,7 @@ export function getAssignUserInputSchema() {
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',
@@ -556,7 +556,7 @@ export function getAssignUserInputSchema() {
     .refine(
       (data) => {
         const hasUserId = data.user_id !== undefined;
-        const hasUserIds = data.user_ids !== undefined && data.user_ids.length > 0;
+        const hasUserIds = data.user_ids !== undefined;
         const hasAgentId = data.agent_id !== undefined;
         return hasUserId || hasUserIds || hasAgentId || data.assign_self === true;
       },
@@ -676,7 +676,7 @@ export function getMoveTaskBetweenBoardsInputSchema() {
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message:

@@ -80,6 +80,7 @@ function fullScreenNewChat(chat, { enabled = false, sessions = [], activeSession
     "@/hooks/useFlag": { useFlag: (key) => key === flag.default.key && enabled },
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": flag,
+    "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch": { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: "htpr-7763-ctrl-tab-session-switch" },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: "Composer" },
     "@/components/AI_CHAT/MessageList": { MessageList: "Messages" },
     "@/components/AI_CHAT/WelcomeScreen": { WelcomeScreen: "Welcome" },
@@ -92,7 +93,7 @@ function fullScreenNewChat(chat, { enabled = false, sessions = [], activeSession
     "@/store": {},
     "@/utils/aiChat/sortBoardsByRecent": { sortBoardsByRecent: (teams) => teams },
     "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
-    "@/utils/generateTime": { default: () => "" },
+    "@/utils/generateTime": { __esModule: true, default: () => "" },
     "lucide-react": new Proxy({}, { get: (_, name) => String(name) }),
     "next/navigation": {
       useRouter: () => ({ replace: (url) => {
