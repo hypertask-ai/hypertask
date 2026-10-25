@@ -183,6 +183,13 @@ export function selectMcpTools(
         let maximum: number | undefined
         let endpointCap: number | undefined
         try {
+          if ((definition.name === 'hypertask_tasks' || definition.name === 'hypertask_comments') && 'board_id' in input) {
+            if (input.project_id !== undefined && Number(input.board_id) !== Number(input.project_id)) {
+              throw new z.ZodError([{ code: 'custom', path: ['board_id'], message: 'board_id and project_id must identify the same board when both are provided.' }])
+            }
+            if (input.project_id === undefined) input.project_id = input.board_id
+            delete input.board_id
+          }
           if (action.read_only && supportsLimit) {
             const requestedLimit = input.limit === undefined ? args.limit : Number(z.object({ limit: tool.parameters.shape.limit }).parse({ limit: input.limit }).limit)
             const limitSchema = z.toJSONSchema(tool.parameters.shape.limit, { unrepresentable: 'any', io: 'input' }) as { maximum?: number }
