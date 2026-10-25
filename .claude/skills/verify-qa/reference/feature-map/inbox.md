@@ -20,7 +20,8 @@ and that archiving/undo works.
 
 - Bulk archive used one or two database writes per selected item and could
   exceed the transaction deadline ([HTPR-7953](https://app.hypertask.ai/detail/project-15/7953)).
-  Check a large selection through `POST /api/notifications/(un)archiveBulk`,
+  Check a large selection through the bulk-archive endpoint in
+  `src/pages/api/notifications/(un)archiveBulk.ts`,
   then archive two QA-created reminders, reload, undo and reload again.
   Missing notification IDs must not fail the batch; other users' rows and
   deleted notifications must stay unchanged.
