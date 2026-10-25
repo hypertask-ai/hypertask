@@ -143,9 +143,36 @@ Turbopuffer embeddings do not use the gateway at all
   the registry, encrypts each secret, writes `managed_gateway`, and removes the
   matching obsolete customer-visible rows while preserving any different
   customer-owned BYOK secret. It never returns plaintext keys.
-- **Missing keys:** Premium, legacy AI, and Pro-comped teams fail closed when
-  their dedicated key is absent. Free, BYOK-plan and BYOK-comped teams
-  intentionally use the shared included-allowance key.
+- **Automatic paid-team keys:** subscription creation and renewal ensure that
+  an entitled Pro or AI team has a `managed_gateway` row before returning
+  success. Provisioning uses Vercel's `POST /v1/api-keys` with
+  `purpose: "ai-gateway"` and team spend attribution. Configure the server-only
+  `MANAGED_GATEWAY_VERCEL_TOKEN` (a Vercel access token permitted to create
+  AI Gateway keys), `MANAGED_GATEWAY_VERCEL_TEAM_ID` (the platform's Vercel
+  team, not a Hypertask team), and the existing `BYOK_CIPHER_SECRET` **before
+  deploying**. See [Vercel's API key documentation](https://vercel.com/docs/ai-gateway/authentication-and-byok/api-keys).
+  Missing configuration or a failed Vercel request fails the webhook for Stripe
+  to retry; the subscription entitlement remains stored. Existing rows,
+  including disabled or malformed rows, are preserved for manual repair, as
+  are customer BYOK keys. Free and BYOK plans never receive a managed key.
+- **Backfill existing paid teams:** with `DATABASE_URL`, `REDIS_URL`, and the
+  provisioning variables loaded (or in `.env.local`), run
+  `node scripts/backfill-managed-team-gateway-keys.cjs` to inspect the dry run.
+  Then run the same command with `--apply` to create missing keys. It scans
+  teams with subscription history, rechecks each current plan under the same
+  team billing lease as the webhook, and reports only team IDs and statuses.
+  It stops on failure; rerunning safely skips existing rows. No live backfill
+  runs as part of the build or deployment.
+- **Missing keys:** Premium, legacy AI, and Pro-comped teams still fail closed when
+  their dedicated key is absent. Provisioning does not introduce a shared-key
+  fallback. Free, BYOK-plan and BYOK-comped teams intentionally use the shared
+  included-allowance key.
+- **Rollback:** revert the provisioning code; newly created unused keys can
+  remain without inference cost. A timeout, lost lease, or failed database write
+  after Vercel creates a key can leave an unused key named `Hypertask team <id>`.
+  Check Vercel's key inventory before retrying repeatedly. Provisioning never
+  revokes a key automatically because a database write may have committed even
+  when its response failed.
 - **Verify billing isolation:** trigger any AI feature in two teams' boards,
   then Vercel → AI Gateway → Observability: each request logs the key it used.
 - **Costs:** gateway passes through list prices, no markup. Old direct spend

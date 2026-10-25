@@ -39,6 +39,11 @@ function loadController(prisma, options = {}) {
     options.completePendingStripeCancellation ?? (async () => false);
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/provisionManagedTeamGatewayKey": {
+      ensureManagedTeamGatewayKeyWithTeamLockHeld:
+        options.ensureManagedTeamGatewayKeyWithTeamLockHeld ??
+        (async () => "existing"),
+    },
     "@/lib/seatBillingLock": { withTeamSeatBillingLock },
     "@/lib/pendingStripeSubscriptionCancellation": {
       completePendingStripeCancellation,
@@ -77,10 +82,15 @@ function stripeSubscription(id, status, trial = false) {
 const pendingCancellationKey =
   "hypertaskPendingPreviousSubscriptionCancellationId";
 
-function loadCheckoutSuccess(prisma, stripe, onSubscriptionUpdated) {
+function loadCheckoutSuccess(prisma, stripe, onSubscriptionUpdated, options = {}) {
   let lockTail = Promise.resolve();
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/provisionManagedTeamGatewayKey": {
+      ensureManagedTeamGatewayKeyWithTeamLockHeld:
+        options.ensureManagedTeamGatewayKeyWithTeamLockHeld ??
+        (async () => "existing"),
+    },
     "@/lib/subscription": { stripe },
     "@/lib/pendingStripeSubscriptionCancellation": {
       subscriptionObjectWithPendingCancellation: (
@@ -160,7 +170,11 @@ function loadCheckoutSuccess(prisma, stripe, onSubscriptionUpdated) {
   return mod.exports.default;
 }
 
-function checkoutReplayHarness({ activeId = null, storedPlans = [] } = {}) {
+function checkoutReplayHarness({
+  activeId = null,
+  storedPlans = [],
+  ensureManagedTeamGatewayKeyWithTeamLockHeld,
+} = {}) {
   let activeSubscriptionPlanId = activeId;
   let plans = storedPlans.map((plan, index) => ({
     id: `stored_plan_${index + 1}`,
@@ -267,9 +281,14 @@ function checkoutReplayHarness({ activeId = null, storedPlans = [] } = {}) {
       },
     },
   };
-  const controller = loadCheckoutSuccess(prisma, stripe, async () => {
-    calls.subscriptionUpdates += 1;
-  });
+  const controller = loadCheckoutSuccess(
+    prisma,
+    stripe,
+    async () => {
+      calls.subscriptionUpdates += 1;
+    },
+    { ensureManagedTeamGatewayKeyWithTeamLockHeld },
+  );
 
   return {
     calls,
@@ -297,6 +316,7 @@ function loadSubscriptionUpdated({
   hasPlan = true,
   withTeamSeatBillingLock,
   completePendingStripeCancellation,
+  ensureManagedTeamGatewayKeyWithTeamLockHeld,
 }) {
   let activeId = activeSubscriptionPlanId;
   let storedStatus = planStatus;
@@ -374,6 +394,7 @@ function loadSubscriptionUpdated({
   const controller = loadController(prisma, {
     withTeamSeatBillingLock,
     completePendingStripeCancellation,
+    ensureManagedTeamGatewayKeyWithTeamLockHeld,
   });
 
   return {
@@ -672,4 +693,66 @@ test("the deleted webhook processes the signed event object", () => {
   assert.match(deletedCase, /event\.data\s*\.object/);
   assert.match(deletedCase, /await onSubscriptionUpdated/);
   assert.doesNotMatch(deletedCase, /getSubscription\(event\)/);
+});
+
+test("a new seat subscription provisions its managed key after storing entitlement", async () => {
+  const provisioned = [];
+  const harness = checkoutReplayHarness({
+    ensureManagedTeamGatewayKeyWithTeamLockHeld: async (teamId, assertHeld) => {
+      assertHeld();
+      assert.equal(harness.state().activeSubscriptionPlanId, "sub_1");
+      provisioned.push(teamId);
+    },
+  });
+  await harness.controller(stripeSubscription("sub_1", "active"), stripePlan);
+  assert.deepEqual(provisioned, ["team_1"]);
+  assert.equal(harness.state().plans.length, 1);
+});
+
+test("renewals retry failed provisioning without losing subscription access", async () => {
+  let attempts = 0;
+  const harness = loadSubscriptionUpdated({
+    activeSubscriptionPlanId: "sub_1",
+    ensureManagedTeamGatewayKeyWithTeamLockHeld: async (teamId, assertHeld) => {
+      assertHeld();
+      assert.equal(teamId, "team_1");
+      attempts += 1;
+      if (attempts === 1) throw new Error("Vercel unavailable");
+    },
+  });
+  await assert.rejects(
+    harness.controller(stripeSubscription("sub_1", "active"), stripePlan),
+    /Vercel unavailable/,
+  );
+  assert.equal(harness.activeId(), "sub_1");
+  await harness.controller(stripeSubscription("sub_1", "active"), stripePlan);
+  assert.equal(attempts, 2);
+  assert.equal(harness.activeId(), "sub_1");
+});
+
+test("canceled and unknown subscriptions never provision a funded key", async () => {
+  const provisioned = [];
+  const ensureManagedTeamGatewayKeyWithTeamLockHeld = async (teamId) =>
+    provisioned.push(teamId);
+  const canceled = loadSubscriptionUpdated({
+    activeSubscriptionPlanId: "sub_1",
+    ensureManagedTeamGatewayKeyWithTeamLockHeld,
+  });
+  await canceled.controller(stripeSubscription("sub_1", "canceled"));
+  assert.equal(canceled.activeId(), null);
+  assert.deepEqual(provisioned, []);
+  const unknown = loadSubscriptionUpdated({
+    activeSubscriptionPlanId: null,
+    hasPlan: false,
+    ensureManagedTeamGatewayKeyWithTeamLockHeld,
+  });
+  await unknown.controller(stripeSubscription("sub_unknown", "active"), stripePlan);
+  assert.equal(unknown.activeId(), null);
+  assert.deepEqual(provisioned, []);
+  const active = loadSubscriptionUpdated({
+    activeSubscriptionPlanId: "sub_1",
+    ensureManagedTeamGatewayKeyWithTeamLockHeld,
+  });
+  await active.controller(stripeSubscription("sub_1", "active"), stripePlan);
+  assert.deepEqual(provisioned, ["team_1"]);
 });

@@ -2,6 +2,7 @@ import type { Prisma, SubscriptionPlanStatus } from "@prisma/client";
 
 import { completePendingStripeCancellation } from "@/lib/pendingStripeSubscriptionCancellation";
 import prisma from "@/lib/prisma";
+import { ensureManagedTeamGatewayKeyWithTeamLockHeld } from "@/lib/provisionManagedTeamGatewayKey";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
 import { ISubscriptionPlan } from "@/models/model";
@@ -167,6 +168,7 @@ export const applySubscriptionUpdatedWithTeamLockHeld = async (
     where: { userId: { in: userIds } },
     data: { trialStatus: true },
   });
+  await ensureManagedTeamGatewayKeyWithTeamLockHeld(teamToPayFor.id, assertHeld);
 };
 
 const onSubscriptionUpdated = async (

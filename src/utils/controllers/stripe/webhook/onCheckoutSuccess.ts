@@ -5,6 +5,7 @@ import {
   subscriptionObjectWithPendingCancellation,
 } from "@/lib/pendingStripeSubscriptionCancellation";
 import prisma from "@/lib/prisma";
+import { ensureManagedTeamGatewayKeyWithTeamLockHeld } from "@/lib/provisionManagedTeamGatewayKey";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
 import type { ISubscriptionPlan } from "@/models/model";
@@ -163,6 +164,7 @@ const sessionOnSuccess = async (
     generateSummaryAfterUpsertionReminder(team.id);
     assertHeld();
     await completePendingStripeCancellation(storedPlan, assertHeld);
+    await ensureManagedTeamGatewayKeyWithTeamLockHeld(team.id, assertHeld);
   });
 };
 
