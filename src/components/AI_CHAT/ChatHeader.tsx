@@ -26,6 +26,7 @@ import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-77
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -69,19 +70,19 @@ function ChatSessionRow({
   chat,
   isActive,
   onSelect,
-  onDelete,
+  children,
 }: {
   chat: HistorySession;
   isActive: boolean;
   onSelect: () => void;
-  onDelete?: () => void;
+  children?: ReactNode;
 }) {
   return (
-    <li className={onDelete ? "flex items-center" : undefined}>
+    <li className={children ? "flex items-center" : undefined}>
       <button
         type="button"
         onClick={onSelect}
-        className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors", onDelete && "min-w-0 flex-1")}
+        className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors", children && "min-w-0 flex-1")}
       >
         <span className="min-w-0 flex-1 truncate font-normal">
           {chat.title}
@@ -95,16 +96,7 @@ function ChatSessionRow({
           />
         )}
       </button>
-      {onDelete && (
-        <button
-          type="button"
-          aria-label="Delete chat"
-          onClick={onDelete}
-          className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
-        >
-          <Trash2 size={16} strokeWidth={1.75} />
-        </button>
-      )}
+      {children}
     </li>
   );
 }
@@ -269,13 +261,23 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
                   key={chat.id}
                   chat={chat}
                   isActive={chat.id === resolvedSessionId}
-                  onDelete={isMbl && phoneChatDelete ? () => handleDeleteSession(chat.id) : undefined}
                   onSelect={() => {
                     setIsDropdownOpen(false);
                     sidebarChats?.onSelect({ kind: "ai" });
                     selectSession(chat.id);
                   }}
-                />
+                >
+                  {phoneChatDelete && isMbl && (
+                    <button
+                      type="button"
+                      aria-label="Delete chat"
+                      onClick={() => handleDeleteSession(chat.id)}
+                      className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
+                    >
+                      <Trash2 size={16} strokeWidth={1.75} />
+                    </button>
+                  )}
+                </ChatSessionRow>
               ))}
             </ul>
           </div>
@@ -294,13 +296,23 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
                   key={chat.id}
                   chat={chat}
                   isActive={chat.id === resolvedSessionId}
-                  onDelete={isMbl && phoneChatDelete ? () => handleDeleteSession(chat.id) : undefined}
                   onSelect={() => {
                     setIsDropdownOpen(false);
                     sidebarChats?.onSelect({ kind: "ai" });
                     selectSession(chat.id);
                   }}
-                />
+                >
+                  {phoneChatDelete && isMbl && (
+                    <button
+                      type="button"
+                      aria-label="Delete chat"
+                      onClick={() => handleDeleteSession(chat.id)}
+                      className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
+                    >
+                      <Trash2 size={16} strokeWidth={1.75} />
+                    </button>
+                  )}
+                </ChatSessionRow>
               ))}
             </ul>
           </div>
