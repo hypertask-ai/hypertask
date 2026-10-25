@@ -94,10 +94,18 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     sendInFlightRef.current = true;
     if (stopClosesStream) streamingRequestRef.current = streamId;
     const ownsSend = () => !stopClosesStream || streamingRequestRef.current === streamId;
+    const acceptedFiles = preserveComposer || queuedMessage ? [] : [...fileUpload.fileItems];
+    let acceptedFilesDropped = false;
+    const dropAcceptedFiles = () => {
+      if (acceptedFilesDropped || acceptedFiles.length === 0) return;
+      acceptedFilesDropped = true;
+      fileUpload.setFileItems((currentFiles) => currentFiles.filter((file) => !acceptedFiles.includes(file)));
+    };
     let settled = false;
     const settleSend = (completedSession?: string) => {
       if (settled) return;
       settled = true;
+      if (stopClosesStream && !ownsSend()) dropAcceptedFiles();
       streamingRequestRef.current = null;
       sendInFlightRef.current = false;
       if (stopClosesStream) settleSendRef.current = null;
@@ -133,7 +141,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }
 
     const sidebarHeaders = sidebarChatHeaders(session.id);
-    const acceptedFiles = preserveComposer || queuedMessage ? [] : [...fileUpload.fileItems];
     const processedAttachments = queuedMessage?.attachments ?? (preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
       fileUpload.fileItems
@@ -301,8 +308,8 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
           queueAccepted = true;
           if (ownsSend()) {
             if (!preserveComposer && !queuedMessage) fileUpload.clearFiles();
-          } else if (acceptedFiles.length > 0) {
-            fileUpload.setFileItems((currentFiles) => currentFiles.filter((file) => !acceptedFiles.includes(file)));
+          } else {
+            dropAcceptedFiles();
           }
 
           if (!assistantPlaceholderAdded) {

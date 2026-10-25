@@ -395,15 +395,16 @@ test("graceful Stop before the first word shows cancellation text", { timeout: 2
   assert.equal(h.messages.get(h.requests[0].assistant_message_id).content, "Stream cancelled.");
 });
 
-test("Stop before response headers drops the sent files and keeps a newer draft file", { timeout: 2000 }, async (t) => {
+test("Stop before response headers drops the sent files before the successor can resend them", { timeout: 2000 }, async (t) => {
   const h = client(t, { delayResponse: true });
   const sent = { name: "invoice.pdf" };
   const newer = { name: "draft.png" };
   h.context.fileUpload.fileItems = [sent];
   const first = h.send({ preserveComposer: false });
   await h.waitForRequest(0);
-  await h.stop();
   h.context.fileUpload.fileItems = [sent, newer];
+  await h.stop();
+  assert.deepEqual(h.context.fileUpload.fileItems, [newer], "the stopped send drops its files while its headers are still blocked");
   h.releaseResponse(0);
   await h.waitForReader(0);
   h.done(0);
