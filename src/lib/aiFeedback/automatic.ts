@@ -6,17 +6,17 @@ import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { getMcpExecutionContext } from '@/lib/mcp/operationContext'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 
-function fileAutomaticFeedback(input: AutomaticFeedbackInput, userId?: number, agentId?: string | null) {
+function fileAutomaticFeedback(input: AutomaticFeedbackInput, userId?: number, agentId?: string | null, agentName?: string | null) {
   const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
   for (const field of ['tool', 'client', 'errorCode', 'field'] as const) {
     if (!automaticFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
   }
-  return import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId, { origin: 'automatic', agentId })).catch(() => {})
+  return import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId, { origin: 'automatic', agentId, agentName })).catch(() => {})
 }
 
-export function queueAiFeedback(input: AutomaticFeedbackInput, userId?: number, agentId?: string | null): void {
+export function queueAiFeedback(input: AutomaticFeedbackInput, userId?: number, agentId?: string | null, agentName?: string | null): void {
   try {
-    waitUntil(fileAutomaticFeedback(input, userId, agentId))
+    waitUntil(fileAutomaticFeedback(input, userId, agentId, agentName))
   } catch {
   }
 }
@@ -113,7 +113,7 @@ function feedbackErrorDetails(value: unknown, depth = 0): Pick<AutomaticFeedback
   }
 }
 
-export function observeFeedbackTools(tools: readonly PortableTool[], userId: number): PortableTool[] {
+export function observeFeedbackTools(tools: readonly PortableTool[], userId: number, agent?: { id?: string | null; name?: string | null }): PortableTool[] {
   return tools.map((tool) => ({
     ...tool,
     execute: async (args, token, invocation) => {
@@ -123,13 +123,16 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
         let result: unknown
         try { result = JSON.parse(text) } catch {}
         const status = feedbackStatus(result)
-        if (status && status >= 500) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }, userId)
+        if (status && status >= 500) {
+          const context = getMcpExecutionContext(token)
+          queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }, userId, agent?.id ?? context?.agentId, agent?.name ?? context?.agentDisplayName)
+        }
         return text
       } catch (error) {
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
         if (status !== 403) {
-          const auth = getMcpExecutionContext(token)
-          queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...feedbackErrorDetails(error) }, userId, auth?.agentId)
+          const context = getMcpExecutionContext(token)
+          queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...feedbackErrorDetails(error) }, userId, agent?.id ?? context?.agentId, agent?.name ?? context?.agentDisplayName)
         }
         throw error
       }

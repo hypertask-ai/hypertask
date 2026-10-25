@@ -151,7 +151,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
       consolidated && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),
       consolidated && await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, ctx.user.id),
       consolidated && await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, ctx.user.id),
-    ), ctx.user.id)
+    ), ctx.user.id, { id: ctx.agentId, name: ctx.agentDisplayName })
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)
     }

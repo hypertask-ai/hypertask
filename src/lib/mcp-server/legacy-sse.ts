@@ -193,7 +193,7 @@ export async function handleLegacySseRequest(
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
                 ...(v2 && ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
-              }, v2, enabled && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId)), userId)
+              }, v2, enabled && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), enabled && await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId)), userId, { id: ctx?.agentId, name: ctx?.agentDisplayName })
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
