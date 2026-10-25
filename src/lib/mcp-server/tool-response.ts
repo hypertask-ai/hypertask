@@ -101,7 +101,7 @@ export async function executeToolResult(
   invocation?: Parameters<PortableTool['execute']>[2],
 ): Promise<CallToolResult> {
   try {
-    const parsed = tool.parameters.parse(args)
+    const parsed = tool.parameters.parse(tool.normalizeArguments ? tool.normalizeArguments(args) : args)
     const text = await tool.execute(parsed, token, invocation)
     if (/^Error:/i.test(text)) return toolErrorResult(new Error(text))
     let structured: Record<string, unknown> | undefined

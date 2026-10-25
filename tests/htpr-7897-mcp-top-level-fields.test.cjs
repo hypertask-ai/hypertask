@@ -41,34 +41,40 @@ function spyTasks(topLevelInputFields = true, { ticketNumber = true } = {}) {
   return { calls, tasks: tools.find((tool) => tool.name === 'hypertask_tasks') }
 }
 
-test('a documented field at the top level reaches the tool', async () => {
+async function callThroughTransport(tasks, args) {
+  const result = await executeToolResult(tasks, args, 'fixture-token')
+  return { result, body: result.isError ? null : JSON.parse(result.content[0].text) }
+}
+
+test('a documented field at the top level reaches the tool through the MCP transport', async () => {
   const { calls, tasks } = spyTasks()
-  const result = JSON.parse(await tasks.execute({ action: 'list', ticket_number: 'HTPR-7897' }, 'fixture-token'))
+  const { result, body } = await callThroughTransport(tasks, { action: 'list', ticket_number: 'HTPR-7897' })
+  assert.equal(result.isError, undefined)
   assert.equal(calls.length, 1)
   assert.equal(calls[0].ticket_number, 'HTPR-7897')
-  assert.equal(result.data.tasks[0].ticket, 'HTPR-7897')
+  assert.equal(body.data.tasks[0].ticket, 'HTPR-7897')
 })
 
 test('the same field inside input keeps working unchanged', async () => {
   const { calls, tasks } = spyTasks()
-  await tasks.execute({ action: 'list', input: { ticket_number: 'HTPR-7897' } }, 'fixture-token')
+  const { body } = await callThroughTransport(tasks, { action: 'list', input: { ticket_number: 'HTPR-7897' } })
   assert.equal(calls[0].ticket_number, 'HTPR-7897')
+  assert.equal(body.data.tasks[0].ticket, 'HTPR-7897')
 })
 
 test('the field in both places with the same value is accepted', async () => {
   const { calls, tasks } = spyTasks()
-  await tasks.execute({ action: 'list', input: { ticket_number: 'HTPR-7897' }, ticket_number: 'HTPR-7897' }, 'fixture-token')
+  const { body } = await callThroughTransport(tasks, { action: 'list', input: { ticket_number: 'HTPR-7897' }, ticket_number: 'HTPR-7897' })
   assert.equal(calls.length, 1)
   assert.equal(calls[0].ticket_number, 'HTPR-7897')
+  assert.equal(body.data.tasks[0].ticket, 'HTPR-7897')
 })
 
 test('the field in both places with different values is refused', async () => {
   const { calls, tasks } = spyTasks()
-  await assert.rejects(tasks.execute({ action: 'list', input: { ticket_number: 'HTPR-7897' }, ticket_number: 'HTPR-7000' }, 'fixture-token'), (error) => {
-    assert.ok(error instanceof z.ZodError)
-    assert.match(error.message, /Pass ticket_number inside input or at the top level, not both with different values/)
-    return true
-  })
+  const result = await executeToolResult(tasks, { action: 'list', input: { ticket_number: 'HTPR-7897' }, ticket_number: 'HTPR-7000' }, 'fixture-token')
+  assert.equal(result.isError, true)
+  assert.match(result.content[0].text, /Pass ticket_number inside input or at the top level, not both with different values/)
   assert.equal(calls.length, 0)
 })
 
@@ -90,7 +96,8 @@ test('a field the action does not document is still refused at the top level', a
 
 test('pagination and response_format stay at the top level', async () => {
   const { calls, tasks } = spyTasks()
-  await tasks.execute({ action: 'list', limit: 5, offset: 4, response_format: 'detailed', ticket_number: 'HTPR-7897' }, 'fixture-token')
+  const { result } = await callThroughTransport(tasks, { action: 'list', limit: 5, offset: 4, response_format: 'detailed', ticket_number: 'HTPR-7897' })
+  assert.equal(result.isError, undefined)
   assert.equal(calls[0].limit, 5)
   assert.equal(calls[0].offset, 4)
   assert.equal(calls[0].ticket_number, 'HTPR-7897')
