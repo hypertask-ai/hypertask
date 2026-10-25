@@ -23,6 +23,10 @@ class KeeperTests(unittest.TestCase):
         self.state.mkdir(parents=True)
         self.events = self.home / 'events'
         self.events.touch()
+        guard = self.home / '.local/bin/session-policy-guard'
+        guard.parent.mkdir(parents=True)
+        guard.write_text('#!/bin/sh\nexit "${POLICY_EXIT:-0}"\n')
+        guard.chmod(0o755)
         self.proc = self.home / 'proc'
         self.proc.mkdir()
         self.pressure()
@@ -60,6 +64,12 @@ esac''')
     def run_keeper(self, *args, script=SCRIPT):
         return subprocess.run(['bash', str(script), *args], env=self.env,
                               capture_output=True, text=True, timeout=10)
+
+    def test_policy_denied_topup_never_sets_up_or_starts(self):
+        self.env['POLICY_EXIT'] = '1'
+        self.assertEqual(self.run_keeper('top-up').returncode, 0)
+        self.assertEqual(self.events.read_text(), '')
+        self.assertIn('launch refused by session policy', (self.state / 'keeper.log').read_text())
 
     def test_green_topup_starts_two_without_reading_quota(self):
         result = self.run_keeper('top-up')
