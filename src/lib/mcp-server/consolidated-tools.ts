@@ -68,13 +68,24 @@ function inputSchema(tool: PortableTool, action: Action, boardAlias = false): Re
 
 const TOP_LEVEL_FIELDS = new Set(['action', 'input', 'response_format', 'limit', 'offset', 'page'])
 
-function hoistTopLevelInputFields(raw: Record<string, unknown>, tool: PortableTool, legacyShape: Record<string, unknown>): Record<string, unknown> {
-  const nested = raw.input
+function hoistTopLevelInputFields(
+  raw: unknown,
+  actions: Record<string, Action>,
+  byName: Map<string, PortableTool>,
+  legacyShape: Record<string, unknown>,
+): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const requested = (raw as Record<string, unknown>).action
+  const action = typeof requested === 'string' ? actions[requested] : undefined
+  const tool = action ? byName.get(action.tool) : undefined
+  if (!tool) return raw
+  const rawFields = raw as Record<string, unknown>
+  const nested = rawFields.input
   if (nested !== undefined && (typeof nested !== 'object' || nested === null || Array.isArray(nested))) return raw
   const input = { ...(nested as Record<string, unknown> | undefined) }
   const documented = new Set(Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field))
-  const hoisted = { ...raw }
-  for (const [key, value] of Object.entries(raw)) {
+  const hoisted = { ...rawFields }
+  for (const [key, value] of Object.entries(rawFields)) {
     if (TOP_LEVEL_FIELDS.has(key) || key in legacyShape || !documented.has(key)) continue
     if (input[key] !== undefined && JSON.stringify(input[key]) !== JSON.stringify(value)) {
       throw new z.ZodError([{ code: 'custom', path: ['input', key], message: `Pass ${key} inside input or at the top level, not both with different values.` }])
@@ -194,10 +205,10 @@ export function selectMcpTools(
       ...(v2 ? { annotations: annotationsForActions(Object.values(actions)) } : {}),
       outputSchema: CONSOLIDATED_OUTPUT_SCHEMA,
       input_examples: definition.input_examples.filter((example) => names.includes((example as { action: string }).action)),
+      ...(topLevelInputFields ? { normalizeArguments: (raw: unknown) => hoistTopLevelInputFields(raw, actions, byName, legacyShape) } : {}),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
         const rawArgs = (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
-        const requestedTool = actions[String(rawArgs.action)] && byName.get(actions[String(rawArgs.action)].tool)
-        const args = parameters.parse(topLevelInputFields && requestedTool ? hoistTopLevelInputFields(rawArgs, requestedTool, legacyShape) : raw)
+        const args = parameters.parse(raw)
         const action = actions[args.action]
         const tool = byName.get(action.tool)!
         const oldArgs = rawArgs
