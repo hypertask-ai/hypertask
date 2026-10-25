@@ -1023,6 +1023,10 @@ N() {
   [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
 }
 N 0 'deployed ok (recorded live proof, merged'
+N 1 'FAIL: no release found' INERT_RELEASES='[{"tagName":"v1"}]'
+N 1 'FAIL: failed workflow run for merge' INERT_RUNS='[{"head_sha":"'"$inert_sha"'","event":"push","head_branch":"master","conclusion":"failure","status":"completed"}]'
+N 1 'FAIL: workflow run for merge' INERT_RUNS='[{"head_sha":"'"$inert_sha"'","event":"push","head_branch":"master","conclusion":null,"status":"in_progress"}]'
+N 1 'FAIL: no successful push' INERT_RUNS='[{"head_sha":"'"$inert_sha"'","event":"push","head_branch":"master","conclusion":"neutral","status":"completed"}]'
 N 1 'FAIL: no release found' SHIP_REPO=valentinyeo/other
 unset -f N
 rm -rf "$E2"
