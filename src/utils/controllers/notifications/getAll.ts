@@ -1,4 +1,4 @@
-import { BLOCKED_INBOX_DISMISSAL_MESSAGE } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { BLOCKED_INBOX_DISMISSAL_MESSAGE } from "@/lib/inbox/blockedInboxDismissal";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";

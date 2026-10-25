@@ -6,7 +6,8 @@ import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
-import { BLOCKED_INBOX_DISMISSAL_MESSAGE, HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { BLOCKED_INBOX_DISMISSAL_MESSAGE } from "@/lib/inbox/blockedInboxDismissal";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { HTPR_7691_IDEMPOTENT_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7691-idempotent-archive";
 

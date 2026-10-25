@@ -1,7 +1,6 @@
 import type { FeatureFlagDefinition } from "../definitions";
 
 export const HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG = "htpr-7840-blocked-inbox-archive";
-export const BLOCKED_INBOX_DISMISSAL_MESSAGE = "htpr-7840-blocked-inbox-dismissal";
 
 export default {
   key: HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG,
