@@ -3,6 +3,7 @@ import { observeFeedbackTools, queueAiFeedback, queueMcpAuthFailure } from '@/li
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import jwt from 'jsonwebtoken'
 import { MCP_TOOLS } from './tools'
+import { getAgentPresenceTool } from './tools/agent-presence.tool'
 import { handleLegacySseRequest, isLegacySseRequest } from './legacy-sse'
 import { recordLegacyMcpRequest } from '@/lib/telemetry/mcpSseAnalytics'
 import {
@@ -136,7 +137,10 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const ctx = authInfo.extra?.mcpAuthContext as McpAuthContext
     const v2 = await isMcpV2Enabled(ctx.user.id)
     const feedbackEnabled = await aiFeedbackEnabled(ctx.user.id)
-    const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
+    const presenceTool = await getAgentPresenceTool(ctx.user.id)
+    const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[]).map((tool) =>
+      tool.name === presenceTool.name ? presenceTool : tool,
+    )
     const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
     const consolidated = Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
     const portableTools = observeFeedbackTools(selectMcpTools(

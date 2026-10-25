@@ -10,6 +10,7 @@ import crypto from 'node:crypto'
 import Redis from 'ioredis'
 import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from './stateless-http'
 import { selectMcpTools } from './consolidated-tools'
+import { getAgentPresenceTool } from './tools/agent-presence.tool'
 import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG, isFeatureEnabled } from '@/lib/flags'
@@ -188,7 +189,10 @@ export async function handleLegacySseRequest(
             }
             if (method === 'tools/list' || method === 'tools/call') {
               const feedbackEnabled = await aiFeedbackEnabled(userId)
-              const available = tools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+              const presenceTool = await getAgentPresenceTool(userId)
+              const available = tools
+                .filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+                .map((tool) => tool.name === presenceTool.name ? presenceTool : tool)
               const catalog = observeFeedbackTools(selectMcpTools(available, enabled, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
