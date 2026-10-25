@@ -1,0 +1,70 @@
+name: Production Revert Proposal
+
+on:
+  workflow_run:
+    workflows: [CI Tests]
+    types: [completed]
+    branches: [production]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Failed production CI run to replay (never publishes)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-revert-proposal
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      culprit: ${{ steps.replay.outputs.culprit }}
+      head: ${{ steps.replay.outputs.head }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - id: replay
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: node .github/scripts/production-revert-pr.mjs
+
+  propose:
+    needs: replay
+    if: github.event_name == 'workflow_run' && needs.replay.outputs.culprit != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          CULPRIT: ${{ needs.replay.outputs.culprit }}
+          VALIDATED_HEAD: ${{ needs.replay.outputs.head }}
+          EVIDENCE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh auth setup-git
+          node .github/scripts/production-revert-pr.mjs publish
