@@ -1854,7 +1854,6 @@ model Follower {
 }
 
 model Comment {
-  blockerForTask Task?          @relation("TaskBlockerComment")
   kind          String?
   id            Int            @id @default(autoincrement())
   text          String
