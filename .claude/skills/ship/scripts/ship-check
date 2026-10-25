@@ -528,9 +528,32 @@ check_proof() {
   echo "proof ok"
 }
 
+is_done_section() {
+  local t=$1 title=$2 board sections is_done
+  title=${title//\"/}
+  title=${title//\'/}
+  title=${title//\\/}
+  [ "$title" = Done ] && return 0
+  board=$(hypertask tasks get "$t" --json 2>/dev/null |
+    jq -r '.tasks[0].boardId // .tasks[0].projectId // empty')
+  [ -n "$board" ] || return 3
+  sections=$(hypertask section list --project "$board" --json 2>/dev/null) || return 3
+  is_done=$(jq -r --arg title "$title" '
+    [.sections[] | select(.section_title == $title)] as $matches |
+    if ($matches | length) == 0 then "unknown" else ($matches[0].isDone | tostring) end
+  ' <<<"$sections") || return 3
+  [ -n "$is_done" ] || return 3
+  [ "$is_done" != unknown ] || return 3
+  [ "$is_done" = true ]
+}
+
 check_done() {
-  local s; s=$(hypertask tasks get "$1" --json 2>/dev/null | jq -r '.tasks[0].section // empty')
-  [ "$s" = Done ] || fail "$1 is in \"$s\", not Done"
+  local section rc
+  section=$(hypertask tasks get "$1" --json 2>/dev/null | jq -r '.tasks[0].section // empty')
+  [ -n "$section" ] || fail "cannot read the section of $1"
+  is_done_section "$1" "$section"; rc=$?
+  [ "$rc" = 3 ] && fail "cannot match \"$section\" against the columns of the board holding $1; retry when the board answers"
+  [ "$rc" = 0 ] || fail "$1 is in \"$section\", which is not the board's done column"
   echo "done ok"
 }
 
@@ -605,14 +628,15 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false
+  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false section_title done_section
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
   local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-} deploy=${SHIP_DEPLOY:-}
   local SHIP_CHECKOUT=$checkout SHIP_WORKER=$worker SHIP_DEPLOY=$deploy
   export SHIP_CHECKOUT SHIP_WORKER SHIP_DEPLOY
   local merge='gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
-  local done="vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*--section[[:space:]=]+[\"']?Done"
+  local section_flag="--section([[:space:]]+|=)(\"[^\"]*\"|'[^']*'|[^[:space:]]+)"
+  local done="vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*$section_flag"
   input=$(cat)
   cmd=$(jq -er '.tool_input.command | select(type == "string")' <<<"$input") || {
     echo "ship-check blocked: cannot read the hook command." >&2; exit 2;
@@ -708,17 +732,24 @@ PY
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
     fi
-    # Move to Done: needs merge, deploy and docs (FEATURE/IMPROVE); app tickets also need proof.md.
+    # Move to the board's done column: needs merge, deploy and docs (FEATURE/IMPROVE); app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then
       [[ $rest =~ (HTPR|HYFA|YPER4)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
-      checks="merged deployed docs"; [[ $t == HTPR-* ]] && checks="merged deployed proof docs"
-      for c in $checks; do
-        if [ "$c" = docs ]; then
-          out=$(check_docs "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Merge a docs PR titled with $t or post a No user-visible change: <reason> ticket comment." >&2; exit 2; }
-          continue
-        fi
-        out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
-      done
+      [[ $rest =~ $section_flag ]]; section_title=${BASH_REMATCH[2]}
+      section_title=${section_title#\"}; section_title=${section_title%\"}
+      section_title=${section_title#\'}; section_title=${section_title%\'}
+      is_done_section "$t" "$section_title"; done_section=$?
+      [ "$done_section" = 3 ] && { echo "ship-check blocked moving $t to \"$section_title\": cannot match it against the columns of the ticket's board; retry when the board answers, or name the column exactly as the board shows it." >&2; exit 2; }
+      if [ "$done_section" = 0 ]; then
+        checks="merged deployed docs"; [[ $t == HTPR-* ]] && checks="merged deployed proof docs"
+        for c in $checks; do
+          if [ "$c" = docs ]; then
+            out=$(check_docs "$t") || { echo "ship-check blocked moving $t to \"$section_title\": ${out#FAIL: }. Merge a docs PR titled with $t or post a No user-visible change: <reason> ticket comment." >&2; exit 2; }
+            continue
+          fi
+          out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to \"$section_title\": ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
+        done
+      fi
     fi
   done < <(sed -E 's/(&&|\|\||;|\||&|\(|\))/\n/g' <<<"$cmd")
   exit 0
