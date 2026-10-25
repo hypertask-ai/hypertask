@@ -266,7 +266,7 @@ export function selectMcpTools(
         const supportsCursor = 'cursor' in tool.parameters.shape
         const inputIssues = (error: z.ZodError) => Object.assign(
           new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] }))),
-          { documentedFields: Object.keys(tool.parameters.shape) },
+          { documentedFields: Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field) },
         )
         const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined
         if (requestedPage !== undefined && input.cursor !== undefined) {

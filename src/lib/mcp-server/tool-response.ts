@@ -53,7 +53,7 @@ export function actionableToolError(error: unknown, hints: ErrorHints = {}): str
         const boardHint = issue.keys.some((key) => ['board_id', 'boardId', 'board'].includes(key))
           ? ' This tool calls the board field project_id.'
           : ''
-        const renamed = hints.renamedField
+        const renamed = hints.renamedField && (issue.path.length === 0 || (issue.path.length === 1 && issue.path[0] === 'input'))
           ? issue.keys
               .map((key) => ({ key, snake: key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase() }))
               .filter(({ key, snake }) => snake !== key && hints.fields?.includes(snake))
