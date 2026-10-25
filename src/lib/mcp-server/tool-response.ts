@@ -50,6 +50,9 @@ export function actionableToolError(error: unknown): string {
           : ''
         return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}`
       }
+      if (field === 'input.user_id.user_ids.agent_id.assign_self') {
+        return issue.message.replace(/\.$/, '')
+      }
       return `Change ${field}: ${issue.message.replace(/[.!]$/, '')}. Pass a value matching this action's input schema.`
     }).join(' ')
   }

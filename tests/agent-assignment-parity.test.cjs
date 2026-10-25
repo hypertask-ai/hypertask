@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
+const { ZodError } = require("zod");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/agent-assignment-parity-entry.cjs"), {
@@ -10,6 +11,9 @@ const jiti = require("jiti")(path.join(root, "tests/agent-assignment-parity-entr
 });
 const { AssignUserInputSchema } = jiti(
   path.join(root, "src/lib/mcp-server/validations/task.validation.ts")
+);
+const { actionableToolError } = jiti(
+  path.join(root, "src/lib/mcp-server/tool-response.ts")
 );
 const { resolveUserIds } = jiti(
   path.join(root, "src/app/api/ai/chat/stream/bulkTools.ts")
@@ -68,7 +72,33 @@ test("MCP assign schema reports one clear issue when no assignee is given", () =
   const result = AssignUserInputSchema.safeParse({ ticket_number: "HTPR-7827" });
   assert.equal(result.success, false);
   assert.equal(result.error.issues.length, 1);
-  assert.match(result.error.issues[0].message, /Provide exactly one of user_id, user_ids, agent_id, or assign_self/);
+  assert.match(result.error.issues[0].message, /Name who to assign or unassign/);
+});
+
+test("MCP assignment errors name the target without a schema path", () => {
+  const result = AssignUserInputSchema.safeParse({ ticket_number: "HTPR-7827" });
+  assert.equal(result.success, false);
+  const error = new ZodError(result.error.issues.map((issue) => ({
+    ...issue,
+    path: ["input", ...issue.path],
+  })));
+  const message = actionableToolError(error);
+  assert.equal(
+    message,
+    "Name who to assign or unassign: provide exactly one of user_id, user_ids, agent_id, or assign_self (agent tokens only)"
+  );
+  assert.doesNotMatch(message, /Change input\.user_id/);
+  assert.equal(
+    AssignUserInputSchema.safeParse({ ticket_number: "HTPR-7827", user_id: 6 }).success,
+    true
+  );
+  const unknownKey = AssignUserInputSchema.safeParse({
+    ticket_number: "HTPR-7827",
+    user_id: 6,
+    unsupported: true,
+  });
+  assert.equal(unknownKey.success, false);
+  assert.match(actionableToolError(unknownKey.error), /^Remove unsupported fields/);
 });
 
 test("MCP task service forwards agent_id to the shared assign endpoint", () => {
