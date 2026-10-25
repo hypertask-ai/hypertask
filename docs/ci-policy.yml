@@ -237,7 +237,7 @@ feature_flag_gate:
   registry_kind: optional_feature_bugfix_improvement_default_feature
   bugfix_flag_exemptions: [saved_data, security, crashes]
   # BUGFIX remains only a mechanical exemption; review enforces bugfix flags.
-  # Bugfix flags share ticket naming and cleanup after 14 days on Everyone.
+  # Bugfix flags share ticket naming. /api/cron/feature-flag-removals files cleanup after 7 days on Everyone; money, access and data-deletion stay at 14 days.
   open_pull_request_reconciliation: production_push_and_all_pull_request_events
 
 policies:
