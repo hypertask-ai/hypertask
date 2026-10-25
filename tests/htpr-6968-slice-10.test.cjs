@@ -106,6 +106,7 @@ function fixture(name, scenario = {}) {
     broadcastInboxChange: (...args) => { step("inbox-realtime", ...args); },
   };
   const mocks = {
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");

@@ -134,6 +134,7 @@ async function loadArchiveBulk() {
     socketIdFromHeader: () => null,
   });
   stubModule("src/lib/prisma.ts", { default: prisma });
+  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
   const handler = loadTs("src/pages/api/notifications/(un)archiveBulk.ts");
   return { handler, calls };
 }

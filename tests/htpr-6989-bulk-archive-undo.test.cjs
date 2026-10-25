@@ -28,7 +28,7 @@ function compileOriginal(file, mocks) {
   return mod.exports;
 }
 
-function fixture(api, original = false) {
+function fixture(api, original = false, enabled = true) {
   const rows = [101, 102, 103].map((id, index) => ({
     id, taskId: 201 + index, userId: 985, agentId: null, fromUserId: 7,
     type: "TaskMovedToInbox", status: "Normal", archivedAt: null,
@@ -38,6 +38,7 @@ function fixture(api, original = false) {
   const matches = (row, where) => Object.entries(where).every(([key, value]) => {
     if (value && typeof value === "object" && !(value instanceof Date)) {
       if (Object.hasOwn(value, "in")) return value.in.includes(row[key]);
+      if (Object.hasOwn(value, "notIn")) return !value.notIn.includes(row[key]);
       if (Object.hasOwn(value, "not")) return row[key] !== value.not;
     }
     return value instanceof Date ? row[key]?.getTime() === value.getTime() : row[key] === value;
@@ -60,6 +61,7 @@ function fixture(api, original = false) {
   };
   const db = { notification, $transaction: async callback => callback(db) };
   const mocks = {
+    "@/lib/flags": { isFeatureEnabled: async key => enabled && key === "htpr-7953-inbox-bulk-archive" },
     "@/lib/prisma": { default: db },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/realtime/server": {
@@ -112,8 +114,8 @@ function fixture(api, original = false) {
   return { rows, writes, broadcasts, inboxIds, invoke, clientUndo };
 }
 
-async function bulkRoundTrip(api, original = false) {
-  const fx = fixture(api, original);
+async function bulkRoundTrip(api, original = false, enabled = true) {
+  const fx = fixture(api, original, enabled);
   const notificationIds = fx.rows.slice(0, 3).map(({ id, taskId }) => ({ notificationId: id, taskId, userId: 7 }));
   assert.deepEqual(fx.inboxIds(), [101, 102, 103]);
   const archived = await fx.invoke({ notificationIds, status: "Archive" });
@@ -148,6 +150,7 @@ test("bulk undo restores all three persisted inbox items and preserves single un
         );
         continue;
       }
+      await bulkRoundTrip(api, false, false);
       await bulkRoundTrip(api);
       const single = fixture(api);
       assert.equal((await single.invoke({}, true)).status, 200);
