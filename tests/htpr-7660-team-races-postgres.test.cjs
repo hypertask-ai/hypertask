@@ -76,7 +76,7 @@ async function fixture(actor = 'bound') {
   return { user, agent, project, other, task, page, principal, move, mocks, load: (file, extra = {}) => load(file, { ...mocks, ...extra }) };
 }
 
-function observedClient({ beforeTransaction, afterRead, afterCommit } = {}) {
+function observedClient({ beforeTransaction, afterRead, afterCommit, onError } = {}) {
   const observe = tx => new Proxy(tx, { get(target, key) {
     const value = target[key];
     if (!['project', 'task', 'page'].includes(key) || !afterRead) return typeof value === 'function' ? value.bind(target) : value;
@@ -88,7 +88,9 @@ function observedClient({ beforeTransaction, afterRead, afterCommit } = {}) {
   return new Proxy(prisma, { get(target, key) {
     if (key === '$transaction') return async (callback, options) => {
       await beforeTransaction?.();
-      const result = await prisma.$transaction(tx => callback(observe(tx)), { timeout: 15_000, ...options });
+      let result;
+      try { result = await prisma.$transaction(tx => callback(observe(tx)), { timeout: 15_000, ...options }); }
+      catch (error) { onError?.(error); throw error; }
       await afterCommit?.();
       return result;
     };
@@ -199,6 +201,8 @@ for (const [phase, table] of [['move-first', 'Task'], ['move-first', 'Project'],
       const f = await fixture(actor);
       let transactions = 0;
       let witnessed = false;
+      const transactionErrors = [];
+      assert.equal((await f.load('src/lib/mcp/tasks/resolveTask.ts').findTaskByIdentifier(f.user, { task_id: f.task.id }, f.agent.id, undefined, f.principal.teamScope)).id, f.task.id);
       const db = observedClient({
         beforeTransaction: async () => {
           transactions++;
@@ -211,6 +215,7 @@ for (const [phase, table] of [['move-first', 'Task'], ['move-first', 'Project'],
           }
         } : undefined,
         afterCommit: async () => { if (phase === 'reconcile' && transactions === 1) throw new Error('Lost commit acknowledgement'); },
+        onError: error => transactionErrors.push(error),
       });
       const uploader = f.load('src/lib/mcp/attachments/storeLockedBatch.ts');
       const file = { kind: 'data', filename: 'race.txt', contentType: 'text/plain', buffer: Buffer.from('race') };
@@ -220,7 +225,10 @@ for (const [phase, table] of [['move-first', 'Task'], ['move-first', 'Project'],
         upload: async () => 'https://storage.example.invalid/race.txt',
       });
       const denied = actor === 'bound' && phase !== 'write-first';
-      if (denied) await assert.rejects(upload(), error => error.status === 404);
+      if (denied) {
+        await assert.rejects(upload(), error => error.status === 500);
+        assert.equal(transactionErrors.at(-1)?.status, 404);
+      }
       else assert.equal((await upload()).length, 1);
       assert.equal(await prisma.attachment.count({ where: { taskId: f.task.id } }), phase === 'move-first' && actor === 'bound' ? 0 : 1);
       if (phase === 'reconcile') assert.equal(transactions, 2);
