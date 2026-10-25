@@ -36,6 +36,8 @@ G 2 vcc task move YPER4-118 $DONE
 
 # Done moves, per command segment.
 G 0 vcc task move YPER4-118 $DONE
+G 2 vcc task move HTPR-6570 --section 'Done""'
+G 2 vcc task move HTPR-6570 --section '"Done"'
 G 2 vcc task move '"HTPR-6570"' $DONE
 G 2 vcc task move "'HTPR-6570'" --section Done
 G 2 echo hi '&&' vcc task move HTPR-6570 --section=Done

@@ -529,13 +529,17 @@ check_proof() {
 }
 
 is_done_section() {
-  local t=$1 title=$2 board
+  local t=$1 title=$2 board sections
+  title=${title//\"/}
+  title=${title//\'/}
   [ "$title" = Done ] && return 0
   board=$(hypertask tasks get "$t" --json 2>/dev/null |
     jq -r '.tasks[0].boardId // .tasks[0].projectId // empty')
-  [ -n "$board" ] || return 1
-  [ "$(hypertask section list --project "$board" --json 2>/dev/null |
-      jq -r --arg title "$title" '.sections[] | select(.section_title == $title) | .isDone')" = true ]
+  [ -n "$board" ] ||
+    fail "cannot read the board of $t to tell whether \"$title\" is its done column; retry when the board answers"
+  sections=$(hypertask section list --project "$board" --json 2>/dev/null) ||
+    fail "cannot read the columns of board $board for $t; retry when the board answers"
+  [ "$(jq -r --arg title "$title" '.sections[] | select(.section_title == $title) | .isDone' <<<"$sections")" = true ]
 }
 
 check_done() {
