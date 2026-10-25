@@ -74,6 +74,9 @@ test("gateway failure falls back to authenticated provider lists without claimin
   assert.ok(fallback.warnings.includes("gateway: HTTP 403"));
   assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
   assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 0);
+  const stale = diffModels(twoVersionCatalog, sources).findings.filter((finding) => finding.kind === "stale");
+  assert.deepEqual(stale.map((finding) => finding.model), ["anthropic/claude-haiku-4.5"]);
+  assert.equal(stale[0].action, "remove stale entry; migrate saved picks to the current model of its class");
   assert.equal(calls.find(([url]) => url === "https://api.openai.com/v1/models")[1].Authorization, "Bearer fixture-openai");
   assert.equal(calls.find(([url]) => url === "https://api.anthropic.com/v1/models")[1]["x-api-key"], "fixture-anthropic");
 });
