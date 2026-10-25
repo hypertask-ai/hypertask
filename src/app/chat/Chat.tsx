@@ -6,6 +6,7 @@ import { WelcomeScreen } from "@/components/AI_CHAT/WelcomeScreen";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
 import { useAiChatContext, type ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   buildFullScreenChatPath,
@@ -327,6 +328,7 @@ function ChatRailFilterRow({
 
 export default function Chat({ initialSessionId }: ChatProps) {
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -408,8 +410,10 @@ export default function Chat({ initialSessionId }: ChatProps) {
     if (!newSession || newSession.id !== activeSession) return;
 
     sessionsBeforeNewSession.current = null;
-    router.replace(buildFullScreenChatPath(returnPath, newSession.id));
-  }, [activeSession, returnPath, router, sessions]);
+    const path = buildFullScreenChatPath(returnPath, newSession.id);
+    if (newSessionFocusEnabled) window.history.replaceState(null, "", path);
+    else router.replace(path);
+  }, [activeSession, newSessionFocusEnabled, returnPath, router, sessions]);
 
   useEffect(() => {
     if (fullScreenChatScopeState !== fullScreenChatScope) {
@@ -463,7 +467,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
       sessions.map((session) => session.id)
     );
     void startNewSession();
-    setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
+    if (!newSessionFocusEnabled) setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
   };
 
   const handleTogglePinnedSession = (
