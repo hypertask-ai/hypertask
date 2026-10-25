@@ -51,6 +51,7 @@
   "notification_ids": "Inbox notification identifiers to archive or restore, not task identifiers.",
   "offset": "Number of matching rows to skip; prefer cursor continuation when supported.",
   "order": "Sort direction for the selected field.",
+  "page": "1-based page number; multiplied by limit into offset. Pass page or offset, not both.",
   "page_id": "Existing page id or public page identifier accepted by page actions.",
   "parent_page_id": "Existing parent page identifier for a nested page.",
   "photo_url": "Public URL of the authenticated human user's profile image.",
