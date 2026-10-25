@@ -99,7 +99,7 @@ test('setup without agent credentials remains summary-only', async () => {
 
 test('CI failure naming recognizes actual spec output and TAP, including a startup failure', () => {
   const workflow = yaml.load(readFileSync('.github/workflows/ci-tests.yml', 'utf8'));
-  const script = workflow.jobs['ci-tests'].steps.find((s) => s.id === 'test-outcome').run.replaceAll("${{ steps.push-test.outcome == 'failure' }}", 'true');
+  const script = workflow.jobs['ci-tests'].steps.find((s) => s.id === 'test-outcome').run.replaceAll("${{ needs.ci-test.result == 'failure' }}", 'true');
   const { mkdtempSync, writeFileSync, rmSync } = require('node:fs');
   const { tmpdir } = require('node:os');
   const { join } = require('node:path');

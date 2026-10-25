@@ -561,7 +561,7 @@ export function getAssignUserInputSchema() {
         return hasUserId || hasUserIds || hasAgentId || data.assign_self === true;
       },
       {
-        message: 'Provide exactly one of user_id, user_ids, agent_id, or assign_self',
+        message: 'Name who to assign or unassign: provide exactly one of user_id, user_ids, agent_id, or assign_self (agent tokens only)',
         path: ['user_id', 'user_ids', 'agent_id', 'assign_self'],
       }
     )

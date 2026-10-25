@@ -369,7 +369,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
     ".github/scripts/verify-required-check-settings.mjs",
     "utf8",
   );
-  const steps = yaml.load(ciWorkflow).jobs["ci-tests"].steps;
+  const steps = yaml.load(ciWorkflow).jobs["ci-prepare"].steps;
   const settingsIndex = steps.findIndex(
     (step) => step.name === "Verify live required-check settings",
   );

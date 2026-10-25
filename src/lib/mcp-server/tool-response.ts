@@ -37,18 +37,24 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   ),
 ])
 
-export function actionableToolError(error: unknown): string {
+export function actionableToolError(error: unknown, hints: { ticketNumberShape?: boolean } = {}): string {
   if (error instanceof z.ZodError) {
     return error.issues.slice(0, 4).map((issue) => {
       const field = issue.path.join('.') || 'input'
       if (/project_id (?:is required|must be provided).*unique_index|unique_index.*(?:requires|must).*project_id/.test(issue.message)) {
         return 'project_id is required when unique_index is given; pass the project id or use ticket_number.'
       }
+      if (hints.ticketNumberShape && issue.code === 'invalid_type' && /(?:^|\.)(?:source_|target_)?ticket_number(?:\.\d+)?$/.test(field)) {
+        return `Pass ${field.replace(/\.\d+$/, '')} as a string like "HTPR-7914"; for a numeric id use task_id, or unique_index together with project_id.`
+      }
       if (issue.code === 'unrecognized_keys') {
         const boardHint = issue.keys.some((key) => ['board_id', 'boardId', 'board'].includes(key))
           ? ' This tool calls the board field project_id.'
           : ''
         return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}`
+      }
+      if (field === 'input.user_id.user_ids.agent_id.assign_self') {
+        return issue.message.replace(/\.$/, '')
       }
       return `Change ${field}: ${issue.message.replace(/[.!]$/, '')}. Pass a value matching this action's input schema.`
     }).join(' ')
@@ -90,8 +96,8 @@ function redactModelFacingMessage(raw: string): string {
   return message.replace(/(?:Bearer\s+\S+|\b(?:htmk_|htk_)[\w-]+|\beyJ[\w.-]+)/gi, '[redacted]').slice(0, 600)
 }
 
-export function toolErrorResult(error: unknown): CallToolResult {
-  return { content: [{ type: 'text', text: actionableToolError(error) }], isError: true }
+export function toolErrorResult(error: unknown, hints: { ticketNumberShape?: boolean } = {}): CallToolResult {
+  return { content: [{ type: 'text', text: actionableToolError(error, hints) }], isError: true }
 }
 
 export async function executeToolResult(
@@ -101,9 +107,9 @@ export async function executeToolResult(
   invocation?: Parameters<PortableTool['execute']>[2],
 ): Promise<CallToolResult> {
   try {
-    const parsed = tool.parameters.parse(args)
+    const parsed = tool.parameters.parse(tool.normalizeArguments ? tool.normalizeArguments(args) : args)
     const text = await tool.execute(parsed, token, invocation)
-    if (/^Error:/i.test(text)) return toolErrorResult(new Error(text))
+    if (/^Error:/i.test(text)) return toolErrorResult(new Error(text), tool.errorHints)
     let structured: Record<string, unknown> | undefined
     let value: unknown
     try { value = JSON.parse(text) } catch {}
@@ -128,7 +134,7 @@ export async function executeToolResult(
       ...(tool.outputSchema && structured ? { structuredContent: structured } : {}),
     }
   } catch (error) {
-    return toolErrorResult(error)
+    return toolErrorResult(error, tool.errorHints)
   }
 }
 

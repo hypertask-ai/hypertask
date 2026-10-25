@@ -16,9 +16,14 @@ function assertNormalTriggers(ci, request) {
   assert.deepEqual(ci.on.push.branches, ["production"]);
   assert.equal(ci.on.schedule, undefined);
   assert.equal(ci.on.workflow_dispatch, undefined);
-  for (const name of ["ci-tests", "browser-smoke"]) {
-    assert.equal(ci.jobs[name].if, "github.event_name == 'push' || github.event.pull_request.draft == false");
-  }
+  assert.equal(ci.jobs["ci-prepare"].if, "github.event_name == 'push' || github.event.pull_request.draft == false");
+  assert.equal(ci.jobs["browser-smoke"].if, "github.event_name == 'push' || github.event.pull_request.draft == false");
+  assert.equal(ci.jobs["ci-tests"].name, "ci-tests");
+  assert.equal(
+    ci.jobs["ci-tests"].if,
+    "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)",
+  );
+  assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-test"]);
   assert.equal(request.jobs.request.if, "github.event.pull_request.draft == false");
 }
 
@@ -27,10 +32,12 @@ test("metadata changes cannot restart or skip required CI, and PR/push tests col
   const request = workflow("app-smoke-request");
   assertNormalTriggers(ci, request);
   assertNoCoverage(ci);
-  const push = ci.jobs["ci-tests"].steps.find((step) => step.id === "push-test");
-  assert.equal(push.if, "github.event_name == 'push'");
-  assert.deepEqual(push.env, { HT_REQUIRE_PG_TESTS: "1" });
-  assert.equal(push.run, 'npm test 2>&1 | tee "$RUNNER_TEMP/push-test.log"');
+  const push = ci.jobs["ci-test"].steps.find((step) => step.id === "push-test");
+  assert.equal(push.if, undefined);
+  assert.equal(push.env.HT_REQUIRE_PG_TESTS, "${{ github.event_name == 'push' && '1' || steps.pg.outputs.need }}");
+  assert.match(push.run, /npm test -- "\$\{FILES\[@\]\}" 2>&1 \| tee "\$RUNNER_TEMP\/ci-shard-upload\/shard-\$\{SHARD\}\.log"/);
+  assert.equal(ci.jobs["ci-test"].strategy["fail-fast"], false);
+  assert.equal(String(ci.env.CI_TEST_SHARDS), "2");
 });
 
 test("nightly diagnostics run the full production suite without publishing a required check", () => {
