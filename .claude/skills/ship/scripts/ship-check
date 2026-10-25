@@ -332,7 +332,18 @@ live_proof_ok() {
       unit=${check#systemd-user-unit }
       [[ $unit =~ ^[A-Za-z0-9@._-]+\.service$ ]] || return 1
       fragment=$(systemctl --user show "$unit" -p FragmentPath --value 2>/dev/null) || return 1
-      [ -f "$fragment" ] && cmp -s "$fragment" "$source/systemd/$unit" || return 1
+      [ -f "$fragment" ] || return 1
+      tmp=$(mktemp -d) || return 1
+      if ! git -C "$source" show "$sha:systemd/$unit" > "$tmp/unit" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
+      if ! cmp -s "$fragment" "$tmp/unit"; then rm -rf "$tmp"; return 1; fi
+      exec=$(sed -n 's/^ExecStart=//p' "$tmp/unit" | head -1)
+      target=${exec%% *}
+      target=${target/#\%h/$HOME}
+      if [[ $target != "$source"/* ]]; then rm -rf "$tmp"; return 1; fi
+      relative=${target#"$source"/}
+      if ! git -C "$source" show "$sha:$relative" > "$tmp/payload" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
+      if ! cmp -s "$target" "$tmp/payload"; then rm -rf "$tmp"; return 1; fi
+      rm -rf "$tmp"
       out=$(systemctl --user show "$unit" -p Result -p ExecMainStatus 2>/dev/null) || return 1
       grep -qx 'Result=success' <<<"$out" && grep -qx 'ExecMainStatus=0' <<<"$out"
       ;;
