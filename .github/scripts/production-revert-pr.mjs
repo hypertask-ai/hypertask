@@ -38,7 +38,7 @@ export function findRegression({ cwd, good, bad, head, files, probe }) {
   const env = { PATH: process.env.PATH, HOME: temp, TMPDIR: temp, CI: 'true', SOURCE_TEXT_ALLOWLIST_BASE: good };
   try {
     git(cwd, 'worktree', 'add', '--detach', tree, good);
-    const docker = ['run', '--rm', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=128', '--memory=2g', '--cpus=2', '--user', `${process.getuid()}:${process.getgid()}`, '--tmpfs', '/tmp'];
+    const docker = ['run', '--rm', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=128', '--memory=2g', '--cpus=2', '--user', `${process.getuid()}:${process.getgid()}`, '--tmpfs', '/tmp:rw,mode=1777'];
     const mounts = [...new Set(['/usr', '/bin', '/lib', '/lib64', process.execPath, resolve(cwd, git(cwd, 'rev-parse', '--git-common-dir')), join(cwd, 'node_modules')])].filter(p => existsSync(p));
     for (const p of mounts) docker.push('--mount', `type=bind,src=${p},dst=${p},readonly`);
     docker.push('--mount', `type=bind,src=${tree},dst=${tree}`, '--mount', `type=bind,src=${tree}/.git,dst=${tree}/.git,readonly`, '--workdir', tree);

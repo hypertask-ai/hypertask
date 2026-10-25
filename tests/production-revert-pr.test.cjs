@@ -17,7 +17,7 @@ function history(t, source) {
   git('config', 'user.name', 'Test');
   mkdirSync(join(cwd, 'tests'));
   writeFileSync(join(cwd, 'package-lock.json'), '{}');
-  writeFileSync(join(cwd, 'tests/check.test.cjs'), source || "require('node:assert/strict').equal(require('node:fs').readFileSync('value', 'utf8'), 'good');\n");
+  writeFileSync(join(cwd, 'tests/check.test.cjs'), source || "const fs = require('node:fs'); const tmp = fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'probe-')); fs.rmSync(tmp, { recursive: true }); require('node:assert/strict').equal(fs.readFileSync('value', 'utf8'), 'good');\n");
   const commit = (file, value) => {
     writeFileSync(join(cwd, file), value);
     git('add', '.'); git('commit', '-qm', 'fixture');
