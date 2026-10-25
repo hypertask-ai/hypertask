@@ -216,6 +216,21 @@ test("undo after a real archive brings the blocked row back once", async () => {
   assert.deepEqual((await f.reload()).json.notifications.map((row) => row.id).sort(), [-42, 701].sort());
 });
 
+test("undoing a later real archive keeps the dismissal marker archived and the blocked row out", async () => {
+  const f = fixture();
+  assert.equal((await f.archive()).status, 200);
+  const marker = f.rows.find((row) => row.message === "htpr-7840-blocked-inbox-dismissal");
+  marker.archivedAt = new Date(since.getTime() + 1);
+  const markerArchivedAt = marker.archivedAt;
+  assert.equal(marker.status, "Archive");
+  f.rows.push({ ...realNotification(), id: 702, archivedAt: null });
+  assert.equal((await f.archive({ id: "702" })).status, 200);
+  assert.equal((await f.archive({ id: "702", intent: undefined })).status, 200);
+  assert.equal(marker.status, "Archive", "the dismissal marker stays archived");
+  assert.equal(marker.archivedAt, markerArchivedAt, "the dismissal marker keeps its own archive time");
+  assert.deepEqual((await f.reload()).json.notifications.map((row) => row.id), [702]);
+});
+
 test("with the flag off a real archive leaves the blocked row visible", async () => {
   const f = fixture({ flagOn: false, rows: [realNotification()] });
   assert.equal((await f.archive({ id: "701" })).status, 200);

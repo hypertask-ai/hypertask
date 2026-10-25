@@ -201,7 +201,7 @@ const route = taskWriteRoute({
             id: { not: notification_.id },
             taskId: parsedTaskId,
             userId,
-            status: { not: "Deleted" }
+            status: "Normal"
           },
           data: {
             status: "Archive",
