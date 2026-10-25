@@ -36,7 +36,8 @@ export const agentPresenceTool = {
 };
 
 export async function getAgentPresenceTool(userId: number) {
-  if (!await isFeatureEnabled(HTPR_7902_TEAM_ID_FLAG, userId)) return agentPresenceTool;
+  const enabled = await isFeatureEnabled(HTPR_7902_TEAM_ID_FLAG, userId).catch(() => false);
+  if (!enabled) return agentPresenceTool;
 
   return {
     ...agentPresenceTool,
