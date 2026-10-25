@@ -1254,5 +1254,64 @@ else bad "other repo: $got $out"; fi
 unset -f gh hypertask
 unset CI_FIXTURE_DIR CI_CALL_LOG CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
 
+# A repo with no release and no workflow run for the merge accepts a recorded live proof.
+E2="$E/inert"; mkdir -p "$E2/bin" "$E2/evidence/YPER4-999" "$E2/src/systemd" "$E2/src/bin" "$E2/units"
+git -C "$E2/src" init -q; git -C "$E2/src" config user.email t@t; git -C "$E2/src" config user.name t
+printf '[Service]\nExecStart=%s/src/bin/fast-lane-close.sh 6\n' "$E2" > "$E2/src/systemd/fast-lane-close.service"
+printf '#!/usr/bin/env bash\necho shipped\n' > "$E2/src/bin/fast-lane-close.sh"
+git -C "$E2/src" add -A; git -C "$E2/src" commit -qm fixture; inert_sha=$(git -C "$E2/src" rev-parse HEAD)
+printf 'later\n' > "$E2/src/later.txt"; git -C "$E2/src" add -A; git -C "$E2/src" commit -qm later
+cp "$E2/src/systemd/fast-lane-close.service" "$E2/units/fast-lane-close.service"
+cp "$E2/src/bin/fast-lane-close.sh" "$E2/installed-copy"
+printf "838\n" > "$E2/evidence/YPER4-999/pr"
+printf "valentinyeo/ceo\n" > "$E2/evidence/YPER4-999/repo"
+printf "master\n" > "$E2/evidence/YPER4-999/base"
+cat > "$E2/bin/gh" <<MOCK
+#!/usr/bin/env bash
+case "\$1:\$2" in
+  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"$inert_sha"},"baseRefName":"master"}\n' ;;
+  release:view) exit 1 ;;
+  release:list) echo '[]' ;;
+  api:*/compare/*) echo behind ;;
+  api:*/actions/runs?*) printf '{"total_count":1,"workflow_runs":%s}\n' "\${INERT_RUNS:-[]}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E2/bin/systemctl" <<MOCK
+#!/usr/bin/env bash
+case "\$*" in
+  *FragmentPath*) echo "$E2/units/fast-lane-close.service" ;;
+  *Result*) printf 'Result=%s\nExecMainStatus=%s\n' "\${INERT_RESULT:-success}" "\${INERT_STATUS:-0}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+chmod +x "$E2/bin/gh" "$E2/bin/systemctl" "$E2/src/bin/fast-lane-close.sh"
+L() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env PATH="$E2/bin:$PATH" VCC_EVIDENCE_DIR="$E2/evidence" SHIP_REPO=valentinyeo/ceo SHIP_BASE=master SHIP_DEPLOY=none "$@" ./ship-check deployed YPER4-999); got=$?
+  [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
+}
+proof="$E2/evidence/YPER4-999/live-proof"
+L 1 'FAIL: no successful push or workflow_dispatch run for merge'
+printf 'sha: %s\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\n' "$inert_sha" "$E2/src" > "$proof"
+L 0 'deployed ok (recorded live proof, merged'
+printf 'dirty\n' >> "$E2/src/systemd/fast-lane-close.service"
+L 0 'deployed ok (recorded live proof, merged'
+printf '[Service]\nExecStart=/bin/false\n' > "$E2/units/fast-lane-close.service"
+L 1 'FAIL: no successful push'
+git -C "$E2/src" show "$inert_sha:systemd/fast-lane-close.service" > "$E2/units/fast-lane-close.service"
+printf '#!/usr/bin/env bash\necho old build\n' > "$E2/src/bin/fast-lane-close.sh"
+L 1 'FAIL: no successful push'
+cp "$E2/installed-copy" "$E2/src/bin/fast-lane-close.sh"
+L 0 'deployed ok (recorded live proof, merged'
+L 1 'FAIL: no successful push' INERT_RUNS='[{"head_sha":"'"$inert_sha"'","event":"push","head_branch":"master","conclusion":"neutral","status":"completed"}]'
+L 1 'FAIL: no successful push' INERT_RESULT=failure
+L 1 'FAIL: no successful push' INERT_STATUS=1
+printf 'sha: 0123456789abcdef0123456789abcdef01234567\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\n' "$E2/src" > "$proof"
+L 1 'FAIL: no successful push'
+printf 'sha: %s\nsource: %s\ncheck: shell any-command\n' "$inert_sha" "$E2/src" > "$proof"
+L 1 'FAIL: no successful push'
+rm -rf "$E2"
+
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
