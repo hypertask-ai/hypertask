@@ -44,6 +44,7 @@ async function pick({ mode = "create-comment", enabled = true, inline = true, ba
   window.addEventListener("ai-task-writer-trigger", onEvent);
   const load = loader({
     "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === inlineFlag ? inline : false },
+    "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/keys": keys,
     "@/lib/state": { useRecoilState: () => [{ id: 7049 }, () => {}], useSetRecoilState: () => () => {} },
     "@/store": { currentProjectAtom: "project" },

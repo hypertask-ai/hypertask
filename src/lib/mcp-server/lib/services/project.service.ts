@@ -1,4 +1,5 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import type { BoardColumnRole } from "@/lib/mcp/boards/columnRole";
 import type { IApiClient } from '../../types/index';
 import { logger } from '../../utils/logger';
 import { generateCorrelationId } from '../../utils/correlation';
@@ -89,6 +90,7 @@ export interface SectionListItem {
   isDone?: boolean | null;
   autoAssign: number | string | null;
   taskCount: number;
+  role?: BoardColumnRole;
 }
 
 export interface ListSectionsResponse {

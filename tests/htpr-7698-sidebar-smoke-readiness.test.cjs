@@ -69,7 +69,7 @@ function pageFor({ selected = agent, failure } = {}) {
     locator: () => ({ visible: true }),
   };
   return { page, selectors, list, title, commit() {
-    title.text = selected.name ?? "AI chat";
+    title.text = selected.name ?? selected.title ?? "AI chat";
     titleReady.resolve();
   }, load: () => transcriptReady.resolve() };
 }

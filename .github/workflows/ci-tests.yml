@@ -350,7 +350,7 @@ jobs:
     timeout-minutes: 25
     outputs:
       contract: ${{ steps.smoke.outputs.contract }}
-      docs_only: ${{ steps.scope.outputs.build_needed == 'false' }}
+      docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
     permissions:
       contents: read
       packages: read
@@ -412,12 +412,12 @@ jobs:
         run: |
           # A missing/broken detector must never suppress correctness checks.
           if ! node .github/scripts/ci-change-scope.cjs; then
-            echo "build_needed=true" >> "$GITHUB_OUTPUT"
+            echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
             : > "$RUNNER_TEMP/changed-files.txt"
           fi
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         with:
           node-version: ^24.22.1
           check-latest: true
@@ -432,7 +432,7 @@ jobs:
           git fetch --depth=1 origin "$BASE_SHA"
           node .github/scripts/layout-lock-approval.mjs
       - name: Install dependencies and Chromium
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
           npm ci --prefer-offline --no-audit --no-fund
           npx prisma generate
@@ -440,7 +440,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y strace
       - name: Prepare disposable local credentials
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -479,7 +479,7 @@ jobs:
             printf '%s\n' 'PUSHER_CLUSTER=mt1'
           } >> "$GITHUB_ENV"
       - name: Create isolated database and logged-in fixtures
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: fixtures
         env:
           BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
@@ -488,7 +488,7 @@ jobs:
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs
       - name: Download checksum-verified pinned native CLI
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         env:
           TRUSTED_CLI_BINARY_VERSION: "0.2.15"
           TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
@@ -502,7 +502,7 @@ jobs:
           chmod 755 "$CLI_BINARY"
           printf 'MCP_CONTRACT_CLI=%s\n' "$CLI_BINARY" >> "$GITHUB_ENV"
       - name: Build the local app (no migrations)
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         # YPER4-363: next/font downloads Google fonts at build time and about
         # 6% of builds lost that download. Retry once, only for that failure.
         run: |
@@ -514,7 +514,7 @@ jobs:
           done
           exit 1
       - name: Serve and check logged-in pages and layout lock
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: smoke
         env:
           BASE_URL: http://127.0.0.1:3100
@@ -549,15 +549,49 @@ jobs:
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --live-like-control
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/inbox-cycle.spec.ts
+          # YPER4-673: one feature-map journey on this same build. Report only, so a red journey never fails browser-smoke.
+          set +e
+          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
+          reseed_status=$?
+          if [ "$reseed_status" -eq 0 ]; then
+            export VERIFY_QA_REPORT_ONLY=1
+            export VERIFY_QA_BASE="$BASE_URL"
+            export VERIFY_QA_STATE_FILE=e2e/smoke/.state/smoke-state.json
+            export VERIFY_QA_FIXTURE=e2e/smoke/.state/inbox-cycle-fixture.json
+            export VERIFY_QA_CHANGED_FILES="${RUNNER_TEMP}/changed-files.txt"
+            export VERIFY_QA_OUT=verify-qa-premerge
+            timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+            verify_qa_status=$?
+          else
+            verify_qa_status=$reseed_status
+            echo "::warning::inbox reseed failed (${reseed_status}); skipped premerge verify-qa"
+          fi
+          set -e
+          if [ "${verify_qa_status:-0}" -ne 0 ]; then
+            echo "::warning::verify-qa premerge journey exited ${verify_qa_status}; evidence is report-only"
+          fi
       # Failing parts are listed in the job log; their "after" screenshots (baseline boxes outlined) are here.
       - name: Upload layout lock screenshots
-        if: failure() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')
+        if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: layout-lock-matrix
           path: test-results/layout-lock-matrix/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Upload premerge verify-qa evidence
+        id: verify-qa-evidence
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verify-qa-premerge
+          path: verify-qa-premerge/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Link premerge verify-qa evidence
+        if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
+        run: |
+          printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
 
 
   mcp-cli-api-contract:

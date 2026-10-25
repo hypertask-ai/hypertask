@@ -13,11 +13,15 @@ Merge to `production`, then read the commit's `Vercel` status (`gh api repos/hyp
 - The Next.js build worker is killed (SIGKILL) and Vercel reports an Out of Memory event. The build container has 8 GB. Build memory is set in `next.config.js` (`experimental.cpus`, `webpackBuildWorker`, `webpackMemoryOptimizations`) and by the `NODE_OPTIONS=--max-old-space-size` cap on `next build` in `package.json` (YPER4-571).
 - Build time creeping toward the Vercel limit after a memory setting is lowered.
 
-## Proof to collect
+## What proof to collect
 
 - The Vercel status `success` and the deployment status Ready for the merge sha.
 - The build log lines for the CPU count, compile time, static pages and `Build Completed`, with no SIGKILL or Out of Memory.
 - For a fix, the matching lines from the last failing build.
+
+### Automated evidence
+
+`node --test tests/build-memory-config.test.cjs` checks the build worker, memory optimizations and single-CPU settings with smoke and PostHog on and off; it does not run a production build or prove deployment success.
 
 ## Cleanup
 
