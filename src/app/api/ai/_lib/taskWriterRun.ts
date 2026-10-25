@@ -227,9 +227,9 @@ export async function prepareTaskWriterRun(
           }) as Promise<TaskWriterCustomFieldDefinition[]>
         : undefined,
     ]);
-    return { customInstructions, customFieldDefinitions };
+    return { boardFormatEnabled: enabled, customInstructions, customFieldDefinitions };
   };
-  const [boardLabels, { customInstructions, customFieldDefinitions }, skillResolution] = await Promise.all([
+  const [boardLabels, { boardFormatEnabled, customInstructions, customFieldDefinitions }, skillResolution] = await Promise.all([
     loadBoardLabels(),
     loadBoardFormat(),
     resolveSkills(body.PROMPT, {

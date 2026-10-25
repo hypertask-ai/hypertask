@@ -15,7 +15,7 @@ function stubEmbeddings() {
     const { input } = JSON.parse(init.body)
     sent.push(input)
     await new Promise((resolve) => setTimeout(resolve, 5))
-    const data = input.map((text: string, index: number) => ({ index, embedding: [text.length] }))
+    const data = input.map((text: string, index: number) => ({ index, embedding: new Array(helper.EMBEDDING_DIM).fill(text.length) }))
     return new Response(JSON.stringify({ data }), { status: 200 })
   }) as any
   return { sent, restore: () => { globalThis.fetch = realFetch } }
@@ -37,7 +37,8 @@ test('different queries, later repeats and batches are never shared', async () =
   try {
     const [one, two] = await Promise.all([helper.embedTexts(['alpha']), helper.embedTexts(['bravo!'])])
     assert.equal(sent.length, 2)
-    assert.deepEqual([one, two], [[[5]], [[6]]])
+    assert.equal(one[0][0], 5)
+    assert.equal(two[0][0], 6)
     await helper.embedTexts(['alpha'])
     assert.equal(sent.length, 3, 'a finished call is not cached')
     await Promise.all([helper.embedTexts(['x', 'y']), helper.embedTexts(['x', 'y'])])
