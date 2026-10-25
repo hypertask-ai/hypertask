@@ -47,6 +47,10 @@ G 2 vcc task update HTPR-6570 --section Done
 G 2 vcc task update HTPR-6570 --section=Done
 G 0 vcc task update HTPR-6570 --section '"In Progress"'
 G 0 vcc task update HTPR-6570 --title 'Ship it'
+# A section title with parentheses stays one argument; hiding a command behind quotes still does not help (YPER4-748).
+G 0 vcc task move HTPR-6570 --section '"Agent Blocked (Infra)"'
+G 2 vcc task move HTPR-6570 --section '"Agent Blocked (Infra)"' '&&' vcc task move HTPR-6570 --section Done
+G 2 '(' vcc task move YPER4-999 --section Done ')'
 # The done column named by its board id, and a working column by id.
 G 2 vcc task move HTPR-6570 --section 4312
 G 0 vcc task move HTPR-6570 --section 4309

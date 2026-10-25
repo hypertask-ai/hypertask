@@ -52,6 +52,62 @@ test("stale detection still fires for a catalogue that keeps two versions of one
   assert.equal(stale.action, "remove stale entry; migrate saved picks to the current model of its class");
 });
 
+test("serving variants share their base model family without changing name or version", () => {
+  for (const [variant, base] of [
+    ["openai/gpt-4o-batch", "openai/gpt-4o"],
+    ["anthropic/claude-opus-5.5-fast", "anthropic/claude-opus-5.5"],
+    ["spacexai/grok-4.20-reasoning-beta", "spacexai/grok-4.20-reasoning"],
+    ["spacexai/grok-4.20-reasoning", "spacexai/grok-4.20"],
+  ]) {
+    assert.equal(identity(variant).family, identity(base).family, variant);
+    assert.deepEqual(identity(variant).version, identity(base).version, variant);
+  }
+  assert.equal(identity("openai/gpt-4o-batch").name, "gpt-4o-batch");
+  assert.deepEqual(identity("openai/gpt-4o-batch").version, [4]);
+  assert.equal(identity("anthropic/claude-opus-5.5-fast").name, "claude-opus-5.5-fast");
+  assert.deepEqual(identity("anthropic/claude-opus-5.5-fast").version, [5, 5]);
+});
+
+test("only trailing serving tokens are stripped repeatedly without emptying the model family", () => {
+  for (const suffix of ["batch", "fast", "preview", "beta", "experimental", "latest", "online", "reasoning", "non-reasoning", "thinking"]) {
+    assert.equal(identity(`openai/gpt-4o-${suffix}`).family, identity("openai/gpt-4o").family, suffix);
+    assert.equal(identity(`openai/gpt-${suffix}-4o-mini`).family, `gpt-${suffix}-o-mini`, suffix);
+  }
+  assert.equal(identity("openai/gpt-4o-batch-fast").family, identity("openai/gpt-4o").family);
+  assert.equal(identity("openai/batch-fast").family, "batch");
+  assert.equal(identity("openai/-batch").family, "-batch");
+  assert.notEqual(identity("openai/gpt-4o-mini").family, identity("openai/gpt-4o").family);
+  assert.notEqual(identity("openai/o3").family, identity("openai/gpt-4o").family);
+  assert.notEqual(identity("openai/gpt-4obatch").family, identity("openai/gpt-4o").family);
+});
+
+test("saved gateway fixture groups offered serving variants without new classes or duplicate family findings", () => {
+  const offered = structuredClone(catalog);
+  offered.definitions.push({ key: "gpt-4o", provider: "openai", modelClass: "gpt-o" });
+  offered.options.push({ modelKey: "gpt-4o", model: "gpt-4o" });
+  for (const ids of [["openai/gpt-4o", "openai/gpt-4o-batch"], ["openai/gpt-4o-batch", "openai/gpt-4o"]]) {
+    const sources = structuredClone(fixture);
+    sources.gateway.data.push(...ids.map((id) => ({ id, type: "language" })));
+    const findings = diffModels(offered, sources).findings;
+    assert.deepEqual(findings.filter((finding) => identity(finding.model).family === identity("openai/gpt-4o").family), []);
+    const families = findings.map((finding) => `${finding.provider}/${identity(finding.model).family}`);
+    assert.equal(new Set(families).size, findings.length);
+  }
+});
+
+test("a newer serving variant follows the existing new-version path once per family", () => {
+  const sources = structuredClone(fixture);
+  sources.gateway.data.push({ id: "anthropic/claude-opus-5.6-fast", type: "language" },
+    { id: "anthropic/claude-opus-5.6-reasoning-beta", type: "language" });
+  const findings = diffModels(catalog, sources).findings.filter((finding) =>
+    identity(finding.model).family === identity("anthropic/claude-opus-5.5").family);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "new-version");
+  assert.equal(findings[0].model, "anthropic/claude-opus-5.6-fast");
+  assert.equal(findings[0].modelClass, "claude-opus");
+  assert.deepEqual(findings[0].current, ["claude-opus-5-5"]);
+});
+
 test("picker membership assertion rejects a missing gateway model (positive and negative controls)", () => {
   assertPickerModelsListed(fixture);
   for (const id of ["openai/gpt-6-luna", "deepseek/deepseek-v4.1-flash-1017", "deepseek/deepseek-v4.1-flash-1017-fast"]) {

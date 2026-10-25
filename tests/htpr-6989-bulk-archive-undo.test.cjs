@@ -38,6 +38,7 @@ function fixture(api, original = false) {
   const matches = (row, where) => Object.entries(where).every(([key, value]) => {
     if (value && typeof value === "object" && !(value instanceof Date)) {
       if (Object.hasOwn(value, "in")) return value.in.includes(row[key]);
+      if (Object.hasOwn(value, "notIn")) return !value.notIn.includes(row[key]);
       if (Object.hasOwn(value, "not")) return row[key] !== value.not;
     }
     return value instanceof Date ? row[key]?.getTime() === value.getTime() : row[key] === value;

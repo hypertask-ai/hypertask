@@ -121,7 +121,10 @@ function normalizeInputPlacement(
     }
   }
   if (options.taskIdTicketReference && documented.has('task_id') && documented.has('ticket_number') && input.task_id !== undefined) {
-    const reference = ticketReferenceFromTaskId(input.task_id)
+    let reference = ticketReferenceFromTaskId(input.task_id)
+    if (Array.isArray(reference) && !z.safeParse(tool.parameters.shape.ticket_number, reference).success) {
+      reference = reference.length === 1 ? reference[0] : undefined
+    }
     if (reference !== undefined) {
       if (input.ticket_number !== undefined && JSON.stringify(input.ticket_number) !== JSON.stringify(reference)) throw placementConflict('task_id')
       input.ticket_number = reference
@@ -161,6 +164,7 @@ export function selectMcpTools(
   inputWrapperFields = false,
   ticketNumberShapeHint = false,
   taskIdTicketReference = false,
+  renamedFieldHint = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -246,7 +250,12 @@ export function selectMcpTools(
       ...(topLevelInputFields || inputWrapperFields || taskIdTicketReference ? {
         normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, taskIdTicketReference, pageAlias }),
       } : {}),
-      ...(ticketNumberShapeHint ? { errorHints: { ticketNumberShape: true } } : {}),
+      ...(ticketNumberShapeHint || renamedFieldHint ? {
+        errorHints: {
+          ...(ticketNumberShapeHint ? { ticketNumberShape: true } : {}),
+          ...(renamedFieldHint ? { renamedField: true } : {}),
+        },
+      } : {}),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
         const rawArgs = (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
         const args = parameters.parse(raw)
@@ -258,7 +267,10 @@ export function selectMcpTools(
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
-        const inputIssues = (error: z.ZodError) => new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] })))
+        const inputIssues = (error: z.ZodError) => Object.assign(
+          new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] }))),
+          { documentedFields: Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field) },
+        )
         const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined
         if (requestedPage !== undefined && input.cursor !== undefined) {
           throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or cursor, not both.' }])
