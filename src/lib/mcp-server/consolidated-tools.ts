@@ -122,7 +122,7 @@ function normalizeInputPlacement(
   }
   if (options.taskIdTicketReference && documented.has('task_id') && documented.has('ticket_number') && input.task_id !== undefined) {
     let reference = ticketReferenceFromTaskId(input.task_id)
-    if (Array.isArray(reference) && !tool.parameters.shape.ticket_number.safeParse(reference).success) {
+    if (Array.isArray(reference) && !z.safeParse(tool.parameters.shape.ticket_number, reference).success) {
       reference = reference.length === 1 ? reference[0] : undefined
     }
     if (reference !== undefined) {
