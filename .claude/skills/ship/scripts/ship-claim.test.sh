@@ -91,6 +91,7 @@ eq "someone else's hand-over does not cancel A's claim" "$(dec)" "$(printf 'LOSE
 cat > "$D/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_LOG"
+if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "activity last" ]; then
   [ -z "${FAKE_ACTIVITY_FAIL:-}" ] || exit 1
   [ -z "${FAKE_ACTIVITY:-}" ] || printf '%s\tx\n' "$FAKE_ACTIVITY"
@@ -135,6 +136,27 @@ if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
 cp fixtures/ship-claim-y243-comments.json "$D/c.json"
 SHIP_CLAIM_RESUME="claude --resume $R8" FAKE_TASK=$PWD/fixtures/ship-claim-y243-task.json ./ship-claim YPER4-243 >/dev/null; eq "flow: Y243 replay -> proceed" "$?" 0
 SHIP_CLAIM_RESUME="claude --resume $R8" ./ship-claim YPER4-243 >/dev/null; eq "flow: Y243 replay, task read fails -> still proceeds (hand-over)" "$?" 0
+
+mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 2' "$(claim other-sess)")" \
+   "$(c 11 2026-10-11T09:10:00.000Z a1 'RUNNER 2' '<p>Question: <strong>Add the four new models?</strong></p>')" \
+   "$(c 12 2026-10-11T09:30:00.000Z a1 'RUNNER 2' '<p>Handed over to RUNNER 3.</p>')" \
+   "$(c 13 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
+: > "$D/log"; out=$(./ship-claim YPER4-999); rc=$?
+eq "takeover with existing question succeeds" "$rc" 0
+[[ $out == *'https://app.hypertask.ai/detail/project-4060/999#comment-11'* && $out == *'Add the four new models?'* ]] \
+  && ok "takeover shows original question and link" || bad "takeover omitted existing question: $out"
+grep -q '^activity add YPER4-999 Takeover:.*comment-11' "$D/log" \
+  && ok "takeover records question handoff in agent lane" || bad "takeover handoff missing"
+eq "takeover creates only its claim comment" "$(grep -c '^comment add ' "$D/log")" 1
+grep -q 'comment update\|--kind question' "$D/log" && bad "takeover changed or repeated the question" || ok "takeover leaves original question unchanged"
+out=$(FAKE_HANDOFF_FAIL=1 ./ship-claim YPER4-999 2>&1); rc=$?
+eq "failed takeover handoff stops work" "$rc" 2
+[[ $out == *'takeover handoff failed'* && $out != *'Start work.'* ]] \
+  && ok "failed handoff never authorizes work" || bad "handoff failure output: $out"
+printf '{"tasks":[{"projectId":42}]}' > "$D/takeover-task.json"
+out=$(FAKE_TASK=$D/takeover-task.json ./ship-claim YPER4-999)
+[[ $out == *'https://app.hypertask.ai/detail/project-42/999#comment-11'* ]] \
+  && ok "takeover uses the board returned by the API" || bad "wrong question board: $out"
 
 # Old competing claim in the full flow: activity decides.
 mk "$(c 10 2026-10-11T00:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
