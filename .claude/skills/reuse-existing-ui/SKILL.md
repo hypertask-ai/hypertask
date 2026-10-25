@@ -35,7 +35,7 @@ CI runs `npm run lint:changed` and full lint; do not run them on the VPS. A tiny
 - `hypertask-ui/no-new-view-save-actions`: import the existing kanban `SaveView` and `SaveViewModal`, never a parallel Save as view button.
 - `hypertask-ui/no-new-selection-styles`: use picker options with `checked`, the shared column/scope pickers, or `SelectionCheckbox` for bulk rows instead of a new checkbox or checkmark style.
 
-Exact import paths and the rule table are in AGENTS.md under "Reuse existing UI (enforced)". `eslint-local-rules/ui-patterns-baseline.json` allows existing production debt per file, not copies in new files or count increases. Lower counts when deleting debt; never raise them to make your change pass. These are syntax ratchets, not permission to invent a control the matcher cannot recognize. Any exception belongs on the offending line with a human-approved reason and expiry date.
+Exact import paths and the rule table are in [Reuse existing UI](../../reference/ui.md#reuse-existing-ui-enforced). `eslint-local-rules/ui-patterns-baseline.json` allows existing production debt per file, not copies in new files or count increases. Lower counts when deleting debt; never raise them to make your change pass. These are syntax ratchets, not permission to invent a control the matcher cannot recognize. Any exception belongs on the offending line with a human-approved reason and expiry date.
 
 CI proves the checks still reject past mistakes with `node --test tests/ui-patterns.test.cjs`. The historical controls cite PRs #547, #571, #578 and #706.
 
