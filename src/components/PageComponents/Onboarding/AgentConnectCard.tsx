@@ -2,13 +2,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
 
 const ConnectAIOnboardingScreen = dynamic(() => import("./Screens/ConnectAIOnboardingScreen").then((module) => module.ConnectAIOnboardingScreen), { ssr: false });
 
 export function AgentConnectCard({ projectId, userId }: { projectId: number; userId: number }) {
-  const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
   const identity = `${userId}:${projectId}`;
   const [state, setState] = useState<{ identity: string; eligible: boolean; show: boolean } | null>(null);
   const serverEligible = state?.identity === identity && state.eligible;
@@ -33,9 +30,9 @@ export function AgentConnectCard({ projectId, userId }: { projectId: number; use
       controller.abort();
       clearInterval(intervalId);
     };
-  }, [identity, projectId, flagEnabled]);
+  }, [identity, projectId]);
 
-  return (flagEnabled ? true : serverEligible) && show
+  return show
     ? <EligibleAgentConnectCard key={identity} serverEligible={serverEligible} />
     : null;
 }
