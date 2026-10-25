@@ -44,9 +44,9 @@ export function actionableToolError(error: unknown, hints: { ticketNumberShape?:
       if (/project_id (?:is required|must be provided).*unique_index|unique_index.*(?:requires|must).*project_id/.test(issue.message)) {
         return 'project_id is required when unique_index is given; pass the project id or use ticket_number.'
       }
-      if (hints.ticketNumberShape && issue.code === 'invalid_type' && /(?:^|\.)(?:source_|target_)?ticket_number(?:\.\d+)?$/.test(field)) {
-        return `Pass ${field.replace(/\.\d+$/, '')} as a string like "HTPR-7914"; for a numeric id use task_id, or unique_index together with project_id.`
-      }
+      const ticketNumberHint = hints.ticketNumberShape && /(?:^|\.)(?:source_|target_)?ticket_number(?:\.\d+)?$/.test(field)
+        ? ` Pass ${field.replace(/\.\d+$/, '')} as a string like "HTPR-7914"; for a numeric id use task_id, or unique_index together with project_id.`
+        : ''
       if (issue.code === 'unrecognized_keys') {
         const boardHint = issue.keys.some((key) => ['board_id', 'boardId', 'board'].includes(key))
           ? ' This tool calls the board field project_id.'
@@ -56,6 +56,7 @@ export function actionableToolError(error: unknown, hints: { ticketNumberShape?:
       if (field === 'input.user_id.user_ids.agent_id.assign_self') {
         return issue.message.replace(/\.$/, '')
       }
+      if (ticketNumberHint) return `Change ${field}: ${issue.message.replace(/[.!]$/, '')}.${ticketNumberHint}`
       return `Change ${field}: ${issue.message.replace(/[.!]$/, '')}. Pass a value matching this action's input schema.`
     }).join(' ')
   }

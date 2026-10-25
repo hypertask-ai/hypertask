@@ -25,7 +25,8 @@ async function refusal(hint, args) {
 
 test('a numeric ticket_number gets the accepted-shape hint when the hint is on', async () => {
   const message = await refusal(true, { action: 'get', input: { ticket_number: 7914 } })
-  assert.match(message, /ticket_number as a string like "HTPR-7914"/)
+  assert.match(message, /^Change input\.ticket_number/)
+  assert.match(message, /Pass input\.ticket_number as a string like "HTPR-7914"/)
   assert.match(message, /task_id/)
   assert.match(message, /unique_index together with project_id/)
 })
