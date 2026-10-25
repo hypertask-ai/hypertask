@@ -152,21 +152,6 @@ function deepseekTranslation(level: ReasoningEffort, modelId?: string): Reasonin
 
 const HIGH_EFFORT = new Set(["high", "xhigh", "max"]);
 
-export function modelOptedIntoHigh(providerOptions: { [key: string]: { [key: string]: unknown } | undefined } | undefined): boolean {
-  if (!providerOptions) return false;
-  const anthropic = providerOptions.anthropic?.effort;
-  if (typeof anthropic === "string" && HIGH_EFFORT.has(anthropic)) return true;
-  const openai = providerOptions.openai?.reasoningEffort;
-  if (typeof openai === "string" && HIGH_EFFORT.has(openai)) return true;
-  const google = (providerOptions.google?.thinkingConfig as { thinkingLevel?: unknown } | undefined)?.thinkingLevel;
-  if (google === "high") return true;
-  const deepseek = providerOptions.deepseek?.reasoningEffort;
-  if (typeof deepseek === "string" && HIGH_EFFORT.has(deepseek)) return true;
-  const openrouter = (providerOptions.openrouter?.reasoning as { effort?: unknown } | undefined)?.effort;
-  if (typeof openrouter === "string" && HIGH_EFFORT.has(openrouter)) return true;
-  return false;
-}
-
 export function vendorsForModel(modelId: string, provider?: string | null): ReasoningProvider[] {
   const id = modelId.toLowerCase();
   const name = (provider ?? "").toLowerCase();
@@ -201,10 +186,9 @@ export function applyReasoningToParams<T extends ReasoningParams>(
 ): T {
   const feature = input.reasoningFeature ?? input.feature ?? "";
   const explicit = input.reasoningEffort ?? null;
-  const mapped = explicit ?? effortForFeature(feature, null);
   let next = params;
   for (const provider of vendorsForModel(modelId, input.provider)) {
-    if (mapped !== "none" && !explicit && providerKeepsStrongerEffort(params.providerOptions, provider)) continue;
+    if (!explicit && providerKeepsStrongerEffort(params.providerOptions, provider)) continue;
     const translated = translateReasoning({ feature, provider, modelId, explicit });
     const providerOptions = { ...(next.providerOptions ?? {}) };
     if (translated.clearThinking && provider === "deepseek") {

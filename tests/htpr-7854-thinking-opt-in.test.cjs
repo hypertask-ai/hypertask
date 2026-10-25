@@ -132,7 +132,7 @@ test("each provider gets its own option shape for every feature effort", () => {
     }
   }
   const cleared = reasoning.applyReasoningToParams(
-    { providerOptions: { deepseek: { thinking: { type: "enabled" }, reasoningEffort: "high", userId: "fixture" } } },
+    { providerOptions: { deepseek: { thinking: { type: "enabled" }, reasoningEffort: "low", userId: "fixture" } } },
     { reasoningFeature: "summaries" },
     "deepseek/deepseek-v4.1-flash-1017",
   );
@@ -140,6 +140,14 @@ test("each provider gets its own option shape for every feature effort", () => {
   assert.equal(cleared.providerOptions.deepseek.reasoningEffort, undefined);
   assert.equal(cleared.providerOptions.deepseek.userId, "fixture");
   assert.equal(cleared.modelId, undefined);
+  const keptStrong = reasoning.applyReasoningToParams(
+    { providerOptions: { deepseek: { thinking: { type: "enabled" }, reasoningEffort: "max" } } },
+    { reasoningFeature: "heartbeat" },
+    "deepseek/deepseek-v4.1-flash-1017",
+  );
+  assert.equal(keptStrong.providerOptions.deepseek.reasoningEffort, "max");
+  assert.equal(keptStrong.providerOptions.deepseek.thinking.type, "enabled");
+  assert.equal(String(keptStrong.modelId ?? "").includes("-fast"), false);
   const stronger = reasoning.applyReasoningToParams(
     { providerOptions: { anthropic: { thinking: { type: "adaptive" }, effort: "xhigh", cacheControl: { type: "ephemeral" } } } },
     { reasoningFeature: "chat" },
