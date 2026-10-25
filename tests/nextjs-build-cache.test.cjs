@@ -20,7 +20,18 @@ test("browser-smoke restores only the matching Next.js incremental build cache b
   assert.equal(restore.with.key, "nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}");
   assert.equal(restore.with["restore-keys"].trim(), restore.with.key.replace("${{ github.sha }}", ""));
   assert.equal(workflow.on.push.branches.includes("production"), true);
-  assert.match(workflow.jobs["browser-smoke"].if, /github\.event_name == 'push'/);
+});
+
+test("browser-smoke runs on pushes and on ready pull requests, never on drafts", () => {
+  for (const [github, expected] of [
+    [{ event_name: "push" }, true],
+    [{ event_name: "push", event: {} }, true],
+    [{ event_name: "push", event: { pull_request: { draft: true } } }, true],
+    [{ event_name: "pull_request", event: { pull_request: { draft: false } } }, true],
+    [{ event_name: "pull_request", event: { pull_request: { draft: true } } }, false],
+  ]) {
+    assert.equal(runInNewContext(workflow.jobs["browser-smoke"].if, { github }), expected, JSON.stringify(github));
+  }
 });
 
 test("browser-smoke saves the rebuilt cache under the restore primary key, only after a successful build", () => {
