@@ -138,7 +138,6 @@ async function sendFixture({ name, args }, mode, recipientUserId) {
     }),
   };
   const flags = {
-    HTPR_7028_FIRST_TASK_EMAIL_FLAG: "htpr-7028-first-task-email",
     HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: flag,
     isFeatureEnabled: async (key, userId) => {
       flagReads.push({ key, userId });
