@@ -642,15 +642,18 @@ const Inbox = ({
         : null;
       const previousFocusedNotificationId = lastFocusedNotificationId.current;
       lastFocusedNotificationId.current = focusedNotificationId;
+      const focusedRowStillListed =
+        previousFocusedNotificationId !== null &&
+        splits?.[effectiveSplit]?.some(
+          (notification) => String(notification.id) === previousFocusedNotificationId,
+        ) === true;
 
       const inboxElement = focusedNotificationId
         ? document.getElementById(`inbox-${focusedNotificationId}`)
         : null;
       const focusScroll = resolveInboxFocusScroll({
         keepsScroll: inboxKeepsScroll,
-        focusedNotificationId,
-        previousFocusedNotificationId,
-        hasFocusedRow: Boolean(inboxElement),
+        focusedRowStillListed,
       });
       if (!focusScroll.scroll) return;
       if (!inboxElement)
