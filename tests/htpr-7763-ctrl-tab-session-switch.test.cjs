@@ -107,11 +107,23 @@ function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true
     "lucide-react": Object.fromEntries(["Check", "ChevronDown", "Minimize2", "Pin", "Search", "Sparkles", "SquarePen", "Trash2"].map(name => [name, name])),
     "next/navigation": { useRouter: () => router, useSearchParams: () => new URLSearchParams("return_to=%2Fmy-tasks") },
   });
+  function renderChildren(node) {
+    if (!node || typeof node !== "object") return;
+    const props = node.props ?? {};
+    if (typeof node.type === "function") {
+      const savedCursor = cursor;
+      cursor = 0;
+      renderChildren(node.type({ ...props, children: undefined }));
+      cursor = savedCursor;
+    }
+    [props.children].flat(Infinity).forEach(renderChildren);
+  }
   function render() {
     cleanups.forEach(cleanup => cleanup?.());
     cleanups = [];
     cursor = 0;
     tree = Chat({});
+    renderChildren(tree);
     cleanups = effects.splice(0).map(effect => effect());
   }
   render();
