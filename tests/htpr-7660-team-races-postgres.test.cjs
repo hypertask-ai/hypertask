@@ -269,10 +269,16 @@ for (const kind of ['board', 'agent']) {
         assert.equal(stored.status, allowed ? 'delivered' : 'cancelled');
         assert.equal(stored.attemptCount, allowed ? 1 : 0);
         if (moved === 'after-send') await f.move[table]();
-        const retryAllowed = moved === 'unchanged' || actor === 'unbound' && table === 'Project';
+        const retryAllowed = moved === 'unchanged' || actor === 'unbound';
         const retry = await (board ? outbox.retryBoardWebhookDelivery({ deliveryId: delivery.id, subscriptionId: subscription.id, idempotencyKey: delivery.id }) : outbox.replayAgentWebhookDelivery({ deliveryId: delivery.id, subscriptionId: subscription.id }));
         assert.equal(Boolean(retry), retryAllowed);
         assert.equal(await deliveryModel.count({ where: { subscriptionId: subscription.id } }), retryAllowed ? 2 : 1);
+        if (retry && moved !== 'unchanged' && table === 'Task') {
+          const callsBeforeRetry = calls.length;
+          assert.equal((await (board ? sender.deliverBoardWebhook(retry) : sender.deliverAgentWebhook(retry))).status, 'skipped');
+          assert.equal(calls.length, callsBeforeRetry);
+          assert.equal((await deliveryModel.findUniqueOrThrow({ where: { id: retry } })).status, 'cancelled');
+        }
       });
     }
   }
