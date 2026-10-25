@@ -163,7 +163,7 @@ test("boardless Free chat defaults to Luna", async () => {
     assert.equal(read().currentAiOption.modelKey, "gpt-6-luna");
     assert.equal(read().modelTeamId, "team-free");
     assert.equal(read().modelBilling.storePlanId, "Free");
-    assert.match(document.querySelector("button").textContent, /6 Luna/);
+    assert.match(document.querySelector("button").textContent, /Luna 6/);
     assert.equal(writes.length, 0);
   });
 });
