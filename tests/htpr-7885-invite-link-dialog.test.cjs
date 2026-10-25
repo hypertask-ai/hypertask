@@ -34,7 +34,7 @@ function inviteLinkComponent(atoms, flags) {
   const end = source.indexOf("const readyBoardRender =", start);
   assert.ok(start >= 0 && end > start, "Load the real invite hooks and effect, not a copied implementation");
   const code = compile(`
-    const { useEffect, useRef } = React;
+    const { useEffect, useRef, useState } = React;
     const { useRecoilState, useRecoilValue, useSetRecoilState } = state;
     const { showCommandsAtom, currentProjectAtom } = atoms;
     const HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email";

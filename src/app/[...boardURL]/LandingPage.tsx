@@ -1111,11 +1111,11 @@ const inviteLinkDialogEnabled = useFlag(HTPR_7885_INVITE_LINK_DIALOG_FLAG)
 const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom)
 const inviteProject = useRecoilValue(currentProjectAtom)
 const inviteHandledRef = useRef<string | null>(null)
-const inviteOpenAttemptsRef = useRef(0)
+const [inviteOpenAttempts, setInviteOpenAttempts] = useState(0)
 useEffect(() => {
   if (!inviteRequested) {
     inviteHandledRef.current = null;
-    inviteOpenAttemptsRef.current = 0;
+    setInviteOpenAttempts(0);
     return;
   }
   if (!authenticated || isGuest || !boardDataReady ||
@@ -1124,9 +1124,9 @@ useEffect(() => {
   const key = `${user.id}:${requestedProjectId}`;
   if (inviteHandledRef.current === key) return;
   if (inviteLinkDialogEnabled && !isMblForChat) {
-    if (inviteOpenAttemptsRef.current === 0 || !showCommands.show || showCommands.mode !== CommandMode.InviteMember) {
-      if (inviteOpenAttemptsRef.current < 2) {
-        inviteOpenAttemptsRef.current += 1;
+    if (inviteOpenAttempts === 0 || !showCommands.show || showCommands.mode !== CommandMode.InviteMember) {
+      if (inviteOpenAttempts < 2) {
+        setInviteOpenAttempts(inviteOpenAttempts + 1);
         setShowCommands({ show: true, mode: CommandMode.InviteMember });
       }
       return;
@@ -1139,7 +1139,7 @@ useEffect(() => {
   const url = new URL(window.location.href);
   url.searchParams.delete("invite");
   window.history.replaceState(getNextRouterAwareHistoryState(window.history.state), "", `${url.pathname}${url.search}${url.hash}`);
-}, [inviteRequested, inviteLinkDialogEnabled, isMblForChat, showCommands, authenticated, isGuest, boardDataReady, currentBoardAccessStatus, readyProject?.id, requestedProjectId, inviteProject?.id, user.id, setShowCommands])
+}, [inviteRequested, inviteLinkDialogEnabled, isMblForChat, showCommands, inviteOpenAttempts, authenticated, isGuest, boardDataReady, currentBoardAccessStatus, readyProject?.id, requestedProjectId, inviteProject?.id, user.id, setShowCommands])
 const readyBoardRender = useMemo<BoardRenderSnapshot | null>(
   () =>
     boardDataReady && readyProject
