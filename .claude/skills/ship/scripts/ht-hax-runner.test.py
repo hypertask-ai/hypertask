@@ -155,7 +155,7 @@ esac''')
                 pass
             process.wait()
         self.assertEqual(self.events.read_text().splitlines(), [
-            'hax --provider=codex --model=gpt-6.1-sol --effort=high -p', 'retry'])
+            'hax --provider=codex --model=gpt-6.1-sol --effort=high ', 'retry'])
 
     def test_invalid_targets_fail_before_launch(self):
         for target, cap in [('0', '20'), ('21', '21'), ('3', '2'), ('oops', '20'), ('9999999999999', '20')]:

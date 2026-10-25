@@ -98,8 +98,21 @@ case "${1:-}" in
       clear; tmux clear-history -t "$TMUX_PANE"
       tmux select-pane -t "$TMUX_PANE" -T "RUNNER $n hax"
       : > "$runlog"
-      hax --provider=codex --model=gpt-6.1-sol --effort=high -p "$brief" 2>&1 | tee -a "$rlog" "$runlog"
+      # Interactive, not -p: vcc refuses board writes from any hax -p process tree (helper guard).
+      (
+        sleep 15
+        tmux send-keys -t "$TMUX_PANE" -l "$brief"; sleep 1; tmux send-keys -t "$TMUX_PANE" C-m
+        for _ in $(seq 1 480); do
+          sleep 30
+          if tmux capture-pane -p -t "$TMUX_PANE" -S -40 | grep -v '^▌' | grep -qE 'RUNNER (DONE [^ ]+|IDLE)'; then sleep 20; break; fi
+        done
+        tmux capture-pane -p -t "$TMUX_PANE" -S - | tee -a "$rlog" > "$runlog"
+        tmux send-keys -t "$TMUX_PANE" C-d
+      ) </dev/null >/dev/null 2>&1 &
+      watcher=$!
+      hax --provider=codex --model=gpt-6.1-sol --effort=high
+      kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null
       echo "$(date -u +%FT%TZ) end" >> "$rlog"
-      if grep -q '^RUNNER IDLE' "$runlog"; then sleep 900; else sleep 30; fi
+      if grep -q 'RUNNER IDLE' "$runlog"; then sleep 900; else sleep 30; fi
     done ;;
 esac
