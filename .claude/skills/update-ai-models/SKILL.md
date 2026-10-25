@@ -28,7 +28,7 @@ The saved fixture is **synthetic**, based on the ticket's examples, not a captur
 node scripts/model-diff --fixture tests/fixtures/model-diff.json --json
 ```
 
-It demonstrates Fable 5.1, GPT 6 Astra, Gemini 4 Argon, Kimi K3.1 Pro, Qwen 3.8 Plus and stale Haiku 4.5. Never use fixture prices to ship. The offline CI test rejects a picker model missing from the gateway fixture, with a positive control and deliberate missing-model negative control.
+It demonstrates Fable 5.1, GPT 6 Astra, Gemini 4 Argon, Kimi K3.1 Pro and Qwen 3.8 Plus. Never use fixture prices to ship. The offline CI test rejects a picker model missing from the gateway fixture, with a positive control and deliberate missing-model negative control, and proves stale detection on a catalogue that keeps two versions of one class, because the real catalogue keeps one model per class (HTPR-7940).
 
 ## Decide
 

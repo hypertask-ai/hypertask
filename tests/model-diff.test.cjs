@@ -16,18 +16,35 @@ function assertPickerModelsListed(sources) {
   assert.deepEqual(missing, [], "Every picker model must exist in the gateway fixture");
 }
 
-test("approved examples are discovered, with one finding per model class and old Haiku stale", () => {
+test("approved examples are discovered, with one finding per model class and no stale Haiku left", () => {
   const findings = report().findings;
   for (const model of ["claude-fable-5.1", "gpt-6-astra", "gemini-4-argon", "kimi-k3.1-pro", "qwen3.8-plus"]) {
     assert.ok(findings.some((finding) => finding.model.endsWith(`/${model}`)), model);
   }
-  assert.equal(findings.find((finding) => finding.model === "claude-haiku-4.5").kind, "stale");
+  assert.equal(findings.filter((finding) => finding.kind === "stale").length, 0);
+  assert.equal(findings.some((finding) => finding.model === "claude-haiku-4.5"), false);
   assert.equal(findings.find((finding) => finding.model.endsWith("/qwen3.8-plus")).modelClass, "qwen-plus");
   assert.equal(findings.find((finding) => finding.model.endsWith("/claude-sonnet-5.6")).action, "ship automatically");
   assert.equal(findings.find((finding) => finding.model.endsWith("/gpt-6.2-sol")).action, "waits for HTPR-7746");
   assert.equal(findings.find((finding) => finding.model.endsWith("/gpt-6-astra")).action, "ask Valentin before shipping");
   assert.equal(findings.filter((finding) => finding.model.includes("claude-sonnet")).length, 1);
   assert.ok(!findings.some((finding) => finding.model.includes("image")));
+});
+
+test("stale detection still fires for a catalogue that keeps two versions of one class", () => {
+  const twoVersionCatalog = {
+    definitions: [
+      { key: "anthropic/claude-haiku-4.5", modelClass: "claude-haiku", label: "Haiku 4.5", provider: "anthropic", priceTier: 1 },
+      { key: "anthropic/claude-haiku-5.5", modelClass: "claude-haiku", label: "Haiku 5.5", provider: "anthropic", priceTier: 1 },
+    ],
+    options: [
+      { id: "claude-haiku-4.5", modelKey: "claude-haiku-4.5", model: "claude-haiku-4.5", source: "claude" },
+      { id: "claude-haiku-5-5", modelKey: "claude-haiku-5-5", model: "claude-haiku-5.5", source: "claude" },
+    ],
+  };
+  const stale = diffModels(twoVersionCatalog, structuredClone(fixture)).findings.find((finding) => finding.kind === "stale");
+  assert.equal(stale.model, "claude-haiku-4.5");
+  assert.equal(stale.action, "remove stale entry; migrate saved picks to the current model of its class");
 });
 
 test("picker membership assertion rejects a missing gateway model (positive and negative controls)", () => {
@@ -53,7 +70,7 @@ test("gateway failure falls back to authenticated provider lists without claimin
   assert.deepEqual(fallback.sourcesUsed, ["openai", "anthropic"]);
   assert.ok(fallback.warnings.includes("gateway: HTTP 403"));
   assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
-  assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 1);
+  assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 0);
   assert.equal(calls.find(([url]) => url === "https://api.openai.com/v1/models")[1].Authorization, "Bearer fixture-openai");
   assert.equal(calls.find(([url]) => url === "https://api.anthropic.com/v1/models")[1]["x-api-key"], "fixture-anthropic");
 });
@@ -94,7 +111,7 @@ test("CLI text and JSON use the same saved fixture and do not access the network
   const text = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8" });
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /Sources used: gateway, openai, anthropic/);
-  assert.match(text.stdout, /stale: claude-haiku-4.5/);
+  assert.doesNotMatch(text.stdout, /stale: /);
   assert.match(text.stdout, /waits for HTPR-7746/);
 });
 
