@@ -7,8 +7,7 @@ const ConnectAIOnboardingScreen = dynamic(() => import("./Screens/ConnectAIOnboa
 
 export function AgentConnectCard({ projectId, userId }: { projectId: number; userId: number }) {
   const identity = `${userId}:${projectId}`;
-  const [state, setState] = useState<{ identity: string; eligible: boolean; show: boolean } | null>(null);
-  const serverEligible = state?.identity === identity && state.eligible;
+  const [state, setState] = useState<{ identity: string; show: boolean } | null>(null);
   const show = state?.identity === identity && state.show;
 
   useEffect(() => {
@@ -16,12 +15,12 @@ export function AgentConnectCard({ projectId, userId }: { projectId: number; use
     const load = () => void fetch("/api/users/ai-connection-status?mode=first", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
-          if (!controller.signal.aborted) setState({ identity, eligible: false, show: false });
+          if (!controller.signal.aborted) setState({ identity, show: false });
           return;
         }
         const data = await response.json();
         if (!controller.signal.aborted) {
-          setState({ identity, eligible: data.eligible === true, show: !data.connected && !data.dismissed && data.boardId === projectId });
+          setState({ identity, show: !data.connected && !data.dismissed && data.boardId === projectId });
         }
       }).catch(() => undefined);
     load();
@@ -33,11 +32,11 @@ export function AgentConnectCard({ projectId, userId }: { projectId: number; use
   }, [identity, projectId]);
 
   return show
-    ? <EligibleAgentConnectCard key={identity} serverEligible={serverEligible} />
+    ? <EligibleAgentConnectCard key={identity} />
     : null;
 }
 
-function EligibleAgentConnectCard({ serverEligible }: { serverEligible: boolean }) {
+function EligibleAgentConnectCard() {
   const [eligible, setEligible] = useState(true);
   const [visible, setVisible] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -83,7 +82,7 @@ function EligibleAgentConnectCard({ serverEligible }: { serverEligible: boolean 
           Dismiss
         </button>
       </div>
-      <ConnectAIOnboardingScreen compact visible={visible} serverEligible={serverEligible} onNextScreen={() => void dismiss()} />
+      <ConnectAIOnboardingScreen compact visible={visible} onNextScreen={() => void dismiss()} />
       {error && <p role="alert" className="mt-2 text-meta text-text-light-gray">{error}</p>}
     </section>
   );

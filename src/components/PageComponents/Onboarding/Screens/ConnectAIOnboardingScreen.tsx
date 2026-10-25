@@ -24,7 +24,6 @@ interface IConnectAIOnboardingScreen {
   onNextScreen: () => void;
   compact?: boolean;
   visible?: boolean;
-  serverEligible?: boolean;
   overlay?: boolean;
   onConnected?: () => void;
 }
@@ -112,7 +111,6 @@ interface ConnectionStatusProps {
   onConnected: (client: string) => void;
   first?: boolean;
   visible?: boolean;
-  serverEligible?: boolean;
   overlay?: boolean;
 }
 
@@ -193,7 +191,6 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen & { planMessage: React
   onNextScreen,
   compact: isCompact = false,
   visible = true,
-  serverEligible = false,
   overlay = false,
   onConnected,
   planMessage,
@@ -270,7 +267,7 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen & { planMessage: React
     ));
 
   const liveStatus = isCompact ? (
-    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} serverEligible={serverEligible} overlay={overlay} />
+    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} overlay={overlay} />
   ) : null;
 
   if (isCompact && connected) {

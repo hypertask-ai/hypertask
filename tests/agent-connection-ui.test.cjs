@@ -122,7 +122,7 @@ test("server-eligible signup renders compact instructions and resolves the conne
       return { ok: true, json: async () => ({ eligible: true, connected, client: "Codex" }) };
     };
     const Screen = loadScreen();
-    await act(async () => reactRoot.render(React.createElement(Screen, { compact: true, serverEligible: true, onNextScreen() {} })));
+    await act(async () => reactRoot.render(React.createElement(Screen, { compact: true, onNextScreen() {} })));
     assert.match(container.textContent, /Waiting for your agent/);
     assert.doesNotMatch(container.textContent, /Which AI will you drive/);
     assert.deepEqual([...container.querySelectorAll("button")].slice(0, 3).map((button) => button.textContent), ["Claude Code", "Cursor", "Codex"]);
@@ -151,7 +151,7 @@ test("board card honors existing connection, dismissal and board scope without r
       global.fetch = async (url, options) => { requests.push({ url, method: options?.method }); return { ok: true, json: async () => state }; };
       global.IntersectionObserver = class { observe() {} disconnect() {} };
       const { AgentConnectCard } = load("src/components/PageComponents/Onboarding/AgentConnectCard.tsx", {
-        "next/dynamic": () => (props) => { assert.equal(props.compact, true); assert.equal(props.serverEligible, state.eligible === true); return React.createElement("div", null, "Shared connection screen"); },
+        "next/dynamic": () => (props) => { assert.equal(props.compact, true); return React.createElement("div", null, "Shared connection screen"); },
       });
       await act(async () => reactRoot.render(React.createElement(AgentConnectCard, { projectId: 7, userId: 42 })));
       assert.equal(!!container.querySelector("section"), expected);

@@ -349,7 +349,7 @@ test("the real shared picker polls only while visible, reports actual connection
       "../GetStartedButton": { GetStartedButton: () => null },
     });
     const onConnected = () => { confirmed++; };
-    const render = (visible) => root.render(React.createElement(ConnectAIOnboardingScreen, { compact: true, serverEligible: true, overlay: true, visible, onConnected, onNextScreen() {} }));
+    const render = (visible) => root.render(React.createElement(ConnectAIOnboardingScreen, { compact: true, overlay: true, visible, onConnected, onNextScreen() {} }));
     try {
       await act(async () => render(false));
       assert.equal(requests.length, 0);
