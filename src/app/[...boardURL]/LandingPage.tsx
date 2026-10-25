@@ -1,6 +1,6 @@
 'use client'
 import Unauthorized from "../unauthorized/page";
-import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
+import { HTPR_7799_PROJECT_ENTRY_FLAG, HTPR_7885_INVITE_LINK_DIALOG_FLAG } from "@/lib/flags/keys";
 import { HTPR_7775_SAVED_URL_VIEW_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
@@ -1107,12 +1107,15 @@ const boardDataReady = Boolean(
   readyProject && isBoardPayloadHydrated(readyProject),
 )
 const inviteRequested = searchParams?.get("invite") === "1"
-const setShowCommands = useSetRecoilState(showCommandsAtom)
+const inviteLinkDialogEnabled = useFlag(HTPR_7885_INVITE_LINK_DIALOG_FLAG)
+const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom)
 const inviteProject = useRecoilValue(currentProjectAtom)
 const inviteHandledRef = useRef<string | null>(null)
+const inviteOpenAttemptsRef = useRef(0)
 useEffect(() => {
   if (!inviteRequested) {
     inviteHandledRef.current = null;
+    inviteOpenAttemptsRef.current = 0;
     return;
   }
   if (!authenticated || isGuest || !boardDataReady ||
@@ -1120,12 +1123,23 @@ useEffect(() => {
       inviteProject?.id !== requestedProjectId) return;
   const key = `${user.id}:${requestedProjectId}`;
   if (inviteHandledRef.current === key) return;
+  if (inviteLinkDialogEnabled && !isMblForChat) {
+    if (inviteOpenAttemptsRef.current === 0 || !showCommands.show || showCommands.mode !== CommandMode.InviteMember) {
+      if (inviteOpenAttemptsRef.current < 2) {
+        inviteOpenAttemptsRef.current += 1;
+        setShowCommands({ show: true, mode: CommandMode.InviteMember });
+      }
+      return;
+    }
+  }
   inviteHandledRef.current = key;
-  setShowCommands({ show: true, mode: CommandMode.InviteMember });
+  if (!inviteLinkDialogEnabled || isMblForChat) {
+    setShowCommands({ show: true, mode: CommandMode.InviteMember });
+  }
   const url = new URL(window.location.href);
   url.searchParams.delete("invite");
   window.history.replaceState(getNextRouterAwareHistoryState(window.history.state), "", `${url.pathname}${url.search}${url.hash}`);
-}, [inviteRequested, authenticated, isGuest, boardDataReady, currentBoardAccessStatus, readyProject?.id, requestedProjectId, inviteProject?.id, user.id, setShowCommands])
+}, [inviteRequested, inviteLinkDialogEnabled, isMblForChat, showCommands, authenticated, isGuest, boardDataReady, currentBoardAccessStatus, readyProject?.id, requestedProjectId, inviteProject?.id, user.id, setShowCommands])
 const readyBoardRender = useMemo<BoardRenderSnapshot | null>(
   () =>
     boardDataReady && readyProject
