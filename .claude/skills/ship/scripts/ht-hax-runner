@@ -104,9 +104,10 @@ case "${1:-}" in
         tmux send-keys -t "$TMUX_PANE" -l "$brief"
         sleep 1
         tmux send-keys -t "$TMUX_PANE" C-m
-        while :; do
+        result=TIMEOUT
+        for _ in $(seq 1 480); do
           sleep 30
-          if result=$(python3 - "$$" "$REPO" <<'PYTHON'
+          if completed=$(python3 - "$$" "$REPO" <<'PYTHON'
 import json
 import os
 from pathlib import Path
@@ -144,12 +145,13 @@ except (OSError, ValueError, StopIteration):
 sys.exit(1)
 PYTHON
           ); then
-            printf '%s\n' "$result" > "$STATE/runner-$n.result"
-            tmux capture-pane -p -t "$TMUX_PANE" -S - | tee -a "$rlog" > "$runlog"
-            tmux send-keys -t "$TMUX_PANE" C-d
+            result=$completed
             break
           fi
         done
+        printf '%s\n' "$result" > "$STATE/runner-$n.result"
+        tmux capture-pane -p -t "$TMUX_PANE" -S - | tee -a "$rlog" > "$runlog"
+        tmux send-keys -t "$TMUX_PANE" C-d
       ) </dev/null >/dev/null 2>&1 &
       watcher=$!
       hax --provider=codex --model=gpt-6.1-sol --effort=high

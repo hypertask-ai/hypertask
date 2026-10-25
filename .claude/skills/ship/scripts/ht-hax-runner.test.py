@@ -241,6 +241,40 @@ exec /bin/sleep 0.01
                 self.assertIn(final_line, (self.state / 'runner-8.latest.log').read_text())
                 self.assertIn(final_line, (self.state / 'runner-8.log').read_text())
 
+    def test_unreadable_completion_times_out_records_screen_and_retries(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        self.command('clear', 'exit 0')
+        self.command('python3', 'echo poll >> "$HOME/events"; exit 1')
+        self.command('hax', 'while [ ! -f "$HOME/closed" ]; do /bin/sleep 0.01; done')
+        self.command('tmux', """
+case "$1" in
+  select-pane|clear-history) : ;;
+  send-keys) case "$*" in *C-d) touch "$HOME/closed" ;; esac ;;
+  capture-pane) echo 'unfinished fixture screen' ;;
+  *) exit 99 ;;
+esac
+""")
+        self.command('sleep', """
+if [ -f "$HOME/closed" ]; then
+  echo "retry $1" >> "$HOME/events"; kill -TERM "$PPID"
+fi
+""")
+        process = subprocess.Popen(['bash', str(SCRIPT), '8', '--loop'], env=self.env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+        try:
+            process.communicate(timeout=10)
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+        self.assertEqual(self.events.read_text().splitlines(), ['poll'] * 480 + ['retry 30'])
+        self.assertEqual((self.state / 'runner-8.result').read_text(), 'TIMEOUT\n')
+        self.assertEqual((self.state / 'runner-8.latest.log').read_text(), 'unfinished fixture screen\n')
+        self.assertIn('unfinished fixture screen', (self.state / 'runner-8.log').read_text())
+
     def test_invalid_targets_fail_before_launch(self):
         for target, cap in [('0', '20'), ('21', '21'), ('3', '2'), ('oops', '20'), ('9999999999999', '20')]:
             with self.subTest(target=target, cap=cap):
