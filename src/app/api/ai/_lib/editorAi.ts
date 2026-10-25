@@ -412,6 +412,7 @@ export async function selectTiptapModel(args?: {
     agentId: args?.agentId,
     provider: selected.usageProvider,
     feature: "editor",
+    reasoningFeature: "slash-rewrite",
   });
   return selected;
 }

@@ -232,7 +232,7 @@ test("flag on: real chat tool and CLI handler have identical writer title, body,
   assert.equal(toStoredHtml(h.saved[0].description), h.saved[0].description);
   assert.equal(h.calls.length, 2);
   assert.deepEqual(h.usage[0], h.usage[1]);
-  assert.deepEqual(h.usage[0], { userId: 985, teamId: "team", projectId: 15, taskId: null, agentId: "agent", provider: "fixture", feature: "task-writer" });
+  assert.deepEqual(h.usage[0], { userId: 985, teamId: "team", projectId: 15, taskId: null, agentId: "agent", provider: "fixture", feature: "task-writer", reasoningFeature: "task-writer" });
   assert.equal(h.selections[0].taskWriterAgentId, "agent");
   assert.equal(h.retrieval[0].prompt.includes(brief.trim()), true);
   for (const call of h.calls) {
