@@ -8,6 +8,8 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { ActivityGroup, chatStatusText, emptyFeedText, FeedFilter, MessageBubble, ScrollToBottomButton } from "./AgentChatFeedItems";
 import type { useAgentChatComposer } from "./useAgentChatComposer";
 import type { useAgentChatFeed } from "./useAgentChatFeed";
@@ -114,6 +116,7 @@ export function AgentChatPane({
   composerLocked, isDictationProcessing, setIsRecording, setIsDictationProcessing, insertDictation,
   mobileFullscreenFlag, dictationProjectId, isRecording, handleSend,
 }: Props) {
+  const contextEnabled = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
   useEffect(() => {
     if (embedded && !active) setIsRecording(false);
   }, [embedded, active, setIsRecording]);
@@ -327,6 +330,7 @@ export function AgentChatPane({
               {reuseAiComposer ? (
                 <AI_Tiptap_Container
                   controlledComposer={{
+                    ...(contextEnabled && embedded ? { showScope: true } : {}),
                     value: draft,
                     inputRef: composerRef,
                     editorRef: composerEditorRef,

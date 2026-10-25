@@ -74,6 +74,9 @@ stub("src/lib/flags.ts", {
     // Shared-chat rollout is evaluated against the agent owner before history
     // loads. Keep it on here so this suite stays about activity rows.
     if (key === "htpr-6002-shared-agent-chat") return true;
+    // Chat context is a separate feature; keep it off so these routes keep
+    // their plain transcript shape.
+    if (key === "htpr-7734-agent-chat-context") return false;
     assert.equal(key, "htpr-6094-agent-activity-rows");
     return flagEnabled;
   },

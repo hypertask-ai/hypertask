@@ -20,6 +20,7 @@ import {
 } from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
 import { agentChatDeliveryMode } from "@/lib/agents/chatAvailability";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,12 @@ function unreadSince(
       OR: [{ authorUserId: null }, { authorUserId: { not: userId } }],
     },
   });
+}
+
+function sentContextIds(context: Prisma.JsonValue | null) {
+  if (!context || typeof context !== "object" || Array.isArray(context)) return {};
+  const { scope, project_id, task_id } = context as Prisma.JsonObject;
+  return { context: { scope, project_id, task_id } };
 }
 
 export async function GET(
@@ -99,6 +106,10 @@ export async function GET(
     );
     const ticketConfirmEnabled = await isFeatureEnabled(
       AGENT_CHAT_TICKET_CONFIRM_FLAG,
+      userId,
+    );
+    const contextEnabled = await isFeatureEnabled(
+      HTPR_7734_AGENT_CHAT_CONTEXT_FLAG,
       userId,
     );
     await readAgentChatTurn(
@@ -176,6 +187,7 @@ export async function GET(
         role: isAgentChatSystemMessage(message) ? "system" : message.role,
         content: message.content,
         createdAt: message.createdAt,
+        ...(contextEnabled ? sentContextIds(message.context) : {}),
       })).map((message, index) => ({
         ...message,
         proposal: serializeChatTicketProposal(
