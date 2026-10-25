@@ -49,6 +49,7 @@ test("the handler uses the authenticated user's flag to control the real error r
   for (const enabled of [true, false]) {
     const { mcpHandler } = load("src/lib/mcp-server/handler.ts", {
       "./tools": { MCP_TOOLS: [searchTool()] },
+      "./tools/agent-presence.tool": { getAgentPresenceTool: async () => ({ name: "hypertask_agent_presence" }) },
       "./listQueryContract": { resolvePortableTools: (tools) => tools },
       "./legacy-sse": { isLegacySseRequest: () => false },
       "@/lib/telemetry/mcpSseAnalytics": { recordLegacyMcpRequest: () => {} },
