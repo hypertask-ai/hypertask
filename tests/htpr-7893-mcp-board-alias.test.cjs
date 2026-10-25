@@ -17,11 +17,11 @@ const variants = [
   ['add', 'hypertask_add_comment_to_task', comments.getAddCommentCrudBaseSchema(), { unique_index: 7893, text: 'Comment' }],
 ]
 
-function harness(flatSchema = false) {
+function harness(flatSchema = false, boardAlias = true) {
   const tools = selectMcpTools(variants.map(([, name, parameters]) => ({
     name, parameters, description: name,
     execute: async (args) => JSON.stringify({ success: true, args }),
-  })), true, {}, true, flatSchema)
+  })), true, {}, true, flatSchema, false, boardAlias)
   return (action) => tools.find((tool) => tool.name === (action === 'add' ? 'hypertask_comments' : 'hypertask_tasks'))
 }
 
@@ -112,4 +112,58 @@ test('board_id keeps each action schema’s existing numeric coercion and valida
       }
     }
   }
+})
+
+for (const flatSchema of [false, true]) {
+  for (const [action, , , fields] of variants) {
+    test(`${action}, flat=${flatSchema}: flag Off rejects board_id with a 400 and keeps project_id working`, async () => {
+      const reports = []
+      const pending = []
+      const { observeFeedbackTools } = load('src/lib/aiFeedback/automatic.ts', {
+        '@vercel/functions': { waitUntil: (promise) => pending.push(promise) },
+        './report': { fileAiFeedback: async (report) => reports.push(report) },
+      })
+      const [tool] = observeFeedbackTools([harness(flatSchema, false)(action)], 985)
+      for (const input of [{ ...fields, project_id: 15, board_id: 15 }, { ...fields, project_id: 15, board_id: 16 }]) {
+        const original = { ...input }
+        await assert.rejects(tool.execute({ action, input }, 'fixture'), (error) => {
+          assert.ok(error instanceof z.ZodError)
+          const issue = error.issues.find((issue) => issue.code === 'unrecognized_keys')
+          assert.deepEqual(issue.keys, ['board_id'])
+          assert.deepEqual(issue.path, ['input'])
+          return true
+        })
+        assert.deepEqual(input, original)
+      }
+      await Promise.all(pending)
+      assert.equal(reports.length, 2)
+      for (const report of reports) {
+        assert.equal(report.status, 400)
+        assert.equal(report.errorCode, 'unrecognized_keys')
+        assert.equal(report.field, 'board_id')
+      }
+      const canonical = JSON.parse(await tool.execute({ action, input: { ...fields, project_id: 15 }, response_format: 'detailed' }, 'fixture'))
+      assert.equal(canonical.data.success, true)
+      assert.equal(canonical.data.args.project_id, 15)
+    })
+  }
+  for (const action of ['list', 'add']) {
+    test(`${action}, flat=${flatSchema}: only flag On describes the board_id alias`, () => {
+      assert.match(harness(flatSchema, true)(action).description, /board_id is an alias for project_id/)
+      assert.doesNotMatch(harness(flatSchema, false)(action).description, /board_id/)
+    })
+  }
+}
+
+test('without a per-user flag decision the catalog defaults to refusing board_id', async () => {
+  const tool = selectMcpTools([{
+    name: 'hypertask_list_tasks', parameters: tasks.getListTasksInputSchema(), description: 'List tasks',
+    execute: async () => { assert.fail('board_id must not reach the legacy tool') },
+  }], true).find((tool) => tool.name === 'hypertask_tasks')
+  assert.doesNotMatch(tool.description, /board_id/)
+  await assert.rejects(tool.execute({ action: 'list', input: { board_id: 15 } }, 'fixture'), (error) => {
+    assert.ok(error instanceof z.ZodError)
+    assert.deepEqual(error.issues.find((issue) => issue.code === 'unrecognized_keys').keys, ['board_id'])
+    return true
+  })
 })

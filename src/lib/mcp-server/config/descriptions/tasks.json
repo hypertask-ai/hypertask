@@ -3,7 +3,7 @@
   "does": "Read, create, update, move, assign and relate tickets, including context, trees and description versions.",
   "use_when": "Use when working with a known ticket or a filtered board queue; list finds overdue work and context includes comments and recent activity.",
   "do_not_use_when": "Do not use for fuzzy text discovery or editing comments; use hypertask_search or hypertask_comments instead.",
-  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields; board_id is an alias for project_id. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Prefer ticket_number (for example HTPR-1234); get accepts one identifier or a list, while context requires task_id and project_id. Normal, Archive and Deleted describe storage state, not workflow columns; section names describe workflow.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Prefer ticket_number (for example HTPR-1234); get accepts one identifier or a list, while context requires task_id and project_id. Normal, Archive and Deleted describe storage state, not workflow columns; section names describe workflow.",
   "actions": {
     "list": {
       "tool": "hypertask_list_tasks",

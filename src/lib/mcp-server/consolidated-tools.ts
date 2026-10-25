@@ -82,6 +82,7 @@ export function selectMcpTools(
   flatSchema = false,
   pageAlias = false,
   taskNumberAlias = false,
+  boardAlias = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -115,6 +116,7 @@ export function selectMcpTools(
   const catalog: PortableTool[] = definitions.flatMap((definition) => {
     const actions = Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => byName.has(action.tool) && canCall(action, caller)))
     const names = Object.keys(actions)
+    const boardAliasEnabled = boardAlias && (definition.name === 'hypertask_tasks' || definition.name === 'hypertask_comments')
     if (!names.length) return []
     const sameNameLegacy = byName.get(definition.name)
     const legacyShape = sameNameLegacy ? Object.fromEntries(Object.entries(sameNameLegacy.parameters.shape).filter(([key]) => key !== 'action').map(([key, schema]) => [key, z.optional(schema as z.ZodType)])) : {}
@@ -157,7 +159,7 @@ export function selectMcpTools(
     }
     return [{
       name: definition.name,
-      description: `Does: ${definition.does}\nUse when: ${definition.use_when}\nDo not use when: ${definition.do_not_use_when}\nParameters and caveats: ${definition.parameters_and_caveats}`,
+      description: `Does: ${definition.does}\nUse when: ${definition.use_when}\nDo not use when: ${definition.do_not_use_when}\nParameters and caveats: ${definition.parameters_and_caveats}${boardAliasEnabled ? ' board_id is an alias for project_id.' : ''}`,
       parameters,
       inputSchema: schema,
       ...(v2 ? { annotations: annotationsForActions(Object.values(actions)) } : {}),
@@ -183,7 +185,7 @@ export function selectMcpTools(
         let maximum: number | undefined
         let endpointCap: number | undefined
         try {
-          if ((definition.name === 'hypertask_tasks' || definition.name === 'hypertask_comments') && 'board_id' in input) {
+          if (boardAliasEnabled && 'board_id' in input) {
             if (input.project_id !== undefined && Number(input.board_id) !== Number(input.project_id)) {
               throw new z.ZodError([{ code: 'custom', path: ['board_id'], message: 'board_id and project_id must identify the same board when both are provided.' }])
             }
