@@ -53,7 +53,9 @@ export const useSessionAndChatHistory = (
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
   const isDemo = pathname?.startsWith("/demo") ?? false;
-  const followsTaskNavigation = useFlag(HTPR_7736_CHAT_FOLLOWS_TASK_FLAG) && isTaskScoped && !pathname?.startsWith("/chat");
+  const taskNavigationEnabled = useFlag(HTPR_7736_CHAT_FOLLOWS_TASK_FLAG);
+  let followsTaskNavigation = false;
+  if (taskNavigationEnabled && isTaskScoped && !pathname?.startsWith("/chat")) followsTaskNavigation = true;
   const explicitTaskRef = useRef<number | undefined>(undefined);
   const hasExplicitTask = taskId !== undefined && (composeIntro?.taskId === taskId || pendingFollowup?.taskId === taskId);
   if (hasExplicitTask) explicitTaskRef.current = taskId;
