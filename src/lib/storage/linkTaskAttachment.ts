@@ -121,7 +121,7 @@ export async function linkTaskAttachment(
           measuredBytes = head.ContentLength;
           await assertUploadAllowedForProject(task.projectId, measuredBytes, {
             actorUserId: userId, entryPoint: "tasks.uploadFinalize.link",
-          });
+          }, { tx });
         }
       } catch (error) {
         if (isPlanLimitReachedError(error)) {

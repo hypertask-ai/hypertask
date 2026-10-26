@@ -389,6 +389,26 @@ test("storage cap is skipped with its flag Off, for a paid team and for a file a
   await assert.rejects(stored.policy.assertUploadAllowedForProject(15, MiB, actor), (error) => error.limit === "storage");
 });
 
+test("storage cap counts bytes already pending in the same batch and locks the team before reading usage", async () => {
+  const GiB = 1024 * MiB;
+  const h = fixture({ storageCap: true, usedBytes: 2 * GiB - 5 * MiB });
+  await h.policy.assertUploadAllowedForProject(15, 4 * MiB, actor, { pendingBytes: 0 });
+  await assert.rejects(
+    h.policy.assertUploadAllowedForProject(15, 4 * MiB, actor, { pendingBytes: 4 * MiB }),
+    (error) => error.limit === "storage",
+  );
+  const order = [];
+  const tx = {
+    $queryRaw: async (query) => {
+      const text = query.strings.join("?");
+      order.push(text.includes("pg_advisory_xact_lock") ? "lock" : "usage");
+      return text.includes('"Attachment"') ? [{ bytes: BigInt(0) }] : [];
+    },
+  };
+  await h.policy.assertUploadAllowedForProject(15, MiB, actor, { tx });
+  assert.deepEqual(order, ["lock", "usage"]);
+});
+
 test("the per-file limit still wins over the storage cap and the storage query names only attachments", async () => {
   const h = fixture({ storageCap: true, usedBytes: 0 });
   await assert.rejects(h.policy.assertUploadAllowedForProject(15, 26 * MiB, actor), (error) => error.limit === "file_size");

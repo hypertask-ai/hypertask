@@ -217,11 +217,18 @@ export async function assertFileSizeForProject(projectId: number, bytes: number,
   if (await isFreeScope(scope)) refuse("file_size", max, scope, ctx, { bytes });
 }
 
-export async function usedStorageBytes(scope: PlanLimitScope): Promise<number> {
+type StorageDb = Pick<Prisma.TransactionClient, "$queryRaw">;
+
+async function lockStorageScope(db: StorageDb, scope: PlanLimitScope) {
+  const key = `plan-limit:${scopeKey(scope)}`;
+  await db.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`);
+}
+
+export async function usedStorageBytes(scope: PlanLimitScope, db: StorageDb = prisma): Promise<number> {
   const owner = scope.kind === "team"
     ? Prisma.sql`p."teamId" = ${scope.teamId}`
     : Prisma.sql`p."teamId" IS NULL AND p."ownerId" = ${scope.ownerId}`;
-  const rows = await prisma.$queryRaw<Array<{ bytes: bigint | null }>>(Prisma.sql`
+  const rows = await db.$queryRaw<Array<{ bytes: bigint | null }>>(Prisma.sql`
     SELECT COALESCE(SUM(CASE WHEN a."fileSize" ~ '^[0-9]{1,15}$' THEN a."fileSize"::bigint ELSE 0 END), 0) AS bytes
     FROM "Attachment" a
     LEFT JOIN "Comment" c ON c."id" = a."commentId"
@@ -232,12 +239,21 @@ export async function usedStorageBytes(scope: PlanLimitScope): Promise<number> {
   return Number(rows[0]?.bytes ?? 0);
 }
 
-export async function assertStorageRoomForProject(projectId: number, bytes: number, ctx: PlanLimitContext): Promise<void> {
+export type StorageAdmissionOptions = { alreadyStored?: boolean; pendingBytes?: number; tx?: StorageDb };
+
+export async function assertStorageRoomForProject(
+  projectId: number,
+  bytes: number,
+  ctx: PlanLimitContext,
+  options: Pick<StorageAdmissionOptions, "pendingBytes" | "tx"> = {},
+): Promise<void> {
   if (bytes <= 0 || !await isPlanLimitsEnabled(ctx.actorUserId)) return;
   if (!await isFeatureEnabled(HTPR_7924_FREE_STORAGE_2GB_FLAG, ctx.actorUserId!)) return;
   const scope = await limitScopeForProject(projectId);
   if (!await isFreeScope(scope)) return;
-  if (await usedStorageBytes(scope) + bytes > FREE_PLAN_MAX_STORAGE_BYTES) {
+  if (options.tx) await lockStorageScope(options.tx, scope);
+  const used = await usedStorageBytes(scope, options.tx ?? prisma);
+  if (used + (options.pendingBytes ?? 0) + bytes > FREE_PLAN_MAX_STORAGE_BYTES) {
     refuse("storage", FREE_PLAN_MAX_STORAGE_BYTES, scope, ctx, { bytes });
   }
 }
@@ -246,8 +262,8 @@ export async function assertUploadAllowedForProject(
   projectId: number,
   bytes: number,
   ctx: PlanLimitContext,
-  options: { alreadyStored?: boolean } = {},
+  options: StorageAdmissionOptions = {},
 ): Promise<void> {
   await assertFileSizeForProject(projectId, bytes, ctx);
-  if (!options.alreadyStored) await assertStorageRoomForProject(projectId, bytes, ctx);
+  if (!options.alreadyStored) await assertStorageRoomForProject(projectId, bytes, ctx, options);
 }
