@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { signalAiChip } from "@/lib/ai/chipEvents";
 import { MessageItem } from "./MessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -9,10 +10,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
 
 interface MessageListProps { sidebarKey?: string; active?: boolean; hidden?: boolean }
-
-const signalChip = (detail: Record<string, unknown>) => {
-  if (typeof window !== "undefined" && typeof window.CustomEvent === "function" && typeof window.dispatchEvent === "function") window.dispatchEvent(new window.CustomEvent("ht:ai-chip", { detail }));
-};
 
 const isSavedOrLocalComposeIntro = (content: string) => / from your note\. Want me to refine it\?/.test(content);
 
@@ -74,8 +71,8 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const newTicketQuestionsKey = showTicketQuestions ? JSON.stringify(newTicketQuestions) : "";
   useEffect(() => {
     if (!chipEventsEnabled || !active || hidden || !showTicketQuestions || newTicketQuestions.length === 0) return;
-    signalChip({ kind: "shown", surface: "new-ticket-questions", chipType: "generated-question", chips: newTicketQuestions, taskId: newTicketId ?? null });
-    return () => signalChip({ kind: "dismiss", surface: "new-ticket-questions" });
+    signalAiChip({ kind: "shown", surface: "new-ticket-questions", chipType: "generated-question", chips: newTicketQuestions, taskId: newTicketId ?? null });
+    return () => signalAiChip({ kind: "dismiss", surface: "new-ticket-questions" });
   }, [chipEventsEnabled, active, hidden, showTicketQuestions, newTicketId, newTicketQuestionsKey]);
 
   useLayoutEffect(() => {
@@ -146,7 +143,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
                 data-compose-question
                 className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-meta text-left w-full"
                 onClick={() => {
-                  if (chipEventsEnabled) signalChip({ kind: "clicked", text: question, index, chipType: "generated-question" });
+                  if (chipEventsEnabled) signalAiChip({ kind: "clicked", text: question, index, chipType: "generated-question" });
                   handleSendMessage(question);
                 }}
               >

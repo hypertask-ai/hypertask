@@ -7,6 +7,7 @@ import { extractStreamRefusalMessage } from "@/lib/aiChat/streamRefusal";
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild";
 import { CHAT_TRANSPORT_RETRY_DELAYS_MS, ChatRequestRefusedError, shouldRetryChatTransport } from "@/lib/aiChat/transportRetry";
 import { chatModelRequestFields } from "@/lib/aiModelOptions";
+import { signalAiChip } from "@/lib/ai/chipEvents";
 
 
 import type { useAiChatSessions } from "./useAiChatSessions";
@@ -90,7 +91,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     }
 
     if (!content.trim()) return false;
-    if (chipEventsEnabled && typeof window !== "undefined" && typeof window.CustomEvent === "function" && typeof window.dispatchEvent === "function") window.dispatchEvent(new window.CustomEvent("ht:ai-chip", { detail: { kind: "send", text: content } }));
+    if (chipEventsEnabled) signalAiChip({ kind: "send", text: content });
     let streamId = crypto.randomUUID();
     sendInFlightRef.current = true;
     if (stopClosesStream) streamingRequestRef.current = streamId;

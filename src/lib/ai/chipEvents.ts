@@ -8,6 +8,10 @@ export const AI_CHIP_EVENTS = ["shown", "clicked", "ignored", "next_typed"] as c
 
 export type AiChipSurface = (typeof AI_CHIP_SURFACES)[number];
 export type AiChipType = (typeof AI_CHIP_TYPES)[number];
+export function signalAiChip(detail: unknown) {
+  if (typeof window !== "undefined" && typeof window.CustomEvent === "function" && typeof window.dispatchEvent === "function") window.dispatchEvent(new window.CustomEvent(AI_CHIP_SIGNAL, { detail }));
+}
+
 export type AiChipEventName = (typeof AI_CHIP_EVENTS)[number];
 
 export type AiChipSignal =
@@ -36,6 +40,7 @@ type ActiveChips = {
   projectId: number | null;
   taskId: number | null;
   resolved: boolean;
+  controls: { chipType: AiChipType; label: string }[];
 };
 
 const clip = (text: string) => text.slice(0, AI_CHIP_TEXT_LIMIT);
@@ -57,6 +62,7 @@ export function createAiChipRecorder(emit: (payload: AiChipEventPayload) => void
     if (!active || active.resolved) return;
     active.resolved = true;
     emit({ event: "ignored", ...base(active) });
+    for (const control of active.controls) emit({ event: "ignored", ...base(active), chipType: control.chipType, chips: [clip(control.label)] });
     if (typed !== undefined) emit({ event: "next_typed", ...base(active), typedText: clip(typed), typedLength: typed.length });
   };
 
@@ -69,10 +75,10 @@ export function createAiChipRecorder(emit: (payload: AiChipEventPayload) => void
         const taskId = signal.taskId ?? null;
         if (active && active.surface === signal.surface && active.chipType === signal.chipType && active.projectId === projectId && active.taskId === taskId && sameChips(active.chips, chips)) return;
         ignore();
-        active = { surface: signal.surface, chipType: signal.chipType, chips, projectId, taskId, resolved: false };
+        active = { surface: signal.surface, chipType: signal.chipType, chips, projectId, taskId, resolved: false, controls: (signal.controls ?? []).map((control) => ({ chipType: control.chipType, label: clip(control.label) })) };
         emit({ event: "shown", ...base(active) });
-        for (const control of signal.controls ?? []) {
-          emit({ event: "shown", ...base(active), chipType: control.chipType, chips: [clip(control.label)] });
+        for (const control of active.controls) {
+          emit({ event: "shown", ...base(active), chipType: control.chipType, chips: [control.label] });
         }
         return;
       }

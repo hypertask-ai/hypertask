@@ -168,7 +168,7 @@ test('chip buttons keep their text, order and send behaviour', () => {
   assert.match(welcome, /clickChip\(example, index, "board-example"\)/);
   assert.match(welcome, /handleSendMessage\(sent\)/);
   const send = read('src/hooks/MultiPages/AIChat/aiChatSend.ts');
-  assert.match(send, /detail: \{ kind: "send", text: content \}/);
+  assert.match(send, /signalAiChip\(\{ kind: "send", text: content \}\)/);
 });
 
 test('a dismissed chat logs ignored once and a later send from another chat logs nothing', () => {
@@ -206,7 +206,7 @@ test('summary and ask all controls log their own shown events', () => {
 
 test('hidden or inactive ticket questions never signal shown', () => {
   const list = read('src/components/AI_CHAT/MessageList.tsx');
-  assert.match(list, /if \(!active \|\| hidden \|\| !showTicketQuestions/);
+  assert.match(list, /if \(!chipEventsEnabled \|\| !active \|\| hidden \|\| !showTicketQuestions/);
   assert.match(list, /kind: "dismiss", surface: "new-ticket-questions"/);
 });
 
@@ -215,7 +215,19 @@ test('every UI entry reads the chip events flag and the recorder is not a new co
     assert.match(read(file), /useFlag\(HTPR_7978_AI_CHIP_EVENTS_FLAG\)/, file);
   }
   assert.match(read('src/app/layout.tsx'), /isFeatureEnabled\(HTPR_7978_AI_CHIP_EVENTS_FLAG/);
-  assert.match(read('src/hooks/MultiPages/AIChat/aiChatSend.ts'), /if \(chipEventsEnabled && typeof window/);
+  assert.match(read('src/hooks/MultiPages/AIChat/aiChatSend.ts'), /if \(chipEventsEnabled\) signalAiChip\(/);
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'src/components/AI_CHAT/AiChipEventRecorder.tsx')), false);
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'src/lib/ai/AiChipEventRecorder.tsx')), true);
+});
+
+test('summary and ask all log ignored when the chat is left without a choice', () => {
+  const { events, recorder: r } = recorder();
+  r.handle(shown(['A'], { controls: [{ chipType: 'summary-action', label: 'Summarize' }] }));
+  r.leave();
+  assert.deepEqual(events.map(e => [e.event, e.chipType]), [['shown', 'suggested'], ['shown', 'summary-action'], ['ignored', 'suggested'], ['ignored', 'summary-action']]);
+});
+
+test('the layout reads the guest status before it checks the chip events flag', () => {
+  const layout = read('src/app/layout.tsx');
+  assert.ok(layout.indexOf('const analyticsIsGuest') < layout.indexOf('const chipEventsEnabled'));
 });

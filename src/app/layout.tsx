@@ -74,7 +74,6 @@ export default async function RootLayout(
     } catch {}
   }
   const [device, boardDocument, inboxDocument] = await firstScreenPromise;
-  const chipEventsEnabled = analyticsSession && !analyticsIsGuest ? await isFeatureEnabled(HTPR_7978_AI_CHIP_EVENTS_FLAG, analyticsSession.id) : false;
   const ticketShellEnabled = await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession?.id ?? -1);
   const shellSeed = ticketShellEnabled ? await getServerTicketShell() : null;
   const firstScreen = boardDocument ?? inboxDocument;
@@ -83,6 +82,7 @@ export default async function RootLayout(
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
+  const chipEventsEnabled = analyticsSession && !analyticsIsGuest ? await isFeatureEnabled(HTPR_7978_AI_CHIP_EVENTS_FLAG, analyticsSession.id) : false;
   const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
 
   const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;

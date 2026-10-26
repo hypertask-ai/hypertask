@@ -1,4 +1,5 @@
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"
+import { signalAiChip } from "@/lib/ai/chipEvents"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -91,10 +92,6 @@ const BOARD_BUILD_EXAMPLES = [
   "Build a SaaS MVP",
   "Plan a wedding in Italy",
 ];
-
-const signalChip = (detail: Record<string, unknown>) => {
-  if (typeof window !== "undefined" && typeof window.CustomEvent === "function" && typeof window.dispatchEvent === "function") window.dispatchEvent(new window.CustomEvent("ht:ai-chip", { detail }));
-};
 
 function pickRandom<T>(arr: T[]): T | null {
   return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
@@ -288,12 +285,12 @@ export const WelcomeScreen = () => {
       if (taskSummaryAction) controls.push({ chipType: "summary-action", label: taskSummaryAction.label });
       if (shownGenerated.length > 0 && !taskQuestions.isLoading) controls.push({ chipType: "ask-all", label: "Ask all" });
     }
-    signalChip({ kind: "shown", surface: shownSurface, chipType: shownType, chips: shownChips, projectId: shownProjectId, taskId: taskId ?? null, controls });
-    return () => signalChip({ kind: "dismiss", surface: shownSurface });
+    signalAiChip({ kind: "shown", surface: shownSurface, chipType: shownType, chips: shownChips, projectId: shownProjectId, taskId: taskId ?? null, controls });
+    return () => signalAiChip({ kind: "dismiss", surface: shownSurface });
   }, [hydrated, chipEventsEnabled, shownKey, shownProjectId, taskId, Boolean(taskSummaryAction), shownGenerated.length > 0 && !taskQuestions.isLoading]);
 
   const clickChip = (sent: string, index: number, chipType: string, label?: string) => {
-    if (chipEventsEnabled) signalChip({ kind: "clicked", text: sent, index, chipType, label });
+    if (chipEventsEnabled) signalAiChip({ kind: "clicked", text: sent, index, chipType, label });
     handleSendMessage(sent);
   };
 
