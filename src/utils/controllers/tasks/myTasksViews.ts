@@ -1,7 +1,10 @@
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
+import { getLabelReferences } from "@/lib/smartSplits";
 import {
   parseMyTasksViewConfig,
   type MyTasksSavedView,
+  type MyTasksViewConfig,
 } from "@/models/MyTasksView";
 
 export const MAX_MY_TASKS_VIEWS = 30;
@@ -36,3 +39,25 @@ export const getMyTasksViews = async (userId: number): Promise<MyTasksSavedView[
 };
 
 export { viewSelect as myTasksViewSelect };
+
+
+export class MissingMyTasksViewLabelError extends Error {
+  constructor() {
+    super("A tag in this view no longer exists. Refresh and try again.");
+  }
+}
+
+export const lockMyTasksViewLabels = async (
+  tx: Prisma.TransactionClient,
+  config: MyTasksViewConfig
+) => {
+  const labelIds = [...new Set([
+    ...config.filters.labelIds.map(String),
+    ...getLabelReferences(config.filterSettings),
+  ])].sort();
+  if (!labelIds.length) return;
+  const labels = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id FROM "Label" WHERE id IN (${Prisma.join(labelIds)}) ORDER BY id FOR KEY SHARE
+  `);
+  if (labels.length !== labelIds.length) throw new MissingMyTasksViewLabelError();
+};

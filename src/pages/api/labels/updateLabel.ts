@@ -217,6 +217,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 throw new LabelMutationError("Smart tags cannot be merged", 409);
               }
               requireEditableReferences(views, source.id, session.userId);
+              await tx.$queryRaw(Prisma.sql`SELECT id FROM "Label" WHERE id = ${source.id} FOR UPDATE`);
               const personalReference = await tx.myTasksView.findFirst({
                 where: {
                   OR: [
@@ -231,7 +232,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               if (personalReference) {
                 throw new LabelMutationError("A saved My Tasks view uses this tag. Remove that filter before merging.", 409);
               }
-              await tx.$queryRaw(Prisma.sql`SELECT id FROM "Label" WHERE id = ${source.id} FOR UPDATE`);
               const targetProjectView = getProjectLabelView(views, target);
               await updateFilterReferences(tx, views, source, target);
               const assignments = await tx.taskLabel.findMany({

@@ -5,6 +5,8 @@ import { isFeatureEnabled, MY_TASKS_QUICK_ADD_FLAG } from "@/lib/flags";
 import { mergeMyTasksViewConfigUpdate } from "@/lib/myTasks/viewConfigMerge";
 import {
   myTasksViewSelect,
+  lockMyTasksViewLabels,
+  MissingMyTasksViewLabelError,
   serializeMyTasksView,
 } from "@/utils/controllers/tasks/myTasksViews";
 import { authorizeMyTasksViewsRequest } from "../auth";
@@ -92,11 +94,13 @@ export async function PATCH(
       const existing = locked[0];
       if (!existing) return null;
       if (configPatch || fullConfig !== undefined) {
-        data.config = mergeMyTasksViewConfigUpdate({
+        const config = mergeMyTasksViewConfigUpdate({
           existingConfig: existing.config,
           fullConfig,
           configPatch,
-        }) as unknown as Prisma.InputJsonValue;
+        });
+        await lockMyTasksViewLabels(tx, config);
+        data.config = config as unknown as Prisma.InputJsonValue;
       }
       if (data.isDefault === true) {
         await tx.myTasksView.updateMany({
@@ -118,6 +122,9 @@ export async function PATCH(
         { error: "Another view was set as default; try again" },
         { status: 409 },
       );
+    }
+    if (error instanceof MissingMyTasksViewLabelError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     console.error("[my-tasks-views] update failed", error);
     return NextResponse.json({ error: "Unable to update view" }, { status: 500 });

@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { parseMyTasksViewConfig } from "@/models/MyTasksView";
 import {
   getMyTasksViews,
+  lockMyTasksViewLabels,
+  MissingMyTasksViewLabelError,
   MAX_MY_TASKS_VIEWS,
   myTasksViewSelect,
   serializeMyTasksView,
@@ -52,12 +54,14 @@ export async function POST(request: NextRequest) {
         _max: { position: true },
       });
       if (aggregate._count >= MAX_MY_TASKS_VIEWS) return null;
+      const config = parseMyTasksViewConfig(body?.config);
+      await lockMyTasksViewLabels(tx, config);
       return tx.myTasksView.create({
         data: {
           userId: auth.userId,
           name,
           position: (aggregate._max.position ?? -1) + 1,
-          config: parseMyTasksViewConfig(body?.config) as unknown as Prisma.InputJsonValue,
+          config: config as unknown as Prisma.InputJsonValue,
         },
         select: myTasksViewSelect,
       });
@@ -70,6 +74,9 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ view: serializeMyTasksView(view) }, { status: 201 });
   } catch (error) {
+    if (error instanceof MissingMyTasksViewLabelError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error("[my-tasks-views] create failed", error);
     return NextResponse.json({ error: "Unable to create view" }, { status: 500 });
   }

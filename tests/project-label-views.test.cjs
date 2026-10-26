@@ -125,7 +125,19 @@ const fixture = (options = {}) => {
       findUnique: async () => options.noDefault ? null : { id: "container", default_view: defaults },
     },
     myTasksView: {
-      findFirst: async () => options.personalReference ? { id: 1 } : null,
+      findFirst: async ({ where }) => {
+        assert.ok(events.includes("source-label-lock"));
+        const contains = (actual, expected) => {
+          if (Array.isArray(expected)) return Array.isArray(actual) && expected.every((item) => actual.some((candidate) => contains(candidate, item)));
+          if (expected && typeof expected === "object") return actual && Object.entries(expected).every(([key, value]) => contains(actual[key], value));
+          return actual === expected;
+        };
+        const personalViews = options.personalViews ?? (options.personalReference ? [{ id: 1, config: { filters: { labelIds: [source.id] } } }] : []);
+        return personalViews.find((row) => where.OR.some(({ config }) => {
+          const actual = config.path.reduce((value, key) => value?.[key], row.config);
+          return contains(actual, config.array_contains);
+        })) ?? null;
+      },
     },
     taskLabel: {
       findMany: async ({ where }) => {
@@ -453,4 +465,22 @@ test("a failed source deletion rolls back copied assignments and retargeted view
   const before = structuredClone(f.state);
   assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 500);
   assert.deepEqual(f.state, before);
+});
+
+
+for (const config of [
+  { filters: { labelIds: ["another", source.id] } },
+  { filterSettings: { matchFilters: "ANY", addedFilters: [{ type: "Labels", match: "ALL", searchPayload: [{ id: source.id, value: source.value }, { id: "another" }] }] } },
+]) {
+  test("merge refuses each persisted personal label-filter shape", async () => {
+    const f = fixture({ personalViews: [{ id: 8, userId: 77, config }] });
+    assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 409);
+    assert.deepEqual(f.writes, []);
+  });
+}
+
+test("unrelated personal filters do not block a legitimate merge", async () => {
+  const f = fixture({ personalViews: [{ id: 8, config: { filters: { labelIds: ["another"] } } }] });
+  assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 200);
+  assert.deepEqual(f.state.labels.map((label) => label.id), [target.id]);
 });
