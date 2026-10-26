@@ -314,7 +314,7 @@ for (const projectViewKind of ["none", "target", "source", "reused-source", "bot
       { taskId: 2, labelId: source.id },
       { taskId: 3, labelId: "other" },
     ] });
-    const result = await f.request({ mergeIntoLabelId: target.id });
+    const result = await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName: source.value });
     assert.equal(result.status, 200);
     assert.equal(result.body.id, target.id);
     const expectedViewId = ["target", "both"].includes(projectViewKind) ? target.id
@@ -347,7 +347,7 @@ for (const kind of ["Private", "draft"]) {
     const privateView = view(source, kind === "Private" ? { visibility: "Private" } : { unsaved_User_Project_View: [{ id: "draft" }] });
     const f = fixture({ views: [view(source, { id: "public" }), privateView] });
     const before = structuredClone(f.state);
-    const result = await f.request({ mergeIntoLabelId: target.id });
+    const result = await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName: source.value });
     assert.equal(result.status, 409);
     assert.deepEqual(f.writes, []);
     assert.deepEqual(f.state, before);
@@ -358,7 +358,7 @@ test("own private reference can merge while unrelated foreign private views rema
   const own = view(source, { id: "own", userId: 42, visibility: "Private" });
   const foreign = view(target, { id: "foreign", visibility: "Private" });
   const f = fixture({ views: [own, foreign] });
-  assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 200);
+  assert.equal((await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName: source.value })).status, 200);
   assert.equal(f.state.views[0].board_filters.addedFilters[0].searchPayload[0].id, target.id);
   assert.deepEqual(f.state.views[1], foreign);
 });
@@ -384,7 +384,7 @@ for (const operation of ["promote", "rename", "merge", "delete"]) {
     const f = fixture({ labels: [smart, target], views: [view(smart)] });
     const body = operation === "promote" ? { projectView: true }
       : operation === "rename" ? { value: "Renamed" }
-        : operation === "merge" ? { mergeIntoLabelId: target.id } : {};
+        : operation === "merge" ? { mergeIntoLabelId: target.id, confirmMergeLabelName: source.value } : {};
     assert.equal((await f.request(body, operation === "delete" ? "DELETE" : "POST")).status, 409);
     assert.deepEqual(f.writes, []);
   });
@@ -393,7 +393,7 @@ for (const operation of ["promote", "rename", "merge", "delete"]) {
 test("smart target and cross-board target reject ordinary merges without writes", async () => {
   for (const other of [{ ...target, ai_prompt: "Classify" }, { ...target, projectId: 16 }]) {
     const f = fixture({ labels: [source, other], views: [view(other)] });
-    assert.ok([400, 409].includes((await f.request({ mergeIntoLabelId: target.id })).status));
+    assert.ok([400, 409].includes((await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName: source.value })).status));
     assert.deepEqual(f.writes, []);
   }
 });
@@ -461,7 +461,7 @@ test("missing board defaults roll back the label rename", async () => {
 test("saved personal references refuse a merge without changing tags or views", async () => {
   const f = fixture({ personalReference: true, views: [view(source)] });
   const before = structuredClone(f.state);
-  assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 409);
+  assert.equal((await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName: source.value })).status, 409);
   assert.deepEqual(f.state, before);
   assert.deepEqual(f.writes, []);
 });
@@ -469,7 +469,7 @@ test("saved personal references refuse a merge without changing tags or views", 
 test("a failed source deletion rolls back copied assignments and retargeted views", async () => {
   const f = fixture({ views: [view(source)], assignments: [{ taskId: 7, labelId: source.id }], failWrite: "label.delete" });
   const before = structuredClone(f.state);
-  assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 500);
+  assert.equal((await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName: source.value })).status, 500);
   assert.deepEqual(f.state, before);
 });
 
@@ -480,20 +480,20 @@ for (const config of [
 ]) {
   test("merge refuses each persisted personal label-filter shape", async () => {
     const f = fixture({ personalViews: [{ id: 8, userId: 77, config }] });
-    assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 409);
+    assert.equal((await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName: source.value })).status, 409);
     assert.deepEqual(f.writes, []);
   });
 }
 
 test("unrelated personal filters do not block a legitimate merge", async () => {
   const f = fixture({ personalViews: [{ id: 8, config: { filters: { labelIds: ["another"] } } }] });
-  assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 200);
+  assert.equal((await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName: source.value })).status, 200);
   assert.deepEqual(f.state.labels.map((label) => label.id), [target.id]);
 });
 
 
 test("disabled project views reject direct creation and merge without writes", async () => {
-  for (const body of [{ projectView: true }, { mergeIntoLabelId: target.id }]) {
+  for (const body of [{ projectView: true }, { mergeIntoLabelId: target.id, confirmMergeLabelName: source.value }]) {
     const f = fixture({ flagEnabled: false, assignments: [{ taskId: 1, labelId: source.id }] });
     const before = structuredClone(f.state);
     const result = await f.request(body);
@@ -518,4 +518,17 @@ test("disabling creation never removes saved project views or their deletion saf
   assert.equal(result.status, 409);
   assert.equal(f.state.views.length, 1);
   assert.equal(f.state.labels.length, 2);
+});
+
+
+test("tag merging requires the exact name of the source tag to be removed", async () => {
+  for (const confirmMergeLabelName of [undefined, "", target.value]) {
+    const f = fixture({ assignments: [{ taskId: 1, labelId: source.id }] });
+    const before = structuredClone(f.state);
+    const result = await f.request({ mergeIntoLabelId: target.id, confirmMergeLabelName });
+    assert.equal(result.status, 400);
+    assert.match(result.body.message, /source tag.*removed/);
+    assert.deepEqual(f.state, before);
+    assert.deepEqual(f.writes, []);
+  }
 });

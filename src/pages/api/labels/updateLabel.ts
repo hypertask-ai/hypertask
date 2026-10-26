@@ -27,6 +27,7 @@ const updateLabelBody = z.object({
   ai_prompt: z.string().max(1000).nullable().optional(),
   projectView: z.boolean().optional(),
   mergeIntoLabelId: z.string().min(1).optional(),
+  confirmMergeLabelName: z.string().optional(),
 });
 
 type BoardFilterView = Pick<View, "id" | "title" | "visibility" | "userId" | "board_filters"> & {
@@ -176,7 +177,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === "POST") {
       const parsed = updateLabelBody.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid label information" });
-      const { value, labelId, ai_prompt, projectView, mergeIntoLabelId } = parsed.data;
+      const { value, labelId, ai_prompt, projectView, mergeIntoLabelId, confirmMergeLabelName } = parsed.data;
       const projectViewsEnabled = await isFeatureEnabled(HTPR_8024_PROJECT_TAG_VIEWS_FLAG, session.userId);
       if (!projectViewsEnabled && (projectView || mergeIntoLabelId)) {
         return res.status(404).json({ message: "Project tag views are not available" });
@@ -214,6 +215,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               throw new LabelMutationError("Only ordinary tags can be projects", 409);
             }
             if (mergeIntoLabelId) {
+              if (confirmMergeLabelName !== source.value) {
+                throw new LabelMutationError("Confirm merging by naming the source tag that will be removed", 400);
+              }
               if (mergeIntoLabelId === source.id) throw new LabelMutationError("Choose a different tag to merge into", 400);
               const target = await tx.label.findUnique({ where: { id: mergeIntoLabelId } });
               if (!target || target.projectId !== projectId) {

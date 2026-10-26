@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8024_PROJECT_TAG_VIEWS_FLAG } from "@/lib/flags/definitions/htpr-8024-project-tag-views";
 import { ILabel } from "@/models/model";
 import {  currentProjectAtom, currentUserAtom } from "@/store";
 import {  useRef, useState } from "react";
@@ -29,6 +31,7 @@ const ManageLabels = ({onClose}: Props) => {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
     const [deleting, setDeleting] = useState<boolean>(false);
     const [deleteError, setDeleteError] = useState("");
+    const projectViewsEnabled = useFlag(HTPR_8024_PROJECT_TAG_VIEWS_FLAG);
     const [searchTerm, setSearchTerm] = useState<string>("");
     const [sortMode, setSortMode] = useState<"alphabetical" | "most" | "fewest">("alphabetical");
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -138,7 +141,8 @@ const ManageLabels = ({onClose}: Props) => {
         for (const labelId of deletableIds) {
           try {
             await globalAPIHandlers.deleteLabelAPI(labelId, currentProject?.id, currentUser?.id);
-          } catch {
+          } catch (error) {
+            if (!projectViewsEnabled) throw error;
             failed.add(labelId);
           }
         }
@@ -146,7 +150,8 @@ const ManageLabels = ({onClose}: Props) => {
         await queryClient.refetchQueries({queryKey:[projectLabelsPrefix, currentProject?.id]});
         await queryClient.refetchQueries({queryKey:["projectsAll"]});
         setSelectedLabelIds(failed);
-      } catch {
+      } catch (error) {
+        if (!projectViewsEnabled) throw error;
         setDeleteError("Could not refresh tags. Reopen Manage Tags.");
       } finally {
         setDeleting(false);
@@ -279,7 +284,7 @@ const ManageLabels = ({onClose}: Props) => {
                 
                   
               </ModalBody>
-              {deleteError && <p role="alert" className="px-4 text-dense text-destructive">{deleteError}</p>}
+              {projectViewsEnabled && deleteError && <p role="alert" className="px-4 text-dense text-destructive">{deleteError}</p>}
               {selectedLabelCount > 0 && (
                 <ModalFooter className="flex justify-between border-t border-border-light-gray-thin bg-modalBackground px-4 py-3">
                   <span className="text-content text-text-light-gray">{selectedLabelText} selected</span>

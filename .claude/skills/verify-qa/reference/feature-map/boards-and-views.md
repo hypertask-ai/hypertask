@@ -71,7 +71,8 @@ its tagged tickets belong there. Repeating the action must not add a view.
 Rename the tag using the same editor. The view title and saved label payload
 must update, while its view ID and bookmark stay stable. The authenticated
 `POST /api/labels/updateLabel` merge operation (`labelId`, `value`,
-`mergeIntoLabelId`) must keep task assignments and retarget source filters,
+`mergeIntoLabelId`, `confirmMergeLabelName` equal to the source tag name)
+must reject missing or mismatched confirmation before writes and keep task assignments and retarget source filters,
 not erase them. When both tags have project views, preserve the target view
 and keep source bookmarks filtered. An unrelated saved view must stay intact.
 Deleting a project tag must not leave an unfiltered project view behind.

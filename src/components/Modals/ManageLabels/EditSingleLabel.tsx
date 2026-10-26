@@ -150,7 +150,7 @@ const EditSingleLabel = (
                 </>
              }
        
-             {error && <p role="alert" className="px-2 text-dense text-destructive">{error}</p>}
+             {projectViewsEnabled && error && <p role="alert" className="px-2 text-dense text-destructive">{error}</p>}
              {projectViewsEnabled && !confirming && !legacySmartLabel && (
                <div className="border-t border-light-black-border-1 px-2 py-2">
                  {hasProjectView ? (
