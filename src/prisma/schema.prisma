@@ -562,6 +562,22 @@ model FeatureFlagReview {
   usedByChangeId    Int?
 }
 
+model ManagerLeaseGrant {
+  id          Int       @id @default(autoincrement())
+  agentId     String
+  session     String    @db.VarChar(100)
+  tokenHash   String    @unique @db.VarChar(64)
+  ttlMinutes  Int
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  renewedAt   DateTime?
+  replacedAt  DateTime?
+  releasedAt  DateTime?
+  endedReason String?   @db.VarChar(20)
+
+  @@index([agentId, expiresAt])
+}
+
 model FigmaConnection {
   userId                Int      @id
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)

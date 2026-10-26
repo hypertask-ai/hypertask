@@ -110,11 +110,30 @@ token=$(cat "$TOKEN_FILE")
 [[ $token =~ ^[A-Za-z0-9._-]+$ ]] || fail 'invalid agent identity credential'
 response=$(mktemp)
 trap 'rm -f "$response"' EXIT
-# Feed the credential through stdin so it never appears in curl arguments.
-code=$(printf 'header = "Authorization: Bearer %s"\n' "$token" |
+grant_config=''
+if [ -n "${HT_MANAGER_GRANT_FILE:-}" ]; then
+  [ -r "$HT_MANAGER_GRANT_FILE" ] || fail 'manager grant receipt is unreadable'
+  grant=$(jq -er '.token' "$HT_MANAGER_GRANT_FILE") || fail 'manager grant receipt has no token'
+  [[ $grant =~ ^[A-Za-z0-9_-]{32,128}$ ]] || fail 'manager grant receipt token is malformed'
+  grant_config=$(printf 'header = "X-Manager-Grant: %s"\n' "$grant")
+fi
+# Feed the credentials through stdin so they never appear in curl arguments.
+set +e
+code=$(printf 'header = "Authorization: Bearer %s"\n%s' "$token" "$grant_config" |
   curl --config - --silent --show-error --connect-timeout 10 --max-time 30 \
     --request "$method" --header 'Content-Type: application/json' \
-    --data "$body" --output "$response" --write-out '%{http_code}' "$url") || fail 'request failed'
+    --data "$body" --output "$response" --write-out '%{http_code}' "$url")
+curl_status=$?
+set -e
+if [ "$curl_status" -ne 0 ]; then
+  if [ "$curl_status" -eq 28 ] && [ "$method" = PATCH ]; then
+    check=$(printf 'header = "Authorization: Bearer %s"\n' "$token" |
+      curl --config - --silent --connect-timeout 10 --max-time 30 "${url}?key=$key") || fail "request timed out and the switch state is unknown; read it with: ht-flag get $key"
+    mode_now=$(printf '%s' "$check" | jq -er --arg key "$key" '[(.flags // .)[]? | select(.key == $key)][0].mode') || fail "request timed out and the switch state is unknown; read it with: ht-flag get $key"
+    fail "request timed out; $key is now $mode_now (requested $mode)"
+  fi
+  fail 'request failed'
+fi
 jq . "$response" || fail "HTTP $code: invalid JSON response"
 [[ $code == 2?? ]] || fail "HTTP $code"
 if [ "$command" = review ]; then
