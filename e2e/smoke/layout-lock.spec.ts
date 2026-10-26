@@ -556,8 +556,7 @@ for (const expanded of [false, true]) {
 test('Board hygiene leaves Manage Tags unchanged', async ({ page }, testInfo) => {
   test.skip(!process.env.SMOKE_BOARD_PATH, 'board fixture required')
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
-  await page.waitForFunction(() => Array.from(document.querySelectorAll('[aria-label="Board menu"]')).some(element =>
-    Object.keys(element).some(key => key.startsWith('__reactProps$'))))
+  await page.locator('[data-board-tasks-hydrated="true"]').waitFor({ state: 'attached' })
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await page.getByRole('button', { name: testInfo.project.name === 'Mobile' ? 'Commands' : 'Board menu', exact: true }).click()
   await page.locator('#htc-search:visible, #htc-mobile-search:visible').fill('Manage tags')
