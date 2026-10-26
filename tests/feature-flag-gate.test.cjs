@@ -2369,3 +2369,39 @@ test('runtime import replacements cannot borrow a sibling gate, while added flag
     assert.equal((await evaluate('HTPR-1 [FEATURE] import control', base, commit(git, name), dir)).pass, expected, name);
   }
 });
+
+test('aliased formatter parameters gate real output, not ignored or overwritten values', async (t) => {
+  const cases = [
+    ['relative return', './formatter', 'return enabled ? "Age" : null;', true],
+    ['aliased return', '@/lib/formatter', 'return enabled ? "Age" : null;', true],
+    ['early null return', '@/lib/formatter', 'if (!enabled) return null; return "Age";', true],
+    ['compound early return', '@/lib/formatter', 'if ((!enabled && data.fresh) || data.missing) { return null; } const suffix = data.days; return `Age ${suffix}`;', true],
+    ['if else return', '@/lib/formatter', 'if (enabled) { return "Age"; } else { return null; }', true],
+    ['ignored parameter', '@/lib/formatter', 'if (enabled) log(); return "Age";', false],
+    ['same returned value', '@/lib/formatter', 'if (!enabled) return "Age"; return "Age";', false],
+    ['same truthy result', '@/lib/formatter', 'if (!enabled) return "Old"; return "Age";', false],
+    ['null and undefined results', '@/lib/formatter', 'if (!enabled) return null; return undefined;', false],
+    ['constant condition', '@/lib/formatter', 'if (!enabled || true) return null; return "Age";', false],
+    ['overwritten parameter', '@/lib/formatter', 'enabled = true; if (!enabled) return null; return "Age";', false],
+    ['unused nested gate', '@/lib/formatter', 'function unused() { if (!enabled) return null; return "Age"; } return "Age";', false],
+    ['external module', 'formatter', 'if (!enabled) return null; return "Age";', false],
+    ['outside source alias', '@/../formatter', 'if (!enabled) return null; return "Age";', false],
+  ];
+  for (const [name, moduleName, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    const helper = `export function format(data, enabled) { ${body} }\n`;
+    const helperPath = moduleName === './formatter' ? 'src/components/formatter.ts' : 'src/lib/formatter.ts';
+    writeFile(dir, helperPath, helper);
+    writeFile(dir, 'src/components/Widget.tsx', `import {useFlag} from "@/hooks/useFlag";
+import {OTHER_FLAG} from "@/lib/flags/keys";
+import {format} from "${moduleName}";
+export function Widget() {
+  const enabled = useFlag(OTHER_FLAG);
+  const label = format({fresh: true, missing: false, days: 2}, enabled);
+  if (!label) return null;
+  return <p>{label}</p>;
+}
+`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter output', base, commit(git, name), dir)).pass, expected, name);
+  }
+});

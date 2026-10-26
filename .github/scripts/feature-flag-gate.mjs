@@ -965,9 +965,11 @@ function assignedGateSymbol(call, checker) {
   return { name, symbol: checker.getSymbolAtLocation(name) };
 }
 
-function resolveRelativeModule(ref, sourcePath, moduleName) {
-  if (!moduleName.startsWith(".")) return null;
-  const base = pathPosix.normalize(pathPosix.join(pathPosix.dirname(sourcePath), moduleName));
+function resolveLocalModule(ref, sourcePath, moduleName) {
+  if (!moduleName.startsWith(".") && !moduleName.startsWith("@/")) return null;
+  const base = moduleName.startsWith("@/")
+    ? pathPosix.normalize(`src/${moduleName.slice(2)}`)
+    : pathPosix.normalize(pathPosix.join(pathPosix.dirname(sourcePath), moduleName));
   if (!base.startsWith("src/")) return null;
   const candidates = /\.[jt]sx?$/.test(base) ? [base] : [
     `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`,
@@ -1011,6 +1013,21 @@ function controlsReturnedValue(node) {
           staticBoolean(other) !== null) continue;
       return false;
     }
+    if (typescript.isIfStatement(parent) && child === parent.expression) {
+      let whenTrue = parent.thenStatement;
+      let whenFalse = parent.elseStatement;
+      if (!whenFalse && typescript.isBlock(parent.parent)) {
+        const statements = parent.parent.statements;
+        whenFalse = statements.slice(statements.indexOf(parent) + 1).find(typescript.isReturnStatement);
+      }
+      if (typescript.isBlock(whenTrue) && whenTrue.statements.length === 1) whenTrue = whenTrue.statements[0];
+      if (whenFalse && typescript.isBlock(whenFalse) && whenFalse.statements.length === 1) whenFalse = whenFalse.statements[0];
+      if (!typescript.isReturnStatement(whenTrue) || !whenFalse || !typescript.isReturnStatement(whenFalse) ||
+          !whenTrue.expression || !whenFalse.expression ||
+          branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression)) return false;
+      const a = staticBoolean(whenTrue.expression), b = staticBoolean(whenFalse.expression);
+      return a === null || b === null || a !== b;
+    }
     if (typescript.isConditionalExpression(parent)) {
       if (child === parent.condition) {
         const whenTrue = staticBoolean(parent.whenTrue);
@@ -1025,7 +1042,7 @@ function controlsReturnedValue(node) {
 }
 
 function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex) {
-  const targetPath = resolveRelativeModule(ref, sourcePath, imported.module);
+  const targetPath = resolveLocalModule(ref, sourcePath, imported.module);
   if (!targetPath) return false;
   const source = git(["show", `${ref}:${targetPath}`]);
   const scriptKind = targetPath.endsWith(".tsx") ? typescript.ScriptKind.TSX :
@@ -1061,11 +1078,11 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
   const parameter = declaration?.parameters[argumentIndex];
   if (!declaration?.body || !parameter || !typescript.isIdentifier(parameter.name)) return false;
   const symbol = checker.getSymbolAtLocation(parameter.name);
-  if (!symbol) return false;
+  if (!symbol || writtenBindingSymbols(sourceFile, checker).has(symbol)) return false;
 
   let controls = false;
   function visit(node) {
-    if (controls) return;
+    if (controls || typescript.isFunctionLike(node)) return;
     if (typescript.isIdentifier(node) && node !== parameter.name &&
         checker.getSymbolAtLocation(node) === symbol && controlsReturnedValue(node)) {
       controls = true;
@@ -1321,7 +1338,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
       if (!FLAG_KEY_MODULES.has(moduleName)) {
         const definitionPath = moduleName.startsWith("@/lib/flags/definitions/")
           ? `src/${moduleName.slice(2)}${moduleName.endsWith(".ts") ? "" : ".ts"}`
-          : resolveRelativeModule(ref, path, moduleName);
+          : resolveLocalModule(ref, path, moduleName);
         if (!definitionPath || !flagDefinitionPaths(ref).includes(definitionPath)) continue;
         const { identifier, definition } = parseFlagFile(git(["show", `${ref}:${definitionPath}`]), definitionPath);
         if (identifier !== imported || definition.key !== key) continue;
