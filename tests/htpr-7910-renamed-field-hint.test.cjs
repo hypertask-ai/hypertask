@@ -64,7 +64,6 @@ test("the handler uses the authenticated user's flag to control the real error r
       "@/lib/aiFeedback/clientInfo": { rememberFeedbackClient: () => {} },
       "@/lib/mcp/operationContext": { withMcpExecutionContext: (_token, _ctx, run) => run() },
       "@/lib/flags": {
-        HTPR_6804_MCP_TOOLS_FLAG: "catalog",
         isFeatureEnabled: async (key, userId) => {
           assert.equal(userId, 985);
           return key === "catalog" || (key === "htpr-7910-renamed-field-hint" && enabled);

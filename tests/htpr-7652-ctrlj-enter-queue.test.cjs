@@ -4,6 +4,7 @@ const path = require("node:path");
 const Module = require("node:module");
 const { test } = require("node:test");
 const React = require("react");
+const { notifyManager, defaultScheduler } = require("@tanstack/react-query");
 
 const root = path.resolve(__dirname, "..");
 const flag = "htpr-7652-ctrlj-enter-queue";
@@ -21,6 +22,8 @@ fixture._compile(`${fixtureSource.slice(0, fixtureSource.indexOf("\ntest("))}\nm
 const { withPalette } = fixture.exports;
 
 async function withColdBoards(t, queueEnabled, check) {
+  notifyManager.setScheduler(queueMicrotask);
+  t.after(() => notifyManager.setScheduler(defaultScheduler));
   await withPalette(t, { newWindow: true, boardChip: false, tab: "compose", url: "/project?id=7" }, async (palette) => {
     let resolveBoards;
     const api = require.cache[path.join(root, "src/utils/api/global/index.ts")].exports.default;
@@ -32,7 +35,6 @@ async function withColdBoards(t, queueEnabled, check) {
       api.getAllProjectsMinimal = async () => boards;
       await React.act(async () => {
         resolveBoards(boards);
-        await new Promise((resolve) => setTimeout(resolve, 5));
       });
     };
     await check({ ...palette, boardsArrive });

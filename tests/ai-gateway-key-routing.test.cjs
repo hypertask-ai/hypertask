@@ -931,13 +931,13 @@ async function selectFreeTeamDefault() {
 
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   return selectTaskWriterModel({
-    aiFeature: "taskWriter",
+    aiFeature: "writeWithAi",
     teamContext: { teamId, settings: {}, userId: 1000 },
     userId: 1000,
   });
 }
 
-test("a Free team defaults to Luna and may use it", async () => {
+test("a Free editor request defaults to Luna and may use it", async () => {
   const selected = await selectFreeTeamDefault();
   assert.equal(selected.provider, "openai");
   assert.equal(selected.modelId, "gpt-6-luna");

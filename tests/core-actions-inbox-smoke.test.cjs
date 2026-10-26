@@ -102,11 +102,8 @@ function fakeApp(options = {}) {
     }
     if (path === "/api/notifications/markAsDone") {
       state.toggles += 1;
-      assert.equal(url.searchParams.get("id"), "201");
-      assert.equal(url.searchParams.get("taskId"), "81");
-      assert.equal(url.searchParams.get("userId"), "17");
-      assert.equal(url.searchParams.get("type"), "TaskMovedToInbox");
-      assert.equal(init.method, "GET");
+      assert.deepEqual(body, { id: 201, taskId: 81, userId: 17, type: "TaskMovedToInbox" });
+      assert.equal(init.method, "POST");
       if (options.failToggle === state.toggles) return json({ message: "This task is not in inbox" }, options.errorStatus || 400);
       const row = state.notifications.find((row) => row.id === 201);
       row.status = row.status === "Normal" ? "Archive" : "Normal";
@@ -144,8 +141,8 @@ test("all named inbox routines use the UI paths and clean up their notification"
   assertClean(app);
   const ui = fs.readFileSync("src/hooks/Inbox/useGlobalFocusHandler.tsx", "utf8");
   const undo = fs.readFileSync("src/utils/undoActions/helperFuncs.ts", "utf8");
-  assert.match(ui, /\/api\/notifications\/markAsDone\?id=/);
-  assert.match(undo, /\/api\/notifications\/markAsDone\?id=/);
+  assert.match(ui, /"\/api\/notifications\/markAsDone",\s*\{\s*method: "POST"/);
+  assert.match(undo, /"\/api\/notifications\/markAsDone", \{\s*method: "POST"/);
   assert.match(fs.readFileSync("src/utils/controllers/tasks/getTask.ts", "utf8"), /fetchTaskDetail\(project, uniqueIndex, user.id\)/);
   assert.match(fs.readFileSync("src/app/detail/[...slug]/page.tsx", "utf8"), /fetchTaskDetail\(params.slug\[0\], params.slug\[1\], userObj.id\)/);
 });

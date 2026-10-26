@@ -105,7 +105,9 @@ function fixture(api, original = false) {
         assert.deepEqual(JSON.parse(options.body), { notificationIds: data.notificationIds, status: "Normal" });
         return invoke(JSON.parse(options.body));
       }
-      assert.ok(url.startsWith("/api/notifications/markAsDone?id=101&taskId=201&"));
+      assert.equal(url, "/api/notifications/markAsDone");
+      assert.equal(options.method, "POST");
+      assert.deepEqual({ id: JSON.parse(options.body).id, taskId: JSON.parse(options.body).taskId }, { id: "101", taskId: 201 });
       return invoke({}, true);
     };
     try { return await undo(data); } finally { global.fetch = saved; }

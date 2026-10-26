@@ -261,6 +261,25 @@ const route = taskWriteRoute({
   },
 });
 
+const archiveBodyFields = (raw: unknown) => Object.fromEntries(
+  Object.entries(raw && typeof raw === "object" ? raw : {})
+    .filter(([, value]) => value !== null && value !== undefined)
+    .map(([key, value]) => [key, String(value)]),
+);
+
+export const POST: TaskWriteRoute = async (request, authenticatedSession) => {
+  try {
+    const session = authenticatedSession ?? await getSessionUser(request.headers);
+    if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    const body = archiveBodyFields(await request.json());
+    return await route({ ...request, headers: request.headers, json: async () => body }, session);
+  } catch (error) {
+    console.log(error);
+
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
+};
+
 export const GET: TaskWriteRoute = async (request, authenticatedSession) => {
   try {
     const session = authenticatedSession ?? await getSessionUser(request.headers);

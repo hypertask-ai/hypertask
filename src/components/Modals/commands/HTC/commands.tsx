@@ -16,8 +16,11 @@ import {
   tableTitleWrapAtom,
   showCommandsAtom,
 } from "@/store";
+import { pageCommandGroups, pageCreationTarget } from "@/lib/pages/commands";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
+import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import { Search, Sparkles } from "lucide-react";
 import { ModalBody } from "reactstrap";
 import styles from "@/styles/linksModal.module.scss";
@@ -145,6 +148,9 @@ const Commands = (props: Props) => {
   const [, setTableTitleWrap] = useRecoilState(tableTitleWrapAtom);
   const calendarSettings = useRecoilValue(calendarSettingsAtom);
   const pathname = usePathname();
+  const router = useRouter();
+  const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
@@ -333,6 +339,7 @@ const Commands = (props: Props) => {
       ...(boardCommands.length > 0
         ? [{ group: "Boards", commandLists: boardCommands }]
         : []),
+      ...(pagesEnabled && standalonePages ? pageCommandGroups(pathname) : []),
       ...registryGroups.slice(boardsInsertIndex),
     ].map((group) => ({
       ...group,
@@ -424,6 +431,9 @@ const Commands = (props: Props) => {
     getCommands,
     pinCommentActions,
     pageActions,
+    pagesEnabled,
+    standalonePages,
+    pathname,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
     hiddenXaiCommandKeys,
@@ -624,6 +634,30 @@ const Commands = (props: Props) => {
         recordHTCCommandUsage(previousUsage, command)
       );
       (document.activeElement as HTMLElement).blur();
+      if (pagesEnabled && standalonePages && ["gotoPages", "newPage", "linkPage", "linkPageTicket"].includes(command.key)) {
+        resetShowCommands();
+        const navigate = async (href: string) => {
+          if (currentPageActions && pathname === `/page/${currentPageActions.publicId}`) await currentPageActions.beforeNavigate?.();
+          router.push(href);
+        };
+        switch (command.key) {
+          case "gotoPages":
+            void navigate(currentProject ? `/pages?project_id=${currentProject.id}` : "/pages");
+            break;
+          case "newPage":
+            const target = pageCreationTarget({ pathname, projectId: currentProject?.id });
+            if (target.kind === "current-surface") window.dispatchEvent(new Event("pages-new-page"));
+            else void navigate(target.href);
+            break;
+          case "linkPage":
+            window.dispatchEvent(new Event("pages-link-page"));
+            break;
+          case "linkPageTicket":
+            window.dispatchEvent(new Event("pages-link-ticket"));
+            break;
+        }
+        return;
+      }
       if (command.key === "deletePage") {
         if (!pageActions) return;
         resetShowCommands();

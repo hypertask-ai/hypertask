@@ -77,3 +77,14 @@ Work limits remain unconfigured until the board supports storing them;
 
 Use a QA-owned scratch board for known labels and tickets. Compare label
 and view lists before and after reading. This report never repairs data.
+
+## MCP duplicate view titles
+
+Creating a view with an existing title must return the same readable
+400 refusal, without changing the existing view or board default.
+For https://app.hypertask.ai/detail/project-15/7985, verify through both
+`POST /api/mcp/view` and `hypertask_views` action `create` on `/mcp`.
+Use a disposable QA-owned view, list it before and after, and remove only
+that fixture. Duplicate refusals log warnings; unexpected storage failures
+must still log errors. Local behavior coverage:
+`node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
