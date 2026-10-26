@@ -1,3 +1,5 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
+import { useFlag } from "@/hooks/useFlag";
 import { ILabel } from "@/models/model";
 import {  currentProjectAtom, currentUserAtom } from "@/store";
 import {  useRef, useState } from "react";
@@ -21,6 +23,7 @@ type Props = {
 }
 
 const ManageLabels = ({onClose}: Props) => {
+  const workLimits = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   const queryClient = useQueryClient();   
     const [currentProject, _] = useRecoilState(currentProjectAtom)
     const [currentUser] = useRecoilState(currentUserAtom)
@@ -35,7 +38,7 @@ const ManageLabels = ({onClose}: Props) => {
     const searchInputRef = useRef<HTMLInputElement>(null);
     const {data:labelsFromTQ} = useGetAllProjectLabels(currentProject?.id)
     const { data: hygiene, isPending: hygienePending, isError: hygieneError } = useQuery({
-      queryKey: ["boardHygiene", currentProject?.id, labelsFromTQ, currentProject?.project_view?.allViews],
+      queryKey: ["boardHygiene", currentProject?.id, labelsFromTQ, currentProject?.project_view?.allViews, currentProject?.section?.map(section => section.wipLimit), workLimits],
       enabled: !!currentProject?.id,
       queryFn: async () => (await axios.get<{ report: BoardHygieneReport }>("/api/projects/hygiene", {
         params: { projectId: currentProject?.id },
@@ -207,7 +210,9 @@ const ManageLabels = ({onClose}: Props) => {
                       <ul>{hygiene.columns.map(column => <li key={column.id}>
                         {column.title}: {column.openTickets} / {column.staleTickets}
                       </li>)}</ul>
-                      <p>Column work limits are not configured.</p>
+                      <p>{workLimits && hygiene.columns.some(column => column.wipLimit !== null)
+                        ? `Columns over their work limit: ${hygiene.columns.filter(column => column.overLimit !== null && column.overLimit > 0).length}`
+                        : "Column work limits are not configured."}</p>
                       <p>All board tags checked. Shared views only.</p>
                       <p>Report only. Nothing changed.</p>
                     </div>}
