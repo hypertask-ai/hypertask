@@ -3,10 +3,12 @@ import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { isPaidTeam } from "@/lib/freeTier";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
+import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
 
 export const FREE_PLAN_MAX_BOARDS = 2;
 export const FREE_PLAN_MAX_TICKETS = 250;
-export const FREE_PLAN_MAX_FILE_BYTES = 25 * 1024 * 1024;
+export const FREE_PLAN_MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const FREE_PLAN_MAX_FILE_BYTES_RAISED = 25 * 1024 * 1024;
 
 export type PlanLimitScope =
   | { kind: "team"; teamId: string }
@@ -22,7 +24,7 @@ type PlanLimit = "boards" | "tickets" | "file_size";
 type ProjectScopeSource = { teamId: string | null; ownerId: number };
 type ScopeDb = Pick<Prisma.TransactionClient, "project">;
 
-function limitMessage(limit: PlanLimit, scope: PlanLimitScope): string {
+function limitMessage(limit: PlanLimit, scope: PlanLimitScope, max: number): string {
   const subject = scope.kind === "personal" ? "Your personal boards" : "This team's";
   if (limit === "boards") {
     return `${subject} Free plan allows ${FREE_PLAN_MAX_BOARDS} boards. Upgrade to add more, or archive a board you no longer use.`;
@@ -30,7 +32,7 @@ function limitMessage(limit: PlanLimit, scope: PlanLimitScope): string {
   if (limit === "tickets") {
     return `${subject} Free plan allows ${FREE_PLAN_MAX_TICKETS} open tickets. Upgrade to add more, or archive tickets you're done with.`;
   }
-  return `Files on the Free plan can be up to ${FREE_PLAN_MAX_FILE_BYTES / (1024 * 1024)} MB. Upgrade to upload bigger files.`;
+  return `Files on the Free plan can be up to ${max / (1024 * 1024)} MB. Upgrade to upload bigger files.`;
 }
 
 export class PlanLimitReachedError extends Error {
@@ -42,7 +44,7 @@ export class PlanLimitReachedError extends Error {
     readonly max: number,
     readonly scope: PlanLimitScope,
   ) {
-    super(limitMessage(limit, scope));
+    super(limitMessage(limit, scope, max));
     this.name = "PlanLimitReachedError";
   }
 }
@@ -191,8 +193,15 @@ export async function assertTaskCountTransition(
   await assertTicketRoom(tx, scope, 1, ctx);
 }
 
+export async function freeFileLimitBytes(actorUserId: number | null): Promise<number> {
+  const raised = actorUserId != null && await isFeatureEnabled(HTPR_7924_FREE_FILE_25MB_FLAG, actorUserId);
+  return raised ? FREE_PLAN_MAX_FILE_BYTES_RAISED : FREE_PLAN_MAX_FILE_BYTES;
+}
+
 export async function assertFileSizeForProject(projectId: number, bytes: number, ctx: PlanLimitContext): Promise<void> {
   if (bytes <= FREE_PLAN_MAX_FILE_BYTES || !await isPlanLimitsEnabled(ctx.actorUserId)) return;
+  const max = await freeFileLimitBytes(ctx.actorUserId);
+  if (bytes <= max) return;
   const scope = await limitScopeForProject(projectId);
-  if (await isFreeScope(scope)) refuse("file_size", FREE_PLAN_MAX_FILE_BYTES, scope, ctx, { bytes });
+  if (await isFreeScope(scope)) refuse("file_size", max, scope, ctx, { bytes });
 }

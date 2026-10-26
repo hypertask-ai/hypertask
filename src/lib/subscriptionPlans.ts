@@ -224,7 +224,7 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
       },
       {
         title: "Files",
-        amount: "Up to 25 MB each on tickets and comments",
+        amount: "Up to 10 MB each on tickets and comments",
         unlimited: false,
       },
       {
