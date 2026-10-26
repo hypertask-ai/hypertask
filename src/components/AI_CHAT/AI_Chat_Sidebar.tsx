@@ -49,6 +49,7 @@ export const AI_Chat_Sidebar = ({
   const [target, setTarget] = useState<SidebarChatTarget>({ kind: "ai" });
   const [agents, setAgents] = useState<SidebarChatAgent[]>([]);
   const [visited, setVisited] = useState<SidebarChatAgent[]>([]);
+  const [routedDraft, setRoutedDraft] = useState<{ sessionId: string; text: string } | null>(null);
   const [rosterError, setRosterError] = useState<string | null>(null);
   const intentRef = useRef(0);
   const rosterGeneration = useRef(0);
@@ -121,7 +122,7 @@ export const AI_Chat_Sidebar = ({
         if (intent !== intentRef.current) return;
         if (next.kind === "native-agent") nativeSessionId = data.session.id;
         if (agentSessionsEnabled) next = { ...next, agent: { ...next.agent, sessionId: data.session.id,
-          draftKey: data.session.id === agents.find((agent) => agent.id === agentId)?.sessionId ? undefined : `${next.agent.id}:${data.session.id}` } };
+          draftKey: options?.newSession || (options?.sessionId && options.sessionId !== agents.find((agent) => agent.id === agentId)?.sessionId) ? `${agentId}:${data.session.id}` : undefined } };
         if (options?.newSession) void loadRoster();
       } catch (error) {
         if (intent !== intentRef.current) return;
@@ -162,6 +163,7 @@ export const AI_Chat_Sidebar = ({
         else sessionStorage.setItem(storageKey, JSON.stringify({ agentId: next.agent.id, sessionId: next.agent.sessionId }));
       } catch {}
     }
+    setRoutedDraft(next.kind === "external-agent" && next.agent.sessionId && mentionText !== undefined ? { sessionId: next.agent.sessionId, text: mentionText } : null);
     if (next.kind === "external-agent") {
       if (leaving.kind === "native-agent") {
         const stored = drafts.current.get("ai");
@@ -238,6 +240,7 @@ export const AI_Chat_Sidebar = ({
     setNativeSidebarChat(null);
     setTarget({ kind: "ai" });
     setVisited([]);
+    setRoutedDraft(null);
     setAgents([]);
     aiSessionRef.current = null;
     drafts.current.clear();
@@ -344,7 +347,7 @@ export const AI_Chat_Sidebar = ({
         {sidebarEnabled && !minimized && currentUser && embeddedAgents.map((agent, index) => (
           <div key={`${projectId}:${agent.id}:${visited[index].sessionId}`} className={cn("min-h-0 min-w-0 flex-1 flex-col", target.kind === "external-agent" && target.agent.id === agent.id && target.agent.sessionId === visited[index].sessionId ? "flex" : "hidden")}>
             <AgentChatClient currentUser={currentUser} roomsEnabled={false}
-              embedded={{ projectId: projectId!, agent, requestId: intentRef.current, sessionId: agentSessionsEnabled ? visited[index].sessionId ?? undefined : undefined, draftKey: visited[index].draftKey, active: target.kind === "external-agent" && target.agent.id === agent.id && target.agent.sessionId === visited[index].sessionId }} />
+              embedded={{ projectId: projectId!, agent, requestId: intentRef.current, sessionId: agentSessionsEnabled ? visited[index].sessionId ?? undefined : undefined, draftKey: visited[index].draftKey, routedDraft: routedDraft?.sessionId === visited[index].sessionId ? routedDraft.text : undefined, active: target.kind === "external-agent" && target.agent.id === agent.id && target.agent.sessionId === visited[index].sessionId }} />
           </div>
         ))}
       </div>

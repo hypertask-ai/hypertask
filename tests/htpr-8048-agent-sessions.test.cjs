@@ -213,3 +213,36 @@ test("roster paging reaches session 101 without exposing another team's titles",
   const legacy = (await (await get()).json()).agents[0];
   assert.equal(Object.hasOwn(legacy, "sessions"), false);
 });
+
+test("mention routing updates a cached external composer without overwriting later drafts", () => {
+  const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+  const updates = [];
+  const noop = () => {};
+  const state = { awaiting: false, draftRef: { current: "Existing agent draft" }, setDraft: (value) => updates.push(value) };
+  const source = loader({
+    "./useAgentChatState": { useAgentChatState: () => state },
+    "./useAgentChatRoster": { useAgentChatRoster: () => ({}) },
+    "./useAgentChatSession": { useAgentChatSession: () => ({ sessionName: "saved", loadMessages: noop }) },
+    "./useAgentChatFeed": { useAgentChatFeed: () => ({}) },
+    "./useAgentChatStream": { useAgentChatStream: noop },
+    "./useAgentChatNavigation": { useAgentChatNavigation: () => ({}) },
+    "./useAgentChatSend": { useAgentChatSend: () => ({ drainQueuedMessageRef: { current: noop } }) },
+    "./useAgentChatComposer": { useAgentChatComposer: () => ({}) },
+    "./useAgentLifecycle": { useAgentLifecycle: () => ({}) },
+    "./useAgentChatDetailsSheet": { useAgentChatDetailsSheet: noop },
+    "./AgentChatPane": { AgentChatPane: () => null },
+    "./AgentChatView": { AgentChatView: () => null },
+  });
+  const AgentChatClient = source("src/app/agents/chat/AgentChatClient.tsx").default;
+  const view = mount();
+  try {
+    const embedded = { projectId: 15, agent: { id: "agent" }, active: true, sessionId: "saved", requestId: 1, routedDraft: "Please check this @Runner" };
+    view.render(React.createElement(AgentChatClient, { currentUser: { id: 6 }, embedded }));
+    assert.deepEqual(updates, ["Please check this @Runner"]);
+    assert.equal(state.draftRef.current, "Please check this @Runner");
+    state.draftRef.current = "New unsent text";
+    view.render(React.createElement(AgentChatClient, { currentUser: { id: 6 }, embedded: { ...embedded, requestId: 2, routedDraft: undefined } }));
+    assert.equal(state.draftRef.current, "New unsent text");
+    assert.equal(updates.length, 1);
+  } finally { view.close(); }
+});
