@@ -43,7 +43,7 @@ test("deferred and manual sends share a synchronous mutex", () => {
   // BYOK and in-flight guards may be split so streaming can enqueue follow-ups
   // (HTPR-5695) without weakening the pre-stream double-send mutex.
   assert.match(chatSource, /if \(isByokBlocked\) return;/);
-  assert.match(chatSource, /if \(sendInFlightRef\.current\) return;/);
+  assert.match(chatSource, /if \(sendInFlightRef\.current\) return false;/);
   assert.match(chatSource, /sendInFlightRef\.current = true/);
   assert.match(chatSource, /sendInFlightRef\.current = false/);
   assert.match(commentSource, /sessionReady \|\| isTypingRef\.current/);
@@ -51,7 +51,7 @@ test("deferred and manual sends share a synchronous mutex", () => {
 
 test("first-open manual send waits for a session before dereferencing it", () => {
   assert.match(chatSource, /const waitForChatSession = async/);
-  assert.match(chatSource, /const session = await waitForChatSession\(\)/);
+  assert.match(chatSource, /session = await waitForChatSession\(\)/);
   assert.match(chatSource, /if \(!session\) \{/);
   assert.doesNotMatch(
     chatSource.slice(
