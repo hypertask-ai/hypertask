@@ -189,7 +189,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     }
     contextCallback(mentionData);
   }
-  const contextCallbackRef = useRef(contextCallback);
+  const contextCallbackRef = useRef(agentSessionsEnabled && agentSidebarEnabled ? agentContextCallback : contextCallback);
   contextCallbackRef.current = agentSessionsEnabled && agentSidebarEnabled ? agentContextCallback : contextCallback;
   const stableContextCallback = useCallback(
     (node: any) => contextCallbackRef.current(node),
