@@ -15,6 +15,10 @@ export function useAiChatDraft({ editor, sessionId, userId, enabled = true }: {
   useLayoutEffect(() => {
     if (!editor || !enabled) return;
     if (!sessionId || !userId) {
+      if (previousKey.current) {
+        editor.commands.setContent("", { emitUpdate: false });
+        editor.view.updateState(EditorState.create({ doc: editor.state.doc, plugins: editor.state.plugins, schema: editor.schema }));
+      }
       const rememberPending = () => { pendingDraft.current = { userId, html: editor.getHTML() }; };
       editor.on("update", rememberPending);
       return () => { editor.off("update", rememberPending); };

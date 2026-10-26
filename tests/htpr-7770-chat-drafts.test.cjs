@@ -151,3 +151,19 @@ test('undo cannot restore another chat or account draft', () => {
     assert.equal(f.editor.getText(), '');
   } finally { f.destroy(); }
 });
+
+test('typing into an unresolved destination cannot carry the previous chat text or undo history', () => {
+  const f = fixture();
+  try {
+    f.render('A');
+    f.editor.commands.insertContent('Private A');
+    f.render(undefined);
+    assert.equal(f.editor.getText(), '');
+    assert.equal(f.editor.can().undo(), false);
+    f.editor.commands.insertContent('Only B');
+    f.render('B');
+    assert.equal(f.editor.getText(), 'Only B');
+    f.render('A');
+    assert.equal(f.editor.getText(), 'Private A');
+  } finally { f.destroy(); }
+});
