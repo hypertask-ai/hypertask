@@ -14,7 +14,7 @@ function tool(hint) {
     description: 'get',
     parameters: tasks.getGetTasksInputSchema(),
     execute: async (args) => JSON.stringify({ success: true, args }),
-  }], true, {}, true, false, false, false, false, false, false, hint)[0]
+  }], true, {}, false, false, false, false, false, false, hint)[0]
 }
 
 async function refusal(hint, args) {

@@ -416,14 +416,13 @@ test("a read agent can still do MCP JSON-RPC initialize and tools/list (the guar
   const { loader } = require("./htpr-6927-fixtures.cjs");
   const readAgent = { user: { id: 7 }, agentId: "agent-read", agentRole: "read", teamScope: null };
   const load2 = loader({
-    "@/lib/prisma": { __esModule: true, default: { featureFlag: { findUnique: async () => null } } },
+    "@/lib/prisma": { __esModule: true, default: { featureFlag: { findUnique: async () => null }, agent: { findUnique: async () => ({ permissions: { role: "read" } }) } } },
     react: { cache: (fn) => fn },
     "./tools": { MCP_TOOLS: [] },
     "@/lib/mcp/auth": {
       extractBearerToken: (header) => header?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null,
       validateMcpAuth: async () => readAgent,
     },
-    "@/lib/mcp/mcpV2": { isMcpV2Enabled: async () => false },
     "@/lib/aiFeedback/enabled": { aiFeedbackEnabled: async () => false },
     "@/lib/aiFeedback/automatic": { observeFeedbackTools: (tools) => tools, queueAiFeedback: () => {}, queueMcpAuthFailure: () => {} },
     "@/lib/aiFeedback/clientInfo": { rememberFeedbackClient: () => {} },

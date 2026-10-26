@@ -21,7 +21,7 @@ function load(file, stubs) {
   const mod = { exports: {} };
   vm.runInNewContext(javascript.get(file), {
     module: mod, exports: mod.exports, Date,
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
     require: (id) => { if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} }; assert.ok(id in stubs, `Unexpected import: ${id}`); return stubs[id]; },
   }, { filename: file });
   return mod.exports;

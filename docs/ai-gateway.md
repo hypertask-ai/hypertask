@@ -243,6 +243,6 @@ Eco Inno / Northwind (board 318, external), plus ~1,000 dormant signup teams.
 Five customer teams are all titled "MyTeam" (the default) — never identify a
 team by title, only by teamId or owner email.
 
-**Business model context:** there is NO free tier. Users get a 7-day trial,
+**Business model context:** there is NO free tier. Users get a 14-day trial,
 then must be Premium or BYOK. Trial expiry is currently enforced only by a
 root-route redirect; server-side AI entitlement is HTPR-4130.

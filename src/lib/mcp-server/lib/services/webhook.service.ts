@@ -45,6 +45,10 @@ export class WebhookService {
           ...(input.delivery_id !== undefined
             ? { delivery_id: input.delivery_id }
             : {}),
+          ...(input.auth_header_name !== undefined ? { auth_header_name: input.auth_header_name } : {}),
+          ...(input.auth_header_value !== undefined ? { auth_header_value: input.auth_header_value } : {}),
+          ...(input.bearer_secret !== undefined ? { bearer_secret: input.bearer_secret } : {}),
+          ...(input.clear_auth_header !== undefined ? { clear_auth_header: input.clear_auth_header } : {}),
         }),
       },
       correlationId,

@@ -1,0 +1,595 @@
+{
+  "version": 1,
+  "sourceDecision": "https://app.hypertask.ai/detail/project-15/7976#comment-314535",
+  "sourceNote": "20 historical first-description/current pairs from our own board. First saved versions follow the approved original-note definition; authorship is not proof the writer produced a revision. Target 40; shipped minimum 20. No inne or IGSH text. Synthetic cases are marked.",
+  "cases": [
+    {
+      "id": "HTPR-7982",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7982",
+        "descriptionVersionId": 4201,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-26T01:21:41.345Z",
+        "method": "first-description-version",
+        "notesSha256": "93c1e3938c10383e3aab2e847c5e35ba1dd61edcca0a05a0ca91fced4ae41cd8"
+      },
+      "title": "Billing: cancelled teams drop to Free cleanly",
+      "notes": "**For Valentin**\n\n-   **What's wanted:** Cancel in Stripe means the team becomes Free. Data kept.\n    \n-   **Who it affects:** Every team that cancels or stops paying.\n    \n-   **Recommended course and why:** Stripe already tells us on cancel. Make that path drop the team to Free. Keep boards, tickets, files. Free rules apply after. Prove it with a test.\n    \n-   **What Valentin must decide:** Nothing.\n    \n-   **How to undo:** Revert the PR.\n    \n\n**Done when.**\n\n-   Cancel at period end: Pro until that date, then Free.\n    \n-   Cancel now or failed payment end: Free right away.\n    \n-   Nothing deleted. Free rules from [HTPR-7922](https://app.hypertask.ai/detail/project-15/7922)–[HTPR-7925](https://app.hypertask.ai/detail/project-15/7925) apply.\n    \n-   Automated test covers each case.\n    \n\n* * *\n\nTech detail: see agent log on this ticket.",
+      "reference": "<p><strong>For Valentin</strong></p><ul><li><p><strong>What&#x27;s wanted:</strong> Cancel in Stripe means the team becomes Free. Data kept.</p></li><li><p><strong>Who it affects:</strong> Every team that cancels or stops paying.</p></li><li><p><strong>Recommended course and why:</strong> Stripe already tells us on cancel. Make that path drop the team to Free. Keep boards, tickets, files. Free rules apply after. Prove it with a test. Pairs with <a href=\"https://app.hypertask.ai/detail/project-15/7980\">HTPR-7980</a>.</p></li><li><p><strong>What Valentin must decide:</strong> Nothing.</p></li><li><p><strong>How to undo:</strong> Revert the PR.</p></li></ul><p><strong>Done when.</strong></p><ul><li><p>Cancel at period end: Pro until that date, then Free.</p></li><li><p>Cancel now or failed payment end: Free right away.</p></li><li><p>Nothing deleted. Free rules from <a href=\"https://app.hypertask.ai/detail/project-15/7922\">HTPR-7922</a>–<a href=\"https://app.hypertask.ai/detail/project-15/7925\">HTPR-7925</a> apply.</p></li><li><p>Automated test covers each case.</p></li></ul><hr><p>Tech detail: see agent log on this ticket.</p><p>Everyone: No. Owner + QA first.</p><p>Flag: <a href=\"https://app.hypertask.ai/admin/flags/htpr-7982-cancelled-free\">htpr-7982-cancelled-free</a></p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7978",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7978",
+        "descriptionVersionId": 4216,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-26T02:39:03.064Z",
+        "method": "first-description-version",
+        "notesSha256": "975807575e416da0847c6cc1ee9c7e5a2b940a689c8d683dc8e45b81d8c7d7c3"
+      },
+      "title": "Log what users do with AI chat chips",
+      "notes": "## Problem\n\n-   We don't know if the chips help.\n    \n-   We likely don't log chip clicks.\n    \n\n## What to build\n\n-   Log when chips show.\n    \n-   Log which chip gets clicked.\n    \n-   Log chips that get ignored.\n    \n-   Log what the user types next.\n    \n-   Keep board and chip type on each event.\n    \n-   Check first. Maybe this exists already.\n    \n-   If it exists, close this ticket.\n    \n\n## Done when\n\n-   Events show up in our own logs.\n    \n-   No visible change for users.\n    \n-   The chip redesign waits on this.",
+      "reference": "<h2>Problem</h2>\n<ul>\n<li><p>We don&#x27;t know if the chips help.</p></li>\n<li><p>We likely don&#x27;t log chip clicks.</p></li>\n</ul>\n<h2>What to build</h2>\n<ul>\n<li><p>Log when chips show.</p></li>\n<li><p>Log which chip gets clicked.</p></li>\n<li><p>Log chips that get ignored.</p></li>\n<li><p>Log what the user types next.</p></li>\n<li><p>Keep board and chip type on each event.</p></li>\n<li><p>Check first. Maybe this exists already.</p></li>\n<li><p>If it exists, close this ticket.</p></li>\n</ul>\n<h2>Done when</h2>\n<ul>\n<li><p>Events show up in our own logs.</p></li>\n<li><p>No visible change for users.</p></li>\n<li><p>The chip redesign waits on this.</p></li>\n</ul>\n<p>Flag: <a href=\"https://app.hypertask.ai/admin/flags/htpr-7978-ai-chip-events\">&lt;htpr-7978-ai-chip-events&gt;</a></p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7980",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7980",
+        "descriptionVersionId": 4199,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-26T01:21:37.817Z",
+        "method": "first-description-version",
+        "notesSha256": "69c1043d0a01772125cf85b12e6d7902e1ce90386e431da42980e1d4e63692bd"
+      },
+      "title": "Billing: Settings shows plan, Upgrade and Manage billing",
+      "notes": "**For Valentin**\n\n-   **What's wanted:** Billing lives on Stripe pages. Not ours.\n    \n-   **Who it affects:** Every paying or trial team. Owners mostly.\n    \n-   **Recommended course and why:** Settings shrinks to one small card. Plan and price. Upgrade button. Manage billing button. Upgrade opens Stripe Checkout. Already built. Manage billing opens Stripe's portal. Portal does switch plan, cancel, invoices, card. Seats stay automatic. Our seat sync owns them.\n    \n-   **What Valentin must decide:** Nothing to start. Turning it on for everyone needs your yes.\n    \n-   **How to undo:** Behind a new flag. Flag off, old screen back.\n    \n\n**Done when.**\n\n-   Flag on: Settings shows one billing card only.\n    \n-   Manage billing opens Stripe's portal.\n    \n-   Portal allows switch plan, cancel, invoices, card.\n    \n-   Seat count not editable in portal.\n    \n\nNext: old screens deleted in the follow-up ticket. Related: [HTPR-7551](https://app.hypertask.ai/detail/project-15/7551), [HTPR-7938](https://app.hypertask.ai/detail/project-15/7938), [HTPR-7511](https://app.hypertask.ai/detail/project-15/7511).\n\n* * *\n\nTech detail: see agent log on this ticket.",
+      "reference": "<p><strong>For Valentin</strong></p><ul><li><p><strong>What&#x27;s wanted:</strong> Billing lives on Stripe pages. Not ours.</p></li><li><p><strong>Who it affects:</strong> Every paying or trial team. Owners mostly.</p></li><li><p><strong>Recommended course and why:</strong> Settings shrinks to one small card. Plan and price. Upgrade button. Manage billing button. Upgrade opens Stripe Checkout. Already built. Manage billing opens Stripe&#x27;s portal. Portal does switch plan, cancel, invoices, card. Seats stay automatic. Our seat sync owns them.</p></li><li><p><strong>What Valentin must decide:</strong> Nothing to start. Turning it on for everyone needs your yes.</p></li><li><p><strong>How to undo:</strong> Behind a new flag. Flag off, old screen back.</p></li></ul><p><strong>Done when.</strong></p><ul><li><p>Flag on: Settings shows one billing card only.</p></li><li><p>Manage billing opens Stripe&#x27;s portal.</p></li><li><p>Portal allows switch plan, cancel, invoices, card.</p></li><li><p>Seat count not editable in portal.</p></li></ul><p>Next: old screens deleted in <a href=\"https://app.hypertask.ai/detail/project-15/7981\">HTPR-7981</a>. Cancel handling in <a href=\"https://app.hypertask.ai/detail/project-15/7982\">HTPR-7982</a>. Related: <a href=\"https://app.hypertask.ai/detail/project-15/7551\">HTPR-7551</a>, <a href=\"https://app.hypertask.ai/detail/project-15/7938\">HTPR-7938</a>, <a href=\"https://app.hypertask.ai/detail/project-15/7511\">HTPR-7511</a>.</p><hr><p>Tech detail: see agent log on this ticket.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7981",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7981",
+        "descriptionVersionId": 4200,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-26T01:21:39.794Z",
+        "method": "first-description-version",
+        "notesSha256": "ad3504663815ead1b7c7f113b2cd7abdb7e9615be50be0749735c131252d03a5"
+      },
+      "title": "Billing: delete our old billing and trial screens",
+      "notes": "**For Valentin**\n\n-   **What's wanted:** Delete our own billing and trial screens.\n    \n-   **Who it affects:** Nobody, once the new billing card ships.\n    \n-   **Recommended course and why:** Subtract after the Stripe portal card is live. Less code, fewer billing bugs. Check each file unused first.\n    \n-   **What Valentin must decide:** Nothing. Runs after the portal card ticket.\n    \n-   **How to undo:** Revert the PR.\n    \n\n**Done when.**\n\n-   Old screens and their routes gone.\n    \n-   Build, tests and lint pass.\n    \n-   Upgrade and Manage billing still work.\n    \n\n* * *\n\nTech detail: see agent log on this ticket.",
+      "reference": "<p><strong>For Valentin</strong></p><ul><li><p><strong>What&#x27;s wanted:</strong> Delete our own billing and trial screens.</p></li><li><p><strong>Who it affects:</strong> Nobody, once the new billing card ships.</p></li><li><p><strong>Recommended course and why:</strong> Subtract after the Stripe portal card is live. Less code, fewer billing bugs. Check each file unused first.</p></li><li><p><strong>What Valentin must decide:</strong> Nothing. Starts after <a href=\"https://app.hypertask.ai/detail/project-15/7980\">HTPR-7980</a> is live for everyone.</p></li><li><p><strong>How to undo:</strong> Revert the PR.</p></li></ul><p><strong>Done when.</strong></p><ul><li><p>Old screens and their routes gone.</p></li><li><p>Build, tests and lint pass.</p></li><li><p>Upgrade and Manage billing still work.</p></li></ul><hr><p>Tech detail: see agent log on this ticket.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7975",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7975",
+        "descriptionVersionId": 4198,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-26T01:16:40.022Z",
+        "method": "first-description-version",
+        "notesSha256": "3d10b165fabb44730c0a9ef746abd668bab2af7c600b4af7f9a6c4df643aa949"
+      },
+      "title": "Board hygiene 4: stale cards and WIP limits per column",
+      "notes": "**Want.** Stuck work is visible.\n\n-   Each column can set a limit.\n    \n-   Over the limit turns red.\n    \n-   Cards show days in column.\n    \n-   Stale after a set age.\n    \n-   Simple rules per board.\n    \n\n**Done when:** In Progress over its limit shows red. Stale cards flagged on both boards.",
+      "reference": "<p><strong>Want.</strong> Stuck work is visible.</p><ul><li><p>Each column can set a limit.</p></li><li><p>Over the limit turns red.</p></li><li><p>Cards show days in column.</p></li><li><p>Stale after a set age.</p></li><li><p>Simple rules per board.</p></li></ul><p><strong>Done when:</strong> In Progress over its limit shows red. Stale cards flagged on both boards.</p><p>Flag: <a href=\"https://app.hypertask.ai/admin/flags/htpr-7975-column-work-limits\">htpr-7975-column-work-limits</a></p><p>On for Everyone by default.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7923",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7923",
+        "descriptionVersionId": 4189,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T23:43:03.728Z",
+        "method": "first-description-version",
+        "notesSha256": "d973da96ce70062135e67983d3c41591bc5cd8393544af5bda704d5a2364fe38"
+      },
+      "title": "Free plan: no ticket limit",
+      "notes": "**Why.** Valentin chose a generous Free plan (2026-10-25). A cost check showed boards and tickets cost us about $0. AI is the only real cost: a typical Free team costs about 1 cent a month, a heavy one $2 to $12, all of it AI.\n\n**Today.** Free limits live in `src/lib/planLimits.ts` behind flag `htpr-7686-free-plan-limits` (Owner + QA only, never released). See [HTPR-7686](https://app.hypertask.ai/detail/project-15/7686). Do not flip the flag in this ticket; that needs Valentin's yes.\n\n**Change.** Remove the 250-ticket limit from the Free limits. Note: today the count wrongly includes Done tickets too, so the limit and that bug go away together.\n\n**Done when.**\n\n-   With htpr-7686 on, a Free test team with 300+ tickets can still create tickets in the app, Slack, AI chat and agents/API.\n    \n-   No screen or help text mentions a ticket limit for Free.\n    \n-   Tests updated.\n    \n\n**Undo.** Revert the PR. Nothing reaches customers until htpr-7686 is released.\n\n**Small PR.** One PR: drop the ticket limit and its counting code/tests.",
+      "reference": "<p><strong>Why.</strong> Valentin chose a generous Free plan (2026-10-25). A cost check showed boards and tickets cost us about $0. AI is the only real cost: a typical Free team costs about 1 cent a month, a heavy one $2 to $12, all of it AI.</p><p><strong>Today.</strong> Free limits live in <code>src/lib/planLimits.ts</code> behind flag <code>htpr-7686-free-plan-limits</code> (Owner + QA only, never released). See <a href=\"https://app.hypertask.ai/detail/project-15/7686\">HTPR-7686</a>. Do not flip the flag in this ticket; that needs Valentin&#x27;s yes.</p><p><strong>Change.</strong> Remove the 250-ticket limit from the Free limits. Note: today the count wrongly includes Done tickets too, so the limit and that bug go away together.</p><p><strong>Done when.</strong></p><ul><li><p>With htpr-7686 on, a Free test team with 300+ tickets can still create tickets in the app, Slack, AI chat and agents/API.</p></li><li><p>No screen or help text mentions a ticket limit for Free.</p></li><li><p>Tests updated.</p></li></ul><p><strong>Undo.</strong> Revert the PR. Nothing reaches customers until htpr-7686 is released.</p><p><strong>Small PR.</strong> One PR: drop the ticket limit and its counting code/tests.</p><p>Flag: <a href=\"https://app.hypertask.ai/admin/flags/htpr-7923-unlimited-free-tickets\">htpr-7923-unlimited-free-tickets</a></p><p>On Everyone: No. Owner + QA only. Existing Free-plan rollout stays unchanged.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7792",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7792",
+        "descriptionVersionId": 4183,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T22:56:34.186Z",
+        "method": "first-description-version",
+        "notesSha256": "9bd9becdda1689e9d729990fbe266f8cf3da544f709e976d647ef986f97bf240"
+      },
+      "title": "[BUG] Replying on a ticket that is also in the Inbox does not remove its Inbox notification",
+      "notes": "Sending a reply on a ticket that is also in the **Inbox** must remove that ticket's Inbox notification. Today it stays.\n\n## Problem\n\nValentin opens a ticket that also has an Inbox item and replies on it. The Inbox notification is not removed. He calls this a huge bug.\n\n## Steps\n\n-   Have a ticket that is also in the Inbox.\n-   Open that ticket.\n-   Write a reply and send it.\n-   Open the Inbox.\n\n## Expected\n\nThe ticket's Inbox notification is removed once the reply is sent.\n\n## Actual\n\nThe Inbox notification is still there after the reply.\n\n## Requirements\n\n-   Applies whether the ticket was opened from the Inbox or from the board (to verify with the existing flows).\n-   Do not change the existing \"Archive and go to next task after sending a comment\" setting behavior.\n-   An archived Inbox message must not come back after reload.\n\n## Done when\n\n-   Reply on a ticket that is also in the Inbox removes its notification, proven live on desktop and phone with the QA account.\n-   A test covers it.\n\n## Related\n\n-   [HTPR-7655](https://app.hypertask.ai/detail/project-15/7655): builds on, comment send archives the Inbox message and opens the next.\n-   [HTPR-7690](https://app.hypertask.ai/detail/project-15/7690): builds on, archived Inbox message came back after reload.\n-   [HTPR-3913](https://app.hypertask.ai/detail/project-15/3913): similar older report, task still in Inbox after Ctrl+Enter.",
+      "reference": "<p>Sending a reply on a ticket that is also in the <strong>Inbox</strong> must remove that ticket&#x27;s Inbox notification. Today it stays.</p><h2>Problem</h2><p>Valentin opens a ticket that also has an Inbox item and replies on it. The Inbox notification is not removed. He calls this a huge bug.</p><h2>Steps</h2><ul><li><p>Have a ticket that is also in the Inbox.</p></li><li><p>Open that ticket.</p></li><li><p>Write a reply and send it.</p></li><li><p>Open the Inbox.</p></li></ul><h2>Expected</h2><p>The ticket&#x27;s Inbox notification is removed once the reply is sent.</p><h2>Actual</h2><p>The Inbox notification is still there after the reply.</p><h2>Requirements</h2><ul><li><p>Applies whether the ticket was opened from the Inbox or from the board (to verify with the existing flows).</p></li><li><p>Do not change the existing &quot;Archive and go to next task after sending a comment&quot; setting behavior.</p></li><li><p>An archived Inbox message must not come back after reload.</p></li></ul><h2>Done when</h2><ul><li><p>Reply on a ticket that is also in the Inbox removes its notification, proven live on desktop and phone with the QA account.</p></li><li><p>A test covers it.</p></li></ul><h2>Related</h2><ul><li><p><a href=\"https://app.hypertask.ai/detail/project-15/7655\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">HTPR-7655</a>: builds on, comment send archives the Inbox message and opens the next.</p></li><li><p><a href=\"https://app.hypertask.ai/detail/project-15/7690\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">HTPR-7690</a>: builds on, archived Inbox message came back after reload.</p></li><li><p><a href=\"https://app.hypertask.ai/detail/project-15/3913\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">HTPR-3913</a>: similar older report, task still in Inbox after Ctrl+Enter.</p></li></ul><p>Flag: <a href=\"https://app.hypertask.ai/admin/flags/htpr-7792-reply-inbox\">htpr-7792-reply-inbox</a></p><p>Everyone: Yes, by default.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7924",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7924",
+        "descriptionVersionId": 4194,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-26T00:44:54.827Z",
+        "method": "first-description-version",
+        "notesSha256": "2bef8d5dc81ed9887b6e1d1df2aab19f5050901796ef1b30ea5b3c50fd8c4c39"
+      },
+      "title": "Free plan: 25 MB per file and 2 GB total storage per team",
+      "notes": "**Why.** Valentin chose a generous Free plan (2026-10-25). A cost check showed boards and tickets cost us about $0. AI is the only real cost: a typical Free team costs about 1 cent a month, a heavy one $2 to $12, all of it AI.\n\n**Today.** Free limits live in `src/lib/planLimits.ts` behind flag `htpr-7686-free-plan-limits` (Owner + QA only, never released). See [HTPR-7686](https://app.hypertask.ai/detail/project-15/7686). Do not flip the flag in this ticket; that needs Valentin's yes.\n\n**Change.** Raise the Free per-file limit from 10 MB to 25 MB and add a 2 GB total storage cap per team. Today there is no total cap, so storage is open-ended.\n\n**Over the limit.** Teams keep every file they already have. Only new uploads are blocked. Show a plain message: \"Your team has used its 2 GB of free storage. Upgrade to Pro to upload more.\" No dollar amounts.\n\n**Done when.**\n\n-   With htpr-7686 on, a Free test team can upload a 24 MB file and is blocked on a 26 MB file with the plain message.\n    \n-   A Free team at 2 GB keeps all existing files, can view/download them, and new uploads are blocked with the upgrade message (app, Slack, agents/API).\n    \n-   Paid teams unaffected.\n    \n\n**Undo.** Revert the PR. Nothing reaches customers until htpr-7686 is released.\n\n**Small PRs.** (1) Per-file 25 MB. (2) Total 2 GB cap and message.",
+      "reference": "<p><strong>Why.</strong> Valentin chose a generous Free plan (2026-10-25). A cost check showed boards and tickets cost us about $0. AI is the only real cost: a typical Free team costs about 1 cent a month, a heavy one $2 to $12, all of it AI.</p><p><strong>Today.</strong> Free limits live in <code>src/lib/planLimits.ts</code> behind flag <code>htpr-7686-free-plan-limits</code> (Owner + QA only, never released). See <a href=\"https://app.hypertask.ai/detail/project-15/7686\">HTPR-7686</a>. Do not flip the flag in this ticket; that needs Valentin&#x27;s yes.</p><p><strong>Change.</strong> Raise the Free per-file limit from 10 MB to 25 MB and add a 2 GB total storage cap per team. Today there is no total cap, so storage is open-ended.</p><p><strong>Over the limit.</strong> Teams keep every file they already have. Only new uploads are blocked. Show a plain message: &quot;Your team has used its 2 GB of free storage. Upgrade to Pro to upload more.&quot; No dollar amounts.</p><p><strong>Done when.</strong></p><ul><li><p>With htpr-7686 on, a Free test team can upload a 24 MB file and is blocked on a 26 MB file with the plain message.</p></li><li><p>A Free team at 2 GB keeps all existing files, can view/download them, and new uploads are blocked with the upgrade message (app, Slack, agents/API).</p></li><li><p>Paid teams unaffected.</p></li></ul><p><strong>Undo.</strong> Revert the PR. Nothing reaches customers until htpr-7686 is released.</p><p><strong>Small PRs.</strong> (1) Per-file 25 MB. (2) Total 2 GB cap and message.</p><p>Flag: <a href=\"https://app.hypertask.ai/admin/flags/htpr-7924-free-file-25mb\">htpr-7924-free-file-25mb</a></p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7770",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7770",
+        "descriptionVersionId": 3980,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-24T12:03:48.253Z",
+        "method": "first-description-version",
+        "notesSha256": "548c4732f6dc5f90c87a4ae3ab2c2d0412396313f7b3f8be2f47c12c6b93f469"
+      },
+      "title": "[BUG] AI chat: text typed in the message box is wiped when the assistant replies",
+      "notes": "**Fix the AI chat so text typed in the composer is never cleared by an incoming assistant reply. Urgent.**\n\n## Problem\n\nValentin reports a huge bug: \"There's a huge bug in the AI chat whereby my message in the text box gets wiped whenever you reply.\" A user types in the composer while the assistant is working, or before sending. When the reply arrives or streams in, the typed text disappears and the user loses what they were writing.\n\n## Current behavior\n\n-   Open the AI chat and send a message so the assistant starts working.\n    \n-   Type a new message in the composer, without sending it.\n    \n-   The reply arrives or streams in. The composer is empty.\n    \n\n## Expected behavior\n\nText typed in the composer stays until the user **sends it, clears it or switches chat sessions**. An incoming reply never touches it.\n\n## Requirements\n\n-   Do not clear the draft when a turn **finishes, fails or is stopped**.\n    \n-   Keep draft text **per chat session**, so it survives streaming updates, switching chats and reloads.\n    \n-   Cover both the **docked sidebar chat** and the **full-screen /chat** view.\n    \n-   Keep queued-message and focus behavior unchanged (see Related).\n    \n\n## Cause to investigate\n\nEngineering to check each of these, then fix the one that applies:\n\n-   The composer value is reset on reply-complete or stream-finish.\n    \n-   The message list re-renders or changes key, which remounts the composer.\n    \n-   Session state hydration overwrites the composer value.\n    \n-   Draft text sits in view-level state instead of a store keyed by session id.\n    \n\n## Done when\n\n-   Typing while a reply streams in leaves the text intact, in the docked chat and in /chat.\n    \n-   The text survives turn finish, failure and stop.\n    \n-   The draft returns after switching to another chat and back, and after a reload.\n    \n-   A test fails if a reply-complete event clears the composer.\n    \n\n## Related\n\n-   [HTPR-7674](https://app.hypertask.ai/detail/project-15/7674), related. An inbox reply typed right after opening can be wiped before sending.\n    \n-   [HTPR-7767](https://app.hypertask.ai/detail/project-15/7767), related. Queued messages are lost when switching chats and back.\n    \n-   [HTPR-7762](https://app.hypertask.ai/detail/project-15/7762), related. Full-screen new session does not focus the chat box.\n    \n-   [HTPR-6038](https://app.hypertask.ai/detail/project-15/6038), builds on. Queue messages while the agent works (the queue feature ticket).",
+      "reference": "<p><strong>Fix the AI chat so text typed in the composer is never cleared by an incoming assistant reply. Urgent.</strong></p><h2>Problem</h2><p>Valentin reports a huge bug: &quot;There&#x27;s a huge bug in the AI chat whereby my message in the text box gets wiped whenever you reply.&quot; A user types in the composer while the assistant is working, or before sending. When the reply arrives or streams in, the typed text disappears and the user loses what they were writing.</p><h2>Current behavior</h2><ul><li><p>Open the AI chat and send a message so the assistant starts working.</p></li><li><p>Type a new message in the composer, without sending it.</p></li><li><p>The reply arrives or streams in. The composer is empty.</p></li></ul><h2>Expected behavior</h2><p>Text typed in the composer stays until the user <strong>sends it, clears it or switches chat sessions</strong>. An incoming reply never touches it.</p><h2>Requirements</h2><ul><li><p>Do not clear the draft when a turn <strong>finishes, fails or is stopped</strong>.</p></li><li><p>Keep draft text <strong>per chat session</strong>, so it survives streaming updates, switching chats and reloads.</p></li><li><p>Cover both the <strong>docked sidebar chat</strong> and the <strong>full-screen /chat</strong> view.</p></li><li><p>Keep queued-message and focus behavior unchanged (see Related).</p></li></ul><h2>Cause to investigate</h2><p>Engineering to check each of these, then fix the one that applies:</p><ul><li><p>The composer value is reset on reply-complete or stream-finish.</p></li><li><p>The message list re-renders or changes key, which remounts the composer.</p></li><li><p>Session state hydration overwrites the composer value.</p></li><li><p>Draft text sits in view-level state instead of a store keyed by session id.</p></li></ul><h2>Done when</h2><ul><li><p>Typing while a reply streams in leaves the text intact, in the docked chat and in /chat.</p></li><li><p>The text survives turn finish, failure and stop.</p></li><li><p>The draft returns after switching to another chat and back, and after a reload.</p></li><li><p>A test fails if a reply-complete event clears the composer.</p></li></ul><h2>Related</h2><ul><li><p><a href=\"/detail/project-15/7674\">A reply typed right after opening an inbox message can be wiped before it is sent</a>, related. Same symptom on the inbox composer.</p></li><li><p><a href=\"/detail/project-15/7767\">[BUG] AI chat: queued messages are lost when you switch to another chat and back</a>, related. Both point at composer state that is not keyed by session.</p></li><li><p><a href=\"/detail/project-15/7762\">[BUG] Full-screen AI chat: new session does not put the cursor in the chat box</a>, related. Composer focus and state handling.</p></li><li><p><a href=\"/detail/project-15/5695\">Queue AI chat messages for automatic sending after the current turn</a>, builds on. The queue feature itself.</p></li></ul>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7759",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7759",
+        "descriptionVersionId": 3973,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-24T11:51:36.715Z",
+        "method": "first-description-version",
+        "notesSha256": "9ac3d59fb8a2e9beadeb4c17a641266969055241e38f5913ae0b3368b4b1a17c"
+      },
+      "title": "Speed up task creation from the AI chat",
+      "notes": "Cut the time from brief to created ticket when the sidebar AI chat creates a task, by measuring each stage first and then removing avoidable work.\n\n## Problem\n\nValentin reports that task creation from the AI chat takes **very long**. No timing data has been gathered yet, so the slow stage is unknown.\n\n## Hypothesis\n\nIf we time each stage and remove extra model round trips and oversized prompt and board context, then AI-chat task creation gets faster. This is an estimate until the stage timings are in.\n\n## Requirements\n\n-   **Measure first.** Log the duration of each stage from the user's brief to the created ticket: chat model turn, context loading, task writer call, task save, and UI update.\n    \n-   **Remove avoidable model round trips.** Count the model calls per create. Drop or merge any that do not change the result.\n    \n-   **Shrink the payload.** Reduce the prompt and the board context sent to the model. Keep what the writer needs for board format, labels and columns.\n    \n-   **Set a latency budget.** Proposed: take the target from the measured baseline and Ctrl+J, and write it in a comment. Do not pick a number before the baseline exists.\n    \n-   **Keep output unchanged.** The chat keeps using the same task writer path as Ctrl+J, CLI and MCP (HTPR-7363). Title, description, priority and size must not change.\n    \n-   **Scope.** This is the engine side only. The interaction and UI improvement is a separate ticket.\n    \n\n## Acceptance criteria\n\n-   A baseline of per-stage timings from real chat creates is posted in a comment, with sample count.\n    \n-   The slowest stage is named, and the fix targets it.\n    \n-   A before and after comparison on the same briefs shows the latency change against the agreed budget.\n    \n-   Output structure and style match Ctrl+J for the same brief.\n    \n\n## Suggested metrics\n\n-   Time from send to created ticket, p50, p75 and p95, as in HTPR-5596.\n    \n-   Number of model calls per task creation.\n    \n-   Prompt input tokens per creation.\n    \n-   Task creation error rate, which must not rise.\n    \n\n## ICE assessment (estimated)\n\n-   Impact 7: slow creation hits a frequent chat action.\n    \n-   Confidence 6: cause unmeasured so far.\n    \n-   Ease 6: depends on which stage dominates.\n    \n-   Total 19/30.\n    \n\n## Related\n\n-   Builds on [HTPR-7363](https://app.hypertask.ai/detail/project-15/7363): chat creates tasks with the same task writer as Ctrl+J.\n    \n-   Builds on [HTPR-5756](https://app.hypertask.ai/detail/project-15/5756): reduce task-creation latency below 1.5s p75.\n    \n-   Builds on [HTPR-5596](https://app.hypertask.ai/detail/project-15/5596): publish the collected task-creation latency in the speed report.",
+      "reference": "<h2>Problem</h2>\n<p>Task creation from the sidebar AI chat takes very long. Valentin, 2026-10-24: &quot;I find task creation takes VERY long when done from the ai chat.&quot;</p>\n<p>No chat-specific timing exists, so the slow stage is unknown. The one measured number on this board is for the <strong>manual</strong> save path, not the chat: desktop p50 1,155 ms, p75 2,054 ms, p95 2,516 ms over 30 samples (Aug 22 to 29 window, <a href=\"/detail/project-15/5756\">Reduce production task-creation latency below 1.5s p75</a>). The chat adds at least one model turn on top of that path.</p>\n<h2>Hypothesis</h2>\n<p>Chat creation pays for stages that add nothing visible: a chat model turn before the writer runs, board context loaded fresh per call, an oversized prompt, and possibly a separate title call. Trimming those should cut the wait without changing output.</p>\n<h2>What to do</h2>\n<ol>\n<li><p><strong>Measure first.</strong> Log per-stage duration from send to created ticket: context load, chat turn, task-writer call, title generation, save, UI update. Post the baseline with sample count in a comment.</p></li>\n<li><p><strong>Count the model calls</strong> per single task creation, and remove or merge any that do not change the result.</p></li>\n<li><p><strong>Shrink the payload.</strong> Cut prompt and board context to what the writer needs: board format, labels, columns. Cache context across turns in one chat.</p></li>\n<li><p><strong>Set the budget from data.</strong> Proposed: the chat path lands within the Ctrl+J p95 for the same brief, since it should be the same writer (<a href=\"/detail/project-15/7363\">AI chat creates tasks with the same task writer as Ctrl+J, CLI and MCP</a>). Confirm the number after the baseline, not before.</p></li>\n</ol>\n<h2>Acceptance</h2>\n<ul>\n<li><p>Per-stage baseline posted, with the slowest stage named and the fix aimed at it.</p></li>\n<li><p>Before and after on the same set of briefs, against the agreed budget.</p></li>\n<li><p>Model calls per creation and prompt input tokens both go down, or the ticket explains why they cannot.</p></li>\n<li><p>Error rate does not rise. A failed title step must not silently retry, see <a href=\"/detail/project-15/7744\">vercel: [ai/chat/stream] title generation failed</a>.</p></li>\n<li><p>Output structure and style still match Ctrl+J for the same brief.</p></li>\n<li><p>Latency reporting follows the rules in <a href=\"/detail/project-15/5596\">Speed report: publish authenticated task-creation latency already collected</a>: p50, p75, p95, error rate, sample count, at least 20 samples.</p></li>\n</ul>\n<h2>Scope</h2>\n<p>Engine and pipeline only. The visible interaction change (ticket first, body after) is <a href=\"/detail/project-15/7758\">AI chat: show the created ticket fast and fill in the body behind it</a>.</p>\n<h2>ICE (estimated, pre-baseline)</h2>\n<p>Impact 7, Confidence 6, Ease 6 = 19/30. Confidence is held back until the stage timings exist.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7958",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7958",
+        "descriptionVersionId": 4100,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T18:35:55.426Z",
+        "method": "first-description-version",
+        "notesSha256": "f4acf9c60a4dd8a998ee3e56be07479c1cd4696feeb5e412144c5b9daf67449d"
+      },
+      "title": "48h trial: cheap model, easy tickets",
+      "notes": "## Why\n\nValentin (25 Oct, 18:09 London): hax is light, so can easy coding run on a cheaper Codex model and let us run more sessions? Applies to Hypertask and Software Factory. This ticket is a measured 48h trial, not a switch.\n\n## Smoke test (25 Oct, about 18:15 to 18:45 London, hypertask-vps)\n\nSubscription login (ChatGPT auth, no API key), fast mode off, `hax --json --no-session --bare --model=X --effort=Y`, throwaway git repo in /tmp. Task: write `slugify()` plus 4+ unittest cases, run them. Tests re-checked by script after each run. Temp repos deleted, no test process left.\n\nSetting\n\nRuns OK\n\nWall time (s)\n\nhax CPU (s)\n\nTokens in / cached / out (typical)\n\nhax price estimate per run\n\ngpt-6-luna high\n\n3/3\n\n14.7, 15.0, 18.5\n\n0.68 to 0.71\n\n13.1k to 13.6k / 7.6k to 8.3k / 570 to 690\n\nabout $0.001\n\ngpt-6.1-sol medium\n\n3/4\n\n17.6, 19.5, 21.8 (+1 hung)\n\n0.73 to 0.75\n\n10.8k to 10.9k / 6.0k to 8.2k / 495 to 527\n\nabout $0.016 (1 run)\n\ngpt-6.1-sol high (today)\n\n3/3\n\n23.0, 24.4, 33.5\n\n0.70 to 0.74\n\n11.0k / 6.1k to 8.4k / 557 to 585\n\n$0.012 to $0.016\n\nWhat the numbers mean:\n\n-   CPU is the hax client only (about 0.7 s in every arm). The model runs on OpenAI's side, so the VPS is not what limits more runners. The Codex weekly pool is.\n    \n-   sol medium used almost the same tokens as sol high on this task. The saving there is only wall time. luna used one extra turn but its estimated price is about 15x lower.\n    \n-   The price column is hax's estimate at API list prices. Under the subscription, nobody yet knows how much of the weekly % a luna token costs vs a sol token. That is the main thing this trial measures.\n    \n-   One sol medium run hung on its first model call for 600 s until timeout (1 of 10 runs overall). Probably a stream stall, not the model. Runners need a stall watchdog (kill and retry after about 3 min with no output).\n    \n-   A tiny task can't show quality on real tickets. The redo rate below covers that.\n    \n\n## Trial setting\n\n-   Cheap arm: **gpt-6-luna, effort high** (passed 3/3). Fallback if luna's redo rate is bad: gpt-6.1-sol medium.\n    \n-   Normal arm: gpt-6.1-sol high, unchanged.\n    \n-   Review stays on gpt-6-astra / Opus. Fast mode stays off everywhere.\n    \n\n## Routing rule (at ticket start only)\n\n-   Cheap arm if the ticket has label `easy` or `intensity:easy`, OR it is small and well specified: one file area and a clear done-when.\n    \n-   Everything else stays on sol high.\n    \n-   Picked when a runner starts a ticket. Never change a live ticket or a running session.\n    \n-   Log the arm on the ticket (one line: arm, model, effort) so the numbers can be split later.\n    \n\n## Parallel runners\n\n-   Add hax runners only while the Codex pool stays under the token ladder's 85% reserve (`token-ladder pick --role runner --harness hax`). At 85% or more, no new runners, same as today.\n    \n-   Start: Codex at 11% used (25 Oct 18:45 London), resets 1 Nov 06:10 London.\n    \n\n## Metrics, cheap vs normal\n\n1.  **Merged PRs per 1% of Codex weekly usage.** From token-ladder history.jsonl readings. The pool is shared, so split each window's % by the per-arm tokens hax records in session JSON (turn\\_usage).\n    \n2.  **Redo rate.** Share of PRs that went CI red, got reverted, or got bounced in review.\n    \n3.  **Time to merge.** Ticket start to merge. Also count stalls (runs killed by the watchdog) per arm.\n    \n\n## Done when\n\n-   After 48h, a keep-or-roll-back note on this ticket with the three numbers per arm, sample sizes and spread.\n    \n-   Keep if the cheap arm gives clearly more merged PRs per 1% and its redo rate is no worse than about 1.5x the normal arm. Otherwise roll back or try sol medium.\n    \n-   Undo: drop the routing rule (all tickets back on sol high). There's no config change to revert; the defaults stay `gpt-6.1-sol` in ~/.codex/config.toml.\n    \n\n## Software Factory\n\nSame trial is open to Software Factory, through toolkit-changes.md. It's Mini Boss CEO's own call.\n\nRelated: HTPR-7951 (Sonnet for Claude runners, Codex role pilot).",
+      "reference": "<p><strong>Goal:</strong> 48h test. Cheap model on easy tickets.</p><p><strong>Done when:</strong> Note after 48h: keep or roll back.</p><p><strong>Risk:</strong> Lower quality. Redo rate tracks it.</p><p><strong>Undo:</strong> Easy tickets back on normal model.</p><p><strong>Links:</strong> <a href=\"https://app.hypertask.ai/detail/project-15/7951\">HTPR-7951</a> · spec in agent lane</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7938",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7938",
+        "descriptionVersionId": 4178,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T22:24:23.941Z",
+        "method": "first-description-version",
+        "notesSha256": "e759832120d32e353934ea60294909a300cdf55b7435f8ef47c6c2eb58278b4f"
+      },
+      "title": "Trial length says 14 days everywhere in the app",
+      "notes": "### For Valentin\n\n-   **What's wrong:** the app disagrees with itself on trial length. The public AI-readable summary (llms.txt) and the new \"Start plan\" checkout say 7 days; the onboarding trial modal, success page and Stripe default say 14.\n    \n-   **Who it affects:** visitors and AI assistants reading llms.txt, and teams on the new Start plan flow, who are told and given 7 days.\n    \n-   **Recommended course:** change every trial mention and trial setting in the hypertask repo to 14 days, so the product matches what Valentin chose.\n    \n-   **What Valentin must decide:** nothing. He chose 14 days on 2026-10-25 at 13:33 London.\n    \n-   **How to undo:** revert the PR.\n    \n\n* * *\n\n### Hits on production (searched 2026-10-25 for \"7-day\", \"7 day(s)\", \"14-day\", \"14 day(s)\", \"trial\")\n\n**Says 7, change to 14:**\n\n-   `public/llms.txt:26`: \"Free 7-day trial, no credit card\"\n    \n-   `src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx:125-126`: \"$20 per user/month after 7 days\" when trialDays === 7\n    \n-   `src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts:622` and `src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts:633`: Start plan sets trialDays: 7 for Trial mode\n    \n-   `src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts:471, 529, 543, 576`: rollout logic keyed on trialDays === 7 / \"7\". Needs a different rollout marker (e.g. checkoutIntent) before the value changes, so the Start plan flow keeps working.\n    \n-   Also mention 7 days, check and update: `docs/analytics-events.md`, `src/prisma/schema.prisma` (comment), `tests/htpr-7511-start-plan.test.cjs`.\n    \n\n**Already 14 (keep):**\n\n-   `src/components/Modals/TrialPlan/TrialModalV2.tsx:191`: \"Start your 14 day FREE trial now!\"\n    \n-   `src/app/trial-plan-confirmation/SuccessPage.tsx:51`: \"You have 14 days to test all Hypertask Pro Features\"\n    \n-   `src/lib/stripe.ts:64`: trial\\_period\\_days default 14\n    \n-   `src/utils/controllers/stripe/checkoutReservation.ts:58`: effectiveTrialDays default 14\n    \n-   `src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts:201`: metadata fallback 14\n    \n\n**No day count:** `src/lib/subscriptionPlans.ts:247` (\"Included during trial\"). No trial day count found in email templates. Line numbers are approximate (±2); re-grep before editing.\n\n### Done when\n\n-   No trial mention or trial setting in the repo says anything other than 14 days (a repo grep for 7-day / 7 days / trialDays 7 near \"trial\" comes back empty), and the Start plan checkout still passes its tests.\n    \n\nRelease: copy and checkout changes ship behind the normal flag and review, on Valentin's go.",
+      "reference": "<p><strong>For Valentin</strong></p>\n<ul>\n<li><p><strong>What&#x27;s wrong:</strong> the app disagrees with itself on trial length. The public AI-readable summary (llms.txt) and the new &quot;Start plan&quot; checkout say 7 days; the onboarding trial modal, success page and Stripe default say 14.</p></li>\n<li><p><strong>Who it affects:</strong> visitors and AI assistants reading llms.txt, and teams on the new Start plan flow, who are told and given 7 days.</p></li>\n<li><p><strong>Recommended course:</strong> change every trial mention and trial setting in the hypertask repo to 14 days, so the product matches what Valentin chose.</p></li>\n<li><p><strong>What Valentin must decide:</strong> nothing. He chose 14 days on 2026-10-25 at 13:33 London.</p></li>\n<li><p><strong>How to undo:</strong> switch the duration flag Off; retain historical checkout readers.</p></li>\n</ul>\n<hr>\n<h3>Hits on production (searched 2026-10-25 for &quot;7-day&quot;, &quot;7 day(s)&quot;, &quot;14-day&quot;, &quot;14 day(s)&quot;, &quot;trial&quot;)</h3>\n<p><strong>Says 7, change to 14:</strong></p>\n<ul>\n<li><p><code>public/llms.txt:26</code>: &quot;Free 7-day trial, no credit card&quot;</p></li>\n<li><p><code>src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx:125-126</code>: &quot;$20 per user/month after 7 days&quot; when trialDays === 7</p></li>\n<li><p><code>src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts:622</code> and <code>src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts:633</code>: Start plan sets trialDays: 7 for Trial mode</p></li>\n<li><p><code>src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts:471, 529, 543, 576</code>: rollout logic keyed on trialDays === 7 / &quot;7&quot;. Needs a different rollout marker (e.g. checkoutIntent) before the value changes, so the Start plan flow keeps working.</p></li>\n<li><p>Also mention 7 days, check and update: <code>docs/analytics-events.md</code>, <code>src/prisma/schema.prisma</code> (comment), <code>tests/htpr-7511-start-plan.test.cjs</code>.</p></li>\n</ul>\n<p><strong>Already 14 (keep):</strong></p>\n<ul>\n<li><p><code>src/components/Modals/TrialPlan/TrialModalV2.tsx:191</code>: &quot;Start your 14 day FREE trial now!&quot;</p></li>\n<li><p><code>src/app/trial-plan-confirmation/SuccessPage.tsx:51</code>: &quot;You have 14 days to test all Hypertask Pro Features&quot;</p></li>\n<li><p><code>src/lib/stripe.ts:64</code>: trial_period_days default 14</p></li>\n<li><p><code>src/utils/controllers/stripe/checkoutReservation.ts:58</code>: effectiveTrialDays default 14</p></li>\n<li><p><code>src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts:201</code>: metadata fallback 14</p></li>\n</ul>\n<p><strong>No day count:</strong> <code>src/lib/subscriptionPlans.ts:247</code> (&quot;Included during trial&quot;). No trial day count found in email templates. Line numbers are approximate (±2); re-grep before editing.</p>\n<h3>Done when</h3>\n<ul><li><p>No trial mention or trial setting in the repo says anything other than 14 days (a repo grep for 7-day / 7 days / trialDays 7 near &quot;trial&quot; comes back empty), and the Start plan checkout still passes its tests.</p></li></ul>\n<p>Release: copy and checkout changes ship behind the normal flag and review, on Valentin&#x27;s go.</p>\n<p>Safety: existing offers keep their saved duration. Rollback uses the duration flag; retain historical checkout readers.</p><p>Public summary omits a duration during mixed rollout.</p><p>Flag: <a href=\"https://app.hypertask.ai/admin/flags/htpr-7938-fourteen-day-trial\">htpr-7938-fourteen-day-trial</a>. Everyone: No; payment change stays Owner + QA.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7957",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7957",
+        "descriptionVersionId": 4099,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T18:35:51.328Z",
+        "method": "first-description-version",
+        "notesSha256": "b0b07314839fc8f2e8005a4700e73d12c89c25067f7cc412cbcaa16ec74bbd0e"
+      },
+      "title": "Shrink starting rules files",
+      "notes": "## Why\n\nEvery fresh session pays for always-loaded rules before its first prompt. Measured on hypertask-vps, 25 Oct 2026, in ~/projects/hypertask, \"say ok\", no router, fast mode off:\n\n-   Claude Code (haiku, `claude -p --output-format json`): **35,318** input tokens. Bare baseline with no settings, skills or MCP: 21,012.\n    \n-   Codex (`codex exec --json`): **28,259** tokens per model call. \"say ok\" cost **55,663**, because a global rule makes Codex `cat` the unslop skill (6.6 KB) before replying.\n    \n-   hax (`--no-session -p`): about **12k**.\n    \n\nBiggest always-loaded rule files:\n\n-   Repo `AGENTS.md`: 21,667 bytes, about 5.4k tokens, loaded by Codex and hax. Claude does not auto-load it; repo `CLAUDE.md` (2,584 bytes) already points into its sections.\n    \n-   `~/.claude/CLAUDE.md`: 4,924 bytes, about 1.2k tokens.\n    \n-   `~/.codex/AGENTS.md`: 1,354 bytes, a separate Codex copy of global rules.\n    \n\n## What to do\n\n1.  Make repo `AGENTS.md` the one source and keep it under about 5 KB: a short map (\"read X when Y\") that points to skills and `.claude/reference/`.\n    \n2.  Move each current `AGENTS.md` section (Claude Code and Codex sessions, CLI and MCP repositories, Hypertask Ticket Access, Ticket comments, Claim a ticket, Repository Workflow, CI contract, Reuse existing UI, Stack Orientation, AI models, Feature flags) into an existing or new skill or reference file. Where a rule is a check, move it into code or a hook instead of prose.\n    \n3.  Make `CLAUDE.md` point at `AGENTS.md` (or import it) so Claude and Codex read the same map. No second copy.\n    \n4.  Delete the duplicate Codex copy (`~/.codex/AGENTS.md`): fold its credential-safety and ticket-writing rules into the global map or the matching skill.\n    \n5.  Stop the global rule that makes Codex read the unslop skill before every reply. Load it only when writing prose for Valentin.\n    \n6.  Nothing lost: the PR description lists every section and the file it moved to.\n    \n\n## Done when\n\n-   Always-loaded rules are under about 5 KB per harness.\n    \n-   Measured before/after with the same commands as above: Codex per-call startup drops by at least 4k tokens (28,259 to 24k or less), the \"say ok\" run no longer reads a skill (no second model call), and Claude repo startup does not grow (35,318 or less).\n    \n-   One `/ship` ticket still runs end to end on the new map.\n    \n\n## Protected files\n\n`CLAUDE.md` and `AGENTS.md` are protected. Open the PR, send its link to HT Product Lead (`session-say hypertasks-10`) and add a comment on this ticket naming HT Product Lead. HT Product Lead reviews and merges.\n\nRelated: [HTPR-7811](https://app.hypertask.ai/detail/project-15/7811) (shrink /ship guidance).",
+      "reference": "<p><strong>Goal:</strong> Small starting rules. Load more when needed.</p><p><strong>Done when:</strong> Rules under 5 KB. Startup costs fewer tokens.</p><p><strong>Risk:</strong> Rules lost in move. PR lists each.</p><p><strong>Undo:</strong> Revert the PR.</p><p><strong>Links:</strong> <a href=\"https://app.hypertask.ai/detail/project-15/7811\">HTPR-7811</a> · spec in agent lane</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7955",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7955",
+        "descriptionVersionId": 4098,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T18:35:47.080Z",
+        "method": "first-description-version",
+        "notesSha256": "1e2afc0e4e9b91725314129ec3da9677790de5dc6a93699553b44a1ebc8acd22"
+      },
+      "title": "Remove fast model ids from agent setup",
+      "notes": "-   On hypertask-vps, the source in `~/projects/agent-toolkit` and `~/projects/shared-skills/skills/create-agent` still uses `cursor-grok-4.6-high-fast`. Replace it with `cursor-grok-4.6-high` (confirmed in the Cursor CLI model list).\n    \n-   Rename the `grok-fast` preset to `grok`. Update `evals/manager-actions.test.sh`.\n    \n-   The installed copy at `~/.claude/skills/create-agent` was already hand-fixed (backup `~/backups/nofast-20261025-191001`), but a skills sync would revert it. So make source and installed copy match.\n    \n-   Valentin's hard rule: no model id containing \"fast\" anywhere.\n    \n-   **Done when:** `rg -n \"fast\"` in both repo paths shows no model ids (non-model names like HT\\_POLL\\_FAST are fine), the tests pass, and a sync leaves the installed copy unchanged.",
+      "reference": "<p><strong>Goal:</strong> No fast model ids in agent setup.</p><p><strong>Done when:</strong> No fast ids left. Tests pass.</p><p><strong>Risk:</strong> Sync could undo the hand fix.</p><p><strong>Undo:</strong> Restore from backup.</p><p><strong>Links:</strong> <a href=\"https://app.hypertask.ai/detail/project-15/7951\">HTPR-7951</a> · spec in agent lane</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7951",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7951",
+        "descriptionVersionId": 4097,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T18:35:42.869Z",
+        "method": "first-description-version",
+        "notesSha256": "138feddc0c50d90bfa8f2943976a9473b238c246a853aef3714a3215c0a4e645"
+      },
+      "title": "Claude runners on Sonnet, one Codex pilot",
+      "notes": "**What.** Two runner-setup changes on hypertask-vps, Hypertask runners only. Manager and specialist sessions keep their model.\n\n**1\\. Claude runners default to Sonnet.** Today new Claude runner sessions inherit `opus` from the global `~/.claude/settings.json`; no launcher sets a model. Add `--model sonnet` to the Claude runner launch command so new runners start on `claude-sonnet-5-5`. Do not edit the global settings or the repo `.claude/settings.json` (that would also move the managers that run in the repo).\n\n**2\\. Pilot: one hax runner moves to Codex CLI with role models.** Codex CLI has built-in subagents with per-role models; a real test spawned a `cheap` role child that ran on gpt-6-luna. Set up Hypertask-only role files (a Hypertask profile or project config, not the global `~/.codex/config.toml`):\n\n-   lookups role: `gpt-6-luna`\n    \n-   coding role: `gpt-6.1-sol`\n    \n-   review role: `gpt-6-astra` Every run uses `--disable fast_mode` and subscription login only, no API keys. Pick one runner at a ticket boundary; do not switch a runner mid-ticket.\n    \n\n**Done when.**\n\n-   A newly started Claude runner shows Sonnet 5.5 in its status line; HT Product Lead and the other managers still show their current model.\n    \n-   The launch change is in a merged PR and a fresh runner start proves it.\n    \n-   The Codex role files are in a Hypertask-only location; `codex features list` shows `fast_mode false`.\n    \n-   The pilot runner finishes one full /ship ticket on Codex CLI: its session log shows lookup, coding and review children on gpt-6-luna, gpt-6.1-sol and gpt-6-astra, the token ladder line is read and followed, and session-mail works.\n    \n-   A short note on the ticket compares the pilot's ticket against a hax runner's (tokens, time, review findings) and recommends keep or roll back.\n    \n-   Undo for each part is written on the ticket.",
+      "reference": "<p><strong>Goal:</strong> Claude runners start on Sonnet. One runner tries Codex.</p><p><strong>Done when:</strong> Fresh runner shows Sonnet. Codex runner ships one ticket.</p><p><strong>Risk:</strong> Managers must keep their model.</p><p><strong>Undo:</strong> Drop launch flag. Move runner back.</p><p><strong>Links:</strong> <a href=\"https://app.hypertask.ai/detail/project-15/7958\">HTPR-7958</a> · spec in agent lane</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7950",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7950",
+        "descriptionVersionId": 4096,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T18:35:38.411Z",
+        "method": "first-description-version",
+        "notesSha256": "7a12072925721d207ecfb3a2687e1dc9bfbd22ff1b7a2dc0403dceba4af10a9e"
+      },
+      "title": "Model per role for Claude and hax",
+      "notes": "**What.** Hypertask Claude Code and hax sessions get pstack's per-role model routing, so most tokens go to the cheap coding model and the top model only does judgment. Hypertask repo only; no global config.\n\n**Change (PR linked below).**\n\n-   New `.claude/rules/pstack-models.md`: Claude Code loads it into every new session in the repo. Coding, bug-fix, perf, swarm and arena workers on `sonnet high`; judgment, hardest tasks, interrogate and synthesizers on `opus medium`; how explorer, why investigators and reflect tooling on `haiku`. No Fable, no fast model ids.\n    \n-   `AGENTS.md`: new section \"pstack in hax and Codex sessions\". Points hax and Codex at the one pstack copy (0.15.32) and maps roles to Codex models: gpt-6.1-sol for coding, gpt-6-astra for judgment and review, gpt-6-luna for lookups. Every subagent is an explicit `hax -p --provider=codex --model=<m> --effort=high`, never fast mode, subscription auth only.\n    \n\n**Checked.** In a worktree of this branch, a throwaway `claude -p` answered \"Bug-fix: Sonnet at high effort. Hardest tasks: Opus at medium effort.\" A throwaway `hax -p` answered \"Bug-fix: gpt-6.1-sol; hardest tasks: gpt-6-astra.\"\n\n**Review.** AGENTS.md is a protected file, so HT Product Lead reviews and merges. Live sessions are unchanged; only new sessions pick this up after merge.\n\n**Undo.** Revert the PR.",
+      "reference": "<p><strong>Goal:</strong> Cheap model codes. Top model judges.</p><p><strong>Done when:</strong> Merged. New sessions follow the split.</p><p><strong>Risk:</strong> Low. Live sessions unchanged.</p><p><strong>Undo:</strong> Revert the PR.</p><p><strong>Links:</strong> <a href=\"https://github.com/hypertask-ai/hypertask/pull/2206\">PR 2206</a> · spec in agent lane</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7854",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7854",
+        "descriptionVersionId": 4013,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-24T23:44:17.420Z",
+        "method": "first-description-version",
+        "notesSha256": "d89fa9a3c3b21ce51c6c3cf8ba0d62102b078758c166d288ae13046e2680575e"
+      },
+      "title": "[IMPROVEMENT] AI thinking off by default; features opt in; chat title capped at 64 output tokens",
+      "notes": "@HT Product Lead Turn adaptive thinking off by default. Chat, heartbeat, chat title, task writer and @HyperAI only think when the feature explicitly opts in. Cap the chat title call at 64 output tokens.\n\n**Why.** Today adaptive thinking runs at medium effort unless maxOutputTokens is set and at most 1,200. Thinking is billed as output, which costs 5x input. Even chat titles think. Estimated saving about $50 a month.\n\n**Where.** `src/app/api/ai/_lib/modelProvider.ts:486-495`; chat cap `src/lib/ai/chatStream/models.ts:175`; title `src/lib/ai/chatStream/title.ts:60-68`.\n\n**Verify.** Tests assert no thinking config is sent unless a feature opts in, and the title call sends maxOutputTokens 64. After rollout, outputTokens for chat, task-writer, hyper-mentioned and custom-instructions drop without stored reply length dropping.\n\nFlag: https://app.hypertask.ai/admin/flags/ai-thinking-opt-in\n\nEveryone: no (default off; flip to Everyone right after CI green + QA, Valentin approves the flag request)\n\nRepo: https://github.com/hypertask-ai/hypertask (branch production). Line numbers from the 2026-10-24 efficiency audit; re-check before editing.",
+      "reference": "<p><span data-type=\"mention\" data-id=\"HT Product Lead\" data-label=\"agent-9b0f3a93-5e88-4093-b558-cad1c229bc51\">@HT Product Lead</span> Turn adaptive thinking off by default. Chat, heartbeat, chat title, task writer and @HyperAI only think when the feature explicitly opts in. Cap the chat title call at 64 output tokens.</p><p><strong>Why.</strong> Today adaptive thinking runs at medium effort unless maxOutputTokens is set and at most 1,200. Thinking is billed as output, which costs 5x input. Even chat titles think. Estimated saving about $50 a month.</p><p><strong>Where.</strong> <code>src/app/api/ai/_lib/modelProvider.ts:486-495</code>; chat cap <code>src/lib/ai/chatStream/models.ts:175</code>; title <code>src/lib/ai/chatStream/title.ts:60-68</code>.</p><p><strong>Verify.</strong> Tests assert no thinking config is sent unless a feature opts in, and the title call sends maxOutputTokens 64. After rollout, outputTokens for chat, task-writer, hyper-mentioned and custom-instructions drop without stored reply length dropping.</p><p>Flag: https://app.hypertask.ai/admin/flags/ai-thinking-opt-in</p><p>Everyone: no (default off; flip to Everyone right after CI green + QA, Valentin approves the flag request)</p><p>Repo: https://github.com/hypertask-ai/hypertask (branch production). Line numbers from the 2026-10-24 efficiency audit; re-check before editing.</p><p>Flag: https://app.hypertask.ai/admin/flags/htpr-7854-ai-thinking-opt-in</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7907",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7907",
+        "descriptionVersionId": 4059,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-25T10:36:18.346Z",
+        "method": "first-description-version",
+        "notesSha256": "b36858fc4a1ea6579bbd3e192fa6a8ea95ee9aed6b8aef16c4da1a68ed08a7de"
+      },
+      "title": "Ctrl+K: archive every ticket in a column in one action",
+      "notes": "Valentin, 2026-10-25: \"ctrl+k archive all tickets in column feature pls so i can easily archive a whole coluimns ticket pls\"\n\n## What he wants\n\nA way to archive a whole column at once. From Ctrl+K, he picks a column, for example Feature, and every ticket in it is archived in one action, instead of archiving tickets one by one.\n\n## What this thread settled\n\n-   The entry point is the Ctrl+K command menu, because that is where he already drives the board.\n    \n-   The action takes a column, not the whole board, so one column can be cleared without touching the others.\n    \n-   Archiving removes the tickets from the board the way single-ticket archive already does; it does not delete anything permanent.\n    \n-   Single-ticket archive keeps working exactly as it does now.\n    \n\n## The deeper pass\n\nA destructive bulk action is only safe if it is hard to trigger by accident and easy to undo. Before it runs, show the column name and the exact ticket count and ask for one confirmation. After it runs, show a result line with the count and a single undo for that action, because a wrong column will otherwise cost him the tickets he meant to keep.\n\nStart from the real paths, not a guess: the existing single-ticket archive action and its permission check, the command menu's existing column commands, and the board's archive view so the result can be seen. Method: reuse the current archive call in a loop over the column's tickets, batch it, and report tickets that refused individually rather than failing the whole run.\n\nOutside proof: on a test board with at least one ticket in two different columns, archive one column from Ctrl+K, then show the column is empty, the other column is untouched, the tickets appear in the board archive, and undo returns them all. Repeat on phone.\n\n## Done when\n\n-   Ctrl+K offers archiving one column, naming the column.\n    \n-   It asks for confirmation with the ticket count before archiving.\n    \n-   After archiving, the column is empty, the other columns are unchanged, and the tickets are in the board archive.\n    \n-   One undo restores the tickets from that action.\n    \n-   Works on desktop and phone.",
+      "reference": "<p>Add a <strong>Ctrl+K command that archives every ticket in one named column</strong> in a single action. It asks for one confirmation with the exact ticket count and gives one undo afterwards.</p>\n\n<h2>Problem</h2>\n<p>Valentin, 2026-10-25: &quot;ctrl+k archive all tickets in column feature pls so i can easily archive a whole coluimns ticket pls&quot;. Today he archives tickets one by one. From Ctrl+K he wants to pick a column, for example Feature, and archive all of its tickets at once.</p>\n\n<h2>Requirements</h2>\n<ul>\n<li><p>The entry point is the <strong>Ctrl+K command menu</strong>, where he already drives the board.</p></li>\n<li><p>The action takes <strong>one column</strong>, not the whole board. Other columns stay untouched.</p></li>\n<li><p>Archiving removes tickets from the board the way single-ticket archive does. <strong>Nothing is permanently deleted.</strong></p></li>\n<li><p><strong>Single-ticket archive</strong> keeps working exactly as it does now.</p></li>\n<li><p>Before it runs, show the <strong>column name and exact ticket count</strong> and ask for one confirmation.</p></li>\n<li><p>After it runs, show a result line with the count and a <strong>single undo</strong> that restores all tickets from that action.</p></li>\n<li><p>Reuse the existing single-ticket archive call and its permission check in a batched loop over the column&#x27;s tickets. Report tickets that refuse individually, without failing the whole run.</p></li>\n<li><p>Start from the real code paths: the command menu&#x27;s existing column commands and the board&#x27;s archive view.</p></li>\n</ul>\n\n<h2>Done when</h2>\n<ul>\n<li><p>Ctrl+K offers archiving one column, naming the column.</p></li>\n<li><p>It asks for confirmation with the ticket count before archiving.</p></li>\n<li><p>After archiving, the column is empty, the other columns are unchanged, and the tickets are in the board archive.</p></li>\n<li><p>One undo restores the tickets from that action.</p></li>\n<li><p>Works on desktop and phone.</p></li>\n</ul>\n\n<h2>Outside proof</h2>\n<p>On a test board with at least one ticket in two different columns, archive one column from Ctrl+K. Then show the column is empty, the other column is untouched, the tickets appear in the board archive, and undo returns them all. Repeat on phone.</p>\n\n<h2>Related</h2>\n<ul>\n<li><p><a href=\"https://app.hypertask.ai/detail/project-15/7137\">HTPR-7137</a>, related. Undo after bulk archive restored only one ticket. Check it before relying on undo here.</p></li>\n<li><p><a href=\"https://app.hypertask.ai/detail/project-15/7138\">HTPR-7138</a>, related. Ctrl+E on a selection also archived an unselected ticket.</p></li>\n<li><p><a href=\"https://app.hypertask.ai/detail/project-15/6160\">HTPR-6160</a>, similar. Inbox cluster archive from Ctrl+K with existing undo.</p></li>\n</ul>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "HTPR-7795",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-15/7795",
+        "descriptionVersionId": 4011,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-24T23:04:41.304Z",
+        "method": "first-description-version",
+        "notesSha256": "4b600c87750ad7411c9c16f501e9735bbecbcb5a6c1b582e352fc8555215c679"
+      },
+      "title": "Per-client AI settings admin page: token source, visible models, preselected model and cap per team",
+      "notes": "**Admin custom team setup: on the Team comps page, Valentin sets per team how much allowance it gets and which models and keys it may use.**\n\nValentin, 2026-10-24: \"I think we need a fourth category of teams, which is custom setups because for Inne, I don't even wanna give them allowance ... there are so many people in their plan, yet they only pay a hundred euros. The same for vetsak btw. but vetsak use it way less so I don't mind but for inne I want them to use their own key exclusively. maybe we can make that an addition to the comp tool and turn that into kind of a backend management tool for myself so I can setup for custom teams which models/ai keys they have from the admin view\".\n\n-   **Where:** the existing admin page https://app.hypertask.ai/admin/comp, a new \"Custom\" plan next to Pro and BYOK, with an end date like today.\n    \n-   **Allowance:** a number per team: zero (own key only), a custom monthly amount, or the plan default.\n    \n-   **Models:** pick which models the team sees, or \"only what its saved keys can run\".\n    \n-   **Keys:** shows which providers the team has saved keys for (never the key itself), with their last test result.\n    \n-   **First users:** inne gets zero allowance, own key only. vetsak stays as it is.\n    \n-   Stripe billing never changes from this page, same as today.\n    \n\nNew visible UI, admin only: wireframe from the live Team comps page first, then Valentin's yes. Goes with HTPR-7731 (allowance first, then key) and HTPR-7746 (premium models).\n\nProof: inne's chat refuses our allowance and answers through their own key; a team with a custom allowance stops at its number.",
+      "reference": "<p><strong>Per-client AI settings admin page (rewritten 2026-10-25, replaces the comps-page Custom plan spec).</strong> One admin page per team where Valentin sets where its tokens come from and which models it sees.</p><p><strong>Funding model (Valentin, final):</strong> paying teams and new paying users see all models. Anthropic models are preselected and billed to Valentin&#x27;s free monthly $200 Anthropic key. Any other model runs on the regular Vercel AI Gateway out of the team&#x27;s allowance. The gateway plus allowance is also the fallback once the month&#x27;s $200 is used up. DeepSeek is not a fallback. inne: own Anthropic key only. inne and vetsak: Anthropic models only.</p><ul><li><p><strong>Token source</strong> per team, one of: Default (Anthropic on the $200 key, then the gateway allowance; other models on the gateway allowance), Own key only (never our keys or the gateway, e.g. inne), Allowance only (gateway allowance for everything).</p></li><li><p><strong>Visible providers:</strong> a checkbox per provider. inne and vetsak: Anthropic only. Their model pickers never show anything else.</p></li><li><p><strong>Preselected model:</strong> Haiku 5.5 by default, changeable per team.</p></li><li><p><strong>Monthly $ cap:</strong> optional, per team.</p></li><li><p><strong>Live numbers:</strong> this month&#x27;s $ on Valentin&#x27;s keys vs $ on the team&#x27;s own key, per team, from AiUsage.</p></li><li><p><strong>Keys:</strong> shows which providers the team has saved keys for and their last test result, never the key itself.</p></li></ul><p><strong>Under the hood:</strong> one team setting and one resolver function that every AI call goes through (chat, side calls, labels, images, embeddings, dictation). The model picker reads the same setting, so the page cannot say one thing while the app does another. Writes from the existing admin route (<code>src/app/admin/comp/page.tsx</code> to <code>/api/admin/team-comp</code> to <code>setTeamComp</code> in <code>src/lib/teamCompAdmin.ts:102-118</code>) or a sibling route. Stripe billing never changes from this page.</p><p><strong>Depends on:</strong> <a href=\"https://app.hypertask.ai/detail/project-15/7844\">HTPR-7844</a> (key-only setting) first; <a href=\"https://app.hypertask.ai/detail/project-15/7845\">HTPR-7845</a> supplies the $200 route and meter. Related: <a href=\"https://app.hypertask.ai/detail/project-15/7750\">HTPR-7750</a> (picker pay-with choice) must read this setting; <a href=\"https://app.hypertask.ai/detail/project-15/7746\">HTPR-7746</a> folds into it.</p><p><strong>Done when:</strong> a test asserts a key-only team logs zero AiUsage rows on Valentin&#x27;s keys; a test asserts vetsak&#x27;s picker shows only Anthropic models; a test asserts a Default team&#x27;s picker preselects Haiku 5.5. New visible UI, admin only: wireframe from the live Team comps page first, then Valentin&#x27;s yes.</p><p>Flag: none yet (new flag <code>per-client-ai-settings</code> created by the PR; direct link https://app.hypertask.ai/admin/flags/per-client-ai-settings added then)</p><p>Everyone: no (flag not created yet)</p><p>Original request, Valentin, 2026-10-24: &quot;I think we need a fourth category of teams, which is custom setups because for Inne, I don&#x27;t even wanna give them allowance ... for inne I want them to use their own key exclusively. maybe we can make that an addition to the comp tool and turn that into kind of a backend management tool for myself so I can setup for custom teams which models/ai keys they have from the admin view&quot;.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "YPER4-751",
+      "kind": "real",
+      "source": {
+        "url": "https://app.hypertask.ai/detail/project-4060/751",
+        "descriptionVersionId": 4221,
+        "descriptionVersion": 1,
+        "recordedAt": "2026-10-26T03:01:22.364Z",
+        "method": "first-description-version",
+        "notesSha256": "4e2ebef1c20f726a33442195d59fbded665f02947dca648929beb65cc4d4dc36"
+      },
+      "title": "Any session runs on Claude, Codex or Grok, with a one-command switchover",
+      "notes": "HT Product Lead Ticket for review. Valentin's plan, 2026-10-25: runners orchestrate on cheap tokens, hax does the leg work, hooks enforce it (not rules text), 10 hax runners on standby, and any session can switch between Claude, Codex and Grok with one command.\n\n### 1\\. What's wrong\n\n-   **Runners do the code work themselves.** Runners are Claude Code on DeepSeek (deepseek-flash through Claude Code Router). They should only orchestrate and start hax (Codex) helpers. Nothing enforces that. Today RUNNER 5 (tmux hypertask-2) made 95 Edit/Write calls and started 6 hax runs. RUNNER 3 (hypertask-8) made 63 Edit/Write calls and started no hax runs.\n    \n-   **DeepSeek is nearly empty.** Spend was $34.45 in about 2 days: about $22 today, 46,875 calls and 6.3B tokens. The balance is $5.48 and the low-balance alert is off. At zero every runner stops.\n    \n-   **No switchover.** There's no command to move a session, or the whole fleet, to another provider. Each harness loads skills, hooks and rules differently, so a session can't simply be restarted on another one.\n    \n\n### 2\\. Who it affects\n\nValentin (spend, and the fleet stalls when a provider runs out). All runners (hypertask, hypertask-2 to 9, hypertasks-10, ceo-runner-1 to 8). Leads (HT Product Lead, Poteto Advisor). Every ticket in /ship.\n\n### 3\\. Recommendation: what poteto would do\n\nSmall PRs, one per part, in this order. Each part works on its own.\n\n1.  **Leg-work hook (urgent, ship first).** A PreToolUse hook that applies to runner sessions only.\n    \n    -   It denies Edit, Write, MultiEdit and NotebookEdit.\n        \n    -   It also denies Bash commands that change repo files or run tests: test runners (pnpm/npm/npx/yarn/bun test, vitest, jest, playwright, pytest), tsc and lint, sed -i, redirects into the repo, git apply.\n        \n    -   It allows board commands and MCP, git (status, log, diff, fetch, checkout, push), gh, hax and the ship scripts.\n        \n    -   The deny message gives the exact hax command to use instead.\n        \n    -   Runner detection: the launcher sets `HT_SESSION_ROLE=runner`. If that's missing, the hook falls back to the session name RUNNER N in ~/.claude/sessions/<pid>.json, the same lookup zsb-runner-guard.sh does.\n        \n    -   Off switch: `touch ~/.local/state/legwork-hook/off`.\n        \n    -   This closes the open item on YPER4-509 (\"block runners from editing code themselves in CODEX mode\").\n        \n2.  **10 hax standby runners and a keeper.**\n    \n    -   A standby slot is a tmux session hax-standby-1 to 10 running a small wrapper that waits for a ticket. No hax process starts and no model is called until a ticket arrives.\n        \n    -   A keeper loop (tmux, no systemd install needed) restarts any missing slot.\n        \n    -   `standby status` prints `10 standby`.\n        \n    -   Idle means no token burn. Check that each idle slot has no hax child process, and that Codex usage in `token-ladder status` stays flat over 30 idle minutes.\n        \n3.  **One harness-neutral session spec per role.**\n    \n    -   Each role (runner, lead, helper) gets one spec: the role file from YPER4-733, the skill list, the hook policy, the board token path, the repo and the default harness.\n        \n    -   A small adapter per harness renders the spec so each harness loads it the same way.\n        \n    -   Claude Code: AGENTS.md/CLAUDE.md, ~/.claude/skills, settings.json hooks.\n        \n    -   hax: AGENTS.md and SKILL.md skills. hax has no hooks by design, so its wrapper enforces the policy and runs ship-check itself (the YPER4-719 approach).\n        \n    -   Cursor CLI: AGENTS.md or .cursor/rules, skills, and ~/.cursor/hooks.json.\n        \n4.  **Switch command with switch-back and an automatic trigger.**\n    \n    -   `switch <session|all> <claude|codex|grok>` and `switch <session|all> back`.\n        \n    -   The command stops the session at a checkpoint and writes a handoff note (ticket, branch, PR, next step). It then starts the same slot on the target harness with the same spec, name and board token. `--dry-run` prints what would move.\n        \n    -   claude = Claude Code, routed the way the ladder says.\n        \n    -   codex = `hax --provider=codex --model=gpt-6.1-sol --effort=high`.\n        \n    -   grok = `cursor-agent` on grok-4.7, reasoning medium, fast false. Grok cloud agents run only on grok-4.7 medium with fast false.\n        \n    -   Automatic trigger (in token-ladder): it watches session and router logs for rate-limit, credit and usage errors (429, 402, insufficient balance, usage limit). It also checks the DeepSeek balance using the key the router already has. When one trips, it runs `switch <affected> <next provider>` and posts one line to the decision inbox.\n        \n\n**Hard rules:** never a model id containing \"fast\", and fast stays false on Grok. No paid keys and no top-ups; that's Valentin's call. The switch never adds a provider key.\n\n### 4\\. What Valentin decides\n\nNothing up front. One flag: hax can't own a /ship loop yet, because YPER4-719 is still open. Until 719 lands, `switch ... codex` keeps a Claude or Grok orchestrator in the slot and moves only the leg work to hax. Full Codex runners depend on 719.\n\n### 5\\. How to undo each part\n\n1.  Leg-work hook: `touch ~/.local/state/legwork-hook/off`, or revert the PR.\n    \n2.  Standby: `standby stop` kills the slots and the keeper. Revert the PR.\n    \n3.  Session spec: it's additive and the current launch path stays as it is. Revert the PR.\n    \n4.  Switch: `switch all back`, and `switch auto off` stops the automatic trigger.\n    \n\n### 6\\. Done when\n\n1.  On each runner's next /ship, the session log shows 0 Edit/Write calls by the runner and at least 1 hax helper started. Paste the jq count on the PR.\n    \n2.  `standby status` shows `10 standby`. Kill 2 slots and the keeper brings it back to 10 within 2 minutes. Codex usage stays flat over 30 idle minutes.\n    \n3.  A fresh session started from the spec on each of the 3 harnesses states the same role, skills and limits.\n    \n4.  `switch hypertask-8 grok --dry-run` is correct, then one real slot moves and comes back with `switch hypertask-8 back`. A simulated 429 and a simulated zero balance each trip the automatic trigger in dry-run.\n    \n\n### 7\\. Technical notes\n\n-   **Runner launch:**\n    \n    -   Runners are tmux sessions started with `claude --settings {apiKeyHelper: ~/.claude-code-router/bin/ccr-claude-code-api-key-default-claude-code} --dangerously-skip-permissions`.\n        \n    -   Env: `ANTHROPIC_BASE_URL=http://127.0.0.1:3456`, with ANTHROPIC\\_MODEL and DEFAULT\\_OPUS/SONNET/HAIKU\\_MODEL all set to DeepSeek/deepseek-flash\\[1m\\].\n        \n    -   No runner-role env var exists today. Identity is only the session name in ~/.claude/sessions/<pid>.json.\n        \n-   **Hooks:** ~/.claude/settings.json PreToolUse runs preview-guard, board-write-guard, the hypertask-only ship-check guard, eta\\_hook, secrets-guard, token-ladder hook-bash, zsb-runner-guard, token-ladder hook-agent and orca. None of them blocks Edit/Write or test runs.\n    \n-   **Token ladder** (valentinyeo/token-ladder, bin/token-ladder):\n    \n    -   hook\\_bash (about line 968) blocks hax only in CLAUDE mode.\n        \n    -   hook\\_agent (about line 988) blocks the Agent tool in CODEX mode.\n        \n    -   The mode is CODEX now. \"Sessions orchestrate\" exists only as prompt text.\n        \n-   **/ship:** the hax step in ~/.agents/skills/ship/SKILL.md (line 26) is instruction text only.\n    \n-   **hax:** ~/.local/bin/hax, source ~/projects/hax.\n    \n    -   It supports one-shot -p/--json, --resume and --no-session.\n        \n    -   It has no daemon, serve or standby mode.\n        \n    -   It has no hooks by design (docs/philosophy.md, \"No hooks or plugins\").\n        \n    -   It loads AGENTS.md and skills. Presets are in ~/.config/hax/config.json.\n        \n-   **Cursor CLI:** ~/.local/bin/cursor-agent.\n    \n    -   ~/.cursor/cli-config.json: model grok-4.7, reasoning\\_effort medium, fast false, maxMode false.\n        \n    -   ~/.cursor/hooks.json holds the zigshell and orca hooks.\n        \n    -   ~/.cursor/rules holds pstack-models.mdc, and ~/.cursor/skills-cursor holds 22 skills.\n        \n-   **Repos:**\n    \n    -   hypertask-ai/agent-toolkit: the hook, standby, keeper, switch and launch adapters (scripts/create-agent.sh, agent-template, hypertask-runner-cli).\n        \n    -   valentinyeo/token-ladder: the automatic trigger and the balance check.\n        \n    -   Role files go in the hypertask repo, linked from AGENTS.md (YPER4-733).\n        \n-   **Related tickets:** YPER4-719 (hax owns /ship), YPER4-733 (role files), YPER4-509 (CODEX mode sends work to Codex), YPER4-664 (runners on DeepSeek through CCR), YPER4-745 (Cursor rung with fast off).",
+      "reference": "<p><span data-type=\"mention\" class=\"mention\" data-id=\"HT Product Lead\" data-label=\"agent-9b0f3a93-5e88-4093-b558-cad1c229bc51\" uniqueindex=\"\" projectid=\"\">HT Product Lead</span> Ticket for review. Valentin&#x27;s plan, 2026-10-25: runners orchestrate on cheap tokens, hax does the leg work, hooks enforce it (not rules text), 10 hax runners on standby, and any session can switch between Claude, Codex and Grok with one command.</p>\n<h3>1. What&#x27;s wrong</h3>\n<ul>\n<li><p><strong>Runners do the code work themselves.</strong> Runners are Claude Code on DeepSeek (deepseek-flash through Claude Code Router). They should only orchestrate and start hax (Codex) helpers. Nothing enforces that. Today RUNNER 5 (tmux hypertask-2) made 95 Edit/Write calls and started 6 hax runs. RUNNER 3 (hypertask-8) made 63 Edit/Write calls and started no hax runs.</p></li>\n<li><p><strong>DeepSeek is nearly empty.</strong> Spend was $34.45 in about 2 days: about $22 today, 46,875 calls and 6.3B tokens. The balance is $5.48 and the low-balance alert is off. At zero every runner stops.</p></li>\n<li><p><strong>No switchover.</strong> There&#x27;s no command to move a session, or the whole fleet, to another provider. Each harness loads skills, hooks and rules differently, so a session can&#x27;t simply be restarted on another one.</p></li>\n</ul>\n<h3>2. Who it affects</h3>\n<p>Valentin (spend, and the fleet stalls when a provider runs out). All runners (hypertask, hypertask-2 to 9, hypertasks-10, ceo-runner-1 to 8). Leads (HT Product Lead, Poteto Advisor). Every ticket in /ship.</p>\n<h3>3. Recommendation: what poteto would do</h3>\n<p>Small PRs, one per part, in this order. Each part works on its own.</p>\n<ol>\n<li><p><strong>Leg-work hook (urgent, ship first).</strong> A PreToolUse hook that applies to runner sessions only.\n</p><ul>\n<li><p>It denies Edit, Write, MultiEdit and NotebookEdit.</p></li>\n<li><p>It also denies Bash commands that change repo files or run tests: test runners (pnpm/npm/npx/yarn/bun test, vitest, jest, playwright, pytest), tsc and lint, sed -i, redirects into the repo, git apply.</p></li>\n<li><p>It allows board commands and MCP, git (status, log, diff, fetch, checkout, push), gh, hax and the ship scripts.</p></li>\n<li><p>The deny message gives the exact hax command to use instead.</p></li>\n<li><p>Runner detection: the launcher sets <code>HT_SESSION_ROLE=runner</code>. If that&#x27;s missing, the hook falls back to the session name RUNNER N in ~/.claude/sessions/&lt;pid&gt;.json, the same lookup zsb-runner-guard.sh does.</p></li>\n<li><p>Off switch: <code>touch ~/.local/state/legwork-hook/off</code>.</p></li>\n<li><p>This closes the open item on YPER4-509 (&quot;block runners from editing code themselves in CODEX mode&quot;).</p></li>\n</ul></li>\n<li><p><strong>10 hax standby runners and a keeper.</strong>\n</p><ul>\n<li><p>A standby slot is a tmux session hax-standby-1 to 10 running a small wrapper that waits for a ticket. No hax process starts and no model is called until a ticket arrives.</p></li>\n<li><p>A keeper loop (tmux, no systemd install needed) restarts any missing slot.</p></li>\n<li><p><code>standby status</code> prints <code>10 standby</code>.</p></li>\n<li><p>Idle means no token burn. Check that each idle slot has no hax child process, and that Codex usage in <code>token-ladder status</code> stays flat over 30 idle minutes.</p></li>\n</ul></li>\n<li><p><strong>One harness-neutral session spec per role.</strong>\n</p><ul>\n<li><p>Each role (runner, lead, helper) gets one spec: the role file from YPER4-733, the skill list, the hook policy, the board token path, the repo and the default harness.</p></li>\n<li><p>A small adapter per harness renders the spec so each harness loads it the same way.</p></li>\n<li><p>Claude Code: AGENTS.md/CLAUDE.md, ~/.claude/skills, settings.json hooks.</p></li>\n<li><p>hax: AGENTS.md and SKILL.md skills. hax has no hooks by design, so its wrapper enforces the policy and runs ship-check itself (the YPER4-719 approach).</p></li>\n<li><p>Cursor CLI: AGENTS.md or .cursor/rules, skills, and ~/.cursor/hooks.json.</p></li>\n</ul></li>\n<li><p><strong>Switch command with switch-back and an automatic trigger.</strong>\n</p><ul>\n<li><p><code>switch &lt;session|all&gt; &lt;claude|codex|grok&gt;</code> and <code>switch &lt;session|all&gt; back</code>.</p></li>\n<li><p>The command stops the session at a checkpoint and writes a handoff note (ticket, branch, PR, next step). It then starts the same slot on the target harness with the same spec, name and board token. <code>--dry-run</code> prints what would move.</p></li>\n<li><p>claude = Claude Code, routed the way the ladder says.</p></li>\n<li><p>codex = <code>hax --provider=codex --model=gpt-6.1-sol --effort=high</code>.</p></li>\n<li><p>grok = <code>cursor-agent</code> on grok-4.7, reasoning medium, fast false. Grok cloud agents run only on grok-4.7 medium with fast false.</p></li>\n<li><p>Automatic trigger (in token-ladder): it watches session and router logs for rate-limit, credit and usage errors (429, 402, insufficient balance, usage limit). It also checks the DeepSeek balance using the key the router already has. When one trips, it runs <code>switch &lt;affected&gt; &lt;next provider&gt;</code> and posts one line to the decision inbox.</p></li>\n</ul></li>\n</ol>\n<p><strong>Hard rules:</strong> never a model id containing &quot;fast&quot;, and fast stays false on Grok. No paid keys and no top-ups; that&#x27;s Valentin&#x27;s call. The switch never adds a provider key.</p>\n<h3>4. What Valentin decides</h3>\n<p>Nothing up front. One flag: hax can&#x27;t own a /ship loop yet, because YPER4-719 is still open. Until 719 lands, <code>switch ... codex</code> keeps a Claude or Grok orchestrator in the slot and moves only the leg work to hax. Full Codex runners depend on 719.</p>\n<h3>5. How to undo each part</h3>\n<ol>\n<li><p>Leg-work hook: <code>touch ~/.local/state/legwork-hook/off</code>, or revert the PR.</p></li>\n<li><p>Standby: <code>standby stop</code> kills the slots and the keeper. Revert the PR.</p></li>\n<li><p>Session spec: it&#x27;s additive and the current launch path stays as it is. Revert the PR.</p></li>\n<li><p>Switch: <code>switch all back</code>, and <code>switch auto off</code> stops the automatic trigger.</p></li>\n</ol>\n<h3>6. Done when</h3>\n<ol>\n<li><p>On each runner&#x27;s next /ship, the session log shows 0 Edit/Write calls by the runner and at least 1 hax helper started. Paste the jq count on the PR.</p></li>\n<li><p><code>standby status</code> shows <code>10 standby</code>. Kill 2 slots and the keeper brings it back to 10 within 2 minutes. Codex usage stays flat over 30 idle minutes.</p></li>\n<li><p>A fresh session started from the spec on each of the 3 harnesses states the same role, skills and limits.</p></li>\n<li><p><code>switch hypertask-8 grok --dry-run</code> is correct, then one real slot moves and comes back with <code>switch hypertask-8 back</code>. A simulated 429 and a simulated zero balance each trip the automatic trigger in dry-run.</p></li>\n</ol>\n<h3>7. Technical notes</h3>\n<ul>\n<li><p><strong>Runner launch:</strong>\n</p><ul>\n<li><p>Runners are tmux sessions started with <code>claude --settings {apiKeyHelper: ~/.claude-code-router/bin/ccr-claude-code-api-key-default-claude-code} --dangerously-skip-permissions</code>.</p></li>\n<li><p>Env: <code>ANTHROPIC_BASE_URL=http://127.0.0.1:3456</code>, with ANTHROPIC_MODEL and DEFAULT_OPUS/SONNET/HAIKU_MODEL all set to DeepSeek/deepseek-flash[1m].</p></li>\n<li><p>No runner-role env var exists today. Identity is only the session name in ~/.claude/sessions/&lt;pid&gt;.json.</p></li>\n</ul></li>\n<li><p><strong>Hooks:</strong> ~/.claude/settings.json PreToolUse runs preview-guard, board-write-guard, the hypertask-only ship-check guard, eta_hook, secrets-guard, token-ladder hook-bash, zsb-runner-guard, token-ladder hook-agent and orca. None of them blocks Edit/Write or test runs.</p></li>\n<li><p><strong>Token ladder</strong> (valentinyeo/token-ladder, bin/token-ladder):\n</p><ul>\n<li><p>hook_bash (about line 968) blocks hax only in CLAUDE mode.</p></li>\n<li><p>hook_agent (about line 988) blocks the Agent tool in CODEX mode.</p></li>\n<li><p>The mode is CODEX now. &quot;Sessions orchestrate&quot; exists only as prompt text.</p></li>\n</ul></li>\n<li><p><strong>/ship:</strong> the hax step in ~/.agents/skills/ship/SKILL.md (line 26) is instruction text only.</p></li>\n<li><p><strong>hax:</strong> ~/.local/bin/hax, source ~/projects/hax.\n</p><ul>\n<li><p>It supports one-shot -p/--json, --resume and --no-session.</p></li>\n<li><p>It has no daemon, serve or standby mode.</p></li>\n<li><p>It has no hooks by design (docs/philosophy.md, &quot;No hooks or plugins&quot;).</p></li>\n<li><p>It loads AGENTS.md and skills. Presets are in ~/.config/hax/config.json.</p></li>\n</ul></li>\n<li><p><strong>Cursor CLI:</strong> ~/.local/bin/cursor-agent.\n</p><ul>\n<li><p>~/.cursor/cli-config.json: model grok-4.7, reasoning_effort medium, fast false, maxMode false.</p></li>\n<li><p>~/.cursor/hooks.json holds the zigshell and orca hooks.</p></li>\n<li><p>~/.cursor/rules holds pstack-models.mdc, and ~/.cursor/skills-cursor holds 22 skills.</p></li>\n</ul></li>\n<li><p><strong>Repos:</strong>\n</p><ul>\n<li><p>hypertask-ai/agent-toolkit: the hook, standby, keeper, switch and launch adapters (scripts/create-agent.sh, agent-template, hypertask-runner-cli).</p></li>\n<li><p>valentinyeo/token-ladder: the automatic trigger and the balance check.</p></li>\n<li><p>Role files go in the hypertask repo, linked from AGENTS.md (YPER4-733).</p></li>\n</ul></li>\n<li><p><strong>Related tickets:</strong> YPER4-719 (hax owns /ship), YPER4-733 (role files), YPER4-509 (CODEX mode sends work to Codex), YPER4-664 (runners on DeepSeek through CCR), YPER4-745 (Cursor rung with fast off).</p></li>\n</ul><h2>Approved split</h2><p>Checkpoint first; switching needs a saved handoff.</p><p>No routers or new paid keys. Earlier balance instructions are superseded.</p><ul><li><p>checkpoint: <a href=\"https://app.hypertask.ai/detail/project-4060/790\">https://app.hypertask.ai/detail/project-4060/790</a></p></li><li><p>switch: <a href=\"https://app.hypertask.ai/detail/project-4060/791\">https://app.hypertask.ai/detail/project-4060/791</a></p></li><li><p>back: <a href=\"https://app.hypertask.ai/detail/project-4060/792\">https://app.hypertask.ai/detail/project-4060/792</a></p></li><li><p>fencing: <a href=\"https://app.hypertask.ai/detail/project-4060/793\">https://app.hypertask.ai/detail/project-4060/793</a></p></li><li><p>claude-proof: <a href=\"https://app.hypertask.ai/detail/project-4060/794\">https://app.hypertask.ai/detail/project-4060/794</a></p></li><li><p>grok-proof: <a href=\"https://app.hypertask.ai/detail/project-4060/795\">https://app.hypertask.ai/detail/project-4060/795</a></p></li></ul><p>This parent stays open until every child finishes.</p>",
+      "maxWords": 240,
+      "requiredSections": [
+        "Problem",
+        "Done when"
+      ],
+      "forbiddenSections": [
+        "Hypothesis",
+        "ICE"
+      ],
+      "protectedPhrases": [
+        "Proposed:"
+      ]
+    },
+    {
+      "id": "synthetic-ab-search",
+      "kind": "synthetic",
+      "title": "Test a completed reminder search option",
+      "notes": "Compare the current reminder search against an option that includes completed reminders. Keep the current screen as control. Write the finished variation.",
+      "reference": "<h2>Problem</h2><p>The reminder page hides completed items.</p><h2>Hypothesis</h2><p>If the search offers completed reminders, people will find past work more often.</p><h2>Control</h2><p>Search currently shows active reminders only.</p><h2>Variations</h2><p>Add a completed reminders option below search.</p><h2>ICE</h2><p>Impact 6, Confidence 7, Ease 8. Total 21/30.</p>",
+      "maxWords": 400,
+      "requiredSections": [
+        "Problem",
+        "Hypothesis",
+        "Control",
+        "Variations",
+        "ICE"
+      ],
+      "forbiddenSections": [],
+      "protectedPhrases": [
+        "Proposed:"
+      ],
+      "instructions": "This is an A/B test ticket. Use these sections: Problem, Hypothesis, Control, Variations, ICE. Write finished ideas, not placeholders. Score Impact, Confidence and Ease each 1 to 10, and sum the score out of 30."
+    },
+    {
+      "id": "synthetic-ab-help",
+      "kind": "synthetic",
+      "title": "Test a clearer help button",
+      "notes": "Compare the current help link against a button labelled Find an answer. Use the existing link as control and write the actual variation copy.",
+      "reference": "<h2>Problem</h2><p>The reminder page hides completed items.</p><h2>Hypothesis</h2><p>If the search offers completed reminders, people will find past work more often.</p><h2>Control</h2><p>Search currently shows active reminders only.</p><h2>Variations</h2><p>Add a completed reminders option below search.</p><h2>ICE</h2><p>Impact 6, Confidence 7, Ease 8. Total 21/30.</p>",
+      "maxWords": 400,
+      "requiredSections": [
+        "Problem",
+        "Hypothesis",
+        "Control",
+        "Variations",
+        "ICE"
+      ],
+      "forbiddenSections": [],
+      "protectedPhrases": [
+        "Proposed:"
+      ],
+      "instructions": "This is an A/B test ticket. Use these sections: Problem, Hypothesis, Control, Variations, ICE. Write finished ideas, not placeholders. Score Impact, Confidence and Ease each 1 to 10, and sum the score out of 30."
+    }
+  ],
+  "controls": {
+    "longNonAb": {
+      "html": "<h2>Problem</h2><p>reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders reminders </p><h2>Hypothesis</h2><p>Unasked structure.</p><h2>ICE</h2><p>21/30</p>"
+    },
+    "goodAb": {
+      "html": "<h2>Problem</h2><p>The reminder page hides completed items.</p><h2>Hypothesis</h2><p>If the search offers completed reminders, people will find past work more often.</p><h2>Control</h2><p>Search currently shows active reminders only.</p><h2>Variations</h2><p>Add a completed reminders option below search.</p><h2>ICE</h2><p>Impact 6, Confidence 7, Ease 8. Total 21/30.</p>"
+    }
+  }
+}

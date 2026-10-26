@@ -800,7 +800,21 @@ PY
         done
       fi
     fi
-  done < <(sed -E 's/(&&|\|\||;|\||&|\(|\))/\n/g' <<<"$cmd")
+  done < <(awk '
+    BEGIN { sq = "\047" }
+    {
+      line = $0; out = ""; n = length(line); q = ""
+      for (i = 1; i <= n; i++) {
+        c = substr(line, i, 1); two = substr(line, i, 2)
+        if (two == "&&" || two == "||") { print out; out = ""; i++; q = ""; continue }
+        if (c == ";" || c == "|" || c == "&") { print out; out = ""; q = ""; continue }
+        if (q == "" && (c == "(" || c == ")")) { print out; out = ""; continue }
+        if (q == "" && (c == "\"" || c == sq)) { q = c; out = out c; continue }
+        if (q != "" && c == q) { q = ""; out = out c; continue }
+        out = out c
+      }
+      print out
+    }' <<<"$cmd")
   exit 0
 }
 

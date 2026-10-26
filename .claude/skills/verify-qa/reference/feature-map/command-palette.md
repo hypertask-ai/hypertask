@@ -19,6 +19,17 @@ the same palette lists the commands but hides the key chips
   while `htpr-7891-palette-share-key-labels` is on, so the printed key and the
   key that copies cannot disagree.
 
+## Search / New Task switch outline
+
+Open Ctrl+J on desktop, or Commands then New Task on a phone. With
+`htpr-8015-amoled-mode-outline` enabled, the existing switch above the
+composer has a 1px `--border-light-gray-thin` outline in AMOLED only.
+The composer outline and the switch's size and position stay unchanged.
+Switch to Search and back to New Task; repeat at 1440x900 and 390x844 in
+AMOLED, Graphite, Porcelain and Dia. Compare computed outlines and bounding
+boxes against the pre-release captures. Flag Off keeps the old appearance.
+No tasks need creating for this styling check.
+
 ## What usually breaks
 
 - A palette label drifting from the key that actually works: the palette
@@ -47,3 +58,14 @@ None; reading the palette and the help list writes nothing.
 
 Phone shots cannot prove the key chips, because the phone palette hides them;
 they only prove the rows still render.
+
+## Desktop New Task entry
+
+While `htpr-8035-sidebar-new-task` and the compose task writer are on, the
+left sidebar has a primary plus button. Hover shows New Task and Ctrl+J
+(Cmd+J on Apple); expanding the sidebar also shows the text label. Clicking
+opens the same New Task compose tab as the shortcut, without changing routes.
+Check a board, task, Inbox, My Tasks, Calendar and Search; cancel with Escape,
+then reopen with Ctrl+J. Check both sidebar widths and all four themes.
+The button must not appear at 390x844, or when its flag is off. Existing
+navigation must still work, and the main content must not move horizontally.

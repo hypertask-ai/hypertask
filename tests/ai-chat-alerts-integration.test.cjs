@@ -229,6 +229,8 @@ function webhookHarness(messageId) {
     "@/lib/prisma": db,
     "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/lib/agentRuns/model": { AGENT_RUN_FEATURE_FLAG: "existing-run-flag" },
+    "@/lib/webhooks/signingKeyStore": { openWebhookSigningKey: (value) => value },
+    "@/lib/flags/definitions/htpr-7905-agent-webhook-auth-header": { AGENT_WEBHOOK_AUTH_HEADER_FLAG: "fixture-auth-header" },
     "@/lib/mcp/webhooks/delivery": { postSignedWebhook: async () => ({ ok: false, statusCode: 503, error: "private upstream body" }) },
     "./queue": { queueAgentWebhookDelivery: async (...args) => queued.push(args) },
     "@/lib/errors/reportError": { reportError: async (report) => reports.push(report) },

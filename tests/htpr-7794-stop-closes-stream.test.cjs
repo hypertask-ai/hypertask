@@ -156,6 +156,7 @@ function legacyHistory(enabled, demo = false) {
         : [value, () => {}],
     },
     "@/hooks/useFlag": { useFlag: (key) => key === FLAG && enabled },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/store": { currentUserAtom: "user" },
     "@/lib/state": {
       useRecoilValue: (atom) => atom === "user" ? { id: 7, uid: "user" } : null,
@@ -249,6 +250,7 @@ function client(t, { enabled = true, cancelStatus = 200, cancelResult = { succes
     "@/utils/helperFunctions/helperFunctions": {},
     "@/utils/helperFunctions/getFileTypeFromUrl": {},
     "@/hooks/useFlag": { useFlag: () => enabled },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7794_STOP_CLOSES_STREAM_FLAG: FLAG },
   };
   const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", mocks);
@@ -566,6 +568,7 @@ for (const enabled of [false, true]) {
       "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask: () => {} }) },
       "@/lib/flags/keys": { HTPR_7756_CHAT_OPENS_TASK_FLAG: "htpr-7756-chat-opens-task", HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats", HTPR_7337_EDIT_WITH_AI_FLAG: "htpr-7337-edit-with-ai", HTPR_6936_ASK_AI_FULLSCREEN_FLAG: "htpr-6936-ask-ai-fullscreen", HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG: "htpr-7049-reload-after-image-chat", HTPR_7099_CHAT_CONNECTION_LOST_FLAG: "htpr-7099-chat-connection-lost", HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "htpr-6971-chat-history-paging", HTPR_7316_CHAT_SCOPE_TICKET_FLAG: "htpr-7316-chat-scope-ticket", HTPR_7794_STOP_CLOSES_STREAM_FLAG: FLAG },
       "@/hooks/useFlag": { useFlag: (key) => key === FLAG && enabled },
+      "@/lib/ai/chipEvents": { signalAiChip: () => {} },
       "./useAiChatState": { useAiChatState: () => ({ sendInFlightRef: { current: false }, settleSendRef: { current: null } }) },
       "./useAiChatSessions": { useAiChatSessions: () => ({}) },
       "./useAiChatAttachments": { useAiChatAttachments: (context) => { stopContext = context; return {}; } },

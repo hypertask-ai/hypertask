@@ -11,23 +11,102 @@ const catalog = readCatalog(fs.readFileSync(path.join(root, "src/lib/aiModelOpti
 const report = () => diffModels(catalog, structuredClone(fixture));
 const response = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
 
+const twoVersionCatalog = {
+  definitions: [
+    { key: "claude-haiku-4.5", modelClass: "claude-haiku", label: "Haiku 4.5", provider: "anthropic", priceTier: 1 },
+    { key: "claude-haiku-5-5", modelClass: "claude-haiku", label: "Haiku 5.5", provider: "anthropic", priceTier: 1 },
+  ],
+  options: [
+    { id: "claude-haiku-4.5", modelKey: "claude-haiku-4.5", model: "claude-haiku-4.5", source: "claude" },
+    { id: "claude-haiku-5-5", modelKey: "claude-haiku-5-5", model: "claude-haiku-5.5", source: "claude" },
+  ],
+};
+const staleFinding = () => diffModels(twoVersionCatalog, structuredClone(fixture)).findings.find((finding) => finding.kind === "stale");
+const findingOfKind = (kind) => kind === "stale" ? staleFinding() : report().findings.find((item) => item.kind === kind);
+
 function assertPickerModelsListed(sources) {
   const missing = diffModels(catalog, sources).findings.filter((finding) => finding.reason === "picker model missing from gateway list");
   assert.deepEqual(missing, [], "Every picker model must exist in the gateway fixture");
 }
 
-test("approved examples are discovered, with one finding per model class and old Haiku stale", () => {
+test("approved examples are discovered, with one finding per model class and no stale Haiku left", () => {
   const findings = report().findings;
-  for (const model of ["claude-fable-5.1", "gpt-6-astra", "gemini-4-argon", "kimi-k3.1-pro", "qwen3.8-plus"]) {
+  for (const model of ["claude-fable-5.1", "gpt-6-astra", "kimi-k3.1-pro", "qwen3.8-plus"]) {
     assert.ok(findings.some((finding) => finding.model.endsWith(`/${model}`)), model);
   }
-  assert.equal(findings.find((finding) => finding.model === "claude-haiku-4.5").kind, "stale");
+  assert.equal(findings.filter((finding) => finding.kind === "stale").length, 0);
+  assert.equal(findings.some((finding) => finding.model === "claude-haiku-4.5"), false);
   assert.equal(findings.find((finding) => finding.model.endsWith("/qwen3.8-plus")).modelClass, "qwen-plus");
   assert.equal(findings.find((finding) => finding.model.endsWith("/claude-sonnet-5.6")).action, "ship automatically");
   assert.equal(findings.find((finding) => finding.model.endsWith("/gpt-6.2-sol")).action, "waits for HTPR-7746");
   assert.equal(findings.find((finding) => finding.model.endsWith("/gpt-6-astra")).action, "ask Valentin before shipping");
   assert.equal(findings.filter((finding) => finding.model.includes("claude-sonnet")).length, 1);
   assert.ok(!findings.some((finding) => finding.model.includes("image")));
+  assert.ok(!findings.some((finding) => /gemini-4-argon|grok-4\.7/.test(finding.model)));
+});
+
+test("stale detection still fires for a catalogue that keeps two versions of one class", () => {
+  const stale = staleFinding();
+  assert.equal(stale.model, "claude-haiku-4.5");
+  assert.deepEqual(stale.current, ["claude-haiku-5-5"]);
+  assert.equal(stale.reason, "superseded by claude-haiku-5-5");
+  assert.equal(stale.action, "remove stale entry; migrate saved picks to the current model of its class");
+});
+
+test("serving variants share their base model family without changing name or version", () => {
+  for (const [variant, base] of [
+    ["openai/gpt-4o-batch", "openai/gpt-4o"],
+    ["anthropic/claude-opus-5.5-fast", "anthropic/claude-opus-5.5"],
+    ["spacexai/grok-4.20-reasoning-beta", "spacexai/grok-4.20-reasoning"],
+    ["spacexai/grok-4.20-reasoning", "spacexai/grok-4.20"],
+  ]) {
+    assert.equal(identity(variant).family, identity(base).family, variant);
+    assert.deepEqual(identity(variant).version, identity(base).version, variant);
+  }
+  assert.equal(identity("openai/gpt-4o-batch").name, "gpt-4o-batch");
+  assert.deepEqual(identity("openai/gpt-4o-batch").version, [4]);
+  assert.equal(identity("anthropic/claude-opus-5.5-fast").name, "claude-opus-5.5-fast");
+  assert.deepEqual(identity("anthropic/claude-opus-5.5-fast").version, [5, 5]);
+});
+
+test("only trailing serving tokens are stripped repeatedly without emptying the model family", () => {
+  for (const suffix of ["batch", "fast", "preview", "beta", "experimental", "latest", "online", "reasoning", "non-reasoning", "thinking"]) {
+    assert.equal(identity(`openai/gpt-4o-${suffix}`).family, identity("openai/gpt-4o").family, suffix);
+    assert.equal(identity(`openai/gpt-${suffix}-4o-mini`).family, `gpt-${suffix}-o-mini`, suffix);
+  }
+  assert.equal(identity("openai/gpt-4o-batch-fast").family, identity("openai/gpt-4o").family);
+  assert.equal(identity("openai/batch-fast").family, "batch");
+  assert.equal(identity("openai/-batch").family, "-batch");
+  assert.notEqual(identity("openai/gpt-4o-mini").family, identity("openai/gpt-4o").family);
+  assert.notEqual(identity("openai/o3").family, identity("openai/gpt-4o").family);
+  assert.notEqual(identity("openai/gpt-4obatch").family, identity("openai/gpt-4o").family);
+});
+
+test("saved gateway fixture groups offered serving variants without new classes or duplicate family findings", () => {
+  const offered = structuredClone(catalog);
+  offered.definitions.push({ key: "gpt-4o", provider: "openai", modelClass: "gpt-o" });
+  offered.options.push({ modelKey: "gpt-4o", model: "gpt-4o" });
+  for (const ids of [["openai/gpt-4o", "openai/gpt-4o-batch"], ["openai/gpt-4o-batch", "openai/gpt-4o"]]) {
+    const sources = structuredClone(fixture);
+    sources.gateway.data.push(...ids.map((id) => ({ id, type: "language" })));
+    const findings = diffModels(offered, sources).findings;
+    assert.deepEqual(findings.filter((finding) => identity(finding.model).family === identity("openai/gpt-4o").family), []);
+    const families = findings.map((finding) => `${finding.provider}/${identity(finding.model).family}`);
+    assert.equal(new Set(families).size, findings.length);
+  }
+});
+
+test("a newer serving variant follows the existing new-version path once per family", () => {
+  const sources = structuredClone(fixture);
+  sources.gateway.data.push({ id: "anthropic/claude-opus-5.6-fast", type: "language" },
+    { id: "anthropic/claude-opus-5.6-reasoning-beta", type: "language" });
+  const findings = diffModels(catalog, sources).findings.filter((finding) =>
+    identity(finding.model).family === identity("anthropic/claude-opus-5.5").family);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "new-version");
+  assert.equal(findings[0].model, "anthropic/claude-opus-5.6-fast");
+  assert.equal(findings[0].modelClass, "claude-opus");
+  assert.deepEqual(findings[0].current, ["claude-opus-5-5"]);
 });
 
 test("picker membership assertion rejects a missing gateway model (positive and negative controls)", () => {
@@ -53,7 +132,10 @@ test("gateway failure falls back to authenticated provider lists without claimin
   assert.deepEqual(fallback.sourcesUsed, ["openai", "anthropic"]);
   assert.ok(fallback.warnings.includes("gateway: HTTP 403"));
   assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
-  assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 1);
+  assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 0);
+  const stale = diffModels(twoVersionCatalog, sources).findings.filter((finding) => finding.kind === "stale");
+  assert.deepEqual(stale.map((finding) => finding.model), ["claude-haiku-4.5"]);
+  assert.equal(stale[0].action, "remove stale entry; migrate saved picks to the current model of its class");
   assert.equal(calls.find(([url]) => url === "https://api.openai.com/v1/models")[1].Authorization, "Bearer fixture-openai");
   assert.equal(calls.find(([url]) => url === "https://api.anthropic.com/v1/models")[1]["x-api-key"], "fixture-anthropic");
 });
@@ -94,7 +176,7 @@ test("CLI text and JSON use the same saved fixture and do not access the network
   const text = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8" });
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /Sources used: gateway, openai, anthropic/);
-  assert.match(text.stdout, /stale: claude-haiku-4.5/);
+  assert.doesNotMatch(text.stdout, /stale: /);
   assert.match(text.stdout, /waits for HTPR-7746/);
 });
 
@@ -243,7 +325,7 @@ test("watcher does not search or create an empty rollup", async () => {
 
 for (const kind of ["new-class", "new-version", "stale"]) {
   test(`watcher finds an exact ${kind} title on the second page without creating`, async () => {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     const now = new Date("2026-10-25T12:00:00Z");
     const ticket = kind === "new-class" ? rollupTicket([finding], now) : ticketFor(finding);
     const cursors = [];
@@ -265,7 +347,7 @@ for (const kind of ["new-class", "new-version", "stale"]) {
   });
 
   test(`watcher exhausts ${kind} pages before creating once with the stable marker idempotency key`, async () => {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     const now = new Date("2026-10-25T12:00:00Z");
     const ticket = kind === "new-class" ? rollupTicket([finding], now) : ticketFor(finding);
     const calls = [];
@@ -329,7 +411,7 @@ test("watcher CLI refuses incomplete or failing later pages with non-zero exit a
 
 test("watcher refuses writes on failed, partial, malformed or truncated searches, and with no discovery sources", async () => {
   for (const kind of ["new-class", "new-version", "stale"]) {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     for (const page of [response({}, 500), response({ success: false }), response({ success: true }),
       response({ success: true, tasks: [], total: 1 }), response({ success: true, tasks: [], total: 0, partial: true }),
       response({ success: true, tasks: [], total: 0, nextCursor: "123" })]) {

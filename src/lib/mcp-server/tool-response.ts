@@ -37,7 +37,9 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   ),
 ])
 
-export function actionableToolError(error: unknown, hints: { ticketNumberShape?: boolean } = {}): string {
+export type ErrorHints = { ticketNumberShape?: boolean; renamedField?: boolean; fields?: readonly string[] }
+
+export function actionableToolError(error: unknown, hints: ErrorHints = {}): string {
   if (error instanceof z.ZodError) {
     return error.issues.slice(0, 4).map((issue) => {
       const field = issue.path.join('.') || 'input'
@@ -51,7 +53,13 @@ export function actionableToolError(error: unknown, hints: { ticketNumberShape?:
         const boardHint = issue.keys.some((key) => ['board_id', 'boardId', 'board'].includes(key))
           ? ' This tool calls the board field project_id.'
           : ''
-        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}`
+        const renamed = hints.renamedField && (issue.path.length === 0 || (issue.path.length === 1 && issue.path[0] === 'input'))
+          ? issue.keys
+              .map((key) => ({ key, snake: key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase() }))
+              .filter(({ key, snake }) => snake !== key && hints.fields?.includes(snake))
+              .map(({ key, snake }) => ` Use ${snake} instead of ${key}.`)
+          : []
+        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}${renamed.join('')}`
       }
       if (field === 'input.user_id.user_ids.agent_id.assign_self') {
         return issue.message.replace(/\.$/, '')
@@ -97,7 +105,7 @@ function redactModelFacingMessage(raw: string): string {
   return message.replace(/(?:Bearer\s+\S+|\b(?:htmk_|htk_)[\w-]+|\beyJ[\w.-]+)/gi, '[redacted]').slice(0, 600)
 }
 
-export function toolErrorResult(error: unknown, hints: { ticketNumberShape?: boolean } = {}): CallToolResult {
+export function toolErrorResult(error: unknown, hints: ErrorHints = {}): CallToolResult {
   return { content: [{ type: 'text', text: actionableToolError(error, hints) }], isError: true }
 }
 
@@ -135,7 +143,8 @@ export async function executeToolResult(
       ...(tool.outputSchema && structured ? { structuredContent: structured } : {}),
     }
   } catch (error) {
-    return toolErrorResult(error, tool.errorHints)
+    const documentedFields = (error as { documentedFields?: string[] } | null)?.documentedFields
+    return toolErrorResult(error, { ...tool.errorHints, fields: documentedFields ?? tool.documentedFields ?? Object.keys(tool.parameters.shape) })
   }
 }
 

@@ -70,6 +70,12 @@
       "legacy_action": "set_instructions",
       "read_only": false,
       "permission": "data"
+    },
+    "hygiene": {
+      "tool": "hypertask_board_config",
+      "legacy_action": "get_hygiene",
+      "read_only": true,
+      "permission": "data"
     }
   },
   "input_examples": [

@@ -114,10 +114,16 @@
     "reason": "Output of an interactive terminal session on the VPS, not a service failure."
   },
   {
+    "id": "powershell-shutdown-cancellation",
+    "service": "vps-journal",
+    "match": "^run-(?:u\\d+|r[0-9a-f]{32})\\.scope: [^\\n]*\\[NamedPipeIPC_ServerListenerError:NamedPipe\\.Exception\\.Error\\][^\\n]* Error Message: Operation canceled\\.\\n[^\\n]*$",
+    "reason": "PowerShell disposes its diagnostic pipe listener on process exit; transient command scopes log the resulting cancellation as an error (YPER4-460)."
+  },
+  {
     "id": "ssh-client-hung-up",
     "service": "vps-journal",
-    "match": "^ssh\\.service: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe\\n",
-    "reason": "An SSH client closed its connection while the server was still sending it a debug notice; the client went away, the server is fine (YPER4-406)."
+    "match": "^(?:ssh\\.service|session-\\d+\\.scope): fatal: ssh_packet_send_debug: send DEBUG: (?:Broken pipe|Connection reset by peer)\\n",
+    "reason": "An SSH client closed its connection while the server was still sending it a debug notice; the client went away, the server is fine (YPER4-406, YPER4-450)."
   },
   {
     "id": "outside-pr-guard-dry-run",
