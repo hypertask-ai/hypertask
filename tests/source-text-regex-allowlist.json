@@ -260,7 +260,6 @@
     "tests/time-report-surfaces.test.cjs",
     "tests/tooltip-feature-flag.test.cjs",
     "tests/typed-api-client-task-adoption.test.cjs",
-    "tests/typed-section-notification-writes.test.cjs",
     "tests/ui-patterns.test.cjs",
     "tests/update-route-lease-adoption.test.cjs",
     "tests/update-task-assignee-reconciliation.test.cjs",
@@ -279,5 +278,5 @@
     "tests/yper4-600-node-runtime-log.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 278
+  "count": 277
 }
