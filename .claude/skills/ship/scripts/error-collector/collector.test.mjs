@@ -1535,3 +1535,18 @@ check('incidents', 'legacy message fingerprint on another route cannot own the n
   assert.equal(creates(h).length, 1);
   assert.equal(activities(h, 'HTPR-8000').length, 0);
 }));
+
+check('incidents', 'retained legacy pending roots migrate before filing; deleted legacy matches stay deleted', async () => withHarness(async h => {
+  await h.run();
+  const state = h.state();
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.count()` invocation: Unknown argument `updatedAt`.';
+  const fp = fingerprint('vercel', message);
+  state.pending[fp] = { board: 15, service: 'vercel', rules: 3, message, normalized: normalize(message), stack: '', routes: ['/api/mcp/projects'], count: 2, firstSeen: new Date(NOW - 1000).toISOString(), lastSeen: new Date(NOW - 1000).toISOString() };
+  h.seed(state);
+  h.remote([{ id: 8000, ticketNumber: 'HTPR-8000', projectId: 15, status: 'Deleted', description: `<p>Routes: /api/mcp/projects</p><p>First seen: ${new Date(NOW - 1000).toISOString()}</p><p>${message}</p><p>error-fingerprint:${fp}</p>` }]);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(Object.keys(h.state().pending).length, 0);
+  assert.equal(Object.values(h.state().fingerprints)[0].deleted, true);
+  assert.equal(activities(h, 'HTPR-8000').length, 0);
+}));
