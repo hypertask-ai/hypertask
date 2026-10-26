@@ -369,7 +369,6 @@ function bulkSectionController(h: ReturnType<typeof activationHarness>, rollback
       batches.push({ tasks, userId, agentId });
     } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
-    "@/lib/api/contracts/sectionWrites": h.load("src/lib/api/contracts/sectionWrites.ts"),
     "@/utils/generateRank": { default: () => "A0100" },
     "@/utils/controllers/section/viewHelpers": { appendSectionToAllViews: noop, updateSectionInAllViews: noop, removeSectionFromAllViews: noop },
   });
