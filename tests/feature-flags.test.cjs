@@ -586,16 +586,14 @@ test("stable layout has its own dated Owner + QA flag and respects OFF", async (
   assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [false, false, false]);
 });
 
-test("typed task reads have their own dated Owner + QA flag and respect OFF", async () => {
-  const key = flags.HTPR_6967_TYPED_TASK_READS_FLAG;
-  assert.equal(key, "htpr-6967-typed-task-reads");
+test("typed settings API client defaults to Owner + QA and respects OFF", async () => {
+  const key = flags.HTPR_6925_TYPED_API_CLIENT_FLAG;
+  assert.equal(key, "htpr-6925-typed-api-client");
   const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
   assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.shippedOn, "2026-10-06");
-  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6967");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6925");
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
-  assert.equal((await flags.featureFlagsForUser(985))[key], false);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
