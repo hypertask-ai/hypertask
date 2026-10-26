@@ -2413,6 +2413,7 @@ test('formatter gate proof requires an explicit live return branch', async (t) =
     ['unsupported direct JSX output', 'return <p>{format(enabled)}</p>;', false],
     ['unsupported assigned JSX output', 'const label = format(enabled); return <p>{label}</p>;', false],
     ['assigned early-return output', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['invariant consumer guards', 'const label = format(enabled); if (label) return <p>Age</p>; if (!label) return <p>Age</p>; return null;', false],
     ['masked direct output', 'return <p>{format(enabled) || \"Age\"}</p>;', false],
     ['masked assigned output', 'const label = format(enabled); return <p>{label || \"Age\"}</p>;', false],
     ['masked JSX element', 'return <p>{format(enabled)}</p> && false;', false],
