@@ -19,7 +19,9 @@ import { aiChatEditTaskIdAtom } from "@/store";
 
 export function useAiChat() {
   const { navigateToTask } = useHypertasksNavigate();
-  const skillDraftsEnabled = useFlag(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG);
+  const skillDraftsFlag = useFlag(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG);
+  let skillDraftsEnabled = false;
+  if (skillDraftsFlag) skillDraftsEnabled = true;
   const parallelChatsEnabled = useFlag(HTPR_7765_PARALLEL_CHATS_FLAG);
   const chatOpensTask = useFlag(HTPR_7756_CHAT_OPENS_TASK_FLAG);
   const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
