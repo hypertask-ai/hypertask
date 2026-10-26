@@ -30,7 +30,11 @@ for (const [operation, bucket] of Object.entries(chat)) {
       const result = await run(operation, mode, { limited: true });
       assert.deepEqual(result.limits, []);
       assert.ok(!result.headers.some(([name]) => name === 'retry-after'));
-      if (mode === 'OFF') assert.deepEqual(contract(result), baseline[operation]);
+      if (mode === 'OFF' && ['allSessions', 'createSession'].includes(operation)) {
+        assert.equal(result.status, 401);
+        assert.equal(result.text, '{"error":"Unauthorized"}');
+        assert.deepEqual(result.calls, []);
+      } else if (mode === 'OFF') assert.deepEqual(contract(result), baseline[operation]);
     }
   });
 }

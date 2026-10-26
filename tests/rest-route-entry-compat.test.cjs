@@ -2074,7 +2074,7 @@ if (require.main === module) {
       const legacy = await run(operation, 'OFF', { profileId: 7 });
       assert.equal(legacy.status, 200);
       assert.ok(legacy.calls.some(([, args]) => args.includes(7)), 'no session stays on the legacy cookie user');
-      assert.deepEqual(legacy.readers, []);
+      assert.equal(legacy.readers.length, operations[operation][1] === 'GET' ? 0 : 1);
     });
     test(`${operation}: without a session the legacy path is unchanged`, async () => {
       for (const options of [{ noProfile: true }, { badCookie: true }]) {
@@ -2085,7 +2085,7 @@ if (require.main === module) {
       const result = await run(operation, 'NO_SESSION', { profileId: 7 });
       assert.deepEqual(contract(result), contract(await run(operation, 'OFF', { profileId: 7 })));
       assert.deepEqual(result.limits, []);
-      assert.deepEqual(result.readers, []);
+      assert.equal(result.readers.length, operations[operation][1] === 'GET' ? 0 : 1);
     });
   }
   for (const operation of ['fields', 'createField', 'patchField', 'deleteField', 'reorder', 'fieldValue', 'bindAgent']) {

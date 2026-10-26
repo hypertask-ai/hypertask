@@ -140,6 +140,7 @@ async function run(name, strategy, empty = false) {
     "@/lib/prisma": { default: database },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere, projectContentAccessWhere },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
+    "@/lib/api/rateLimit": { checkRestRateLimit: async () => null },
     "next/headers": { cookies: async () => ({ get: () => ({ value: JSON.stringify(profile) }) }) },
     "@/utils/controllers/turbopuffer/turbopufferHelper": {},
     "@/utils/helperFunctions/markdownToHtml": {},
@@ -210,6 +211,7 @@ function sessionRoute({ cookie, rows = [], fail = false, sessionUserId = 7 } = {
   const route = load("src/app/api/ai-chat/all-sessions/route.ts", {
     "next/headers": { cookies: async () => ({ get: () => cookie === undefined ? { value: JSON.stringify(profile) } : cookie }) },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => sessionUserId == null ? null : ({ userId: sessionUserId }) },
+    "@/lib/api/rateLimit": { checkRestRateLimit: async () => null },
     "@/lib/prisma": { default: { chatSession: {
       findMany: async (args) => { calls.push({ operation: "findMany", args }); if (fail) throw new Error("fixture failure"); return [...rows]; },
       create: async (args) => { calls.push({ operation: "create", args }); return created; },
