@@ -120,27 +120,24 @@ export async function GET(request: NextRequest) {
 
     const where: Prisma.ProjectWhereInput = {
       status: status ?? 'Normal',
-      AND: [
-        getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
-        ...(search
-          ? [
-              {
-                OR: [
-                  { title: { contains: search, mode: 'insensitive' } },
-                  { name: { contains: search, mode: 'insensitive' } },
-                  { description: { contains: search, mode: 'insensitive' } },
-                ],
-              } satisfies Prisma.ProjectWhereInput,
-            ]
-          : []),
-      ],
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { name: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+            ],
+          } satisfies Prisma.ProjectWhereInput
+        : {}),
     }
     const orderBy: Prisma.ProjectOrderByWithRelationInput = { [sortBy]: sortOrder }
 
-    const total = await prisma.project.count({ where })
+    const total = await prisma.project.count({
+      where: { ...where, AND: [getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope)] },
+    })
 
     const projects = await prisma.project.findMany({
-      where,
+      where: { ...where, AND: [getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope)] },
       select: {
         id: true,
         title: true,
