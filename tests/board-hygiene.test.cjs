@@ -92,33 +92,6 @@ test("board scope is checked before counts, only public views are loaded, and th
   assert.equal(calls.length, 1);
 });
 
-test("MCP report route validates scope, IDs and auth, without permitting mutations", async () => {
-  const { NextRequest } = require("next/server");
-  let auth = { user: { id: 985 }, agentId: "agent", teamScope: null };
-  let report = { untaggedOpenTickets: 10 };
-  let calls = 0;
-  const { GET } = load("src/lib/mcp/operations/projects/[projectId]/hygiene/operation.ts", {
-    "@/lib/mcp/routeWrapper": {
-      wrapMcpRoute: handler => handler,
-      checkMcpRouteRateLimit: async () => null,
-      validateMcpRouteAuth: async () => auth,
-    },
-    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => assert.fail("unexpected error") },
-    "@/utils/controllers/projects/hygiene": { getBoardHygiene: async (...args) => { calls++; assert.deepEqual(args, [15, 985, "agent", null]); return report; } },
-  });
-  const read = projectId => GET(new NextRequest("https://app.hypertask.ai/api/mcp/projects/15/hygiene"), { params: Promise.resolve({ projectId }) });
-  const response = await read("15");
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { success: true, projectId: 15, report });
-  assert.equal((await read("15junk")).status, 400);
-  assert.equal(calls, 1);
-  report = null;
-  assert.equal((await read("15")).status, 404);
-  auth = null;
-  assert.equal((await read("15")).status, 401);
-  assert.equal(calls, 2);
-});
-
 test("health report distinguishes absent work limits from actual excess", () => {
   const report = boardHygieneReport({ untaggedOpenTickets: 0, publicViewFilters: [], labels: [], columns: [
     { id: 1, title: "In Progress", openTickets: 7, staleTickets: 2, wipLimit: null },
@@ -132,5 +105,28 @@ test("MCP project service exposes the report action as a GET", async () => {
   const requests = [];
   const service = new ProjectService({ makeRequest: async (endpoint, options) => { requests.push({ endpoint, method: options.method }); return { success: true, report: { untaggedOpenTickets: 10 } }; } });
   assert.deepEqual(await service.manageBoardConfig({ action: "get_hygiene", project_id: 15 }), { success: true, report: { untaggedOpenTickets: 10 } });
-  assert.deepEqual(requests, [{ endpoint: "/mcp/projects/15/hygiene", method: "GET" }]);
+  assert.deepEqual(requests, [{ endpoint: "/mcp/projects/15/manifest?include=hygiene", method: "GET" }]);
+});
+
+test("manifest report is opt-in and retains existing board access checks", async () => {
+  const { NextRequest } = require("next/server");
+  let auth = { user: { id: 985 }, agentId: "agent", teamScope: null };
+  let accessible = true;
+  let reportReads = 0;
+  const { GET } = load("src/lib/mcp/operations/projects/[projectId]/manifest/operation.ts", {
+    "@/lib/mcp/routeWrapper": { wrapMcpRoute: handler => handler, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => auth },
+    "@/lib/prisma": { default: { project: { findFirst: async () => accessible ? { id: 15, title: "Board", section: [] } : null } } },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({ ownerId: 985 }) },
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => assert.fail("unexpected error") },
+    "@/utils/controllers/projects/hygiene": { getBoardHygiene: async (...args) => { reportReads++; assert.deepEqual(args, [15, 985, "agent", null]); return { untaggedOpenTickets: 10 }; } },
+  });
+  const read = query => GET(new NextRequest("https://app.hypertask.ai/api/mcp/projects/15/manifest" + query), { params: Promise.resolve({ projectId: "15" }) });
+  assert.equal((await read("")).status, 200);
+  assert.equal(reportReads, 0);
+  assert.deepEqual((await (await read("?include=hygiene")).json()).report, { untaggedOpenTickets: 10 });
+  accessible = false;
+  assert.equal((await read("?include=hygiene")).status, 404);
+  auth = null;
+  assert.equal((await read("?include=hygiene")).status, 401);
+  assert.equal(reportReads, 1);
 });

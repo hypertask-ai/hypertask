@@ -75,7 +75,6 @@ const operations: OperationDefinition[] = [
   { pattern: /^\/mcp\/view$/, params: [], methods: ["GET","POST"], load: () => import('./view/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/sections\/([^\/]+)$/, params: ["projectId","sectionId"], methods: ["PATCH","DELETE"], load: () => import('./projects/[projectId]/sections/[sectionId]/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/instructions$/, params: ["projectId"], methods: ["GET","PUT"], load: () => import('./projects/[projectId]/instructions/operation') },
-  { pattern: /^\/mcp\/projects\/([^\/]+)\/hygiene$/, params: ["projectId"], methods: ["GET"], load: () => import('./projects/[projectId]/hygiene/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/manifest$/, params: ["projectId"], methods: ["GET"], load: () => import('./projects/[projectId]/manifest/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/playbook$/, params: ["projectId"], methods: ["GET","PUT"], load: () => import('./projects/[projectId]/playbook/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/sections$/, params: ["projectId"], methods: ["POST","GET"], load: () => import('./projects/[projectId]/sections/operation') },

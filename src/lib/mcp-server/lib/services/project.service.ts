@@ -270,7 +270,7 @@ export class ProjectService {
       const isPlaybook = validatedInput.action.endsWith('playbook');
       let resource = 'instructions';
       if (isPlaybook) resource = 'playbook';
-      if (validatedInput.action === 'get_hygiene') resource = 'hygiene';
+      if (validatedInput.action === 'get_hygiene') resource = 'manifest?include=hygiene';
       const endpoint = `/mcp/projects/${validatedInput.project_id}/${resource}`;
 
       if (validatedInput.action.startsWith('get_')) {

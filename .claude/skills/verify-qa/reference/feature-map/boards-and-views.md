@@ -65,7 +65,7 @@ On a board, Ctrl+K → Manage tags → Board hygiene. Check the report on
 resize the modal or change the board, labels or saved views. Reload and
 reopen; counts must match the read-only `/api/projects/hygiene?projectId=N`
 response. Agents use `hypertask_projects` action `hygiene`, input
-`{ "project_id": N }`, or GET `/api/mcp/projects/N/hygiene`.
+`{ "project_id": N }`, or GET `/api/mcp/projects/N/manifest?include=hygiene`.
 
 Report all board tags, since project/category tag classification is not
 stored. Only a public view filtering solely one tag covers that tag.
