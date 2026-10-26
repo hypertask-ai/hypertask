@@ -86,9 +86,9 @@ test("archive keeps fetch status, original body and echo header, even with malfo
   t.mock.method(global, "fetch", async (...args) => { calls.push(args); return response; });
   t.mock.method(console, "warn", (...args) => warnings.push(args));
   const query = { id: "20", taskId: null, userId: 985, type: "TaskMovedToInbox", tutorial: 1 };
-  assert.deepEqual(client.notificationArchiveRoute.query.parse(query), query);
+  assert.deepEqual(client.notificationArchiveRoute.body.parse(query), query);
   assert.equal(await client.toggleNotificationArchive(query, { "X-Socket-Id": "123.456" }), response);
-  assert.deepEqual(calls[0], ["/api/notifications/markAsDone?id=20&taskId=null&userId=985&type=TaskMovedToInbox&tutorial=1", { method: "GET", headers: { "X-Socket-Id": "123.456", "X-Hypertask-Client": "htpr-6925" } }]);
+  assert.deepEqual(calls[0], ["/api/notifications/markAsDone", { method: "POST", headers: { "X-Socket-Id": "123.456", "Content-Type": "application/json", "X-Hypertask-Client": "htpr-6925" }, body: JSON.stringify(query) }]);
   assert.deepEqual(await response.json(), notification, "diagnostics never consume the caller's body");
   assert.equal(warnings.length, 0);
   response = Response.json({ drift: true });
@@ -265,9 +265,8 @@ test("captured disposable-local ON/OFF wire answers satisfy all adopted descript
     const route = client[descriptor];
     assert.ok(fixtures[name]?.length, name);
     for (const fixture of fixtures[name]) {
-      const input = route.method === "GET" ? name === "setNotificationSeen"
+      const input = route.method === "GET"
         ? { notificationId: Number(fixture.query.notificationId), seen: Number(fixture.query.seen) }
-        : { id: fixture.query.id, taskId: fixture.query.taskId === "null" ? null : Number(fixture.query.taskId), userId: Number(fixture.query.userId), type: fixture.query.type, ...(fixture.query.tutorial ? { tutorial: Number(fixture.query.tutorial) } : {}) }
         : fixture.body;
       assert.deepEqual((route.method === "GET" ? route.query : route.body).parse(input), input);
       assert.deepEqual(route.success.parse(fixture.data), fixture.data, `${name}: ${fixture.phase}`);
