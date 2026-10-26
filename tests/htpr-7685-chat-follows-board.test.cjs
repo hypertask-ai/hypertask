@@ -34,6 +34,7 @@ function chat({ enabled = true, savedScope = null, board = 1 } = {}) {
     },
     "@/store": atoms,
     "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flag.HTPR_7685_CHAT_FOLLOWS_BOARD_FLAG); return enabled; } },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/definitions/htpr-7685-chat-follows-board": flag,
   });
   return {
