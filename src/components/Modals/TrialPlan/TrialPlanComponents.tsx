@@ -227,13 +227,13 @@ const OwnPlanColumn = ({
         <div className={`flex flex-col ${highlighted ? "items-center" : ""}`}>
             {perks.map((perk, index) => (
                 <div key={`perk-${index}`}>
-                    <RowContent type="title" AIPrefix={!!perk.titlePrefix} content={perk.title} />
-                    <RowContent
-                        type="amount"
-                        checkVariant={highlighted ? (perk.titlePrefix ? "AI" : "black") : "gray"}
-                        showCheck={highlighted ? true : !perk.excludeCheck}
-                        content={perk.amount}
-                    />
+                    <div className="flex gap-2 lg:gap-3 pb-3 items-center font-medium text-meta sm:text-content lg:text-emphasis">
+                        {perk.titlePrefix ? <span className="text-hypertasks-ai-purple">AI</span> : null}
+                        <span className="whitespace-nowrap">{perk.title}</span>
+                    </div>
+                    <div className="flex gap-2 lg:gap-3 pb-3 items-center font-normal text-meta sm:text-content lg:text-emphasis">
+                        <span className="whitespace-nowrap">{perk.amount}</span>
+                    </div>
                 </div>
             ))}
         </div>
