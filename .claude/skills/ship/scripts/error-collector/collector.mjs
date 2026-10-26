@@ -330,9 +330,12 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         if (!groups.has(fp)) groups.set(fp, { rules: FINGERPRINT_RULES, board: event.board, service: event.service,normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts, ...(event.incident ? { incident: event.incident, aliases: [], occurrences: {} } : {}) });
         const group = groups.get(fp);
         if (event.incident) {
-          group.aliases.push(fingerprint(event.service, event.message));
-          const id = createHash('sha256').update(JSON.stringify([event.service, event.route, event.message, event.ts])).digest('hex').slice(0, 24);
-          group.occurrences[id] = { text: `Occurrence ${event.ts}: ${redact(event.route)}; ${redact(normalize(event.message))}; ${event.count} hits. [error-occurrence:${id}]` };
+          const alias = fingerprint(event.service, event.message);
+          if (!group.aliases.includes(alias)) group.aliases.push(alias);
+          const id = createHash('sha256').update(JSON.stringify([event.service, event.route, normalize(event.message), since, until])).digest('hex').slice(0, 24);
+          const occurrence = group.occurrences[id] ??= { count: 0 };
+          occurrence.count += event.count;
+          occurrence.text = `Occurrence window ${since} to ${until}: ${redact(event.route)}; ${redact(normalize(event.message))}; ${occurrence.count} hits. [error-occurrence:${id}]`;
         }
         merge(group, event);
       }

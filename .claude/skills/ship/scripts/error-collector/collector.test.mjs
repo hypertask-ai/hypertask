@@ -1550,3 +1550,12 @@ check('incidents', 'retained legacy pending roots migrate before filing; deleted
   assert.equal(Object.values(h.state().fingerprints)[0].deleted, true);
   assert.equal(activities(h, 'HTPR-8000').length, 0);
 }));
+
+check('incidents', 'repeated hits in one collection window make one counted activity', async () => withHarness(async h => {
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.count()` invocation: Unknown argument `updatedAt`.';
+  h.events(Array.from({ length: 50 }, (_, index) => event({ service: 'vercel', message, route: '/api/mcp/projects', ts: new Date(NOW - index - 1).toISOString() })));
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, 'HTPR-100').length, 1);
+  assert.match(activities(h, 'HTPR-100')[0].args[3], /50 hits/);
+}));

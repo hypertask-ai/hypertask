@@ -124,19 +124,11 @@ ERROR_COLLECTOR_STATE_DIR=/tmp/realtime-collector-dry-run node .claude/skills/sh
 
 ## Related production incidents
 
-Prisma validation failures for one model and unknown field share a root key on
-the same route, regardless of the Prisma read operation. Project-list wrappers
-join only one root observed within ten minutes. Different fields, models and
-routes remain separate; ambiguous wrappers are not guessed.
-
-Before creating, the collector searches open route reports and the projects MCP
-tool report. One nearby automatic HTTP 500 report can own the incident. Each
-correlated occurrence gets a durable activity marker; retries read those markers
-before posting again. Other errors retain the existing fingerprint and six-hour
-activity policy. `ship-claim` performs the same read-only related-incident check
-before writing a claim on tagged product alerts.
-
-The sanitized five-report replay is `fixtures/project-validation.json`.
-`ship-scripts-tests` runs the real collector with private fake CLI commands,
-including distinct-root and ambiguous-activity controls. Production dry runs
-remain read-only and never replace that replay with live test errors.
+Prisma errors share a root by route, model, and unknown field. Project-list
+wrappers join only one root within ten minutes. Other fields, models, routes,
+and ambiguous wrappers stay separate. One nearby open MCP HTTP 500 report can
+own the incident. Counted activities group identical hits within one collection
+window; durable markers recover interrupted writes. Ordinary errors retain their
+six-hour activity policy. Tagged product alerts get the same related-incident
+check before `ship-claim` writes. The sanitized historical replay lives in
+`fixtures/project-validation.json`; hosted tests prove writes with fake CLIs.

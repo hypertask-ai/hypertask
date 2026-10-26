@@ -374,7 +374,6 @@ The offline replay binds the complete corpus hash and recomputes every score.
 
 ## Incident correlation replay
 
-`ship-scripts-tests` also runs the isolated incident replay and claim-collision
-checks. Four recorded Vercel payloads join the original MCP failure report,
-producing one ticket and five occurrence activities. A different Prisma model,
-field or route stays separate. The replay uses fake board commands only.
+`ship-scripts-tests` runs the collector's supported offline runner and claim
+checks: four Vercel reports join the original MCP report with five activities.
+Different roots/routes stay separate. All board commands are private fakes.
