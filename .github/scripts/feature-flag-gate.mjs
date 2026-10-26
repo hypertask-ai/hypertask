@@ -1127,8 +1127,8 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   const sourceFile = node.getSourceFile();
   const live = collectLiveFunctions(sourceFile, checker);
   return gatesRuntimeBehavior(call, checker, sourceFile,
-    (reference) => controlsRuntimeBranch(reference) ||
-      (renderFunctions.has(enclosingFunctionLike(reference)) &&
+    (reference) => renderFunctions.has(enclosingFunctionLike(reference)) &&
+      (controlsRuntimeBranch(reference) ||
        controlsReturnedValue(reference, { earlyOnly: true, after: call })), live);
 }
 
