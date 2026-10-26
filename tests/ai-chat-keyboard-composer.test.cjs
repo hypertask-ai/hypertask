@@ -95,3 +95,15 @@ for (const action of ["All boards", "Cancel"]) test(`controlled scope ${action} 
     assert.equal(view.inputRef.current.value, "Agent draft");
   } finally { view.close(); }
 });
+
+test("native editor Enter still sends after ProseMirror has handled its default", () => {
+  const view = composerView();
+  try {
+    const editor = view.container.querySelector(".ProseMirror");
+    editor.addEventListener("keydown", event => event.preventDefault());
+    const event = new window.KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true });
+    React.act(() => editor.dispatchEvent(event));
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(view.actions, ["send"]);
+  } finally { view.close(); }
+});

@@ -64,7 +64,7 @@ export function createAiChatKeyboard(context: Context, options?: { focusedShortc
 
   function tiptapKeydown(e: any) {
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    if (e.defaultPrevented || e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229) return;
+    if (sharedShortcutsEnabled && (e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229)) return;
     const sendShortcut = sharedShortcutsEnabled
       ? matchChatShortcut(e, true) === "send"
       : e.keyCode === KeyCodes.ENTER && !e.shiftKey;
@@ -133,7 +133,7 @@ export function createAiChatKeyboard(context: Context, options?: { focusedShortc
   }
 
   function layoutKeydown(e: any) {
-    if (e.defaultPrevented || e.isComposing) return;
+    if (sharedShortcutsEnabled && (e.defaultPrevented || e.isComposing)) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
     if (e.keyCode === KeyCodes.FORWARD_SLASH && cmdControl && e.shiftKey) {

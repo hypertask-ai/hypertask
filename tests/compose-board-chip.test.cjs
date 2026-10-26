@@ -25,7 +25,7 @@ visit(ast);
 assert.ok(legacyButton, 'retain the production chat trigger while the flag is off');
 const compiled = ts.transpileModule(`const Legacy = () => (${legacyButton});`, { compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS } }).outputText;
 const renderLegacy = (scopeChip, mobile, isOpen) => {
-  const Legacy = new Function('React', 'scopeChip', 'mobile', 'isOpen', 'setIsOpen', 'ListTodo', 'Layers', 'SquareKanban', 'ChevronDown', `${compiled}; return Legacy;`)(React, scopeChip, mobile, isOpen, () => {}, icons.ListTodo, icons.Layers, icons.SquareKanban, icons.ChevronDown);
+  const Legacy = new Function('React', 'scopeChip', 'mobile', 'isOpen', 'setIsOpen', 'ListTodo', 'Layers', 'SquareKanban', 'ChevronDown', 'sharedShortcuts', 'chatShortcutHint', `${compiled}; return Legacy;`)(React, scopeChip, mobile, isOpen, () => {}, icons.ListTodo, icons.Layers, icons.SquareKanban, icons.ChevronDown, false, () => "");
   return renderToStaticMarkup(React.createElement(Legacy));
 };
 
