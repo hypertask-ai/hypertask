@@ -83,7 +83,7 @@ test("page actions are transient, with desktop navigation only behind Pages, usi
     for (const pagesEnabled of [false, true]) {
       const updates = [];
       const cleanup = evaluate(`(${publish.getText()})()`, {
-        isMobile, pagesEnabled, page: { publicId: "example" }, version: 7,
+        isMobile, pagesEnabled, standalonePages: true, page: { publicId: "example" }, version: 7,
         deletePage, flushPendingSaves, setCurrentPageActions: (value) => updates.push(value),
       });
       if (!isMobile && !pagesEnabled) {

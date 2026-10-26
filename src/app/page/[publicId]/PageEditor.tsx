@@ -87,9 +87,8 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [toggleHighlight, setToggleHighlight] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const pagesScreens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
-  const pagesEnabled = pagesScreens && standalonePages;
   const galleryEnabled = useFlag(HTPR_6872_PAGE_IMAGE_GALLERY_FLAG);
   const [galleryItems, setGalleryItems] = useState<TCarousalItems>();
   const railOn = useRecoilValue(appShellRailAtom);
@@ -182,8 +181,8 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
   const taskHref = page.task
     ? `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`
-    : pagesEnabled ? `/pages?project_id=${page.projectId}` : `/project?id=${page.projectId}`;
-  const backLabel = page.task ? "Back to task" : pagesEnabled ? "Back to Pages" : "Back to board";
+    : pagesEnabled && standalonePages ? `/pages?project_id=${page.projectId}` : `/project?id=${page.projectId}`;
+  const backLabel = page.task ? "Back to task" : pagesEnabled && standalonePages ? "Back to Pages" : "Back to board";
 
   useEffect(() => {
     try {
@@ -417,11 +416,11 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   }, [isDeleting, page.publicId, router, taskHref]);
 
   useEffect(() => {
-    if (!isMobile && !pagesEnabled) return;
+    if (!isMobile && (!pagesEnabled || !standalonePages)) return;
 
     setCurrentPageActions({ publicId: page.publicId, version, onDelete: deletePage, beforeNavigate: flushPendingSaves });
     return () => setCurrentPageActions(null);
-  }, [deletePage, flushPendingSaves, isMobile, page.publicId, pagesEnabled, setCurrentPageActions, version]);
+  }, [deletePage, flushPendingSaves, isMobile, page.publicId, pagesEnabled, standalonePages, setCurrentPageActions, version]);
 
   const statusText =
     saveStatus === "saving"
@@ -506,7 +505,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
               }`}
             />
 
-            {pagesEnabled && (
+            {pagesEnabled && standalonePages && (
               <div className={isMobile ? "px-4" : ""}>
                 <PageLinkedTickets publicId={page.publicId} tickets={page.linkedTasks} beforeNavigate={flushPendingSaves} />
               </div>

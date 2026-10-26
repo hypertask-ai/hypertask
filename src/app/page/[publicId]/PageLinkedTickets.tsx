@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/keys";
 import SearchTasks from "@/components/Modals/commands/searchTasks";
 import { changePageLink, type LinkedPageTicket } from "@/lib/pages/browser";
 import type { ITask } from "@/models/model";
@@ -19,6 +21,7 @@ export default function PageLinkedTickets({
   beforeNavigate: () => Promise<void>;
 }) {
   const router = useRouter();
+  const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const [picking, setPicking] = useState(false);
   const [changing, setChanging] = useState(false);
   const openPicker = useCallback(() => setPicking(true), []);
@@ -52,6 +55,8 @@ export default function PageLinkedTickets({
       setChanging(false);
     }
   };
+
+  if (!pagesEnabled) return null;
 
   return (
     <section aria-label="Linked tickets" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-text-light-gray">

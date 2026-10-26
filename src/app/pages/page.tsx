@@ -11,10 +11,7 @@ export const metadata = { title: "Pages" };
 
 export default async function Pages() {
   const user = await requireServerCookieUser();
-  const flags = await Promise.all([
-    isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, user.id),
-    isFeatureEnabled(HTPR_7309_PAGES_SCREENS_FLAG, user.id),
-  ]);
-  if (!flags.every(Boolean)) notFound();
-  return <PagesListScreen currentUser={user} />;
+  const pagesEnabled = await isFeatureEnabled(HTPR_7309_PAGES_SCREENS_FLAG, user.id);
+  if (!(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, user.id))) notFound();
+  return pagesEnabled ? <PagesListScreen currentUser={user} /> : notFound();
 }

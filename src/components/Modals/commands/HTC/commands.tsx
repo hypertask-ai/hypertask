@@ -148,9 +148,8 @@ const Commands = (props: Props) => {
   const calendarSettings = useRecoilValue(calendarSettingsAtom);
   const pathname = usePathname();
   const router = useRouter();
-  const pagesScreens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
-  const pagesEnabled = pagesScreens && standalonePages;
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
@@ -335,7 +334,7 @@ const Commands = (props: Props) => {
       ...(boardCommands.length > 0
         ? [{ group: "Boards", commandLists: boardCommands }]
         : []),
-      ...(pagesEnabled ? pageCommandGroups(pathname) : []),
+      ...(pagesEnabled && standalonePages ? pageCommandGroups(pathname) : []),
       ...registryGroups.slice(boardsInsertIndex),
     ].map((group) => ({
       ...group,
@@ -428,6 +427,7 @@ const Commands = (props: Props) => {
     pinCommentActions,
     pageActions,
     pagesEnabled,
+    standalonePages,
     pathname,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
@@ -628,7 +628,7 @@ const Commands = (props: Props) => {
         recordHTCCommandUsage(previousUsage, command)
       );
       (document.activeElement as HTMLElement).blur();
-      if (pagesEnabled && ["gotoPages", "newPage", "linkPage", "linkPageTicket"].includes(command.key)) {
+      if (pagesEnabled && standalonePages && ["gotoPages", "newPage", "linkPage", "linkPageTicket"].includes(command.key)) {
         resetShowCommands();
         const navigate = async (href: string) => {
           if (currentPageActions && pathname === `/page/${currentPageActions.publicId}`) await currentPageActions.beforeNavigate?.();

@@ -22,9 +22,8 @@ const DescriptionPages = () => {
   const router = useRouter();
   const { editMode, currentTask } = useTaskContext();
   const { pages, loading, hasPages, createAndOpenPage, refetch } = useTaskPages();
-  const screens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalone = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
-  const pagesEnabled = screens && standalone;
   const [pageOptions, setPageOptions] = useState<BrowserPage[] | null>(null);
   const openLinkPicker = useCallback(async () => {
     try {
@@ -34,7 +33,7 @@ const DescriptionPages = () => {
     }
   }, []);
   useEffect(() => {
-    if (!pagesEnabled) return;
+    if (!pagesEnabled || !standalone) return;
     const link = () => { void openLinkPicker(); };
     const create = () => { void createAndOpenPage(); };
     window.addEventListener("pages-link-page", link);
@@ -43,7 +42,7 @@ const DescriptionPages = () => {
       window.removeEventListener("pages-link-page", link);
       window.removeEventListener("pages-new-page", create);
     };
-  }, [createAndOpenPage, openLinkPicker, pagesEnabled]);
+  }, [createAndOpenPage, openLinkPicker, pagesEnabled, standalone]);
   const linkPage = async (publicId: string) => {
     if (!currentTask) return;
     setPageOptions(null);
@@ -82,7 +81,7 @@ const DescriptionPages = () => {
     router.push(pageHref);
   };
 
-  const linkPicker = pageOptions && <OptionPickerModal header="Link page to ticket"
+  const linkPicker = pagesEnabled && standalone && pageOptions && <OptionPickerModal header="Link page to ticket"
         options={pageOptions.filter((page) => !pages.some((linked) => linked.id === page.id)).map((page) => ({ id: page.publicId, label: page.title || "Untitled", hint: page.project.title }))}
         onClose={() => setPageOptions(null)}
         onSelect={(option) => { if (typeof option.id === "string") void linkPage(option.id); }} />;
@@ -145,7 +144,7 @@ const DescriptionPages = () => {
           <Plus size={8} className="mr-1" strokeWidth={1.75} />
           New page
         </span>
-        {pagesEnabled && <button type="button" onClick={() => void openLinkPicker()}
+        {pagesEnabled && standalone && <button type="button" onClick={() => void openLinkPicker()}
           className="min-h-11 text-meta hover:text-white-black">+ Link page</button>}
       </div>
     </div>
