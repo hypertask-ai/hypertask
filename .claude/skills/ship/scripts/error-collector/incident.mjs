@@ -54,8 +54,9 @@ export function relatedTicket(group, tasks) {
   }
   const exact = candidates.filter(item => item.incident.root === group.incident.root).sort((a, b) => Number(a.task.id) - Number(b.task.id));
   if (exact.length) return { ticket: exact[0].task.ticketNumber, deleted: false };
+  if (group.allowWrapper === false) return;
   const nearby = candidates.filter(item => Math.abs(Date.parse(item.incident.ts) - Date.parse(group.firstSeen)) <= 10 * 60_000);
   if (nearby.some(item => item.incident.root && item.incident.root !== group.incident.root)) return;
   const wrappers = nearby.filter(item => item.incident.wrapper);
-  if (wrappers.length === 1) return { ticket: wrappers[0].task.ticketNumber, deleted: false, prior: wrappers[0].incident.feedback ? wrappers[0].incident.ts : undefined };
+  if (wrappers.length === 1) return { ticket: wrappers[0].task.ticketNumber, deleted: false, prior: wrappers[0].incident.ts };
 }

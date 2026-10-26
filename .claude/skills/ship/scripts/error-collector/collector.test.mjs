@@ -419,6 +419,7 @@ check('tickets', 'negative control rejects a known-group data-loss mutation', ()
   writeFileSync(join(directory, 'collector.mjs'), source.replace(old, 'const known = undefined;'));
   writeFileSync(join(directory, 'io.mjs'), readFileSync(join(HERE, 'io.mjs')));
   writeFileSync(join(directory, 'noise.json'), readFileSync(join(HERE, 'noise.json')));
+  writeFileSync(join(directory, 'incident.mjs'), readFileSync(join(HERE, 'incident.mjs')));
   const mutant = await import(pathToFileURL(join(directory, 'collector.mjs')));
   h.events([event()]); await mutant.collect({ env: h.env, now: NOW, sources: [fixture] });
   h.events([event({ ts: new Date(NOW + HOUR).toISOString() })]);
@@ -1514,4 +1515,23 @@ check('incidents', 'new root ticket groups operations and preserves activities a
   await h.run();
   assert.equal(activities(h, 'HTPR-100').length, 2, 'saved activity markers recover ambiguous writes');
   assert.equal(Object.keys(h.state().occurrences).length, 0);
+}));
+
+check('incidents', 'simultaneous distinct fields never reserve the same untyped MCP report', async () => withHarness(async h => {
+  h.remote([{ id: 8017, ticketNumber: 'HTPR-8017', projectId: 15, status: 'Normal', section: 'Bugs', description: `<p>Tool: hypertask_projects</p><p>HTTP status: 500</p><p>Last seen: ${new Date(NOW - 2000).toISOString()}</p>` }]);
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.findMany()` invocation: Unknown argument `updatedAt`.';
+  h.events([event({ service: 'vercel', message, route: '/api/mcp/projects' }), event({ service: 'vercel', message: message.replace('updatedAt', 'otherField'), route: '/api/mcp/projects' })]);
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(new Set(Object.values(h.state().fingerprints).map(record => record.ticket)).size, 2);
+  assert.equal(activities(h, 'HTPR-8017').length, 0);
+}));
+
+check('incidents', 'legacy message fingerprint on another route cannot own the new route', async () => withHarness(async h => {
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.findMany()` invocation: Unknown argument `updatedAt`.';
+  h.remote([{ id: 8000, ticketNumber: 'HTPR-8000', projectId: 15, status: 'Normal', description: `<p>Routes: /api/projects</p><p>First seen: ${new Date(NOW - 2000).toISOString()}</p><p>${message}</p><p>error-fingerprint:${fingerprint('vercel', message)}</p>` }]);
+  h.events([event({ service: 'vercel', message, route: '/api/mcp/projects' })]);
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, 'HTPR-8000').length, 0);
 }));

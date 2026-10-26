@@ -9,8 +9,8 @@ try {
   if (task.labels?.some(label => ['prod-error', 'ai-feedback'].includes(label.name))) {
     const incident = taskIncident(task);
     if (incident) {
-      const found = findRelatedIncident({ board: 15, incident, firstSeen: incident.ts, exclude: task.ticketNumber }, process.env);
-      if (found) {
+      const found = findRelatedIncident({ board: 15, incident, firstSeen: incident.ts, claim: task }, process.env);
+      if (found && found.ticket !== task.ticketNumber) {
         console.log(`ship-claim: STEP BACK; related open incident https://app.hypertask.ai/detail/project-15/${found.ticket.split('-')[1]}; coordinate there before claiming another alert`);
         process.exitCode = 3;
       }

@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { correlate, relatedTicket } from './incident.mjs';
+import { correlate, incidentOf, relatedTicket, taskIncident } from './incident.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
@@ -154,7 +154,7 @@ function description(group, fp) {
   return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p>` : ''}`;
 }
 
-function search(fp, board, env) {
+function search(fp, board, env, incident) {
   let found;
   for (const status of ['Normal', 'Archive', 'Deleted']) {
     let offset = 0;
@@ -165,6 +165,8 @@ function search(fp, board, env) {
       for (const task of value.tasks) {
         if (task.projectId !== board) throw new Error('wrong board in search');
         if (typeof task.description === 'string' && new RegExp(`error-fingerprint:${fp}(?![a-f0-9])`).test(task.description)) {
+          const identity = incident && taskIncident(task);
+          if (incident && (identity?.route !== incident.route || identity?.root !== incident.root)) continue;
           const match = { ticket: ticketRef(task), deleted: status === 'Deleted' };
           if (!found || match.deleted) found = match;
         }
@@ -178,7 +180,7 @@ function search(fp, board, env) {
 }
 
 export function findRelatedIncident(group, env) {
-  const tasks = new Map();
+  const tasks = new Map(group.claim ? [[ticketRef(group.claim), group.claim]] : []);
   const queries = [group.incident.route];
   if (group.incident.route === '/api/mcp/projects') queries.push('hypertask_projects', 'list projects');
   for (const text of queries) {
@@ -189,7 +191,7 @@ export function findRelatedIncident(group, env) {
       if (!Array.isArray(page.tasks) || !Number.isSafeInteger(page.total) || page.total < 0 || (!page.tasks.length && offset < page.total)) throw new Error('invalid related incident page');
       for (const task of page.tasks) {
         if (task.projectId !== group.board) throw new Error('wrong board in related incident search');
-        if (ticketRef(task) !== group.exclude) tasks.set(task.ticketNumber, task);
+        tasks.set(ticketRef(task), task);
       }
       offset += page.tasks.length;
       if (offset >= page.total) break;
@@ -390,6 +392,15 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   for (const date of Object.keys(state.summaries)) if (date < day(now - 13 * DAY)) delete state.summaries[date];
   for (const [fp, record] of Object.entries(state.stale)) if (day(record.lastSeen) < day(now - 13 * DAY)) delete state.stale[fp];
   for (const [fp, group] of Object.entries(state.pending)) {
+    if (group.noiseRule || group.incident) continue;
+    const route = group.routes.find(value => value.startsWith('/api/')) ?? group.routes[0];
+    const incident = incidentOf({ message: group.message, stack: group.stack, route });
+    if (!incident?.root) continue;
+    const id = createHash('sha256').update(`${fp}|${group.firstSeen}`).digest('hex').slice(0, 24);
+    delete state.pending[fp];
+    absorb(incident.key, { ...group, incident, aliases: [...new Set([...(group.aliases ?? []), fp])], occurrences: { [id]: { text: `Retained occurrence ${group.firstSeen}: ${group.count} hits; ${incident.root}. [error-occurrence:${id}]` } } }, false);
+  }
+  for (const [fp, group] of Object.entries(state.pending)) {
     if (group.noiseRule || group.rules === FINGERPRINT_RULES) continue;
     group.rules = FINGERPRINT_RULES;
     if (!changedByCurrentRules(group.message)) continue;
@@ -406,8 +417,12 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     if (signal.aborted) break;
     try {
       let found = search(fp, group.board, env);
-      for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env);
-      if (!found && group.incident) found = findRelatedIncident(group, env);
+      for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env, group.incident);
+      if (!found && group.incident) {
+        const allowWrapper = !Object.values(state.pending).some(other => other.incident?.route === group.incident.route && other.incident.root !== group.incident.root && Math.abs(Date.parse(other.firstSeen) - Date.parse(group.firstSeen)) <= 10 * 60_000);
+        found = findRelatedIncident({ ...group, allowWrapper }, env);
+        if (found?.prior && Object.values(state.fingerprints).some(record => record.ticket === found.ticket && record.incident?.root && record.incident.root !== group.incident.root)) found = undefined;
+      }
       if (!found) {
         if (now - Date.parse(group.lastSeen) > staleWindow) {
           const target = Object.values(state.fingerprints).find(record => record.ticket && !record.deleted && record.board === group.board && group.routes.some(route => route && record.routes?.includes(route)));

@@ -183,11 +183,15 @@ grep -q 'pass the resume command' "$D/err" && ok "clear error names the argument
 
 
 jq -n '{success:true,tasks:[{id:8020,ticketNumber:"HTPR-8020",projectId:15,status:"Normal",labels:[{name:"prod-error"}],description:"<p>Routes: /api/mcp/projects</p><p>First seen: 2026-10-26T08:55:00Z</p><p>Error root: /api/mcp/projects | prisma-validation:project:unknown-argument:updatedAt</p>"}]}' > "$D/alert.json"
-jq '.tasks[0].id=8021 | .tasks[0].ticketNumber="HTPR-8021" | .total=1' "$D/alert.json" > "$D/related.json"
+jq '.tasks[0].id=8019 | .tasks[0].ticketNumber="HTPR-8019" | .total=1' "$D/alert.json" > "$D/related.json"
 : > "$D/log"
 FAKE_TASK="$D/alert.json" FAKE_RELATED="$D/related.json" ./ship-claim HTPR-8020 "codex resume argsess" > "$D/related-out"
 eq "related open root stops a second claim" "$?" 3
 [ ! -s "$D/log" ] && ok "related alert check runs before all board writes" || bad "related alert wrote a claim"
-grep -q 'https://app.hypertask.ai/detail/project-15/8021' "$D/related-out" && ok "related alert names the existing full link" || bad "missing related link"
+grep -q 'https://app.hypertask.ai/detail/project-15/8019' "$D/related-out" && ok "related alert names the existing full link" || bad "missing related link"
+
+jq '.tasks[0].id=8022 | .tasks[0].ticketNumber="HTPR-8022"' "$D/related.json" > "$D/later.json"
+FAKE_RELATED="$D/later.json" node ./error-collector/claim-incident.mjs < "$D/alert.json" > "$D/canonical-out"
+eq "earliest root remains claimable with a later duplicate" "$?" 0
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]

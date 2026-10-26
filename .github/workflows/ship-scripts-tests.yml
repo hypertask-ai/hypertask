@@ -72,5 +72,6 @@ jobs:
         env:
           HOME: ${{ runner.temp }}/ship-scripts-home
         run: |
-          node --test .claude/skills/ship/scripts/error-collector/collector.test.mjs .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs .claude/skills/ship/scripts/error-collector/sources.test.mjs
+          bash .claude/skills/ship/scripts/error-collector.test.sh
+          node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
           bash .claude/skills/ship/scripts/ship-claim.test.sh
