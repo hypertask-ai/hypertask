@@ -1105,9 +1105,14 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   if (!typescript.isCallExpression(call) || !typescript.isIdentifier(call.expression)) return false;
   const argumentIndex = call.arguments.findIndex((item) => item === argument);
   const imported = importedFunctions.get(checker.getSymbolAtLocation(call.expression));
-  return Boolean(argumentIndex !== -1 && imported &&
-    importedParameterControlsReturnValue(ref, path, imported, argumentIndex) &&
-    gatesRuntimeBehavior(call, checker, node.getSourceFile(), () => false));
+  if (argumentIndex === -1 || !imported || isStaticallyUnreachable(node) ||
+      !importedParameterControlsReturnValue(ref, path, imported, argumentIndex)) return false;
+  const sourceFile = node.getSourceFile();
+  const live = collectLiveFunctions(sourceFile, checker);
+  const observed = (value) => !isStaticallyUnreachable(value) && expressionResultIsObserved(value) &&
+    jsxResultIsConsumed(value, checker, live);
+  return observed(call) || gatesRuntimeBehavior(call, checker, sourceFile,
+    (reference) => controlsRuntimeBranch(reference) || controlsReturnedValue(reference) || observed(reference), live);
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null) {

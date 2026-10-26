@@ -2405,3 +2405,23 @@ export function Widget() {
     assert.equal((await evaluate('HTPR-1 [FEATURE] formatter output', base, commit(git, name), dir)).pass, expected, name);
   }
 });
+
+test('formatter gate proof requires its result to reach live output', async (t) => {
+  const cases = [
+    ['direct JSX output', 'return <p>{format(enabled)}</p>;', true],
+    ['assigned JSX output', 'const label = format(enabled); return <p>{label}</p>;', true],
+    ['assigned early-return output', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['discarded JSX result', 'const unused = <p>{format(enabled)}</p>; return <p>Always</p>;', false],
+    ['dead direct output', 'return <>{false && <p>{format(enabled)}</p>}</>;', false],
+    ['discarded result', 'format(enabled); return <p>Always</p>;', false],
+    ['unused assignment', 'const unused = format(enabled); return <p>Always</p>;', false],
+    ['overwritten result', 'let label = format(enabled); label = "Always"; return <p>{label}</p>;', false],
+    ['dead output', 'const label = format(enabled); return <>{false && <p>{label}</p>}</>;', false],
+  ];
+  for (const [name, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { if (!enabled) return null; return "Age"; }\n');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + body + ' }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
