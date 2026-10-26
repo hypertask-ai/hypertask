@@ -153,6 +153,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
     client.clear();
   });
   const focus = loadSource("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
+    "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox": load("src/lib/flags/definitions/htpr-7970-bulk-blocked-inbox.ts", {}),
     "@/lib/api/typedClient": {},
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/keys": { HTPR_6979_TYPED_WRITES_FLAG: "htpr-6979-typed-writes-sections-notifications" },
