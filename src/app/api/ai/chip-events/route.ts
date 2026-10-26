@@ -36,17 +36,16 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   const actingAgentId = (await getSessionUser(request.headers))?.agentId;
-  const access = { ...getProjectWhere(viewer.id), AND: [getProjectWhere(viewer.id, actingAgentId)] };
   let projectId: number | null = null;
   let taskId: number | null = null;
   if (parsed.data.taskId) {
-    const task = await prisma.task.findFirst({ where: { id: parsed.data.taskId, project: access }, select: { id: true, projectId: true } });
+    const task = await prisma.task.findFirst({ where: { id: parsed.data.taskId, project: getProjectWhere(viewer.id, actingAgentId) }, select: { id: true, projectId: true } });
     if (task) {
       taskId = task.id;
       projectId = task.projectId;
     }
   } else if (parsed.data.projectId) {
-    const project = await prisma.project.findFirst({ where: { id: parsed.data.projectId, ...access }, select: { id: true } });
+    const project = await prisma.project.findFirst({ where: { id: parsed.data.projectId, AND: [getProjectWhere(viewer.id, actingAgentId)] }, select: { id: true } });
     projectId = project?.id ?? null;
   }
 
