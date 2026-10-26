@@ -113,7 +113,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     const settleSend = (completedSession?: string) => {
       if (settled) return;
       settled = true;
-      if (stopClosesStream && !ownsSend()) dropAcceptedFiles();
+      if ((stopClosesStream || runtime) && !ownsSend()) dropAcceptedFiles();
       streamingRequestRef.current = null;
       sendInFlightRef.current = false;
       if (stopClosesStream || runtime) settleSendRef.current = null;

@@ -276,3 +276,23 @@ test("failed deletion preserves a background chat's pending messages", async () 
   assert.equal(f.queue.get("A")[0].content, "keep");
   assert.deepEqual(f.streams.sessionIds(), ["A"]);
 });
+
+test("parallel Stop before response headers drops only accepted files with the older stop-close flag off", async () => {
+  const f = fixture();
+  f.context.stopClosesStream = false;
+  const submitted = { name: "submitted.txt" }, fresh = { name: "fresh.txt" };
+  f.fileItems.push(submitted);
+  const realTransport = f.transport;
+  let accept;
+  f.transport = (url, ...args) => url.endsWith("/cancel") ? realTransport(url, ...args)
+    : new Promise((resolve) => { accept = () => resolve(realTransport(url, ...args)); });
+  await transport(f, async () => {
+    const a = f.send("a"); await flush();
+    f.fileItems.push(fresh);
+    const runtime = f.streams.get("A");
+    await useAiChatAttachments({ ...f.context, ...runtime, stopClosesStream: true, currentStreamingSession: "A" }).handleCancelStream();
+    assert.deepEqual(f.fileItems, [fresh]);
+    accept(); await flush(); f.finish("a"); await a;
+    assert.deepEqual(f.fileItems, [fresh]);
+  });
+});
