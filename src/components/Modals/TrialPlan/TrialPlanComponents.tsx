@@ -218,11 +218,11 @@ const OwnPlanColumn = ({
     <div className={highlighted ? "xs:px-3 lg:px-6 bg-sidebar dark:bg-active-elementBg py-2" : "lg:px-4 xs:px-2 py-2"}>
         {highlighted ? (
             <div className="flex gap-2 items-center font-bold">
-                <ColumnTitle content={"Pro with "} />
+                <span className="min-h-[40px] mb-2 block font-bold text-heading whitespace-nowrap">Pro with </span>
                 <span className="text-hypertasks-ai-purple text-heading min-h-[40px] mb-2">AI</span>
             </div>
         ) : (
-            <ColumnTitle content={"Starter"} />
+            <span className="min-h-[40px] mb-2 block font-bold text-heading whitespace-nowrap">Starter</span>
         )}
         <div className={`flex flex-col ${highlighted ? "items-center" : ""}`}>
             {perks.map((perk, index) => (
