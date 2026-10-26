@@ -150,7 +150,7 @@ async function run(name, strategy, empty = false) {
     let result;
     if (name === "sessions") {
       const route = load("src/app/api/ai-chat/all-sessions/route.ts", mocks);
-      result = await route.GET({ headers: new Headers() });
+      result = await route.GET({ headers: new Headers(), url: "https://app.hypertask.ai/api/ai-chat/all-sessions" });
       assert.equal(result.status, 200);
       result = await result.json();
     } else if (name === "favorites") result = await load("src/utils/controllers/favorites/getAll.ts", mocks).getFavoritesForUser(7);
@@ -223,7 +223,7 @@ function sessionRoute({ cookie, rows = [], fail = false, sessionUserId = 7 } = {
 for (const cookie of [null, { value: "" }, { value: "{" }, { value: "{}" }]) {
   test(`session list unauthorized cookie ${JSON.stringify(cookie)} keeps its 401 body and makes no query`, async () => {
     const { route, calls } = sessionRoute({ cookie });
-    const response = await route.GET({ headers: new Headers() });
+    const response = await route.GET({ headers: new Headers(), url: "https://app.hypertask.ai/api/ai-chat/all-sessions" });
     assert.equal(response.status, 401);
     assert.deepEqual(await response.json(), { error: "Unauthorized" });
     assert.deepEqual(calls, []);
@@ -233,7 +233,7 @@ for (const cookie of [null, { value: "" }, { value: "{" }, { value: "{}" }]) {
 for (const sessionUserId of [null, 8]) {
   test(`shared session loader enforces the existing proxy identity invariant for ${sessionUserId}`, async () => {
     const { route, calls } = sessionRoute({ sessionUserId });
-    const response = await route.GET({ headers: new Headers() });
+    const response = await route.GET({ headers: new Headers(), url: "https://app.hypertask.ai/api/ai-chat/all-sessions" });
     assert.equal(response.status, 401);
     assert.deepEqual(await response.json(), { error: "Unauthorized" });
     assert.deepEqual(calls, []);
@@ -242,7 +242,7 @@ for (const sessionUserId of [null, 8]) {
 
 test("empty session list still creates and returns one session with the same include", async () => {
   const { route, calls, created } = sessionRoute();
-  const response = await route.GET({ headers: new Headers() });
+  const response = await route.GET({ headers: new Headers(), url: "https://app.hypertask.ai/api/ai-chat/all-sessions" });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { success: true, sessions: [created] });
   assert.deepEqual(calls.map(({ operation }) => operation), ["findMany", "create"]);
@@ -254,7 +254,7 @@ test("empty session list still creates and returns one session with the same inc
 
 test("session database failure retains the 500 response", async () => {
   const { route, calls } = sessionRoute({ fail: true });
-  const response = await route.GET({ headers: new Headers() });
+  const response = await route.GET({ headers: new Headers(), url: "https://app.hypertask.ai/api/ai-chat/all-sessions" });
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), { success: false, error: "Internal server error" });
   assert.equal(calls.length, 1);
