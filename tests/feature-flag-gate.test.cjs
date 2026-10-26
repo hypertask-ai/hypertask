@@ -2108,3 +2108,118 @@ import { OTHER_FLAG } from "@/lib/flags/keys";
   const consumer = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, "gated consumer"), dir);
   assert.equal(consumer.pass, true, consumer.reason);
 });
+
+test('render-child gates require a consumed custom component callback', async (t) => {
+  const cases = [
+    ['render child', 'return <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>;', true],
+    ['named render child', 'const render = () => <Row limit={enabled ? 3 : undefined} />; return <Boundary>{render}</Boundary>;', true],
+    ['discarded named render child', 'const render = () => <Row limit={enabled ? 3 : undefined} />; const unused = <Boundary>{render}</Boundary>; return <Row />;', false],
+    ['nested render children', 'return <Boundary>{() => <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>}</Boundary>;', true],
+    ['discarded render child', 'const unused = <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>; return <Row />;', false],
+    ['dead render child', 'return <>{false && <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>}</>;', false],
+    ['intrinsic function child', 'return <div>{() => <Row limit={enabled ? 3 : undefined} />}</div>;', false],
+    ['shadowed render flag', 'return <Boundary>{(enabled) => <Row limit={enabled ? 3 : undefined} />}</Boundary>;', false],
+    ['unrelated map callback', 'return <>{items.map(() => <Row limit={enabled ? 3 : undefined} />)}</>;', false],
+  ];
+  for (const [name, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + body + ' }\n');
+    const result = await evaluate('HTPR-1 [FEATURE] render child', base, commit(git, name), dir);
+    assert.equal(result.pass, expected, name);
+  }
+});
+
+test('changed component paths accept private gates without trusting unchanged sibling exports', async (t) => {
+  const imports = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n';
+  const entry = 'export function Widget() { return <Private />; }\n';
+  const unchanged = 'export function Title() { return <h1>Existing</h1>; }\n';
+  const gated = 'function Private() { return useFlag(OTHER_FLAG) ? <span>New</span> : null; }\n';
+  const cases = [
+    ['private child behind unchanged entry', entry + gated + unchanged, true],
+    ['changed entry reaches private child', entry.replace('<Private />', '<main><Private /></main>') + gated + unchanged, true],
+    ['new unrelated ungated export', entry + gated + unchanged + 'export function Other() { return <aside>New</aside>; }\n', false],
+    ['changed ungated sibling', entry + gated + unchanged.replace('Existing', 'New'), false],
+    ['unused gated private component', entry.replace('<Private />', '<div>New</div>') + gated + unchanged, false],
+    ['shadowed private component', 'export function Widget() { const Private = () => <div>New</div>; return <Private />; }\n' + gated + unchanged, false],
+    ['discarded gated child', 'export function Widget() { const unused = <Private />; return <div>New</div>; }\n' + gated + unchanged, false],
+    ['dead gated child', 'export function Widget() { return <>{false && <Private />}<div>New</div></>; }\n' + gated + unchanged, false],
+  ];
+  for (const [name, source, expected] of cases) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, 'src/components/Widget.tsx', imports + entry + 'function Private() { return null; }\n' + unchanged);
+    const base = commit(git, 'existing components');
+    writeFile(dir, 'src/components/Widget.tsx', imports + source);
+    const result = await evaluate('HTPR-1 [FEATURE] private child', base, commit(git, name), dir);
+    assert.equal(result.pass, expected, name);
+  }
+});
+
+test('deletion anchors never turn an unchanged flag read into a new ticket gate', async (t) => {
+  const { dir, git } = makeRepo(t);
+  const source = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() {\n  const enabled = useFlag(OTHER_FLAG);\n  const unused = 0;\n  return enabled ? <div>Old</div> : null;\n}\n';
+  writeFile(dir, 'src/components/Widget.tsx', source);
+  const base = commit(git, 'existing gate');
+  writeFile(dir, 'src/components/Widget.tsx', source.replace('  const unused = 0;\n', '').replace('Old', 'New'));
+  assert.equal((await evaluate('HTPR-1 [FEATURE] existing gate', base, commit(git, 'delete next to flag'), dir)).pass, false);
+});
+
+test('deletion-only sibling changes still require their own reachable ticket gate', async (t) => {
+  const { dir, git } = makeRepo(t);
+  const source = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() { return null; }\nexport function Other() {\n  if (!visible) return null;\n  return <aside>Existing</aside>;\n}\n';
+  writeFile(dir, 'src/components/Widget.tsx', source);
+  const base = commit(git, 'existing siblings');
+  const gated = source.replace('return null; }', 'return useFlag(OTHER_FLAG) ? <div>New</div> : null; }');
+  writeFile(dir, 'src/components/Widget.tsx', gated);
+  assert.equal((await evaluate('HTPR-1 [FEATURE] sibling control', base, commit(git, 'still allowed'), dir)).pass, true);
+  writeFile(dir, 'src/components/Widget.tsx', gated.replace('  if (!visible) return null;\n', ''));
+  assert.equal((await evaluate('HTPR-1 [FEATURE] sibling control', base, commit(git, 'now refused'), dir)).pass, false);
+});
+
+test('changed module values and rebound exports cannot borrow a sibling gate', async (t) => {
+  const imports = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n';
+  const cases = [
+    ['changed module constant', 'const title = "Old";\nexport function Title() { return <h1>{title}</h1>; }\n', 'const title = "New";\nexport function Title() { return <h1>{title}</h1>; }\n'],
+    ['removed module assignment', 'let title = "Old";\ntitle = "New";\nexport function Title() { return <h1>{title}</h1>; }\n', 'let title = "Old";\nexport function Title() { return <h1>{title}</h1>; }\n'],
+    ['same-line module constant', 'const title = "Old"; export function Title() { return <h1>{title}</h1>; }\n', 'const title = "New"; export function Title() { return <h1>{title}</h1>; }\n'],
+    ['edited rebound entry', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>Old</aside>;\n', 'export let Other = () => <aside>New</aside>;\nOther = () => <aside>New</aside>;\n'],
+    ['only reassignment edited', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>Old</aside>;\n', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>New</aside>;\n'],
+  ];
+  for (const [name, before, after] of cases) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, 'src/components/Widget.tsx', imports + before);
+    const base = commit(git, 'existing UI');
+    writeFile(dir, 'src/components/Widget.tsx', imports + after + 'export function Gated() { return useFlag(OTHER_FLAG) ? <div>Feature</div> : null; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] sibling gate', base, commit(git, name), dir)).pass, false, name);
+  }
+});
+
+test('entry-scoped gates cannot come from unrelated module initializers', async (t) => {
+  const cases = [
+    ['module async call', 'async function load() { if (await isFeatureEnabled(OTHER_FLAG)) doWork(); }\nconst settings = load();\n'],
+    ['module JSX callback', 'const unused = <Boundary>{() => <Row limit={useFlag(OTHER_FLAG) ? 3 : undefined}/>}</Boundary>;\n'],
+    ['direct module gate', 'const enabled = useFlag(OTHER_FLAG);\nconst setting = enabled ? 1 : 2;\n'],
+  ];
+  for (const [name, decoy] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + decoy + 'export function Widget() { return <div>Ungated</div>; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] module decoy', base, commit(git, name), dir)).pass, false, name);
+  }
+});
+
+test('runtime import replacements cannot borrow a sibling gate, while added flag bindings remain allowed', async (t) => {
+  for (const [name, beforeImport, afterImport, content, expected] of [
+    ['named source replacement', 'import { title } from "./old";', 'import { title } from "./new";', '<h1>{title}</h1>', false],
+    ['default source replacement', 'import Title from "./old";', 'import Title from "./new";', '<Title />', false],
+    ['namespace source replacement', 'import * as UI from "./old";', 'import * as UI from "./new";', '<UI.Title />', false],
+    ['named binding replacement', 'import { oldTitle as title } from "./values";', 'import { newTitle as title } from "./values";', '<h1>{title}</h1>', false],
+    ['new side effect', '', 'import "./global-theme";', '<h1>Existing</h1>', false],
+    ['added flag binding', 'import { EXISTING_FLAG } from "@/lib/flags/keys";', 'import { EXISTING_FLAG, OTHER_FLAG } from "@/lib/flags/keys";', '<h1>Existing</h1>', true],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const title = `export function TitleView() { return ${content}; }\n`;
+    writeFile(dir, 'src/components/Widget.tsx', beforeImport + '\n' + title);
+    const base = commit(git, 'existing imports');
+    writeFile(dir, 'src/components/Widget.tsx', afterImport + '\nimport {useFlag} from "@/hooks/useFlag";\n' + (name === 'added flag binding' ? '' : 'import {OTHER_FLAG} from "@/lib/flags/keys";\n') + title + 'export function Gated() { return useFlag(OTHER_FLAG) ? <div>Feature</div> : null; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] import control', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
