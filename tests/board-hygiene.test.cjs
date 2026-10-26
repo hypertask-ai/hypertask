@@ -130,3 +130,21 @@ test("manifest report is opt-in and retains existing board access checks", async
   assert.equal((await read("?include=hygiene")).status, 401);
   assert.equal(reportReads, 1);
 });
+
+test("native AI board configuration reads the same scoped report", async () => {
+  const { createBoardConfigTool } = load("src/lib/ai/tools/boardConfig.ts", {
+    "ai": { tool: definition => definition },
+    "@/app/api/ai/_lib/planGate": {},
+    "@/app/api/ai/_lib/customInstructions": { assertProjectAccess: async () => {} },
+    "@/lib/prisma": { default: {} },
+    "@prisma/client": {},
+    "@/lib/aiModelOptions": {},
+    "@/lib/ai/tools/execution": { withToolErrors: execute => execute },
+    "@/lib/ai/tools/helpers": { sanitizeForJson: value => value },
+    "@/utils/controllers/projects/getAllIncludes": {},
+    "@/utils/controllers/projects/hygiene": { getBoardHygiene: async (...args) => { assert.deepEqual(args, [15, 985, "agent", null]); return { untaggedOpenTickets: 10 }; } },
+  });
+  const tool = createBoardConfigTool({ user: { id: 985 }, actingAgentId: "agent", teamScope: null, sendStatus: () => {} }).hypertask_board_config;
+  const input = tool.inputSchema.parse({ action: "get_hygiene", project_id: 15 });
+  assert.deepEqual(await tool.execute(input), { success: true, projectId: 15, report: { untaggedOpenTickets: 10 } });
+});
