@@ -206,6 +206,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       sessionId: session.id,
       isDelivered: true,
       attachments: messageAttachments,
+      ...(queuedMessage ? { precedesMessageId: assistantMessageId } : {}),
     };
 
     const chatHistory = session.messages.map((message) => ({
