@@ -14,11 +14,14 @@ function fixture({ flags = [own, dependency], projectId = 15, section = "Flag: E
     project: { findFirst: async () => ({ id: projectId }) },
     task: {
       findUnique: async () => saved,
+      findUniqueOrThrow: async () => saved,
       update: async ({ data }) => { calls.push("saved"); saved = { ...saved, ...data }; return saved; },
       findMany: async (args) => { calls.push(args); return [before]; },
     },
     section: { findFirst: async () => ({ section_title: section }), findMany: async () => [{ id: 10, section_title: "In Progress" }, { id: 11, section_title: section }] },
     taskSectionEvent: { create: noop },
+    drafts: { deleteMany: noop },
+    user: { findUnique: async () => ({ id: 985 }) },
     $transaction: async (run) => run(db),
   };
   const mocks = {
@@ -29,14 +32,14 @@ function fixture({ flags = [own, dependency], projectId = 15, section = "Flag: E
     "@/lib/tasks/sameBoardRelations": {},
     "@/utils/controllers/tasks/parentTaskAccess": { ParentTaskNotFoundError: class extends Error {} },
     "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: noop },
-    "../activities/createActivity": {},
+    "../activities/createActivity": { default: noop },
     "../activities/createTaskMovedActivity": { createTaskMovedActivityInTransaction: async () => null },
     "../activities/sendTaskMoveNotification": {},
-    "../notifications/creation-service/createAndSendNotificationTaskMove": {},
-    "../description/common-description-create": {},
+    "../notifications/creation-service/createAndSendNotificationTaskMove": { default: noop },
+    "../description/common-description-create": { default: async ({ content }) => { saved = { ...saved, description_: { content } }; } },
     "@/pages/api/queues/FAST/generateSummary": { default() {} },
     "../turbopuffer/turbopufferHelper": { upsertTaskToTurbopuffer() {} },
-    "../assignees/autoAssignForSection": {}, "@/lib/ai/labelClassifier": {}, "./spawnRecurrence": {},
+    "../assignees/autoAssignForSection": {}, "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels() {} }, "./spawnRecurrence": {},
     "../notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail() {} },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
     "@/lib/mcp/tasks/agentMutationFence": { assertAgentAssignmentChangeAllowed: noop, TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {} },
@@ -124,4 +127,13 @@ test("daily audit does not report success when its column is missing", async () 
   const response = await route.GET(new NextRequest("https://app.hypertask.ai/api/cron/flag-column-audit", { headers: { authorization: "Bearer fixture-secret" } }));
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), { error: "Flag: Everyone column not found" });
+});
+
+
+test("removing an obsolete dependency reference and moving saves the resulting ticket", async () => {
+  const h = fixture({ flags: [{ ...own, mode: "EVERYONE" }, dependency] });
+  const result = await h.update({ description: "" });
+  assert.equal(result.status, 200);
+  assert.equal(h.saved().sectionId, 11);
+  assert.equal(h.saved().description_.content, "");
 });
