@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { correlate, incidentOf, relatedTicket, taskIncident } from './incident.mjs';
+import { correlate, incidentOf, redact, relatedTicket, taskIncident } from './incident.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
@@ -30,17 +30,7 @@ export function isNoise(event) {
   return Boolean(noiseRule(event));
 }
 
-export function redact(text) {
-  return String(text ?? '')
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
-    .replace(/(["']?\bauthorization["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\r\n]*)/gi, '$1[redacted]')
-    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
-    .replace(/(["']?\b(?:[\w-]*(?:token|key|password|passwd|secret|authorization)[\w-]*)["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/gi, '$1[redacted]')
-    .replace(/\b(?:sk|pk|ghp|gho|github_pat|AKIA)[-_]?[A-Za-z0-9_-]{12,}\b/g, '[redacted]')
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?\b/g, '[redacted]')
-    .replace(/https?:\/\/[^\s<>"']+/gi, url => url.replace(/\/\/[^/@]+@/, '//[redacted]@').replace(/\?[^#]*/, '').replace(/#.*$/, ''))
-    .replace(/\b[A-Za-z0-9_+\/-]{32,}={0,2}\b/g, '[redacted]');
-}
+export { redact } from './incident.mjs';
 
 const FINGERPRINT_RULES = 3;
 const isoTime = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?/;
@@ -139,6 +129,7 @@ function validate(event) {
 }
 
 function merge(group, event) {
+  if (event.incident?.ts > group.incident?.ts) group.incident = event.incident;
   group.count += event.count;
   group.firstSeen = group.firstSeen < event.ts ? group.firstSeen : event.ts;
   group.lastSeen = group.lastSeen > event.ts ? group.lastSeen : event.ts;
@@ -248,6 +239,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   const absorb = (fp, group, observed = true) => {
     const known = state.fingerprints[fp];
     if (known) {
+      if (group.incident && (!known.incident || group.incident.ts > known.incident.ts)) known.incident = group.incident;
       if (group.incident && !known.deleted) {
         for (const [id, occurrence] of Object.entries(group.occurrences ?? {})) state.occurrences[id] ??= { ...occurrence, ticket: known.ticket, queuedAt: iso(now) };
       }
@@ -264,6 +256,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       }
     } else if (state.pending[fp]) {
       const pending = state.pending[fp];
+      if (group.incident?.ts > pending.incident?.ts) pending.incident = group.incident;
       pending.count += group.count;
       pending.firstSeen = pending.firstSeen < group.firstSeen ? pending.firstSeen : group.firstSeen;
       pending.lastSeen = pending.lastSeen > group.lastSeen ? pending.lastSeen : group.lastSeen;
@@ -295,7 +288,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         cursor = JSON.parse(encoded);
       }
       if (!Array.isArray(rows)) throw new Error('invalid source response');
-      const events = correlate(rows.map(validate).filter(event => event.ts > since && event.ts <= until), [...Object.values(state.pending), ...Object.values(state.fingerprints)].filter(group => group.incident).map(group => ({ ...group.incident, ts: group.lastSeen })));
+      const events = correlate(rows.map(validate).filter(event => event.ts > since && event.ts <= until), [...Object.values(state.pending), ...Object.values(state.fingerprints)].filter(group => group.incident).map(group => group.incident));
       // A fingerprint keeps the board it was first routed to, so one kind of error never splits across boards.
       const boards = new Map();
       for (const event of events) {
@@ -332,7 +325,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         if (event.incident) {
           const alias = fingerprint(event.service, event.message);
           if (!group.aliases.includes(alias)) group.aliases.push(alias);
-          const id = createHash('sha256').update(JSON.stringify([event.service, event.route, normalize(event.message), since, until])).digest('hex').slice(0, 24);
+          const id = createHash('sha256').update(JSON.stringify([event.incident.key, event.service, redact(event.route), normalize(event.message), since, until])).digest('hex').slice(0, 24);
           const occurrence = group.occurrences[id] ??= { count: 0 };
           occurrence.count += event.count;
           occurrence.text = `Occurrence window ${since} to ${until}: ${redact(event.route)}; ${redact(normalize(event.message))}; ${occurrence.count} hits. [error-occurrence:${id}]`;
@@ -401,7 +394,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     if (!incident?.root) continue;
     const id = createHash('sha256').update(`${fp}|${group.firstSeen}`).digest('hex').slice(0, 24);
     delete state.pending[fp];
-    absorb(incident.key, { ...group, incident, aliases: [...new Set([...(group.aliases ?? []), fp])], occurrences: { [id]: { text: `Retained occurrence ${group.firstSeen}: ${group.count} hits; ${incident.root}. [error-occurrence:${id}]` } } }, false);
+    absorb(incident.key, { ...group, incident: { ...incident, ts: group.lastSeen }, aliases: [...new Set([...(group.aliases ?? []), fp])], occurrences: { [id]: { text: `Retained occurrence ${group.firstSeen}: ${group.count} hits; ${incident.root}. [error-occurrence:${id}]` } } }, false);
   }
   for (const [fp, group] of Object.entries(state.pending)) {
     if (group.noiseRule || group.rules === FINGERPRINT_RULES) continue;

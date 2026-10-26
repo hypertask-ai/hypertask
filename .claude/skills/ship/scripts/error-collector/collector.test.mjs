@@ -1559,3 +1559,25 @@ check('incidents', 'repeated hits in one collection window make one counted acti
   assert.equal(activities(h, 'HTPR-100').length, 1);
   assert.match(activities(h, 'HTPR-100')[0].args[3], /50 hits/);
 }));
+
+check('incidents', 'long matching dumps keep distinct-root activities and redact canonical paths', async () => withHarness(async h => {
+  const prefix = 'PrismaClientValidationError: Invalid `prisma.project.count()` invocation: ' + 'argument dump '.repeat(40);
+  const route = '/api/projects/person@example.invalid/sk-abcdefghijklmnopqrstuv';
+  h.events(['firstField', 'secondField'].map(field => event({ service: 'vercel', route, message: prefix + `Unknown argument \`${field}\`.` })));
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(activities(h).filter(call => call.args[2] !== 'YPER4-354').length, 2);
+  assert.doesNotMatch(JSON.stringify(h.state()) + JSON.stringify(creates(h)), /person@example|sk-abcdefghijkl/);
+}));
+
+check('incidents', 'wrapper-only windows never renew actual root timestamps', async () => withHarness(async h => {
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.count()` invocation: Unknown argument `updatedAt`.';
+  h.events([event({ service: 'vercel', message, route: '/api/mcp/projects' })]); await h.run();
+  const root = Object.values(h.state().fingerprints)[0].incident.ts;
+  for (const minutes of [9, 18]) {
+    h.events([event({ service: 'vercel', message: 'Failed to list projects | Internal server error', route: '/mcp', ts: new Date(NOW + minutes * 60000).toISOString() })]);
+    await h.run({ now: NOW + minutes * 60000 });
+  }
+  assert.equal(creates(h).length, 2);
+  assert.equal(Object.values(h.state().fingerprints).find(record => record.incident)?.incident.ts, root);
+}));

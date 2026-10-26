@@ -1,5 +1,18 @@
 import { createHash } from 'node:crypto';
 
+export function redact(text) {
+  return String(text ?? '')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+    .replace(/(["']?\bauthorization["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\r\n]*)/gi, '$1[redacted]')
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/(["']?\b(?:[\w-]*(?:token|key|password|passwd|secret|authorization)[\w-]*)["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/gi, '$1[redacted]')
+    .replace(/\b(?:sk|pk|ghp|gho|github_pat|AKIA)[-_]?[A-Za-z0-9_-]{12,}\b/g, '[redacted]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?\b/g, '[redacted]')
+    .replace(/https?:\/\/[^\s<>"']+/gi, url => url.replace(/\/\/[^/@]+@/, '//[redacted]@').replace(/\?[^#]*/, '').replace(/#.*$/, ''))
+    .replace(/\b[A-Za-z0-9_+\/-]{32,}={0,2}\b/g, '[redacted]');
+}
+
+
 export function plain(text) {
   return String(text ?? '').replace(/<[^>]*>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#(?:x27|0?39);/gi, "'").replace(/&amp;/g, '&');
 }
@@ -15,6 +28,7 @@ export function incidentOf({ message = '', stack = '', route = '' }) {
   const root = model && field && /PrismaClientValidationError/.test(text) ? `prisma-validation:${model}:unknown-argument:${field}` : undefined;
   const wrapper = /^(?:Failed to list projects\s*\|\s*Internal server error|HTTP 500 hypertask_projects)$/.test(message.trim());
   if (!root && !wrapper) return;
+  path = redact(path);
   return { route: path, root, ...(root ? { key: createHash('sha256').update(`${path}|${root}`).digest('hex').slice(0, 16) } : {}), wrapper };
 }
 
@@ -25,7 +39,7 @@ export function taskIncident(task) {
   const feedback = /Tool:\s*hypertask_projects\b/.test(text) && /HTTP status:\s*500\b/.test(text);
   const message = feedback ? 'HTTP 500 hypertask_projects' : /Sample message:\s*Failed to list projects\s*\|\s*Internal server error/.test(text) ? 'Failed to list projects | Internal server error' : text;
   const stored = /Error root:\s*(\/[^\s|]+)\s*\|\s*(prisma-validation:[\w]+:unknown-argument:[\w.]+)/.exec(text);
-  const incident = stored ? { route: stored[1], root: stored[2], wrapper: false } : incidentOf({ message, route });
+  const incident = stored ? { route: redact(stored[1]), root: stored[2], wrapper: false } : incidentOf({ message, route });
   if (!incident) return;
   const ts = /(?:First seen|Last seen):\s*(\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text)?.[1];
   return { ...incident, ts, feedback };
@@ -40,7 +54,7 @@ export function correlate(events, known = []) {
       const keys = new Set(matches.map(root => root.key));
       if (keys.size === 1) incident = matches[0];
     }
-    return incident?.root ? { ...event, incident } : event;
+    return incident?.root ? { ...event, incident: { ...incident, ts: incident.ts ?? event.ts } } : event;
   });
 }
 
