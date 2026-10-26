@@ -1,7 +1,6 @@
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import {
   buildVelocityReport,
@@ -35,14 +34,7 @@ export async function GET(request: NextRequest) {
 async function getVelocityReport(request: NextRequest) {
   const session = await getSessionUser(request.headers).catch(() => null);
   const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
-  let restCompat = false;
-  if (currentUser) {
-    try {
-      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
-    } catch {
-    }
-  }
-  const cookieUser = restCompat && currentUser
+  const cookieUser = currentUser
     ? currentUser.user
     : await getCurrentUserFromCookies();
   const userId = Number(cookieUser?.id);

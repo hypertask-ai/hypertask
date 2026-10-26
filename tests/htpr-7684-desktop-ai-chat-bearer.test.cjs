@@ -226,7 +226,6 @@ function sessionList({ sessionUser, cliUser, headers = {} }) {
     } } },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => sessionUser },
     "@/app/api/ai/_lib/requestUser": { getCliBearerChatUser: async (_request, endpoint) => { cliCalls.push(endpoint); return cliUser; } },
-    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "htpr-6924-rest-compat", isFeatureEnabled: async () => false },
     "@/lib/api/rateLimit": { checkRestRateLimit: async () => null },
     "@/lib/redis": { getRedis: async () => ({}) },
     "@/lib/agents/chatAccess": {
