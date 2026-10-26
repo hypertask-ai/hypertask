@@ -182,7 +182,8 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
 
-    if (!preserveComposer && !queuedMessage) editor?.commands.clearContent();
+    if (!preserveComposer && !queuedMessage && retryContent === undefined && editor?.getHTML() === htmlContent &&
+        (!sessionId || getDisplayedSession?.()?.id === sessionId)) editor?.commands.clearContent();
 
     setIsTyping(true);
 

@@ -138,6 +138,8 @@ function fixture() {
   return {
     streams, queue, context, controls, added, sent, controllers, fileItems, select,
     send(text) { draft = text; return bind()(); },
+    setDraft(text) { draft = text; },
+    getDraft() { return draft; },
     async transport(url, options) {
       if (url.endsWith("/cancel")) return Response.json({ success: true });
       const payload = JSON.parse(options.body);
@@ -339,4 +341,52 @@ test("parallel agent sessions respect pre-deploy isolated-agent turns without se
   await redis.del(key);
   assert.equal(typeof await start("A"), "object");
   assert.equal(typeof await start("B"), "object");
+});
+
+test("HTPR-7770: accepting a delayed send never erases newer composer text", async () => {
+  const f = fixture();
+  let finishAttachments;
+  f.context.processAttachments = () => new Promise((resolve) => { finishAttachments = resolve; });
+  await transport(f, async () => {
+    const sending = f.send("accepted message");
+    await flush();
+    f.setDraft("new unsent draft");
+    finishAttachments([]);
+    await flush();
+    try { assert.equal(f.getDraft(), "new unsent draft"); }
+    finally { f.finish("accepted message"); await sending; }
+    assert.equal(f.getDraft(), "new unsent draft");
+  });
+});
+
+test("HTPR-7770: retrying an earlier message leaves the current draft through success or failure", async () => {
+  for (const fail of [false, true]) {
+    const f = fixture();
+    await transport(f, async () => {
+      f.setDraft("new unsent draft");
+      const sending = createAiChatSend(f.context).handleSendMessage("retry message");
+      await flush();
+      try { assert.equal(f.getDraft(), "new unsent draft"); }
+      finally { f.finish("retry message", fail); await sending; }
+      assert.equal(f.getDraft(), "new unsent draft");
+    });
+  }
+});
+
+test("HTPR-7770: a delayed legacy send cannot clear identical text in another chat", async () => {
+  const f = fixture();
+  f.context.parallelStreams = undefined;
+  f.context.persistentQueue = undefined;
+  let finishAttachments;
+  f.context.processAttachments = () => new Promise((resolve) => { finishAttachments = resolve; });
+  await transport(f, async () => {
+    const sending = f.send("same text");
+    await flush();
+    f.select("B");
+    f.setDraft("same text");
+    finishAttachments([]);
+    await flush();
+    try { assert.equal(f.getDraft(), "same text"); }
+    finally { f.finish("same text"); await sending; }
+  });
 });

@@ -159,9 +159,10 @@ test("still works: flag off uses the original in-view enqueue, cancellation and 
   assert.equal(await fixture.enqueue("legacy cancelled"), true);
   fixture.controls.removeQueuedMessage(fixture.context.messageQueueRef.current[1].id);
   fixture.bind();
+  fixture.setDraft("unfinished next question");
   await withTransport(fixture, async () => { fixture.controls.drainQueuedMessage(); await flush(); });
   assert.deepEqual(fixture.sent.map((item) => [item.session_id, item.message]), [["A", "legacy first"]]);
-  assert.equal(fixture.clears(), 3);
+  assert.equal(fixture.draft(), "unfinished next question");
 });
 
 test("switching during queued session resolution cannot redirect A's message into B", async () => {

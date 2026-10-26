@@ -1,4 +1,5 @@
 import { createSessionStreams } from "@/lib/aiChat/sessionStreams";
+import { useAiChatDraft } from "./useAiChatDraft";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { TAiModal } from "@/models/AI_Task_writer_model";
@@ -212,6 +213,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
   } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage, parallelChatsEnabled);
+  useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {
     sessionQueue.sessionId = currentSession?.id;

@@ -28,6 +28,18 @@ only and may validly be fewer or absent when no specific improvement is justifie
 Record the effective flag and response. If chips are returned, wait for them
 (about 10 s), click one and check it is sent and answered in the same chat.
 
+## Unsent message drafts
+
+In both the docked sidebar and `/chat`, type while a reply streams.
+Finish, fail or stop that reply: the unsent text must remain.
+Queue a follow-up, then type another unsent message; draining the queue
+must not clear it. Retry an older message without sending the new draft.
+Switch from chat A to B, write different text, then return to A and reload:
+each chat restores its own rich-text draft in the same browser tab.
+Sending or explicitly clearing a draft must not restore it on reload.
+Opening a different account must not expose the previous account's draft.
+Capture the typed text before and after, alongside queued-message delivery.
+
 ## Retiring a model version
 
 A saved pick, a team feature override or a stored agent pin keeps an old
