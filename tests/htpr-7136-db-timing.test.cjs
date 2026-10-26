@@ -47,11 +47,10 @@ function prismaHook(timing) {
   return { hook, tracked }
 }
 
-function wrapped(timing, enabled = true) {
+function wrapped(timing) {
   return load('src/lib/mcp/routeWrapper.ts', {
     './dbTiming': timing,
     './operationContext': { getMcpOperationContext: () => undefined },
-    '@/lib/flags': { isFeatureEnabled: async () => enabled },
     '@/lib/mcp/auth': {}, '@/lib/mcp/readJsonBody': {}, '@/lib/mcp/tasks/agentMutationLeaseAdoption': {},
   }).wrapMcpRoute
 }
@@ -133,10 +132,10 @@ test('without a store, operation results are unchanged and pool connection clock
   await pool.end()
 })
 
-test('opaque keys, absent Bearer, and flag-off calls emit no timings and activate no database store', async () => {
+test('opaque keys and absent Bearer emit no timings and activate no database store', async () => {
   const { timing } = timingHarness()
-  for (const [bearer, enabled] of [[undefined, true], ['htk_secret', true], ['htmk_secret', true], [token, false]]) {
-    const response = await wrapped(timing, enabled)(async () => {
+  for (const bearer of [undefined, 'htk_secret', 'htmk_secret', 'httk_secret']) {
+    const response = await wrapped(timing)(async () => {
       assert.equal(timing.mcpDbTimings.getStore(), undefined)
       return new Response('{}')
     })(request(bearer))
