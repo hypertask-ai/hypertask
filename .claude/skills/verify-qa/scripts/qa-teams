@@ -2,7 +2,7 @@
 
 const { readFile } = require('node:fs/promises');
 const { homedir } = require('node:os');
-const { join } = require('node:path');
+const { join, resolve } = require('node:path');
 
 const appHost = 'app.hypertask.ai';
 const teamListPath = '/api/teams/getAllMinimal';
@@ -28,7 +28,8 @@ function refuse(message) {
 function parseArgs(argv) {
   const labels = [];
   let baseUrl = `https://${appHost}`;
-  let stateDir = join(homedir(), '.config', 'ht-qa');
+  const defaultStateDir = join(homedir(), '.config', 'ht-qa');
+  let stateDir = defaultStateDir;
   const args = [...argv];
   while (args.length) {
     const arg = args.shift();
@@ -55,6 +56,9 @@ function parseArgs(argv) {
     } else {
       return { error: 'not a named test team' };
     }
+  }
+  if (baseUrl !== `https://${appHost}` && resolve(stateDir) === resolve(defaultStateDir)) {
+    return { error: 'test base URL needs a test state directory' };
   }
   return { labels, baseUrl, stateDir };
 }

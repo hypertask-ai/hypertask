@@ -236,3 +236,20 @@ test('a null comped plan on a comped team reads as Pro', async t => {
   assert.equal(code, 0);
   assert.match(stdout, /^pro \| Pro \| comped until .* \| OK$|OK\n$/);
 });
+
+test('a test base URL without a test state directory is refused before any state file is read', async t => {
+  const server = http.createServer();
+  let connections = 0;
+  server.on('connection', () => { connections += 1; });
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const child = spawn(process.execPath, [script, '--base-url', `http://127.0.0.1:${server.address().port}`], {
+    stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000,
+  });
+  let stdout = '';
+  child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; });
+  const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
+  assert.equal(code, 2);
+  assert.match(stdout, /^refused: test base URL needs a test state directory/);
+  assert.equal(connections, 0);
+});
