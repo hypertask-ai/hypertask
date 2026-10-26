@@ -1,5 +1,6 @@
 "use client";
 
+import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
@@ -139,6 +140,13 @@ export const AI_Chat_Sidebar = ({
       latest.resetFiles(stored?.files ?? []);
     }
   };
+  const shortcuts = useChatShortcuts({
+    onNewChat: async () => {
+      await selectTarget({ kind: "ai" });
+      await chat.startNewSession();
+    },
+    onSelectSession: (id) => { void selectTarget({ kind: "ai" }, id); },
+  });
   const selectTargetRef = useRef(selectTarget);
   selectTargetRef.current = selectTarget;
 
@@ -236,6 +244,9 @@ export const AI_Chat_Sidebar = ({
   return (
     <div
       data-ai-chat-panel
+      ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "sidebar" : undefined}
+      onKeyDownCapture={shortcuts.onKeyDownCapture}
+      tabIndex={shortcuts.enabled ? -1 : undefined}
       data-testid="ai-sidebar"
       className={cn(
         "ai-chat-sidebar bg-ai-chat flex sticky top-0 min-h-0 min-w-0 text-white-black shadow-md",
@@ -248,38 +259,5 @@ export const AI_Chat_Sidebar = ({
       )}
       style={desktopWidthStyle}
     >
+      {shortcuts.modal}
       <AiChatSidebarResizeHandle />
-
-      <div
-        className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col border-l-thin border-[#434343]"
-        )}
-      >
-        <ChatHeader sidebarChats={enabled && sidebarEnabled ? { projectId: projectId!, target, agents, error: rosterError,
-          onSelect: (next) => void selectTarget(next), onSelectSession: pastChatsFirst ? (id) => void selectTarget({ kind: "ai" }, id) : chat.selectSession, onRetry: () => void loadRoster() } : undefined} />
-
-        {!minimized && (
-          <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden", sidebarEnabled && target.kind === "external-agent" && "hidden")}>
-            <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-              {sidebarEnabled ? (
-                <>
-                  {(showWelcomeScreen || generalChatPending) && <WelcomeScreen />}
-                  <MessageList sidebarKey={chat.currentSession?.id} hidden={showWelcomeScreen || generalChatPending}
-                    active={target.kind !== "external-agent" && !showWelcomeScreen && !generalChatPending} />
-                </>
-              ) : showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
-            </div>
-
-            <AI_Tiptap_Container disabled={generalChatPending} active={!sidebarEnabled || target.kind !== "external-agent"} />
-          </div>
-        )}
-        {sidebarEnabled && !minimized && currentUser && embeddedAgents.map((agent) => (
-          <div key={`${projectId}:${agent.id}`} className={cn("min-h-0 min-w-0 flex-1 flex-col", target.kind === "external-agent" && target.agent.id === agent.id ? "flex" : "hidden")}>
-            <AgentChatClient currentUser={currentUser} roomsEnabled={false}
-              embedded={{ projectId: projectId!, agent, requestId: intentRef.current, active: target.kind === "external-agent" && target.agent.id === agent.id }} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};

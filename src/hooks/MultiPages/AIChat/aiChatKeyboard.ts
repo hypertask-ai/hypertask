@@ -1,3 +1,4 @@
+import { matchChatShortcut } from "@/lib/aiChat/chatShortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
 import { IChatMessage } from "@/models/model";
@@ -8,7 +9,7 @@ import type { useAiChatSessions } from "./useAiChatSessions";
 import type { useAiChatAttachments } from "./useAiChatAttachments";
 import { MOBILE_VIEWPORT_MAX_PX } from "./aiChatShared";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "setAiChatExplicitOpenAt" | "setIsSidebarMode" | "editor" | "setAiChatAutoOpenSuppressed" | "setAiChatPinned" | "setShowAIChat" | "setMinimized" | "setChatMounted" | "currentSession" | "showMentionList" | "isTyping" | "isFullScreenChat" | "showAiChatInterface" | "isSidebarMode" | "lastWorkspaceFocusRef" | "chatMounted"> &
+type Context = { sharedShortcutsEnabled?: boolean } & Pick<ReturnType<typeof useAiChatState>, "setAiChatExplicitOpenAt" | "setIsSidebarMode" | "editor" | "setAiChatAutoOpenSuppressed" | "setAiChatPinned" | "setShowAIChat" | "setMinimized" | "setChatMounted" | "currentSession" | "showMentionList" | "isTyping" | "isFullScreenChat" | "showAiChatInterface" | "isSidebarMode" | "lastWorkspaceFocusRef" | "chatMounted"> &
   Pick<ReturnType<typeof createAiChatSend>, "handleSendMessage"> &
   Pick<ReturnType<typeof useAiChatSessions>, "isApple" | "isByokBlocked" | "fileUpload" | "startNewSession"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
@@ -19,7 +20,7 @@ export function createAiChatKeyboard(context: Context) {
   setShowAIChat, setMinimized, setChatMounted, currentSession, handleSendMessage,
   isApple, showMentionList, isByokBlocked, isTyping, handleCancelStream,
   isFullScreenChat, showAiChatInterface, isSidebarMode, lastWorkspaceFocusRef, fileUpload,
-  chatMounted, startNewSession,
+  chatMounted, startNewSession, sharedShortcutsEnabled,
   } = context;
 
 
@@ -62,7 +63,11 @@ export function createAiChatKeyboard(context: Context) {
 
   function tiptapKeydown(e: any) {
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    if (e.keyCode === KeyCodes.ENTER && !e.shiftKey) {
+    if (e.defaultPrevented || e.isComposing || e.nativeEvent?.isComposing) return;
+    const sendShortcut = sharedShortcutsEnabled
+      ? matchChatShortcut(e, true) === "send"
+      : e.keyCode === KeyCodes.ENTER && !e.shiftKey;
+    if (sendShortcut) {
       const mentionListElement = document.getElementById(
         DIV_ID_CONSTANTS.aiMentionList
       );
@@ -126,6 +131,7 @@ export function createAiChatKeyboard(context: Context) {
   }
 
   function layoutKeydown(e: any) {
+    if (e.defaultPrevented || e.isComposing) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
     if (e.keyCode === KeyCodes.FORWARD_SLASH && cmdControl && e.shiftKey) {

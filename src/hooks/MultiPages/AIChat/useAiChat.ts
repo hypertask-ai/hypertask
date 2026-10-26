@@ -1,3 +1,4 @@
+import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 
 export { type AiChatProcessedAttachment } from "./aiChatShared";
 
@@ -18,6 +19,7 @@ import { useRecoilState } from "@/lib/state";
 import { aiChatEditTaskIdAtom } from "@/store";
 
 export function useAiChat() {
+  const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const { navigateToTask } = useHypertasksNavigate();
   const skillDraftsFlag = useFlag(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG);
   let skillDraftsEnabled = false;
@@ -121,6 +123,7 @@ export function useAiChat() {
   toggleSidebarMode, togglePopover, minimizeChat, restoreChat, retryStream,
   editMessage, tiptapKeydown, layoutKeydown,
   } = createAiChatKeyboard({
+    sharedShortcutsEnabled,
     setAiChatExplicitOpenAt, setIsSidebarMode, editor, setAiChatAutoOpenSuppressed, setAiChatPinned,
     setShowAIChat, setMinimized, setChatMounted, currentSession, handleSendMessage,
     isApple, showMentionList, isByokBlocked, isTyping, handleCancelStream,

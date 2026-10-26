@@ -87,6 +87,10 @@ function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true
   const router = { replace: route => routes.push(route) };
   const { default: Chat } = load("src/app/chat/Chat.tsx", {
     react,
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
+    "@/lib/aiChat/chatShortcuts": { chatShortcutHint: () => "" },
+    "@/components/Modals/OptionPicker": { default: "OptionPicker" },
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: "Composer" },
     "@/components/AI_CHAT/MessageList": { MessageList: "MessageList" },
     "@/components/AI_CHAT/WelcomeScreen": { WelcomeScreen: "WelcomeScreen" },

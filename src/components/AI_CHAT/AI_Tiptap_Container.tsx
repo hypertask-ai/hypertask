@@ -1,3 +1,5 @@
+import { chatShortcutHint } from "@/lib/aiChat/chatShortcuts";
+import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 import AIModelDropDownButton from "../Global/ModelSelectorDropdown";
 import Tooltip from "../Common/Tooltip";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
@@ -103,6 +105,7 @@ export function AI_Tiptap_Container({
   disabled?: boolean;
   active?: boolean;
 } = {}) {
+  const sharedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
@@ -216,7 +219,7 @@ export function AI_Tiptap_Container({
   }, []);
 
   useEffect(() => {
-    if (isMbl || !active || disabled) return;
+    if (sharedShortcuts || isMbl || !active || disabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
       const cmdControl = e.metaKey || e.ctrlKey;
       if (!cmdControl || !e.shiftKey) return;
@@ -238,7 +241,7 @@ export function AI_Tiptap_Container({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isMbl, active, disabled, audioButtonId]);
+  }, [sharedShortcuts, isMbl, active, disabled, audioButtonId]);
 
   const isEditorEmpty =
     useEditorState({
@@ -383,6 +386,9 @@ export function AI_Tiptap_Container({
             controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
                 <AIModelDropDownButton
+                  keyboardNavigation={sharedShortcuts}
+                  shortcutHint={sharedShortcuts ? chatShortcutHint("model") : undefined}
+                  onKeyboardClose={() => editor?.commands.focus("end")}
                   optionCallback={dropDownButtonAICallback}
                   aiSelected={currentAiOption}
                   modelTeamId={modelTeamId}
@@ -539,6 +545,8 @@ export function AI_Tiptap_Container({
 }
 
 function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabled = false }: { mobile?: boolean; reuseChip?: boolean; ticketScopeEnabled?: boolean }) {
+  const sharedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const { editor } = useAiChatContext();
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -590,6 +598,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
     }
     setDockedScope(projectId);
     setIsOpen(false);
+    if (sharedShortcuts) requestAnimationFrame(() => editor?.commands.focus("end"));
   };
 
   return (
@@ -599,7 +608,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
       className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
     >
       {reuseChip ? (
-        <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={scopeChip.title}
+        <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={sharedShortcuts ? `${scopeChip.title} · ${chatShortcutHint("scope")}` : scopeChip.title}
           mobile={mobile} isOpen={isOpen} aria-haspopup="dialog" onClick={() => setIsOpen((open) => !open)} />
       ) : <button
         type="button"
@@ -611,7 +620,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
             : "rounded-[4px] px-2 py-1"
         }`}
         onClick={() => setIsOpen((open) => !open)}
-        title={scopeChip.title}
+        title={sharedShortcuts ? `${scopeChip.title} · ${chatShortcutHint("scope")}` : scopeChip.title}
       >
         {mobile && (
           <span className="mr-1 flex-none text-text-light-gray">Context:</span>
@@ -655,7 +664,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
               }))
             ),
           ]}
-          onClose={() => setIsOpen(false)}
+          onClose={() => { setIsOpen(false); if (sharedShortcuts) requestAnimationFrame(() => editor?.commands.focus("end")); }}
           onSelect={({ id }) => {
             if (id === null || typeof id === "number" || id === "all" || id === "ticket") {
               selectScope(id);
