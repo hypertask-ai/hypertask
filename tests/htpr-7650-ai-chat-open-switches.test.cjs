@@ -153,6 +153,18 @@ test("publishing the default board view preserves a manual Open during startup",
   }
 });
 
+test("an account choice of off closes auto-opened chat when the default view arrives together", () => {
+  for (const phone of [false, true]) {
+    let values = { ...allOff, aiChatOpenBoards: true };
+    const h = pageHarness(new Proxy({}, { get: (_target, key) => values[key] }));
+    h.navigate("/project?id=15", phone);
+    assert.equal(h.values.showAIChatInterfaceAtom, true);
+    values = allOff;
+    h.navigate("/project?id=15&view=default", phone);
+    assert.equal(h.values.showAIChatInterfaceAtom, false);
+  }
+});
+
 test("known flag Off retains the legacy default-view close", () => {
   const h = pageHarness(allOff, { stabilize: false });
   h.navigate("/project?id=15"); h.manualOpen();

@@ -56,7 +56,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
     if (!page || manualOpen) return;
     if (changed) setSuppressed(false);
     if ((suppressed && !changed) || !allowed) {
-      const savedOffAfterAutoOpen = !allowed && autoOpenedPage.current === pageKey;
+      const savedOffAfterAutoOpen = !allowed && autoOpenedPage.current !== null && !pageChangedSinceLastVisit(autoOpenedPage.current, null, pageKey, stableDefaultView);
       if (changed || savedOffAfterAutoOpen) setOpen(false);
       autoOpenedPage.current = null;
       return;
