@@ -1094,7 +1094,7 @@ test('stream updates after an active refresh replace their message ID without er
   });
 });
 
-test('new feature flag defaults Owner + QA and is independent of the server compatibility flag', () => {
+test('new feature flag defaults Owner + QA', () => {
   const definition = require('./helpers/flag-files.cjs').load(require('node:path').resolve('src/lib/flags/definitions/htpr-6971-chat-history-paging.ts'));
   assert.equal(definition.HTPR_6971_CHAT_HISTORY_PAGING_FLAG, flag);
   assert.equal(definition.default.kind, 'feature');
@@ -1102,7 +1102,6 @@ test('new feature flag defaults Owner + QA and is independent of the server comp
   assert.ok(definition.default.releaseRisk.reason);
   const source = require('node:fs').readFileSync('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', 'utf8');
   assert.match(source, /useFlag\(HTPR_6971_CHAT_HISTORY_PAGING_FLAG\)/);
-  assert.doesNotMatch(source, /HTPR_6924_REST_COMPAT_FLAG/);
 });
 
 test('unavailable server paging falls back to the complete legacy cache without requesting transcripts', async () => {

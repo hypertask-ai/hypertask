@@ -1,6 +1,5 @@
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -16,14 +15,7 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
-    let restCompat = false;
-    if (currentUser) {
-      try {
-        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
-      } catch {
-      }
-    }
-    const { isValid, user } = restCompat && currentUser
+    const { isValid, user } = currentUser
       ? { isValid: true, user: currentUser.user }
       : isValidUser(userCookie?.value);
 
@@ -32,26 +24,22 @@ export async function POST(request: NextRequest) {
     }
 
     let body: Awaited<ReturnType<typeof request.json>>;
-    if (restCompat) {
-      let jsonError: unknown;
-      const result = await readJsonBody<typeof body>({
-        json: async () => {
-          try {
-            body = await request.json();
-            return body;
-          } catch (error) {
-            jsonError = error;
-            throw error;
-          }
-        },
-      } as Request, {
-        invalidJson: () => { throw jsonError },
-        invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
-      });
-      if (result.ok) body = result.body;
-    } else {
-      body = await request.json();
-    }
+    let jsonError: unknown;
+    const result = await readJsonBody<typeof body>({
+      json: async () => {
+        try {
+          body = await request.json();
+          return body;
+        } catch (error) {
+          jsonError = error;
+          throw error;
+        }
+      },
+    } as Request, {
+      invalidJson: () => { throw jsonError },
+      invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
+    });
+    if (result.ok) body = result.body;
     const { projectId, orderedFieldIds } = body;
     if (!projectId || !Array.isArray(orderedFieldIds)) {
       return NextResponse.json(

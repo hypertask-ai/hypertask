@@ -7,7 +7,7 @@ import { isValidUser } from '@/utils/edgeHelpers'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from '@/lib/flags/definitions/htpr-7298-standalone-pages'
 import { getProjectWhere, taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
@@ -32,23 +32,12 @@ function positiveInteger(value: unknown): number | null {
     : null
 }
 
-function isRequestBody(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
-    let restCompat = false
-    if (currentUser) {
-      try {
-        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
-      } catch {
-      }
-    }
 
     let userId: number
-    if (restCompat && currentUser) {
+    if (currentUser) {
       userId = currentUser.userId
     } else {
       const userCookie = (await cookies()).get('nookies_user')
@@ -58,34 +47,21 @@ export async function POST(request: NextRequest) {
       userId = user.id
     }
 
-    if (restCompat && currentUser) {
+    if (currentUser) {
       const limited = await checkRestRateLimit(currentUser.userId, 'write')
       if (limited) return limited
     }
 
     let parsedBody: unknown
-    if (restCompat) {
-      const result = await readJsonBody<Record<string, unknown>>(request, {
-        invalidJson: () => NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 }),
-        invalidObject: () => NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 }),
-      })
-      if (!result.ok) return result.response
-      parsedBody = result.body
-    } else {
-      try {
-        parsedBody = await request.json()
-      } catch {
-        return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 })
-      }
-      if (!isRequestBody(parsedBody)) {
-        return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
-      }
-    }
+    const result = await readJsonBody<Record<string, unknown>>(request, {
+      invalidJson: () => NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 }),
+      invalidObject: () => NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 }),
+    })
+    if (!result.ok) return result.response
+    parsedBody = result.body
     const body = parsedBody as CreatePageBody
 
-    const taskId = restCompat
-      ? (typeof body.task_id === 'number' ? parsePositiveInt(body.task_id, { safe: false, max: Infinity }) : null)
-      : positiveInteger(body.task_id)
+    const taskId = typeof body.task_id === 'number' ? parsePositiveInt(body.task_id, { safe: false, max: Infinity }) : null
     const standalone = body.task_id === undefined && body.project_id !== undefined
     if (standalone && !(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, userId))) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -114,9 +90,7 @@ export async function POST(request: NextRequest) {
 
     let parentPageId: number | undefined
     if (body.parent_page_id !== undefined) {
-      const parsedParentPageId = restCompat
-        ? (typeof body.parent_page_id === 'number' ? parsePositiveInt(body.parent_page_id, { safe: false, max: Infinity }) : null)
-        : positiveInteger(body.parent_page_id)
+      const parsedParentPageId = typeof body.parent_page_id === 'number' ? parsePositiveInt(body.parent_page_id, { safe: false, max: Infinity }) : null
       if (parsedParentPageId === null) {
         return NextResponse.json(
           { error: 'parent_page_id must be a positive integer' },

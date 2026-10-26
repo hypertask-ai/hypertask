@@ -2,7 +2,6 @@ import { cookies } from 'next/headers'
 import type { IUser } from '@/models/model'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { isValidUser } from '@/utils/edgeHelpers'
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 
 type CurrentUser = { userId: number; agentId?: string }
@@ -33,7 +32,6 @@ export async function loadCurrentUser(
 
 async function loadProfileFromSession(userId: number): Promise<CurrentUserWithProfile | null> {
   try {
-    if (!(await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, userId))) return null
     const row = await prisma.user.findUnique({
       where: { id: userId },
       include: { UserSetting: true, userPicture: true },
