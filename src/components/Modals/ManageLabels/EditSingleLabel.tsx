@@ -156,7 +156,7 @@ const EditSingleLabel = (
                    <button
                      type="button"
                      disabled={!title.trim()}
-                     className="border-0 bg-transparent p-0 text-dense text-white-black hover:text-heading disabled:opacity-50"
+                     className="border-0 bg-transparent p-0 text-dense text-text-light-gray hover:text-white-black disabled:opacity-50"
                      onClick={() => updateLabel(true)}
                    >
                      Create project view

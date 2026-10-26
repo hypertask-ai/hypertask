@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled, MY_TASKS_QUICK_ADD_FLAG } from "@/lib/flags";
+import { parseMyTasksViewConfig } from "@/models/MyTasksView";
 import { mergeMyTasksViewConfigUpdate } from "@/lib/myTasks/viewConfigMerge";
 import {
   myTasksViewSelect,
@@ -99,7 +100,7 @@ export async function PATCH(
           fullConfig,
           configPatch,
         });
-        await lockMyTasksViewLabels(tx, config);
+        await lockMyTasksViewLabels(tx, config, parseMyTasksViewConfig(existing.config));
         data.config = config as unknown as Prisma.InputJsonValue;
       }
       if (data.isDefault === true) {

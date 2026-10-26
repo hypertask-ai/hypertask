@@ -49,7 +49,8 @@ export class MissingMyTasksViewLabelError extends Error {
 
 export const lockMyTasksViewLabels = async (
   tx: Prisma.TransactionClient,
-  config: MyTasksViewConfig
+  config: MyTasksViewConfig,
+  previousConfig?: MyTasksViewConfig
 ) => {
   const labelIds = [...new Set([
     ...config.filters.labelIds.map(String),
@@ -59,5 +60,12 @@ export const lockMyTasksViewLabels = async (
   const labels = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT id FROM "Label" WHERE id IN (${Prisma.join(labelIds)}) ORDER BY id FOR KEY SHARE
   `);
-  if (labels.length !== labelIds.length) throw new MissingMyTasksViewLabelError();
+  const previousIds = new Set([
+    ...(previousConfig?.filters.labelIds.map(String) ?? []),
+    ...getLabelReferences(previousConfig?.filterSettings),
+  ]);
+  const existingIds = new Set(labels.map((label) => label.id));
+  if (labelIds.some((id) => !existingIds.has(id) && !previousIds.has(id))) {
+    throw new MissingMyTasksViewLabelError();
+  }
 };

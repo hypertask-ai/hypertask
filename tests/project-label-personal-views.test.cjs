@@ -48,3 +48,19 @@ test("unfiltered personal saves need no label locks", async () => {
   await lockMyTasksViewLabels({ $queryRaw: async () => { queried = true; return [{ id: "a" }]; } }, { filters: { labelIds: ["a"] } });
   assert.equal(queried, true);
 });
+
+
+test("unrelated config edits can retain already orphaned personal filters", async () => {
+  const previous = { filters: { labelIds: ["deleted"] } };
+  const next = { filters: { labelIds: ["deleted", "live"] } };
+  let locked;
+  await lockMyTasksViewLabels({ $queryRaw: async (query) => {
+    locked = query.values;
+    return [{ id: "live" }];
+  } }, next, previous);
+  assert.deepEqual(locked, ["deleted", "live"]);
+  await assert.rejects(
+    () => lockMyTasksViewLabels({ $queryRaw: async () => [{ id: "live" }] }, next),
+    MissingMyTasksViewLabelError,
+  );
+});
