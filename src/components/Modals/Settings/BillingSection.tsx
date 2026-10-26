@@ -2,12 +2,14 @@
 
 import axios from "axios";
 import { ReactNode, useEffect, useState } from "react";
+import { useFreePlanLimitFlags } from "@/hooks/useFreePlanLimitCopy";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { convertTimestampToFormattedDate } from "@/utils/helperFunctions/helperFunctions";
 import {
   BillingActionRow,
   BillingRow,
+  FreePlanLimitLines,
   settingsActionButtonClass as actionButtonClass,
 } from "./SettingsBillingRow";
 import SettingsCard from "./SettingsCard";
@@ -60,6 +62,7 @@ const BillingSection = () => {
   const [savingBillingEmail, setSavingBillingEmail] = useState(false);
 
   const planLabel = billing?.storePlanId ?? "Free";
+  const freePlanLimits = useFreePlanLimitFlags();
   const billingCycle = billing?.billingInterval ?? "Free Plan";
   const usedSeats =
     (ownerAndMembers.owner ? 1 : 0) + ownerAndMembers.members.length;
@@ -213,6 +216,7 @@ const BillingSection = () => {
     <SettingsSectionShell title="Billing">
       <SettingsCard title="Plan">
         <BillingRow label="Plan" value={planLabel} />
+        {planLabel === "Free" && <FreePlanLimitLines align="start" flags={freePlanLimits} />}
         <BillingRow
           label="Seats"
           value={`${usedSeats} of ${team?.totalSeats ?? 0} seats used`}

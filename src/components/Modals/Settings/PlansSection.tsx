@@ -1,8 +1,10 @@
 "use client";
 
 import axios from "axios";
+import { useFreePlanLimitFlags } from "@/hooks/useFreePlanLimitCopy";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
+import { subscriptionPlansFor } from "@/lib/subscriptionPlans";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,12 +20,12 @@ import {
 } from "@/lib/pricingCheckoutUrls";
 import {
   ISubscriptionPlan,
-  storeSubscriptionPlans,
 } from "@/lib/subscriptionPlans";
 import type { IPricingSearchParams } from "@/models/model";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import {
   BillingActionRow,
+  FreePlanLimitLines,
   settingsActionButtonClass,
 } from "./SettingsBillingRow";
 import SettingsCard from "./SettingsCard";
@@ -38,6 +40,8 @@ type BillingIntervalIndex = 0 | 1;
 const PlansSection = () => {
   const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const { planLimits, unlimitedTickets } = useFreePlanLimitFlags();
+  const freePlanLimits = { planLimits, unlimitedTickets };
   const freePlanDescription = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : null}</>;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -57,10 +61,10 @@ const PlansSection = () => {
 
   const plans = useMemo(
     () =>
-      [...storeSubscriptionPlans].sort(
+      [...subscriptionPlansFor({ planLimits, unlimitedTickets })].sort(
         (left, right) => STORE_PLAN_RANK[left.id] - STORE_PLAN_RANK[right.id],
       ),
-    [],
+    [planLimits, unlimitedTickets],
   );
 
   useEffect(() => {
@@ -199,6 +203,7 @@ const PlansSection = () => {
                     {selectedType.price} {plan.id === "Free"
                       ? !planFlagReady || startPlanEnabled ? freePlanDescription : selectedType.description
                       : selectedType.description}
+                    {plan.id === "Free" && <FreePlanLimitLines flags={freePlanLimits} />}
                   </span>
                   {isCurrentTier && (
                     <span className="text-micro font-medium text-text-light-gray">

@@ -1,3 +1,5 @@
+import { freePlanLimitLines, type FreePlanLimitFlags } from "@/lib/freePlanLimits";
+
 export interface ISubscriptionPlan {
   id: "Free" | "AI" | "Pro" | "BYOK";
   name: string;
@@ -33,7 +35,7 @@ export const yearly_pro_price_id = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_
 export const allMonthlyPrices = [prevMonthly1, prevMonthly2, monthly_byok_price_id, monthly_pro_price_id]
 export const allYearlyPrices = [prevYearly1, prevYearly2, yearly_byok_price_id, yearly_pro_price_id]
 
-export const storeSubscriptionPlans: ISubscriptionPlan[] = [
+const subscriptionPlanTemplates: ISubscriptionPlan[] = [
   {
     id: "BYOK",
     name: "BYOK",
@@ -208,31 +210,6 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
         unlimited: false,
       },
       {
-        title: "Boards",
-        amount: "Up to 2",
-        unlimited: false,
-      },
-      {
-        title: "Open tickets",
-        amount: "Up to 250",
-        unlimited: false,
-      },
-      {
-        title: "Archived tickets and archived boards",
-        amount: "Don't count, so archiving frees room",
-        unlimited: false,
-      },
-      {
-        title: "Files",
-        amount: "Up to 10 MB each on tickets and comments",
-        unlimited: false,
-      },
-      {
-        title: "Teams already over a limit",
-        amount: "Keep everything; you just can't add more until you're under it or upgrade",
-        unlimited: false,
-      },
-      {
         title: "CLI + MCP",
         amount: "Included",
         unlimited: true,
@@ -255,3 +232,24 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
     ]
   },
 ];
+
+const legacyFreePlan: FreePlanLimitFlags = { planLimits: false, unlimitedTickets: false };
+
+function withFreeLimits(plan: ISubscriptionPlan, flags: FreePlanLimitFlags): ISubscriptionPlan {
+  if (plan.id !== "Free") return plan;
+  const membersIndex = plan.perks.findIndex((perk) => perk.title === "Members");
+  const limitPerks = freePlanLimitLines(flags).map((line) => ({
+    title: line.title,
+    amount: line.amount,
+    unlimited: line.amount === "Unlimited tickets",
+  }));
+  const perks = [...plan.perks];
+  perks.splice(Math.max(membersIndex, 0) + 1, 0, ...limitPerks);
+  return { ...plan, perks };
+}
+
+export function subscriptionPlansFor(flags: FreePlanLimitFlags): ISubscriptionPlan[] {
+  return subscriptionPlanTemplates.map((plan) => withFreeLimits(plan, flags));
+}
+
+export const storeSubscriptionPlans = subscriptionPlansFor(legacyFreePlan);

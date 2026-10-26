@@ -1,4 +1,6 @@
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
+import { FreePlanLimitLines } from "@/components/Modals/Settings/SettingsBillingRow";
+import { useFreePlanLimitFlags } from "@/hooks/useFreePlanLimitCopy";
 import "@/styles/AttachmentView.scss";
 import React, { useEffect, useRef, useState } from "react";
 import { ModalHeader } from "reactstrap";
@@ -315,6 +317,7 @@ const NewTrialBody = ({
 }) => {
   const [selectedPlan, setSelectedPlan] = useState<TPlan>("Year");
   const [selectedTier, setSelectedTier] = useState<TTier>("Pro");
+  const freePlanLimits = useFreePlanLimitFlags();
   const [openingCheckout, setOpeningCheckout] = useState(false);
   const router = useRouter();
   const { effectiveTheme } = useDarkMode();
@@ -402,6 +405,9 @@ const NewTrialBody = ({
         <p className="text-center text-gray-400 text-content mb-4">
           {offerPlan.name}: {monthType.price} monthly · {yearType.price} yearly
         </p>
+        <div className="mb-4 flex justify-center">
+          <FreePlanLimitLines align="center" flags={freePlanLimits} />
+        </div>
 
         <div className="space-y-6 max-w-md mx-auto w-full">
           <NewTrialCard

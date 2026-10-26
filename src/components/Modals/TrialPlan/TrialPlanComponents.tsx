@@ -1,4 +1,6 @@
 import { IconsGlobal } from "@/components/Common/IconsGlobal";
+import { FreePlanLimitLines } from "@/components/Modals/Settings/SettingsBillingRow";
+import { useFreePlanLimitFlags } from "@/hooks/useFreePlanLimitCopy";
 import { getTeamById } from "@/lib/serverActions";
 import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
 import { CreateCheckoutParams, IPricingSearchParams } from "@/models/model";
@@ -134,10 +136,14 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
 export const PlansTable = ()=>{
     const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
     const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+    const freePlanLimits = useFreePlanLimitFlags();
     return(
         <>
         <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Start a Hypertask plan" : "Try the Pro plan for free for 14 days"}</h2>
-        <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.</p>
+        <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">Unlimited AI. Risk free, cancel anytime.</p>
+        <div className="flex justify-center">
+            <FreePlanLimitLines align="center" flags={freePlanLimits} />
+        </div>
         <div className="py-2 sm:py-6 max-h-[58svh] max-w-[80vw] overflow-auto lg:scrollbar-none scrollbar-thin scrollbar-thumb-inherit scrollbar-track-inherit text-left font-semibold ">
                 <div className="flex xs:gap-3 lg:gap-8">
 
