@@ -46,6 +46,7 @@
           "taskId": null,
           "projectId": null,
           "agentId": null,
+          "agentSessionKey": null,
           "teamId": null,
           "title": null,
           "messages": [
