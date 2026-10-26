@@ -59,17 +59,20 @@ export function AiChatSidebarResizeHandle() {
       draggedWidth = clampAiChatSidebarWidthPx(next, window.innerWidth);
       setWidthPx(draggedWidth);
     };
-    const onUp = () => {
-      if (rememberWidth && userId !== undefined && draggedWidth !== undefined) {
-        const width = draggedWidth;
-        setPreferredWidths((widths) => ({ ...widths, [userId]: width }));
-      }
+    const stopDragging = () => {
       setIsDragging(false);
       document.body.style.userSelect = "";
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onUp);
     };
+    const onUp = rememberWidth ? () => {
+      if (userId !== undefined && draggedWidth !== undefined) {
+        const width = draggedWidth;
+        setPreferredWidths((widths) => ({ ...widths, [userId]: width }));
+      }
+      stopDragging();
+    } : stopDragging;
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
     document.addEventListener("pointercancel", onUp);
