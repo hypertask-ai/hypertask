@@ -133,8 +133,8 @@ test("Haiku catalog aliases and raw legacy ids resolve regardless of the flag", 
       assert.equal(catalog.resolveHaikuModelId(id, enabled), id);
     }
     for (const entry of catalog.aiModelOptions) {
-      assert.equal(catalog.isAiModelOptionVisible(entry, enabled), entry.modelKey !== "deepseek-v4.1-flash-fast");
-      assert.equal(catalog.isAiModelOptionVisible(entry, enabled, true), true);
+      assert.equal(catalog.isAiModelOptionVisible(entry, enabled), entry.modelKey !== "deepseek-v4.1-flash-fast" && !catalog.isGrokGemini4ModelKey(entry.modelKey));
+      assert.equal(catalog.isAiModelOptionVisible(entry, enabled, true), !catalog.isGrokGemini4ModelKey(entry.modelKey));
     }
   }
 });

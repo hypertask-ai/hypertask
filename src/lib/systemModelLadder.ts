@@ -278,7 +278,7 @@ export function resolveUserFacingModelOption(
   return (
     pickAutoAiModelOption(
       aiModelOptions.filter((option) =>
-        isAiModelOptionVisible(option, haiku55Enabled) && isModelOptionEnabled(
+        isAiModelOptionVisible(option, haiku55Enabled, false, true) && isModelOptionEnabled(
           option,
           aiProviderSettings,
           customEndpointConfigured,

@@ -1,4 +1,4 @@
-import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/definitions/htpr-7939-grok-gemini4-models";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 

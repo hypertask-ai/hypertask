@@ -30,7 +30,7 @@ import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiS
 import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import { getAiDefaultModelContext, resolveTeamCustomEndpoint } from "@/app/api/ai/_lib/byokKeys";
 import { getDefaultAiModelOptionForPlan, type AiDefaultModelContext, getAiModelOptionById, resolveAiModelOption, isGrokGemini4ModelKey } from "@/lib/aiModelOptions";
-import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/definitions/htpr-7939-grok-gemini4-models";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 

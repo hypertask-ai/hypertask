@@ -28,7 +28,7 @@ export function filterModelOptionForTeam(
   const enabled = aiModelOptions.filter((candidate) => {
     const candidateDefinition = getAiModelDefinition(candidate.modelKey);
     return (
-      isAiModelOptionVisible(candidate, haiku55Enabled) && candidateDefinition &&
+      isAiModelOptionVisible(candidate, haiku55Enabled, false, true) && candidateDefinition &&
       candidateDefinition.provider !== "custom" &&
       resolveTeamProviderEnabled(settings, candidateDefinition.provider)
     );

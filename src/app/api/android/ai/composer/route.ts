@@ -10,7 +10,7 @@ import {
   resolveTeamCustomEndpoint,
 } from "@/app/api/ai/_lib/byokKeys";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
-import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/definitions/htpr-7939-grok-gemini4-models";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { buildComposerConfig, providersRequiringByokCheck } from "./config";
 
 function error(message: string, status: number) {

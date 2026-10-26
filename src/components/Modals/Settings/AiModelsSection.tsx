@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 import { currentUserAtom } from "@/store";
 import { useRecoilValue } from "@/lib/state";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/definitions/htpr-7939-grok-gemini4-models";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import {
   teamAiProvidersQueryKey,
   useTeamAiProviders,
