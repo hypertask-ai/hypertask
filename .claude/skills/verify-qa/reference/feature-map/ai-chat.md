@@ -28,6 +28,18 @@ only and may validly be fewer or absent when no specific improvement is justifie
 Record the effective flag and response. If chips are returned, wait for them
 (about 10 s), click one and check it is sent and answered in the same chat.
 
+## Unsent message drafts
+
+In both the docked sidebar and `/chat`, type while a reply streams.
+Finish, fail or stop that reply: the unsent text must remain.
+Queue a follow-up, then type another unsent message; draining the queue
+must not clear it. Retry an older message without sending the new draft.
+Switch from chat A to B, write different text, then return to A and reload:
+each chat restores its own rich-text draft in the same browser tab.
+Sending or explicitly clearing a draft must not restore it on reload.
+Opening a different account must not expose the previous account's draft.
+Capture the typed text before and after, alongside queued-message delivery.
+
 ## Retiring a model version
 
 A saved pick, a team feature override or a stored agent pin keeps an old
@@ -70,6 +82,12 @@ the chat request carried `claude-haiku-5-5`.
 
 ## What proof to collect
 
+For code readability (https://app.hypertask.ai/detail/project-15/7782), request
+shell, JSON and SQL fenced blocks plus inline code and a long unbroken line.
+Check readable text, monospace, horizontal block scrolling and Copy response
+in the docked sidebar, `/chat`, and phone view at 390x844. Capture Porcelain,
+Graphite, AMOLED and Dia, plus Follow system with light and dark device modes.
+
 Screenshot the sent message and the received reply together, with the model
 name visible if the UI shows it. If the ticket is about a specific
 model/provider, don't accept a reply from a silently-substituted fallback
@@ -108,3 +126,14 @@ The sidebar and its board-scope picker must stay visible even when the chat runt
 Opening again must not close a chat already requested open. The existing
 **Close AI chat** button must still close it. Capture the first opening
 and use the unchanged `[data-ai-chat-scope]:visible > button` scope control.
+
+## Remembered sidebar width
+
+With `htpr-8013-sidebar-width` enabled, use QA 985's existing sidebar resize
+handle on a desktop board. Drag to a new width, close and reopen, then reload
+and open a ticket or another board. Each opening must retain the dragged width.
+Shrink the window until the sidebar hits its existing 85% viewport limit, then
+expand it again: the original dragged width must return. Temporary viewport
+clamping must not replace the preference. A second account starts at 420px and
+keeps its own drags. Phone chat remains full-width. The flag-off path retains
+the previous shared width and viewport clamping behavior.

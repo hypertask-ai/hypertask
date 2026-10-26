@@ -2,6 +2,7 @@ import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { resolveQueuedMessageCreatedAt } from "@/lib/aiChat/queuedMessageOrder";
 import prisma from "@/lib/prisma";
 import {
   getHypertasksObjectSize,
@@ -160,6 +161,12 @@ export async function POST(request: NextRequest) {
           })
         : messageData.content;
 
+    const createdAt = await resolveQueuedMessageCreatedAt(
+      messageData.role,
+      messageData.precedesMessageId,
+      (id) => prisma.chatMessage.findFirst({ where: { id, sessionId, role: "assistant" }, select: { createdAt: true } })
+    );
+
     const [_, message] = await prisma.$transaction([
       prisma.chatSession.update({
         where: { id: sessionId },
@@ -171,6 +178,7 @@ export async function POST(request: NextRequest) {
         data: {
           sessionId,
           content,
+          createdAt,
           role: messageData.role,
           isDelivered: true,
           authorUserId: messageData.role === "human" ? user.id : null,
