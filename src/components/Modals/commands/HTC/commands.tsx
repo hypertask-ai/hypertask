@@ -189,6 +189,8 @@ const Commands = (props: Props) => {
   let hiddenBasetenCommandKey: string | undefined;
   if (!basetenByokEnabled) hiddenBasetenCommandKey = "settingsApiKeysBasetenApiKey";
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
+  let hiddenXaiCommandKeys = "";
+  if (!grokGemini4Enabled) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai";
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -277,7 +279,7 @@ const Commands = (props: Props) => {
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
             command.key !== hiddenBasetenCommandKey &&
-            (grokGemini4Enabled || (command.key !== "settingsApiKeysXaiApiKey" && command.key !== "settingsAiModelsXai")) &&
+            !hiddenXaiCommandKeys.split(" ").includes(command.key) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -424,7 +426,7 @@ const Commands = (props: Props) => {
     pageActions,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
-    grokGemini4Enabled,
+    hiddenXaiCommandKeys,
     autoTaskDescriptionsEnabled,
     currentProject,
     frequentlyUsed,

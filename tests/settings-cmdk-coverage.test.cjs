@@ -274,7 +274,7 @@ test("unresolved shared row labels fail rather than silently dropping a setting"
 
 const gatedCommands = [
   { keys: ["settingsApiKeysBasetenApiKey"], flag: "basetenByokEnabled", dependency: "hiddenBasetenCommandKey", file: "ApiKeysSection.tsx", uiFlag: "basetenEnabled" },
-  { keys: ["settingsApiKeysXaiApiKey", "settingsAiModelsXai"], flag: "grokGemini4Enabled", file: "ApiKeysSection.tsx", uiFlag: "grokGemini4Enabled" },
+  { keys: ["settingsApiKeysXaiApiKey", "settingsAiModelsXai"], flag: "grokGemini4Enabled", dependency: "hiddenXaiCommandKeys", file: "ApiKeysSection.tsx", uiFlag: "grokGemini4Enabled" },
   { keys: ["settingsCalendarKeepTasksUpdated"], flag: "googleCalendarSettingsEnabled", file: "CalendarSection.tsx", uiFlag: "enabled" },
   { keys: ["settingsTaskPageSuggestDescriptionsFromTaskTitles"], flag: "autoTaskDescriptionsEnabled", file: "src/components/sidebars/RightSidebar/UserPreference.tsx", uiFlag: "autoTaskDescriptionsEnabled" },
 ];

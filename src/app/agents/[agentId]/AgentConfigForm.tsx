@@ -4,7 +4,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
-import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible } from "@/lib/aiModelOptions";
+import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible, isGrokGemini4ModelKey } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import AgentSelect, { AgentOption } from "../AgentSelect";
@@ -62,9 +62,12 @@ export function AgentConfigForm({
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
+  const gatedModelOptions = grokGemini4Enabled
+    ? flagModelOptions
+    : flagModelOptions.filter((option) => !isGrokGemini4ModelKey(option.modelKey));
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, grokGemini4Enabled))
-    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, grokGemini4Enabled));
+    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
+    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
   return (
     <>
                 <section className="bg-comment-description rounded-[4px] px-4 py-3 shadow-md flex flex-col gap-1.5">

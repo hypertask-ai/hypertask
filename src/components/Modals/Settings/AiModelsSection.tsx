@@ -25,6 +25,7 @@ const AiModelsSection = () => {
   const { gdprSafeMode, isLoading, providers } = useTeamAiProviders(teamId);
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const [rows, setRows] = useState(providers);
+  const visibleRows = grokGemini4Enabled ? rows : rows.filter((provider) => provider.key !== "xai");
   const [savingProvider, setSavingProvider] = useState<string | null>(null);
   const [savingSafeMode, setSavingSafeMode] = useState(false);
 
@@ -138,7 +139,7 @@ const AiModelsSection = () => {
           </p>
         ) : (
           <div className="flex flex-col gap-1">
-            {rows.filter((provider) => grokGemini4Enabled || provider.key !== "xai").map((provider) => (
+            {visibleRows.map((provider) => (
               <div
                 className="flex items-center justify-between gap-4 rounded-[5px] px-2 py-2 hover:bg-hover-active"
                 key={provider.key}

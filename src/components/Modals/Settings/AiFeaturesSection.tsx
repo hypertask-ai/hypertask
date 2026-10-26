@@ -20,6 +20,7 @@ import {
   aiModelOptions,
   getDefaultAiModelOptionForPlan,
   isAiModelOptionVisible,
+  isGrokGemini4ModelKey,
   getAiModelDefinition,
   getAiModelOptionById,
 } from "@/lib/aiModelOptions";
@@ -319,9 +320,12 @@ const AiFeaturesSection = () => {
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
+  const gatedModelOptions = grokGemini4Enabled
+    ? flagModelOptions
+    : flagModelOptions.filter((option) => !isGrokGemini4ModelKey(option.modelKey));
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, grokGemini4Enabled))
-    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, grokGemini4Enabled));
+    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
+    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();

@@ -94,11 +94,12 @@ test("web pickers, the xAI key row, the xAI provider row and both xAI commands f
   ]) {
     const source = read(file);
     assert.match(source, /useFlag\(HTPR_7939_GROK_GEMINI4_MODELS_FLAG\)/, file);
-    assert.match(source, /isAiModelOptionVisible\(option, true, true, grokGemini4Enabled\)/, file);
-    assert.match(source, /isAiModelOptionVisible\(option, false, true, grokGemini4Enabled\)/, file);
+    assert.match(source, /grokGemini4Enabled\s*\?\s*flagModelOptions\s*:\s*flagModelOptions\.filter\(\(option\) => !isGrokGemini4ModelKey\(option\.modelKey\)\)/, file);
+    assert.match(source, /isAiModelOptionVisible\(option, true, true, true\)/, file);
+    assert.match(source, /isAiModelOptionVisible\(option, false, true, true\)/, file);
   }
   assert.match(read("src/components/Modals/Settings/ApiKeysSection.tsx"), /grokGemini4Enabled \? providerRows : providerRows\.filter\(\(row\) => row\.source !== "xai"\)/);
-  assert.match(read("src/components/Modals/Settings/AiModelsSection.tsx"), /rows\.filter\(\(provider\) => grokGemini4Enabled \|\| provider\.key !== "xai"\)/);
+  assert.match(read("src/components/Modals/Settings/AiModelsSection.tsx"), /grokGemini4Enabled \? rows : rows\.filter\(\(provider\) => provider\.key !== "xai"\)/);
   const commands = read("src/components/Modals/commands/HTC/commands.tsx");
-  assert.match(commands, /grokGemini4Enabled \|\| \(command\.key !== "settingsApiKeysXaiApiKey" && command\.key !== "settingsAiModelsXai"\)/);
+  assert.match(commands, /if \(!grokGemini4Enabled\) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai"/);
 });
