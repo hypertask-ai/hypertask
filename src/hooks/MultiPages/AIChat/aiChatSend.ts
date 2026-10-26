@@ -18,7 +18,7 @@ import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sess
 
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
-  Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "resolveHistorySession" | "sessionsRef" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "settleSendRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
+  Pick<ReturnType<typeof useAiChatState>, "skillDraftsEnabled" | "sessionPagingEnabled" | "getDisplayedSession" | "resolveHistorySession" | "sessionsRef" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "settleSendRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { parallelStreams?: SessionStreams; progressiveChatCreateEnabled?: boolean; reloadTaskAfterChat: boolean; connectionRetry?: boolean; chipSendSignal?: typeof signalAiChip; persistentQueue?: SessionMessageQueue; stopClosesStream?: boolean; navigateToTask?: (projectId: number, uniqueIndex: number) => void };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
@@ -26,7 +26,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   const runtime = sessionId ? context.parallelStreams?.get(sessionId) : undefined;
   const scopedContext = runtime ? { ...context, ...runtime } : context;
   const {
-  parallelStreams, resolveHistorySession, sessionsRef, sessionPagingEnabled, getDisplayedSession, isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
+  skillDraftsEnabled, parallelStreams, resolveHistorySession, sessionsRef, sessionPagingEnabled, getDisplayedSession, isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
   setQueuedMessages, sendInFlightRef, settleSendRef, surface, inViewObject, waitForChatSession,
   currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
   scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
@@ -353,7 +353,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
           await consumeAiChatStream({
             isCurrentStream: ownsSend,
             response: { body: response.body }, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
-            updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, progressiveChatCreateEnabled, navigateToTask,
+            updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, progressiveChatCreateEnabled, navigateToTask, skillDraftsEnabled,
           });
           refusalMessage = null;
           break;

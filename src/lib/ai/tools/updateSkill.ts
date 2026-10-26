@@ -11,11 +11,11 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 import type { ToolContext } from "./context";
 
 export function createUpdateSkillTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, skillDraftsEnabled } = context;
   return {
     hypertask_update_skill: tool({
-      description:
-        "Draft an update to an accessible personal or project skill by ID using structured fields or complete SKILL.md content. Show the complete revised skill and save only after the user approves that exact draft in a new message.",
+      description: skillDraftsEnabled ?
+        "Draft an update to an accessible personal or project skill by ID using structured fields or complete SKILL.md content. Show the complete revised skill and save only after the user approves that exact draft in a new message." : "Update an accessible personal or project skill by ID using structured fields or complete SKILL.md content.",
       inputSchema: z.object({
         skill_id: z.coerce.number().int().positive(),
         markdown: z.string().optional(),
@@ -78,7 +78,7 @@ export function createUpdateSkillTool(context: ToolContext) {
           ...data,
           ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
         };
-        if (await requireCrossMessageConfirmation({
+        if (skillDraftsEnabled && await requireCrossMessageConfirmation({
           userId: user.id,
           sessionId: confirmationSessionId,
           operationKey: `update-skill:${skill.id}:${JSON.stringify({ skill, changes })}`,
@@ -96,7 +96,7 @@ export function createUpdateSkillTool(context: ToolContext) {
 
         try {
           const updated = await prisma.aI_Skill.update({
-            where: { id: skill.id, updatedAt: skill.updatedAt },
+            where: { id: skill.id, ...(skillDraftsEnabled ? { updatedAt: skill.updatedAt } : {}) },
             data: changes,
           });
           return sanitizeForJson({ success: true, skill: updated });

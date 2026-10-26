@@ -14,6 +14,7 @@ import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7768_CHAT_SKILL_DRAFTS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
@@ -21,6 +22,7 @@ import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/ht
 
 export function useAiChatState(parallelChatsEnabled = false) {
 
+  const skillDraftsEnabled = useFlag(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG);
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
@@ -267,7 +269,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   }
   const selectedStream = currentSession && parallelStreams?.get(currentSession.id);
   return {
-  parallelStreams,
+  skillDraftsEnabled, parallelStreams,
   lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
   aiChatBoardSessionMap, setAiChatBoardSessionMap, setRecentChatBoardIds, setAiChatPinned, isSidebarMode,

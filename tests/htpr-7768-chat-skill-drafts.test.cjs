@@ -3,7 +3,7 @@ const test = require("node:test");
 const { load } = require("./task-route-loader.cjs");
 const { Prisma } = require("@prisma/client");
 
-function harness() {
+function harness({ enabled = true } = {}) {
   const skills = [];
   const tokens = new Map();
   const redis = {
@@ -43,7 +43,7 @@ function harness() {
   const create = load("src/lib/ai/tools/createSkill.ts", mocks).createCreateSkillTool;
   const update = load("src/lib/ai/tools/updateSkill.ts", mocks).createUpdateSkillTool;
   function turn({ userId = 985, sessionId = "skill-session" } = {}) {
-    const context = { user: { id: userId }, confirmationSessionId: sessionId, bulkPreviewsIssued: new Set(), sendStatus() {} };
+    const context = { skillDraftsEnabled: enabled, user: { id: userId }, confirmationSessionId: sessionId, bulkPreviewsIssued: new Set(), sendStatus() {} };
     const creator = create(context).hypertask_create_skill;
     const updater = update(context).hypertask_update_skill;
     return {
@@ -196,3 +196,14 @@ for (const duringCommit of [false, true]) {
     assert.equal(h.skills[0].body, "Changed by another editor");
   });
 }
+
+
+test("flag Off preserves direct creation and updates without draft confirmation", async () => {
+  const h = harness({ enabled: false });
+  const saved = await h.turn().create(draft);
+  assert.equal(saved.success, true);
+  assert.equal(h.skills[0].body, draft.body);
+  const updated = await h.turn().update({ skill_id: saved.skill.id, body: "Direct update" });
+  assert.equal(updated.success, true);
+  assert.equal(h.skills[0].body, "Direct update");
+});

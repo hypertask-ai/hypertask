@@ -296,8 +296,8 @@
   {
     "file": "src/lib/ai/chatStream/prompt.ts",
     "id": "agent-system-prompt",
-    "version": "2",
-    "partsHash": "ce3077e55c9f14014dc8c61b0d7dae24042a571a4be0b8c18538fcae77bfa9f3",
+    "version": "1",
+    "partsHash": "cbe07e00931582770548622a04d27f557e2f621e1dffd7a36fa56f0154c818a2",
     "expressionsHash": "f25482aca279220b626a7e98b3b496b4113853b09f608a5c80187135a0023824"
   },
   {
@@ -404,5 +404,12 @@
     "version": "1",
     "partsHash": "115522d00fa6bf535c3cbb8af94cd89ec4be0a4823d808106e48988103009ac9",
     "expressionsHash": "3987f615e6ce9d82f477171cd015d3ba142e7eebe2703e76c58394b77af57461"
+  },
+  {
+    "id": "chat-skill-drafts",
+    "file": "src/lib/ai/chatStream/modelTurn.ts",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "version": "1",
+    "partsHash": "5b3d57bfd16e047bd3a473f4ac362e47f34e261da49b4e48a106c3d4cade3c65"
   }
 ]

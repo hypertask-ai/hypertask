@@ -11,11 +11,11 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 import type { ToolContext } from "./context";
 
 export function createCreateSkillTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, skillDraftsEnabled } = context;
   return {
     hypertask_create_skill: tool({
-      description:
-        "Draft a personal or project skill from a requested workflow or this chat session. Returns the complete draft for review before saving. If the slug exists, offer to update the existing skill instead. Save only after the user approves the exact draft in a new message.",
+      description: skillDraftsEnabled ?
+        "Draft a personal or project skill from a requested workflow or this chat session. Returns the complete draft for review before saving. If the slug exists, offer to update the existing skill instead. Save only after the user approves the exact draft in a new message." : "Create a personal or project skill from complete SKILL.md content or structured fields.",
       inputSchema: z.object({
         scope: z.enum(["user", "project"]).default("user"),
         project_id: z.coerce.number().int().positive().optional(),
@@ -69,32 +69,34 @@ export function createCreateSkillTool(context: ToolContext) {
         }
 
         const draft = { ...scope, ...parsed, enabled: input.enabled };
-        const existing = await prisma.aI_Skill.findFirst({
-          where: { ...scope, slug: parsed.slug },
-        });
-        if (existing) {
-          return sanitizeForJson({
-            success: false,
-            existing_skill: { id: existing.id, slug: existing.slug, name: existing.name },
-            skill: draft,
-            scope: input.scope,
-            message: "This slug already exists in this scope. Offer to update that skill using hypertask_update_skill; do not overwrite it without approval.",
+        if (skillDraftsEnabled) {
+          const existing = await prisma.aI_Skill.findFirst({
+            where: { ...scope, slug: parsed.slug },
           });
-        }
-        if (await requireCrossMessageConfirmation({
-          userId: user.id,
-          sessionId: confirmationSessionId,
-          operationKey: `create-skill:${JSON.stringify(draft)}`,
-          confirmed: input.confirmed,
-          previewsIssuedThisRequest: bulkPreviewsIssued,
-        }) === "preview") {
-          return sanitizeForJson({
-            success: false,
-            confirmation_required: true,
-            skill: draft,
-            scope: input.scope,
-            message: "Nothing has been saved. Show the full draft: slug, name, description, trigger (argumentHint), body, enabled and personal or board scope. Ask the user to confirm, edit or reject it. End your turn. Only after approval in a new message repeat this exact call with confirmed: true. Edits require a new preview.",
-          });
+          if (existing) {
+            return sanitizeForJson({
+              success: false,
+              existing_skill: { id: existing.id, slug: existing.slug, name: existing.name },
+              skill: draft,
+              scope: input.scope,
+              message: "This slug already exists in this scope. Offer to update that skill using hypertask_update_skill; do not overwrite it without approval.",
+            });
+          }
+          if (await requireCrossMessageConfirmation({
+            userId: user.id,
+            sessionId: confirmationSessionId,
+            operationKey: `create-skill:${JSON.stringify(draft)}`,
+            confirmed: input.confirmed,
+            previewsIssuedThisRequest: bulkPreviewsIssued,
+          }) === "preview") {
+            return sanitizeForJson({
+              success: false,
+              confirmation_required: true,
+              skill: draft,
+              scope: input.scope,
+              message: "Nothing has been saved. Show the full draft: slug, name, description, trigger (argumentHint), body, enabled and personal or board scope. Ask the user to confirm, edit or reject it. End your turn. Only after approval in a new message repeat this exact call with confirmed: true. Edits require a new preview.",
+            });
+          }
         }
 
         try {

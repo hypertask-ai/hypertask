@@ -6,7 +6,7 @@ import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
-type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "progressiveChatCreateEnabled" | "navigateToTask"> & {
+type Context = Pick<AiChatSendContext, "skillDraftsEnabled" | "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "progressiveChatCreateEnabled" | "navigateToTask"> & {
   isCurrentStream?: () => boolean;
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
@@ -176,7 +176,7 @@ export async function consumeAiChatStream(context: Context) {
                     break;
                   }
                   case "done":
-                    invalidateSlashSkills();
+                    if (context.skillDraftsEnabled) invalidateSlashSkills();
                     if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     sawDone = true;
                     console.log("🔥 Stream complete:", parsed);

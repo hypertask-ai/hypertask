@@ -58,7 +58,7 @@ test('route prompt literals are short and the detector rejects a known long inli
 
 test('prompt identification records only id and version, including composed chat prompts', () => {
   const { AGENT_SYSTEM_PROMPT } = load(path.join(root, 'src/lib/ai/chatStream/prompt.ts'));
-  assert.deepEqual(identifyPrompt([{ role: 'system', content: `${AGENT_SYSTEM_PROMPT}\nUser-specific context` }]), { promptId: 'agent-system-prompt', promptVersion: '2' });
+  assert.deepEqual(identifyPrompt([{ role: 'system', content: `${AGENT_SYSTEM_PROMPT}\nUser-specific context` }]), { promptId: 'agent-system-prompt', promptVersion: '1' });
   assert.deepEqual(identifyPrompt([{ role: 'user', content: [{ type: 'text', text: renderPrompt('task-summaries-system-2') }] }]), { promptId: 'task-summaries-system-2', promptVersion: '1' });
   assert.deepEqual(identifyPrompt([{ role: 'user', content: 'private dynamic content' }]), { promptId: 'dynamic-input', promptVersion: '1' });
   const { createPromptForTiptapForwardSlash } = load(path.join(root, 'src/app/api/ai/_lib/editorAiPrompts.ts'));
