@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { isPaidTeam } from "@/lib/freeTier";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
+import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7923-unlimited-free-tickets";
 
 export const FREE_PLAN_MAX_BOARDS = 2;
 export const FREE_PLAN_MAX_TICKETS = 250;
@@ -74,6 +75,11 @@ export async function isPlanLimitsEnabled(actorUserId: number | null): Promise<b
   return actorUserId != null && isFeatureEnabled(HTPR_7686_FREE_PLAN_LIMITS_FLAG, actorUserId);
 }
 
+async function isTicketLimitEnabled(actorUserId: number | null): Promise<boolean> {
+  if (actorUserId == null || !await isPlanLimitsEnabled(actorUserId)) return false;
+  return !await isFeatureEnabled(HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG, actorUserId);
+}
+
 export function scopeForProject(project: ProjectScopeSource): PlanLimitScope {
   return project.teamId
     ? { kind: "team", teamId: project.teamId }
@@ -132,7 +138,7 @@ export async function assertBoardRoom(tx: Prisma.TransactionClient, scope: PlanL
 }
 
 export async function assertTicketRoom(tx: Prisma.TransactionClient, scope: PlanLimitScope, delta: number, ctx: PlanLimitContext): Promise<void> {
-  if (delta <= 0 || !await isPlanLimitsEnabled(ctx.actorUserId) || !await isFreeScope(scope)) return;
+  if (delta <= 0 || !await isTicketLimitEnabled(ctx.actorUserId) || !await isFreeScope(scope)) return;
   await lockPlanLimitScope(tx, scope);
   const count = await tx.task.count({
     where: { status: "Normal", project: { ...scopeWhere(scope), status: "Normal" } },
@@ -141,7 +147,7 @@ export async function assertTicketRoom(tx: Prisma.TransactionClient, scope: Plan
 }
 
 export async function assertProjectTicketRoom(tx: Prisma.TransactionClient, projectId: number, delta: number, ctx: PlanLimitContext): Promise<void> {
-  if (delta <= 0 || !await isPlanLimitsEnabled(ctx.actorUserId)) return;
+  if (delta <= 0 || !await isTicketLimitEnabled(ctx.actorUserId)) return;
   const project = await tx.project.findUniqueOrThrow({
     where: { id: projectId },
     select: { teamId: true, ownerId: true, status: true },
@@ -165,7 +171,7 @@ export async function assertTaskCountTransition(
 ): Promise<void> {
   if (after.status !== "Normal" ||
       (before.status === "Normal" && before.projectId === after.projectId) ||
-      !await isPlanLimitsEnabled(ctx.actorUserId)) return;
+      !await isTicketLimitEnabled(ctx.actorUserId)) return;
   const destination = await tx.project.findUniqueOrThrow({
     where: { id: after.projectId },
     select: { teamId: true, ownerId: true, status: true },
