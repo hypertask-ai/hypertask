@@ -25,7 +25,7 @@ function loadHook(mocks) {
   return loaded.exports.useChatShortcuts;
 }
 
-function fixture(surface, { enabled = true, width = 1440 } = {}) {
+function fixture(surface, { enabled = true, width = 1440, active = true } = {}) {
   const dom = new JSDOM(`<input id="board"><section data-ai-chat-surface="${surface}" tabindex="-1">
     <button id="header">Chat</button><div data-ai-chat-scope><button id="scope">Scope</button></div>
     <div data-ai-chat-model><button id="model">Model</button></div><div data-ai-chat-composer>
@@ -88,8 +88,9 @@ function fixture(surface, { enabled = true, width = 1440 } = {}) {
     "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { aiMentionList: "mentions" } },
     "@/lib/skills/slashSkills": { SLASH_MENU_DOM_ID: "slash-menu" },
   });
-  const render = () => { index = 0; hook = useChatShortcuts(); hook.surfaceRef(root); return hook; };
+  const render = () => { index = 0; hook = useChatShortcuts({ active }); hook.surfaceRef(root); return hook; };
   render();
+  root.querySelector("[data-ai-chat-composer]").addEventListener("keydown", (event) => context.tiptapKeydown(event));
   root.addEventListener("keydown", (nativeEvent) => {
     const event = {
       nativeEvent, target: nativeEvent.target, currentTarget: root,
@@ -209,7 +210,7 @@ test("board keys, other inputs, other windows, composition, repeats, phone and r
 test("session navigation respects order and boundaries without wrapping", () => {
   assert.equal(registry.adjacentChatSession(["a", "b"], "b", "next"), undefined);
   assert.equal(registry.adjacentChatSession(["a", "b"], "a", "previous"), undefined);
-  assert.equal(registry.adjacentChatSession(["a", "b"], undefined, "next"), "a");
+  assert.equal(registry.adjacentChatSession(["a", "b"], undefined, "next"), undefined);
   assert.equal(registry.adjacentChatSession([], undefined, "previous"), undefined);
   assert.equal(registry.chatShortcutHint("new", true), "Cmd+Shift+O");
   assert.equal(registry.chatShortcutHint("focus", true), "Ctrl+Q");
@@ -225,5 +226,18 @@ test("Option shortcuts use physical codes on Apple layouts", () => {
     f.press("÷", { altKey: true, code: "Slash" });
     assert.equal(f.render().modal.props.header, "Chat shortcuts");
     assert.equal(registry.chatShortcutHint("mention", true), "Option+2");
+  } finally { f.close(); }
+});
+
+test("inactive external-agent headers cannot target retained native sessions", () => {
+  const f = fixture("sidebar", { active: false });
+  try {
+    f.dom.window.confirm = () => assert.fail("native deletion confirmation must not open");
+    const header = f.root.querySelector("#header");
+    for (const [key, modifiers] of [["Backspace", { ctrlKey: true, shiftKey: true }], ["p", { ctrlKey: true, shiftKey: true }], ["m", { ctrlKey: true, shiftKey: true }], ["u", { ctrlKey: true }]]) {
+      assert.equal(f.press(key, modifiers, header).defaultPrevented, false);
+    }
+    assert.deepEqual(f.actions, []);
+    assert.deepEqual(f.pins(), []);
   } finally { f.close(); }
 });

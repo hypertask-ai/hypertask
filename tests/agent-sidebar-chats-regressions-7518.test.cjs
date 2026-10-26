@@ -461,6 +461,7 @@ test("native switching snapshots the latest draft and attachments after open, tr
     startNewSession: assert.fail,
   };
   const mocks = {
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     react: { ...react, default: react },
     "@/hooks/useFlag": { useFlag: key => key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },

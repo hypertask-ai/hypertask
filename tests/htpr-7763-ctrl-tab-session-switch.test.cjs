@@ -49,7 +49,7 @@ function fixture() {
   ];
 }
 
-function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true, width = 1440, current = "today", rows = fixture() } = {}) {
+function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE", paging = true, width = 1440, current = "today", rows = fixture() } = {}) {
   const dom = new JSDOM('<input id="search"><textarea id="composer"></textarea>', { url: "https://app.hypertask.ai/chat" });
   dom.window.innerWidth = width;
   const savedGlobals = ["window", "document", "setTimeout"].map(key => [key, Object.getOwnPropertyDescriptor(global, key)]);
@@ -87,7 +87,7 @@ function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true
   const router = { replace: route => routes.push(route) };
   const { default: Chat } = load("src/app/chat/Chat.tsx", {
     react,
-    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: shared }) },
     "@/lib/aiChat/chatShortcuts": { chatShortcutHint: () => "" },
     "@/components/Modals/OptionPicker": { default: "OptionPicker" },
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
@@ -139,6 +139,11 @@ function chat({ enabled = flag.default.defaultMode === "EVERYONE", paging = true
   render();
   return {
     context, routes, selections, composer, dom,
+    searchKey(overrides = {}) {
+      const event = { key: "Enter", keyCode: 13, nativeEvent: { isComposing: false }, preventDefault: noop, stopPropagation: noop, ...overrides };
+      elements(tree, node => node.type === "input")[0].props.onKeyDown(event);
+      render();
+    },
     get ids() { return elements(tree, node => node.type === "li").map(node => node.key); },
     get groups() { return elements(tree, node => node.type === "h2").map(node => node.props.children); },
     setFlag(value) { enabled = value; render(); },
@@ -313,6 +318,26 @@ test("existing Ctrl+Shift+O, Ctrl+Shift+J and Ctrl+Q still execute alongside ses
     assert.equal(newChats, 2);
   } finally {
     document.removeEventListener("keydown", keyboard.layoutKeydown);
+    view.close();
+  }
+});
+
+test("full-screen rail search preserves IME commits and still selects with ordinary Enter", () => {
+  const view = chat({ shared: true, current: "pinned" });
+  const previousFrame = global.requestAnimationFrame;
+  global.requestAnimationFrame = callback => callback();
+  view.context.editor.commands = { focus: () => view.composer.focus() };
+  try {
+    view.search("MATCH");
+    view.searchKey({ nativeEvent: { isComposing: true } });
+    view.searchKey({ keyCode: 229 });
+    assert.deepEqual(view.selections, []);
+    view.searchKey();
+    assert.deepEqual(view.selections, ["pinned"]);
+    assert.equal(document.activeElement.id, "composer");
+  } finally {
+    if (previousFrame) global.requestAnimationFrame = previousFrame;
+    else delete global.requestAnimationFrame;
     view.close();
   }
 });

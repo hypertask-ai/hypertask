@@ -78,7 +78,7 @@ export const AI_Chat_Sidebar = ({
     }
   }, [enabled, projectId]);
 
-  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string) => {
+  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, { createFallbackSession = true } = {}) => {
     const intent = ++intentRef.current;
     if (next.kind !== "ai" && !sidebarEnabled) return;
     let nativeSessionId: string | null = null;
@@ -99,7 +99,7 @@ export const AI_Chat_Sidebar = ({
         setRosterError(error instanceof Error ? error.message : "Could not open chat");
         return;
       }
-    } else if (target.kind === "native-agent" && !aiSessionRef.current && !aiSessionId) {
+    } else if (createFallbackSession && target.kind === "native-agent" && !aiSessionRef.current && !aiSessionId) {
       setNativeSidebarChat(null);
       await chat.startNewSession();
     }
@@ -141,9 +141,15 @@ export const AI_Chat_Sidebar = ({
     }
   };
   const shortcuts = useChatShortcuts({
+    active: target.kind !== "external-agent",
     onNewChat: async () => {
-      await selectTarget({ kind: "ai" });
-      await chat.startNewSession();
+      resolvingGeneralChat.current = true;
+      try {
+        await selectTarget({ kind: "ai" }, undefined, { createFallbackSession: false });
+        await chat.startNewSession();
+      } finally {
+        resolvingGeneralChat.current = false;
+      }
     },
     onSelectSession: (id) => { void selectTarget({ kind: "ai" }, id); },
   });

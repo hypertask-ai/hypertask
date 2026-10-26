@@ -33,6 +33,7 @@ async function pickSkill({ enabled = true, mode = "create-comment", keyboard = f
   const agent = { id: "runner", displayName: "Runner", runtimeType: "EXTERNAL" };
   const mocks = {
     [flagImport]: { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: flag },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : ["comment-skills", "inline-ai", "agent-chats"].includes(key) },
     "@/lib/flags/keys": keys,
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "past-chats" },

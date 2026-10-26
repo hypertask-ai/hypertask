@@ -6,6 +6,7 @@ const flag = "htpr-8042-amoled-chat-border";
 
 function windowView({ enabled = true, mobile = false, minimized = false } = {}) {
   const load = loader({
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/hooks/useFlag": { useFlag: key => key === flag && enabled },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {

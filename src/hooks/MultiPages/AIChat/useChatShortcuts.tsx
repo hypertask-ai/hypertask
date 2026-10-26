@@ -12,12 +12,14 @@ import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
 
 export function useChatShortcuts(options: {
+  active?: boolean;
   onNewChat?: () => void | Promise<unknown>;
   onSelectSession?: (id: string) => void;
   sessionIds?: string[];
   onSearch?: () => void;
 } = {}) {
-  const enabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const requested = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const enabled = requested && options.active !== false;
   const isApple = useDeviceContext();
   const chat = useAiChatContext();
   const [pinnedIds, setPinnedIds] = useRecoilState(aiChatPinnedSessionIdsAtom);
@@ -100,7 +102,7 @@ export function useChatShortcuts(options: {
         return true;
       case "send": {
         const target = document.activeElement;
-        if (!(target instanceof HTMLElement) || !target.closest(".ProseMirror[contenteditable='true']") || target.closest("[data-agent-chat-ai-composer]")) return false;
+        if (!(target instanceof HTMLElement) || !target.closest("[data-ai-chat-composer]") || !target.closest(".ProseMirror[contenteditable='true']") || target.closest("[data-agent-chat-ai-composer]")) return false;
         if (chat.isRecording) return click("[data-ai-chat-recording-submit]");
         const event = currentEvent.current;
         if (!event) return false;
@@ -131,7 +133,7 @@ export function useChatShortcuts(options: {
     }
   };
   const onKeyDownCapture = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (!enabled) return;
+    if (!enabled || event.nativeEvent.keyCode === 229) return;
     const target = event.target;
     if (target instanceof HTMLElement && target.closest("[data-agent-chat-ai-composer]")) return;
     rootRef.current = event.currentTarget;
@@ -154,10 +156,6 @@ export function useChatShortcuts(options: {
       closePicker();
       if (typeof id !== "string") return;
       if (picker === "search") selectSession(id);
-      else {
-        const shortcut = CHAT_SHORTCUTS.find((item) => item.id === id);
-        if (shortcut) run(shortcut.id);
-      }
     }}
   />;
   return { enabled, onKeyDownCapture, modal, surfaceRef: (element: HTMLElement | null) => { rootRef.current = element; } };

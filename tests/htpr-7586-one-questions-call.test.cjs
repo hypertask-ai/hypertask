@@ -46,6 +46,7 @@ async function withSidebar(options, check) {
     aiChatEditTaskIdAtom: "edit", composeTaskChatIntroAtom: "intro", composeTaskQuestionsTaskIdAtom: "questionsTaskId", aiChatSidebarWidthPxAtom: "width",
   };
   const mocks = {
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {

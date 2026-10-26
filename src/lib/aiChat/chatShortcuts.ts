@@ -61,7 +61,7 @@ export function dispatchChatShortcut(
 
 export function adjacentChatSession(ids: string[], currentId: string | undefined, direction: "next" | "previous") {
   const index = ids.indexOf(currentId ?? "");
-  if (index < 0) return direction === "next" ? ids[0] : ids[ids.length - 1];
+  if (index < 0) return;
   return ids[index + (direction === "next" ? 1 : -1)];
 }
 

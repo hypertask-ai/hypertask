@@ -153,17 +153,19 @@ test("flag off preserves AI and agent-only rows, legacy status words and agent s
   assert.deepEqual(view.selections, []);
 });
 
-function sidebar(initialSession = { id: "remembered", agentId: null }) {
+function sidebar(initialSession = { id: "remembered", agentId: null }, { createSession = () => assert.fail("An explicit saved chat must not create a replacement") } = {}) {
+  let shortcutOptions;
   const events = [];
   const state = hooks(value => { if (value?.kind) events.push(`mode:${value.kind}`); });
   let nativeContext = null;
   let chat = {
     currentSession: initialSession, fileItems: [], editor: { getHTML: () => "", getText: () => "", commands: { setContent: noop } },
-    resetFiles: noop, startNewSession: () => assert.fail("An explicit saved chat must not create a replacement"),
+    resetFiles: noop, startNewSession: createSession,
     selectSession: id => { events.push(`select:${id}`); chat = { ...chat, currentSession: { id, agentId: id === "native-session" ? "native" : null } }; },
   };
   const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
     react: { ...state.react, default: state.react },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: (options) => { shortcutOptions = options; return { enabled: true }; } },
     "@/hooks/useFlag": { useFlag: key => key !== "htpr-7800-skill-runs-in-sidebar" }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
     "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
@@ -182,7 +184,7 @@ function sidebar(initialSession = { id: "remembered", agentId: null }) {
     "./AI_Tiptap_Container": { AI_Tiptap_Container: "Composer" }, "./AiChatSidebarResizeHandle": { AiChatSidebarResizeHandle: "Resize" },
     "@/lib/configs/style.config": { AI_CHAT_SIDEBAR_MIN_PX: 280 }, "@/utils/undoActions/helperFuncs": { cn: () => "" },
   });
-  return { events, get nativeContext() { return nativeContext; }, get currentSession() { return chat.currentSession; }, showSession(session) { chat = { ...chat, currentSession: session }; }, render() {
+  return { events, get shortcuts() { return shortcutOptions; }, get nativeContext() { return nativeContext; }, get currentSession() { return chat.currentSession; }, showSession(session) { chat = { ...chat, currentSession: session }; }, render() {
     state.reset();
     return find(AI_Chat_Sidebar({}), "ChatHeader").props.sidebarChats;
   } };
@@ -313,4 +315,23 @@ test("the ticket bugfix flag defaults to Everyone with the agreed ship date and 
   assert.equal(flag.default.shippedOn, "2026-10-23");
   assert.equal(flag.default.releaseRisk.risk, "small");
   assert.ok(flag.default.releaseRisk.reason.length > 0);
+});
+
+test("native-to-AI new-chat shortcut creates one session and external targets disable native keys", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, json: async () => ({ success: true, session: { id: "native-session" } }) });
+  let created = 0;
+  try {
+    const view = sidebar(null, { createSession: async () => { created += 1; } });
+    view.render().onSelect(native);
+    await tick();
+    view.render();
+    await view.shortcuts.onNewChat();
+    assert.equal(created, 1);
+    assert.equal(view.render().target.kind, "ai");
+    assert.equal(view.shortcuts.active, true);
+    view.render().onSelect({ kind: "external-agent", agent: agents[0] });
+    view.render();
+    assert.equal(view.shortcuts.active, false);
+  } finally { global.fetch = originalFetch; }
 });

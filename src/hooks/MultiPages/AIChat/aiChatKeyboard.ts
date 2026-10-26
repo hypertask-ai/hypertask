@@ -63,11 +63,12 @@ export function createAiChatKeyboard(context: Context) {
 
   function tiptapKeydown(e: any) {
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    if (e.defaultPrevented || e.isComposing || e.nativeEvent?.isComposing) return;
+    if (e.defaultPrevented || e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229) return;
     const sendShortcut = sharedShortcutsEnabled
       ? matchChatShortcut(e, true) === "send"
       : e.keyCode === KeyCodes.ENTER && !e.shiftKey;
     if (sendShortcut) {
+      if (sharedShortcutsEnabled && (!(e.target instanceof HTMLElement) || !e.target.closest(".ProseMirror[contenteditable='true']") || e.target.closest("[data-agent-chat-ai-composer]"))) return;
       const mentionListElement = document.getElementById(
         DIV_ID_CONSTANTS.aiMentionList
       );

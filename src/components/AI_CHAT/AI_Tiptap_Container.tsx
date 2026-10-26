@@ -186,6 +186,10 @@ export function AI_Tiptap_Container({
     aiChatExplicitOpenAtAtom
   );
   const focusRootRef = useRef<HTMLDivElement>(null);
+  const restoreComposerFocus = () => {
+    if (controlledComposer) (controlledEditor?.view.dom ?? controlledComposer.inputRef.current)?.focus();
+    else editor?.commands.focus("end");
+  };
   const audioButtonId = `ai-chat-audio-button-${useId()}`;
   useEffect(() => {
     if (
@@ -284,7 +288,7 @@ export function AI_Tiptap_Container({
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
         >
-          {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
+          {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} mobile reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
           {!controlledComposer && <div
             data-ai-chat-mobile-context-scroll
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
@@ -383,7 +387,7 @@ export function AI_Tiptap_Container({
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
           leadingControls={
-            controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
+            controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
                 <AIModelDropDownButton
                   keyboardNavigation={sharedShortcuts}
@@ -400,7 +404,7 @@ export function AI_Tiptap_Container({
                     pathname?.startsWith("/chat") ? undefined : "hidden"
                   }
                 />
-                {!pathname?.startsWith("/chat") && <ChatScopeDropdown reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
+                {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
               </>
             )
           }
@@ -544,9 +548,8 @@ export function AI_Tiptap_Container({
   );
 }
 
-function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabled = false }: { mobile?: boolean; reuseChip?: boolean; ticketScopeEnabled?: boolean }) {
+function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabled = false, onRestoreFocus }: { mobile?: boolean; reuseChip?: boolean; ticketScopeEnabled?: boolean; onRestoreFocus: () => void }) {
   const sharedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
-  const { editor } = useAiChatContext();
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -598,7 +601,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
     }
     setDockedScope(projectId);
     setIsOpen(false);
-    if (sharedShortcuts) requestAnimationFrame(() => editor?.commands.focus("end"));
+    if (sharedShortcuts) requestAnimationFrame(onRestoreFocus);
   };
 
   return (
@@ -664,7 +667,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
               }))
             ),
           ]}
-          onClose={() => { setIsOpen(false); if (sharedShortcuts) requestAnimationFrame(() => editor?.commands.focus("end")); }}
+          onClose={() => { setIsOpen(false); if (sharedShortcuts) requestAnimationFrame(onRestoreFocus); }}
           onSelect={({ id }) => {
             if (id === null || typeof id === "number" || id === "all" || id === "ticket") {
               selectScope(id);

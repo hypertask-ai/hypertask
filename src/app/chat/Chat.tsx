@@ -541,6 +541,8 @@ export default function Chat({ initialSessionId }: ChatProps) {
     ...sessionGroups,
   ], [pinnedSessions, sessionGroups]);
 
+  const displayedSessions = displayedSessionGroups.flatMap((group) => group.sessions);
+
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
       sessions.map((session) => session.id)
@@ -576,7 +578,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
 
   const shortcuts = useChatShortcuts({
     onNewChat: handleStartNewSession,
-    sessionIds: displayedSessionGroups.flatMap((group) => group.sessions.map((session) => session.id)),
+    sessionIds: displayedSessions.map((session) => session.id),
     onSelectSession: (id) => {
       selectSession(id);
       window.history.replaceState(null, "", buildFullScreenChatPath(returnPath, id));
@@ -647,7 +649,8 @@ export default function Chat({ initialSessionId }: ChatProps) {
               value={searchQuery}
               onChange={(event) => { setSearchQuery(event.target.value); setSearchIndex(0); }}
               onKeyDown={shortcuts.enabled ? (event) => {
-                const results = displayedSessionGroups.flatMap((group) => group.sessions);
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                const results = displayedSessions;
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                   event.preventDefault();
                   setSearchIndex((index) => Math.max(0, Math.min(results.length - 1, index + (event.key === "ArrowDown" ? 1 : -1))));
@@ -704,12 +707,12 @@ export default function Chat({ initialSessionId }: ChatProps) {
                       <li key={session.id}>
                         <div
                           className={`group relative flex w-full items-center rounded transition-colors hover:bg-hover-active ${
-                            isActive ? "bg-kanban-active-cardbg" : ""
+                            isActive || (shortcuts.enabled && searchQuery && displayedSessions[searchIndex]?.id === session.id) ? "bg-kanban-active-cardbg" : ""
                           }`}
                         >
                           <button
                             type="button"
-                            aria-current={shortcuts.enabled && displayedSessionGroups.flatMap((group) => group.sessions)[searchIndex]?.id === session.id && searchQuery ? "true" : undefined}
+                            aria-current={shortcuts.enabled && displayedSessions[searchIndex]?.id === session.id && searchQuery ? "true" : undefined}
                             onClick={() => {
                               selectSession(session.id);
                               router.replace(
