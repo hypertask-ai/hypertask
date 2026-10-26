@@ -133,12 +133,14 @@ test("open failure waits for the expected error", async () => {
   assert.equal(view.title.text, "AI chat");
 });
 
-test("open waits for browser flags and lane history", async () => {
+test("open waits for browser activity, flags and lane history", async () => {
   const view = pageFor({ selected: chat });
   const flags = deferred();
+  const activity = deferred();
   let listening = false, complete = false;
   view.page.waitForResponse = predicate => {
     listening = true;
+    if (predicate({ url: () => "http://localhost/api/activity/addLastActiveAt" })) return activity.promise;
     assert.equal(predicate({ url: () => "http://localhost/api/flags", ok: () => true }), true);
     return flags.promise;
   };
@@ -148,12 +150,24 @@ test("open waits for browser flags and lane history", async () => {
   await tick();
   assert.equal(complete, false);
   flags.resolve({ json: async () => ({ flags: { "htpr-7518-agent-sidebar-chats": true, "htpr-7688-past-chats-first": true } }) });
+  await tick();
+  assert.equal(complete, false);
+  activity.resolve({ status: () => 200 });
   view.commit();
   await tick();
   assert.equal(complete, false);
   view.load();
   await opening;
   assert.deepEqual(view.selectors, ['[data-command-key="session:saved-id"]']);
+});
+
+test("open rejects a background activity API failure", async () => {
+  const view = pageFor({ selected: chat });
+  view.page.waitForResponse = predicate => Promise.resolve(predicate({ url: () => "http://localhost/api/activity/addLastActiveAt" })
+    ? { status: () => 500 }
+    : { json: async () => ({ flags: {} }) });
+  view.page.goto = async () => {};
+  await assert.rejects(smoke().open(view.page, "Desktop"), /sidebar board startup records user activity/);
 });
 
 test("browser contexts use lane storage states before beforeAll has loaded the fixture", async () => {
@@ -174,7 +188,7 @@ test("seed isolates lane users, cookies, histories and tokens", async () => {
   assert.ok(start >= 0 && end > start);
   const records = {}, files = {};
   let id = 100;
-  const prisma = Object.fromEntries(["user", "member_Team", "member", "chatSession", "chatMessage", "agent"].map(model => {
+  const prisma = Object.fromEntries(["user", "user_Activity", "member_Team", "member", "chatSession", "chatMessage", "agent"].map(model => {
     records[model] = [];
     return [model, {
       create: async ({ data }) => {

@@ -320,6 +320,7 @@ async function seedSessionFixtures(flags) {
       UserSetting: { create: { notification: false, onboardingTourStatus: true, onboardingTutorialStatus: true } },
     }, include: { UserSetting: true } });
     await prisma.user.update({ where: { id: sidebarUser.id }, data: { UserSettingId: sidebarUser.UserSetting.id } });
+    await prisma.user_Activity.create({ data: { userId: sidebarUser.id, totalTeamsOwned: 0, lastActiveAt: new Date() } });
     await prisma.member_Team.create({ data: {
       userId: sidebarUser.id, teamId: team.id, googleAccountId: googleAccount.id, status: "Accepted", acceptedAt: new Date(),
     } });

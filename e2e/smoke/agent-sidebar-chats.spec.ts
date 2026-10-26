@@ -68,7 +68,9 @@ async function heartbeat(request: APIRequestContext, agent: Agent) {
 
 async function open(page: Page, lane: string) {
   const flags = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
+  const activity = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/activity/addLastActiveAt')
   await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board&agentSidebar=1`))
+  expect((await activity).status(), 'sidebar board startup records user activity').toBe(200)
   await expect(page.getByTestId('ai-sidebar')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toBeVisible()
   const enabledFlags = (await (await flags).json()).flags
