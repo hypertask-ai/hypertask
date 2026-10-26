@@ -372,3 +372,21 @@ test("HTPR-7770: retrying an earlier message leaves the current draft through su
     });
   }
 });
+
+test("HTPR-7770: a delayed legacy send cannot clear identical text in another chat", async () => {
+  const f = fixture();
+  f.context.parallelStreams = undefined;
+  f.context.persistentQueue = undefined;
+  let finishAttachments;
+  f.context.processAttachments = () => new Promise((resolve) => { finishAttachments = resolve; });
+  await transport(f, async () => {
+    const sending = f.send("same text");
+    await flush();
+    f.select("B");
+    f.setDraft("same text");
+    finishAttachments([]);
+    await flush();
+    try { assert.equal(f.getDraft(), "same text"); }
+    finally { f.finish("same text"); await sending; }
+  });
+});
