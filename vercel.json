@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/ai-model-canary",
+      "schedule": "40 4 * * *"
+    },
+    {
       "path": "/api/cron/ai-allowance-drift",
       "schedule": "*/5 * * * *"
     },
@@ -43,6 +47,10 @@
     {
       "path": "/api/cron/webhook-signing-key-sweep",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/flag-column-audit",
+      "schedule": "43 4 * * *"
     }
   ]
 }

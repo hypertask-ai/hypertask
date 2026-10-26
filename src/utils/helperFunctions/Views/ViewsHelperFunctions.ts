@@ -10,7 +10,7 @@ import {
   TBoardSortingViewOrder,
   TBoardSubtaskSetting,
 } from "@/models/Views/model";
-import { deepCopy, getFromLocalStorage } from "@/utils/helperFunctions/helperFunctions";
+import { deepCopy, getCurrentProject, getFromLocalStorage } from "@/utils/helperFunctions/helperFunctions";
 import axios from "axios";
 import { defaultFilterSettings, getFilteredSections } from "./FilterHelperFunctions";
 import sortByStringParam from "@/utils/sortByParam";
@@ -200,11 +200,11 @@ export const resolveShowArchivedForBoard = (
 }
 
 
-export const getActiveFiltersFromProject = (project?:IProject|null):IFilterSettings=>{
-    const view = project?.project_view?.user_project_views[0]
-    if (!project || !view) return defaultFilterSettings
-    const unsaved = view.unsavedView?.board_filters as IFilterSettings
-    const applied = view.appliedView?.board_filters as IFilterSettings
+export const getActiveFiltersFromProject = (project?:IProject|null, runtimeContext?:IFilterRuntimeContext):IFilterSettings=>{
+    const view = project?.project_view?.user_project_views?.[0]
+    if (!project || (!view && runtimeContext?.legacyMissingPersonalViewFilters)) return defaultFilterSettings
+    const unsaved = view?.unsavedView?.board_filters as IFilterSettings
+    const applied = view?.appliedView?.board_filters as IFilterSettings
     const defaultView = project.project_view?.default_view?.board_filters as IFilterSettings
     return deepCopy(unsaved??applied??defaultView??defaultFilterSettings)
 }
@@ -639,9 +639,15 @@ export const sanitizeTableSort = (column: unknown, direction: unknown): { column
 
 export { getViewFromProject } from "@/lib/firstScreen/boardView";
 
-export const pinProjectToUrlView = (project: IProject, viewSlug?: string | null, runtimeContext?: IFilterRuntimeContext) => {
+export const pinProjectToUrlView = (project: IProject, viewSlug?: string | null, runtimeContext?: IFilterRuntimeContext, restoreUrlViewSections = true) => {
   const pinnedProject = pinProjectViewToUrl(project, viewSlug)
   if (pinnedProject === project) return project
+
+  if (restoreUrlViewSections && Array.isArray(pinnedProject.section) && Array.isArray(pinnedProject.tasks)) {
+    const { _sections, firstTask } = getCurrentProject(pinnedProject) as { _sections: ISection[]; firstTask: IProject["firstTask"] }
+    pinnedProject.sections = _sections
+    pinnedProject.firstTask = firstTask
+  }
 
   let filteredSections = getFilteredSections(pinnedProject.sections ?? [], pinnedProject, undefined, {}, runtimeContext)
   filteredSections = getAppliedSubtaskSections(filteredSections, pinnedProject)

@@ -1,0 +1,173 @@
+#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+
+const ROOT = path.resolve(__dirname, "..");
+const SOURCES = {
+  gateway: "https://ai-gateway.vercel.sh/v1/models",
+  openai: "https://api.openai.com/v1/models",
+  anthropic: "https://api.anthropic.com/v1/models",
+};
+
+function readCatalog(source) {
+  function rows(name) {
+    const body = source.match(new RegExp(`export const ${name}[^=]*= \\[([\\s\\S]*?)\\n\\];`))?.[1];
+    if (!body) throw new Error(`Cannot read ${name}`);
+    return [...body.matchAll(/^  \{\n([\s\S]*?)^  \},/gm)].map((match) =>
+      Object.fromEntries([...match[1].matchAll(/^    (\w+): "([^"]*)"/gm)].map((field) => [field[1], field[2]])));
+  }
+  const definitions = rows("aiModelDefinitions").filter((row) => row.provider !== "custom");
+  const options = rows("aiModelOptions").filter((row) => row.source !== "custom");
+  if (!definitions.length || !options.length || definitions.some((row) => !row.key || !row.provider || !row.modelClass) ||
+      options.some((row) => !row.model || !definitions.some((definition) => definition.key === row.modelKey))) {
+    throw new Error("Model catalog shape changed; update model-diff before filing tickets");
+  }
+  return { definitions, options };
+}
+
+function identity(id) {
+  const name = id.toLowerCase().split("/").at(-1)
+    .replace(/-(?:\d{8}|\d{4}-\d{2}-\d{2})$/, "")
+    .replace(/(\d)[.-](?=\d)/g, "$1.");
+  let family = name.replace(/v?(\d+(?:\.\d+)*)/g, "").replace(/-+/g, "-").replace(/-$/, "");
+  while (true) {
+    const base = family.replace(/-(?:batch|fast|preview|beta|experimental|latest|online|reasoning|non-reasoning|thinking)$/, "");
+    if (!base || base === family) break;
+    family = base;
+  }
+  return {
+    name,
+    family,
+    version: (name.match(/\d+(?:\.\d+)*/)?.[0] ?? "0").split(".").map(Number),
+  };
+}
+
+function compareVersions(a, b) {
+  const left = identity(a).version;
+  const right = identity(b).version;
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const difference = (left[i] ?? 0) - (right[i] ?? 0);
+    if (difference) return difference;
+  }
+  return 0;
+}
+
+function languageModel(model, source) {
+  if (model.type && model.type !== "language") return false;
+  const name = model.id.split("/").at(-1);
+  if (/(?:image|audio|realtime|transcri|tts|embedding|moderation|search|codex)/i.test(name)) return false;
+  return source === "gateway" ? model.type === "language" || /^(gpt-|o\d|claude-|gemini-|deepseek-|kimi-|qwen|glm-)/.test(name)
+    : source === "anthropic" ? name.startsWith("claude-") : /^(gpt-|o\d)/.test(name);
+}
+
+async function collectSources({ fetchImpl = fetch, env = process.env } = {}) {
+  return Object.fromEntries(await Promise.all(Object.entries(SOURCES).map(async ([source, url]) => {
+    const key = source === "openai" ? env.OPENAI_API_KEY : source === "anthropic" ? env.ANTHROPIC_API_KEY : null;
+    if (source !== "gateway" && !key) return [source, { error: "no API key configured" }];
+    const headers = source === "anthropic" ? { "x-api-key": key, "anthropic-version": "2023-06-01" }
+      : key ? { Authorization: `Bearer ${key}` } : {};
+    try {
+      const data = [];
+      let next = url;
+      do {
+        const response = await fetchImpl(next, { headers, signal: AbortSignal.timeout(30_000) });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const page = await response.json();
+        if (!Array.isArray(page.data) || !page.data.length || page.data.some((model) => typeof model.id !== "string")) {
+          throw new Error("invalid or empty model list");
+        }
+        data.push(...page.data);
+        if (source === "anthropic" && page.has_more) {
+          if (!page.last_id || next.includes(`after_id=${encodeURIComponent(page.last_id)}`)) throw new Error("invalid pagination");
+          next = `${url}?limit=1000&after_id=${encodeURIComponent(page.last_id)}`;
+        } else next = null;
+      } while (next);
+      return [source, { data }];
+    } catch (error) {
+      return [source, { error: /^HTTP \d+$|^invalid/.test(error.message) ? error.message : "request failed or returned non-JSON" }];
+    }
+  })));
+}
+
+function diffModels(catalog, sources) {
+  const sourcesUsed = Object.keys(SOURCES).filter((source) => Array.isArray(sources[source]?.data));
+  const warnings = Object.keys(SOURCES).filter((source) => !sourcesUsed.includes(source))
+    .map((source) => `${source}: ${sources[source]?.error ?? "unavailable"}`);
+  const available = new Map();
+  for (const source of sourcesUsed) {
+    for (const model of sources[source].data.filter((row) => languageModel(row, source))) {
+      const provider = source === "gateway" ? model.id.split("/")[0] : source;
+      const id = `${provider}/${identity(model.id).name}`;
+      const rawPrice = source === "gateway" ? model.pricing?.input : null;
+      const price = typeof rawPrice === "number" || typeof rawPrice === "string" && rawPrice.trim() !== ""
+        ? Number(rawPrice) * 1_000_000 : null;
+      const previous = available.get(id);
+      if (!previous) available.set(id, {
+        id: model.id.includes("/") ? model.id : `${provider}/${model.id}`,
+        provider, inputPerMillion: Number.isFinite(price) && price >= 0 ? price : null, sources: [source],
+      });
+      else previous.sources.push(source);
+    }
+  }
+  const findings = [];
+  function add(kind, model, modelClass, current, reason) {
+    const premium = model.inputPerMillion !== null && model.inputPerMillion > 5;
+    const automatic = kind === "new-version" && ["openai", "anthropic"].includes(model.provider);
+    const action = premium ? "waits for HTPR-7746"
+      : kind === "stale" ? "remove stale entry; migrate saved picks to the current model of its class"
+      : automatic ? model.inputPerMillion === null ? "ship automatically only after gateway pricing confirms at most $5 per million input tokens" : "ship automatically"
+      : "ask Valentin before shipping";
+    findings.push({ kind, model: model.id, provider: model.provider, modelClass, current,
+      inputPerMillion: model.inputPerMillion, action, reason });
+  }
+  const groups = new Map();
+  for (const model of available.values()) {
+    const family = identity(model.id).family;
+    const key = `${model.provider}/${family}`;
+    const previous = groups.get(key);
+    if (!previous || compareVersions(model.id, previous.id) > 0) groups.set(key, model);
+  }
+  for (const model of groups.values()) {
+    const family = identity(model.id).family;
+    const current = catalog.definitions.filter((row) => identity(row.key).family === family &&
+      (row.provider === model.provider || ({ moonshot: "moonshotai", zhipu: "zai", xai: "spacexai" })[row.provider] === model.provider))
+      .sort((a, b) => compareVersions(b.key, a.key));
+    if (!current.length) add("new-class", model, family, [], "not in the current catalog");
+    else if (compareVersions(model.id, current[0].key) > 0) {
+      add("new-version", model, current[0].modelClass, current.map((row) => row.key), "newer version in an existing class");
+    }
+  }
+  for (const definition of catalog.definitions) {
+    const newer = catalog.definitions.find((row) => row.modelClass === definition.modelClass && compareVersions(row.key, definition.key) > 0);
+    const options = catalog.options.filter((row) => row.modelKey === definition.key);
+    const provider = ({ moonshot: "moonshotai", zhipu: "zai", xai: "spacexai" })[definition.provider] ?? definition.provider;
+    const missing = sourcesUsed.includes("gateway") && options.some((option) =>
+      !sources.gateway.data.some((model) => model.id === `${provider}/${option.model}` ||
+        model.id === option.model || model.id === `${provider}/${option.directModel}` ||
+        model.id.split("/")[0] === provider && identity(model.id).name === identity(option.model).name));
+    if (newer || missing) add("stale", { id: definition.key, provider: definition.provider, inputPerMillion: null },
+      definition.modelClass, newer ? [newer.key] : [], newer ? `superseded by ${newer.key}` : "picker model missing from gateway list");
+  }
+  return { sourcesUsed, warnings, findings: findings.sort((a, b) => `${a.kind}/${a.model}`.localeCompare(`${b.kind}/${b.model}`)) };
+}
+
+async function main(args = process.argv.slice(2)) {
+  const fixtureIndex = args.indexOf("--fixture");
+  if (args.some((arg, index) => arg !== "--json" && arg !== "--fixture" && !(fixtureIndex >= 0 && index === fixtureIndex + 1)) ||
+      fixtureIndex >= 0 && (!args[fixtureIndex + 1] || args[fixtureIndex + 1].startsWith("--"))) {
+    throw new Error("Usage: node scripts/model-diff [--json] [--fixture path]");
+  }
+  const catalog = readCatalog(fs.readFileSync(path.join(ROOT, "src/lib/aiModelOptions.ts"), "utf8"));
+  const sources = fixtureIndex >= 0 ? JSON.parse(fs.readFileSync(args[fixtureIndex + 1], "utf8")) : await collectSources();
+  const report = diffModels(catalog, sources);
+  if (args.includes("--json")) console.log(JSON.stringify(report, null, 2));
+  else {
+    console.log(`Sources used: ${report.sourcesUsed.join(", ") || "none"}`);
+    for (const warning of report.warnings) console.log(`Warning: ${warning}`);
+    for (const finding of report.findings) console.log(`${finding.kind}: ${finding.model} (${finding.modelClass}); ${finding.reason}; ${finding.action}`);
+  }
+  return report;
+}
+
+module.exports = { readCatalog, identity, collectSources, diffModels, main };
+if (require.main === module) main().catch(() => { console.error("model-diff failed; check arguments and catalog/fixture shape"); process.exitCode = 1; });

@@ -118,6 +118,7 @@ async function harness(persisted, run, flagEnabled = true, flagReady = true, swi
     ${declarations.map((node) => node.getText(storeAst)).join("\n")}`, { "@/lib/state": state });
   const { useKeepAiChatClosed } = load(read("src/hooks/General/useKeepAiChatClosed.ts"), {
     "@/hooks/useFlag": { useFlag: () => flagEnabled, useFlagReady: () => flagReady },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/state": state,
     "@/store": atoms,
     "@/lib/flags/keys": { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },

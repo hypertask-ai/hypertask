@@ -1192,6 +1192,8 @@ model Task {
   sectionChangedAt    DateTime        @default(now())
   lastCommentAt       DateTime?
   staleNudgedAt       DateTime?
+  blockerCommentId    Int?            @unique
+  blockerComment      Comment?        @relation("TaskBlockerComment", fields: [blockerCommentId], references: [id], onDelete: SetNull)
   waitingOnUserId     Int?
   waitingOnSetById    Int?
   waitingOnSetAt      DateTime?
@@ -1854,6 +1856,7 @@ model Follower {
 }
 
 model Comment {
+  blockerForTask Task?          @relation("TaskBlockerComment")
   kind          String?
   id            Int            @id @default(autoincrement())
   text          String
@@ -2293,6 +2296,8 @@ model AgentWebhookSubscription {
   project        Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   url            String
   secret         String
+  authHeaderName  String?
+  authHeaderValue String?
   events         String[]
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -2565,6 +2570,7 @@ model ChatMessage {
   id String @id @default(uuid())
   createdAt DateTime @default(now())
   content String
+  context Json?
   role ChatRole
   sessionId String
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

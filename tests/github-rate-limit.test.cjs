@@ -82,7 +82,7 @@ test('the shell reaches the post-verdict reads with GH_API_NO_WAIT=1', () => {
   const workflow = require('node:fs').readFileSync(require('node:path').join(__dirname, '../.github/workflows/feature-flag-gate.yml'), 'utf8');
   assert.equal(workflow.match(/GH_API_NO_WAIT=1 gh_api --paginate --slurp "repos\/\$REPO\/pulls\?state=open/g)?.length, 2);
   assert.match(workflow, /GH_API_NO_WAIT=1 gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER" >"\$current_json"/);
-  assert.match(workflow, /GH_API_NO_WAIT=1 gh_api "repos\/\$REPO\/pulls\/\$number"/);
+  assert.doesNotMatch(workflow, /gh_api "repos\/\$REPO\/pulls\/\$number"/);
 });
 
 for (const args of [[], ['-X', 'GET'], ['--method', 'GET'], ['-XGET'], ['--method=GET']]) {

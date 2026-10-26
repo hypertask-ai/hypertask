@@ -58,6 +58,7 @@ export interface IChatMessage {
   attachments?: IAttachment[];
   statusSteps?: string[];
   authorAgent?: { displayName: string } | null;
+  precedesMessageId?: string;
 }
 
 export type RedirectMode =
@@ -525,6 +526,7 @@ export interface ITask {
   sectionChangedAt?: string;
   lastCommentAt?: string | null;
   staleNudgedAt?: string | null;
+  blockerCommentId?: number | null;
   waitingOnUserId?: number | null;
   waitingOnUser?: {
     id: number;
@@ -751,7 +753,7 @@ export interface FCMDeviceInfo {
 
 export interface CreateCheckoutParams {
   trialDays?: number;
-  checkoutIntent?: "signup-straight-to-board";
+  checkoutIntent?: "signup-straight-to-board" | "start-plan";
   googleAccountId: string;
   returnUrl: string;
   priceId: string;
@@ -1135,6 +1137,8 @@ export interface IAllCommands {
     isApple: boolean;
     isCurrentUserCreator: boolean;
     isPinned: boolean;
+    blockerCommentEnabled?: boolean;
+    isBlocker?: boolean;
     isStarred: boolean;
     creatorId?: number;
   };

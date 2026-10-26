@@ -25,9 +25,9 @@ function fixture(options = {}) {
     },
     "@/lib/prisma": { default: {} },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async () => auth.user },
-    "@/lib/tasks/setWaitingOn": { setTaskWaitingOn: async ({ taskId, userId }) => {
-      writes.push({ taskId, userId });
-      return { status: 200, body: { id: taskId, waitingOnUserId: userId, waitingOnSetById: userId === null ? null : 7, waitingOnSetAt: userId === null ? null : "2026-10-24T12:00:00.000Z" } };
+    "@/lib/tasks/setWaitingOn": { setTaskWaitingOn: async ({ taskId, userId, blockerCommentId }) => {
+      writes.push({ taskId, ...(userId !== undefined ? { userId } : {}), ...(blockerCommentId !== undefined ? { blockerCommentId } : {}) });
+      return { status: 200, body: { id: taskId, ...(blockerCommentId !== undefined ? { blockerCommentId } : {}), waitingOnUserId: userId, waitingOnSetById: userId === null ? null : 7, waitingOnSetAt: userId === null ? null : "2026-10-24T12:00:00.000Z" } };
     } },
     "@/lib/mcp/operationContext": {
       getMcpExecutionContext: (token) => {
@@ -75,7 +75,7 @@ test("flag on: waiting-on tool reaches the gated operation and keeps all waiting
 
 test("flag off: legacy and consolidated tools propagate the operation refusal without writing", async () => {
   const f = fixture({ flagEnabled: false });
-  const tools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" }, true);
+  const tools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" });
   const tasks = tools.find((tool) => tool.name === "hypertask_tasks");
   assert.ok(tasks);
   for (const userId of [9, null]) {
@@ -99,14 +99,38 @@ test("waiting-on tool rejects invalid arguments before sending a write", async (
 
 test("consolidated waiting_on is a write action, hidden from read agents and still callable by write agents", async () => {
   const f = fixture();
-  const readTools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "read" }, true);
+  const readTools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "read" });
   assert.equal(readTools.find((tool) => tool.name === "hypertask_tasks"), undefined);
   assert.equal(readTools.find((tool) => tool.name === f.tool.name), undefined);
-  const writeTools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" }, true);
+  const writeTools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" });
   const tasks = writeTools.find((tool) => tool.name === "hypertask_tasks");
   assert.ok(tasks);
   assert.equal(tasks.annotations.readOnlyHint, false);
   const result = await tasks.execute({ action: "waiting_on", input: { taskId: 42, userId: 9 } }, "agent-token");
   assert.deepEqual(JSON.parse(result).data, { success: true, task: { id: 42, waitingOnUserId: 9, waitingOnSetById: 7, waitingOnSetAt: "2026-10-24T12:00:00.000Z" } });
   assert.deepEqual(f.calls, [{ endpoint: "/mcp/tasks/waiting-on", method: "POST", body: { taskId: 42, userId: 9 } }]);
+});
+
+test("legacy and consolidated waiting-on tools transport the person and blocker comment together", async () => {
+  const f = fixture();
+  const tasks = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" }).find((tool) => tool.name === "hypertask_tasks");
+  for (const input of [{ taskId: 42, userId: 9, blockerCommentId: 101 }, { taskId: 42, userId: null, blockerCommentId: null }]) {
+    const receipt = JSON.parse(await f.tool.execute(input, "agent-token"));
+    assert.equal(receipt.task.blockerCommentId, input.blockerCommentId);
+    const consolidated = JSON.parse(await tasks.execute({ action: "waiting_on", input }, "agent-token"));
+    assert.equal(consolidated.data.task.blockerCommentId, input.blockerCommentId);
+    assert.deepEqual(f.calls.at(-1).body, input);
+    assert.deepEqual(f.writes.at(-1), input);
+  }
+});
+
+test("waiting-on tool validates blocker-only updates and rejects malformed comment IDs", async () => {
+  const f = fixture();
+  assert.deepEqual(f.tool.parameters.parse({ taskId: 42, blockerCommentId: 101 }), { taskId: 42, blockerCommentId: 101 });
+  for (const blockerCommentId of ["101", 0, -1, 1.5, 2 ** 40]) {
+    const input = { taskId: 42, userId: 9, blockerCommentId };
+    assert.equal(f.tool.parameters.safeParse(input).success, false);
+    await assert.rejects(f.tool.execute(input, "agent-token"));
+  }
+  assert.deepEqual(f.calls, []);
 });

@@ -152,7 +152,9 @@ test("pending AI header is quiet on ticket routes; resolved titles and other rou
     "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px]" },
     "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/lib/flags/definitions/htpr-7773-chat-header-name": { HTPR_7773_CHAT_HEADER_NAME_FLAG: "htpr-7773-chat-header-name" },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: "htpr-7575-phone-chat-delete" },
 
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], currentSession, isSessionPending: true, isSidebarMode: true }) },
     "lucide-react": Object.fromEntries(["Check", "ChevronDown", "ChevronRight", "Ellipsis", "History", "Maximize2", "Minus", "PanelRight", "Pencil", "PictureInPicture2", "Pin", "PinOff", "SquarePen", "Trash2", "X"].map((name) => [name, noop])),

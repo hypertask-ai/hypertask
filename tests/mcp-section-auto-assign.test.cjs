@@ -269,108 +269,99 @@ function sectionMutationHarness({ role = 'write', human = false, scopeEnforced =
   return { ...f, effects, sections, invoke };
 }
 
-for (const wrapper of ['off', 'on']) {
-  for (const scopeEnforced of [false, true]) {
-    const mode = `wrapper=${wrapper}, scope=${scopeEnforced ? 'ENFORCE' : 'WATCH'}`;
-    const withMode = async (run) => {
-      const previous = process.env.HTPR_6926_TEST_FLAG;
-      process.env.HTPR_6926_TEST_FLAG = wrapper;
-      try { await run(); } finally {
-        if (previous === undefined) delete process.env.HTPR_6926_TEST_FLAG;
-        else process.env.HTPR_6926_TEST_FLAG = previous;
-      }
-    };
+for (const scopeEnforced of [false, true]) {
+  const mode = `scope=${scopeEnforced ? 'ENFORCE' : 'WATCH'}`;
 
-    test(`read agents cannot PATCH, DELETE or create sections (${mode})`, async () => withMode(async () => {
+
+  test(`read agents cannot PATCH, DELETE or create sections (${mode})`, async () => {
+    for (const method of ['PATCH', 'DELETE', 'POST']) {
+      const h = sectionMutationHarness({ role: 'read', scopeEnforced });
+      const response = await h.invoke(method);
+      assert.equal(response.status, 403, method);
+      assert.equal((await response.json()).code, 'insufficient_scope');
+      assert.equal(response.headers.has('Server-Timing'), true);
+      assert.deepEqual(h.state.writes, []);
+      assert.deepEqual(h.effects, []);
+      assert.equal(h.tasks[0].section, 'Todo');
+      assert.equal(h.sections[0].deleted, false);
+      assert.ok(h.state.flagReads > 0);
+    }
+  });
+
+  test(`write/admin and human section mutations retain behavior (${mode})`, async () => {
+    for (const role of ['write', 'admin', null, 'human']) {
       for (const method of ['PATCH', 'DELETE', 'POST']) {
-        const h = sectionMutationHarness({ role: 'read', scopeEnforced });
+        const h = sectionMutationHarness({ role, human: role === 'human', scopeEnforced });
         const response = await h.invoke(method);
-        assert.equal(response.status, 403, method);
-        assert.equal((await response.json()).code, 'insufficient_scope');
-        assert.equal(response.headers.has('Server-Timing'), wrapper === 'on');
-        assert.deepEqual(h.state.writes, []);
-        assert.deepEqual(h.effects, []);
-        assert.equal(h.tasks[0].section, 'Todo');
-        assert.equal(h.sections[0].deleted, false);
-        assert.ok(h.state.flagReads > 0);
-      }
-    }));
-
-    test(`write/admin and human section mutations retain behavior (${mode})`, async () => withMode(async () => {
-      for (const role of ['write', 'admin', null, 'human']) {
-        for (const method of ['PATCH', 'DELETE', 'POST']) {
-          const h = sectionMutationHarness({ role, human: role === 'human', scopeEnforced });
-          const response = await h.invoke(method);
-          assert.equal(response.status, 200, `${role} ${method}`);
-          assert.equal((await response.json()).success, true);
-          assert.equal(response.headers.has('Server-Timing'), wrapper === 'on');
-          assert.ok(h.effects.includes('broadcast'));
-          if (method === 'PATCH') {
-            assert.equal(h.sections[0].section_title, 'Renamed');
-            assert.equal(h.tasks[0].section, 'Renamed');
-            assert.ok(h.effects.includes('view.update'));
-            assert.ok(h.effects.includes('column.renamed'));
-          } else if (method === 'DELETE') {
-            assert.equal(h.sections[0].deleted, true);
-            assert.equal(h.tasks[0].sectionId, 16);
-            assert.equal(h.tasks[0].section, 'Done');
-            assert.ok(h.effects.includes('view.remove'));
-          } else {
-            assert.equal(h.sections.at(-1).section_title, 'Renamed');
-            assert.ok(h.effects.includes('view.append'));
-            assert.ok(h.effects.includes('column.created'));
-          }
-          assert.ok(h.state.writes.includes(method === 'POST' ? 'section.create' : 'section.update'));
+        assert.equal(response.status, 200, `${role} ${method}`);
+        assert.equal((await response.json()).success, true);
+        assert.equal(response.headers.has('Server-Timing'), true);
+        assert.ok(h.effects.includes('broadcast'));
+        if (method === 'PATCH') {
+          assert.equal(h.sections[0].section_title, 'Renamed');
+          assert.equal(h.tasks[0].section, 'Renamed');
+          assert.ok(h.effects.includes('view.update'));
+          assert.ok(h.effects.includes('column.renamed'));
+        } else if (method === 'DELETE') {
+          assert.equal(h.sections[0].deleted, true);
+          assert.equal(h.tasks[0].sectionId, 16);
+          assert.equal(h.tasks[0].section, 'Done');
+          assert.ok(h.effects.includes('view.remove'));
+        } else {
+          assert.equal(h.sections.at(-1).section_title, 'Renamed');
+          assert.ok(h.effects.includes('view.append'));
+          assert.ok(h.effects.includes('column.created'));
         }
+        assert.ok(h.state.writes.includes(method === 'POST' ? 'section.create' : 'section.update'));
       }
-    }));
+    }
+  });
 
-    test(`write agents retain section resource restrictions (${mode})`, async () => withMode(async () => {
-      for (const method of ['PATCH', 'DELETE', 'POST']) {
-        const h = sectionMutationHarness({ scopeEnforced });
-        h.projects[0].ownerId = 99;
-        h.projects[0].owner = { id: 99, agents: [] };
-        h.projects[0].members = [];
-        assert.equal((await h.invoke(method)).status, 403, method);
-        assert.deepEqual(h.state.writes, []);
-        assert.deepEqual(h.effects, []);
-      }
-      for (const method of ['PATCH', 'DELETE']) {
-        const h = sectionMutationHarness({ scopeEnforced });
-        assert.equal((await h.invoke(method, { title: 'Renamed' }, '4060')).status, 404);
-        assert.deepEqual(h.state.writes, []);
-        assert.deepEqual(h.effects, []);
-      }
-      for (const auto_assign of [42, 'unlisted-agent']) {
-        const h = sectionMutationHarness({ scopeEnforced });
-        assert.equal((await h.invoke('PATCH', { auto_assign })).status, 400);
-        assert.deepEqual(h.state.writes, []);
-        assert.deepEqual(h.effects, []);
-      }
-      const last = sectionMutationHarness({ scopeEnforced });
-      last.sections.splice(1, 1);
-      assert.equal((await last.invoke('DELETE')).status, 400);
-      assert.deepEqual(last.state.writes, []);
-      assert.deepEqual(last.effects, []);
-    }));
+  test(`write agents retain section resource restrictions (${mode})`, async () => {
+    for (const method of ['PATCH', 'DELETE', 'POST']) {
+      const h = sectionMutationHarness({ scopeEnforced });
+      h.projects[0].ownerId = 99;
+      h.projects[0].owner = { id: 99, agents: [] };
+      h.projects[0].members = [];
+      assert.equal((await h.invoke(method)).status, 403, method);
+      assert.deepEqual(h.state.writes, []);
+      assert.deepEqual(h.effects, []);
+    }
+    for (const method of ['PATCH', 'DELETE']) {
+      const h = sectionMutationHarness({ scopeEnforced });
+      assert.equal((await h.invoke(method, { title: 'Renamed' }, '4060')).status, 404);
+      assert.deepEqual(h.state.writes, []);
+      assert.deepEqual(h.effects, []);
+    }
+    for (const auto_assign of [42, 'unlisted-agent']) {
+      const h = sectionMutationHarness({ scopeEnforced });
+      assert.equal((await h.invoke('PATCH', { auto_assign })).status, 400);
+      assert.deepEqual(h.state.writes, []);
+      assert.deepEqual(h.effects, []);
+    }
+    const last = sectionMutationHarness({ scopeEnforced });
+    last.sections.splice(1, 1);
+    assert.equal((await last.invoke('DELETE')).status, 400);
+    assert.deepEqual(last.state.writes, []);
+    assert.deepEqual(last.effects, []);
+  });
 
-    test(`valid section targets and read-agent GET remain allowed (${mode})`, async () => withMode(async () => {
-      const readOnly = sectionMutationHarness({ role: 'read', scopeEnforced });
-      const listed = await readOnly.invoke('GET');
-      assert.equal(listed.status, 200);
-      assert.deepEqual((await listed.json()).sections.map((section) => section.id), [15, 16]);
-      assert.deepEqual(readOnly.state.writes, []);
-      for (const auto_assign of [6, 'scope-agent', null]) {
-        const h = sectionMutationHarness({ scopeEnforced });
-        const response = await h.invoke('PATCH', { auto_assign });
-        assert.equal(response.status, 200);
-        assert.equal((await response.json()).section.autoAssign, auto_assign);
-      }
-      const empty = sectionMutationHarness({ scopeEnforced });
-      empty.sections.splice(1, 1);
-      empty.tasks[0].status = 'Deleted';
-      assert.equal((await empty.invoke('DELETE')).status, 200);
-      assert.equal(empty.sections[0].deleted, true);
-    }));
-  }
+  test(`valid section targets and read-agent GET remain allowed (${mode})`, async () => {
+    const readOnly = sectionMutationHarness({ role: 'read', scopeEnforced });
+    const listed = await readOnly.invoke('GET');
+    assert.equal(listed.status, 200);
+    assert.deepEqual((await listed.json()).sections.map((section) => section.id), [15, 16]);
+    assert.deepEqual(readOnly.state.writes, []);
+    for (const auto_assign of [6, 'scope-agent', null]) {
+      const h = sectionMutationHarness({ scopeEnforced });
+      const response = await h.invoke('PATCH', { auto_assign });
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).section.autoAssign, auto_assign);
+    }
+    const empty = sectionMutationHarness({ scopeEnforced });
+    empty.sections.splice(1, 1);
+    empty.tasks[0].status = 'Deleted';
+    assert.equal((await empty.invoke('DELETE')).status, 200);
+    assert.equal(empty.sections[0].deleted, true);
+  });
 }

@@ -143,7 +143,7 @@ test("mobile model gauge offers Haiku 5.5 plus the four approved choices and pre
     assert.ok(trigger);
     assert.match(trigger.className, /h-11 w-11/);
     assert.match(trigger.className, /rounded-\[4px\]/);
-    assert.match(trigger.getAttribute("aria-label"), /6 Luna · High/);
+    assert.match(trigger.getAttribute("aria-label"), /Luna 6 · High/);
     Object.defineProperty(dom.window, "innerWidth", {
       configurable: true,
       value: 390,

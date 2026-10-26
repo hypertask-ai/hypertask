@@ -1,0 +1,39 @@
+name: Production Revert Check
+
+on:
+  pull_request:
+    paths:
+      - .github/scripts/production-revert-pr.mjs
+      - .github/workflows/production-revert-*.yml
+      - tests/production-revert-pr.test.cjs
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-revert-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROBE_IMAGE: production-revert-sandbox
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: printf 'FROM scratch\nCMD ["/usr/bin/node"]\n' | docker build -t "$PROBE_IMAGE" -
+      - run: node --test tests/production-revert-pr.test.cjs
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED_RUN_ID: '40201291546'
+        run: node .github/scripts/production-revert-pr.mjs

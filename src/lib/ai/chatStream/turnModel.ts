@@ -1,4 +1,4 @@
-import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, HTPR_7796_DISABLED_PROVIDER_PICK_FLAG, HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { NextResponse } from "next/server";
 
@@ -6,11 +6,11 @@ import prisma from "@/lib/prisma";
 
 import { type LanguageModel } from "ai";
 import { type AiProviderOptions, type AiModelCredential, type AiGatewayTags, isCustomEndpointConfig, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
-import { type TAiModelOption, type AiDefaultModelContext, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, isOpenAiOnlyPaidTeam } from "@/lib/aiModelOptions";
+import { type TAiModelOption, type AiDefaultModelContext, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, getAiModelDefinition, isOpenAiOnlyPaidTeam, isGrokGemini4ModelKey } from "@/lib/aiModelOptions";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
+import { getAiProviderInfo, resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
@@ -140,6 +140,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     const deepseekFlashFastEnabled = await import("@/lib/flags")
       .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, dbUser.id))
       .catch(() => false);
+    const grokGemini4Enabled = await import("@/lib/flags")
+      .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7939_GROK_GEMINI4_MODELS_FLAG, dbUser.id))
+      .catch(() => false);
     const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
     const defaultContext = haiku55Enabled
       ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId, body.byokProviderFlags)
@@ -170,9 +173,30 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       haiku55Enabled,
       deepseekFlashFastEnabled,
     );
+    if (body.modelFromDefault !== true && (requestedModel.modelOptionId || requestedModel.model)) {
+      let provider = selection.modelOption
+        ? getAiModelDefinition(selection.modelOption.modelKey)?.provider
+        : undefined;
+      if (!provider && selection.provider === "openrouter") provider = "openrouter";
+      if (provider && provider !== "custom" && !resolveTeamProviderEnabled(teamProviderSettings, provider)) {
+        const refuseDisabledPick = await import("@/lib/flags")
+          .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7796_DISABLED_PROVIDER_PICK_FLAG, dbUser.id));
+        if (refuseDisabledPick) {
+          return createSseErrorResponse(
+            `${getAiProviderInfo(provider)?.label ?? provider} is off for this team. Enable it in Settings > AI models > Providers.`,
+            403,
+          );
+        }
+      }
+    }
     if (selection.modelOption) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(selection.modelOption, teamProviderSettings, haiku55Enabled)
+        filterModelOptionForTeam(selection.modelOption, teamProviderSettings, haiku55Enabled, grokGemini4Enabled)
+      );
+    }
+    if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
+      selection = selectionFromModelOption(
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled, grokGemini4Enabled),
       );
     }
     if (
@@ -183,7 +207,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       )
     ) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled),
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled, grokGemini4Enabled),
       );
     }
     const haikuByok = defaultContext.byok?.provider === "openrouter" &&
@@ -253,6 +277,13 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
         );
       }
+    }
+
+    if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
+      selection = selectionFromModelOption(
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled, false),
+      );
+      byokApiKey = await getSelectionApiKey(selection);
     }
 
     if (selection.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok?.provider === "openrouter") {

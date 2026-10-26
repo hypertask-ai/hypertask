@@ -103,19 +103,32 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.match(workflow, /workflow_run:/);
   assert.match(workflow, /workflows: \["App Smoke Request"\]/);
-  assert.match(
-    workflow,
-    /format\('app-smoke-\{0\}-\{1\}', github\.event\.workflow_run\.head_repository\.full_name, github\.event\.workflow_run\.head_branch\)/,
-  );
-  assert.match(workflow, /cancel-in-progress: true/);
-  assert.match(workflow, /conclusion == 'cancelled' && format\('app-smoke-cancelled-request-\{0\}', github\.run_id\)/);
+  assert.deepEqual(parsedWorkflow.concurrency, {
+    group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
+    "cancel-in-progress": true,
+  });
+  assert.equal(parsedWorkflow.jobs["app-smoke"].concurrency, undefined);
+  assert.deepEqual(parsedWorkflow.on.push.branches, ["production"]);
+  assert.deepEqual(yaml.load(request).concurrency, {
+    group: "app-smoke-request-${{ github.event.pull_request.number }}",
+    "cancel-in-progress": true,
+  });
+  const validationSteps = parsedWorkflow.jobs.validate.steps;
+  const recheck = validationSteps.find((step) => step.id === "current-request");
+  assert.ok(validationSteps.indexOf(recheck) > validationSteps.findIndex((step) => step.id === "scope"));
+  assert.match(recheck.with.script, /if \(!await currentHead\(\)\) return;/);
+  assert.match(recheck.with.script, /requestNumber < request\.run_number/);
+  assert.match(recheck.with.script, /requestNumber === request\.run_number && run\.run_number < context\.runNumber/);
+  assert.ok(recheck.with.script.lastIndexOf("if (!await currentHead()) return;") < recheck.with.script.indexOf("await github.rest.actions.cancelWorkflowRun("));
+  assert.equal(parsedWorkflow.jobs.validate.concurrency, undefined);
+  assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(
     parsedWorkflow.jobs.validate.if,
     "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
   );
   assert.equal(
     parsedWorkflow.jobs.report.if,
-    "always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
+    "always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
   );
   assert.match(
     workflow,
@@ -264,6 +277,40 @@ test("app smoke validates the head before isolated build and route checks", asyn
     /--tmpfs \/var\/lib\/postgresql\/data:rw,nosuid,nodev,size=1g/,
   );
   assert.match(isolated, /--name "\$seed"[\s\S]*CORE_SMOKE_APP_ROOT=\/trusted/);
+  assert.match(
+    isolated,
+    /--name "\$seed"[\s\S]*"\$\{database_client_mounts\[@\]\}"/,
+  );
+  assert.match(
+    isolated,
+    /-v "\$scratch\/candidate-client\/\.prisma:\/trusted\/node_modules\/\.prisma:ro"/,
+  );
+  assert.match(
+    isolated,
+    /-v "\$scratch\/candidate-client\/@prisma:\/trusted\/node_modules\/@prisma:ro"/,
+  );
+  assert.match(isolated, /\[ "\$dependencies_mount" != "\$trusted_root\/node_modules" \]/);
+  assert.match(
+    isolated,
+    /mkdir -p "\$scratch\/candidate-client"[\s\S]*?chmod 0777 "\$scratch\/candidate-client"[\s\S]*?docker run --rm --name "\$\{generate\}-client"/,
+  );
+  assert.match(isolated, /-v "\$dependencies_mount:\/dependencies:ro"/);
+  assert.match(
+    isolated,
+    /for generated_client in \.prisma @prisma; do/,
+  );
+  assert.match(
+    isolated,
+    /cp -a --no-preserve=ownership "\/dependencies\/\$generated_client" \/out\//,
+  );
+  assert.match(
+    isolated,
+    /for generated_client in \.prisma @prisma; do[\s\S]*?chmod -R a\+rwX "\/out\/\$generated_client"/,
+  );
+  assert.match(
+    isolated,
+    /Generated Prisma client missing from the candidate dependencies\./,
+  );
   assert.match(seed, /writeFile\(/);
   assert.match(seed, /flag: "wx"/);
   assert.match(seed, /sections: \["Baseline", "Alternate"\]/);
@@ -308,7 +355,6 @@ test("app smoke validates the head before isolated build and route checks", asyn
 
 test("auto-merge waits for app smoke and runs when it completes", async () => {
   const workflow = await readFile(".github/workflows/automerge.yml", "utf8");
-  const ciWorkflow = await readFile(".github/workflows/ci-tests.yml", "utf8");
 
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
@@ -317,25 +363,35 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
-  assert.match(ciWorkflow, /name: Verify live required-check settings/);
-  const settingsScript = await readFile(
-    ".github/scripts/verify-required-check-settings.mjs",
-    "utf8",
-  );
-  const steps = yaml.load(ciWorkflow).jobs["ci-tests"].steps;
-  const settingsIndex = steps.findIndex(
-    (step) => step.name === "Verify live required-check settings",
-  );
+});
+
+test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
+  const ciWorkflow = await readFile(".github/workflows/ci-tests.yml", "utf8");
+  const ciSteps = yaml.load(ciWorkflow).jobs["ci-prepare"].steps;
+  assert.equal(ciSteps.some((step) => step.run?.includes("verify-required-check-settings.mjs")), false);
+  const settingsWorkflow = yaml.load(await readFile(".github/workflows/required-check-settings.yml", "utf8"));
+  assert.deepEqual(Object.keys(settingsWorkflow.on).sort(), ["schedule", "workflow_dispatch"]);
+  assert.deepEqual(settingsWorkflow.on.schedule, [{ cron: "17 * * * *" }]);
+  assert.deepEqual(settingsWorkflow.permissions, { contents: "read" });
+  assert.equal(settingsWorkflow.concurrency["cancel-in-progress"], false);
+  const settingsJob = settingsWorkflow.jobs.verify;
+  assert.equal(settingsJob.if, "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production')");
+  assert.equal(settingsJob["runs-on"], "ubuntu-latest");
+  assert.equal(settingsJob["timeout-minutes"], 80);
+  const steps = settingsJob.steps;
+  const settingsIndex = steps.findIndex((step) => step.name === "Verify live required-check settings");
   const settingsStep = steps[settingsIndex];
   assert.equal(settingsStep.run, "node .github/scripts/verify-required-check-settings.mjs");
   assert.equal(settingsStep.if, undefined);
   assert.equal(settingsStep["continue-on-error"], undefined);
-  assert.equal(settingsStep["timeout-minutes"], 7);
+  assert.equal(settingsStep["timeout-minutes"], 70);
   assert.equal(settingsStep.env.GH_TOKEN, "${{ github.token }}");
   assert.equal(settingsStep.env.REPO, "${{ github.repository }}");
   assert.match(steps[0].uses, /^actions\/checkout@/);
-  assert.equal(steps[0].with["fetch-depth"], 1);
+  assert.equal(steps[0].with.ref, "production");
+  assert.equal(steps[0].with["persist-credentials"], false);
   assert.ok(settingsIndex > 0);
+  const settingsScript = await readFile(".github/scripts/verify-required-check-settings.mjs", "utf8");
   assert.match(settingsScript, /GITHUB_EVENT_NAME !== "pull_request"/);
   assert.match(settingsScript, /"fetch", "--no-tags", "--depth=1", "origin", base, head/);
   assert.match(settingsScript, /"diff", "--name-only", "--no-renames", "-z", base, head/);
@@ -348,7 +404,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(settingsScript, /x-ratelimit-reset/);
   assert.match(settingsScript, /retry-after/);
   assert.match(settingsScript, /status === 403 \|\| status === 429/);
-  assert.match(settingsScript, /maxWaitSeconds = 300/);
+  assert.match(settingsScript, /maxWaitSeconds = 3900/);
   assert.match(settingsScript, /waitedSeconds \+ seconds > maxWaitSeconds/);
   assert.match(settingsScript, /rate limited, waiting \$\{seconds\}s until reset/);
   assert.match(settingsScript, /spawnSync\("sleep"/);

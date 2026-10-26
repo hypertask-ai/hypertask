@@ -86,9 +86,9 @@ test("archive keeps fetch status, original body and echo header, even with malfo
   t.mock.method(global, "fetch", async (...args) => { calls.push(args); return response; });
   t.mock.method(console, "warn", (...args) => warnings.push(args));
   const query = { id: "20", taskId: null, userId: 985, type: "TaskMovedToInbox", tutorial: 1 };
-  assert.deepEqual(client.notificationArchiveRoute.query.parse(query), query);
+  assert.deepEqual(client.notificationArchiveRoute.body.parse(query), query);
   assert.equal(await client.toggleNotificationArchive(query, { "X-Socket-Id": "123.456" }), response);
-  assert.deepEqual(calls[0], ["/api/notifications/markAsDone?id=20&taskId=null&userId=985&type=TaskMovedToInbox&tutorial=1", { method: "GET", headers: { "X-Socket-Id": "123.456", "X-Hypertask-Client": "htpr-6925" } }]);
+  assert.deepEqual(calls[0], ["/api/notifications/markAsDone", { method: "POST", headers: { "X-Socket-Id": "123.456", "Content-Type": "application/json", "X-Hypertask-Client": "htpr-6925" }, body: JSON.stringify(query) }]);
   assert.deepEqual(await response.json(), notification, "diagnostics never consume the caller's body");
   assert.equal(warnings.length, 0);
   response = Response.json({ drift: true });
@@ -119,145 +119,133 @@ function declaration(file, name, env) {
   const compiled = ts.transpileModule(`const ${found.getText(tree)};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   return new Function(...Object.keys(env), `${compiled}\nreturn ${name};`)(...Object.values(env));
 }
-for (const flag of [false, undefined, true]) {
-  test(`read helpers ${flag}: identical switches, null guards and swallowed rejection`, async () => {
-    const calls = []; let failure = false;
-    const write = async (...args) => { calls.push(args); if (failure) throw new Error("denied"); return { data: notification }; };
-    const api = load("src/utils/api/Inbox/index.ts", { axios: { default: { get: (...args) => write("legacy", ...args) } } });
-    const selected = flag ? (...args) => write("typed", ...args) : undefined;
-    await api.markNotificationSeen(20, selected);
-    assert.deepEqual(calls.pop(), flag ? ["typed", { notificationId: 20, seen: 0 }] : ["legacy", "/api/notifications/markAsUnseen?notificationId=20&seen=0"]);
-    for (const seen of [false, true]) {
-      await api.markAsUnseen(20, seen, undefined, selected);
-      assert.deepEqual(calls.pop(), flag ? ["typed", { notificationId: 20, seen: seen ? 1 : 0 }] : ["legacy", `/api/notifications/markAsUnseen?notificationId=20&seen=${seen ? 1 : 0}`]);
-    }
-    await api.markNotificationSeen(null, selected);
-    assert.equal(calls.length, 0);
-    failure = true;
-    const oldLog = console.log; console.log = () => {};
-    try { assert.equal(await api.markNotificationSeen(20, selected), undefined); } finally { console.log = oldLog; }
-  });
-  test(`section reorder ${flag}: optimistic first, canonical rank before view, same failed persistence handling`, async () => {
-    const calls = []; let failure = false;
-    const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); };
-    const updatedSection = { ...section, ranking: "A0050" };
-    const fn = declaration("src/components/Modals/commands/manageColumn.tsx", "onDragEndHandler", {
-      typedWrite: flag ? (...args) => write("typed", ...args) : undefined, axios: { post: (...args) => write("legacy", ...args) },
-      sections: [section], currentUser: { id: 985 },
-      reorderSectionsWithRank: () => ({ reorderedSections: [updatedSection], updatedSection, ranking: "A0050" }),
-      updateCache: async (...args) => calls.push(["cache", ...args]), synchronizeBoardSectionOrder: async (...args) => calls.push(["sync", ...args]),
-      console: { log() {} }, toast: { error: (...args) => calls.push(["error", ...args]) },
-    });
-    const input = { source: { index: 0 }, destination: { index: 1 } };
-    await fn(input);
-    const body = { userId: 985, sectionId: 12, newSection: { ranking: "A0050" } };
-    assert.deepEqual(calls.map(([kind]) => kind), ["cache", "write", "sync", "cache"]);
-    assert.deepEqual(calls[1], flag ? ["write", "typed", body] : ["write", "legacy", "/api/section/update", body]);
-    assert.equal(calls[0][2], false); assert.equal(calls[3][2], true);
-    failure = true; calls.length = 0; await fn(input);
-    assert.deepEqual(calls.map(([kind]) => kind), ["cache", "write", "error"]);
-    assert.equal(calls[2][1], "Column order could not be saved");
-  });
-  test(`notification archive ${flag}: tutorial query, echo headers and unchanged task archive order`, async () => {
-    const calls = [];
-    const request = async (...args) => { calls.push(args); return { ok: true }; };
-    const fn = declaration("src/hooks/Inbox/useGlobalFocusHandler.tsx", "archiveHandler", {
-      searchParams: { get: () => "1" }, currentUser: { id: 985 },
-      typedArchive: flag ? (...args) => request("typed", ...args) : undefined, fetch: (...args) => request("legacy", ...args), realtimeEchoHeaders: () => ({ "X-Socket-Id": "123.456" }),
-    });
-    const row = { ...notification, id: "20", taskId: null };
-    assert.equal(await fn(row, 0, "Notification"), true);
-    assert.deepEqual(calls[0], flag ? ["typed", { id: "20", taskId: null, userId: 985, type: notification.type, tutorial: 1, intent: "archive" }, { "X-Socket-Id": "123.456" }] : ["legacy", "/api/notifications/markAsDone?id=20&taskId=null&userId=985&type=TaskMovedToInbox&tutorial=1&intent=archive", { method: "GET", headers: { "X-Socket-Id": "123.456" } }]);
-    calls.length = 0; assert.equal(await fn({ ...row, taskId: 12 }, 0, "Task"), true);
-    assert.equal(calls.length, 2);
-    assert.deepEqual(calls[1], ["legacy", "/api/tasks/single", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ newTask: { id: 12, status: "Archive" } }) }]);
-  });
-}
-
-test("leaf flag selection and legacy wire expressions remain present", () => {
-  for (const file of ["src/components/commands.tsx", "src/components/Modals/commands/manageColumn.tsx", "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx", "src/components/notifications/inboxSplit/index.tsx", "src/hooks/Inbox/useGlobalFocusHandler.tsx", "src/app/archived/ArchivedInboxComp.tsx"]) {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /useFlag\(HTPR_6979_TYPED_WRITES_FLAG\)/, file);
-    assert.match(source, /if \(typedWrites\)/, file);
+test(`read helpers identical switches, null guards and swallowed rejection`, async () => {
+  const calls = []; let failure = false;
+  const write = async (...args) => { calls.push(args); if (failure) throw new Error("denied"); return { data: notification }; };
+  const api = load("src/utils/api/Inbox/index.ts", { "@/lib/api/typedClient": { setNotificationSeen: (...args) => write(...args) } });
+  await api.markNotificationSeen(20);
+  assert.deepEqual(calls.pop(), [{ notificationId: 20, seen: 0 }]);
+  for (const seen of [false, true]) {
+    await api.markAsUnseen(20, seen);
+    assert.deepEqual(calls.pop(), [{ notificationId: 20, seen: seen ? 1 : 0 }]);
   }
-  const general = fs.readFileSync(path.join(root, "src/components/generalCommandActions.ts"), "utf8");
-  assert.match(general, /createSectionWriter \? await createSectionWriter/);
-  assert.match(general, /await axios.post\("\/api\/section\/create", \{\s*projectId: _currentProject.id,\s*title,\s*ranking,\s*\}\)/);
+  await api.markNotificationSeen(null);
+  assert.equal(calls.length, 0);
+  failure = true;
+  const oldLog = console.log; console.log = () => {};
+  try { assert.equal(await api.markNotificationSeen(20), undefined); } finally { console.log = oldLog; }
+});
+test(`section reorder optimistic first, canonical rank before view, same failed persistence handling`, async () => {
+  const calls = []; let failure = false;
+  const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); };
+  const updatedSection = { ...section, ranking: "A0050" };
+  const fn = declaration("src/components/Modals/commands/manageColumn.tsx", "onDragEndHandler", {
+    writeSection: (...args) => write(...args),
+    sections: [section], currentUser: { id: 985 },
+    reorderSectionsWithRank: () => ({ reorderedSections: [updatedSection], updatedSection, ranking: "A0050" }),
+    updateCache: async (...args) => calls.push(["cache", ...args]), synchronizeBoardSectionOrder: async (...args) => calls.push(["sync", ...args]),
+    console: { log() {} }, toast: { error: (...args) => calls.push(["error", ...args]) },
+  });
+  const input = { source: { index: 0 }, destination: { index: 1 } };
+  await fn(input);
+  const body = { userId: 985, sectionId: 12, newSection: { ranking: "A0050" } };
+  assert.deepEqual(calls.map(([kind]) => kind), ["cache", "write", "sync", "cache"]);
+  assert.deepEqual(calls[1], ["write", body]);
+  assert.equal(calls[0][2], false); assert.equal(calls[3][2], true);
+  failure = true; calls.length = 0; await fn(input);
+  assert.deepEqual(calls.map(([kind]) => kind), ["cache", "write", "error"]);
+  assert.equal(calls[2][1], "Column order could not be saved");
+});
+test(`notification archive tutorial query, echo headers and unchanged task archive order`, async () => {
+  const calls = [];
+  const request = async (...args) => { calls.push(args); return { ok: true }; };
+  const fn = declaration("src/hooks/Inbox/useGlobalFocusHandler.tsx", "archiveHandler", {
+    searchParams: { get: () => "1" }, currentUser: { id: 985 },
+    toggleNotificationArchive: (...args) => request("typed", ...args), fetch: (...args) => request("legacy", ...args), realtimeEchoHeaders: () => ({ "X-Socket-Id": "123.456" }),
+  });
+  const row = { ...notification, id: "20", taskId: null };
+  assert.equal(await fn(row, 0, "Notification"), true);
+  assert.deepEqual(calls[0], ["typed", { id: "20", taskId: null, userId: 985, type: notification.type, tutorial: 1, intent: "archive" }, { "X-Socket-Id": "123.456" }]);
+  calls.length = 0; assert.equal(await fn({ ...row, taskId: 12 }, 0, "Task"), true);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1], ["legacy", "/api/tasks/single", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ newTask: { id: 12, status: "Archive" } }) }]);
 });
 
-for (const flag of [false, undefined, true]) {
-  test(`rename and delete ${flag}: exact patches, same cache behavior and failure settling`, async () => {
-    const calls = []; let failure = false;
-    const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); };
-    const fn = declaration("src/components/Modals/commands/manageColumn.tsx", "handleSectionUpdateVis", {
-      typedWrite: flag ? (...args) => write("typed", ...args) : undefined, axios: { post: (...args) => write("legacy", ...args) },
-      sections: [section], updating: false, lastColumnDeleteMessage: false, noEmptyBoardFlash: false, title: "Renamed", ticketsFinished: true, currentUser: { id: 985 }, currentProject: { id: 15, section: [section], sections: [section] },
-      setUpdating: (value) => calls.push(["updating", value]),
-      updateSection: (rows, updated, mode) => mode === "Delete" ? [] : rows.map((row) => ({ ...row, ...updated })),
-      globalConstants: { GetAllManageColumnsPrefixKey: "manageColumns" },
-      queryClient: { setQueryData: (...args) => calls.push(["cache", ...args]), refetchQueries: async (...args) => calls.push(["refetch", ...args]), invalidateQueries: async (...args) => calls.push(["invalidate", ...args]) },
-      updateCache: (...args) => calls.push(["updateCache", ...args]), setCurrentProject: (...args) => calls.push(["project", ...args]), setEditSection() {}, console: { log() {} },
-    });
-    for (const mode of ["RENAME", "DELETE"]) {
-      calls.length = 0; await fn(section, mode);
-      const body = { userId: 985, sectionId: 12, newSection: mode === "RENAME" ? { section_title: "Renamed", isDone: true } : { ...section, deleted: true } };
-      assert.deepEqual(calls.find(([kind]) => kind === "write"), flag ? ["write", "typed", body] : ["write", "legacy", "/api/section/update", body]);
-      assert.equal(calls.filter(([kind]) => kind === "write").length, 1);
-      assert.deepEqual(calls.at(-1), ["updating", false]);
-      assert.ok(calls.some(([kind]) => kind === (mode === "DELETE" ? "refetch" : "project")));
-      failure = true; calls.length = 0; await fn(section, mode);
-      assert.deepEqual(calls.map(([kind]) => kind), ["updating", "write", "updating"]);
-      failure = false;
-    }
-  });
-  test(`unarchive ${flag}: unchanged refetches and error handling`, async () => {
-    const calls = []; let failure = false;
-    const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); };
-    const fn = declaration("src/app/archived/ArchivedInboxComp.tsx", "markAsUnarchive", {
-      typedWrite: flag ? (...args) => write("typed", ...args) : undefined, axios: { post: (...args) => write("legacy", ...args) },
-      queryClient: { refetchQueries: (...args) => calls.push(["refetch", ...args]) },
-    });
-    await fn(notification);
-    assert.deepEqual(calls[0], flag ? ["write", "typed", { notificationId: 20 }] : ["write", "legacy", "/api/notifications/unArchiveNotificationById", { notificationId: 20 }]);
-    assert.deepEqual(calls.slice(1), [["refetch", { queryKey: ["archivedInbox"] }], ["refetch", { queryKey: ["archivedInboxMeta"] }]]);
-    failure = true; calls.length = 0; await fn(notification);
-    assert.equal(calls.length, 1);
-  });
-  test(`bulk archive ${flag}: same filtered IDs and socket header`, async () => {
-    const calls = [];
-    const fn = declaration("src/hooks/Inbox/useGlobalFocusHandler.tsx", "bulkArchiveHandler", {
-      typedBulkArchive: flag ? (...args) => calls.push(["typed", ...args]) : undefined,
-      axiosClient: { post: (...args) => calls.push(["legacy", ...args]) }, realtimeEchoHeaders: () => ({ "X-Socket-Id": "123.456" }),
-    });
-    const entries = [{ notificationId: 20, taskId: null, userId: 985 }];
-    await fn([...entries, { notificationId: null, taskId: 12, userId: 985 }, { notificationId: -1, taskId: 12, userId: 985 }], "Notification");
-    const body = { notificationIds: entries, status: "Archive" };
-    assert.deepEqual(calls, [flag ? ["typed", body, { "X-Socket-Id": "123.456" }] : ["legacy", "/notifications/(un)archiveBulk", body, { headers: { "X-Socket-Id": "123.456" } }]]);
-  });
-}
+test("no leaf still selects writers through the removed flag", () => {
+  for (const file of ["src/components/commands.tsx", "src/components/Modals/commands/manageColumn.tsx", "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx", "src/components/notifications/inboxSplit/index.tsx", "src/hooks/Inbox/useGlobalFocusHandler.tsx", "src/app/archived/ArchivedInboxComp.tsx", "src/components/generalCommandActions.ts", "src/utils/api/Inbox/index.ts"]) {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.doesNotMatch(source, /HTPR_6979_TYPED_WRITES_FLAG|typedWrites|createSectionWriter/, file);
+  }
+});
 
-for (const flag of [false, undefined, true]) {
-  test(`create ${flag}: same body, section reveal/cache patch and error close`, async () => {
-    const calls = []; let failure = false;
-    const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); return { status: 200, data: { section, project_view: null } }; };
-    const fn = declaration("src/components/generalCommandActions.ts", "createColumn", {
-      createSectionWriter: flag ? (...args) => write("typed", ...args) : undefined,
-      axios: { post: (...args) => write("legacy", ...args) }, _currentProject: { id: 15 },
-      window: { dispatchEvent: (...args) => calls.push(["event", ...args]) }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } },
-      LEARN_TUTORIAL_COLUMN_CREATED_EVENT: "created", toast: { success: (...args) => calls.push(["success", ...args]), error: (...args) => calls.push(["error", ...args]) },
-      getProjectIdxAndAllData: () => ({ projectToUpdateIndex: 0 }), updateProjectView: (...args) => calls.push(["patch", ...args]),
-      boardCloseHandler: () => calls.push(["close"]), console: { log() {} },
-    });
-    assert.deepEqual(await fn("Next", undefined), { ...section, items: [] });
-    const body = { projectId: 15, title: "Next", ranking: undefined };
-    assert.deepEqual(calls[0], flag ? ["write", "typed", body] : ["write", "legacy", "/api/section/create", body]);
-    assert.deepEqual(calls.find(([kind]) => kind === "patch"), ["patch", 0, null, { ...section, items: [] }]);
-    assert.deepEqual(calls.at(-1), ["close"]);
-    failure = true; calls.length = 0;
-    assert.equal(await fn("Next", undefined), undefined);
-    assert.deepEqual(calls.map(([kind]) => kind), ["write", "error", "close"]);
+test(`rename and delete exact patches, same cache behavior and failure settling`, async () => {
+  const calls = []; let failure = false;
+  const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); };
+  const fn = declaration("src/components/Modals/commands/manageColumn.tsx", "handleSectionUpdateVis", {
+    writeSection: (...args) => write(...args),
+    sections: [section], updating: false, lastColumnDeleteMessage: false, noEmptyBoardFlash: false, title: "Renamed", ticketsFinished: true, currentUser: { id: 985 }, currentProject: { id: 15, section: [section], sections: [section] },
+    setUpdating: (value) => calls.push(["updating", value]),
+    updateSection: (rows, updated, mode) => mode === "Delete" ? [] : rows.map((row) => ({ ...row, ...updated })),
+    globalConstants: { GetAllManageColumnsPrefixKey: "manageColumns" },
+    queryClient: { setQueryData: (...args) => calls.push(["cache", ...args]), refetchQueries: async (...args) => calls.push(["refetch", ...args]), invalidateQueries: async (...args) => calls.push(["invalidate", ...args]) },
+    updateCache: (...args) => calls.push(["updateCache", ...args]), setCurrentProject: (...args) => calls.push(["project", ...args]), setEditSection() {}, console: { log() {} },
   });
-}
+  for (const mode of ["RENAME", "DELETE"]) {
+    calls.length = 0; await fn(section, mode);
+    const body = { userId: 985, sectionId: 12, newSection: mode === "RENAME" ? { section_title: "Renamed", isDone: true } : { ...section, deleted: true } };
+    assert.deepEqual(calls.find(([kind]) => kind === "write"), ["write", body]);
+    assert.equal(calls.filter(([kind]) => kind === "write").length, 1);
+    assert.deepEqual(calls.at(-1), ["updating", false]);
+    assert.ok(calls.some(([kind]) => kind === (mode === "DELETE" ? "refetch" : "project")));
+    failure = true; calls.length = 0; await fn(section, mode);
+    assert.deepEqual(calls.map(([kind]) => kind), ["updating", "write", "updating"]);
+    failure = false;
+  }
+});
+test(`unarchive unchanged refetches and error handling`, async () => {
+  const calls = []; let failure = false;
+  const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); };
+  const fn = declaration("src/app/archived/ArchivedInboxComp.tsx", "markAsUnarchive", {
+    unarchiveNotification: (...args) => write(...args),
+    queryClient: { refetchQueries: (...args) => calls.push(["refetch", ...args]) },
+  });
+  await fn(notification);
+  assert.deepEqual(calls[0], ["write", { notificationId: 20 }]);
+  assert.deepEqual(calls.slice(1), [["refetch", { queryKey: ["archivedInbox"] }], ["refetch", { queryKey: ["archivedInboxMeta"] }]]);
+  failure = true; calls.length = 0; await fn(notification);
+  assert.equal(calls.length, 1);
+});
+test(`bulk archive same filtered IDs and socket header`, async () => {
+  const calls = [];
+  const fn = declaration("src/hooks/Inbox/useGlobalFocusHandler.tsx", "bulkArchiveHandler", {
+    archiveNotifications: (...args) => calls.push(["typed", ...args]),
+    realtimeEchoHeaders: () => ({ "X-Socket-Id": "123.456" }),
+  });
+  const entries = [{ notificationId: 20, taskId: null, userId: 985 }];
+  await fn([...entries, { notificationId: null, taskId: 12, userId: 985 }, { notificationId: -1, taskId: 12, userId: 985 }], "Notification");
+  const body = { notificationIds: entries, status: "Archive" };
+  assert.deepEqual(calls, [["typed", body, { "X-Socket-Id": "123.456" }]]);
+});
+
+test(`create same body, section reveal/cache patch and error close`, async () => {
+  const calls = []; let failure = false;
+  const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); return { status: 200, data: { section, project_view: null } }; };
+  const fn = declaration("src/components/generalCommandActions.ts", "createColumn", {
+    createSection: (...args) => write(...args), _currentProject: { id: 15 },
+    window: { dispatchEvent: (...args) => calls.push(["event", ...args]) }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } },
+    LEARN_TUTORIAL_COLUMN_CREATED_EVENT: "created", toast: { success: (...args) => calls.push(["success", ...args]), error: (...args) => calls.push(["error", ...args]) },
+    getProjectIdxAndAllData: () => ({ projectToUpdateIndex: 0 }), updateProjectView: (...args) => calls.push(["patch", ...args]),
+    boardCloseHandler: () => calls.push(["close"]), console: { log() {} },
+  });
+  assert.deepEqual(await fn("Next", undefined), { ...section, items: [] });
+  const body = { projectId: 15, title: "Next", ranking: undefined };
+  assert.deepEqual(calls[0], ["write", body]);
+  assert.deepEqual(calls.find(([kind]) => kind === "patch"), ["patch", 0, null, { ...section, items: [] }]);
+  assert.deepEqual(calls.at(-1), ["close"]);
+  failure = true; calls.length = 0;
+  assert.equal(await fn("Next", undefined), undefined);
+  assert.deepEqual(calls.map(([kind]) => kind), ["write", "error", "close"]);
+});
 
 test("captured disposable-local ON/OFF wire answers satisfy all adopted descriptors", () => {
   const fixtures = require("./fixtures/typed-section-notification-writes.json");
@@ -265,9 +253,8 @@ test("captured disposable-local ON/OFF wire answers satisfy all adopted descript
     const route = client[descriptor];
     assert.ok(fixtures[name]?.length, name);
     for (const fixture of fixtures[name]) {
-      const input = route.method === "GET" ? name === "setNotificationSeen"
+      const input = route.method === "GET"
         ? { notificationId: Number(fixture.query.notificationId), seen: Number(fixture.query.seen) }
-        : { id: fixture.query.id, taskId: fixture.query.taskId === "null" ? null : Number(fixture.query.taskId), userId: Number(fixture.query.userId), type: fixture.query.type, ...(fixture.query.tutorial ? { tutorial: Number(fixture.query.tutorial) } : {}) }
         : fixture.body;
       assert.deepEqual((route.method === "GET" ? route.query : route.body).parse(input), input);
       assert.deepEqual(route.success.parse(fixture.data), fixture.data, `${name}: ${fixture.phase}`);

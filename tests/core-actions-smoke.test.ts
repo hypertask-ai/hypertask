@@ -587,7 +587,7 @@ function fakeApp(
       return json({ ...taskBody(), notifications, _count: { notifications: notifications.length } });
     }
     if (url.pathname === "/api/notifications/markAsDone") {
-      const row = state.notifications.find((item) => item.id === Number(url.searchParams.get("id")));
+      const row = state.notifications.find((item) => item.id === Number(body.id));
       row.status = row.status === "Normal" ? "Archive" : "Normal";
       row.archivedAt = row.status === "Normal" ? null : "2026-10-03T00:00:00Z";
       return json(row);

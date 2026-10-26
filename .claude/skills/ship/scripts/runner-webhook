@@ -7,9 +7,10 @@ agent-events receiver), 502 when it is down. POST /webhook/runner-<n> is handled
 file $RUNNER_WEBHOOK_SECRETS/runner-<n> (mode 600); it is never logged. Delivery goes through runner-deliver.
 The HT Product Lead route is /webhook/ht-product-lead, with /webhook/infra-manager kept as an alias.
 Both use the infra-manager signing config and state files.
-Handled events: comment.created, comment.mention, task.assigned, chat.message, comment.reaction. Events caused by an agent are ignored.
+Handled events: comment.created, comment.mention, task.assigned, chat.message, comment.reaction. Agent-caused events are ignored except non-self comment mentions of the addressed agent, subject to a per-ticket streak guard.
 """
 import fcntl, hashlib, hmac, html, http.client, json, os, re, subprocess, sys, threading, time
+from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOME = os.path.expanduser("~")
@@ -19,12 +20,17 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 DELIVER = os.environ.get("RUNNER_DELIVER", os.path.join(HERE, "runner-deliver"))
 CHAT_REPLY = os.environ.get("RUNNER_CHAT_REPLY_CMD", f"{HOME}/.local/lib/hypertask/runner-pickup/runner-chat-reply")
 MAX_AGE = int(os.environ.get("RUNNER_WEBHOOK_MAX_AGE", "300"))
+AGENT_STREAK_MAX = max(0, int(os.environ.get("RUNNER_WEBHOOK_AGENT_STREAK_MAX", "6")))
 MAX_BODY = 1024 * 1024
 MAX_PROXY_BODY = 4 * 1024 * 1024
 DELIVER_TIMEOUT = 45  # longer than runner-deliver's lock waits (2 x 10 s) so a slow lock never reads as a failure
 FALLBACK_PORT = int(os.environ.get("RUNNER_WEBHOOK_FALLBACK_PORT", "8795"))
 HOP = {"connection", "keep-alive", "proxy-connection", "transfer-encoding", "te", "trailer", "upgrade"}
 SEEN_CAP = 4000
+# A person's chat message must reach the session whole (YPER4-657). Only a message longer than CHAT_TEXT_LIMIT is cut,
+# and then it says so and where to read the rest.
+CHAT_TEXT_CAP = 30000
+CHAT_TEXT_LIMIT = 20000
 LOCK = threading.Lock()
 EVENTS = {"comment.created", "comment.mention", "task.assigned", "chat.message", "comment.reaction"}
 OWNER_USER_ID = os.environ.get("RUNNER_WEBHOOK_OWNER_USER_ID", "6")  # Valentin Yeo, the only person who gives runners instructions
@@ -46,13 +52,15 @@ def log(msg):
     print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} runner-webhook: {msg}", file=sys.stderr, flush=True)
 
 
-def strip_html(text, limit=400):
-    text = str(text or "")[:20000]  # bound the input before any pattern runs
+def strip_html(text, limit=400, cut_note=None):
+    text = str(text or "")[:CHAT_TEXT_CAP]  # bound the input before any pattern runs
     text = re.sub(r"<(?:br|/p|/li|/div)[^<>]{0,200}>", " ", text)
     text = html.unescape(re.sub(r"<[^<>]{0,2000}>", "", text))
     text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
     text = re.sub(r"\s+", " ", text).strip().replace('"', "'")
-    return text if len(text) <= limit else text[: limit - 3] + "..."
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..." + (f" {cut_note}" if cut_note else "")
 
 
 def safe_join(base, name):
@@ -127,6 +135,33 @@ class Seen:
             pass
 
 
+class AgentMentions(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.agent_ids = set()
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        label = attrs.get("data-label") or ""
+        if tag == "span" and attrs.get("data-type") == "mention" and label.startswith("agent-"):
+            self.agent_ids.add(label[len("agent-"):])
+
+
+class AgentStreak(Seen):
+    def load(self):
+        try:
+            with open(self.path) as fh:
+                return json.load(fh)
+        except FileNotFoundError:
+            return {}
+
+    def save(self, streaks):
+        tmp = self.path + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump(streaks, fh)
+        os.replace(tmp, self.path)
+
+
 def ticket_url(p):
     num = (p.get("ticketNumber") or "").rsplit("-", 1)[-1]
     if p.get("projectId") and num.isdigit():
@@ -164,7 +199,7 @@ def build_message(n, p):
         if not sid or not mid:
             return None
         who = chat.get("userName") or actor
-        return (f'Agent Chat for {label(n)}: {who} wrote: "{strip_html(chat.get("text") or "")}". Answer in the same chat with: '
+        return (f'Agent Chat for {label(n)}: {who} wrote: "{strip_html(chat.get("text") or "", CHAT_TEXT_LIMIT, "The message is longer than this; read all of it in the chat in the app.")}". Answer in the same chat with: '
                 f'{CHAT_REPLY} {n} {sid} {mid} "<your answer>"')
     return None
 
@@ -213,16 +248,44 @@ def handle(n, p, delivery_id):
             if delivery_id and seen_d.has(f"delivery:{delivery_id}"):
                 return True
             ok = True
-            if p.get("event") in EVENTS and not (p.get("actor") or {}).get("agentId"):
-                key = dedupe_key(p)
+            actor_agent = (p.get("actor") or {}).get("agentId")
+            agent_mention = False
+            if actor_agent and p.get("event") == "comment.mention" and p.get("agentId") and actor_agent != p["agentId"]:
+                mentions = AgentMentions()
+                mentions.feed(p.get("commentHtml") or "")
+                agent_mention = p["agentId"] in mentions.agent_ids
+            key = dedupe_key(p)
+            with AgentStreak(f"runner-{n}.agent-streak.json") as streak:
+                streaks = streak.load()
+                ticket = ticket_url(p)
                 with Seen(f"runner-{n}.seen") as seen_k:
                     if not (key and seen_k.has(key)):
-                        message = build_message(n, p)
-                        ok = deliver(n, message, key or (f"delivery:{delivery_id}" if delivery_id else None)) if message else True
-                        if ok and message:
-                            log(f"runner {n}: {p.get('event')} delivered")
-                        if ok and key:
-                            seen_k.add(key)
+                        if not actor_agent and ticket and ticket in streaks:
+                            streaks[ticket] = 0
+                            streak.save(streaks)
+                        if p.get("event") in EVENTS and (not actor_agent or agent_mention):
+                            message = build_message(n, p)
+                            target = n
+                            event_id = key or (f"delivery:{delivery_id}" if delivery_id else None)
+                            count = streaks.get(ticket, 0)
+                            if agent_mention and count >= AGENT_STREAK_MAX:
+                                message = None
+                                slot = f"runner-{n}" if n.isdigit() else n
+                                event_id = f"loop:{ticket}:{slot}"
+                                if count == AGENT_STREAK_MAX and not seen_k.has(event_id):
+                                    target = "ht-product-lead"
+                                    message = (f"Board event for {label(n)}: Possible agent loop suspected on "
+                                               f"{p.get('ticketNumber')} {ticket}. Agent mentions are paused until a human event on this ticket.")
+                            ok = deliver(target, message, event_id) if message else True
+                            if ok and message:
+                                log(f"runner {target}: {p.get('event')} delivered")
+                                if agent_mention:
+                                    streaks[ticket] = count + 1
+                                    streak.save(streaks)
+                                    if count >= AGENT_STREAK_MAX:
+                                        seen_k.add(event_id)
+                            if ok and key:
+                                seen_k.add(key)
             if ok and delivery_id:
                 seen_d.add(f"delivery:{delivery_id}")
             return ok

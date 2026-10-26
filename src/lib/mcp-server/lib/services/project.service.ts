@@ -1,4 +1,5 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import type { BoardColumnRole } from "@/lib/mcp/boards/columnRole";
 import type { IApiClient } from '../../types/index';
 import { logger } from '../../utils/logger';
 import { generateCorrelationId } from '../../utils/correlation';
@@ -89,6 +90,7 @@ export interface SectionListItem {
   isDone?: boolean | null;
   autoAssign: number | string | null;
   taskCount: number;
+  role?: BoardColumnRole;
 }
 
 export interface ListSectionsResponse {
@@ -266,9 +268,10 @@ export class ProjectService {
     try {
       const validatedInput = BoardConfigInputSchema.parse(params);
       const isPlaybook = validatedInput.action.endsWith('playbook');
-      const endpoint = `/mcp/projects/${validatedInput.project_id}/${
-        isPlaybook ? 'playbook' : 'instructions'
-      }`;
+      let resource = 'instructions';
+      if (isPlaybook) resource = 'playbook';
+      if (validatedInput.action === 'get_hygiene') resource = 'manifest?include=hygiene';
+      const endpoint = `/mcp/projects/${validatedInput.project_id}/${resource}`;
 
       if (validatedInput.action.startsWith('get_')) {
         return await this.apiClient.makeRequest<ProjectApiResponse>(

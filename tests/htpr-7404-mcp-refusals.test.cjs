@@ -10,7 +10,7 @@ const conflictMessage = "Task has an active agent mutation lease. Retry after th
 const task = (id, status = "Normal") => ({ id, projectId: 15, sectionId: null, status });
 const lease = (agentId = "agent-a") => ({ agentId, token: "explicit-lease", adoptionCount: 0 });
 
-function harness(t, { v2, tasks = [task(42)], leases = new Map(), writeError, cancelBeforeWrite = false }) {
+function harness(t, { tasks = [task(42)], leases = new Map(), writeError, cancelBeforeWrite = false }) {
   const reports = [];
   const pending = [];
   const writes = [];
@@ -75,7 +75,6 @@ function harness(t, { v2, tasks = [task(42)], leases = new Map(), writeError, ca
     "@/lib/prisma": { default: prisma },
     "@/lib/mcp/routeWrapper": wrapper,
     "@/lib/mcp/auth": auth,
-    "@/lib/mcp/mcpV2": { isMcpV2Enabled: async () => v2 },
     "@/lib/mcp/tasks/agentMutationLeaseAdoption": adoption,
     "./agentMutationLeaseAdoption": adoption,
     "@/lib/mcp/idempotency/idempotencyStore": {
@@ -113,97 +112,94 @@ function harness(t, { v2, tasks = [task(42)], leases = new Map(), writeError, ca
   };
 }
 
-for (const v2 of [false, true]) {
-  const version = v2 ? "V2" : "V1";
-  for (const kind of ["missing", "conflict"]) {
-    test(`${version}: all ${kind} leases answer 409 with a code, warn, and send no PostHog report`, async t => {
-      const tasks = [task(42, "Archive"), task(43, "Archive")];
-      const leases = kind === "missing" ? new Map() : new Map(tasks.map(task => [task.id, lease("agent-b")]));
-      const h = harness(t, { v2, tasks, leases });
-      const response = await h.update();
-
-      assert.equal(response.status, 409);
-      assert.deepEqual(response.body, {
-        success: false,
-        tasks: [],
-        error: `Failed to update 2 task(s). ${kind === "missing" ? missingMessage : conflictMessage}`,
-        code: `agent_mutation_lease_${kind}`,
-      });
-      assert.equal(h.errors.length, 0);
-      const refusals = h.warnings.filter(([message]) => message.includes("Refused update of"));
-      assert.equal(refusals.length, 2);
-      assert.equal(refusals[0][1].name, kind === "missing" ? "AgentMutationLeaseMissingError" : "AgentMutationLeaseConflictError");
-      assert.equal(h.reports.length, 0);
-      assert.deepEqual(h.writes, []);
-      assert.deepEqual(h.broadcasts, []);
-    });
-  }
-
-  test(`${version}: a mixed batch stays 200 and includes only the successful task plus the refused failure`, async t => {
-    const h = harness(t, {
-      v2,
-      tasks: [task(42), task(43)],
-      leases: new Map([[42, lease()], [43, lease("agent-b")]]),
-    });
-    const response = await h.update();
-
-    assert.equal(response.status, 200);
-    assert.deepEqual(response.body, {
-      success: true,
-      tasks: [{ id: 42 }],
-      task: { id: 42 },
-      message: "1 task(s) updated successfully (1 task(s) failed)",
-      failed_tasks: [{ taskId: 43, error: conflictMessage, status: 409, code: "agent_mutation_lease_conflict" }],
-    });
-    assert.deepEqual(h.writes, [42]);
-    assert.deepEqual(h.broadcasts, [[42]]);
-    assert.equal(h.errors.length, 0);
-    assert.equal(h.reports.length, 0);
-  });
-
-  test(`${version}: a plain Prisma write Error still answers 500 and sends a PostHog report`, async t => {
-    const h = harness(t, { v2, leases: new Map([[42, lease()]]), writeError: new Error("Database unavailable") });
-    const response = await h.update();
-
-    assert.equal(response.status, 500);
-    assert.equal(response.body.success, false);
-    assert.equal(response.body.code, undefined);
-    assert.match(response.body.error, /Database unavailable/);
-    assert.equal(h.errors.length, 1);
-    assert.equal(h.reports.length, 1);
-    assert.equal(h.reports[0].extra.route, "/api/mcp/tasks/update");
-    assert.equal(h.reports[0].extra.method, "POST");
-    assert.equal(h.reports[0].extra.errorName, "McpServerErrorWithoutCause");
-    assert.deepEqual(h.writes, []);
-  });
-
-  test(`${version}: still allowed, an agent holding the lease updates successfully`, async t => {
-    const tasks = [task(42)];
-    const h = harness(t, { v2, tasks, leases: new Map([[42, lease()]]) });
-    const response = await h.update();
-
-    assert.equal(response.status, 200);
-    assert.equal(response.body.success, true);
-    assert.deepEqual(response.body.tasks, [{ id: 42 }]);
-    assert.deepEqual(h.writes, [42]);
-    assert.equal(tasks[0].acceptanceCriteria, "Verified");
-    assert.deepEqual(h.broadcasts, [[42]]);
-    assert.equal(h.warnings.length, 0);
-    assert.equal(h.errors.length, 0);
-    assert.equal(h.reports.length, 0);
-  });
-
-  test(`${version}: a lease cancelled before the contract write is a missing-lease 409, not a crash`, async t => {
-    const h = harness(t, { v2, leases: new Map([[42, lease()]]), cancelBeforeWrite: true });
+for (const kind of ["missing", "conflict"]) {
+  test(`all ${kind} leases answer 409 with a code, warn, and send no PostHog report`, async t => {
+    const tasks = [task(42, "Archive"), task(43, "Archive")];
+    const leases = kind === "missing" ? new Map() : new Map(tasks.map(task => [task.id, lease("agent-b")]));
+    const h = harness(t, { tasks, leases });
     const response = await h.update();
 
     assert.equal(response.status, 409);
-    assert.equal(response.body.code, "agent_mutation_lease_missing");
+    assert.deepEqual(response.body, {
+      success: false,
+      tasks: [],
+      error: `Failed to update 2 task(s). ${kind === "missing" ? missingMessage : conflictMessage}`,
+      code: `agent_mutation_lease_${kind}`,
+    });
     assert.equal(h.errors.length, 0);
+    const refusals = h.warnings.filter(([message]) => message.includes("Refused update of"));
+    assert.equal(refusals.length, 2);
+    assert.equal(refusals[0][1].name, kind === "missing" ? "AgentMutationLeaseMissingError" : "AgentMutationLeaseConflictError");
     assert.equal(h.reports.length, 0);
     assert.deepEqual(h.writes, []);
+    assert.deepEqual(h.broadcasts, []);
   });
 }
+
+test(`a mixed batch stays 200 and includes only the successful task plus the refused failure`, async t => {
+  const h = harness(t, {
+    tasks: [task(42), task(43)],
+    leases: new Map([[42, lease()], [43, lease("agent-b")]]),
+  });
+  const response = await h.update();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, {
+    success: true,
+    tasks: [{ id: 42 }],
+    task: { id: 42 },
+    message: "1 task(s) updated successfully (1 task(s) failed)",
+    failed_tasks: [{ taskId: 43, error: conflictMessage, status: 409, code: "agent_mutation_lease_conflict" }],
+  });
+  assert.deepEqual(h.writes, [42]);
+  assert.deepEqual(h.broadcasts, [[42]]);
+  assert.equal(h.errors.length, 0);
+  assert.equal(h.reports.length, 0);
+});
+
+test(`a plain Prisma write Error still answers 500 and sends a PostHog report`, async t => {
+  const h = harness(t, { leases: new Map([[42, lease()]]), writeError: new Error("Database unavailable") });
+  const response = await h.update();
+
+  assert.equal(response.status, 500);
+  assert.equal(response.body.success, false);
+  assert.equal(response.body.code, undefined);
+  assert.match(response.body.error, /Database unavailable/);
+  assert.equal(h.errors.length, 1);
+  assert.equal(h.reports.length, 1);
+  assert.equal(h.reports[0].extra.route, "/api/mcp/tasks/update");
+  assert.equal(h.reports[0].extra.method, "POST");
+  assert.equal(h.reports[0].extra.errorName, "McpServerErrorWithoutCause");
+  assert.deepEqual(h.writes, []);
+});
+
+test(`still allowed, an agent holding the lease updates successfully`, async t => {
+  const tasks = [task(42)];
+  const h = harness(t, { tasks, leases: new Map([[42, lease()]]) });
+  const response = await h.update();
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+  assert.deepEqual(response.body.tasks, [{ id: 42 }]);
+  assert.deepEqual(h.writes, [42]);
+  assert.equal(tasks[0].acceptanceCriteria, "Verified");
+  assert.deepEqual(h.broadcasts, [[42]]);
+  assert.equal(h.warnings.length, 0);
+  assert.equal(h.errors.length, 0);
+  assert.equal(h.reports.length, 0);
+});
+
+test(`a lease cancelled before the contract write is a missing-lease 409, not a crash`, async t => {
+  const h = harness(t, { leases: new Map([[42, lease()]]), cancelBeforeWrite: true });
+  const response = await h.update();
+
+  assert.equal(response.status, 409);
+  assert.equal(response.body.code, "agent_mutation_lease_missing");
+  assert.equal(h.errors.length, 0);
+  assert.equal(h.reports.length, 0);
+  assert.deepEqual(h.writes, []);
+});
+
 
 test("lease refusal metadata preserves names, messages, custom messages, and conflict instanceof checks", () => {
   const { AgentMutationLeaseConflictError, AgentMutationLeaseMissingError } = load("src/lib/mcp/tasks/agentMutationFence.ts", {});

@@ -9,12 +9,12 @@ export default {
   shippedOn: "2026-10-21",
   releaseRisk: {
     risk: "new",
-    reason: "Adds server-selected paid plan checkout and changes eligible trials to seven days.",
+    reason: "Adds server-selected paid plan checkout and trial terms.",
     highRisk: "money",
     ownerRequest: {
       quote: "this one goes behind a feature flag that is only on for me at first pls. Don't release to everyone right away.",
       ticketUrl: "https://app.hypertask.ai/detail/project-15/7511",
     },
   },
-  description: "Owner-only preview of Start-plan checkout with server-selected monthly Pro pricing and seven-day trials.",
+  description: "Owner-only preview of Start-plan checkout with server-selected monthly Pro pricing and trial terms.",
 } as const satisfies FeatureFlagDefinition;

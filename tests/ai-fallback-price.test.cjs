@@ -29,8 +29,8 @@ const enabledExcept = (provider) =>
 // A team disabling a provider must not silently move its users onto a pricier
 // model than the one they chose (HTPR-4688).
 test("a tier-1 model is never replaced by a pricier one", () => {
-  const haiku = getAiModelOptionById("claude-haiku-4.5");
-  assert.ok(haiku, "expected a Haiku 4.5 option to exist");
+  const haiku = getAiModelOptionById("claude-haiku-5-5");
+  assert.ok(haiku, "expected a Haiku 5.5 option to exist");
   assert.equal(tierOf(haiku), 1);
 
   const fallback = pickReplacementAiModelOption(

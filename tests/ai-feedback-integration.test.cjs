@@ -33,6 +33,7 @@ stub('src/lib/prisma.ts', { default: {
   section: { findMany: async () => [] },
   task: { findFirst: async () => null, findMany: async () => [] },
   label: { findFirst: async () => ({ id: 'ai-feedback' }) },
+  agent: { findUnique: async () => ({ permissions: { role: 'write' } }) },
 } })
 stub('src/lib/flags.ts', {
   isFeatureEnabled: async (key, id) => key === 'htpr-7536-plain-ai-feedback' ? plainMode === 'EVERYONE' : key === 'htpr-6804-mcp-tools' ? catalogEnabled : key === 'htpr-7195-ai-feedback' && enabledFor(id),
@@ -55,8 +56,7 @@ stub('src/lib/mcp/auth.ts', {
   mcpUnauthorizedResponse: async () => Response.json({ error: 'Unauthorized' }, { status: 401 }),
   checkMcpRateLimit: async () => null,
 })
-stub('src/lib/mcp/inProcessClient.ts', { createInProcessMcpClient: async () => ({ auth: auth(), client: {} }) })
-stub('src/lib/mcp/mcpV2.ts', { isMcpV2Enabled: async () => false })
+stub('src/lib/mcp/directOperationClient.ts', { createDirectOperationClient: () => ({}) })
 stub('src/lib/telemetry/mcpSseAnalytics.ts', { recordLegacyMcpRequest: () => {} })
 stub('src/lib/mcp-server/legacy-sse.ts', { isLegacySseRequest: () => false })
 const vercelPath = require.resolve('@vercel/functions')
@@ -301,15 +301,14 @@ test('thrown 400, 404 and 500 errors still file AI feedback and are rethrown unc
   }
 })
 
-test('schema rejections thrown inside a tool file as 400, not a 500 crash (HTPR-7207)', async () => {
+test('schema rejections thrown inside a tool file are a refused call that files nothing (HTPR-7207, HTPR-7920)', async () => {
   const schema = z.object({ task_id: z.array(z.number()) })
   const tools = observeFeedbackTools([
     { name: 'hypertask_tasks', description: 'bad input', parameters: z.object({}), execute: async (args) => { schema.parse(args); return '{}' } },
   ], 985)
   await assert.rejects(tools[0].execute({ task_id: 'HTPR-1' }, 'fixture'), z.ZodError)
   await drain()
-  assert.equal(files.length, 1)
-  assert.match(files[0].description, /HTTP status: 400/)
+  assert.equal(files.length, 0)
 })
 
 test('an empty real MCP catalog reports even when deferred discovery helpers prevent a literally empty wire list', async () => {

@@ -18,6 +18,10 @@ After the change is merged and the poster timer has swept once, list every open 
 
 Checklist written before QA; the status line for every open production PR with a total; the count of recent PR heads carrying the new description; one doctor screenshot of the app signed in as a QA account. Never print tokens.
 
+### Automated evidence
+
+`python3 .claude/skills/ship/scripts/premerge-evidence.test.py` exercises the poster with local fixtures, including refreshing every waiting PR when checker bytes change and invalidating the cached verdict.
+
 ## Cleanup
 
 None. Read-only.

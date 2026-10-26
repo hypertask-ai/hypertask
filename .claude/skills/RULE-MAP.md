@@ -43,7 +43,7 @@ ones, so older comments that cite them still point at the same rule.
 | 82 | Every new feature, screen, control, shortcut, API route, or deliberate behaviour change needs one flag named `htpr-<ticket>-<slug>`. | ship-feature-behind-flag |
 | 83 | New flags set `defaultMode: "EVERYONE"` unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode (HTPR-7389). Only Valentin widens an existing one. | ship-feature-behind-flag |
 | 84 | Gate protected behaviour on the server. `useFlag` only hides client UI. | ship-feature-behind-flag |
-| 85 | A bug fix gets a ticket-named bugfix flag default Everyone, except saved-data, security and crash fixes; same 14-day cleanup. | fix-bug |
+| 85 | A bug fix gets a ticket-named bugfix flag default Everyone, except saved-data, security and crash fixes; cleanup after 7 days on Everyone, filed by the daily cron; money, access and data-deletion stay at 14 days. | fix-bug |
 | 86 | No flag for performance work with the same output, security fixes, dependency or CI changes, spelling fixes, or an AI CHAT ticket. | ship-feature-behind-flag |
 | 87 | A `[BUGFIX]` title is not proof. New visible behaviour dressed as a fix needs a flag. | fix-bug, INDEX.md |
 | 88 | The mechanical flag check may pass a `[BUGFIX]` or `[INFRA]` title within 150 added UI lines. The reviewer still decides from the diff and enforces required bugfix flags; mechanical exemptions do not waive policy. | ship-feature-behind-flag |

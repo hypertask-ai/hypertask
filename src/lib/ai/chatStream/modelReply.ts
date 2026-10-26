@@ -47,6 +47,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       agentId: actingAgent?.id ?? null,
       provider: state.selected.usageProvider,
       feature: "chat",
+      reasoningFeature: heartbeatExecutionId ? "heartbeat" : "chat",
     });
     const result = streamText({
       model: state.selected.model,

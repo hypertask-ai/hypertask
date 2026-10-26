@@ -3,6 +3,7 @@ import { observeFeedbackTools, queueAiFeedback, queueMcpAuthFailure } from '@/li
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import jwt from 'jsonwebtoken'
 import { MCP_TOOLS } from './tools'
+import { getAgentPresenceTool } from './tools/agent-presence.tool'
 import { handleLegacySseRequest, isLegacySseRequest } from './legacy-sse'
 import { recordLegacyMcpRequest } from '@/lib/telemetry/mcpSseAnalytics'
 import {
@@ -14,9 +15,16 @@ import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { resolvePortableTools } from './listQueryContract'
 import { selectMcpTools } from './consolidated-tools'
-import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
-import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
+import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
+import { HTPR_7893_BOARD_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7893-board-alias'
+import { HTPR_7863_MCP_PAGE_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7863-mcp-page-alias'
+import { HTPR_7895_TASK_NUMBER_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7895-task-number-alias'
+import { HTPR_7897_MCP_INPUT_FIELDS_FLAG } from '@/lib/flags/definitions/htpr-7897-mcp-input-fields'
+import { HTPR_7917_MCP_INPUT_WRAPPERS_FLAG } from '@/lib/flags/definitions/htpr-7917-mcp-input-wrappers'
+import { HTPR_7914_TICKET_NUMBER_HINT_FLAG } from '@/lib/flags/definitions/htpr-7914-ticket-number-hint'
+import { HTPR_7910_RENAMED_FIELD_HINT_FLAG } from '@/lib/flags/definitions/htpr-7910-renamed-field-hint'
+import { HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG } from '@/lib/flags/definitions/htpr-7894-task-id-ticket-reference'
 import { HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7390-mcp-handshake-feedback'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
@@ -131,22 +139,30 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const userId = Number(authInfo.clientId)
     if (Number.isFinite(userId)) telemetryUserId = userId
     const ctx = authInfo.extra?.mcpAuthContext as McpAuthContext
-    const v2 = await isMcpV2Enabled(ctx.user.id)
     const feedbackEnabled = await aiFeedbackEnabled(ctx.user.id)
-    const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
+    const presenceTool = await getAgentPresenceTool(ctx.user.id)
+    const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[]).map((tool) =>
+      tool.name === presenceTool.name ? presenceTool : tool,
+    )
     const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
-    const consolidated = Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
     const portableTools = observeFeedbackTools(selectMcpTools(
       availableTools,
-      consolidated,
+      true,
       {
         managementPermissions: authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
         teamScoped: authInfo.extra?.teamScoped === true,
         agent: authInfo.extra?.agent === true,
-        ...(v2 && ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
+        ...(ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
       },
-      v2,
-      consolidated && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),
+      await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),
+      await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, ctx.user.id),
+      await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, ctx.user.id),
+      Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, ctx.user.id),
+      await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, ctx.user.id),
+      await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, ctx.user.id),
+      await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, ctx.user.id),
+      await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, ctx.user.id),
+      await isFeatureEnabled(HTPR_7910_RENAMED_FIELD_HINT_FLAG, ctx.user.id),
     ), ctx.user.id)
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)

@@ -27,7 +27,7 @@ function loadTsModule(file, stubs = {}) {
 
 const { pickDecisionComments, withDecisionCommentAnchor } = loadTsModule("src/lib/inboxDecisions.ts");
 const { inboxConfig, decisionsSplitName } = loadTsModule("src/lib/configs/inbox.config.ts");
-const { buildInboxTasksPlaylist } = loadTsModule("src/lib/inbox/inboxTasksPlaylist.ts");
+const { buildInboxTasksPlaylist } = require("./task-route-loader.cjs").load("src/lib/inbox/inboxTasksPlaylist.ts", {});
 const archiveNavigation = loadTsModule("src/lib/taskDetailArchiveNavigation.ts");
 const at = (hour) => new Date(`2026-10-21T${String(hour).padStart(2, "0")}:00:00Z`);
 const question = (commentId, hour, taskId = 1) => ({ taskId, commentId, text: "<p><strong>Question:</strong> proceed?</p>", commentText: null, createdAt: at(hour) });
@@ -154,7 +154,7 @@ const notification = (overrides = {}) => ({
   task: { id: 1, projectId: 15, uniqueIndex: 7311 }, decisionCommentId: 30, ...overrides,
 });
 
-function createInboxHarness(enabled, split, rows = [notification()], disableInboxFlow = false) {
+function createInboxHarness(enabled, split, rows = [notification()], disableInboxFlow = false, inboxVisibleOrder = false) {
   const calls = [];
   let playlist;
   const tree = sourceTree(inboxFile);
@@ -162,6 +162,7 @@ function createInboxHarness(enabled, split, rows = [notification()], disableInbo
   assert.ok(decisionGate);
   const environment = {
     inboxConfig, withDecisionCommentAnchor, buildInboxTasksPlaylist, selectedSplit: split,
+    inboxVisibleOrder, snapshot: null,
     decisionCommentLinks: evaluate(`(() => { let decisionCommentLinks = ${expression(inboxFile, "decisionCommentLinks")}; ${decisionGate.getText(tree)} return decisionCommentLinks; })()`, { decisionCommentLinkEnabled: enabled, selectedSplit: split, decisionsSplitName }),
     disableInboxFlow, disableNotificationSideEffects: true,
     _notifications: rows, selectedKeyboardRow: { item: { kind: "notification", notification: rows[0] } },
@@ -299,4 +300,21 @@ test("flag is a low-risk feature on for Everyone and runtime gates cover both ch
     assert.match(read(file), /useFlag\(HTPR_7311_DECISION_COMMENT_LINK_FLAG\)/);
   }
   assert.match(read(".claude/skills/verify-qa/reference/feature-map/inbox.md"), /htpr-7311-decision-comment-link/);
+});
+
+test("click and reply opens queue blocked tickets in visible order only while the bugfix flag is on", async () => {
+  const rows = [3, 2, 1, 5, 4].map((uniqueIndex) => notification({
+    id: String(uniqueIndex <= 3 ? -uniqueIndex : uniqueIndex),
+    taskId: uniqueIndex,
+    waitingOnSynthetic: uniqueIndex <= 3,
+    createdAt: `2026-10-24T${String(20 - uniqueIndex).padStart(2, "0")}:00:00.000Z`,
+    task: { id: uniqueIndex, projectId: 15, uniqueIndex },
+  }));
+  for (const enabled of [false, true]) {
+    for (const clicked of [false, true]) {
+      const harness = createInboxHarness(false, "Important", rows, false, enabled);
+      await harness.open(clicked ? "view" : "reply", clicked ? rows[2] : null);
+      assert.deepEqual(harness.playlist().map((item) => item.uniqueIndex), enabled ? [1, 2, 3, 4, 5] : [3, 2, 1, 5, 4]);
+    }
+  }
 });

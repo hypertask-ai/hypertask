@@ -34,7 +34,8 @@ function setup({ mode = null, name = 'Robin', flagError = false, auth, pending =
     '@/lib/mcp/auth/mcpAuthErrors': { classifyMcpAuthFailure: async () => { if (reason instanceof Error) throw reason; return reason } },
     '@/lib/prisma': { __esModule: true, default: db },
     '@/lib/mcp/auth': { validateMcpAuth: async () => auth },
-    '@/lib/mcp/inProcessClient': { createInProcessMcpClient: async () => ({ auth }) },
+    '@/lib/mcp/directOperationClient': { createDirectOperationClient: () => ({}) },
+    '@/lib/mcp/operationContext': { getMcpExecutionContext: () => auth, withMcpExecutionContext: (t, a, fn) => fn() },
     '@/lib/aiFeedback/clientInfo': { getFeedbackClient: async () => undefined },
     '../config/tool-metadata': { TOOL_METADATA: { REPORT_FEEDBACK: { name: 'hypertask_report_feedback' } } },
     './enabled': { aiFeedbackEnabled: async () => true },
@@ -345,7 +346,7 @@ for (const [mode, expectedPlain] of [['EVERYONE', true], ['OFF', false]]) {
       const f = setup({ mode })
       await f.fileAiFeedback(serverError, undefined, { origin: 'automatic' })
       assert.equal(f.created[0].title.startsWith('AI feedback:'), !expectedPlain)
-      assert.deepEqual(f.lookups, [{ flag: key, userId: undefined }])
+      assert.deepEqual(f.lookups, [{ flag: key, userId: undefined }, { flag: 'htpr-7941-quiet-fixable-reports', userId: 42 }])
     } finally {
       if (previous === undefined) delete process.env.AI_FEEDBACK_AGENT_USER_ID
       else process.env.AI_FEEDBACK_AGENT_USER_ID = previous
