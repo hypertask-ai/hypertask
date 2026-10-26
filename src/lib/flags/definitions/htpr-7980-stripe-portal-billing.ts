@@ -4,6 +4,7 @@ export const HTPR_7980_STRIPE_PORTAL_BILLING_FLAG = "htpr-7980-stripe-portal-bil
 
 export default {
   key: HTPR_7980_STRIPE_PORTAL_BILLING_FLAG,
+  kind: "feature",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-10-26",
   description: "A single Billing card with checkout for unsubscribed Free teams and an explicitly configured, price-only Stripe billing portal for existing subscriptions.",
