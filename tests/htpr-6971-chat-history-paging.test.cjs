@@ -1336,3 +1336,12 @@ test('leaving task detail restores legacy latest-chat selection', async () => {
     assert.equal(history().sessions[0].id, id(1));
   });
 });
+
+for (const paging of [true, false]) {
+  test(`following tasks still creates the first conversation on an empty account (paging ${paging})`, async () => {
+    await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [] }, async ({ history, resolver }) => {
+      assert.equal(history().currentSession.taskId, 91);
+      assert.equal((await resolver().ensureSessionForCurrentBoard()).id, history().currentSession.id);
+    });
+  });
+}

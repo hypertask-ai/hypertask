@@ -230,7 +230,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
 
   useEffect(() => {
     if (!ready || !summaryQuery.isSuccess || activeSession || newChatRef.current || initializationError || (isTaskScoped && taskId === undefined)) return;
-    const initialTaskId = selectionScope.initialTaskId;
+    const initialTaskId = selectionScope.initialTaskId ?? (historySessions.length === 0 ? taskId : undefined);
     let cancelled = false;
     setInitializationError(false);
     const initialize = async () => {

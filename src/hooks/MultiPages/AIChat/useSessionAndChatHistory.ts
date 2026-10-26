@@ -505,7 +505,7 @@ export const useSessionAndChatHistory = (
 
         const sessions = sessionsData?.data?.sessions ?? [];
 
-        if (followsTaskNavigation && !hasExplicitTask) {
+        if (followsTaskNavigation && !hasExplicitTask && sessions.length > 0) {
           setActiveSession((selected) => sessions.some((session) => session.id === selected && session.userId === currentUser.id) ? selected : sessions[0]?.id);
           return;
         }
