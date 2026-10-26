@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { load } = require("./task-route-loader.cjs");
+const { Prisma } = require("@prisma/client");
 
 function harness() {
   const skills = [];
@@ -11,8 +12,15 @@ function harness() {
   };
   const prisma = { aI_Skill: {
     findFirst: async ({ where }) => skills.find(skill => Object.entries(where).every(([key, value]) => skill[key] === value)) ?? null,
-    create: async ({ data }) => { const skill = { id: skills.length + 1, ...data }; skills.push(skill); return skill; },
-    update: async ({ where, data }) => { const skill = skills.find(skill => skill.id === where.id); Object.assign(skill, data); return skill; },
+    create: async ({ data }) => { const skill = { id: skills.length + 1, updatedAt: new Date(0), ...data }; skills.push(skill); return skill; },
+    update: async ({ where, data }) => {
+      const skill = skills.find(skill => skill.id === where.id);
+      if (where.updatedAt && skill.updatedAt.getTime() !== where.updatedAt.getTime()) {
+        throw new Prisma.PrismaClientKnownRequestError("Record changed", { code: "P2025", clientVersion: "test" });
+      }
+      Object.assign(skill, data, { updatedAt: new Date(skill.updatedAt.getTime() + 1) });
+      return structuredClone(skill);
+    },
   } };
   const mocks = {
     "ai": { tool: value => value },
@@ -28,7 +36,7 @@ function harness() {
       getAccessibleSkill: async (userId, id) => {
         const skill = skills.find(skill => skill.id === id && (skill.userId === userId || skill.projectId === 15));
         if (!skill) throw new Error("access denied");
-        return skill;
+        return structuredClone(skill);
       },
     },
   };
@@ -163,3 +171,28 @@ test("new skills appear immediately after a chat turn, even when an older menu r
   await oldRequest;
   assert.deepEqual((await fetchSlashSkills(15)).map(skill => skill.slug), [draft.slug]);
 });
+
+
+for (const duringCommit of [false, true]) {
+  test(`a concurrent edit cannot approve an unseen skill body (${duringCommit ? "atomic save" : "before approval"})`, async () => {
+    const h = harness();
+    await h.turn().create(draft);
+    const { skill } = await h.turn().create({ ...draft, confirmed: true });
+    const update = { skill_id: skill.id, name: "Revised name" };
+    await h.turn().update(update);
+    const concurrentEdit = () => {
+      h.skills[0].body = "Changed by another editor";
+      h.skills[0].updatedAt = new Date(1000);
+    };
+    if (duringCommit) {
+      const getdel = h.redis.getdel;
+      h.redis.getdel = async key => { concurrentEdit(); return getdel(key); };
+    } else concurrentEdit();
+    const outcome = await h.turn().update({ ...update, confirmed: true });
+    assert.equal(outcome.success, false);
+    if (!duringCommit) assert.equal(outcome.confirmation_required, true);
+    else assert.match(outcome.error, /changed|draft/i);
+    assert.equal(h.skills[0].name, draft.name);
+    assert.equal(h.skills[0].body, "Changed by another editor");
+  });
+}

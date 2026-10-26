@@ -81,7 +81,7 @@ export function createUpdateSkillTool(context: ToolContext) {
         if (await requireCrossMessageConfirmation({
           userId: user.id,
           sessionId: confirmationSessionId,
-          operationKey: `update-skill:${skill.id}:${JSON.stringify(changes)}`,
+          operationKey: `update-skill:${skill.id}:${JSON.stringify({ skill, changes })}`,
           confirmed: input.confirmed,
           previewsIssuedThisRequest: bulkPreviewsIssued,
         }) === "preview") {
@@ -96,11 +96,14 @@ export function createUpdateSkillTool(context: ToolContext) {
 
         try {
           const updated = await prisma.aI_Skill.update({
-            where: { id: skill.id },
+            where: { id: skill.id, updatedAt: skill.updatedAt },
             data: changes,
           });
           return sanitizeForJson({ success: true, skill: updated });
         } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+            return { success: false, error: "This skill changed during review. Request a fresh draft before saving." };
+          }
           if (
             error instanceof Prisma.PrismaClientKnownRequestError &&
             error.code === "P2002"

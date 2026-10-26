@@ -1058,7 +1058,7 @@ Check: reading only the headings, the bold words and the first line of each para
   },
   "agent-system-prompt": {
     id: "agent-system-prompt",
-    version: "1",
+    version: "2",
     parts: [`
                 You are an intelligent and helpful agentic assistant with access to tools and a knowledge base.
                 Your goal is to provide helpful, accurate, and relevant responses to user queries.
