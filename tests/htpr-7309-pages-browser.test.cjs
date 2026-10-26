@@ -52,3 +52,35 @@ test('link and unlink use the existing write boundary and report refused writes'
   fetch.mock.mockImplementation(async () => new Response('', { status: 403 }));
   await assert.rejects(changePageLink({ publicId: 'page-4', taskId: 8 }), /Could not change the page link/);
 });
+
+function pagesRoute(enabledFlags) {
+  const ts = require('typescript');
+  const fs = require('node:fs');
+  const source = ts.transpileModule(fs.readFileSync(require('node:path').join(__dirname, '../src/app/pages/page.tsx'), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+    fileName: 'page.tsx',
+  }).outputText;
+  const module = { exports: {} };
+  const mocks = {
+    'next/navigation': { notFound: () => { throw new Error('not found'); } },
+    '@/lib/auth/serverUser': { requireServerCookieUser: async () => ({ id: 985 }) },
+    '@/lib/flags': { isFeatureEnabled: async (key, userId) => userId === 985 && enabledFlags.includes(key) },
+    '@/lib/flags/definitions/htpr-7298-standalone-pages': { HTPR_7298_STANDALONE_PAGES_FLAG: 'htpr-7298-standalone-pages' },
+    '@/lib/flags/definitions/htpr-7309-pages-screens': { HTPR_7309_PAGES_SCREENS_FLAG: 'htpr-7309-pages-screens' },
+    './PagesListScreen': { default: 'PagesListScreen', __esModule: true },
+  };
+  new Function('require', 'module', 'exports', source)((name) => mocks[name] ?? require(name), module, module.exports);
+  return module.exports.default;
+}
+
+for (const flags of [[], ['htpr-7298-standalone-pages'], ['htpr-7309-pages-screens']]) {
+  test(`Pages server route is unavailable without both flags: ${flags.join(',') || 'neither'}`, async () => {
+    await assert.rejects(pagesRoute(flags)(), /not found/);
+  });
+}
+
+test('Pages server route still renders for a signed-in user with both flags', async () => {
+  const view = await pagesRoute(['htpr-7298-standalone-pages', 'htpr-7309-pages-screens'])();
+  assert.equal(view.type, 'PagesListScreen');
+  assert.deepEqual(view.props.currentUser, { id: 985 });
+});
