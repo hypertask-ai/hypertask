@@ -1,8 +1,6 @@
 "use client";
 
-import { setNotificationSeen } from "@/lib/api/typedClient";
 import {
-  HTPR_6979_TYPED_WRITES_FLAG,
   HTPR_7311_DECISION_COMMENT_LINK_FLAG,
   SHORTCUT_NUDGES_FLAG,
 } from "@/lib/flags/keys";
@@ -196,9 +194,6 @@ const InboxSplit = ({
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
-  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
-  let typedWrite: typeof setNotificationSeen | undefined;
-  if (typedWrites) typedWrite = setNotificationSeen;
   const shortcutNudgesEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
   const noPhoneNudges = useFlag(HTPR_5906_NO_PHONE_NUDGES_FLAG) && isMbl;
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
@@ -649,7 +644,6 @@ const InboxSplit = ({
         Number.parseInt(selectedNotification.id),
         selectedNotification.seen,
         undefined,
-        typedWrite,
       ).finally(() =>
         queryClient.invalidateQueries({
           queryKey: queryKey ?? inboxDataQueryKey(currentUser?.id),
@@ -786,7 +780,7 @@ const InboxSplit = ({
       });
     }
 
-    void markNotificationSeen(Number.parseInt(notification.id), typedWrite).finally(() =>
+    void markNotificationSeen(Number.parseInt(notification.id)).finally(() =>
       queryClient.invalidateQueries({ queryKey: cacheKey, exact: true }),
     );
   };

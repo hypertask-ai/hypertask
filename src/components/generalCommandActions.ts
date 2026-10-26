@@ -1,4 +1,4 @@
-import type { createSection } from "@/lib/api/typedClient";
+import { createSection } from "@/lib/api/typedClient";
 import { CommandMode } from "@/models/enums";
 import { IAgent, IProject, ISection, IUser } from "@/models/model";
 import axios from "axios";
@@ -16,7 +16,7 @@ import type { createCommandModalCallbacks } from "./commandModalCallbacks";
 
 type Context = Pick<ReturnType<typeof useCommandsState>, "boardCloseHandler" | "inViewObject" | "assignTaskUser" | "currentUser" | "router" | "_currentProject" | "queryClient" | "setCurrentProject" | "goToProjectShortcut" | "_activeItem" | "activeSectionId" | "setBoardColumnsViewAPI" | "getProjectIdxAndAllData" | "updateProjectView" | "renameBoard" | "removeMemberFromBoard" | "addAgentToBoard" | "removeAgentFromBoard" | "inviteNewMembersToBoard" | "setShowCommands" | "setCommandMode"> &
   Pick<ReturnType<typeof createCommandModalCallbacks>, "toggleAssignModal"> &
-  { ticketPrefixEnabled?: boolean; createSectionWriter?: typeof createSection };
+  { ticketPrefixEnabled?: boolean };
 
 export function createGeneralCommandActions(context: Context) {
   const {
@@ -24,7 +24,7 @@ export function createGeneralCommandActions(context: Context) {
   router, _currentProject, queryClient, setCurrentProject, goToProjectShortcut,
   _activeItem, activeSectionId, setBoardColumnsViewAPI, getProjectIdxAndAllData, updateProjectView,
   renameBoard, removeMemberFromBoard, addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard,
-  setShowCommands, setCommandMode, ticketPrefixEnabled = false, createSectionWriter,
+  setShowCommands, setCommandMode, ticketPrefixEnabled = false,
   } = context;
 
 
@@ -260,11 +260,7 @@ export function createGeneralCommandActions(context: Context) {
 
     let response;
     try {
-      response = createSectionWriter ? await createSectionWriter({
-        projectId: _currentProject.id,
-        title,
-        ranking,
-      }) : await axios.post("/api/section/create", {
+      response = await createSection({
         projectId: _currentProject.id,
         title,
         ranking,

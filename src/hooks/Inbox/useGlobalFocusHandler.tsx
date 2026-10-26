@@ -1,7 +1,6 @@
 import { archiveNotifications, toggleNotificationArchive } from "@/lib/api/typedClient";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
-import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import {
   globalNotificationFocusAtom,
   currentUserAtom,
@@ -59,13 +58,6 @@ const isWaitingOnSynthetic = (notification: unknown) => {
 
 const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
-  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
-  let typedArchive: typeof toggleNotificationArchive | undefined;
-  let typedBulkArchive: typeof archiveNotifications | undefined;
-  if (typedWrites) {
-    typedArchive = toggleNotificationArchive;
-    typedBulkArchive = archiveNotifications;
-  }
   const [globalFocus, setGlobalFocus] = useRecoilState(
     globalNotificationFocusAtom,
   );
@@ -289,28 +281,14 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     mode?: string,
   ) => {
     const tutorialArchive = searchParams?.get("tutorial") === "1";
-    const notificationResponse = typedArchive ? await typedArchive({
+    const notificationResponse = await toggleNotificationArchive({
       id: String(notification.id),
       taskId: notification.taskId,
       userId: currentUser.id,
       type: notification.type,
       ...(tutorialArchive ? { tutorial: 1 } : {}),
       intent: "archive",
-    }, realtimeEchoHeaders()) : await fetch(
-      "/api/notifications/markAsDone",
-      {
-        method: "POST",
-        headers: { ...realtimeEchoHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: notification.id,
-          taskId: notification.taskId,
-          userId: currentUser.id,
-          type: notification.type,
-          ...(tutorialArchive ? { tutorial: 1 } : {}),
-          intent: "archive",
-        }),
-      },
-    );
+    }, realtimeEchoHeaders());
     if (!notificationResponse.ok) return false;
     if (mode === "Task") {
       const taskResponse = await fetch(`/api/tasks/single`, {
@@ -426,17 +404,10 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     );
     if (archivableIds.length === 0) return;
 
-    typedBulkArchive ? await typedBulkArchive({
+    await archiveNotifications({
       notificationIds: archivableIds,
       status: "Archive",
-    }, realtimeEchoHeaders()) : await axiosClient.post(
-      "/notifications/(un)archiveBulk",
-      {
-        notificationIds: archivableIds,
-        status: "Archive",
-      },
-      { headers: realtimeEchoHeaders() },
-    );
+    }, realtimeEchoHeaders());
   };
 
   const navigateTabs = (
