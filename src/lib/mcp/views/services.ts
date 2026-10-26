@@ -15,6 +15,8 @@ import {
 } from '@/utils/controllers/projects/views/boardFilterWriteLock';
 import { canonicalBoardColumns, normalizeNativeBoardFilters } from './nativeBoardSettings';
 
+export class ViewTitleConflictError extends Error {}
+
 export type CreateViewFilters = {
     label_names?: string[];
     assignee_ids?: Array<number | string>;
@@ -177,7 +179,7 @@ export async function createView(input: CreateViewInput) {
         select: { id: true },
     });
     if (existing) {
-        throw new Error(`A view titled "${title}" already exists on this board`);
+        throw new ViewTitleConflictError(`A view titled "${title}" already exists on this board`);
     }
 
     const board_filters = input.board_filters === undefined

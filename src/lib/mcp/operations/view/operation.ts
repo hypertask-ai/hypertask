@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { SortingMode, SortingOrder, SubtaskSetting, EmptySections, ViewVisibility } from '@prisma/client'
 import { savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
-import { createView, type CreateViewInput } from '@/lib/mcp/views/services'
+import { createView, ViewTitleConflictError, type CreateViewInput } from '@/lib/mcp/views/services'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions'
 import { isSubtaskSetting } from '@/models/Views/model'
@@ -330,7 +330,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, view })
   } catch (error) {
-    console.error('Error creating view:', error)
+    if (!(error instanceof ViewTitleConflictError)) console.error('Error creating view:', error)
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 400 }
