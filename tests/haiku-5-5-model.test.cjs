@@ -133,8 +133,8 @@ test("Haiku catalog aliases and raw legacy ids resolve regardless of the flag", 
       assert.equal(catalog.resolveHaikuModelId(id, enabled), id);
     }
     for (const entry of catalog.aiModelOptions) {
-      assert.equal(catalog.isAiModelOptionVisible(entry, enabled), entry.modelKey !== "deepseek-v4.1-flash-fast");
-      assert.equal(catalog.isAiModelOptionVisible(entry, enabled, true), true);
+      assert.equal(catalog.isAiModelOptionVisible(entry, enabled), entry.modelKey !== "deepseek-v4.1-flash-fast" && !catalog.isGrokGemini4ModelKey(entry.modelKey));
+      assert.equal(catalog.isAiModelOptionVisible(entry, enabled, true), !catalog.isGrokGemini4ModelKey(entry.modelKey));
     }
   }
 });
@@ -147,7 +147,7 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.doesNotMatch(source, /HTPR_7010_HAIKU_5_5_FLAG/);
-    assert.match(source, /isAiModelOptionVisible\(option, false(?:, true)?\)/);
+    assert.match(source, /isAiModelOptionVisible\(option, false(?:, true(?:, (?:true|grokGemini4Enabled))?)?\)/);
     const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let visibilityExpression;
     function visit(node) {
@@ -163,10 +163,11 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
         const visible = vm.runInNewContext(visibilityExpression, {
           haiku55Enabled,
           haikuDefaultEnabled,
+          gatedModelOptions: catalog.aiModelOptions.filter((entry) => !catalog.isGrokGemini4ModelKey(entry.modelKey)),
           flagModelOptions: catalog.aiModelOptions,
           isAiModelOptionVisible: catalog.isAiModelOptionVisible,
         });
-        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true)));
+        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true, true) && !catalog.isGrokGemini4ModelKey(entry.modelKey)));
       }
     }
   }

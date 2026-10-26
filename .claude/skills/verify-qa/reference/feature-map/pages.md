@@ -41,7 +41,7 @@ Ticket with "Pages (1)", the page editor with "Saved", reload keeping the
 title, and "Back to task" returning to the ticket, desktop and 390x844.
 Flagged: a standalone page opening with "Back to board", a link making it
 appear on the ticket, unlink removing it, and the Pages list including it. Search, board scope, Archived pages,
-Commands entries and Link page from the ticket must also work. Flag-off: 404 from each flagged call. Shoot the changed page screen in
+Commands entries and Link page from the ticket must also work. On a fresh ticket load, search for Link page immediately; late flag or route updates must refresh the open search without retyping or reloading. Repeat at desktop and phone width. Flag-off: 404 from each flagged call. Shoot the changed page screen in
 all four themes.
 
 ## Cleanup

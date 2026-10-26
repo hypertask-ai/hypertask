@@ -1,5 +1,9 @@
 "use client";
 
+import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+
+
 import { setNotificationSeen } from "@/lib/api/typedClient";
 import {
   HTPR_6979_TYPED_WRITES_FLAG,
@@ -196,6 +200,9 @@ const InboxSplit = ({
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
+  const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
+  const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
+  const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   let typedWrite: typeof setNotificationSeen | undefined;
   if (typedWrites) typedWrite = setNotificationSeen;
@@ -1022,6 +1029,8 @@ const InboxSplit = ({
                     notification.waitingOnSynthetic ||
                     String(notification.id).startsWith("-");
 
+                  const canBulkSelect = !isWaitingOnSynthetic || bulkBlockedInbox;
+
                   return (
                     <div
                       className={`${isBulkSelected ? "bulk-active" : ""}`}
@@ -1068,7 +1077,7 @@ const InboxSplit = ({
                           >
                             {!disableRowButtons &&
                               !disableBulkActions &&
-                              isWaitingOnSynthetic && (
+                              !canBulkSelect && (
                                 <div
                                   className="hidden w-[15px] shrink-0 sm:block md:hidden"
                                   aria-hidden="true"
@@ -1076,7 +1085,7 @@ const InboxSplit = ({
                               )}
                             {!disableRowButtons &&
                               !disableBulkActions &&
-                              !isWaitingOnSynthetic && (
+                              canBulkSelect && (
                                 <SelectionCheckbox
                                   alwaysVisible={selectedIdsArray.length > 0}
                                   className={cn(
@@ -1098,7 +1107,7 @@ const InboxSplit = ({
                             <div className="inbox-row-gutter hidden shrink-0 items-center justify-end gap-2 pr-[1px] md:flex">
                               {!disableRowButtons &&
                                 !disableBulkActions &&
-                                (isWaitingOnSynthetic ? (
+                                (!canBulkSelect ? (
                                   <div
                                     className="w-[15px] shrink-0"
                                     aria-hidden="true"

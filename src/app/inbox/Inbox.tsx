@@ -1,6 +1,10 @@
 
 
 "use client";
+
+import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+
 import {
   FC,
   ReactNode,
@@ -106,6 +110,9 @@ const Inbox = ({
   homepageRouter: string;
   originProject: string;
 }) => {
+  const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
+  const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
+  const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
   const showSelectedCount = useFlag(HTPR_7111_INBOX_SELECTED_COUNT_FLAG);
   const inboxKeepsScroll = useFlag(HTPR_7841_INBOX_KEEPS_SCROLL_FLAG);
   const snapshot = useFirstScreenSurface(currentUser.id);
@@ -787,8 +794,8 @@ const Inbox = ({
             ?.flatMap((inner) => inner.flatMap((n) => n))
             .filter(
               (notification) =>
-                !notification.waitingOnSynthetic &&
-                !String(notification.id).startsWith("-"),
+                bulkBlockedInbox || (!notification.waitingOnSynthetic &&
+                !String(notification.id).startsWith("-")),
             )
             .reduce((acc: INotification[], curr) => {
               if (!acc.some((item) => item.id === curr.id)) acc.push(curr);

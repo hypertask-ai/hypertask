@@ -1,4 +1,5 @@
 import { archiveNotifications, toggleNotificationArchive } from "@/lib/api/typedClient";
+import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
@@ -59,6 +60,8 @@ const isWaitingOnSynthetic = (notification: unknown) => {
 
 const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
+  const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
+  const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   let typedArchive: typeof toggleNotificationArchive | undefined;
   let typedBulkArchive: typeof archiveNotifications | undefined;
@@ -346,33 +349,48 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     undoHandler: any,
   ) => {
     const archivableNotifications = notifications.filter(
-      (notification) => !isWaitingOnSynthetic(notification),
+      (notification) => bulkBlockedInbox || !isWaitingOnSynthetic(notification),
     );
     if (archivableNotifications.length === 0) return;
 
-    const notificationIds = archivableNotifications.map((notification) => ({
+    const syntheticNotifications = archivableNotifications.filter(isWaitingOnSynthetic)
+      .filter((notification, index, rows) => rows.findIndex(row => row.taskId === notification.taskId) === index);
+    const syntheticTaskIds = new Set(syntheticNotifications.map(row => row.taskId));
+    const regularNotifications = archivableNotifications.filter(
+      notification => !syntheticTaskIds.has(notification.taskId),
+    );
+    const notificationIds = regularNotifications.map((notification) => ({
       taskId: notification.taskId,
       userId: currentUser.id,
       notificationId: parseInt(notification.id),
     }));
 
-    const bulkUndoData = {
-      notifications: archivableNotifications,
-      notificationIds,
-      currentUser,
-      isBulkOperation: true,
-    };
-
-    performActionAndStoreUndoData(
-      bulkUndoData,
-      `Undo archive (${archivableNotifications.length} items)`,
-      undoHandler,
-    );
-
     bulkRemoveElementsFromState(archivableNotifications);
 
     try {
-      await bulkArchiveHandler(notificationIds, mode);
+      const [regularArchived, ...syntheticArchived] = await Promise.all([
+        bulkArchiveHandler(notificationIds, mode).then(() => true, () => false),
+        ...syntheticNotifications.map(notification =>
+          archiveHandler(notification, 0, "Notification").catch(() => false),
+        ),
+      ]);
+      const archivedSynthetic = syntheticNotifications.filter((_, index) => syntheticArchived[index]);
+      const archivedNotifications = [
+        ...(regularArchived ? regularNotifications : []), ...archivedSynthetic,
+      ];
+      if (archivedNotifications.length > 0) {
+        performActionAndStoreUndoData(
+          {
+            notifications: archivedNotifications,
+            notificationIds: regularArchived ? notificationIds : [],
+            ...(archivedSynthetic.length > 0 ? { syntheticNotifications: archivedSynthetic } : {}),
+            currentUser,
+            isBulkOperation: true,
+          },
+          `Undo archive (${archivedNotifications.length} items)`,
+          undoHandler,
+        );
+      }
     } finally {
       await reconcileInbox();
     }
@@ -394,7 +412,12 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       queryClient,
       queryKey: resolvedQueryKey,
       accountId: currentUser.id,
-      mutation: createInboxRemovalMutation(notificationsToRemove),
+      mutation: {
+        ...createInboxRemovalMutation(notificationsToRemove),
+        ...(bulkBlockedInbox ? {
+          notificationIds: notificationsToRemove.flatMap(notification => [String(notification.id), `-${notification.taskId}`]),
+        } : {}),
+      },
     });
     if (!cachePayload) return;
     const newState = cachePayload.notifications;
