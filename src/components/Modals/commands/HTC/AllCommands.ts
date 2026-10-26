@@ -655,6 +655,13 @@ const settings: CommandGroup = {
       keywords: "settings google api key use byok",
     },
     {
+      key: "settingsApiKeysXaiApiKey",
+      name: "Settings: xAI API key",
+      commandMode: CommandMode.Setting,
+      payload: "apiKeys",
+      keywords: "settings xai api key use byok",
+    },
+    {
       key: "settingsApiKeysDeepseekApiKey",
       name: "Settings: DeepSeek API key",
       commandMode: CommandMode.Setting,
@@ -737,6 +744,13 @@ const settings: CommandGroup = {
       commandMode: CommandMode.Setting,
       payload: "ai-models",
       keywords: "settings google enable disable team",
+    },
+    {
+      key: "settingsAiModelsXai",
+      name: "Settings: xAI",
+      commandMode: CommandMode.Setting,
+      payload: "ai-models",
+      keywords: "settings xai enable disable team",
     },
     {
       key: "settingsAiModelsDeepseek",
