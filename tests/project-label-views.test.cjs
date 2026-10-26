@@ -40,6 +40,12 @@ const view = (label, overrides = {}) => ({
 
 const contexts = new AsyncLocalStorage();
 const mocks = {
+  "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+    assert.equal(key, "htpr-8024-project-tag-views");
+    assert.equal(userId, 42);
+    return contexts.getStore().options.flagEnabled !== false;
+  } },
+  "@/lib/flags/definitions/htpr-8024-project-tag-views": { HTPR_8024_PROJECT_TAG_VIEWS_FLAG: "htpr-8024-project-tag-views" },
   "@/lib/prisma": { __esModule: true, default: new Proxy({}, {
     get: (_object, property) => contexts.getStore().db[property],
   }) },
@@ -483,4 +489,33 @@ test("unrelated personal filters do not block a legitimate merge", async () => {
   const f = fixture({ personalViews: [{ id: 8, config: { filters: { labelIds: ["another"] } } }] });
   assert.equal((await f.request({ mergeIntoLabelId: target.id })).status, 200);
   assert.deepEqual(f.state.labels.map((label) => label.id), [target.id]);
+});
+
+
+test("disabled project views reject direct creation and merge without writes", async () => {
+  for (const body of [{ projectView: true }, { mergeIntoLabelId: target.id }]) {
+    const f = fixture({ flagEnabled: false, assignments: [{ taskId: 1, labelId: source.id }] });
+    const before = structuredClone(f.state);
+    const result = await f.request(body);
+    assert.equal(result.status, 404);
+    assert.deepEqual(f.state, before);
+    assert.deepEqual(f.writes, []);
+  }
+});
+
+test("disabled project views keep ordinary renames without new view updates", async () => {
+  const f = fixture({ flagEnabled: false, views: [view(source)] });
+  const result = await f.request({ value: "Renamed" });
+  assert.equal(result.status, 200);
+  assert.equal(f.state.labels.find((label) => label.id === source.id).value, "Renamed");
+  assert.equal(f.state.views[0].title, source.value);
+  assert.equal(f.writes.some((write) => write.kind.startsWith("view.")), false);
+});
+
+test("disabling creation never removes saved project views or their deletion safeguards", async () => {
+  const f = fixture({ flagEnabled: false, views: [view(source)] });
+  const result = await f.request({}, "DELETE");
+  assert.equal(result.status, 409);
+  assert.equal(f.state.views.length, 1);
+  assert.equal(f.state.labels.length, 2);
 });

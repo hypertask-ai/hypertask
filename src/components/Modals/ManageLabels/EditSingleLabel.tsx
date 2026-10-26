@@ -10,6 +10,8 @@ import { ModalBody, ModalFooter } from 'reactstrap'
 import ConfirmDialog from '@/components/Modals/Common Modals/ConfirmDialog'
 import { useRecoilState } from '@/lib/state';
 import { getProjectLabelView } from "@/lib/projectLabelViews";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8024_PROJECT_TAG_VIEWS_FLAG } from "@/lib/flags/definitions/htpr-8024-project-tag-views";
 import { ModalContainerCustom, ModalHeaderComp } from '@/components/Common/CommonModalComponents';
 
 const MAX_AI_PROMPT_LENGTH = 1000;
@@ -32,6 +34,7 @@ const EditSingleLabel = (
     const queryClient = useQueryClient();   
     const [confirming, setConfirming] = useState<boolean>(false)
     const [error, setError] = useState("");
+    const projectViewsEnabled = useFlag(HTPR_8024_PROJECT_TAG_VIEWS_FLAG);
     const hasProjectView = getProjectLabelView(
         currentProject?.project_view?.allViews ?? [],
         label
@@ -148,7 +151,7 @@ const EditSingleLabel = (
              }
        
              {error && <p role="alert" className="px-2 text-dense text-destructive">{error}</p>}
-             {!confirming && !legacySmartLabel && (
+             {projectViewsEnabled && !confirming && !legacySmartLabel && (
                <div className="border-t border-light-black-border-1 px-2 py-2">
                  {hasProjectView ? (
                    <p className="text-dense text-text-light-gray">Project view ready. Tag renames update it.</p>

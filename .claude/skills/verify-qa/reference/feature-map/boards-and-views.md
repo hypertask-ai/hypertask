@@ -55,6 +55,13 @@ https://app.hypertask.ai/detail/project-15/7263 adds phone selection behind `htp
 
 ## Project tag views
 
+https://app.hypertask.ai/detail/project-15/8024 gates this behavior behind
+`htpr-8024-project-tag-views`, initially Owner + QA because merging deletes
+the source tag. Off hides creation and the ready message, rejects direct
+creation/merge requests with 404 before writes, and stops automatic rename
+updates. Ordinary tag edits still work. Existing saved views and deletion
+safeguards remain intact; disabling the feature never removes saved data.
+
 On the QA account's own private board, open Commands → Manage tags. Edit an
 ordinary tag and choose **Create project view**. The existing saved-view tabs
 must contain one public view named after the tag. Reopen the editor: **Project

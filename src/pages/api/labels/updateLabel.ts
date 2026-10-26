@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { Prisma, type Label, type View } from "@prisma/client";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8024_PROJECT_TAG_VIEWS_FLAG } from "@/lib/flags/definitions/htpr-8024-project-tag-views";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { scheduleBackfillAiLabel } from "@/lib/ai/labelClassifier";
 import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
@@ -175,6 +177,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const parsed = updateLabelBody.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid label information" });
       const { value, labelId, ai_prompt, projectView, mergeIntoLabelId } = parsed.data;
+      const projectViewsEnabled = await isFeatureEnabled(HTPR_8024_PROJECT_TAG_VIEWS_FLAG, session.userId);
+      if (!projectViewsEnabled && (projectView || mergeIntoLabelId)) {
+        return res.status(404).json({ message: "Project tag views are not available" });
+      }
       const normalizedAiPrompt = ai_prompt === undefined ? undefined : ai_prompt?.trim() || null;
       const existingLabel = await prisma.label.findUnique({ where: { id: labelId } });
       if (!existingLabel) return res.status(404).json({ message: "Label not found" });
@@ -204,7 +210,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
             const views = await getBoardFilterViews(tx, projectId);
             const sourceProjectView = getProjectLabelView(views, source);
-            if ((projectView || sourceProjectView) && (normalizedAiPrompt || source.ai_prompt?.trim())) {
+            if (projectViewsEnabled && (projectView || sourceProjectView) && (normalizedAiPrompt || source.ai_prompt?.trim())) {
               throw new LabelMutationError("Only ordinary tags can be projects", 409);
             }
             if (mergeIntoLabelId) {
@@ -252,9 +258,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 : inheritedView;
               return { updatedLabel: target, previousAiPrompt: source.ai_prompt, projectViewId: savedView?.id };
             }
-            if (source.value !== value) requireEditableReferences(views, source.id, session.userId);
+            if (projectViewsEnabled && source.value !== value) requireEditableReferences(views, source.id, session.userId);
             const updatedLabel = await tx.label.update({ where: { id: labelId }, data: updateData });
-            if (source.value !== value) await updateFilterReferences(tx, views, source, updatedLabel);
+            if (projectViewsEnabled && source.value !== value) await updateFilterReferences(tx, views, source, updatedLabel);
             const savedView = sourceProjectView ?? getProjectLabelView(views, updatedLabel) ?? (projectView
               ? await createProjectLabelView(tx, projectId, session.userId, updatedLabel)
               : undefined);

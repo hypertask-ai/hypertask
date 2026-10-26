@@ -103,6 +103,7 @@ class ManagedSmartSplitMutationError extends Error {
 const labelHandler = (writes, label, view, options = {}) => loadRoute(
   "src/pages/api/labels/updateLabel.ts",
   {
+    "src/lib/flags.ts": { isFeatureEnabled: async () => true },
     "src/lib/prisma.ts": {
       default: (() => {
         const tx = {
