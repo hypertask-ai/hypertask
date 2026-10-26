@@ -66,3 +66,4 @@ jobs:
           python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
           python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
           node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
+          node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
