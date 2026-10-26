@@ -28,14 +28,15 @@ const healthyTeams = {
   byok: [team(BYOK, { compedUntil: future, compedPlan: 'BYOK' })],
 };
 const healthyUsage = {
-  [FREE]: { fundingSource: 'shared', allowance: { budgetUsd: 1, remainingUsd: 0.924265, capped: false } },
-  [PRO]: { fundingSource: null, allowance: null },
+  [FREE]: { fundingSource: 'shared', maskedKey: 'vck_canary****', allowance: { budgetUsd: 1, remainingUsd: 0.924265, capped: false } },
+  [PRO]: { fundingSource: 'managed', allowance: null, apiKey: 'sk-canary-private' },
   [BYOK]: { fundingSource: 'customer', allowance: null },
 };
 const STATE_FILES = { free: 'state-free.json', pro: 'state-pro.json', byok: 'state-byok.json' };
+const USER_BY_TIER = { free: 3411, pro: 3413, byok: 3412 };
 const SESSION_BY_TIER = { free: 'sess-free', pro: 'sess-pro', byok: 'sess-byok' };
 
-async function run(t, { args = [], teams = healthyTeams, usage = healthyUsage, cookies = {}, handler, skipState = [] } = {}) {
+async function run(t, { args = [], teams = healthyTeams, usage = healthyUsage, users = USER_BY_TIER, cookies = {}, handler, skipState = [] } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'qa-teams-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   for (const [tier, file] of Object.entries(STATE_FILES)) {
@@ -49,6 +50,7 @@ async function run(t, { args = [], teams = healthyTeams, usage = healthyUsage, c
     if (handler) return handler(req, res, who);
     res.setHeader('Content-Type', 'application/json');
     const url = new URL(req.url, 'http://127.0.0.1');
+    if (req.method === 'GET' && url.pathname === '/api/users/getById') return res.end(JSON.stringify({ id: users[who] }));
     if (req.method === 'POST' && url.pathname === '/api/teams/getAllMinimal') return res.end(JSON.stringify(teams[who] ?? []));
     if (req.method === 'GET' && url.pathname === '/api/settings/ai-usage') {
       const body = usage[url.searchParams.get('teamId')];
@@ -69,7 +71,7 @@ async function run(t, { args = [], teams = healthyTeams, usage = healthyUsage, c
   child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; });
   child.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
   const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
-  for (const secret of [sessionValue, customerId, ...Object.values(SESSION_BY_TIER), 'fixture_session', 'stripe_customer_id']) {
+  for (const secret of [sessionValue, customerId, ...Object.values(SESSION_BY_TIER), 'fixture_session', 'stripe_customer_id', 'sk-canary', 'vck_canary']) {
     assert.ok(!stdout.includes(secret) && !stderr.includes(secret), `${secret} must not appear in output`);
   }
   assert.equal(stderr, '');
@@ -78,7 +80,7 @@ async function run(t, { args = [], teams = healthyTeams, usage = healthyUsage, c
 
 const healthyOutput = [
   'free | Free | not comped | $0.92 of $1.00 left | shared | OK',
-  `pro | Pro | comped until ${futureDay} | n/a | none | OK`,
+  `pro | Pro | comped until ${futureDay} | n/a | managed | OK`,
   `byok | BYOK | comped until ${futureDay} | n/a | own key | OK`,
   '',
 ].join('\n');
@@ -117,13 +119,14 @@ for (const args of [
   });
 }
 
-test('only reads: every request is the team list POST or the usage GET', async t => {
+test('only reads: every request is the identity GET, the team list POST or the usage GET', async t => {
   const { seen } = await run(t);
-  assert.equal(seen.length, 6);
+  assert.equal(seen.length, 9);
   for (const request of seen) {
     const path = request.url.split('?')[0];
     assert.ok(
       (request.method === 'POST' && path === '/api/teams/getAllMinimal') ||
+      (request.method === 'GET' && path === '/api/users/getById') ||
       (request.method === 'GET' && path === '/api/settings/ai-usage'),
       `${request.method} ${request.url} is not an allowed read`,
     );
@@ -182,11 +185,54 @@ test('a cookie for another domain is never sent', async t => {
   const { code, stdout, seen } = await run(t, { cookies: { free: [cookie({ domain: '.elsewhere.example' })] } });
   assert.equal(code, 1);
   assert.match(stdout, /^free \| - \| - \| - \| UNAVAILABLE: no app cookies$/m);
-  assert.equal(seen.length, 4);
+  assert.equal(seen.length, 6);
 });
 
 test('a missing state file is unavailable', async t => {
   const { code, stdout } = await run(t, { skipState: ['byok'] });
   assert.equal(code, 1);
   assert.match(stdout, /^byok \| - \| - \| - \| UNAVAILABLE: cannot read login state$/m);
+});
+
+test('a pro team with no managed key source is a mismatch', async t => {
+  const { code, stdout } = await run(t, { usage: { ...healthyUsage, [PRO]: { fundingSource: null, allowance: null } } });
+  assert.equal(code, 1);
+  assert.match(stdout, /^pro \| Pro \| comped until .* \| n\/a \| none \| MISMATCH: expected managed key source$/m);
+});
+
+test('a login that belongs to another user is a mismatch and never asks about teams', async t => {
+  const { code, stdout, seen } = await run(t, { users: { ...USER_BY_TIER, pro: 3412 } });
+  assert.equal(code, 1);
+  assert.match(stdout, /^pro \| - \| - \| - \| MISMATCH: login is not user 3413$/m);
+  assert.equal(seen.filter(request => request.who === 'pro' && request.url.includes('getAllMinimal')).length, 0);
+});
+
+test('a redirect is unavailable and is not followed', async t => {
+  const { code, stdout, seen } = await run(t, {
+    handler: (req, res) => { res.writeHead(302, { Location: 'http://127.0.0.1:9/elsewhere' }); res.end(); },
+  });
+  assert.equal(code, 1);
+  assert.match(stdout, /UNAVAILABLE: \/api\/users\/getById answered 302/);
+  assert.equal(seen.length, 3);
+});
+
+test('a revoked session that still lists teams reports expired when the usage read is refused', async t => {
+  const { code, stdout } = await run(t, {
+    handler: (req, res, who) => {
+      res.setHeader('Content-Type', 'application/json');
+      const url = new URL(req.url, 'http://127.0.0.1');
+      if (url.pathname === '/api/users/getById') return res.end(JSON.stringify({ id: USER_BY_TIER[who] }));
+      if (url.pathname === '/api/teams/getAllMinimal') return res.end(JSON.stringify(healthyTeams[who]));
+      res.writeHead(401);
+      res.end('{}');
+    },
+  });
+  assert.equal(code, 3);
+  assert.match(stdout, /^pro \| Pro \| comped until .* \| - \| - \| EXPIRED: login refused by the server$/m);
+});
+
+test('a null comped plan on a comped team reads as Pro', async t => {
+  const { code, stdout } = await run(t, { args: ['pro'], teams: { ...healthyTeams, pro: [team(PRO, { compedUntil: future, compedPlan: null })] } });
+  assert.equal(code, 0);
+  assert.match(stdout, /^pro \| Pro \| comped until .* \| OK$|OK\n$/);
 });

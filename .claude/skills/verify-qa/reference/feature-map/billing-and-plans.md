@@ -16,11 +16,11 @@ Four plan cases, three teams. A real paid Pro team would need real money, so the
 | Pro and Comped | 3413 (`state-pro.json`) | `2ce0d9f8-4179-489d-bbce-2b0e197f8067` | Pro, comped until 2027-10-03 |
 | Bring your own key | 3412 (`state-byok.json`) | `977c0c91-c14f-47b0-b8bc-933cc751f19d` | BYOK, comped until 2027-10-03, own key |
 
-Run `.claude/skills/verify-qa/scripts/qa-teams` before a plan check. It prints one health line per team: plan, comp date, allowance left, key source and OK, MISMATCH, UNAVAILABLE or EXPIRED. Exit 0 means all three are healthy, 1 a mismatch or unavailable report, 3 an expired login (refresh it with the QA runner, see the account table in `SKILL.md`). It only reads, accepts only the names `free`, `pro` and `byok`, refuses anything else, and never changes a plan, comp date or payment. Paste its output into the QA proof.
+Run `.claude/skills/verify-qa/scripts/qa-teams` before a plan check. It first checks that each state file really is the listed user, then prints one health line per team: plan, comp date, allowance left, key source (Free shared, Pro managed, BYOK own key) and OK, MISMATCH, UNAVAILABLE or EXPIRED. Exit 0 means all three are healthy, 1 a mismatch or unavailable report, 3 an expired login (refresh it with the QA runner, see the account table in `SKILL.md`). It never changes a plan, comp date, key or payment. Its AI usage read is the same one the Settings AI usage page makes, which can also set the month's allowance baseline; do not run it in a loop. It accepts only the names `free`, `pro` and `byok`, refuses anything else. Paste its output into the QA proof.
 
 Plan and comp changes are owner-only on the comp admin page, so a runner never resets them. If a line shows MISMATCH, tell HT Product Lead; do not try to fix it.
 
-The spending cap on the BYOK team's saved key is not visible from the app, so it is not checked. A BYOK line showing UNAVAILABLE means the app could not load that key's usage report.
+The spending cap on the BYOK team's saved key is not visible from the app, so it is not checked. The comp dates end on 2027-10-03, after which the lines show MISMATCH by design. The comped Pro team currently has no managed AI key source and the BYOK usage report fails with a 502, so both lines show MISMATCH or UNAVAILABLE until those are fixed. The health line is the API view; the effective plan shown to users is the Billing page, which the `plan-check` journey asserts. A BYOK line showing UNAVAILABLE means the app could not load that key's usage report.
 
 ## How to drive it
 

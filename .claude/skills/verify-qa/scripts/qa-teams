@@ -7,11 +7,12 @@ const { join } = require('node:path');
 const appHost = 'app.hypertask.ai';
 const teamListPath = '/api/teams/getAllMinimal';
 const usagePath = '/api/settings/ai-usage';
+const identityPath = '/api/users/getById';
 
 const NAMED_TEAMS = [
-  { label: 'free', userId: 3411, stateFile: 'state-free.json', teamId: '308dcc93-8076-4e30-a982-ae8b0df82cee', plan: 'Free' },
-  { label: 'pro', userId: 3413, stateFile: 'state-pro.json', teamId: '2ce0d9f8-4179-489d-bbce-2b0e197f8067', plan: 'Pro' },
-  { label: 'byok', userId: 3412, stateFile: 'state-byok.json', teamId: '977c0c91-c14f-47b0-b8bc-933cc751f19d', plan: 'BYOK' },
+  { label: 'free', userId: 3411, stateFile: 'state-free.json', teamId: '308dcc93-8076-4e30-a982-ae8b0df82cee', plan: 'Free', funding: 'shared' },
+  { label: 'pro', userId: 3413, stateFile: 'state-pro.json', teamId: '2ce0d9f8-4179-489d-bbce-2b0e197f8067', plan: 'Pro', funding: 'managed' },
+  { label: 'byok', userId: 3412, stateFile: 'state-byok.json', teamId: '977c0c91-c14f-47b0-b8bc-933cc751f19d', plan: 'BYOK', funding: 'customer' },
 ];
 
 const EXIT = { ok: 0, mismatch: 1, refused: 2, expired: 3 };
@@ -132,6 +133,7 @@ function readPlan(team) {
 }
 
 const FUNDING_TEXT = { customer: 'own key', managed: 'managed', shared: 'shared' };
+const FUNDING_BY_TEXT = Object.fromEntries(Object.entries(FUNDING_TEXT).map(([source, text]) => [text, source]));
 
 function readUsage(usage) {
   const allowance = usage && usage.allowance;
@@ -147,6 +149,10 @@ async function health(entry, options) {
   let teams;
   try {
     cookie = await loadCookies(join(options.stateDir, entry.stateFile));
+    const identity = await call(options.baseUrl, identityPath, cookie, 'GET');
+    if (!identity || identity.id !== entry.userId) {
+      return { code: EXIT.mismatch, text: line(['-', '-', '-'], `MISMATCH: login is not user ${entry.userId}`) };
+    }
     teams = await call(options.baseUrl, teamListPath, cookie, 'POST');
   } catch (error) {
     if (error instanceof Expired) return { code: EXIT.expired, text: line(['-', '-', '-'], `EXPIRED: ${error.message}`) };
@@ -164,9 +170,11 @@ async function health(entry, options) {
     return { code, text: line([plan.plan, plan.compedText, '-', '-'], `${status}: ${error.message}`) };
   }
   const planMatches = plan.plan === entry.plan && (entry.plan === 'Free' ? !plan.comped : plan.comped);
+  const fundingMatches = FUNDING_BY_TEXT[usage.keySource] === entry.funding;
+  const problem = !planMatches ? `expected ${entry.plan}` : !fundingMatches ? `expected ${FUNDING_TEXT[entry.funding]} key source` : null;
   return {
-    code: planMatches ? EXIT.ok : EXIT.mismatch,
-    text: line([plan.plan, plan.compedText, usage.allowanceText, usage.keySource], planMatches ? 'OK' : `MISMATCH: expected ${entry.plan}`),
+    code: problem ? EXIT.mismatch : EXIT.ok,
+    text: line([plan.plan, plan.compedText, usage.allowanceText, usage.keySource], problem ? `MISMATCH: ${problem}` : 'OK'),
   };
 }
 
