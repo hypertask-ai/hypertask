@@ -887,7 +887,9 @@ test("recurring/agent-created tickets evaluate and log the acting user rather th
   await assert.rejects(events.createTaskWithBoardWebhookOutbox(h.db, {
     userId: 7, agentId: "original-author-agent", actingUserId: 985, actingAgentId: "acting-agent",
   }, createdTask(h), "web", null, 15), (error) => error.code === "PLAN_LIMIT_REACHED");
-  assert.ok(h.calls.filter(([kind]) => kind === "flag").every(([, key, userId]) => key === flag && userId === 985));
+  const flagCalls = h.calls.filter(([kind]) => kind === "flag");
+  assert.ok(flagCalls.every(([, , userId]) => userId === 985));
+  assert.deepEqual([...new Set(flagCalls.map(([, key]) => key))].sort(), [flag, "htpr-7923-unlimited-free-tickets"]);
   assert.equal(h.logs.length, 1);
   assert.equal(h.logs[0][1].actorUserId, 985);
   assert.equal(h.logs[0][1].agentId, "acting-agent");
