@@ -138,3 +138,49 @@ export async function recordAiChatTurn(turn: AiChatTurnRecord): Promise<void> {
     await captureAiChatTurn(turn, environment);
   }
 }
+
+export type AiChipRecord = {
+  userId: number;
+  event: "shown" | "clicked" | "ignored" | "next_typed";
+  surface: string;
+  chipType: string;
+  chips: string[];
+  chipIndex?: number;
+  chipText?: string;
+  typedText?: string;
+  typedLength?: number;
+  projectId: number | null;
+  taskId: number | null;
+};
+
+export function buildAiChipCapture(chip: AiChipRecord, environment: string) {
+  return {
+    distinctId: String(chip.userId),
+    event: `ai_chat_chip_${chip.event}`,
+    properties: {
+      ht_surface: chip.surface,
+      ht_chip_type: chip.chipType,
+      ht_chips: chip.chips,
+      ht_chip_index: chip.chipIndex ?? null,
+      ht_chip_text: chip.chipText ?? null,
+      ht_typed_text: chip.typedText ?? null,
+      ht_typed_length: chip.typedLength ?? null,
+      ht_project_id: chip.projectId,
+      ht_task_id: chip.taskId,
+      ht_user_id: chip.userId,
+      ht_environment: environment,
+    },
+  };
+}
+
+export async function recordAiChipEvent(chip: AiChipRecord): Promise<void> {
+  const environment = deploymentEnvironment();
+  const capture = buildAiChipCapture(chip, environment);
+  console.info("[ai/chip-event]", JSON.stringify({ event: capture.event, ...capture.properties }));
+  if (environment !== "production" && environment !== "preview") return;
+  try {
+    await postHogClient()?.captureImmediate(capture);
+  } catch (error) {
+    console.warn("[ai/chip-event] capture failed", error);
+  }
+}
