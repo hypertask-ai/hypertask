@@ -572,13 +572,9 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await page.goto(fixture.detailPath)
     await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
     const linkPageCommand = page.getByRole('dialog').getByText('Link page', { exact: true })
-    let commandAttempts = 0
     await expect(async () => {
-      if (commandAttempts++ > 0) {
-        await page.reload()
-        await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
-      }
       if (!(await page.getByPlaceholder('Type a command or search...').isVisible())) await page.keyboard.press('Control+k')
+      await page.getByPlaceholder('Type a command or search...').fill('')
       await page.getByPlaceholder('Type a command or search...').fill('Link page')
       await expect(linkPageCommand).toBeVisible({ timeout: 3_000 })
     }, 'Link page command should be listed on the ticket page').toPass({ timeout: 40_000, intervals: [0] })
