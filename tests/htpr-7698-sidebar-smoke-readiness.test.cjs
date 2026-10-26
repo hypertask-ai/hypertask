@@ -18,9 +18,10 @@ const fixture = { projectId: 15, lanes: { Desktop: [agent] }, personalChats: [ch
 
 function smoke() {
   let use;
+  let beforeEach;
   const register = () => {};
   Object.assign(register, {
-    use: options => { use = options; }, describe: { configure() {} }, skip() {}, beforeAll() {}, beforeEach() {},
+    use: options => { use = options; }, describe: { configure() {} }, skip() {}, beforeAll() {}, beforeEach: callback => { beforeEach = callback; },
   });
   const expect = (locator, message) => ({
     async toBeVisible() { await locator.ready; assert.equal(locator.visible, true); },
@@ -42,8 +43,27 @@ function smoke() {
     assert.fail(`Unexpected dependency: ${name}`);
   }, loaded, loaded.exports);
   loaded.exports.setFixture(fixture);
-  return { ...loaded.exports, use };
+  return { ...loaded.exports, use, beforeEach };
 }
+
+test("sidebar diagnostics identify non-agent API failures without bodies or query credentials", async () => {
+  const handlers = {};
+  await smoke().beforeEach({ page: { on: (event, handler) => { handlers[event] = handler; } } });
+  const lines = [];
+  const previous = console.log;
+  try {
+    console.log = line => lines.push(line);
+    await handlers.response({
+      url: () => "http://127.0.0.1:3100/api/users/preferences?token=private-query",
+      status: () => 500,
+      request: () => ({ method: () => "POST" }),
+      json: () => assert.fail("non-agent failure body must not be read"),
+    });
+  } finally {
+    console.log = previous;
+  }
+  assert.deepEqual(lines, ["[sidebar apierror] POST /api/users/preferences status=500"]);
+});
 
 function pageFor({ selected = agent, failure } = {}) {
   const titleReady = deferred(), transcriptReady = deferred();

@@ -35,6 +35,9 @@ test.beforeEach(async ({ page }) => {
   })
   page.on('response', async (response) => {
     const url = new URL(response.url())
+    if (url.pathname.startsWith('/api/') && response.status() >= 500) {
+      console.log(`[sidebar apierror] ${response.request().method()} ${url.pathname} status=${response.status()}`)
+    }
     if (url.pathname !== '/api/agent-sidebar-chats' && !url.pathname.startsWith('/api/agent-chat/') && url.pathname !== '/api/flags') return
     const body = await response.json().catch(() => null)
     console.log(`[sidebar response] ${response.request().method()} ${url.pathname} status=${response.status()} ${JSON.stringify({
