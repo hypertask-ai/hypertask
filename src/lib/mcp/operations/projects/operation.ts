@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { parseSortOrderParam } from '@/lib/mcp/listParams'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8018_PROJECT_PAGE_SIZE_FLAG } from '@/lib/flags/keys'
 
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
@@ -85,8 +87,11 @@ export async function GET(request: NextRequest) {
       )
     }
     const search = listQuery?.query || searchParams.get('search') || undefined
+    const pageSize = z.coerce.number().int().positive().safe().default(50)
     const pagination = z.object({
-      limit: z.coerce.number().int().positive().safe().default(50),
+      limit: await isFeatureEnabled(HTPR_8018_PROJECT_PAGE_SIZE_FLAG, user.id)
+        ? pageSize.catch(50)
+        : pageSize,
       offset: z.coerce.number().int().min(0).max(2_147_483_647).default(0),
     }).safeParse({
       limit: searchParams.get('limit') ?? undefined,
