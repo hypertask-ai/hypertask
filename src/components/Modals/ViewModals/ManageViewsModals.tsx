@@ -19,7 +19,7 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { asViewOrder, sortViewsByOrder } from "@/utils/helperFunctions/Views/ViewOrderHelperFunctions";
-import { isBuiltinView, viewTabPreferenceKey, type BoardView } from "@/lib/constants/builtinViews";
+import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, isBuiltinView, viewTabPreferenceKey, type BoardView } from "@/lib/constants/builtinViews";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { getSmartSplitLabel } from "@/lib/smartSplits";
 import SmartSplitModal from "./SmartSplitModal";
@@ -28,12 +28,15 @@ import { useRouter } from "next/navigation";
 import type { TSavedBoardLayout } from "@/models/Views/model";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { replaceProjectViewForCurrentBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7804_BLOCKED_BY_ME_FLAG } from "@/lib/flags/keys";
 type Props = {
     toggle: () => void | Promise<void>
 }
 
 const ManageViews: React.FC<Props> = ({ toggle }) => {
 
+    const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
     const isMbl = useContext(MobileViewContext)
     const queryClient = useQueryClient()
     const router = useRouter()
@@ -121,7 +124,7 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
         const { allViews = [], default_view_id, user_project_views } = currentProject.project_view ?? {}
         const unsavedViewId = user_project_views?.[0]?.unsavedView?.id
         const resetViews = sortViewsByOrder<BoardView>(
-            [...allViews.filter((view) => view.id !== unsavedViewId), ...orderedViews.filter(isBuiltinView)],
+            [...allViews.filter((view) => view.id !== unsavedViewId), ...BUILTIN_VIEWS.filter((view) => blockedByMeEnabled || view.id !== BUILTIN_VIEW_IDS.blockedByMe)],
             projectDefaultOrder,
             default_view_id
         )

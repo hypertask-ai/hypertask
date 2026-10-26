@@ -17,10 +17,11 @@ import {
 import useOrderedViews from './useOrderedViews'
 import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG, HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/keys'
 import { DEFAULT_SUBTASK_SETTING } from '@/models/Views/model'
 
 const useRenderedViews = (project: IProject | null) => {
+  const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const orderedViews = useOrderedViews(project)
   const hiddenViewTabIds = useRecoilValue(hiddenViewTabIdsAtom)
@@ -89,9 +90,9 @@ const useRenderedViews = (project: IProject | null) => {
 
     return views.filter((view) => {
       const count = viewTaskCounts.get(view.id) ?? 0
-      return count > 0 || view.id === defaultViewId || view.id === activeViewId || view.id === BUILTIN_VIEW_IDS.blockedByMe
+      return count > 0 || view.id === defaultViewId || view.id === activeViewId || (blockedByMeEnabled && view.id === BUILTIN_VIEW_IDS.blockedByMe)
     })
-  }, [activeViewId, defaultViewId, showEmptyViewTabs, viewTaskCounts, views])
+  }, [activeViewId, blockedByMeEnabled, defaultViewId, showEmptyViewTabs, viewTaskCounts, views])
 
   return { views, orderedViews, renderedViews, viewTaskCounts }
 }
