@@ -88,3 +88,16 @@ Use a disposable QA-owned view, list it before and after, and remove only
 that fixture. Duplicate refusals log warnings; unexpected storage failures
 must still log errors. Local behavior coverage:
 `node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
+
+## MCP board-list sorting
+
+For https://app.hypertask.ai/detail/project-15/8017, list boards through
+`GET /api/mcp/projects` and `hypertask_projects` action `list` on `/mcp`.
+Default/title and `createdAt` sorts must still return accessible boards;
+check descending order and cursor continuation. Boards have no update-time
+field: `sort_by=updatedAt`, `sort=updatedAt:desc`, and
+`filter.updated_since` must return readable validation refusals, not server
+errors. Check both JSON and dotted filter query parameters. Unsupported
+sort directions must also fail before database access. These reads need
+no fixtures or cleanup. Local behavior coverage:
+`node --test tests/htpr-8017-project-list-sort.test.cjs`.

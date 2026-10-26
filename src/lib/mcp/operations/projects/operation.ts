@@ -2,13 +2,13 @@ import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import {
   normalizeTaskStatus,
   parseNumericCursor,
-  parseUpdatedSince,
   projectRows,
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
@@ -99,7 +99,26 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const where: any = {
+    if (sortBy !== 'title' && sortBy !== 'createdAt') {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'sort must be title or createdAt; boards do not track update times' },
+        { status: 400 },
+      )
+    }
+    if (sortOrder !== 'asc' && sortOrder !== 'desc') {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'sort_order must be asc or desc' },
+        { status: 400 },
+      )
+    }
+    if (listQuery?.filter.updated_since) {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'filter.updated_since is not supported; boards do not track update times' },
+        { status: 400 },
+      )
+    }
+
+    const where: Prisma.ProjectWhereInput = {
       status: status ?? 'Normal',
       AND: [
         getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
@@ -111,36 +130,12 @@ export async function GET(request: NextRequest) {
                   { name: { contains: search, mode: 'insensitive' } },
                   { description: { contains: search, mode: 'insensitive' } },
                 ],
-              },
+              } satisfies Prisma.ProjectWhereInput,
             ]
           : []),
       ],
     }
-    if (listQuery?.filter.updated_since) {
-      const since = parseUpdatedSince(listQuery.filter.updated_since)
-      if (!since) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Validation error',
-            message: 'filter.updated_since must be an ISO datetime',
-          },
-          { status: 400 },
-        )
-      }
-      where.updatedAt = { gte: since }
-    }
-
-    const orderBy: any = {}
-    if (sortBy === 'title') {
-      orderBy.title = sortOrder
-    } else if (sortBy === 'createdAt') {
-      orderBy.createdAt = sortOrder
-    } else if (sortBy === 'updatedAt') {
-      orderBy.updatedAt = sortOrder
-    } else {
-      orderBy.title = 'asc'
-    }
+    const orderBy: Prisma.ProjectOrderByWithRelationInput = { [sortBy]: sortOrder }
 
     const total = await prisma.project.count({ where })
 
