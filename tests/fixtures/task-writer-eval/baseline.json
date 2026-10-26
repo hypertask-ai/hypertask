@@ -1,0 +1,320 @@
+{
+  "corpusHash": "32e1738bd75d3dc2218116c980841f446092d6b9341751a3a30251c567018394",
+  "results": [
+    {
+      "id": "HTPR-7982",
+      "writer": {
+        "words": 178,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example",
+          "2:existing-section:problem",
+          "3:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7978",
+      "writer": {
+        "words": 182,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": []
+      }
+    },
+    {
+      "id": "HTPR-7980",
+      "writer": {
+        "words": 225,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": []
+      }
+    },
+    {
+      "id": "HTPR-7981",
+      "writer": {
+        "words": 205,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": []
+      }
+    },
+    {
+      "id": "HTPR-7975",
+      "writer": {
+        "words": 230,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example",
+          "2:existing-section:problem",
+          "3:existing-section:requirements"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7923",
+      "writer": {
+        "words": 229,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7792",
+      "writer": {
+        "words": 218,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example",
+          "2:existing-section:done when"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7924",
+      "writer": {
+        "words": 319,
+        "violations": [
+          "too-long"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": []
+      }
+    },
+    {
+      "id": "HTPR-7770",
+      "writer": {
+        "words": 323,
+        "violations": [
+          "too-long"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7759",
+      "writer": {
+        "words": 394,
+        "violations": [
+          "too-long",
+          "forbidden:Hypothesis"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "1:prompt-example",
+          "2:existing-section:done when"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7958",
+      "writer": {
+        "words": 554,
+        "violations": [
+          "too-long",
+          "forbidden:Hypothesis"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": []
+      }
+    },
+    {
+      "id": "HTPR-7938",
+      "writer": {
+        "words": 338,
+        "violations": [
+          "too-long"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example",
+          "3:existing-section:problem"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7957",
+      "writer": {
+        "words": 571,
+        "violations": [
+          "too-long",
+          "forbidden:Hypothesis"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7955",
+      "writer": {
+        "words": 174,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7951",
+      "writer": {
+        "words": 456,
+        "violations": [
+          "too-long",
+          "forbidden:Hypothesis"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7950",
+      "writer": {
+        "words": 380,
+        "violations": [
+          "too-long",
+          "missing:Done when",
+          "forbidden:Hypothesis"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "2:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7854",
+      "writer": {
+        "words": 326,
+        "violations": [
+          "too-long",
+          "forbidden:Hypothesis"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "2:existing-section:done when"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7907",
+      "writer": {
+        "words": 324,
+        "violations": [
+          "too-long"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:writer-required-text",
+          "2:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "HTPR-7795",
+      "writer": {
+        "words": 270,
+        "violations": [
+          "too-long"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "1:prompt-example"
+        ]
+      }
+    },
+    {
+      "id": "YPER4-751",
+      "writer": {
+        "words": 939,
+        "violations": [
+          "too-long",
+          "forbidden:Hypothesis"
+        ]
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "0:prompt-example",
+          "2:existing-section:done when"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-ab-search",
+      "writer": {
+        "words": 269,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": []
+      }
+    },
+    {
+      "id": "synthetic-ab-help",
+      "writer": {
+        "words": 284,
+        "violations": []
+      },
+      "chips": {
+        "count": 4,
+        "violations": [
+          "1:existing-section:control"
+        ]
+      }
+    }
+  ]
+}
