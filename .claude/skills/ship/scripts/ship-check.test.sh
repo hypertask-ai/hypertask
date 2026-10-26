@@ -838,6 +838,7 @@ MOCK
   unset -f ND
 }
 no_release_tests
+bash ./ship-check-reviewer.test.sh && ok 'reviewer deployment proof' || bad 'reviewer deployment proof'
 
 # Premerge status boundaries, without browser evidence or live flag reads.
 mkdir -p "$E/flag-bin" "$E/YPER4-999" "$PREMERGE_STATUS_STATE"
