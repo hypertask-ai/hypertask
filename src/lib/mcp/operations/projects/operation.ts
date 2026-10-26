@@ -49,6 +49,9 @@ export interface ListProjectsResponse {
   nextCursor?: string | null
 }
 
+const isNonNegativeInteger = (raw: string) => /^\d+$/.test(raw.trim()) && Number.isSafeInteger(Number(raw))
+const isPositiveInteger = (raw: string) => isNonNegativeInteger(raw) && Number(raw) > 0
+
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -83,8 +86,20 @@ export async function GET(request: NextRequest) {
       )
     }
     const search = listQuery?.query || searchParams.get('search') || undefined
-    const limit = Math.min(listQuery?.limit ?? parseInt(searchParams.get('limit') || '50'), 100)
-    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
+    const rawLimit = searchParams.get('limit')
+    const rawOffset = searchParams.get('offset')
+    if ((rawLimit !== null && !isPositiveInteger(rawLimit)) || (rawOffset !== null && !isNonNegativeInteger(rawOffset))) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'limit must be a positive integer and offset a non-negative integer',
+        },
+        { status: 400 },
+      )
+    }
+    const limit = Math.min(listQuery?.limit ?? parseInt(rawLimit || '50'), 100)
+    const offset = parseInt(rawOffset || '0')
     const sortBy = listQuery?.sortBy || searchParams.get('sort_by') || 'title'
     const sortOrder = listQuery?.sortOrder || searchParams.get('sort_order') || 'asc'
     const cursorId = listQuery?.cursor ? parseNumericCursor(listQuery.cursor) : null
