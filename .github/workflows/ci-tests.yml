@@ -80,12 +80,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '
+          if ! STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '
             [.statuses[] | select(.context == "ai-review" or .context == "claude-review") | {context, state}]
             | group_by(.context) | map(.[0])
             | if any(.[]; .state == "success") then "success"
-              elif any(.[]; .state == "failure") then "failure" else "none" end')
-          [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
+              elif any(.[]; .state == "failure") then "failure" else "none" end'); then
+            echo "::warning::Review precheck unavailable; running tests. Required AI review still blocks merging."
+          else
+            [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
+          fi
       - name: Runner admission, dispatcher and selfupdate fixtures
         run: |
           python3 .claude/skills/ship/scripts/session-policy-guard.test.py
