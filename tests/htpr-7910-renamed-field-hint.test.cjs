@@ -15,7 +15,7 @@ const searchTool = (errorHints) => ({
 });
 
 function searchCatalog(renamedFieldHint, tools = [searchTool()]) {
-  return selectMcpTools(tools, true, {}, false, false, false, false, false, false, false, false, false, renamedFieldHint);
+  return selectMcpTools(tools, true, {}, false, false, false, false, false, false, false, false, renamedFieldHint);
 }
 
 async function errorText(tool, args) {
@@ -59,7 +59,6 @@ test("the handler uses the authenticated user's flag to control the real error r
         extractBearerToken: (header) => header?.replace(/^Bearer /, ""),
         validateMcpAuth: async () => ({ user: { id: 985 }, agentId: null }),
       },
-      "@/lib/mcp/mcpV2": { isMcpV2Enabled: async () => false },
       "@/lib/mcp/agents/scopes": { getAgentRole: async () => "write" },
       "@/lib/aiFeedback/clientInfo": { rememberFeedbackClient: () => {} },
       "@/lib/mcp/operationContext": { withMcpExecutionContext: (_token, _ctx, run) => run() },

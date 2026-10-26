@@ -75,7 +75,7 @@ test("flag on: waiting-on tool reaches the gated operation and keeps all waiting
 
 test("flag off: legacy and consolidated tools propagate the operation refusal without writing", async () => {
   const f = fixture({ flagEnabled: false });
-  const tools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" }, true);
+  const tools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" });
   const tasks = tools.find((tool) => tool.name === "hypertask_tasks");
   assert.ok(tasks);
   for (const userId of [9, null]) {
@@ -99,10 +99,10 @@ test("waiting-on tool rejects invalid arguments before sending a write", async (
 
 test("consolidated waiting_on is a write action, hidden from read agents and still callable by write agents", async () => {
   const f = fixture();
-  const readTools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "read" }, true);
+  const readTools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "read" });
   assert.equal(readTools.find((tool) => tool.name === "hypertask_tasks"), undefined);
   assert.equal(readTools.find((tool) => tool.name === f.tool.name), undefined);
-  const writeTools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" }, true);
+  const writeTools = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" });
   const tasks = writeTools.find((tool) => tool.name === "hypertask_tasks");
   assert.ok(tasks);
   assert.equal(tasks.annotations.readOnlyHint, false);
@@ -113,7 +113,7 @@ test("consolidated waiting_on is a write action, hidden from read agents and sti
 
 test("legacy and consolidated waiting-on tools transport the person and blocker comment together", async () => {
   const f = fixture();
-  const tasks = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" }, true).find((tool) => tool.name === "hypertask_tasks");
+  const tasks = f.selectMcpTools([f.tool], true, { agent: true, agentRole: "write" }).find((tool) => tool.name === "hypertask_tasks");
   for (const input of [{ taskId: 42, userId: 9, blockerCommentId: 101 }, { taskId: 42, userId: null, blockerCommentId: null }]) {
     const receipt = JSON.parse(await f.tool.execute(input, "agent-token"));
     assert.equal(receipt.task.blockerCommentId, input.blockerCommentId);
