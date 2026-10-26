@@ -29,8 +29,8 @@ test("the task welcome screen sends the promoted action prompt", () => {
     "utf8"
   );
   const taskBranch = source.slice(
-    source.indexOf("if (taskId)"),
-    source.indexOf("if (boardBuild)")
+    source.lastIndexOf("if (taskId)"),
+    source.lastIndexOf("if (boardBuild)")
   );
 
   assert.match(taskBranch, /taskSummaryAction\.label/);
