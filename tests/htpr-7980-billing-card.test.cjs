@@ -171,6 +171,34 @@ test("portal availability errors preserve existing billing controls and data", a
   await click("Update");
   assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected" } }]);
 });
+for (const status of ["free", "canceled"]) test(`${status} Stripe customer retains existing billing when portal is unavailable`, async () => {
+  portalAvailable = false;
+  if (status === "canceled") team = subscribed("canceled");
+  team.stripe_customer_id = "cus_selected"; refreshedTeam = team;
+  await render();
+  assert.match(document.body.textContent, /billing@example.invalid/);
+  assert.equal(document.querySelector('a[href="https://stripe.test/existing-invoice"]').textContent, "View");
+  await click("Update");
+  assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected" } }]);
+});
+test("a rejected dedicated portal restores existing billing without opening a fallback automatically", async () => {
+  team = subscribed(); team.stripe_customer_id = "cus_selected"; refreshedTeam = team;
+  axios.post = async (url, body) => {
+    requests.push({ url, body });
+    if (body.intent === "settings-billing-portal") {
+      throw new axios.AxiosError("Configuration unavailable", "ERR_BAD_RESPONSE", undefined, undefined, { status: 503, data: {} });
+    }
+    return { data: { url: "https://stripe.test/legacy" } };
+  };
+  await render(); await click("Manage billing");
+  assert.equal(requests.length, 1);
+  assert.deepEqual(redirects, []);
+  assert.match(document.body.textContent, /Cancel plan/);
+  assert.match(document.body.textContent, /billing@example.invalid/);
+  await click("Update");
+  assert.deepEqual(requests[1], { url: "/api/stripe/billing-portal", body: { teamId: "team_selected" } });
+  assert.deepEqual(redirects, ["https://stripe.test/legacy"]);
+});
 test("unconfigured portal does not block existing Free checkout", async () => {
   portalAvailable = false;
   await render();

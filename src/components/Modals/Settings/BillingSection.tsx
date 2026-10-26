@@ -72,7 +72,8 @@ const BillingSection = () => {
   const [savingBillingEmail, setSavingBillingEmail] = useState(false);
 
   const summary = portalBillingEnabled && team ? settingsBillingSummary(team) : null;
-  const showBillingCard = portalBillingEnabled && (portalAvailable || Boolean(summary?.canUpgrade));
+  const showBillingCard = portalBillingEnabled &&
+    (portalAvailable || Boolean(summary?.canUpgrade && !team?.stripe_customer_id));
   const isOwner = Boolean(currentUser?.id && ownerAndMembers.owner?.id === currentUser.id);
   const checkoutOptions = storeSubscriptionPlans
     .filter((plan) => plan.id === "BYOK" || plan.id === "Pro")
@@ -223,6 +224,7 @@ const BillingSection = () => {
       const message = axios.isAxiosError<{ message?: string }>(error)
         ? error.response?.data?.message
         : null;
+      setPortalAvailable(false);
       toast.error(message === "No billing account" ? message : "Could not open billing portal");
     } finally {
       setOpeningPortal(false);
