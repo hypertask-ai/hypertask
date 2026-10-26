@@ -209,3 +209,13 @@ test('hidden or inactive ticket questions never signal shown', () => {
   assert.match(list, /if \(!active \|\| hidden \|\| !showTicketQuestions/);
   assert.match(list, /kind: "dismiss", surface: "new-ticket-questions"/);
 });
+
+test('every UI entry reads the chip events flag and the recorder is not a new component file', () => {
+  for (const file of ['src/components/AI_CHAT/WelcomeScreen.tsx', 'src/components/AI_CHAT/MessageList.tsx', 'src/hooks/MultiPages/AIChat/useAiChat.ts']) {
+    assert.match(read(file), /useFlag\(HTPR_7978_AI_CHIP_EVENTS_FLAG\)/, file);
+  }
+  assert.match(read('src/app/layout.tsx'), /isFeatureEnabled\(HTPR_7978_AI_CHIP_EVENTS_FLAG/);
+  assert.match(read('src/hooks/MultiPages/AIChat/aiChatSend.ts'), /if \(chipEventsEnabled && typeof window/);
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'src/components/AI_CHAT/AiChipEventRecorder.tsx')), false);
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'src/lib/ai/AiChipEventRecorder.tsx')), true);
+});

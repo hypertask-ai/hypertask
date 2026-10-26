@@ -12,7 +12,7 @@ import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys"
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
@@ -125,6 +125,7 @@ export const WelcomeScreen = () => {
   const sections = currentProject?.sections ?? null;
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
   const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
   let isEditMode = false;
   if (editWithAiEnabled) isEditMode = Boolean(taskId) && editTaskId === taskId;
@@ -281,7 +282,7 @@ export const WelcomeScreen = () => {
   const shownKey = JSON.stringify([shownSurface, shownType, shownChips]);
   const shownProjectId = currentProject?.id ?? null;
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !chipEventsEnabled) return;
     const controls: { chipType: string; label: string }[] = [];
     if (taskId && !isEditMode) {
       if (taskSummaryAction) controls.push({ chipType: "summary-action", label: taskSummaryAction.label });
@@ -289,10 +290,10 @@ export const WelcomeScreen = () => {
     }
     signalChip({ kind: "shown", surface: shownSurface, chipType: shownType, chips: shownChips, projectId: shownProjectId, taskId: taskId ?? null, controls });
     return () => signalChip({ kind: "dismiss", surface: shownSurface });
-  }, [hydrated, shownKey, shownProjectId, taskId, Boolean(taskSummaryAction), shownGenerated.length > 0 && !taskQuestions.isLoading]);
+  }, [hydrated, chipEventsEnabled, shownKey, shownProjectId, taskId, Boolean(taskSummaryAction), shownGenerated.length > 0 && !taskQuestions.isLoading]);
 
   const clickChip = (sent: string, index: number, chipType: string, label?: string) => {
-    signalChip({ kind: "clicked", text: sent, index, chipType, label });
+    if (chipEventsEnabled) signalChip({ kind: "clicked", text: sent, index, chipType, label });
     handleSendMessage(sent);
   };
 

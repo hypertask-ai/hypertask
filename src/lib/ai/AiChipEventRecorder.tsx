@@ -16,9 +16,8 @@ function postChipEvent(payload: AiChipEventPayload) {
   }).catch(() => {});
 }
 
-export function AiChipEventRecorder({ authenticated }: { authenticated: boolean }) {
+export function AiChipEventRecorder() {
   useEffect(() => {
-    if (!authenticated) return;
     const recorder = createAiChipRecorder(postChipEvent);
     const onSignal = (event: Event) => {
       const detail = (event as CustomEvent).detail;
@@ -31,7 +30,7 @@ export function AiChipEventRecorder({ authenticated }: { authenticated: boolean 
       window.removeEventListener(AI_CHIP_SIGNAL, onSignal);
       window.removeEventListener("pagehide", onLeave);
     };
-  }, [authenticated]);
+  }, []);
 
   return null;
 }
