@@ -4,7 +4,7 @@
     {
       "id": "HTPR-7982",
       "writer": {
-        "words": 178,
+        "words": 176,
         "violations": []
       },
       "chips": {
@@ -19,7 +19,7 @@
     {
       "id": "HTPR-7978",
       "writer": {
-        "words": 182,
+        "words": 177,
         "violations": []
       },
       "chips": {
@@ -30,7 +30,7 @@
     {
       "id": "HTPR-7980",
       "writer": {
-        "words": 225,
+        "words": 215,
         "violations": []
       },
       "chips": {
@@ -41,7 +41,7 @@
     {
       "id": "HTPR-7981",
       "writer": {
-        "words": 205,
+        "words": 202,
         "violations": []
       },
       "chips": {
@@ -52,7 +52,7 @@
     {
       "id": "HTPR-7975",
       "writer": {
-        "words": 230,
+        "words": 226,
         "violations": []
       },
       "chips": {
@@ -67,7 +67,7 @@
     {
       "id": "HTPR-7923",
       "writer": {
-        "words": 229,
+        "words": 222,
         "violations": []
       },
       "chips": {
@@ -80,7 +80,7 @@
     {
       "id": "HTPR-7792",
       "writer": {
-        "words": 218,
+        "words": 214,
         "violations": []
       },
       "chips": {
@@ -94,7 +94,7 @@
     {
       "id": "HTPR-7924",
       "writer": {
-        "words": 319,
+        "words": 313,
         "violations": [
           "too-long"
         ]
@@ -107,7 +107,7 @@
     {
       "id": "HTPR-7770",
       "writer": {
-        "words": 323,
+        "words": 315,
         "violations": [
           "too-long"
         ]
@@ -122,7 +122,7 @@
     {
       "id": "HTPR-7759",
       "writer": {
-        "words": 394,
+        "words": 389,
         "violations": [
           "too-long",
           "forbidden:Hypothesis"
@@ -139,7 +139,7 @@
     {
       "id": "HTPR-7958",
       "writer": {
-        "words": 554,
+        "words": 547,
         "violations": [
           "too-long",
           "forbidden:Hypothesis"
@@ -153,7 +153,7 @@
     {
       "id": "HTPR-7938",
       "writer": {
-        "words": 338,
+        "words": 325,
         "violations": [
           "too-long"
         ]
@@ -169,7 +169,7 @@
     {
       "id": "HTPR-7957",
       "writer": {
-        "words": 571,
+        "words": 556,
         "violations": [
           "too-long",
           "forbidden:Hypothesis"
@@ -185,7 +185,7 @@
     {
       "id": "HTPR-7955",
       "writer": {
-        "words": 174,
+        "words": 166,
         "violations": []
       },
       "chips": {
@@ -198,7 +198,7 @@
     {
       "id": "HTPR-7951",
       "writer": {
-        "words": 456,
+        "words": 447,
         "violations": [
           "too-long",
           "forbidden:Hypothesis"
@@ -214,7 +214,7 @@
     {
       "id": "HTPR-7950",
       "writer": {
-        "words": 380,
+        "words": 369,
         "violations": [
           "too-long",
           "missing:Done when",
@@ -231,7 +231,7 @@
     {
       "id": "HTPR-7854",
       "writer": {
-        "words": 326,
+        "words": 318,
         "violations": [
           "too-long",
           "forbidden:Hypothesis"
@@ -247,7 +247,7 @@
     {
       "id": "HTPR-7907",
       "writer": {
-        "words": 324,
+        "words": 322,
         "violations": [
           "too-long"
         ]
@@ -263,7 +263,7 @@
     {
       "id": "HTPR-7795",
       "writer": {
-        "words": 270,
+        "words": 268,
         "violations": [
           "too-long"
         ]
@@ -278,7 +278,7 @@
     {
       "id": "YPER4-751",
       "writer": {
-        "words": 939,
+        "words": 924,
         "violations": [
           "too-long",
           "forbidden:Hypothesis"
@@ -295,7 +295,7 @@
     {
       "id": "synthetic-ab-search",
       "writer": {
-        "words": 269,
+        "words": 267,
         "violations": []
       },
       "chips": {
@@ -306,7 +306,7 @@
     {
       "id": "synthetic-ab-help",
       "writer": {
-        "words": 284,
+        "words": 282,
         "violations": []
       },
       "chips": {

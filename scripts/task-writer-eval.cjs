@@ -2,11 +2,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
+const { parse } = require('node-html-parser');
 const load = require('jiti')(__filename, { alias: { '@': path.resolve(__dirname, '../src') }, fsCache: false });
 const { extractTaskWriterProperties } = load(path.resolve(__dirname, '../src/app/api/ai/_lib/taskWriterProperties.ts'));
 const directory = path.resolve(__dirname, '../tests/fixtures/task-writer-eval');
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const text = (value) => value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]*>/g, ' ').replace(/&#(x[\da-f]+|\d+);/gi, (_, n) => String.fromCodePoint(n[0].toLowerCase() === 'x' ? parseInt(n.slice(1), 16) : Number(n))).replace(/&(nbsp|amp|lt|gt|quot|apos);/g, (_, n) => ({ nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" })[n]).replace(/\s+/g, ' ').trim();
+const text = (value) => {
+  const root = parse(value);
+  for (const element of root.querySelectorAll('script, style')) element.remove();
+  return root.structuredText.replace(/\s+/g, ' ').trim();
+};
 const normalize = (value) => text(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const sectionName = (value) => {
   const name = normalize(value).replace(/^(?:\d+|[a-z])\s+/, '');

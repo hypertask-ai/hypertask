@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { scoreWriter, scoreChips, compareBaseline, replay, runLive, validateCorpus, digest } = require('../scripts/task-writer-eval.cjs');
+const { text, scoreWriter, scoreChips, compareBaseline, replay, runLive, validateCorpus, digest } = require('../scripts/task-writer-eval.cjs');
 const corpus = require('./fixtures/task-writer-eval/cases.json');
 const simple = { maxWords: 240, requiredSections: ['Problem', 'Done when'], forbiddenSections: ['Hypothesis', 'ICE'], protectedPhrases: ['Proposed:'] };
 const good = '<h2>Problem</h2><p>Search omits reminders.</p><h2>Done when</h2><p>Search finds completed reminders.</p><p>Proposed: reuse the search.</p>';
@@ -108,4 +108,12 @@ test('hosted live eval never exposes QA credentials to pull request code', () =>
   const candidate = yaml.load(fs.readFileSync('.github/workflows/ai-evals.yml', 'utf8')).jobs['ai-evals'];
   assert.ok(!JSON.stringify(candidate).includes('secrets.QA_'));
   assert.ok(candidate.steps.some((step) => step.run === 'node scripts/task-writer-eval.cjs --verify-baseline'));
+});
+
+
+test('word measurement uses parsed visible blocks and ignores script/style text', () => {
+  assert.equal(text('<p>one &amp; two</p><p>three</p>'), 'one & two three');
+  assert.equal(text('<script>alert(1)</script><p>real text</p><style>body {}</style>'), 'real text');
+  assert.equal(text('<p>up<strong>date</strong> kept</p>'), 'update kept');
+  assert.ok(scoreWriter(simple, '<script>alert(1)</script ><p>real text</p>').violations.includes('empty-draft'));
 });
