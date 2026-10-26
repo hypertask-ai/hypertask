@@ -21,6 +21,10 @@ function composerView(controlled = false) {
   const source = loader({
     "next/navigation": { usePathname: () => "/project" },
     "@/hooks/useFlag": { useFlag: (key) => [FLAG, "htpr-7734-agent-chat-context"].includes(key) },
+    "@/lib/flags/keys": { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG: "htpr-7734-agent-chat-context" },
+    "@/lib/controlledComposerEditor": { ControlledComposerEditor: () => null },
+    "./AiComposerTextarea": { AiComposerTextarea: () => null },
+    "./ChatScopeChip": { ChatScopeChip: () => null },
     "@/store": {},
     "@/lib/state": { useRecoilState: () => [[], noop], useRecoilValue: () => null },
     "@/hooks/MultiPages/AIChat/useDockedChatScope": { useDockedChatScope: () => [null, noop] },
