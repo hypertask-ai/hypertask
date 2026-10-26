@@ -185,7 +185,7 @@ test("title callback dependencies refresh the model when the flag changes while 
   }
   visit(ast);
   assert.ok(callback);
-  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["haiku55Enabled", "haikuDefaultEnabled", "defaultModelOption", "defaultContext", "_currentProject?.teamId"]);
+  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["autoTitleRecoveryEnabled", "haiku55Enabled", "haikuDefaultEnabled", "defaultModelOption", "defaultContext", "_currentProject?.teamId"]);
   const code = ts.transpileModule(`module.exports = ${callback.getText(ast)}`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -204,7 +204,7 @@ test("title callback dependencies refresh the model when the flag changes while 
     formValuesRef.current.currentProject = { teamId: "fixture-team", billing: { storePlanId: plan, byokProviderFlags: provider ? [{ provider, enabled: true }] : [] } };
     const loaded = { exports: {} };
     vm.runInNewContext(code, {
-      module: loaded, useCallback, haiku55Enabled, haikuDefaultEnabled, defaultContext: undefined, _currentProject: null,
+      module: loaded, useCallback, haiku55Enabled, haikuDefaultEnabled, autoTitleRecoveryEnabled: false, defaultContext: undefined, _currentProject: null,
       getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags,
       defaultModelOption: haiku55Enabled ? haiku : catalog.defaultAiModelOption,
       formValuesRef, aiModelPreferencesRef: { current: {} },
