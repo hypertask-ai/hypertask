@@ -10,6 +10,10 @@ import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUE
 
 interface MessageListProps { sidebarKey?: string; active?: boolean; hidden?: boolean }
 
+const signalChip = (detail: Record<string, unknown>) => {
+  if (typeof window !== "undefined" && typeof window.CustomEvent === "function" && typeof window.dispatchEvent === "function") window.dispatchEvent(new window.CustomEvent("ht:ai-chip", { detail }));
+};
+
 const isSavedOrLocalComposeIntro = (content: string) => / from your note\. Want me to refine it\?/.test(content);
 
 export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = true, hidden = false }) => {
@@ -66,6 +70,11 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
     if (showTicketQuestions && newTicketId === questionsTaskId) setQuestionsTaskId(null);
   }, [showTicketQuestions, newTicketId, questionsTaskId, setQuestionsTaskId]);
   const newTicketQuestions = ticketQuestions.data?.questions?.filter(Boolean) ?? [];
+  const newTicketQuestionsKey = showTicketQuestions ? JSON.stringify(newTicketQuestions) : "";
+  useEffect(() => {
+    if (!showTicketQuestions || newTicketQuestions.length === 0) return;
+    signalChip({ kind: "shown", surface: "new-ticket-questions", chipType: "generated-question", chips: newTicketQuestions, taskId: newTicketId ?? null });
+  }, [showTicketQuestions, newTicketId, newTicketQuestionsKey]);
 
   useLayoutEffect(() => {
     registerMessageListRef(messageListRef.current);
@@ -129,12 +138,15 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
         {showTicketQuestions && newTicketQuestions.length > 0 && (
           <div className="flex flex-col gap-2 px-2">
             <p className="px-2 text-micro text-text-light-gray">Questions and ideas for this ticket</p>
-            {newTicketQuestions.map((question) => (
+            {newTicketQuestions.map((question, index) => (
               <button
                 key={question}
                 data-compose-question
                 className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-meta text-left w-full"
-                onClick={() => handleSendMessage(question)}
+                onClick={() => {
+                  signalChip({ kind: "clicked", text: question, index, chipType: "generated-question" });
+                  handleSendMessage(question);
+                }}
               >
                 {question}
               </button>

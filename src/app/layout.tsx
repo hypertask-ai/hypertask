@@ -8,6 +8,7 @@ import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useF
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
+import { AiChipEventRecorder } from "@/components/AI_CHAT/AiChipEventRecorder";
 import DeploySkewGuard from "@/components/System/DeploySkewGuard";
 import FilesImageFallback from "@/components/FilesImageFallback";
 import { isMobileDevice } from "@/utils/serverActions";
@@ -190,6 +191,7 @@ export default async function RootLayout(
         ) : null}
         <FilesImageFallback />
         <ClientErrorReporter />
+        <AiChipEventRecorder authenticated={Boolean(analyticsSession) && !analyticsIsGuest} />
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}

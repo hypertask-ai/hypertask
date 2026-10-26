@@ -90,6 +90,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     }
 
     if (!content.trim()) return false;
+    if (typeof window !== "undefined" && typeof window.CustomEvent === "function" && typeof window.dispatchEvent === "function") window.dispatchEvent(new window.CustomEvent("ht:ai-chip", { detail: { kind: "send", text: content } }));
     let streamId = crypto.randomUUID();
     sendInFlightRef.current = true;
     if (stopClosesStream) streamingRequestRef.current = streamId;

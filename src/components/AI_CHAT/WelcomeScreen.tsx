@@ -92,6 +92,10 @@ const BOARD_BUILD_EXAMPLES = [
   "Plan a wedding in Italy",
 ];
 
+const signalChip = (detail: Record<string, unknown>) => {
+  if (typeof window !== "undefined" && typeof window.CustomEvent === "function" && typeof window.dispatchEvent === "function") window.dispatchEvent(new window.CustomEvent("ht:ai-chip", { detail }));
+};
+
 function pickRandom<T>(arr: T[]): T | null {
   return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
 }
@@ -251,16 +255,54 @@ export const WelcomeScreen = () => {
     setBoardBuild(isGuestBoardBuild(currentProject));
   }, [currentProject]);
 
+  const shownGenerated = taskQuestions.data?.questions?.filter(Boolean) ?? [];
+  let shownChips = suggestions;
+  let shownSurface = "welcome-board";
+  let shownType = "suggested";
+  if (taskId) {
+    shownSurface = "welcome-ticket";
+    shownType = "ticket-prompt";
+    if (isEditMode) {
+      shownChips = EDIT_QUERIES;
+      shownSurface = "welcome-edit";
+      shownType = "edit-prompt";
+    } else if (shownGenerated.length) {
+      shownChips = shownGenerated;
+      shownType = "generated-question";
+    }
+  } else if (boardBuild) {
+    shownChips = BOARD_BUILD_EXAMPLES;
+    shownSurface = "welcome-board-build";
+    shownType = "board-example";
+  } else if (isDemo) {
+    shownSurface = "welcome-demo";
+    shownType = "demo-prompt";
+  }
+  const shownKey = JSON.stringify([shownSurface, shownType, shownChips]);
+  const shownProjectId = currentProject?.id ?? null;
+  useEffect(() => {
+    if (!hydrated) return;
+    signalChip({ kind: "shown", surface: shownSurface, chipType: shownType, chips: shownChips, projectId: shownProjectId, taskId: taskId ?? null });
+  }, [hydrated, shownKey, shownProjectId, taskId]);
+
+  const clickChip = (sent: string, index: number, chipType: string, label?: string) => {
+    signalChip({ kind: "clicked", text: sent, index, chipType, label });
+    handleSendMessage(sent);
+  };
+
   if (taskId) {
     const generatedQuestions = taskQuestions.data?.questions?.filter(Boolean) ?? [];
     const displayedQuestions = isEditMode ? EDIT_QUERIES : generatedQuestions.length
       ? generatedQuestions
       : suggestions;
     const askAll = () => {
-      handleSendMessage(
+      clickChip(
         `Answer each of these about this ticket:\n${generatedQuestions
           .map((question, index) => `${index + 1}. ${question}`)
-          .join("\n")}`
+          .join("\n")}`,
+        -1,
+        "ask-all",
+        "Ask all"
       );
     };
 
@@ -272,7 +314,7 @@ export const WelcomeScreen = () => {
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded border-thin border-hypertasks-ai-purple/70 bg-hypertasks-ai-purple/10 p-2 text-left text-xs text-white-black hover:bg-hypertasks-ai-purple/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-hypertasks-ai-purple"
-              onClick={() => handleSendMessage(taskSummaryAction.prompt)}
+              onClick={() => clickChip(taskSummaryAction.prompt, -1, "summary-action", taskSummaryAction.label)}
             >
               <Sparkles
                 aria-hidden="true"
@@ -287,7 +329,7 @@ export const WelcomeScreen = () => {
             <button
               key={suggestion}
               className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"
-              onClick={() => handleSendMessage(isEditMode ? EDIT_PROMPTS(ticketRef!)[index] : suggestion)}
+              onClick={() => clickChip(isEditMode ? EDIT_PROMPTS(ticketRef!)[index] : suggestion, index, shownType, suggestion)}
             >
               {suggestion}
             </button>
@@ -334,11 +376,11 @@ export const WelcomeScreen = () => {
           <p className="px-2 mb-1 text-[11px] text-text-light-gray">
             Describe it in one sentence and I&apos;ll build your board.
           </p>
-          {BOARD_BUILD_EXAMPLES.map((example) => (
+          {BOARD_BUILD_EXAMPLES.map((example, index) => (
             <button
               key={example}
               className="bg-kanban-active-cardbg hover:bg-hover-active rounded text-white-black p-2 text-meta text-left w-full"
-              onClick={() => handleSendMessage(example)}
+              onClick={() => clickChip(example, index, "board-example")}
             >
               {example}
             </button>
@@ -351,11 +393,11 @@ export const WelcomeScreen = () => {
   return (
     <div className="flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4">
       <div className="flex flex-col gap-2 w-full max-w-md">
-        {suggestions.map((suggestion) => (
+        {suggestions.map((suggestion, index) => (
           <button
             key={suggestion}
             className="bg-kanban-active-cardbg hover:bg-hover-active rounded text-white-black p-2 text-meta text-left w-full"
-            onClick={() => handleSendMessage(suggestion)}
+            onClick={() => clickChip(suggestion, index, shownType)}
           >
             {suggestion}
           </button>
