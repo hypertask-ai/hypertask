@@ -12,6 +12,7 @@ import {
   FileText,
   Inbox,
   LogIn,
+  Plus,
   Timer,
 } from "lucide-react";
 import {
@@ -53,6 +54,8 @@ import { currentPageActionsAtom } from "@/store/currentPageActions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
+import { HTPR_8035_SIDEBAR_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-8035-sidebar-new-task";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/definitions/htpr-6929-compose-task-writer";
 import { prefetchInboxQuery } from "@/hooks/Inbox/useGetNotifications";
 
 const FeedbackModal = dynamic(
@@ -100,6 +103,8 @@ const AppShellRail = ({
   notificationsUnseen = 0,
 }: AppShellRailProps) => {
   const isApple = useDeviceContext();
+  const sidebarNewTask = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const pathname = usePathname();
@@ -194,6 +199,7 @@ const AppShellRail = ({
             />
           </button>
         </RailItem>
+
       </div>
 
       <div className={`mt-3 flex flex-col gap-1 ${wide ? "w-full" : "items-center"}`}>
@@ -320,6 +326,23 @@ const AppShellRail = ({
               <Tooltip left={tooltipLeft} bottom={-8} text="Running timers" keyCombination={["7"]} />
             </button>
           </RailItem>
+        )}
+      </div>
+
+      <div className={`mt-3 flex flex-col ${wide ? "w-full" : "items-center"}`}>
+        {sidebarNewTask && composeEnabled && (
+          <button
+            type="button"
+            aria-label="New Task"
+            onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
+            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] bg-shadcn-primary text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
+              wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
+            }`}
+          >
+            <Plus size={18} strokeWidth={1.75} aria-hidden />
+            {wide && <span className="text-content font-medium">New Task</span>}
+            <Tooltip left={tooltipLeft} bottom={-8} text="New Task" keyCombination={[isApple ? "CMD" : "CTRL", "J"]} />
+          </button>
         )}
       </div>
 

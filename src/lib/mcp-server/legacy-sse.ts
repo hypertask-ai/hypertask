@@ -11,7 +11,6 @@ import Redis from 'ioredis'
 import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from './stateless-http'
 import { selectMcpTools } from './consolidated-tools'
 import { getAgentPresenceTool } from './tools/agent-presence.tool'
-import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { HTPR_7203_MCP_FLAT_SCHEMA_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7893_BOARD_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7893-board-alias'
@@ -129,11 +128,9 @@ export async function handleLegacySseRequest(
     const response = Object.assign(stream, { writeHead: () => response })
     const transport = new SSEServerTransport('/message', response as unknown as ServerResponse)
     const server = new McpServer(MCP_SERVER_INFO)
-    const registered: { remove: () => void }[] = []
-    let registeredWithV2 = initialTools.some((tool) => tool.annotations)
     const register = (catalog: readonly PortableTool[]) => {
       for (const tool of catalog) {
-        registered.push(server.registerTool(tool.name, {
+        server.registerTool(tool.name, {
           description: tool.description,
           inputSchema: tool.parameters,
           ...(tool.annotations ? { annotations: tool.annotations } : {}),
@@ -147,7 +144,7 @@ export async function handleLegacySseRequest(
               clientFingerprint: crypto.createHash('sha256').update(token).digest('hex'),
             })) }],
           }
-        }))
+        })
       }
     }
     register(initialTools)
@@ -184,7 +181,6 @@ export async function handleLegacySseRequest(
             const method = (incoming.body as { method?: unknown } | null)?.method
             const userId = Number(incoming.authInfo.clientId)
             const ctx = incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined
-            const v2 = (method === 'tools/list' || method === 'tools/call') && Boolean(ctx && await isMcpV2Enabled(ctx.user.id))
             if (method === 'initialize') {
               const params = (incoming.body as { params?: { clientInfo?: { name?: unknown } } }).params
               rememberFeedbackClient(incoming.authInfo.token, params?.clientInfo?.name, userId)
@@ -199,8 +195,8 @@ export async function handleLegacySseRequest(
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
-                ...(v2 && ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
-              }, v2, await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, userId), await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, userId), await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, userId), await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, userId)), userId)
+                ...(ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
+              }, await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, userId), await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, userId), await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, userId), await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, userId)), userId)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -208,12 +204,6 @@ export async function handleLegacySseRequest(
               }), incoming.authInfo, catalog, { sessionId: transport.sessionId }))
               if (rpcResponse.status !== 202) await transport.send(await rpcResponse.json())
             } else {
-              if (registeredWithV2 && (method === 'tools/list' || method === 'tools/call')) {
-                for (const tool of registered) tool.remove()
-                registered.length = 0
-                register(tools)
-                registeredWithV2 = false
-              }
               await transport.handleMessage(incoming.body, { authInfo: incoming.authInfo })
             }
           } catch {

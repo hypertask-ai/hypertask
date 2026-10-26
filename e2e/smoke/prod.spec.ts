@@ -235,6 +235,7 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   const opener = page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true })
   const assertScope = async (title: string) => {
     await expect(page.locator('.kanban-column-title').first()).toBeVisible()
+    await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
     await expect(page.locator('[data-testid="ai-sidebar"]:visible').or(opener).first()).toBeVisible()
     if (!(await sidebar.isVisible())) await opener.click()
     await expect(chip).toBeVisible()
@@ -570,9 +571,12 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
     console.log('[pages] pending save persisted and ticket unlinked')
     await page.goto(fixture.detailPath)
+    await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
+    const linkPageCommand = page.getByRole('dialog').getByText('Link page', { exact: true })
     await page.keyboard.press('Control+k')
     await page.getByPlaceholder('Type a command or search...').fill('Link page')
-    await page.getByRole('dialog').getByText('Link page', { exact: true }).click()
+    await expect(linkPageCommand).toBeVisible({ timeout: 15_000 })
+    await linkPageCommand.click()
     await page.locator('#option-picker input').fill(title)
     await page.locator('#option-picker').getByText(title, { exact: true }).click()
     await expect(page.locator(`a[href="/page/${publicId}"]`)).toBeVisible()
@@ -592,6 +596,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
   } catch (error) {
     console.error(`[pages] failed on ${page.url()}: ${error}`)
+    console.error(`[pages] dialog text: ${(await page.getByRole('dialog').allInnerTexts().catch(() => [])).join(' | ').slice(0, 600)}`)
     throw error
   } finally {
     await page.request.post(`/api/pages/${publicId}/archive`, { timeout: 5000 }).catch(() => {})

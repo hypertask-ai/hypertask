@@ -8,6 +8,8 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8030_CHAT_OPEN_RACE_FLAG } from "@/lib/flags/definitions/htpr-8030-chat-open-race";
 import {
   MOBILE_OVERLAY_SHEET_Z,
   mobileOverlayAppSheetBodyClass,
@@ -63,7 +65,8 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
     currentSession,
     togglePopover,
   } = chat;
-  const { toggleAIChatInterface } = useGlobalUIState();
+  const idempotentChatOpen = useFlag(HTPR_8030_CHAT_OPEN_RACE_FLAG);
+  const { openAIChatInterface, toggleAIChatInterface } = useGlobalUIState();
 
   const togglePopoverRef = useRef(togglePopover);
   togglePopoverRef.current = togglePopover;
@@ -98,7 +101,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
       {!showAiChatInterface && !isMbl && (
         <button
           tabIndex={-1}
-          onClick={toggleAIChatInterface}
+          onClick={idempotentChatOpen ? openAIChatInterface : toggleAIChatInterface}
           aria-label="Open AI chat"
           className="group fixed right-1 top-2 z-[60] flex h-[20px] items-center justify-center text-text-light-gray hover:text-white-black"
         >

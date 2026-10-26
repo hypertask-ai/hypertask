@@ -37,7 +37,7 @@ function spyComments({ taskIdTicketReference = true, ticketNumber = z.string(), 
       calls.push(args)
       return JSON.stringify({ comments: [{ id: 1, ticket: args.ticket_number ?? null, task: args.task_id ?? null }] })
     },
-  }], true, {}, false, false, false, false, false, false, false, false, taskIdTicketReference)
+  }], true, {}, false, false, false, false, false, false, false, taskIdTicketReference)
   return { calls, tools: tools.find((tool) => tool.name === resource) }
 }
 

@@ -58,6 +58,7 @@ each ticket only needs the one or two areas it touches.
 | Slack app | [slack-app.md](slack-app.md) | read-only install/support pages and redirects; real workspace parity needs a human |
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 | Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
+| MCP and CLI project listing | [mcp-project-list.md](mcp-project-list.md) | read-only pagination, malformed-input refusals, metadata and scoped caller checks |
 | MCP task moves | [mcp-task-moves.md](mcp-task-moves.md) | disposable fixture refusal, unchanged column, successful moves; delete fixture |
 | MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
 | MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; never revoke-all on QA 2343 (it runs the MCP watcher) |

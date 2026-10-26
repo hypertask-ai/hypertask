@@ -28,3 +28,20 @@ Doctor: merge SHA production deployment success and /my-tasks signed in as QA 98
 ## Cleanup
 
 The canary closes its own ticket and resolves its PostHog issue. Nothing else is written.
+
+
+## Related Vercel error collector
+
+The separate VPS collector is installed from
+`.claude/skills/ship/scripts/error-collector/collector.mjs`. It reads production
+logs and writes through `vcc`; PostHog issue alerts keep their existing path.
+
+For route/root grouping changes, first inspect the hosted `ship-scripts-tests`
+replay. It must show one incident for the recorded project-list failures, separate
+different-field and different-route failures, and recover interrupted activities.
+After merge, install the merged collector, run `user-unit-check --first-run
+error-collector.service`, then inspect its result and journal. Run the collector
+with `--dry-run --sources vercel` against a fresh state directory; retain its
+read-only plan and live related-ticket lookup. Never raise real errors or file
+customer tickets merely to verify grouping. A read-only replay proves the live
+lookup and installed code; the hosted isolated replay proves write side effects.
