@@ -87,7 +87,7 @@ function addedLinesFor(baseSha, headSha, path) {
     if (!hunk) continue;
     const start = Number(hunk[1]);
     const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-    for (let line = start; line < start + count; line += 1) lines.add(line);
+    for (let line = start; line < start + Math.max(count, 1); line += 1) lines.add(line);
   }
   return lines;
 }
@@ -276,12 +276,17 @@ function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
   return false;
 }
 
-// True when `node` is the value of a JSX attribute (onClick={node}) in JSX that is consumed.
-function isJsxAttributeValue(node, checker, live) {
+function isJsxCallbackValue(node, checker, live) {
   let child = node;
   while (child.parent && typescript.isParenthesizedExpression(child.parent)) child = child.parent;
-  return Boolean(child.parent && typescript.isJsxExpression(child.parent) &&
-    typescript.isJsxAttribute(child.parent.parent) && jsxResultIsConsumed(child, checker, live));
+  if (!child.parent || !typescript.isJsxExpression(child.parent)) return false;
+  const container = child.parent.parent;
+  const customChild = typescript.isJsxElement(container) &&
+    (typescript.isPropertyAccessExpression(container.openingElement.tagName) ||
+     (typescript.isIdentifier(container.openingElement.tagName) &&
+      /^[A-Z]/.test(container.openingElement.tagName.text)));
+  return (typescript.isJsxAttribute(container) || customChild) &&
+    jsxResultIsConsumed(child, checker, live);
 }
 
 function isExportedVariableStatement(statement) {
@@ -679,7 +684,7 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   return null;
 }
 
-function collectLiveFunctions(sourceFile, checker) {
+function collectLiveFunctions(sourceFile, checker, entries = null) {
   const functions = [];
   function collect(node) {
     if (typescript.isFunctionLike(node)) functions.push(node);
@@ -698,7 +703,8 @@ function collectLiveFunctions(sourceFile, checker) {
   }));
   // Export recognition remains intact for the ungated-sibling check, but a
   // rebound binding cannot prove which implementation runs. No flow analysis.
-  const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) && isExportedUiEntry(fn, identifierExports)));
+  const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) &&
+    (entries ? entries.has(fn) : isExportedUiEntry(fn, identifierExports))));
   const functionBySymbol = new Map();
   for (const fn of functions) {
     const name = functionBindingName(fn, checker);
@@ -749,7 +755,7 @@ function collectLiveFunctions(sourceFile, checker) {
     // An inline callback in a JSX attribute (onClick={() => send()}) runs when
     // the live element it sits in is rendered.
     for (const fn of functions) {
-      if (live.has(fn) || !isJsxAttributeValue(fn, checker, live) || !isLiveCallSite(fn, live)) continue;
+      if (live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live)) continue;
       live.add(fn);
       changed = true;
     }
@@ -769,7 +775,7 @@ function collectLiveFunctions(sourceFile, checker) {
           referenced = true;
           return;
         }
-        if (typescript.isIdentifier(node) && isJsxAttributeValue(node, checker, live) &&
+        if (typescript.isIdentifier(node) && isJsxCallbackValue(node, checker, live) &&
             checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live)) {
           referenced = true;
           return;
@@ -1105,7 +1111,6 @@ function functionContainsJsx(fn) {
 }
 
 function exportedJsxEntryHasTicketGate(
-  fn,
   checker,
   helperSymbols,
   flagSymbols,
@@ -1121,7 +1126,7 @@ function exportedJsxEntryHasTicketGate(
   let found = false;
   function visit(node) {
     if (found) return;
-    if (node !== fn && typescript.isFunctionLike(node)) return;
+    if (typescript.isFunctionLike(node) && !liveFunctions.has(node)) return;
     if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
         helperSymbols.has(checker.getSymbolAtLocation(node.expression)) &&
         !isStaticallyUnreachable(node)) {
@@ -1155,7 +1160,7 @@ function exportedJsxEntryHasTicketGate(
     }
     typescript.forEachChild(node, visit);
   }
-  visit(fn);
+  visit(sourceFile);
   return found;
 }
 
@@ -1167,7 +1172,6 @@ function hasUngatedExportedJsxEntry(
   registry,
   allowedKeys,
   addedLines,
-  liveFunctions,
   ref,
   path,
   importedFunctions,
@@ -1181,8 +1185,14 @@ function hasUngatedExportedJsxEntry(
   const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   for (const fn of functions) {
     if (!isExportedUiEntry(fn, identifierExports) || !functionContainsJsx(fn)) continue;
+    const entryFunctions = collectLiveFunctions(sourceFile, checker, new Set([fn]));
+    const entryChanged = [...entryFunctions].some((entry) => {
+      const startLine = sourceFile.getLineAndCharacterOfPosition(entry.getStart(sourceFile)).line + 1;
+      const endLine = sourceFile.getLineAndCharacterOfPosition(entry.getEnd()).line + 1;
+      return [...addedLines].some((line) => line >= startLine && line <= endLine);
+    });
+    if (!entryChanged) continue;
     if (!exportedJsxEntryHasTicketGate(
-      fn,
       checker,
       helperSymbols,
       flagSymbols,
@@ -1190,7 +1200,7 @@ function hasUngatedExportedJsxEntry(
       allowedKeys,
       addedLines,
       sourceFile,
-      liveFunctions,
+      entryFunctions,
       ref,
       path,
       importedFunctions,
@@ -1268,7 +1278,6 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
     registry,
     allowedKeys,
     addedLines,
-    liveFunctions,
     ref,
     path,
     importedFunctions,

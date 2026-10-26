@@ -2108,3 +2108,46 @@ import { OTHER_FLAG } from "@/lib/flags/keys";
   const consumer = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, "gated consumer"), dir);
   assert.equal(consumer.pass, true, consumer.reason);
 });
+
+test('render-child gates require a consumed custom component callback', async (t) => {
+  const cases = [
+    ['render child', 'return <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>;', true],
+    ['nested render children', 'return <Boundary>{() => <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>}</Boundary>;', true],
+    ['discarded render child', 'const unused = <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>; return <Row />;', false],
+    ['dead render child', 'return <>{false && <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>}</>;', false],
+    ['intrinsic function child', 'return <div>{() => <Row limit={enabled ? 3 : undefined} />}</div>;', false],
+    ['shadowed render flag', 'return <Boundary>{(enabled) => <Row limit={enabled ? 3 : undefined} />}</Boundary>;', false],
+    ['unrelated map callback', 'return <>{items.map(() => <Row limit={enabled ? 3 : undefined} />)}</>;', false],
+  ];
+  for (const [name, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + body + ' }\n');
+    const result = await evaluate('HTPR-1 [FEATURE] render child', base, commit(git, name), dir);
+    assert.equal(result.pass, expected, name);
+  }
+});
+
+test('changed component paths accept private gates without trusting unchanged sibling exports', async (t) => {
+  const imports = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n';
+  const entry = 'export function Widget() { return <Private />; }\n';
+  const unchanged = 'export function Title() { return <h1>Existing</h1>; }\n';
+  const gated = 'function Private() { return useFlag(OTHER_FLAG) ? <span>New</span> : null; }\n';
+  const cases = [
+    ['private child behind unchanged entry', entry + gated + unchanged, true],
+    ['changed entry reaches private child', entry.replace('<Private />', '<main><Private /></main>') + gated + unchanged, true],
+    ['new unrelated ungated export', entry + gated + unchanged + 'export function Other() { return <aside>New</aside>; }\n', false],
+    ['changed ungated sibling', entry + gated + unchanged.replace('Existing', 'New'), false],
+    ['unused gated private component', entry.replace('<Private />', '<div>New</div>') + gated + unchanged, false],
+    ['shadowed private component', 'export function Widget() { const Private = () => <div>New</div>; return <Private />; }\n' + gated + unchanged, false],
+    ['discarded gated child', 'export function Widget() { const unused = <Private />; return <div>New</div>; }\n' + gated + unchanged, false],
+    ['dead gated child', 'export function Widget() { return <>{false && <Private />}<div>New</div></>; }\n' + gated + unchanged, false],
+  ];
+  for (const [name, source, expected] of cases) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, 'src/components/Widget.tsx', imports + entry + 'function Private() { return null; }\n' + unchanged);
+    const base = commit(git, 'existing components');
+    writeFile(dir, 'src/components/Widget.tsx', imports + source);
+    const result = await evaluate('HTPR-1 [FEATURE] private child', base, commit(git, name), dir);
+    assert.equal(result.pass, expected, name);
+  }
+});
