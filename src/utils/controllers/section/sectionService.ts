@@ -167,7 +167,7 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
       return { status: 403, json: { message: 'User does not have permission to update this section' } }
     }
 
-    if (wipLimit !== undefined && !(await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, userId))) {
+    if (wipLimit !== undefined && wipLimit !== existing.wipLimit && !(await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, userId))) {
       return { status: 403, json: { message: 'Column work limits are not enabled' } }
     }
 

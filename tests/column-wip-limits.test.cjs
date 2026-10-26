@@ -113,6 +113,6 @@ test("flag Off refuses limit writes without blocking ordinary column edits", asy
   const f = fixture({ enabled: false });
   assert.equal((await f.update({ wipLimit: 2 })).status, 403);
   assert.deepEqual(f.writes, []);
-  assert.equal((await f.update({ ranking: "A2" })).status, 200);
+  assert.equal((await f.update({ ranking: "A2", wipLimit: 3 })).status, 200);
   assert.equal(f.section.wipLimit, 3);
 });
