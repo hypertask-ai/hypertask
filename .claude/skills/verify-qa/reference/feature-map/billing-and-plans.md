@@ -6,6 +6,22 @@
 - Click Manage subscription to reach Plans (`/settings/plans`); `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
 - Billing > Payment method > Update opens the Stripe customer portal.
 
+## Test teams for every plan
+
+Four plan cases, three teams. A real paid Pro team would need real money, so the Pro and Comped cases are the same team: the comped Pro team.
+
+| Case | QA user | Team id | Reads as |
+|---|---|---|---|
+| Free | 3411 (`state-free.json`) | `308dcc93-8076-4e30-a982-ae8b0df82cee` | Free, not comped, shared allowance |
+| Pro and Comped | 3413 (`state-pro.json`) | `2ce0d9f8-4179-489d-bbce-2b0e197f8067` | Pro, comped until 2027-10-03 |
+| Bring your own key | 3412 (`state-byok.json`) | `977c0c91-c14f-47b0-b8bc-933cc751f19d` | BYOK, comped until 2027-10-03, own key |
+
+Run `.claude/skills/verify-qa/scripts/qa-teams` before a plan check. It prints one health line per team: plan, comp date, allowance left, key source and OK, MISMATCH, UNAVAILABLE or EXPIRED. Exit 0 means all three are healthy, 1 a mismatch or unavailable report, 3 an expired login (refresh it with the QA runner, see the account table in `SKILL.md`). It only reads, accepts only the names `free`, `pro` and `byok`, refuses anything else, and never changes a plan, comp date or payment. Paste its output into the QA proof.
+
+Plan and comp changes are owner-only on the comp admin page, so a runner never resets them. If a line shows MISMATCH, tell HT Product Lead; do not try to fix it.
+
+The spending cap on the BYOK team's saved key is not visible from the app, so it is not checked. A BYOK line showing UNAVAILABLE means the app could not load that key's usage report.
+
 ## How to drive it
 
 Use `~/.config/ht-qa/state-{free,byok,pro}.json`. Select each account's own private `QA runner board` before opening settings and verify the account owns its team.
