@@ -1,4 +1,4 @@
-import { assertFileSizeForProject, isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
+import { assertUploadAllowedForProject, isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { persistAttachmentRows } from "@/lib/mcp/attachments/persistBatch";
@@ -119,9 +119,9 @@ export async function linkTaskAttachment(
             throw new TaskAttachmentLinkError("That upload could not be verified", 409);
           }
           measuredBytes = head.ContentLength;
-          await assertFileSizeForProject(task.projectId, measuredBytes, {
+          await assertUploadAllowedForProject(task.projectId, measuredBytes, {
             actorUserId: userId, entryPoint: "tasks.uploadFinalize.link",
-          });
+          }, { tx });
         }
       } catch (error) {
         if (isPlanLimitReachedError(error)) {
