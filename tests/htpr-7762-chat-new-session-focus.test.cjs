@@ -39,7 +39,7 @@ function chat({ enabled = true, fullscreen = true } = {}) {
   };
   const { useAiChatSessions } = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
     react: hooks,
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flag.default.key); return enabled; } },
+    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-7736-chat-follows-task") return true; assert.equal(key, flag.default.key); return enabled; } },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": flag,
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null },
