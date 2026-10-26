@@ -4,6 +4,7 @@ import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/ht
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import "@/styles/globals.scss";
 import "@/styles/tailwindThemes/rounded.css";
+import "@/styles/tailwindThemes/graphite-2.css";
 import "../../tokens.css";
 import { cookies, headers } from "next/headers";
 import Provider from "@/utils/Providers";
