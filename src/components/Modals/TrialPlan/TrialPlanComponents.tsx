@@ -140,10 +140,15 @@ export const PlansTable = ()=>{
     return(
         <>
         <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Start a Hypertask plan" : "Try the Pro plan for free for 14 days"}</h2>
-        <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">{trialPlanBlurb(showCorrectedCopy)}</p>
+        <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">{trialPlanBlurb(useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG))}</p>
         <div className="py-2 sm:py-6 max-h-[58svh] max-w-[80vw] overflow-auto lg:scrollbar-none scrollbar-thin scrollbar-thumb-inherit scrollbar-track-inherit text-left font-semibold ">
                 <div className="flex xs:gap-3 lg:gap-8">
-                    {columns.sharedTitles ? (
+                    {useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG) ? (
+                    <>
+                    <OwnPlanColumn perks={columns.starter} highlighted={false} />
+                    <OwnPlanColumn perks={columns.proWithAi} highlighted />
+                    </>
+                    ) : (
                     <>
                     <div className="lg:px-4 xs:px-2 py-2">
                         <ColumnTitle content={""} />
@@ -187,11 +192,6 @@ export const PlansTable = ()=>{
                             }
                         </div>
                     </div>
-                    </>
-                    ) : (
-                    <>
-                    <OwnPlanColumn perks={columns.starter} highlighted={false} />
-                    <OwnPlanColumn perks={columns.proWithAi} highlighted />
                     </>
                     )}
                 </div>
