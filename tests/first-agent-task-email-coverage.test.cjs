@@ -116,6 +116,9 @@ function fixture(options = {}) {
     "./emailTemplates": {},
   });
   const service = load(serviceFile, {
+    "@/lib/flags/definitions/htpr-7975-column-work-limits": require("./task-route-loader.cjs").load("src/lib/flags/definitions/htpr-7975-column-work-limits.ts", {}),
+    "@/lib/flags": { isFeatureEnabled: async () => true },
+    "@/lib/api/contracts/sectionWrites": require("./task-route-loader.cjs").load("src/lib/api/contracts/sectionWrites.ts", {}),
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/notifications/agentFirstTaskEmail": scheduler,
     "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: async () => null },

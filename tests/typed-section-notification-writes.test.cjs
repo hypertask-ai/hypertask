@@ -187,8 +187,10 @@ test(`rename and delete exact patches, same cache behavior and failure settling`
     setUpdating: (value) => calls.push(["updating", value]),
     updateSection: (rows, updated, mode) => mode === "Delete" ? [] : rows.map((row) => ({ ...row, ...updated })),
     globalConstants: { GetAllManageColumnsPrefixKey: "manageColumns" },
-    queryClient: { setQueryData: (...args) => calls.push(["cache", ...args]), refetchQueries: async (...args) => calls.push(["refetch", ...args]), invalidateQueries: async (...args) => calls.push(["invalidate", ...args]) },
-    updateCache: (...args) => calls.push(["updateCache", ...args]), setCurrentProject: (...args) => calls.push(["project", ...args]), setEditSection() {}, console: { log() {} },
+    queryClient: { getQueryData: () => [section], setQueryData: (...args) => calls.push(["cache", ...args]), refetchQueries: async (...args) => calls.push(["refetch", ...args]), invalidateQueries: async (...args) => calls.push(["invalidate", ...args]) },
+    updateCache: (...args) => calls.push(["updateCache", ...args]),
+    setCurrentProject: (update) => calls.push(["project", typeof update === "function" ? update({ id: 15, section: [{ ...section, wipLimit: 7 }], sections: [{ ...section, wipLimit: 7 }] }) : update]),
+    setEditSection() {}, console: { log() {} },
   });
   for (const mode of ["RENAME", "DELETE"]) {
     calls.length = 0; await fn(section, mode);
@@ -197,6 +199,12 @@ test(`rename and delete exact patches, same cache behavior and failure settling`
     assert.equal(calls.filter(([kind]) => kind === "write").length, 1);
     assert.deepEqual(calls.at(-1), ["updating", false]);
     assert.ok(calls.some(([kind]) => kind === (mode === "DELETE" ? "refetch" : "project")));
+    if (mode === "RENAME") {
+      assert.equal(calls.some(([kind]) => kind === "refetch"), false);
+      const updated = calls.find(([kind]) => kind === "project")[1];
+      assert.equal(updated.section[0].section_title, "Renamed");
+      assert.equal(updated.section[0].wipLimit, 7);
+    }
     failure = true; calls.length = 0; await fn(section, mode);
     assert.deepEqual(calls.map(([kind]) => kind), ["updating", "write", "updating"]);
     failure = false;
@@ -265,4 +273,32 @@ test("captured disposable-local ON/OFF wire answers satisfy all adopted descript
   assert.ok(fixtures.updateSection.some(fixture => fixture.status === 204 && fixture.data === ""));
   assert.ok(fixtures.toggleNotificationArchive.some(fixture => fixture.data.status === "Archive"));
   assert.ok(fixtures.unarchiveNotification.some(fixture => fixture.data.status === "Normal"));
+});
+
+test("queued work-limit edits preserve the final reversal", async () => {
+  const cache = [{ ...section, wipLimit: 3 }];
+  const writes = [];
+  let release;
+  let tail = new Promise((resolve) => { release = resolve; });
+  const queueSave = (run) => (tail = tail.then(run));
+  const save = (wipLimitDraft) => declaration("src/components/Modals/commands/manageColumn.tsx", "saveWipLimit", {
+    editSection: { ...section, wipLimit: 3 }, wipLimitDraft, queueSave,
+    queryClient: { getQueryData: () => cache },
+    globalConstants: { GetAllManageColumnsPrefixKey: "manageColumns" },
+    currentProject: { id: 15 }, currentUser: { id: 985 },
+    handleSectionUpdateVis: async (current, mode, rank, update) => {
+      assert.equal(mode, "LIMIT");
+      writes.push(update.wipLimit);
+      cache[0] = { ...current, ...update };
+    },
+  })();
+  save("5");
+  save("3");
+  release();
+  await tail;
+  assert.deepEqual(writes, [5, 3]);
+  assert.equal(cache[0].wipLimit, 3);
+  save("3");
+  await tail;
+  assert.deepEqual(writes, [5, 3]);
 });

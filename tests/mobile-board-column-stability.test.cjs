@@ -36,22 +36,3 @@ test("tapping a column title opens Manage columns without publishing board data"
   );
   assert.doesNotMatch(titleAndTasks, /(?:refetch|invalidate|setQueryData)/);
 });
-
-test("renaming a column does not refetch and unmount the active board", () => {
-  const source = read("src/components/Modals/commands/manageColumn.tsx");
-  const renameUpdateStart = source.indexOf(
-    'if (saveMode === "RENAME" && currentProject)',
-  );
-  const renameUpdate = source.slice(
-    renameUpdateStart,
-    source.indexOf("} catch (error)", renameUpdateStart),
-  );
-
-  assert.ok(renameUpdateStart >= 0, "rename cache update is present");
-  assert.match(renameUpdate, /setCurrentProject\(updateProject\(currentProject\)\)/);
-  assert.match(renameUpdate, /setQueryData<IProjectsAll>\(\["projectsAll"\]/);
-  assert.doesNotMatch(
-    renameUpdate,
-    /invalidateQueries\(\{ queryKey: \["projectsAll"\] \}\)/,
-  );
-});
