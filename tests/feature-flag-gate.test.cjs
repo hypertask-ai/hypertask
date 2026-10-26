@@ -2205,3 +2205,21 @@ test('entry-scoped gates cannot come from unrelated module initializers', async 
     assert.equal((await evaluate('HTPR-1 [FEATURE] module decoy', base, commit(git, name), dir)).pass, false, name);
   }
 });
+
+test('runtime import replacements cannot borrow a sibling gate, while added flag bindings remain allowed', async (t) => {
+  for (const [name, beforeImport, afterImport, content, expected] of [
+    ['named source replacement', 'import { title } from "./old";', 'import { title } from "./new";', '<h1>{title}</h1>', false],
+    ['default source replacement', 'import Title from "./old";', 'import Title from "./new";', '<Title />', false],
+    ['namespace source replacement', 'import * as UI from "./old";', 'import * as UI from "./new";', '<UI.Title />', false],
+    ['named binding replacement', 'import { oldTitle as title } from "./values";', 'import { newTitle as title } from "./values";', '<h1>{title}</h1>', false],
+    ['new side effect', '', 'import "./global-theme";', '<h1>Existing</h1>', false],
+    ['added flag binding', 'import { EXISTING_FLAG } from "@/lib/flags/keys";', 'import { EXISTING_FLAG, OTHER_FLAG } from "@/lib/flags/keys";', '<h1>Existing</h1>', true],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const title = `export function TitleView() { return ${content}; }\n`;
+    writeFile(dir, 'src/components/Widget.tsx', beforeImport + '\n' + title);
+    const base = commit(git, 'existing imports');
+    writeFile(dir, 'src/components/Widget.tsx', afterImport + '\nimport {useFlag} from "@/hooks/useFlag";\n' + (name === 'added flag binding' ? '' : 'import {OTHER_FLAG} from "@/lib/flags/keys";\n') + title + 'export function Gated() { return useFlag(OTHER_FLAG) ? <div>Feature</div> : null; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] import control', base, commit(git, name), dir)).pass, expected, name);
+  }
+});

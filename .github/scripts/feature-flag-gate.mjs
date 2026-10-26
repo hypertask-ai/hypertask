@@ -1197,7 +1197,29 @@ function hasUngatedExportedJsxEntry(
       !statement.declarationList.declarations.every((declaration) =>
         declaration.initializer && typescript.isFunctionLike(unwrapArgumentExpression(declaration.initializer)));
   }).map((statement) => statement.getText(file)).join("\n");
-  const moduleChanged = moduleState(sourceFile) !== moduleState(baseSourceFile);
+  const runtimeImports = (file) => {
+    const bindings = new Set();
+    for (const statement of file.statements) {
+      if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
+      const clause = statement.importClause;
+      if (clause?.isTypeOnly) continue;
+      const moduleName = statement.moduleSpecifier.text;
+      if (!clause) { bindings.add(`${moduleName}:side-effect`); continue; }
+      if (clause.name) bindings.add(`${moduleName}:default:${clause.name.text}`);
+      const named = clause.namedBindings;
+      if (named && typescript.isNamespaceImport(named)) bindings.add(`${moduleName}:*:${named.name.text}`);
+      if (named && typescript.isNamedImports(named)) {
+        for (const binding of named.elements) {
+          if (!binding.isTypeOnly) bindings.add(`${moduleName}:${binding.propertyName?.text ?? binding.name.text}:${binding.name.text}`);
+        }
+      }
+    }
+    return bindings;
+  };
+  const beforeImports = runtimeImports(baseSourceFile), afterImports = runtimeImports(sourceFile);
+  const importsChanged = [...beforeImports].some((binding) => !afterImports.has(binding)) ||
+    [...afterImports].some((binding) => binding.endsWith(":side-effect") && !beforeImports.has(binding));
+  const moduleChanged = importsChanged || moduleState(sourceFile) !== moduleState(baseSourceFile);
   const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   for (const fn of functions) {
     if (!isExportedUiEntry(fn, identifierExports) || !functionContainsJsx(fn)) continue;
