@@ -248,7 +248,7 @@ const AppShellRail = ({
               aria-label="Go to pages"
               className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${pathname === "/pages" ? "bg-hover-active !text-white-black" : ""}`}>
               <FileText size={18} strokeWidth={1.5} />
-              <Tooltip left={tooltipLeft} bottom={-8} text="Go to pages" />
+              <Tooltip left={tooltipLeft} bottom={-8} text="Go to pages" keyCombination={null} />
             </Link>
           </RailItem>
         )}

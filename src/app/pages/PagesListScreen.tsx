@@ -93,7 +93,7 @@ export default function PagesListScreen({ currentUser }: { currentUser: IUser })
       {pickingBoard && (
         <OptionPickerModal
           header="New page: choose board"
-          options={availableProjects.map((project) => ({ id: project.id, label: project.title }))}
+          options={availableProjects.map((project) => ({ id: project.id, label: project.title || "Untitled board" }))}
           onClose={() => setPickingBoard(false)}
           onSelect={(option) => { if (typeof option.id === "number") void createPage(option.id); }}
         />
