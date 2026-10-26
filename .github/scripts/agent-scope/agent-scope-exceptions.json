@@ -19,17 +19,17 @@
     "path": "src/lib/mcp/operations/projects/operation.ts",
     "call": "prisma.project.count({ where })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "477d1065a576935ecabf824cabf15f33ae7b4501d9880a4e7f51c2fb5293c481",
-    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Both calls consume where with AND getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope), which intersects board access with the credential team. Search/status/date filters do not replace that AND."
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/8019",
+    "sha256": "d6d7f51d2f45533bba6ad29ede90a5f434b6c22d4381eb82021699c792240d98",
+    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Both calls consume the typed where with AND getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope), which intersects board access with the credential team. Search OR and status only narrow that predicate. HTPR-8019 rejects unavailable project timestamps before either query; authorization remains unchanged."
   },
   {
     "path": "src/lib/mcp/operations/projects/operation.ts",
-    "call": "prisma.project.findMany({ where, select: { id: true, title: true, description: true, name: true, uniqueIdentifier: true, ownerId: true, owner: { select: { id: true, email: true, displayName: true } }, status: true, sections: true, section: { select: { id: true, section_title: true } }, labels: { select: { id: true, value: true } }, createdAt: true, _count: { select: { members: true, tasks: { where: { status: 'Normal' } } } } }, orderBy: [orderBy, { id: 'asc' as const }], take: limit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
+    "call": "prisma.project.findMany({ where, select: { id: true, title: true, description: true, name: true, uniqueIdentifier: true, ownerId: true, owner: { select: { id: true, email: true, displayName: true } }, status: true, sections: true, section: { select: { id: true, section_title: true } }, labels: { select: { id: true, value: true } }, createdAt: true, _count: { select: { members: true, tasks: { where: { status: 'Normal' } } } } }, orderBy: [orderBy, { id: 'asc' }], take: limit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "477d1065a576935ecabf824cabf15f33ae7b4501d9880a4e7f51c2fb5293c481",
-    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Both calls consume where with AND getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope), which intersects board access with the credential team. Search/status/date filters do not replace that AND."
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/8019",
+    "sha256": "d6d7f51d2f45533bba6ad29ede90a5f434b6c22d4381eb82021699c792240d98",
+    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Both calls consume the typed where with AND getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope), which intersects board access with the credential team. Search OR and status only narrow that predicate. HTPR-8019 rejects unavailable project timestamps before either query; authorization remains unchanged."
   },
   {
     "path": "src/lib/mcp/operations/tasks/operation.ts",
