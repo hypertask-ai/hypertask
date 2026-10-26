@@ -93,8 +93,9 @@ jobs:
             | if any(.[]; .state == "success") then "success"
               elif any(.[]; .state == "failure") then "failure" else "none" end')
           [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
-      - name: Runner dispatcher and selfupdate fixtures
+      - name: Runner admission, dispatcher and selfupdate fixtures
         run: |
+          python3 .claude/skills/ship/scripts/session-policy-guard.test.py
           python3 .claude/skills/ship/scripts/runner-dispatch.test.py
           python3 .claude/skills/ship/scripts/runner-dispatch.cache.test.py
           python3 .claude/skills/ship/scripts/runner-snapshot.test.py

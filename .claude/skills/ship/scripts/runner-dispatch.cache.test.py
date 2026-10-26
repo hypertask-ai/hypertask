@@ -61,6 +61,9 @@ class CacheTests(unittest.TestCase):
 
     def command(self, *args):
         self.calls.append(args)
+        if args == (str(Path.home() / ".local/bin/session-policy-guard"),
+                    "--project", str(Path.home() / "projects/hypertask")):
+            return "session-policy-guard: allowed\n"
         if args[0:3] == ("hypertask", "tasks", "list"):
             self.assertEqual(args[:4], ("hypertask", "tasks", "list", "--project"))
             self.assertEqual(args[5:8], ("--limit", "500", "--json"))
