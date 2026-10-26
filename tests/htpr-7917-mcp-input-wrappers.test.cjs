@@ -46,8 +46,8 @@ function spyTasks({ inputWrapperFields = true, topLevelInputFields = true } = {}
       return JSON.stringify({ tasks: [{ id: 1, ticket: args.ticket_number ?? null }] })
     },
   }
-  const tools = selectMcpTools([listTool], true, {}, false, false, false, false, false, topLevelInputFields, inputWrapperFields)
-  const getOnly = selectMcpTools([getTool], true, {}, false, false, false, false, false, topLevelInputFields, inputWrapperFields)
+  const tools = selectMcpTools([listTool], true, {}, false, false, false, false, topLevelInputFields, inputWrapperFields)
+  const getOnly = selectMcpTools([getTool], true, {}, false, false, false, false, topLevelInputFields, inputWrapperFields)
   return {
     calls,
     tasks: tools.find((tool) => tool.name === 'hypertask_tasks'),

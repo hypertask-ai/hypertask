@@ -165,7 +165,6 @@ export function selectMcpTools(
   legacyTools: readonly PortableTool[],
   enabled: boolean,
   caller: ToolCaller = {},
-  v2 = false,
   flatSchema = false,
   pageAlias = false,
   taskNumberAlias = false,
@@ -177,7 +176,6 @@ export function selectMcpTools(
   renamedFieldHint = false,
 ): readonly PortableTool[] {
   if (!enabled) {
-    if (!v2) return legacyTools
     return legacyTools.flatMap((tool) => {
       const actions = (CONSOLIDATED_TOOL_DESCRIPTIONS as Description[]).flatMap((definition) => Object.values(definition.actions)).filter((action) => action.tool === tool.name)
       const allowed = actions.filter((action) => canCall(action, caller))
@@ -254,7 +252,7 @@ export function selectMcpTools(
       description: `Does: ${definition.does}\nUse when: ${definition.use_when}\nDo not use when: ${definition.do_not_use_when}\nParameters and caveats: ${definition.parameters_and_caveats}${boardAliasEnabled ? ' board_id is an alias for project_id.' : ''}`,
       parameters,
       inputSchema: schema,
-      ...(v2 ? { annotations: annotationsForActions(Object.values(actions)) } : {}),
+      annotations: annotationsForActions(Object.values(actions)),
       outputSchema: CONSOLIDATED_OUTPUT_SCHEMA,
       input_examples: definition.input_examples.filter((example) => names.includes((example as { action: string }).action)),
       ...(topLevelInputFields || inputWrapperFields || taskIdTicketReference ? {
@@ -337,15 +335,15 @@ export function selectMcpTools(
   for (const tool of legacyTools) {
     if (catalog.some((entry) => entry.name === tool.name)) continue
     const actions = definitions.flatMap((definition) => Object.values(definition.actions)).filter((action) => action.tool === tool.name)
-    const allowed = v2 ? actions.filter((action) => canCall(action, caller)) : actions
-    if (v2 && !allowed.length) continue
+    const allowed = actions.filter((action) => canCall(action, caller))
+    if (!allowed.length) continue
     const names = allowed.map((action) => action.legacy_action).filter((name): name is string => Boolean(name))
     if (!actions.length) throw new Error(`Legacy tool ${tool.name} is missing from the consolidated catalog`)
     catalog.push({
       ...tool,
       hidden: true,
-      ...(v2 ? { annotations: annotationsForActions(allowed) } : {}),
-      ...(v2 && allowed.length !== actions.length && names.length ? { parameters: tool.parameters.extend({ action: z.enum(names as [string, ...string[]]) }) } : {}),
+      annotations: annotationsForActions(allowed),
+      ...(allowed.length !== actions.length && names.length ? { parameters: tool.parameters.extend({ action: z.enum(names as [string, ...string[]]) }) } : {}),
       outputSchema: { type: 'object', additionalProperties: true },
       execute: async (raw, token, invocation) => {
         const requested = (raw as Record<string, unknown>)?.action
@@ -354,7 +352,7 @@ export function selectMcpTools(
       },
     })
   }
-  catalog.push(...createMetaTools(() => catalog, v2).map((tool) => ({
+  catalog.push(...createMetaTools(() => catalog).map((tool) => ({
     ...tool, hidden: true, outputSchema: { type: 'object', additionalProperties: true },
   })))
   return catalog

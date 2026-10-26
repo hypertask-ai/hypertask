@@ -36,7 +36,6 @@ source('src/lib/mcp-server/stateless-http.ts', {
   MCP_SERVER_INFO: { name: 'test', version: '0.0.0' },
 })
 source('src/lib/mcp-server/consolidated-tools.ts', { selectMcpTools: (tools) => tools })
-source('src/lib/mcp/mcpV2.ts', { isMcpV2Enabled: async () => false })
 source('src/lib/mcp/agents/scopes.ts', { getAgentRole: async () => undefined })
 source('src/lib/mcp/operationContext.ts', { withMcpExecutionContext: (_token, _ctx, fn) => fn() })
 

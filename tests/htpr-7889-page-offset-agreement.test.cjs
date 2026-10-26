@@ -37,7 +37,7 @@ function spyTasks(pageAlias = true) {
       calls.push(args)
       return JSON.stringify({ tasks: rows.slice(args.offset, args.offset + args.limit), has_more: args.offset + args.limit < rows.length })
     },
-  }], true, {}, false, false, pageAlias)
+  }], true, {}, false, pageAlias)
   return { calls, tasks: tools.find((tool) => tool.name === 'hypertask_tasks') }
 }
 

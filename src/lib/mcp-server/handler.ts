@@ -15,7 +15,6 @@ import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { resolvePortableTools } from './listQueryContract'
 import { selectMcpTools } from './consolidated-tools'
-import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
 import { HTPR_7893_BOARD_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7893-board-alias'
@@ -140,7 +139,6 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const userId = Number(authInfo.clientId)
     if (Number.isFinite(userId)) telemetryUserId = userId
     const ctx = authInfo.extra?.mcpAuthContext as McpAuthContext
-    const v2 = await isMcpV2Enabled(ctx.user.id)
     const feedbackEnabled = await aiFeedbackEnabled(ctx.user.id)
     const presenceTool = await getAgentPresenceTool(ctx.user.id)
     const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[]).map((tool) =>
@@ -154,9 +152,8 @@ export async function mcpHandler(request: Request): Promise<Response> {
         managementPermissions: authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
         teamScoped: authInfo.extra?.teamScoped === true,
         agent: authInfo.extra?.agent === true,
-        ...(v2 && ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
+        ...(ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
       },
-      v2,
       await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),
       await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, ctx.user.id),
       await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, ctx.user.id),
