@@ -241,7 +241,7 @@ function functionBindingName(fn, checker = null) {
 
 // True when the JSX holding `node` is consumed: reached through the returned
 // expression, an argument of a call, or a const that is itself consumed.
-function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
+function jsxResultIsConsumed(node, checker, live, seen = new Set(), allowCallArguments = true) {
   // A reference or element on a statically dead path (false && x, if (false)) never renders.
   if (isStaticallyUnreachable(node)) return false;
   let child = node;
@@ -250,18 +250,19 @@ function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
     if (typescript.isReturnStatement(parent)) return isLiveCallSite(parent, live);
     if (typescript.isArrowFunction(parent)) return child === parent.body && live.has(parent);
     if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
-        parent.arguments?.includes(child)) return isLiveCallSite(parent, live);
+        parent.arguments?.includes(child)) return allowCallArguments && isLiveCallSite(parent, live);
     if (typescript.isVariableDeclaration(parent)) {
       if (parent.initializer !== child || !typescript.isIdentifier(parent.name)) return false;
       const symbol = checker.getSymbolAtLocation(parent.name);
-      if (!symbol || seen.has(symbol)) return false;
+      if (!symbol || seen.has(symbol) ||
+          (!allowCallArguments && writtenBindingSymbols(node.getSourceFile(), checker).has(symbol))) return false;
       seen.add(symbol);
       let consumed = false;
       (function find(item) {
         if (consumed) return;
         if (typescript.isIdentifier(item) && item !== parent.name &&
             checker.getSymbolAtLocation(item) === symbol &&
-            jsxResultIsConsumed(item, checker, live, seen)) {
+            jsxResultIsConsumed(item, checker, live, seen, allowCallArguments)) {
           consumed = true;
           return;
         }
@@ -269,6 +270,12 @@ function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
       })(node.getSourceFile());
       return consumed;
     }
+    if (!allowCallArguments && typescript.isBinaryExpression(parent) &&
+        !((child === parent.right && (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
+             parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken)) ||
+          (child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken))) return false;
+    if (!allowCallArguments && ((typescript.isConditionalExpression(parent) && child === parent.condition) ||
+        typescript.isJsxAttribute(parent))) return false;
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
         typescript.isNonNullExpression(parent) || typescript.isSatisfiesExpression(parent) ||
         typescript.isTypeAssertionExpression(parent) || typescript.isConditionalExpression(parent) ||
@@ -690,7 +697,7 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   return null;
 }
 
-function collectLiveFunctions(sourceFile, checker, entries = null) {
+function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = false) {
   const functions = [];
   function collect(node) {
     if (typescript.isFunctionLike(node)) functions.push(node);
@@ -710,6 +717,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
   // Export recognition remains intact for the ungated-sibling check, but a
   // rebound binding cannot prove which implementation runs. No flow analysis.
   const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) &&
+    (!renderOnly || functionContainsJsx(fn)) &&
     (entries ? entries.has(fn) : isExportedUiEntry(fn, identifierExports))));
   const functionBySymbol = new Map();
   for (const fn of functions) {
@@ -722,7 +730,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
     changed = false;
     // Returning a named callback from a live hook exposes that callback to its
     // callers. Resolve property values by symbol, never by matching their text.
-    for (const fn of Array.from(live)) {
+    for (const fn of renderOnly ? [] : Array.from(live)) {
       function returned(node) {
         if (node !== fn && typescript.isFunctionLike(node)) return;
         if (isStaticallyUnreachable(node)) return;
@@ -761,7 +769,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
     // An inline callback in a JSX attribute (onClick={() => send()}) runs when
     // the live element it sits in is rendered.
     for (const fn of functions) {
-      if (live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live, !entries)) continue;
+      if (renderOnly || live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live, !entries)) continue;
       live.add(fn);
       changed = true;
     }
@@ -791,13 +799,13 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
       function visit(node) {
         if (referenced || node === fn) return;
         if (isStaticallyUnreachable(node)) return;
-        if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
+        if (!renderOnly && typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
             checker.getSymbolAtLocation(node.expression) === symbol &&
             isLiveCallSite(node, live, !entries)) {
           referenced = true;
           return;
         }
-        if (typescript.isIdentifier(node) && isJsxCallbackValue(node, checker, live) &&
+        if (!renderOnly && typescript.isIdentifier(node) && isJsxCallbackValue(node, checker, live) &&
             checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live, !entries)) {
           referenced = true;
           return;
@@ -805,7 +813,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
         if ((typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) &&
             typescript.isIdentifier(node.tagName) &&
             checker.getSymbolAtLocation(node.tagName) === symbol &&
-            isLiveCallSite(node, live, !entries) && jsxResultIsConsumed(node, checker, live)) {
+            isLiveCallSite(node, live, !entries) && jsxResultIsConsumed(node, checker, live, new Set(), !renderOnly)) {
           referenced = true;
           return;
         }
@@ -984,12 +992,12 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
   return null;
 }
 
-function controlsReturnedValue(node) {
+function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
-    if (typescript.isReturnStatement(parent) && child === parent.expression) return true;
-    if (typescript.isArrowFunction(parent) && child === parent.body) return true;
+    if (typescript.isReturnStatement(parent) && child === parent.expression) return !earlyOnly;
+    if (typescript.isArrowFunction(parent) && child === parent.body) return !earlyOnly;
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
         typescript.isTypeAssertionExpression(parent) || typescript.isNonNullExpression(parent) ||
         typescript.isSatisfiesExpression(parent) || typescript.isAwaitExpression(parent) ||
@@ -1014,12 +1022,21 @@ function controlsReturnedValue(node) {
       return false;
     }
     if (typescript.isIfStatement(parent) && child === parent.expression) {
-      let whenTrue = parent.thenStatement;
-      let whenFalse = parent.elseStatement;
-      if (!whenFalse && typescript.isBlock(parent.parent)) {
-        const statements = parent.parent.statements;
-        whenFalse = statements.slice(statements.indexOf(parent) + 1).find(typescript.isReturnStatement);
+      if (!typescript.isBlock(parent.parent)) return false;
+      const statements = parent.parent.statements;
+      const index = statements.indexOf(parent);
+      let start = 0;
+      if (after) {
+        let declaration = after;
+        while (declaration.parent && declaration.parent !== parent.parent) declaration = declaration.parent;
+        start = statements.indexOf(declaration) + 1;
+        if (start === 0 || start > index) return false;
       }
+      const straightLine = (statement) => typescript.isVariableStatement(statement) || typescript.isEmptyStatement(statement);
+      if (!statements.slice(start, index).every(straightLine)) return false;
+      let whenTrue = parent.thenStatement;
+      const following = statements.slice(index + 1).find((statement) => !straightLine(statement));
+      let whenFalse = parent.elseStatement ?? following;
       if (typescript.isBlock(whenTrue) && whenTrue.statements.length === 1) whenTrue = whenTrue.statements[0];
       if (whenFalse && typescript.isBlock(whenFalse) && whenFalse.statements.length === 1) whenFalse = whenFalse.statements[0];
       if (!typescript.isReturnStatement(whenTrue) || !whenFalse || !typescript.isReturnStatement(whenFalse) ||
@@ -1094,7 +1111,7 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
   return controls;
 }
 
-function importedArgumentGatesRuntime(node, ref, path, checker, importedFunctions) {
+function importedArgumentGatesRuntime(node, ref, path, checker, importedFunctions, renderFunctions) {
   let argument = node;
   while (argument.parent && (typescript.isParenthesizedExpression(argument.parent) ||
          typescript.isAsExpression(argument.parent) || typescript.isTypeAssertionExpression(argument.parent) ||
@@ -1110,7 +1127,9 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   const sourceFile = node.getSourceFile();
   const live = collectLiveFunctions(sourceFile, checker);
   return gatesRuntimeBehavior(call, checker, sourceFile,
-    (reference) => controlsRuntimeBranch(reference) || controlsReturnedValue(reference), live);
+    (reference) => controlsRuntimeBranch(reference) ||
+      (renderFunctions.has(enclosingFunctionLike(reference)) &&
+       controlsReturnedValue(reference, { earlyOnly: true, after: call })), live);
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null) {
@@ -1161,6 +1180,7 @@ function exportedJsxEntryHasTicketGate(
   addedLines,
   sourceFile,
   liveFunctions,
+  renderFunctions,
   ref,
   path,
   importedFunctions,
@@ -1195,6 +1215,7 @@ function exportedJsxEntryHasTicketGate(
               path,
               checker,
               importedFunctions,
+              renderFunctions,
             ), liveFunctions)) {
         found = true;
         return;
@@ -1278,6 +1299,7 @@ function hasUngatedExportedJsxEntry(
       addedLines,
       sourceFile,
       entryFunctions,
+      collectLiveFunctions(sourceFile, checker, new Set([fn]), true),
       ref,
       path,
       importedFunctions,
@@ -1323,6 +1345,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
   const flagSymbols = new Map();
   const importedFunctions = new Map();
   const liveFunctions = collectLiveFunctions(sourceFile, checker);
+  const renderFunctions = collectLiveFunctions(sourceFile, checker, null, true);
 
   for (const statement of sourceFile.statements) {
     if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
@@ -1395,6 +1418,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
               path,
               checker,
               importedFunctions,
+              renderFunctions,
             ), liveFunctions)) found = key;
     }
     if (!found) typescript.forEachChild(node, visit);

@@ -2378,6 +2378,8 @@ test('aliased formatter parameters gate real output, not ignored or overwritten 
     ['compound early return', '@/lib/formatter', 'if ((!enabled && data.fresh) || data.missing) { return null; } const suffix = data.days; return `Age ${suffix}`;', true],
     ['if else return', '@/lib/formatter', 'if (enabled) { return "Age"; } else { return null; }', true],
     ['ignored parameter', '@/lib/formatter', 'if (enabled) log(); return "Age";', false],
+    ['invariant repeated guards', '@/lib/formatter', 'if (!enabled) return \"Age\"; if (enabled) return \"Age\"; return null;', false],
+    ['invariant prior guard with else', '@/lib/formatter', 'if (!enabled) return \"Age\"; if (enabled) return \"Age\"; else return null;', false],
     ['same returned value', '@/lib/formatter', 'if (!enabled) return "Age"; return "Age";', false],
     ['same truthy result', '@/lib/formatter', 'if (!enabled) return "Old"; return "Age";', false],
     ['null and undefined results', '@/lib/formatter', 'if (!enabled) return null; return undefined;', false],
@@ -2428,5 +2430,27 @@ test('formatter gate proof requires an explicit live return branch', async (t) =
     writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { if (!enabled) return null; return "Age"; }\n');
     writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + body + ' }\n');
     assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('formatter return proof follows rendered components, never discarded hook or helper results', async (t) => {
+  const label = 'const enabled = useFlag(OTHER_FLAG); const label = format(enabled);';
+  const guarded = label + ' if (!label) return null; return <p>Age</p>;';
+  const cases = [
+    ['mounted component', `function Private() { ${guarded} } export function Widget() { return <Private/>; }`, true],
+    ['returned JSX binding', `function Private() { ${guarded} } export function Widget() { const row = <Private/>; return row; }`, true],
+    ['discarded hook result', `function useLabel() { ${label} return label; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
+    ['discarded guarded string hook', `function useLabel() { ${label} if (!label) return null; return "Age"; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
+    ['discarded JSX helper', `function Private() { ${guarded} } export function Widget() { Private(); return <p>Always</p>; }`, false],
+    ['discarded exported JSX helper', `export function Private() { ${guarded} } export function Widget() { Private(); return <p>Always</p>; }`, false],
+    ['ignored JSX argument', `function Private() { ${guarded} } export function Widget() { const ignore = () => {}; ignore(<Private/>); return <p>Always</p>; }`, false],
+    ['masked JSX component', `function Private() { ${guarded} } export function Widget() { return <Private/> && false; }`, false],
+    ['overwritten JSX binding', `function Private() { ${guarded} } export function Widget() { let row = <Private/>; row = <p>Always</p>; return row; }`, false],
+  ];
+  for (const [name, source, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { if (!enabled) return null; return "Age"; }\n');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + source);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] rendered formatter consumer', base, commit(git, name), dir)).pass, expected, name);
   }
 });
