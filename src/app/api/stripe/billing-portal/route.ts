@@ -26,14 +26,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { teamId?: unknown };
+  let body: unknown;
   try {
-    body = (await request.json()) as { teamId?: unknown };
+    body = await request.json();
   } catch {
     return NextResponse.json({ message: "Invalid request" }, { status: 400 });
   }
 
-  const teamId = typeof body.teamId === "string" ? body.teamId.trim() : "";
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ message: "Invalid request" }, { status: 400 });
+  }
+  const teamId = "teamId" in body && typeof body.teamId === "string" ? body.teamId.trim() : "";
   if (!teamId) {
     return NextResponse.json({ message: "teamId required" }, { status: 400 });
   }
@@ -65,7 +68,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "No billing account" }, { status: 400 });
   }
 
-  if (await isFeatureEnabled(HTPR_7980_STRIPE_PORTAL_BILLING_FLAG, user.id)) {
+  if ("intent" in body && body.intent === "settings-billing-portal" &&
+    await isFeatureEnabled(HTPR_7980_STRIPE_PORTAL_BILLING_FLAG, user.id)) {
     try {
       const session = await createConfiguredBillingPortalSession(team.stripe_customer_id);
       return NextResponse.json({ url: session.url });

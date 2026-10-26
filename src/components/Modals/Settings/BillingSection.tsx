@@ -72,6 +72,7 @@ const BillingSection = () => {
   const [savingBillingEmail, setSavingBillingEmail] = useState(false);
 
   const summary = portalBillingEnabled && team ? settingsBillingSummary(team) : null;
+  const showBillingCard = portalBillingEnabled && (portalAvailable || Boolean(summary?.canUpgrade));
   const isOwner = Boolean(currentUser?.id && ownerAndMembers.owner?.id === currentUser.id);
   const checkoutOptions = storeSubscriptionPlans
     .filter((plan) => plan.id === "BYOK" || plan.id === "Pro")
@@ -123,7 +124,7 @@ const BillingSection = () => {
   useEffect(() => {
     let cancelled = false;
 
-    if (portalBillingEnabled || !team?.id || !team.stripe_customer_id) {
+    if (showBillingCard || !team?.id || !team.stripe_customer_id) {
       setBillingData(null);
       setBillingError(null);
       setBillingLoading(false);
@@ -153,7 +154,7 @@ const BillingSection = () => {
     return () => {
       cancelled = true;
     };
-  }, [team?.id, team?.stripe_customer_id, project?.id, portalBillingEnabled]);
+  }, [team?.id, team?.stripe_customer_id, project?.id, showBillingCard]);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,7 +215,7 @@ const BillingSection = () => {
     try {
       const response = await axios.post<{ url: string }>(
         "/api/stripe/billing-portal",
-        { teamId: team.id }
+        { teamId: team.id, ...(showBillingCard ? { intent: "settings-billing-portal" } : {}) }
       );
       window.location.assign(response.data.url);
     } catch (error) {
@@ -278,7 +279,7 @@ const BillingSection = () => {
     }
   };
 
-  if (portalBillingEnabled) {
+  if (showBillingCard) {
     return (
       <SettingsSectionShell title="Billing">
         <SettingsCard title="Plan">

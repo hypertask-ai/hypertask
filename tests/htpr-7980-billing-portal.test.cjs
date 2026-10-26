@@ -43,7 +43,7 @@ const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": p
 const policy = jiti(path.join(root, "src/lib/stripeBillingPortal.ts"));
 const { GET, POST } = jiti(path.join(root, "src/app/api/stripe/billing-portal/route.ts"));
 const request = (body = { teamId: "team_owned" }) => new Request("https://app.hypertask.ai/api/stripe/billing-portal", {
-  method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" },
+  method: "POST", body: JSON.stringify({ intent: "settings-billing-portal", ...body }), headers: { "Content-Type": "application/json" },
 });
 beforeEach(() => {
   user = { id: 985, accountId: "account_owned" };
@@ -68,6 +68,15 @@ test("untrusted caller cannot resolve flag, config, customer or portal session",
   user = null;
   assert.equal((await POST(request())).status, 401);
 });
+test("non-object request bodies refuse before resolving billing access", async () => {
+  for (const body of [null, "team_owned", 42]) {
+    const response = await POST(new Request("https://app.hypertask.ai/api/stripe/billing-portal", {
+      method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" },
+    }));
+    assert.equal(response.status, 400);
+  }
+  assert.deepEqual([flagLookups, retrieved, sessions, legacy], [[], [], [], []]);
+});
 test("owner linked through the authenticated account remains allowed", async () => {
   user.id = 986;
   assert.equal((await POST(request())).status, 200);
@@ -79,6 +88,17 @@ test("flag off retains the legacy portal and never fetches a new config", async 
   assert.deepEqual(legacy, ["cus_owned"]);
   assert.deepEqual(retrieved, []);
   assert.deepEqual(sessions, []);
+});
+test("legacy billing controls remain available without a dedicated configuration", async () => {
+  delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
+  assert.equal((await POST(request({ teamId: "team_owned", intent: undefined }))).status, 200);
+  assert.deepEqual(legacy, ["cus_owned"]);
+  assert.deepEqual([flagLookups, retrieved, sessions], [[], [], []]);
+});
+test("legacy requests cannot bypass team ownership", async () => {
+  user = { id: 42, accountId: "account_other" };
+  assert.equal((await POST(request({ teamId: "team_owned", intent: undefined }))).status, 403);
+  assert.deepEqual([flagLookups, retrieved, sessions, legacy], [[], [], [], []]);
 });
 test("missing dedicated config refuses rather than falling back to default", async () => {
   delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;

@@ -52,7 +52,9 @@ beforeEach(() => {
       if (availabilityError) throw new Error("Unavailable");
       return { data: { available: portalAvailable } };
     }
-    return { data: { customerEmail: null, invoices: [], upcomingInvoice: null } };
+    return { data: { customerEmail: "billing@example.invalid", invoices: [{ id: "invoice_existing", amountPaid: 2000,
+      cardBrand: "visa", cardLast4: "4242", created: 1793000000, currency: "usd", paymentMethodType: "card",
+      status: "paid", hostedInvoiceUrl: "https://stripe.test/existing-invoice" }], upcomingInvoice: null } };
   };
   axios.post = async (url, body) => { requests.push({ url, body }); return { data: { url: "https://stripe.test/hosted" } }; };
 });
@@ -99,7 +101,7 @@ for (const status of ["trialing", "active", "past_due", "unpaid", "incomplete"])
   await render();
   assert.ok(![...document.querySelectorAll("button")].some(button => button.textContent === "Upgrade"));
   await click("Manage billing");
-  assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected" } }]);
+  assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected", intent: "settings-billing-portal" } }]);
   assert.deepEqual(redirects, ["https://stripe.test/hosted"]);
 });
 test("an intervening subscription prevents checkout after the picker opens", async () => {
@@ -148,16 +150,26 @@ for (const status of ["trialing", "active", "past_due"]) test(`${status} portal 
   team = subscribed(status); team.stripe_customer_id = "cus_selected"; refreshedTeam = team;
   await render();
   assert.ok(![...document.querySelectorAll("button")].some(button => button.textContent === "Manage billing"));
-  assert.match(document.body.textContent, /PlanProPrice/);
-  assert.deepEqual(requests, []);
-  assert.deepEqual(redirects, []);
+  assert.match(document.body.textContent, /Cancel plan/);
+  assert.match(document.body.textContent, /Payment/);
+  assert.match(document.body.textContent, /Invoicing email/);
+  assert.match(document.body.textContent, /Invoices/);
+  assert.match(document.body.textContent, /billing@example.invalid/);
+  assert.equal(document.querySelector('a[href="https://stripe.test/existing-invoice"]').textContent, "View");
+  await click("Update");
+  assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected" } }]);
+  assert.deepEqual(redirects, ["https://stripe.test/hosted"]);
 });
-test("portal availability errors keep the action hidden", async () => {
+test("portal availability errors preserve existing billing controls and data", async () => {
   availabilityError = true;
   team = subscribed(); team.stripe_customer_id = "cus_selected"; refreshedTeam = team;
   await render();
   assert.ok(![...document.querySelectorAll("button")].some(button => button.textContent === "Manage billing"));
-  assert.deepEqual(requests, []);
+  assert.match(document.body.textContent, /Cancel plan/);
+  assert.match(document.body.textContent, /billing@example.invalid/);
+  assert.equal(document.querySelector('a[href="https://stripe.test/existing-invoice"]').textContent, "View");
+  await click("Update");
+  assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected" } }]);
 });
 test("unconfigured portal does not block existing Free checkout", async () => {
   portalAvailable = false;
@@ -172,7 +184,10 @@ test("portal stays hidden until availability is confirmed", async () => {
   team = subscribed(); team.stripe_customer_id = "cus_selected"; refreshedTeam = team;
   await render();
   assert.ok(![...document.querySelectorAll("button")].some(button => button.textContent === "Manage billing"));
+  assert.match(document.body.textContent, /Cancel plan/);
+  assert.match(document.body.textContent, /Invoicing email/);
+  assert.ok([...document.querySelectorAll("button")].some(button => button.textContent === "Update"));
   await React.act(async () => resolveAvailability({ data: { available: true } }));
   await click("Manage billing");
-  assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected" } }]);
+  assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected", intent: "settings-billing-portal" } }]);
 });
