@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useRecoilState } from "@/lib/state";
-import { aiChatSidebarWidthPxAtom } from "@/store";
+import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { aiChatSidebarPreferredWidthsAtom, aiChatSidebarWidthPxAtom, currentUserAtom } from "@/store";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8013_SIDEBAR_WIDTH_FLAG } from "@/lib/flags/definitions/htpr-8013-sidebar-width";
 import {
+  AI_CHAT_SIDEBAR_DEFAULT_PX,
   AI_CHAT_SIDEBAR_MIN_PX,
   clampAiChatSidebarWidthPx,
   getAiChatSidebarMaxPx,
@@ -12,19 +15,35 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 
 export function AiChatSidebarResizeHandle() {
   const [widthPx, setWidthPx] = useRecoilState(aiChatSidebarWidthPxAtom);
+  const rememberWidth = useFlag(HTPR_8013_SIDEBAR_WIDTH_FLAG);
+  const userId = useRecoilValue(currentUserAtom)?.id;
+  const [preferredWidths, setPreferredWidths] = useRecoilState(aiChatSidebarPreferredWidthsAtom);
+  const savedWidth = userId === undefined ? undefined : preferredWidths?.[userId];
+  const fallbackWidth = preferredWidths === null ? widthPx : AI_CHAT_SIDEBAR_DEFAULT_PX;
+  const preferredWidth = typeof savedWidth === "number" && Number.isFinite(savedWidth)
+    ? savedWidth : fallbackWidth;
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const widthRef = useRef(widthPx);
   widthRef.current = widthPx;
 
+  const needsMigration = rememberWidth && userId !== undefined && preferredWidths === null;
+  useEffect(() => {
+    if (needsMigration && userId !== undefined) {
+      setPreferredWidths({ [userId]: widthRef.current });
+    }
+  }, [needsMigration, userId, setPreferredWidths]);
+
   useEffect(() => {
     const onResize = () => {
-      setWidthPx((w) => clampAiChatSidebarWidthPx(w, window.innerWidth));
+      setWidthPx((w) => clampAiChatSidebarWidthPx(
+        rememberWidth && userId !== undefined ? preferredWidth : w, window.innerWidth
+      ));
     };
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [setWidthPx]);
+  }, [setWidthPx, rememberWidth, userId, preferredWidth]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -33,12 +52,18 @@ export function AiChatSidebarResizeHandle() {
     setIsDragging(true);
     document.body.style.userSelect = "none";
 
+    let draggedWidth: number | undefined;
     const onMove = (ev: PointerEvent) => {
       const delta = ev.clientX - startX;
       const next = startW - delta;
-      setWidthPx(clampAiChatSidebarWidthPx(next, window.innerWidth));
+      draggedWidth = clampAiChatSidebarWidthPx(next, window.innerWidth);
+      setWidthPx(draggedWidth);
     };
     const onUp = () => {
+      if (rememberWidth && userId !== undefined && draggedWidth !== undefined) {
+        const width = draggedWidth;
+        setPreferredWidths((widths) => ({ ...widths, [userId]: width }));
+      }
       setIsDragging(false);
       document.body.style.userSelect = "";
       document.removeEventListener("pointermove", onMove);
