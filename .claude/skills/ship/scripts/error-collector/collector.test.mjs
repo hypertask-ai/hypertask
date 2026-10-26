@@ -120,15 +120,15 @@ check('sources', 'normalization strips every dynamic value and hash matches inde
   assert.notEqual(fingerprint('web', 'failed 42', '/users/1'), fingerprint('api', 'failed 42', '/users/1'));
 });
 
-check('sources', 'PowerShell cancellation sessions count as one new kind across transient scopes', () => withHarness(async h => {
+check('sources', 'PowerShell genuine pipe failures count as one new kind across transient scopes', () => withHarness(async h => {
   const messages = [
     ['run-u2003472.scope', '7.6.7:B:80', 2169841],
     ['run-u2003644.scope', '7.6.7:C:80', 2863890],
     ['run-r1b66062f07d0426abf597f7579b30ec8.scope', '7.6.7:C:80', 3021000],
     ['run-r536fa8835f1f416693556a3156812a26.scope', '7.4.6:C:99', 3051000],
-  ].map(([unit, session, pid]) => `${unit}: (${session}) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: ${pid} in AppDomain: None. Error Message: Operation canceled.`);
+  ].map(([unit, session, pid]) => `${unit}: (${session}) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: ${pid} in AppDomain: None. Error Message: Access denied.`);
   assert.equal(new Set(messages.map(message => fingerprint('vps-journal', message))).size, 1);
-  assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vps-journal', messages[0].replace('Operation canceled.', 'Access denied.')));
+  assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vps-journal', messages[0].replace('Access denied.', 'Connection refused.')));
   assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vercel', messages[0]));
   h.events(messages.map(message => event({ service: 'vps-journal', board: 4060, message })));
   assert.equal(await h.run(), 0);
@@ -722,6 +722,26 @@ check('reporting', 'SSH client resets under session scopes are noise, real failu
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 2);
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+}));
+
+check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures still file', () => withHarness(async h => {
+  const message = 'run-u2003644.scope: (7.6.7:C:80) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: 1990196 in AppDomain: None.  Error Message: Operation canceled.';
+  const vps = { service: 'vps-journal', board: 4060, route: 'run-u2003644.scope', stack: '' };
+  h.events([
+    event({ ...vps, message }),
+    event({ ...vps, message: message.replace('run-u2003644.scope', 'run-r1b66062f07d0426abf597f7579b30ec8.scope') }),
+    event({ ...vps, message: message.replace('Operation canceled.', 'Access denied.') }),
+    event({ ...vps, message: message.replace('Operation canceled.', 'Operation canceled. Unexpected failure.') }),
+    event({ ...vps, message: `${message}\nAccess denied.` }),
+    event({ ...vps, route: 'worker.service', message: message.replace('run-u2003644.scope', 'worker.service') }),
+    event({ ...vps, service: 'vercel', message }),
+  ]);
+  assert.equal(await h.run(), 0);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 2);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 4);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+  assert.equal(creates(h).length, 5);
+  assert.ok(creates(h).some(call => call.description.includes('Access denied.')));
 }));
 
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
