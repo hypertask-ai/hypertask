@@ -26,7 +26,7 @@ export type TAgentChatSession = { id: string; agentId: string };
 export interface IProp {
   currentUser: IUser;
   roomsEnabled: boolean;
-  embedded?: { projectId: number; agent: import("../AgentsRegister").TAgent; active: boolean; requestId?: number; sessionId?: string; draftKey?: string; routedDraft?: string };
+  embedded?: { projectId: number; agent: import("../AgentsRegister").TAgent; active: boolean; requestId?: number; sessionId?: string; draftKey?: string; routedDraft?: { text: string; requestId: number }; onRoutedDraftConsumed?: (requestId: number) => void };
 }
 
 export type SidebarChatAgent = {

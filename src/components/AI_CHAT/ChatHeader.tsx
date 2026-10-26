@@ -83,6 +83,7 @@ function ChatSessionRow({
     <li className={children ? "flex items-center" : undefined}>
       <button
         type="button"
+        data-chat-session-id={chat.id}
         onClick={onSelect}
         className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors", children && "min-w-0 flex-1")}
       >
@@ -262,7 +263,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               }
             }}
           >
-            {phoneChatDelete && isMbl && !chat.agentId && (
+            {phoneChatDelete && isMbl && !(agentSessionsEnabled && sidebarChats && chat.agentId) && (
               <button
                 type="button"
                 aria-label="Delete chat"

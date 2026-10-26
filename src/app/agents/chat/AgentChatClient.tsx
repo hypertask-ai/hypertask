@@ -26,8 +26,9 @@ const AgentChatClient = (props: IProp) => {
     if (!agentChatSession.sessionName) agentChatSession.selectAgent(props.embedded.agent);
     else void agentChatSession.loadMessages(agentChatSession.sessionName);
     if (props.embedded.routedDraft !== undefined) {
-      agentChatState.draftRef.current = props.embedded.routedDraft;
-      agentChatState.setDraft(props.embedded.routedDraft);
+      agentChatState.draftRef.current = props.embedded.routedDraft.text;
+      agentChatState.setDraft(props.embedded.routedDraft.text);
+      props.embedded.onRoutedDraftConsumed?.(props.embedded.routedDraft.requestId);
     }
   }, [props.embedded?.agent.id, props.embedded?.active, props.embedded?.requestId]);
   useEffect(() => {

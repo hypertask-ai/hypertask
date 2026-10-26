@@ -325,7 +325,7 @@ export function AI_Tiptap_Container({
             />
           </div>
         )}
-        {sidebarAgent && <ContextList mobile={isMbl} items={[{ type: "agent", id: sidebarAgent, name: `@${sidebarAgent}`, photoURL: null }]}
+        {sidebarAgent && <ContextList mobile={isMbl} destination items={[{ type: "agent", id: sidebarAgent, name: `@${sidebarAgent}`, photoURL: null }]}
           onClick={() => window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: null } }))} />}
         {!controlledComposer && !isMbl && visibleContextList.length > 0 && (
           <ContextList items={visibleContextList} onClick={(index) => handleRemoveContext(contextList.indexOf(visibleContextList[index]))} />
@@ -676,10 +676,12 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
 }
 
 function ContextList({
+  destination = false,
   items,
   onClick,
   mobile = false,
 }: {
+  destination?: boolean;
   items: MentionItem[];
   onClick: (index: number) => void;
   mobile?: boolean;
@@ -708,7 +710,7 @@ function ContextList({
     <div className="flex items-center gap-2 self-start flex-wrap">
       {items.map((item: MentionItem, index: number) => (
         <div
-          className="relative group flex items-center justify-center gap-2 rounded-md border-[2px] border-icon-dark-gray px-2 py-1 text-white-black hover:bg-hover-active"
+          className={`relative group flex items-center justify-center gap-2 ${destination ? "rounded-sm border-thin border-border-light-gray-thin" : "rounded-md border-[2px] border-icon-dark-gray"} px-2 py-1 text-white-black hover:bg-hover-active`}
           key={`context-value-${index}`}
         >
           <X

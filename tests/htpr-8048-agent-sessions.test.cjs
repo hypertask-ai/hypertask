@@ -236,12 +236,15 @@ test("mention routing updates a cached external composer without overwriting lat
   const AgentChatClient = source("src/app/agents/chat/AgentChatClient.tsx").default;
   const view = mount();
   try {
-    const embedded = { projectId: 15, agent: { id: "agent" }, active: true, sessionId: "saved", requestId: 1, routedDraft: "Please check this @Runner" };
+    const acknowledgements = [];
+    const embedded = { projectId: 15, agent: { id: "agent" }, active: true, sessionId: "saved", requestId: 1,
+      routedDraft: { text: "Please check this @Runner", requestId: 1 }, onRoutedDraftConsumed: (requestId) => acknowledgements.push(requestId) };
     view.render(React.createElement(AgentChatClient, { currentUser: { id: 6 }, embedded }));
     assert.deepEqual(updates, ["Please check this @Runner"]);
+    assert.deepEqual(acknowledgements, [1]);
     assert.equal(state.draftRef.current, "Please check this @Runner");
     state.draftRef.current = "New unsent text";
-    view.render(React.createElement(AgentChatClient, { currentUser: { id: 6 }, embedded: { ...embedded, requestId: 2, routedDraft: undefined } }));
+    view.render(React.createElement(AgentChatClient, { key: "restored", currentUser: { id: 6 }, embedded: { ...embedded, requestId: 2, routedDraft: undefined } }));
     assert.equal(state.draftRef.current, "New unsent text");
     assert.equal(updates.length, 1);
   } finally { view.close(); }

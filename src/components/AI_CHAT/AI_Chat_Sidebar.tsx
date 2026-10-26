@@ -49,7 +49,11 @@ export const AI_Chat_Sidebar = ({
   const [target, setTarget] = useState<SidebarChatTarget>({ kind: "ai" });
   const [agents, setAgents] = useState<SidebarChatAgent[]>([]);
   const [visited, setVisited] = useState<SidebarChatAgent[]>([]);
-  const [routedDraft, setRoutedDraft] = useState<{ sessionId: string; text: string } | null>(null);
+  const [routedDraft, setRoutedDraft] = useState<{ sessionId: string; text: string; requestId: number } | null>(null);
+  const agentsRef = useRef(agents);
+  agentsRef.current = agents;
+  const rosterProject = useRef<number | null>(null);
+  const lastAgentSessions = useRef(new Map<string, string>());
   const [rosterError, setRosterError] = useState<string | null>(null);
   const intentRef = useRef(0);
   const rosterGeneration = useRef(0);
@@ -71,14 +75,33 @@ export const AI_Chat_Sidebar = ({
       const data = await response.json();
       if (!response.ok || !data.success || !Array.isArray(data.agents)) throw new Error(data.error ?? "Could not load agents");
       if (generation !== rosterGeneration.current) return;
-      setAgents(data.agents);
+      const refreshed: SidebarChatAgent[] = data.agents;
+      if (agentSessionsEnabled) for (const agent of refreshed) {
+        const loadedCount = agentsRef.current.find((previous) => previous.id === agent.id)?.sessions?.length ?? 0;
+        while (agent.hasMoreSessions && (agent.sessions?.length ?? 0) < loadedCount) {
+          const before = agent.sessions?.at(-1)?.id;
+          if (!before) break;
+          const olderResponse = await fetch(`/api/agent-sidebar-chats?projectId=${projectId}&agentId=${encodeURIComponent(agent.id)}&before=${encodeURIComponent(before)}`, { cache: "no-store" });
+          const olderData = await olderResponse.json();
+          if (!olderResponse.ok || !olderData.success || !Array.isArray(olderData.agents)) throw new Error("Could not refresh older sessions");
+          if (generation !== rosterGeneration.current) return;
+          const page: SidebarChatAgent | undefined = olderData.agents.find((item: SidebarChatAgent) => item.id === agent.id);
+          if (!page) throw new Error("Agent sessions unavailable");
+          const merged = [...new Map([...(agent.sessions ?? []), ...(page.sessions ?? [])].map((session) => [session.id, session])).values()];
+          if (merged.length <= (agent.sessions?.length ?? 0)) break;
+          agent.sessions = merged;
+          agent.hasMoreSessions = page.hasMoreSessions;
+        }
+      }
+      rosterProject.current = projectId;
+      setAgents(refreshed);
       setRosterError(null);
     } catch (error) {
       if (generation !== rosterGeneration.current) return;
       setAgents([]);
       setRosterError(error instanceof Error ? error.message : "Could not load agents");
     }
-  }, [enabled, projectId]);
+  }, [enabled, projectId, agentSessionsEnabled]);
 
   const loadingAgentPages = useRef(new Set<string>());
   const loadMoreAgentSessions = async (agent: SidebarChatAgent) => {
@@ -157,13 +180,14 @@ export const AI_Chat_Sidebar = ({
       setTarget(next);
     }
     if (agentSessionsEnabled) {
+      if (next.kind !== "ai" && next.agent.sessionId) lastAgentSessions.current.set(next.agent.id, next.agent.sessionId);
       try {
         const storageKey = `agentChat.sidebar.${currentUser.id}.${projectId}`;
         if (next.kind === "ai") sessionStorage.removeItem(storageKey);
         else sessionStorage.setItem(storageKey, JSON.stringify({ agentId: next.agent.id, sessionId: next.agent.sessionId }));
       } catch {}
     }
-    setRoutedDraft(next.kind === "external-agent" && next.agent.sessionId && mentionText !== undefined ? { sessionId: next.agent.sessionId, text: mentionText } : null);
+    setRoutedDraft(next.kind === "external-agent" && next.agent.sessionId && mentionText !== undefined ? { sessionId: next.agent.sessionId, text: mentionText, requestId: intent } : null);
     if (next.kind === "external-agent") {
       if (leaving.kind === "native-agent") {
         const stored = drafts.current.get("ai");
@@ -183,12 +207,12 @@ export const AI_Chat_Sidebar = ({
   const restoredSelection = useRef(false);
   useEffect(() => { restoredSelection.current = false; }, [projectId, currentUser?.id]);
   useEffect(() => {
-    if (!agentSessionsEnabled || !sidebarEnabled || !agents.length || restoredSelection.current) return;
+    if (!agentSessionsEnabled || !sidebarEnabled || rosterProject.current !== projectId || !agents.length || restoredSelection.current) return;
     restoredSelection.current = true;
     try {
       const saved = JSON.parse(sessionStorage.getItem(`agentChat.sidebar.${currentUser.id}.${projectId}`) ?? "null");
       const agent = agents.find((item) => item.id === saved?.agentId);
-      if (agent && agent.sessions?.some((session) => session.id === saved.sessionId)) {
+      if (agent && typeof saved.sessionId === "string" && saved.sessionId) {
         void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId: saved.sessionId });
       }
     } catch {}
@@ -199,7 +223,7 @@ export const AI_Chat_Sidebar = ({
       const detail = (event as CustomEvent<{ agentId: string | null; html?: string; text?: string }>).detail;
       if (detail.agentId === null) { void selectTargetRef.current({ kind: "ai" }); return; }
       const agent = agents.find((item) => item.id === detail.agentId);
-      if (agent) void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { mentionHtml: detail.html, mentionText: detail.text });
+      if (agent) void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId: lastAgentSessions.current.get(agent.id), mentionHtml: detail.html, mentionText: detail.text });
     };
     window.addEventListener("ht-sidebar-agent-selected", choose);
     return () => window.removeEventListener("ht-sidebar-agent-selected", choose);
@@ -241,6 +265,7 @@ export const AI_Chat_Sidebar = ({
     setTarget({ kind: "ai" });
     setVisited([]);
     setRoutedDraft(null);
+    lastAgentSessions.current.clear();
     setAgents([]);
     aiSessionRef.current = null;
     drafts.current.clear();
@@ -347,7 +372,7 @@ export const AI_Chat_Sidebar = ({
         {sidebarEnabled && !minimized && currentUser && embeddedAgents.map((agent, index) => (
           <div key={`${projectId}:${agent.id}:${visited[index].sessionId}`} className={cn("min-h-0 min-w-0 flex-1 flex-col", target.kind === "external-agent" && target.agent.id === agent.id && target.agent.sessionId === visited[index].sessionId ? "flex" : "hidden")}>
             <AgentChatClient currentUser={currentUser} roomsEnabled={false}
-              embedded={{ projectId: projectId!, agent, requestId: intentRef.current, sessionId: agentSessionsEnabled ? visited[index].sessionId ?? undefined : undefined, draftKey: visited[index].draftKey, routedDraft: routedDraft?.sessionId === visited[index].sessionId ? routedDraft.text : undefined, active: target.kind === "external-agent" && target.agent.id === agent.id && target.agent.sessionId === visited[index].sessionId }} />
+              embedded={{ projectId: projectId!, agent, requestId: intentRef.current, sessionId: agentSessionsEnabled ? visited[index].sessionId ?? undefined : undefined, draftKey: visited[index].draftKey, routedDraft: routedDraft?.sessionId === visited[index].sessionId ? routedDraft : undefined, onRoutedDraftConsumed: (requestId) => setRoutedDraft((previous) => previous?.requestId === requestId ? null : previous), active: target.kind === "external-agent" && target.agent.id === agent.id && target.agent.sessionId === visited[index].sessionId }} />
           </div>
         ))}
       </div>

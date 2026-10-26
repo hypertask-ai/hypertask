@@ -159,7 +159,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
       aria-label={agentsOnly ? "Agent sessions" : "Sidebar conversations"}
       ref={hostRef}
       tabIndex={-1}
-      className={`absolute ${agentsOnly ? "right-0" : "left-0"} top-full z-[1200] mt-1 w-72 overflow-y-auto rounded-md bg-modalBackground py-1 text-white-black shadow-md outline-none`}
+      className={`absolute ${agentsOnly ? "right-0" : "left-0"} top-full z-[1200] mt-1 w-72 overflow-y-auto ${agentsOnly ? "rounded-[5px]" : "rounded-md"} bg-modalBackground py-1 text-white-black shadow-md outline-none`}
       onKeyDown={(event) => {
         if (event.key === "Tab") {
           event.stopPropagation();
