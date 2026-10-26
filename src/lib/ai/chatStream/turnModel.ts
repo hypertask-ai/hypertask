@@ -1,5 +1,4 @@
-import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
-import { HTPR_7796_DISABLED_PROVIDER_PICK_FLAG } from "@/lib/flags/definitions/htpr-7796-disabled-provider-pick";
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, HTPR_7796_DISABLED_PROVIDER_PICK_FLAG } from "@/lib/flags/keys";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { NextResponse } from "next/server";
 
