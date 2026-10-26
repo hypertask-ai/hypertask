@@ -142,11 +142,12 @@ test("an empty agent roster renders without crashing; the legacy conversation mo
   assert.deepEqual(view.selected, [{ kind: "ai" }]);
 });
 
-test("the feature has an Everyone default and a reversible server/client flag", () => {
+test("access-risk sessions default to Owner + QA with a reversible server/client flag", () => {
   const definition = load("src/lib/flags/definitions/htpr-8048-agent-sessions.ts", {}).default;
   assert.equal(definition.key, FLAG);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.releaseRisk.highRisk, "access");
   assert.equal(definition.releaseRisk.risk, "new");
 });
 
