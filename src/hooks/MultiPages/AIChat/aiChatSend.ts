@@ -8,6 +8,7 @@ import { extractStreamRefusalMessage } from "@/lib/aiChat/streamRefusal";
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild";
 import { CHAT_TRANSPORT_RETRY_DELAYS_MS, ChatRequestRefusedError, shouldRetryChatTransport } from "@/lib/aiChat/transportRetry";
 import { chatModelRequestFields } from "@/lib/aiModelOptions";
+import { signalAiChip } from "@/lib/ai/chipEvents";
 
 
 import type { useAiChatSessions } from "./useAiChatSessions";
@@ -33,7 +34,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   pathname, currentUser, billing, isDemo, streamingSessionRef,
   streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
   setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
-  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, stopClosesStream, navigateToTask,
+  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, chipSendSignal, stopClosesStream, navigateToTask,
   } = scopedContext;
 
 
@@ -98,6 +99,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     }
 
     if (!content.trim()) return false;
+    chipSendSignal?.({ kind: "send", text: content });
     let streamId = crypto.randomUUID();
     sendInFlightRef.current = true;
     if (stopClosesStream || runtime) streamingRequestRef.current = streamId;

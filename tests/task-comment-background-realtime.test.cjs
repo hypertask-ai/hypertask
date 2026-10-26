@@ -19,6 +19,7 @@ function loadTypeScriptModule(filename, stubs) {
   const loadedModule = { exports: {} };
   const localRequire = (request) => stubs[request] ?? {
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {},
     "@/lib/taskDetailReads": {},
   }[request] ?? require(request);
