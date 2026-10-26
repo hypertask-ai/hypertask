@@ -125,8 +125,12 @@ export async function isFreeScope(scope: PlanLimitScope): Promise<boolean> {
   return scope.kind === "personal" || !await isPaidTeam(scope.teamId);
 }
 
+function planLimitLockKey(scope: PlanLimitScope): string {
+  return `plan-limit:${scopeKey(scope)}`;
+}
+
 export async function lockPlanLimitScope(tx: Prisma.TransactionClient, scope: PlanLimitScope) {
-  const key = `plan-limit:${scopeKey(scope)}`;
+  const key = planLimitLockKey(scope);
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
 }
 
@@ -230,8 +234,7 @@ export async function assertFileSizeForProject(projectId: number, bytes: number,
 type StorageDb = Pick<Prisma.TransactionClient, "$queryRaw">;
 
 async function lockStorageScope(db: StorageDb, scope: PlanLimitScope) {
-  const key = `plan-limit:${scopeKey(scope)}`;
-  await db.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`);
+  await db.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${planLimitLockKey(scope)}))::text AS lock_result`);
 }
 
 export async function usedStorageBytes(scope: PlanLimitScope, db: StorageDb = prisma): Promise<number> {

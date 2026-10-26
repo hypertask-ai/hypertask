@@ -111,6 +111,7 @@ export function createAttachFilesTool(context: ToolContext) {
           url: string;
         }> = [];
 
+        let pendingBytes = 0;
         for (const [index, attachment] of input.attachments.entries()) {
           let fetched: { buffer: Buffer; contentType: string };
           try {
@@ -130,7 +131,8 @@ export function createAttachFilesTool(context: ToolContext) {
           }
 
           if (planLimitContext) {
-            await assertUploadAllowedForProject(task.projectId, fetched.buffer.length, planLimitContext);
+            await assertUploadAllowedForProject(task.projectId, fetched.buffer.length, planLimitContext, { pendingBytes });
+            pendingBytes += fetched.buffer.length;
           }
 
           fetchedByIndex.push(fetched);
@@ -286,7 +288,11 @@ export function createAttachFilesTool(context: ToolContext) {
               url: created.fileSource,
             });
           } catch (error) {
-            if (isPlanLimitReachedError(error)) throw error;
+            if (isPlanLimitReachedError(error)) {
+              if (attachmentsOut.length === 0) throw error;
+              failures.push({ ...failureContext, error: error.message });
+              continue;
+            }
             console.error("[AI chat attachments]", error);
             failures.push({
               ...failureContext,
