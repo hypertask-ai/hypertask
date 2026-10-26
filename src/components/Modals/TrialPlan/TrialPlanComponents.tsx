@@ -215,7 +215,7 @@ const OwnPlanColumn = ({
     perks: { titlePrefix?: string; title: string; amount: string; excludeCheck?: boolean }[];
     highlighted: boolean;
 }) => (
-    <div className={highlighted ? "xs:px-3 lg:px-6 bg-[#F3F3F3] dark:bg-active-elementBg py-2" : "lg:px-4 xs:px-2 py-2"}>
+    <div className={highlighted ? "xs:px-3 lg:px-6 bg-sidebar dark:bg-active-elementBg py-2" : "lg:px-4 xs:px-2 py-2"}>
         {highlighted ? (
             <div className="flex gap-2 items-center font-bold">
                 <ColumnTitle content={"Pro with "} />
