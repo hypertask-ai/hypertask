@@ -128,6 +128,14 @@ repurpose a team key for tooling:
   there is no shared-key fallback. The standalone public generation route was
   removed because it bypassed the guest-flow limits.
 
+- **Model canary** — set server-only `MODEL_CANARY_AI_GATEWAY_API_KEY` to
+  an approved internal tooling key. The production `/api/cron/ai-model-canary`
+  probe never falls back to `AI_GATEWAY_API_KEY`. Missing, malformed or
+  trials-key-identical configuration skips gateway probes without inference.
+  Existing enabled direct-provider QA keys continue to be probed separately.
+  Check the `model-canary` gateway tag and key identity after a run;
+  org-wide `/v1/credits` totals do not prove isolation.
+
 Also note: "All Trials Key" is the intentional included-allowance key for Free
 and BYOK-plan (and BYOK-comped) teams. It is not a fallback for Premium,
 legacy AI, or Pro-comped teams. Per-team allowance enforcement is tracked in HTPR-5205; until that ships,

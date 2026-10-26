@@ -8,11 +8,12 @@ const stub = (file, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
 const TEAM = "qa-owned-team";
-const KEY = "vck_synthetic_canary_shared_credential";
+const KEY = "vck_synthetic_canary_internal_credential";
+const TRIALS = "vck_synthetic_canary_trials_credential";
 const BYOK = "sk_synthetic_canary_direct_credential";
 const NativeDate = Date;
 let now, redis, alerts, calls, usage, keys, settings, behavior, authenticated, rateLimited, lookups;
-let forcedUsageProvider, replacementModel;
+let forcedUsageProvider, replacementModel, selectedCredentials;
 
 stub("src/lib/redis.ts", { getRedis: async () => redis });
 stub("src/lib/prisma.ts", { default: { team: { findMany: async (query) => {
@@ -32,15 +33,17 @@ stub("src/app/api/ai/_lib/providerGate.ts", {});
 stub("src/lib/ai/chatStream/prompt.ts", { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES: ["claude-sonnet-5", "claude-opus-5", "claude-haiku-5"] });
 stub("src/app/api/ai/_lib/modelProvider.ts", {
   isVercelAiGatewayKey: (value) => typeof value === "string" && value.startsWith("vck_"),
-  gatewayFundingSourceForApiKey: (value) => value === KEY ? "shared" : "customer",
   aiUsageProviderForCredential: (provider, credential, option) => forcedUsageProvider ?? (
     credential?.startsWith("vck_") ? provider : `byok:${option.source === "claude" ? "claude" : option.source === "openai" ? "openai" : option.modelKey.startsWith("deepseek") ? "deepseek" : "google"}`
   ),
-  resolveAiModel: (provider, modelId, credential, option) => ({
-    modelId: replacementModel ?? (credential?.startsWith("vck_") && provider !== "gateway" ? `${provider === "claude" ? "anthropic" : provider}/${modelId}` : provider === "gateway" && !credential?.startsWith("vck_") ? option?.directModel ?? modelId.slice(modelId.indexOf("/") + 1) : modelId),
-    provider: credential?.startsWith("vck_") ? "gateway" : "openai.chat",
-    option,
-  }),
+  resolveAiModel: (provider, modelId, credential, option) => {
+    selectedCredentials.push(credential);
+    return {
+      modelId: replacementModel ?? (credential?.startsWith("vck_") && provider !== "gateway" ? `${provider === "claude" ? "anthropic" : provider}/${modelId}` : provider === "gateway" && !credential?.startsWith("vck_") ? option?.directModel ?? modelId.slice(modelId.indexOf("/") + 1) : modelId),
+      provider: credential?.startsWith("vck_") ? "gateway" : "openai.chat",
+      option,
+    };
+  },
   providerOptionsForAiModel: (model, _feature, tags, option) => {
     model.option = option;
     return { gateway: { tags: ["chat", `team:${tags.teamId}`, `user:${tags.userId}`] }, ...option?.providerOptions };
@@ -65,7 +68,7 @@ const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
 const canary = load(path.join(root, "src/lib/ai/modelCanary.ts"));
 const cron = load(path.join(root, "src/app/api/cron/ai-model-canary/route.ts"));
 const status = load(path.join(root, "src/app/api/mcp/ai/models/status/route.ts"));
-const env = Object.fromEntries(["AI_GATEWAY_API_KEY", "NODE_ENV", "VERCEL_ENV", "CRON_SECRET"].map((key) => [key, process.env[key]]));
+const env = Object.fromEntries(["AI_GATEWAY_API_KEY", "MODEL_CANARY_AI_GATEWAY_API_KEY", "NODE_ENV", "VERCEL_ENV", "CRON_SECRET"].map((key) => [key, process.env[key]]));
 
 function fakeRedis() {
   const values = new Map();
@@ -110,8 +113,9 @@ test.beforeEach(() => {
   };
   redis = fakeRedis(); alerts = []; calls = []; usage = []; keys = new Map(); settings = {};
   lookups = []; behavior = async () => text(); authenticated = true; rateLimited = false;
-  forcedUsageProvider = undefined; replacementModel = undefined;
-  process.env.AI_GATEWAY_API_KEY = KEY;
+  forcedUsageProvider = undefined; replacementModel = undefined; selectedCredentials = [];
+  process.env.AI_GATEWAY_API_KEY = TRIALS;
+  process.env.MODEL_CANARY_AI_GATEWAY_API_KEY = ` ${KEY} `;
   process.env.NODE_ENV = "production"; process.env.VERCEL_ENV = "production";
   process.env.CRON_SECRET = "synthetic-cron-authority";
 });
@@ -132,6 +136,33 @@ test("inventory derives every visible option and effort variant; images are skip
   assert.equal(result.checked, inventory.length);
   assert.equal(calls.length, expected.filter((option) => option.source !== "custom").length);
   assert.ok((await rows()).filter((row) => row.capability === "image").every((row) => row.outcome === "skipped" && row.lastPassAt === null));
+});
+
+test("canary gateway probes use only the internal key, never the trials key", async () => {
+  const result = await canary.runModelCanary();
+  assert.ok(result.pass > 0);
+  assert.ok(selectedCredentials.length > 0);
+  assert.ok(selectedCredentials.every((credential) => credential === KEY));
+  assert.equal((await probe(catalog.aiModelOptions[0], "gateway", TRIALS)).outcome, "skipped");
+  assert.ok(!selectedCredentials.includes(TRIALS));
+});
+
+test("missing, malformed or trials-reused internal key fails closed without disabling QA BYOK", async () => {
+  for (const value of [undefined, "", " ", "sk_not_a_gateway_key", TRIALS, ` ${TRIALS} `]) {
+    if (value === undefined) delete process.env.MODEL_CANARY_AI_GATEWAY_API_KEY;
+    else process.env.MODEL_CANARY_AI_GATEWAY_API_KEY = value;
+    redis = fakeRedis(); calls = []; selectedCredentials = [];
+    const result = await canary.runModelCanary();
+    assert.equal(result.pass, 0);
+    assert.equal(calls.length, 0);
+    assert.deepEqual(selectedCredentials, []);
+    assert.ok((await rows()).filter((row) => row.lane === "gateway").every((row) => row.outcome === "skipped" && row.lastPassAt === null));
+  }
+  keys.set("openai", BYOK);
+  const result = await canary.runModelCanary();
+  assert.ok(result.pass > 0);
+  assert.ok(selectedCredentials.length > 0);
+  assert.ok(selectedCredentials.every((credential) => credential === BYOK));
 });
 
 test("probe keeps actual provider options and allowance team tags, one prompt, no tools/history/retries", async () => {

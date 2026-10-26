@@ -5,7 +5,7 @@ import { aiImageModelDefinitions, aiModelOptions, getAiModelDefinition, isAiMode
 import { getAiProviderInfo, resolveTeamProviderEnabled, type TByokProviderKey } from "@/lib/aiProviders";
 import { resolveTeamByokApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
-import { configureAiModelUsage, gatewayFundingSourceForApiKey, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
+import { configureAiModelUsage, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
 import { FEATURE_FLAG_QA_USER_ID } from "@/lib/auth/ownerOrQaIds";
 import { redactSecrets } from "@/lib/errors/errorFingerprint";
 import { redactErrorText } from "@/lib/telemetry/errorSanitization";
@@ -84,8 +84,9 @@ function originalError(error: unknown) {
 export async function probeModelCanary(option: TAiModelOption, lane: string, credential: string | undefined, teamId: string, signal: AbortSignal) {
   const started = Date.now();
   let stage: Stage = lane === "gateway" ? "gateway" : "provider";
+  const internalGatewayKey = process.env.MODEL_CANARY_AI_GATEWAY_API_KEY?.trim();
   try {
-    if (!credential || (lane === "gateway" ? !isVercelAiGatewayKey(credential) || gatewayFundingSourceForApiKey(credential) === "customer" : isVercelAiGatewayKey(credential))) {
+    if (!credential || (lane === "gateway" ? !isVercelAiGatewayKey(credential) || credential !== internalGatewayKey || credential === process.env.AI_GATEWAY_API_KEY?.trim() : isVercelAiGatewayKey(credential))) {
       return { outcome: "skipped" as const, stage: null, statusCode: null, safeError: "skipped_no_test_key", latencyMs: Date.now() - started };
     }
     const selected = selectModel(option.source, option.model, credential, option, { teamId, userId: FEATURE_FLAG_QA_USER_ID });
@@ -174,7 +175,7 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
     if (teams.length !== 1) throw new Error("Model canary requires exactly one QA-owned team");
     const team = teams[0];
     const targets = modelCanaryInventory();
-    const credentials = new Map<string, string | undefined>([["gateway", process.env.AI_GATEWAY_API_KEY?.trim()]]);
+    const credentials = new Map<string, string | undefined>([["gateway", process.env.MODEL_CANARY_AI_GATEWAY_API_KEY?.trim()]]);
     for (const provider of new Set(targets.flatMap((target) => target.provider ? [target.provider] : []))) {
       signal.throwIfAborted();
       const definition = targets.find((target) => target.provider === provider)?.option;
