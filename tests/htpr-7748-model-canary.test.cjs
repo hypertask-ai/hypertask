@@ -148,7 +148,7 @@ test("canary gateway probes use only the internal key, never the trials key", as
 });
 
 test("missing, malformed or trials-reused internal key fails closed without disabling QA BYOK", async () => {
-  for (const value of [undefined, "", " ", "sk_not_a_gateway_key", TRIALS, ` ${TRIALS} `]) {
+  for (const value of [undefined, "", " ", "sk_not_a_gateway_key", "vck_", "vck_contains whitespace", TRIALS, ` ${TRIALS} `]) {
     if (value === undefined) delete process.env.MODEL_CANARY_AI_GATEWAY_API_KEY;
     else process.env.MODEL_CANARY_AI_GATEWAY_API_KEY = value;
     redis = fakeRedis(); calls = []; selectedCredentials = [];

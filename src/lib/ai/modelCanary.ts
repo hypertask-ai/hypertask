@@ -85,8 +85,11 @@ export async function probeModelCanary(option: TAiModelOption, lane: string, cre
   const started = Date.now();
   let stage: Stage = lane === "gateway" ? "gateway" : "provider";
   const internalGatewayKey = process.env.MODEL_CANARY_AI_GATEWAY_API_KEY?.trim();
+  const internalGatewayCredential = credential === internalGatewayKey
+    && credential !== process.env.AI_GATEWAY_API_KEY?.trim()
+    && /^vck_\S+$/.test(credential ?? "");
   try {
-    if (!credential || (lane === "gateway" ? !isVercelAiGatewayKey(credential) || credential !== internalGatewayKey || credential === process.env.AI_GATEWAY_API_KEY?.trim() : isVercelAiGatewayKey(credential))) {
+    if (!credential || (lane === "gateway" ? !internalGatewayCredential : isVercelAiGatewayKey(credential))) {
       return { outcome: "skipped" as const, stage: null, statusCode: null, safeError: "skipped_no_test_key", latencyMs: Date.now() - started };
     }
     const selected = selectModel(option.source, option.model, credential, option, { teamId, userId: FEATURE_FLAG_QA_USER_ID });
