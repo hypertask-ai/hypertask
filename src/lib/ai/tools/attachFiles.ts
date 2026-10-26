@@ -1,5 +1,5 @@
 import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
-import { assertFileSizeForProject, isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
+import { assertUploadAllowedForProject, isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
 import { tool } from "ai";
 import { z } from "zod";
 import { MCP_ATTACHMENT_MAX_FILES, normalizeMime } from "@/lib/mcp/attachments/constants";
@@ -130,7 +130,7 @@ export function createAttachFilesTool(context: ToolContext) {
           }
 
           if (planLimitContext) {
-            await assertFileSizeForProject(task.projectId, fetched.buffer.length, planLimitContext);
+            await assertUploadAllowedForProject(task.projectId, fetched.buffer.length, planLimitContext);
           }
 
           fetchedByIndex.push(fetched);

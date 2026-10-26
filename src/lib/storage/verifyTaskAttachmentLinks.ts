@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import {
-  assertFileSizeForProject,
+  assertUploadAllowedForProject,
   isPlanLimitsEnabled,
   isPlanLimitReachedError,
   type PlanLimitContext,
@@ -95,7 +95,7 @@ export async function verifyTaskAttachmentLinks(
     const bytes = await getHypertasksObjectSize(key);
     if (bytes === null) throw new TaskAttachmentLinkError("That upload could not be verified", 409);
     try {
-      await assertFileSizeForProject(projectId, bytes, ctx);
+      await assertUploadAllowedForProject(projectId, bytes, ctx, { alreadyStored: Boolean(existing) });
     } catch (error) {
       if (isPlanLimitReachedError(error) && !existing && target.newlyUploadedSources?.includes(source)) {
         try {

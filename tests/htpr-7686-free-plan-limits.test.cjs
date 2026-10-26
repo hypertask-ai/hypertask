@@ -31,6 +31,7 @@ const sourceModules = [
   "src/lib/internalCompTeams.ts",
   "src/lib/flags/definitions/htpr-7686-free-plan-limits.ts",
   "src/lib/flags/definitions/htpr-7924-free-file-25mb.ts",
+  "src/lib/flags/definitions/htpr-7924-free-storage-2gb.ts",
   "src/utils/controllers/projects/boardQuota.ts",
   "src/utils/controllers/projects/createProjectWithStableName.ts",
   "src/utils/controllers/projects/archiveProject.ts",
@@ -107,7 +108,14 @@ function fixture(options = {}) {
   };
   const db = {
     $executeRaw: async (strings, ...values) => { calls.push(["scope.lock", strings.join("?"), ...values]); },
-    $queryRaw: async (...args) => { calls.push(["row.lock", plain(args)]); return []; },
+    $queryRaw: async (...args) => {
+      if (args[0]?.strings?.join("?").includes('"Attachment"')) {
+        calls.push(["storage.used", plain(args)]);
+        return [{ bytes: BigInt(options.usedBytes ?? 0) }];
+      }
+      calls.push(["row.lock", plain(args)]);
+      return [];
+    },
     project: {
       count: async (query) => {
         calls.push(["project.count", plain(query)]);
@@ -179,6 +187,7 @@ function fixture(options = {}) {
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       calls.push(["flag", key, userId]);
       if (key === "htpr-7924-free-file-25mb") return options.raisedFile !== false;
+      if (key === "htpr-7924-free-storage-2gb") return options.storageCap === true;
       return key === "htpr-7982-cancelled-free"
         ? options.cancelledFree === true
         : key === flag && options.enabled !== false;
@@ -354,6 +363,39 @@ test("file flag Off keeps the 10 MiB Free limit and its message; flag On refuses
   const on = fixture();
   await on.policy.assertFileSizeForProject(15, 25 * MiB, actor);
   await refused(on, on.policy.assertFileSizeForProject(15, 26 * MiB, actor), "file_size", teamScope, { bytes: 26 * MiB });
+});
+
+test("storage cap refuses an upload that would pass 2 GiB and allows one that lands exactly on it", async () => {
+  const GiB = 1024 * MiB;
+  const h = fixture({ storageCap: true, usedBytes: 2 * GiB - 5 * MiB });
+  await h.policy.assertUploadAllowedForProject(15, 5 * MiB, actor);
+  await assert.rejects(h.policy.assertUploadAllowedForProject(15, 5 * MiB + 1, actor), (error) => {
+    assert.equal(error.limit, "storage");
+    assert.equal(error.max, 2 * GiB);
+    assert.equal(error.status, 402);
+    assert.equal(error.message, "Your team has used its 2 GB of free storage. Upgrade to Pro to upload more.");
+    return true;
+  });
+});
+
+test("storage cap is skipped with its flag Off, for a paid team and for a file already stored", async () => {
+  const GiB = 1024 * MiB;
+  const off = fixture({ storageCap: false, usedBytes: 2 * GiB });
+  await off.policy.assertUploadAllowedForProject(15, MiB, actor);
+  const paid = fixture({ storageCap: true, usedBytes: 2 * GiB, entitlement: "paid" });
+  await paid.policy.assertUploadAllowedForProject(15, MiB, actor);
+  const stored = fixture({ storageCap: true, usedBytes: 2 * GiB });
+  await stored.policy.assertUploadAllowedForProject(15, MiB, actor, { alreadyStored: true });
+  await assert.rejects(stored.policy.assertUploadAllowedForProject(15, MiB, actor), (error) => error.limit === "storage");
+});
+
+test("the per-file limit still wins over the storage cap and the storage query names only attachments", async () => {
+  const h = fixture({ storageCap: true, usedBytes: 0 });
+  await assert.rejects(h.policy.assertUploadAllowedForProject(15, 26 * MiB, actor), (error) => error.limit === "file_size");
+  await h.policy.assertUploadAllowedForProject(15, 1, actor);
+  const used = h.calls.find((call) => call[0] === "storage.used");
+  assert.ok(used, "storage usage was read");
+  assert.match(JSON.stringify(used[1]), /teamId/);
 });
 
 test("zero/negative deltas and grandfathered edits/archives do not inspect quotas", async () => {
