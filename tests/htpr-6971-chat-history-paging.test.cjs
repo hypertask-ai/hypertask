@@ -1304,3 +1304,35 @@ for (const paging of [true, false]) {
     });
   });
 }
+
+for (const paging of [true, false]) {
+  test(`following tasks opens the latest conversation after reload (paging ${paging})`, async () => {
+    await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/92', taskId: 92, rows: [session(1, { taskId: 91 }), session(2, { taskId: 92 })] }, async ({ history }) => {
+      assert.equal(history().currentSession.id, id(1));
+      assert.ok(history().currentSession.messages.length > 0);
+    });
+  });
+}
+
+test('a pending explicit ticket introduction cannot send into the previous legacy chat', async () => {
+  const creating = deferred();
+  await withHistory({ on: false, followsTask: true, compose: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [session(1, { taskId: 91 })], create: () => creating.promise }, async ({ history, resolver, setTask, setIntro, render, flush }) => {
+    setTask(92); setIntro({ taskId: 92, content: 'Created this ticket' }); await render();
+    assert.equal(history().currentSession, undefined);
+    assert.equal(await resolver().ensureSessionForCurrentBoard(), undefined);
+    await React.act(async () => creating.resolve(response({ success: true, session: session(2, { taskId: 92, messages: [] }) }))); await flush();
+    assert.equal(history().currentSession.id, id(2));
+    assert.equal((await resolver().ensureSessionForCurrentBoard()).id, id(2));
+  });
+});
+
+test('leaving task detail restores legacy latest-chat selection', async () => {
+  const config = { on: false, followsTask: false, pathname: '/detail/project-4/91', taskId: 91, rows: [session(1, { taskId: 92 }), session(2, { taskId: 91 })] };
+  await withHistory(config, async ({ history, setTask, render }) => {
+    assert.equal(history().currentSession.id, id(2));
+    config.followsTask = true; await render();
+    setTask(undefined); await render();
+    assert.equal(history().currentSession.id, id(1));
+    assert.equal(history().sessions[0].id, id(1));
+  });
+});

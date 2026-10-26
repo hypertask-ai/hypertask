@@ -53,7 +53,7 @@ export const useSessionAndChatHistory = (
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
   const isDemo = pathname?.startsWith("/demo") ?? false;
-  const followsTaskNavigation = useFlag(HTPR_7736_CHAT_FOLLOWS_TASK_FLAG) && !pathname?.startsWith("/chat");
+  const followsTaskNavigation = useFlag(HTPR_7736_CHAT_FOLLOWS_TASK_FLAG) && isTaskScoped && !pathname?.startsWith("/chat");
   const explicitTaskRef = useRef<number | undefined>(undefined);
   const hasExplicitTask = taskId !== undefined && (composeIntro?.taskId === taskId || pendingFollowup?.taskId === taskId);
   if (hasExplicitTask) explicitTaskRef.current = taskId;
@@ -78,7 +78,7 @@ export const useSessionAndChatHistory = (
   currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
-  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, isTaskScoped, nameBoardRef, selectionScope);
+  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, isTaskScoped, nameBoardRef, { key: selectionScope, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId });
   const paged = pagingRequested && !isDemo && !pagedHistory.pagingUnavailable;
 
   const {
@@ -505,7 +505,10 @@ export const useSessionAndChatHistory = (
 
         const sessions = sessionsData?.data?.sessions ?? [];
 
-        if (followsTaskNavigation && !hasExplicitTask && sessions.some((session) => session.id === activeSession && session.userId === currentUser.id)) return;
+        if (followsTaskNavigation && !hasExplicitTask) {
+          setActiveSession((selected) => sessions.some((session) => session.id === selected && session.userId === currentUser.id) ? selected : sessions[0]?.id);
+          return;
+        }
 
         if (taskId === undefined) {
           if (isTaskScoped) return;
@@ -552,9 +555,10 @@ export const useSessionAndChatHistory = (
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
-  const currentSession = paged ? pagedHistory.currentSession : activeSession
+  const selectedSession = paged ? pagedHistory.currentSession : activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
+  const currentSession = followsTaskNavigation && hasExplicitTask && selectedSession?.taskId !== taskId ? undefined : selectedSession;
   useEffect(() => {
     if (!waitingForSkillFollowup && composeEnabled && composeIntro && isTaskScoped &&
         taskId === composeIntro.taskId && currentSession?.taskId === composeIntro.taskId) {
