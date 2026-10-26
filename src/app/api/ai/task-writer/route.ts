@@ -209,6 +209,7 @@ export async function POST(request: NextRequest) {
             const filtered = filterOneImagePass(buffer, allowedImgSrcs);
             enqueueText(filtered.emit);
           }
+          if (titleOnly && streamError !== undefined) throw streamError;
           if (!producedText && streamError !== undefined && await isRealErrorEnabled(userId)) {
             const error = streamError;
             await reportError({

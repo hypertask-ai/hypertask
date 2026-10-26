@@ -6,9 +6,9 @@ const jiti = require('jiti')(__filename, { alias: { '@': path.resolve(__dirname,
 const properties = jiti('../src/app/api/ai/_lib/taskWriterProperties.ts');
 const flag = 'htpr-8031-auto-title';
 
-async function post({ requestKind = 'auto-title', enabled = true, output = '<h1 id="ai-generated-task-title">Check the bread delivery</h1>' } = {}) {
+async function post({ requestKind = 'auto-title', enabled = true, streamError, output = '<h1 id="ai-generated-task-title">Check the bread delivery</h1>' } = {}) {
   const route = load('src/app/api/ai/task-writer/route.ts', {
-    'ai': { streamText: () => ({ textStream: (async function* () { yield output; })() }) },
+    'ai': { streamText: options => ({ textStream: (async function* () { yield output; if (streamError) options.onError({ error: streamError }); })() }) },
     'next/server': { NextResponse: { json: Response.json } },
     '@/lib/flags': { isFeatureEnabled: async key => key === flag && enabled },
     '@/lib/flags/definitions/htpr-8031-auto-title': { HTPR_8031_AUTO_TITLE_FLAG: flag },
@@ -43,6 +43,13 @@ test('full task writer and flag-off auto-title still reject title-only drafts', 
   assert.match(await post({ enabled: false }), /empty-task-writer-draft/);
   const draft = '<h1 id="ai-generated-task-title">Check delivery</h1><p>Before opening.</p>';
   assert.equal(await post({ requestKind: 'manual', output: draft }), draft);
+});
+
+test('provider errors after a partial title never release that title', async () => {
+  const result = await post({ streamError: new Error('Provider interrupted') });
+  assert.match(result, /event: error/);
+  assert.ok(result.includes('Provider interrupted'));
+  assert.equal(result.includes('Check the bread delivery'), false);
 });
 
 test('automatic title refuses empty, metadata-only and description-only replies', async () => {
