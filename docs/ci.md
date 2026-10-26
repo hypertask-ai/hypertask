@@ -370,3 +370,10 @@ To refresh a baseline, run the live script with a QA storage-state file in
 outside the committed fixture folder. Review the full output, promote it to
 `recorded.json`, then run `node scripts/task-writer-eval.cjs --save-baseline`.
 The offline replay binds the complete corpus hash and recomputes every score.
+
+
+## Incident correlation replay
+
+`ship-scripts-tests` runs the collector's supported offline runner and claim
+checks: four Vercel reports join the original MCP report with five activities.
+Different roots/routes stay separate. All board commands are private fakes.
