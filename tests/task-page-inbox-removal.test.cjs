@@ -153,6 +153,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
     client.clear();
   });
   const focus = loadSource("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
+    "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox": load("src/lib/flags/definitions/htpr-7970-bulk-blocked-inbox.ts", {}),
     "@/lib/api/typedClient": {
       toggleNotificationArchive: (body, headers) => global.fetch("/api/notifications/markAsDone", {
         method: "POST",
