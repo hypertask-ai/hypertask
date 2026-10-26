@@ -51,6 +51,7 @@ each ticket only needs the one or two areas it touches.
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); suggestions verify by hand |
 | Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
 | CLI install commands and login | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots, real install and read-only token-login guided start |
+| Team AI usage | [ai-usage.md](ai-usage.md) | read-only customer key error and successful report checks |
 | Billing and plans | [billing-and-plans.md](billing-and-plans.md) | no payment journey; open checkout and cancel without payment |
 | My Tasks | [my-tasks.md](my-tasks.md) | no write journey; verify by hand |
 | Pages | [pages.md](pages.md) | no write journey; verify by hand (flagged standalone parts through the session API) |
