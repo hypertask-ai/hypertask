@@ -56,9 +56,7 @@ export default function PageLinkedTickets({
     }
   };
 
-  if (!pagesEnabled) return null;
-
-  return (
+  return pagesEnabled ? (
     <section aria-label="Linked tickets" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-text-light-gray">
       <span>Linked tickets ({tickets.length})</span>
       {tickets.map((task) => (
@@ -78,5 +76,5 @@ export default function PageLinkedTickets({
       <button type="button" onClick={openPicker} className="min-h-11 hover:text-white-black">+ Link ticket</button>
       {picking && <SearchTasks header="Link ticket to page" closeHandler={() => setPicking(false)} onSelect={linkTicket} />}
     </section>
-  );
+  ) : null;
 }
