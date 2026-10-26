@@ -115,7 +115,7 @@ test('authenticated HTTP requests evaluate the flag for the user and advertise t
       '@/lib/aiFeedback/enabled': { aiFeedbackEnabled: async () => true },
       '@/lib/aiFeedback/automatic': { observeFeedbackTools: (tools) => tools, queueAiFeedback: () => {} },
       '@/lib/telemetry/mcpSseAnalytics': { recordLegacyMcpRequest: () => {} },
-      '@/lib/flags': { HTPR_6804_MCP_TOOLS_FLAG: 'catalog', HTPR_7203_MCP_FLAT_SCHEMA_FLAG: key, isFeatureEnabled: async (flag, userId) => {
+      '@/lib/flags': { HTPR_7203_MCP_FLAT_SCHEMA_FLAG: key, isFeatureEnabled: async (flag, userId) => {
         calls.push({ flag, userId })
         return flag === key ? enabled : true
       } },

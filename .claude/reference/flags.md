@@ -37,7 +37,9 @@ export function Widget() {
 }
 ```
 
-A flag check inside a named handler also counts when a live JSX attribute references that handler. An unused handler does not count. This protects the action, not the visibility of its control.
+A flag check inside a named handler also counts when a live JSX attribute references that handler. A function child of a consumed custom component also counts, including nested render children. Discarded JSX, unreachable callbacks, intrinsic-element function children, and shadowed flag bindings do not count. An unused handler does not count. This protects the action, not the visibility of its control.
+
+Changed exported components can reach their gate through private components and helpers in the same file. Unchanged sibling exports need no new ticket gate. Changed ungated sibling exports still block the file; a gate in an unrelated export does not cover them.
 
 ### Effects: select the callback, not the hook
 
