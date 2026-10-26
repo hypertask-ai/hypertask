@@ -25,7 +25,7 @@ import useDebounceWithCancel from "@/hooks/General/useDebounceWithCancel";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG } from "@/lib/flags/keys";
+import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG, HTPR_7298_STANDALONE_PAGES_FLAG, HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/keys";
 import { isContentCarouselImage } from "@/utils/helperFunctions/isContentCarouselImage";
 import { pageRoute } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -40,10 +40,8 @@ import type { IUser, TCarousalItems } from "@/models/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import styles from "@/styles/tiptap.module.scss";
-import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
-import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import type { LinkedPageTicket } from "@/lib/pages/browser";
-import PageLinkedTickets from "./PageLinkedTickets";
+const PageLinkedTickets = dynamic(() => import("./PageLinkedTickets"), { ssr: false });
 
 type SerializedPage = {
   publicId: string;

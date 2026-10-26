@@ -1,6 +1,9 @@
 
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/keys";
+
 import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from "react";
 import { usePathname } from "next/navigation";
 import { PanelLeft } from "lucide-react";
@@ -34,6 +37,7 @@ const MobileTopBar = ({
   const HeaderStrip = headerStrip ?? MobileHeaderStrip;
   const MobileTopBarActions = topBarActions ?? ClientTopBarActions;
   const pathname = usePathname();
+  const pagesScreens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const calendarTitle = useRecoilValue(mobileTopBarTitleAtom);
   const [showBoards, setShowBoards] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
@@ -44,7 +48,7 @@ const MobileTopBar = ({
   const onProject = pathname?.startsWith("/project") ?? false;
   const deferredControlsReady = !onProject || boardUsable;
   let fallbackTitle = "Board";
-  if (pathname === "/pages") {
+  if (pagesScreens && pathname === "/pages") {
     fallbackTitle = "Pages";
   } else if (onCalendar) {
     fallbackTitle = calendarTitle ?? "Calendar";

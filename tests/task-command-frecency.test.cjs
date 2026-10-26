@@ -165,6 +165,7 @@ test("task comment commands remember usage without changing their pinned order",
         useRecoilValue: (atom) => atom.default,
       }),
       setMock(require.resolve("next/navigation"), {
+        useRouter: () => ({ push() {} }),
         usePathname: () => "/detail/project-15/5971",
       }),
       setMock(require.resolve("reactstrap"), {

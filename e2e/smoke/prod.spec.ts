@@ -542,6 +542,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
   await page.getByRole('dialog').getByText('New page', { exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toBeVisible()
   const publicId = new URL(page.url()).pathname.split('/').pop()!
+  console.log(`[pages] created ${publicId}`)
   try {
     const created = await page.request.get(`/api/pages/${publicId}`)
     expect((await created.json()).page.projectId).toBe(boardId)
@@ -550,11 +551,13 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await page.reload()
     await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toHaveValue(title)
     await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
+    console.log('[pages] title saved and reloaded')
     const linked = await page.request.post(`/api/pages/${publicId}/links`, { data: { task_id: fixture.taskId } })
     expect(linked.ok()).toBe(true)
     await page.reload()
     await expect(page.getByText('Linked tickets (1)', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Back to task', exact: true })).toBeVisible()
+    console.log('[pages] ticket linked')
     await page.getByRole('textbox', { name: 'Page title', exact: true }).fill(`${title} pending`)
     await page.getByRole('region', { name: 'Linked tickets', exact: true }).getByRole('link').click()
     await expect.poll(() => new URL(page.url()).pathname).toBe(fixture.detailPath)
@@ -565,6 +568,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await page.getByRole('button', { name: /^Unlink / }).click()
     await expect(page.getByText('Linked tickets (0)', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
+    console.log('[pages] pending save persisted and ticket unlinked')
     await page.goto(fixture.detailPath)
     await page.keyboard.press('Control+k')
     await page.getByPlaceholder('Type a command or search...').fill('Link page')
@@ -578,6 +582,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await page.getByRole('button', { name: 'Back to Pages', exact: true }).click()
     await page.getByRole('textbox', { name: 'Search pages' }).fill(title)
     await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
+    console.log('[pages] task-context Link page and list search verified')
     const archived = await page.request.post(`/api/pages/${publicId}/archive`)
     expect(archived.ok()).toBe(true)
     await page.reload()
@@ -585,7 +590,10 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await expect(page.getByText('No pages found.', { exact: true })).toBeVisible()
     await page.getByRole('tab', { name: /^Archived pages/ }).click()
     await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
+  } catch (error) {
+    console.error(`[pages] failed on ${page.url()}: ${error}`)
+    throw error
   } finally {
-    await page.request.post(`/api/pages/${publicId}/archive`)
+    await page.request.post(`/api/pages/${publicId}/archive`, { timeout: 5000 }).catch(() => {})
   }
 })
