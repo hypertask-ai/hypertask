@@ -170,10 +170,6 @@ export function useAiChatState(parallelChatsEnabled = false) {
         return exists ? prev : [...prev, mentionData];
       });
     } else if (mentionData.type === "agent") {
-      if (agentSessionsEnabled && agentSidebarEnabled && currentProject?.id && currentUser && editor?.view.dom.closest('[data-testid="ai-sidebar"]')) {
-        window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: mentionData.id, html: editor.getHTML(), text: editor.getText({ textSerializers: { mention: ({ node }) => `@${node.attrs.text || node.attrs.id}` } }) } }));
-        return;
-      }
       setContextList((prev) => {
         const exists = prev.some(
           (item) => item.type === "agent" && item.id === mentionData.id
@@ -183,8 +179,18 @@ export function useAiChatState(parallelChatsEnabled = false) {
     } else if (mentionData.type === "name") {
     }
   }
+  function agentContextCallback(mentionData: MentionItem) {
+    if (mentionData.type === "agent" && currentProject?.id && currentUser && editor?.view.dom.closest('[data-testid="ai-sidebar"]')) {
+      window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: {
+        agentId: mentionData.id, html: editor.getHTML(),
+        text: editor.getText({ textSerializers: { mention: ({ node }) => `@${node.attrs.text || node.attrs.id}` } }),
+      } }));
+      return;
+    }
+    contextCallback(mentionData);
+  }
   const contextCallbackRef = useRef(contextCallback);
-  contextCallbackRef.current = contextCallback;
+  contextCallbackRef.current = agentSessionsEnabled && agentSidebarEnabled ? agentContextCallback : contextCallback;
   const stableContextCallback = useCallback(
     (node: any) => contextCallbackRef.current(node),
     []
