@@ -16,7 +16,7 @@ The `ux-signoff` gate accepts `https://hypertask.app/wireframes/<id>`, `https://
 
 ## Shapes accepted by feature-flag-gate
 
-The trusted gate reads changed UI files individually. It checks live local branches, not arbitrary hook or context data flow. A flag read in one file does not cover another changed file. Gate the actual behavior in every affected file; adding an unused flag read does not count. Server authorization still needs its own flag check.
+The trusted gate starts from a live ticket-specific branch. Coverage follows that file’s imports through changed UI files, recursively. It does not flow back from an imported hook to its consuming component. A gated API route can also cover changed UI files that reference it through that import tree. Arbitrary context data flow is not proof. Gate the actual behavior; an unused flag read does not count. Server authorization still needs its own flag check.
 
 These examples use the synthetic `OTHER_FLAG` from the gate tests. Replace it with your ticket's real flag constant. `Row`, `items`, `remove`, and `subscribe` represent existing app code, not new shared controls. Tests run these exact examples through `.github/scripts/feature-flag-gate.mjs`.
 
@@ -83,6 +83,6 @@ export function Widget() {
 }
 ```
 
-For a cross-file hook or context change, keep the hook's behavior gated too. Its consumer needs a local branch around the new behavior when that UI file changes. Do not move a hook into a condition or add a flag read unrelated to the changed behavior just to satisfy CI.
+For a cross-file hook or context change, a gate inside the hook alone does not cover its changed consumer. Put the branch around the consumer's new behavior; its changed imports then receive coverage. Keep any independent hook behavior gated too. Do not move a hook into a condition or add a flag read unrelated to the changed behavior just to satisfy CI.
 
 Run `npm run test:file -- tests/feature-flag-gate.test.cjs` on an allowed development host. On the VPS, use the PR's hosted CI result. The `documented flag-gate shapes` tests check these examples, their ungated variants, and the unsupported mapped-prop, effect, and map callback shapes. Mechanical acceptance does not replace flag-on and flag-off behavior tests.

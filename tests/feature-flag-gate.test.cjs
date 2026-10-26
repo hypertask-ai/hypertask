@@ -2085,3 +2085,26 @@ export function Widget() { const enabled = useFlag(OTHER_FLAG); ${body} }
     assert.equal(result.pass, false, `${name}: ${result.reason}`);
   }
 });
+
+test("documented flag-gate shapes follow imports from a gated consumer, not back from a hook", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/hooks/usePreview.ts", `import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+export function usePreview() { return useFlag(OTHER_FLAG) ? "new" : "old"; }
+`);
+  const imports = `import { usePreview } from "../hooks/usePreview";
+import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+`;
+  writeFile(dir, "src/components/Widget.tsx", imports + "export function Widget() { return <div>{usePreview()}</div>; }\n");
+  const hookOnly = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, "hook gate only"), dir);
+  assert.equal(hookOnly.pass, false, hookOnly.reason);
+  writeFile(dir, "src/components/Widget.tsx", imports + `export function Widget() {
+  const preview = usePreview();
+  return useFlag(OTHER_FLAG) ? <div>{preview}</div> : <div />;
+}
+`);
+  const consumer = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, "gated consumer"), dir);
+  assert.equal(consumer.pass, true, consumer.reason);
+});
