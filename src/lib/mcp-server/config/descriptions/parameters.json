@@ -98,5 +98,9 @@
   "visibility": "Whether a saved view is shared (Public) or private to its owner (Private).",
   "visible_section_ids": "Numeric column ids to display in the saved board view.",
   "working_rules": "Board-specific workflow instructions to store in the playbook.",
-  "member_identifier": "One human user id, email address or managed agent UUID to add to the board."
+  "member_identifier": "One human user id, email address or managed agent UUID to add to the board.",
+  "auth_header_name": "Header name the webhook receiver requires, sent on every delivery, test and resend. Use with auth_header_value.",
+  "auth_header_value": "Value for auth_header_name. Stored encrypted and never returned.",
+  "bearer_secret": "Shortcut for an Authorization: Bearer header. Stored encrypted and never returned.",
+  "clear_auth_header": "True removes the saved receiver auth header."
 }
