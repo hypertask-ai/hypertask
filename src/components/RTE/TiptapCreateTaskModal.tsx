@@ -90,6 +90,7 @@ const TiptapCreateTaskModal = () => {
     HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   );
   const createSubmissionRef = useRef(false);
+  const appliedRawWriterPromptsRef = useRef(new Set<string>());
   const {
     editMode,
     setEditMode,
@@ -437,6 +438,7 @@ const TiptapCreateTaskModal = () => {
     setShowConfirmationModal(false);
     setFilesDropped([]);
     pendingAttachmentUploadsRef.current.clear();
+    appliedRawWriterPromptsRef.current.clear();
     createTaskAttachmentsRef.current = [];
     setNewCommentAttachments([]);
     setTrigger((current) => !current);
@@ -1013,10 +1015,11 @@ const TiptapCreateTaskModal = () => {
                 onCreateTaskFailure={mobileWriterSave ? async (prompt) => {
                   let description = editor?.getHTML() ?? formValues.description;
                   const rawPrompt = prompt.trim();
-                  if (rawPrompt && rawPrompt !== editor?.getText().trim()) {
+                  if (rawPrompt && !appliedRawWriterPromptsRef.current.has(rawPrompt) && rawPrompt !== editor?.getText().trim()) {
                     description += `<p>${escapeHtml(rawPrompt).replace(/\n/g, "<br>")}</p>`;
                     editor?.commands.setContent(description);
                     handleChange("description", description);
+                    appliedRawWriterPromptsRef.current.add(rawPrompt);
                   }
                   const title = getCurrentTitle() || editor?.getText().trim().slice(0, 500) || rawPrompt.slice(0, 500);
                   if (!title) return false;

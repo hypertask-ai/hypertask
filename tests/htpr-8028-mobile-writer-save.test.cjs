@@ -154,12 +154,15 @@ test('raw fallback preserves a submitted writer note as literal text in the draf
     mobileWriterSave: true, formValues: { title: 'Existing title', description: html, attachments: [] },
     editor: { getHTML: () => html, getText: () => 'Original description.', commands: { setContent: value => { html = value; } } },
     getCurrentTitle: () => 'Existing title', applyTaskWriterTitle() {}, handleChange() {}, escapeHtml,
+    appliedRawWriterPromptsRef: { current: new Set() },
     CtrlEnterHandler: async (_, values) => { writes.push(values); return false; },
   });
   assert.equal(await callback(note), false);
   assert.equal(writes[0].description, '<p>Original description.</p><p>New dictated detail: &lt;keep&gt; every &amp; word<br>Second line</p>');
   assert.equal(html, writes[0].description, 'failed persistence leaves both original and new words in the draft');
   assert.equal(writes[0].title, 'Existing title');
+  assert.equal(await callback(note), false);
+  assert.equal(writes[1].description, writes[0].description, 'retry must not append the same note twice');
 });
 
 test('fallback waits for uploads, then reads the completed attachment rather than a stale form snapshot', async () => {
