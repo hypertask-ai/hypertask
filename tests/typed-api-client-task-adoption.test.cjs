@@ -56,6 +56,7 @@ test("history always uses typed reads, preserving cancellation and restore", asy
   assert.equal(h.states[1], 7);
   assert.equal(h.states[2], false);
   assert.deepEqual(h.effects[0].dependencies, [12]);
+  assert.deepEqual(elements(h.render(props)).filter((node) => typeof node.props?.content === "string").map((node) => node.props.content), ["Current", "Old"]);
   const restore = elements(h.render(props)).find((node) => node.type === "button" && JSON.stringify(node.props?.children).includes("Restore this version"));
   assert.ok(restore); restore.props.onClick();
   const confirm = elements(h.render(props)).find((node) => node.props?.id === "confirm-description-restore");

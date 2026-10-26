@@ -17,9 +17,6 @@ const restoreRoute = read(
 );
 const updateTask = read("src/utils/controllers/tasks/single.ts");
 const commands = read("src/components/Modals/commands/HTC/AllCommands.ts");
-const modal = read(
-  "src/components/Modals/TaskDescriptionHistory/TaskDescriptionHistoryModal.tsx",
-);
 
 test("description changes preserve an existing empty description", () => {
   assert.match(snapshotSource, /if \(existing && oldContent !== content\)/);
@@ -63,11 +60,3 @@ test("Ctrl+K exposes version history only on task detail", () => {
   assert.match(commands, /CommandMode\.TaskDescriptionVersions/);
 });
 
-test("version history supports comparison and confirmed restoration", () => {
-  assert.match(modal, /taskDescriptionVersionsRoute/);
-  assert.match(modal, /Current description/);
-  assert.match(modal, /selected\.contentText/);
-  assert.match(modal, /version_id: selected.id/);
-  assert.match(modal, /ConfirmDialog/);
-  assert.match(modal, /Restore this version/);
-});
