@@ -87,6 +87,7 @@ export function createCommandDispatcher(context: Context) {
       case CommandMode.ToggleAmoledTheme:
       case CommandMode.ToggleRoundedTheme:
       case CommandMode.ToggleDiaTheme:
+      case CommandMode.ToggleGraphite2Theme:
       case CommandMode.ToggleDarkTheme:
       case CommandMode.InviteMember:
       case CommandMode.DeleteMessage:
@@ -343,6 +344,11 @@ function dispatchCommandGroup1(context: Context, mode?: CommandMode, action?: st
 
       case CommandMode.ToggleDiaTheme:
         switchToTheme("dia");
+        boardCloseHandler();
+        break;
+
+      case CommandMode.ToggleGraphite2Theme:
+        switchToTheme("graphite-2");
         boardCloseHandler();
         break;
 

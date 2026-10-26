@@ -83,6 +83,7 @@ export const LocalRightSideInfo = (
   return (
     <>
       <span
+        data-task-property-label
         onClick={onClick}
         className={cn(
           "cursor-pointer rounded-[5px] border-icon-dark-gray relative group text-[#8E9093] font-medium",

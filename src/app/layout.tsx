@@ -1,4 +1,5 @@
 import { HTPR_8145_PHONE_ZOOM_FLAG } from "@/lib/flags/definitions/htpr-8145-phone-zoom";
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import "@/styles/globals.scss";
@@ -97,7 +98,7 @@ export default async function RootLayout(
   }
   const deferUnusedBoardFonts = boardDocument &&
     (boardDocument.display as BoardDisplay).isMobile &&
-    ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
+    ["amoled", "graphite", "graphite-2", "porcelain"].includes(boardDocument.display.theme);
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
   const chipEventsFlag = await isFeatureEnabled(HTPR_7978_AI_CHIP_EVENTS_FLAG, analyticsSession?.id ?? -1);
@@ -119,10 +120,9 @@ export default async function RootLayout(
     name: authConfig.cookies.theme,
   };
   const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
+  const graphite2Enabled = await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, analyticsSession?.id ?? -1);
   const flagReaderSubscribe = await isFeatureEnabled(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession?.id ?? -1);
-  const savedTheme = roundedEnabled
-    ? normalizeThemePreference(theme.value, true)
-    : normalizeThemePreference(theme.value);
+  const savedTheme = normalizeThemePreference(theme.value, roundedEnabled, graphite2Enabled);
   const themeValue = savedTheme ?? "system";
   const systemLightTheme = resolveThemePreference("system", "light");
   const systemDarkTheme = resolveThemePreference("system", "dark");
@@ -131,7 +131,7 @@ export default async function RootLayout(
   const themeClassName = themeValue === "system"
     ? "system"
     : resolvedThemeDomMetadata[initialResolvedTheme].classes.join(" ");
-  const plexPreloadHref = shellSeed && ["amoled", "graphite", "porcelain"].includes(initialResolvedTheme)
+  const plexPreloadHref = shellSeed && ["amoled", "graphite", "graphite-2", "porcelain"].includes(initialResolvedTheme)
     ? (ibmPlexSans as typeof ibmPlexSans & { preloadHref?: string }).preloadHref
     : undefined;
 
@@ -168,6 +168,7 @@ export default async function RootLayout(
               systemLightTheme,
               systemDarkTheme,
               roundedEnabled,
+              graphite2Enabled,
             ),
           }}
         />
