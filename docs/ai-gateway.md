@@ -131,8 +131,9 @@ repurpose a team key for tooling:
 - **Model canary** — set server-only `MODEL_CANARY_AI_GATEWAY_API_KEY` to
   an approved internal tooling key. The production `/api/cron/ai-model-canary`
   probe never falls back to `AI_GATEWAY_API_KEY`. Missing, malformed or
-  trials-key-identical configuration skips gateway probes without inference.
-  Existing enabled direct-provider QA keys continue to be probed separately.
+  trials-key-identical configuration disables the entire run without inference
+  or status writes. After configuration, existing enabled direct-provider QA
+  keys continue to be probed separately.
   Check the `model-canary` gateway tag and key identity after a run;
   org-wide `/v1/credits` totals do not prove isolation.
 

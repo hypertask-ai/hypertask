@@ -69,6 +69,13 @@ export function modelCanaryInventory(): Target[] {
   ];
 }
 
+function modelCanaryGatewayKey() {
+  const apiKey = process.env.MODEL_CANARY_AI_GATEWAY_API_KEY?.trim();
+  return apiKey && /^vck_\S+$/.test(apiKey) && apiKey !== process.env.AI_GATEWAY_API_KEY?.trim()
+    ? apiKey
+    : undefined;
+}
+
 function originalError(error: unknown) {
   let current = error;
   for (let depth = 0; depth < 5; depth++) {
@@ -84,12 +91,8 @@ function originalError(error: unknown) {
 export async function probeModelCanary(option: TAiModelOption, lane: string, credential: string | undefined, teamId: string, signal: AbortSignal) {
   const started = Date.now();
   let stage: Stage = lane === "gateway" ? "gateway" : "provider";
-  const internalGatewayKey = process.env.MODEL_CANARY_AI_GATEWAY_API_KEY?.trim();
-  const internalGatewayCredential = credential === internalGatewayKey
-    && credential !== process.env.AI_GATEWAY_API_KEY?.trim()
-    && /^vck_\S+$/.test(credential ?? "");
   try {
-    if (!credential || (lane === "gateway" ? !internalGatewayCredential : isVercelAiGatewayKey(credential))) {
+    if (!credential || (lane === "gateway" ? credential !== modelCanaryGatewayKey() : isVercelAiGatewayKey(credential))) {
       return { outcome: "skipped" as const, stage: null, statusCode: null, safeError: "skipped_no_test_key", latencyMs: Date.now() - started };
     }
     const selected = selectModel(option.source, option.model, credential, option, { teamId, userId: FEATURE_FLAG_QA_USER_ID });
@@ -167,6 +170,8 @@ export async function runModelCanary(): Promise<ModelCanaryCounts> {
 
 async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCounts> {
   const counts: ModelCanaryCounts = { checked: 0, pass: 0, fail: 0, skipped: 0, inconclusive: 0 };
+  const gatewayKey = modelCanaryGatewayKey();
+  if (!gatewayKey) return counts;
   const started = Date.now();
   const deadline = started + BUDGET_MS;
   const redis = await getRedis();
@@ -178,7 +183,7 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
     if (teams.length !== 1) throw new Error("Model canary requires exactly one QA-owned team");
     const team = teams[0];
     const targets = modelCanaryInventory();
-    const credentials = new Map<string, string | undefined>([["gateway", process.env.MODEL_CANARY_AI_GATEWAY_API_KEY?.trim()]]);
+    const credentials = new Map<string, string | undefined>([["gateway", gatewayKey]]);
     for (const provider of new Set(targets.flatMap((target) => target.provider ? [target.provider] : []))) {
       signal.throwIfAborted();
       const definition = targets.find((target) => target.provider === provider)?.option;

@@ -18,10 +18,10 @@ This is internal monitoring, not a customer AI entry point.
 5. Correlate `model-canary` gateway requests by timestamp, model and QA user 985.
    The provider's request log must identify the approved internal key, not the
    All Trials Key. Org-wide credit totals are not routing proof.
-6. Missing, malformed or trials-identical internal configuration must skip
-   gateway inference. Exercise these negative cases with synthetic credentials
+6. Missing, malformed or trials-identical internal configuration disables
+   the entire run, with zero inference or status writes. Exercise these negative cases with synthetic credentials
    in `tests/htpr-7748-model-canary.test.cjs`, never by editing production keys.
-   Enabled direct-provider QA keys still run independently.
+   Enabled direct-provider QA keys run after internal configuration is valid.
 
 ## What usually breaks
 

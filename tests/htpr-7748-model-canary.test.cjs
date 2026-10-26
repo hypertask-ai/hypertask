@@ -147,22 +147,25 @@ test("canary gateway probes use only the internal key, never the trials key", as
   assert.ok(!selectedCredentials.includes(TRIALS));
 });
 
-test("missing, malformed or trials-reused internal key fails closed without disabling QA BYOK", async () => {
+test("missing, malformed or trials-reused internal key disables the whole canary until configured", async () => {
+  keys.set("openai", BYOK);
   for (const value of [undefined, "", " ", "sk_not_a_gateway_key", "vck_", "vck_contains whitespace", TRIALS, ` ${TRIALS} `]) {
     if (value === undefined) delete process.env.MODEL_CANARY_AI_GATEWAY_API_KEY;
     else process.env.MODEL_CANARY_AI_GATEWAY_API_KEY = value;
     redis = fakeRedis(); calls = []; selectedCredentials = [];
     const result = await canary.runModelCanary();
-    assert.equal(result.pass, 0);
+    assert.deepEqual(result, { checked: 0, pass: 0, fail: 0, skipped: 0, inconclusive: 0 });
     assert.equal(calls.length, 0);
     assert.deepEqual(selectedCredentials, []);
-    assert.ok((await rows()).filter((row) => row.lane === "gateway").every((row) => row.outcome === "skipped" && row.lastPassAt === null));
+    assert.equal(redis.values.size, 0);
+    assert.deepEqual(await rows(), []);
   }
-  keys.set("openai", BYOK);
+  process.env.MODEL_CANARY_AI_GATEWAY_API_KEY = KEY;
   const result = await canary.runModelCanary();
   assert.ok(result.pass > 0);
-  assert.ok(selectedCredentials.length > 0);
-  assert.ok(selectedCredentials.every((credential) => credential === BYOK));
+  assert.ok(selectedCredentials.includes(KEY));
+  assert.ok(selectedCredentials.includes(BYOK));
+  assert.ok(selectedCredentials.every((credential) => credential === KEY || credential === BYOK));
 });
 
 test("probe keeps actual provider options and allowance team tags, one prompt, no tools/history/retries", async () => {
