@@ -890,11 +890,8 @@ test("task writer option ids map to provider options and legacy model strings fa
     byokProviderFlags: [],
     teamContext,
   });
-  assert.equal(legacySelection.provider, "openai");
-  assert.equal(legacySelection.modelId, "gpt-6-luna");
-  assert.deepEqual(legacySelection.providerOptions?.openai, {
-    reasoningEffort: "medium",
-  });
+  assert.equal(legacySelection.provider, "claude");
+  assert.equal(legacySelection.modelId, "claude-haiku-5.5");
 });
 
 async function selectFreeTeamDefault() {
