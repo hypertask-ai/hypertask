@@ -54,7 +54,8 @@
     "landmarks": [
       "search"
     ],
-    "reason": "Approved Option A adds a Pages row under Table in the left bar. Only later rail items move down one row; the rail frame, board, inbox panel and ticket composer keep their existing positions. Approval: https://app.hypertask.ai/detail/project-15/7298#comment-289791."
+    "reason": "Approved Option A adds a Pages row under Table in the left bar. Only later rail items move down one row; the rail frame, board, inbox panel and ticket composer keep their existing positions. Approval: https://app.hypertask.ai/detail/project-15/7298#comment-289791.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7298"
   },
   {
     "flag": "htpr-7309-pages-screens",
@@ -63,6 +64,7 @@
     "landmarks": [
       "search"
     ],
-    "reason": "Approved Option A adds a Pages row under Table in the left bar. Only later rail items move down one row; the rail frame, board, inbox panel and ticket composer keep their existing positions. Approval: https://app.hypertask.ai/detail/project-15/7298#comment-289791."
+    "reason": "Approved Option A adds a Pages row under Table in the left bar. Only later rail items move down one row; the rail frame, board, inbox panel and ticket composer keep their existing positions. Approval: https://app.hypertask.ai/detail/project-15/7298#comment-289791.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7298"
   }
 ]
