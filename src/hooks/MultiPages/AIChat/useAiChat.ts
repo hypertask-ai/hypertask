@@ -52,7 +52,8 @@ export function useAiChat() {
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, parallelStreams: sessionStreams,
   } = useAiChatState(parallelChatsEnabled);
-  const parallelStreams = parallelChatsEnabled ? sessionStreams : undefined;
+  let parallelStreams = sessionStreams;
+  if (!parallelChatsEnabled) parallelStreams = undefined;
   useEffect(editWithAiEnabled ? () => {
     if (editTaskId === null) return;
     if (!showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
