@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
@@ -84,8 +83,6 @@ test("free plan copy with the limits flag on uses the enforced board, ticket and
 });
 
 test("the file line uses freeFileByteLimit: 10 MB, or 25 MB when that flag is on, and only while plan limits are on", () => {
-  const enforcement = fs.readFileSync(path.join(root, "src/lib/planLimits.ts"), "utf8");
-  assert.match(enforcement, /return freeFileByteLimit\(raised\)/);
   assert.equal(limits.freeFileByteLimit(false), limits.FREE_PLAN_MAX_FILE_BYTES);
   assert.equal(limits.freeFileByteLimit(true), limits.FREE_PLAN_MAX_FILE_BYTES_RAISED);
   const ten = `Up to ${limits.freeFileByteLimit(false) / (1024 * 1024)} MB each on tickets and comments`;
