@@ -12,6 +12,17 @@ For a runner takeover, `ship-claim` first resolves the claim race, then shows ex
 
 Verify takeover changes with `bash .claude/skills/ship/scripts/ship-claim.test.sh` from the installed production copy. The full-flow replay must keep the original question, show its link, and write an agent-lane handoff without another question. Read the original incident's comments through the CLI to confirm their links and replies remain available. Never claim another runner's real ticket for QA.
 
+The installed `~/.local/bin/session-policy-guard` runs first, even for a
+read-only plan. It audits active subscription settings and refuses fast or
+router drift before any board read or work delivery. The private company pack
+owns the guard. A missing guard is a refusal, never an implicit approval.
+
+The standing hax pool source is `.claude/skills/ship/scripts/ht-hax-runner`.
+`ht-hax-runner check` validates its exact pinned launch options without creating
+an identity, pane, prompt or model request. It also checks admission before
+creating a new pool pane and before each subsequent ticket session. Install
+updates only after its owning runner finishes; never interrupt active tickets.
+
 ## What usually breaks
 
 - A helper script the dispatcher calls is not where it looks (YPER4-577: `runner-snapshot` stayed in the runners skill).
@@ -21,7 +32,7 @@ Verify takeover changes with `bash .claude/skills/ship/scripts/ship-claim.test.s
 
 ## What proof to collect
 
-The resolved snapshot path, the runner row count, and the read-only plan output with its exit code, rendered to a PNG. Never run `--go` for QA. Never print tokens.
+The resolved snapshot path, the runner row count, the subscription guard verdict, `ht-hax-runner check`, and the read-only plan output with exit codes, rendered to a PNG. Never run `--go` for QA. Never print tokens.
 
 ## Zero-runner alarm
 

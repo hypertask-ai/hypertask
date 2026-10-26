@@ -39,6 +39,11 @@ account's inbox stays empty between runs.
 
 The PR check runs on a disposable loopback app, and the live script on QA Sandbox; neither covers the phone layout yet (`--phone` exists on the live script but is not required).
 
+- Reply from a board-opened ticket after its Inbox reminder arrives. The reply
+  must archive that new message even though the ticket initially had none.
+  Check both desktop and phone, then reload the Inbox. The board-opened ticket
+  stays open; the advance-on-send preference still controls Inbox-flow navigation.
+
 ## Blocked by you bulk archive
 
 With `htpr-7970-bulk-blocked-inbox` and `htpr-7840-blocked-inbox-archive`
