@@ -59,4 +59,3 @@ test("Ctrl+K exposes version history only on task detail", () => {
   assert.match(commands, /!taskProps\?\.isKanban/);
   assert.match(commands, /CommandMode\.TaskDescriptionVersions/);
 });
-
