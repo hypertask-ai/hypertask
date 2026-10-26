@@ -17,7 +17,7 @@ on:
     branches: [production]
 
 concurrency:
-  group: ci-tests-${{ github.event.pull_request.number || github.ref }}
+  group: ci-tests-${{ github.event.pull_request.number || github.sha }}
   # Superseded PR runs are waste, but every production run must finish its full
   # test report and warning path.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
