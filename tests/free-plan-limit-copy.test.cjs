@@ -139,7 +139,7 @@ test("trial comparison keeps production columns until the copy flag is on", () =
 test("the trial table renders each plan's own features only when the copy flag is on", () => {
   const shown = { corrected: false };
   const table = load("src/components/Modals/TrialPlan/TrialPlanComponents.tsx", {
-    "@/components/Common/IconsGlobal": { IconsGlobal: { Check: () => null } },
+    "@/components/Common/IconsGlobal": { IconsGlobal: { Check: ({ variant }) => React.createElement("i", { "data-check": variant }) } },
     "@/lib/serverActions": { getTeamById: async () => null },
     "@/lib/subscriptionPlans": plans,
     "@/lib/flags/definitions/htpr-7686-free-plan-copy": { HTPR_7686_FREE_PLAN_COPY_FLAG: "htpr-7686-free-plan-copy" },
@@ -167,4 +167,13 @@ test("the trial table renders each plan's own features only when the copy flag i
   assert.equal(starter.includes("Priority"), false);
   assert.equal(pro.includes("Priority"), true);
   assert.equal(pro.includes("Your API keys"), false);
+  assert.equal(starter.includes('data-check="gray"'), true);
+  assert.equal(starter.includes('data-check="black"'), false);
+  assert.equal(starter.includes('data-check="purple"'), false);
+  assert.equal(pro.includes('data-check="purple"'), true);
+  assert.equal(pro.includes('data-check="black"'), true);
+  assert.equal(pro.includes('data-check="gray"'), false);
+  assert.equal(off.includes('data-check="gray"'), true);
+  assert.equal(off.includes('data-check="purple"'), true);
+  assert.equal(off.includes('data-check="black"'), true);
 });

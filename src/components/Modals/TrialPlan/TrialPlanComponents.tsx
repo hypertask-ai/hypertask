@@ -145,8 +145,25 @@ export const PlansTable = ()=>{
                 <div className="flex xs:gap-3 lg:gap-8">
                     {useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG) ? (
                     <>
-                    <OwnPlanColumn perks={columns.starter} highlighted={false} />
-                    <OwnPlanColumn perks={columns.proWithAi} highlighted />
+                    {([
+                        ["starter", columns.starter, false],
+                        ["pro", columns.proWithAi, true],
+                    ] as const).map(([key, perks, highlighted]) => (
+                        <div key={key} className={highlighted ? "xs:px-3 lg:px-6 bg-sidebar dark:bg-active-elementBg py-2" : "lg:px-4 xs:px-2 py-2"}>
+                            <div className={highlighted ? "flex gap-2 items-center font-bold" : undefined}>
+                                <ColumnTitle content={highlighted ? "Pro with " : "Starter"} />
+                                {highlighted ? <span className="text-hypertasks-ai-purple text-heading min-h-[40px] mb-2">AI</span> : null}
+                            </div>
+                            <div className={`flex flex-col ${highlighted ? "items-center" : ""}`}>
+                                {perks.map((perk, index) => (
+                                    <div key={`${key}-${index}`}>
+                                        <RowContent type="title" AIPrefix={!!perk.titlePrefix} content={perk.title} />
+                                        <RowContent type="amount" checkVariant={highlighted ? (perk.titlePrefix ? "AI" : "black") : "gray"} showCheck={highlighted ? true : !perk.excludeCheck} content={perk.amount} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
                     </>
                     ) : (
                     <>
@@ -207,35 +224,3 @@ const ColumnTitle = ({ content }: any) => {
         <span className="min-h-[40px] mb-2 block font-bold text-heading whitespace-nowrap" >{content}</span>
     )
 }
-
-const OwnPlanColumn = ({
-    perks,
-    highlighted,
-}: {
-    perks: { titlePrefix?: string; title: string; amount: string; excludeCheck?: boolean }[];
-    highlighted: boolean;
-}) => (
-    <div className={highlighted ? "xs:px-3 lg:px-6 bg-sidebar dark:bg-active-elementBg py-2" : "lg:px-4 xs:px-2 py-2"}>
-        {highlighted ? (
-            <div className="flex gap-2 items-center font-bold">
-                <span className="min-h-[40px] mb-2 block font-bold text-heading whitespace-nowrap">Pro with </span>
-                <span className="text-hypertasks-ai-purple text-heading min-h-[40px] mb-2">AI</span>
-            </div>
-        ) : (
-            <span className="min-h-[40px] mb-2 block font-bold text-heading whitespace-nowrap">Starter</span>
-        )}
-        <div className={`flex flex-col ${highlighted ? "items-center" : ""}`}>
-            {perks.map((perk, index) => (
-                <div key={`perk-${index}`}>
-                    <div className="flex gap-2 lg:gap-3 pb-3 items-center font-medium text-meta sm:text-content lg:text-emphasis">
-                        {perk.titlePrefix ? <span className="text-hypertasks-ai-purple">AI</span> : null}
-                        <span className="whitespace-nowrap">{perk.title}</span>
-                    </div>
-                    <div className="flex gap-2 lg:gap-3 pb-3 items-center font-normal text-meta sm:text-content lg:text-emphasis">
-                        <span className="whitespace-nowrap">{perk.amount}</span>
-                    </div>
-                </div>
-            ))}
-        </div>
-    </div>
-);
