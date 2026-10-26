@@ -60,6 +60,7 @@ const BillingSection = () => {
     useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [portalAvailable, setPortalAvailable] = useState(false);
   const [billingData, setBillingData] = useState<SettingsBillingData | null>(
     null
   );
@@ -153,6 +154,25 @@ const BillingSection = () => {
       cancelled = true;
     };
   }, [team?.id, team?.stripe_customer_id, project?.id, portalBillingEnabled]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPortalAvailable(false);
+    if (!portalBillingEnabled) return;
+
+    (async () => {
+      try {
+        const response = await axios.get<{ available: boolean }>("/api/stripe/billing-portal");
+        if (!cancelled) setPortalAvailable(response.data.available === true);
+      } catch {
+        if (!cancelled) setPortalAvailable(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [portalBillingEnabled]);
 
   const saveBillingEmail = async () => {
     const email = billingEmailDraft.trim();
@@ -271,7 +291,7 @@ const BillingSection = () => {
               {openingCheckout ? "Opening checkout…" : "Upgrade"}
             </button>
           } />}
-          {team?.stripe_customer_id && <BillingActionRow label="Manage billing" action={
+          {portalAvailable && team?.stripe_customer_id && <BillingActionRow label="Manage billing" action={
             <button className={actionButtonClass} type="button"
               disabled={!isOwner || openingPortal} onClick={openBillingPortal}>
               {openingPortal ? "Opening billing…" : "Manage billing"}

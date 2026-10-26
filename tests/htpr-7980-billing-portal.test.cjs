@@ -41,7 +41,7 @@ stub("src/lib/stripe.ts", { getStripeInstance: () => ({ billingPortal: {
 } }) });
 const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const policy = jiti(path.join(root, "src/lib/stripeBillingPortal.ts"));
-const { POST } = jiti(path.join(root, "src/app/api/stripe/billing-portal/route.ts"));
+const { GET, POST } = jiti(path.join(root, "src/app/api/stripe/billing-portal/route.ts"));
 const request = (body = { teamId: "team_owned" }) => new Request("https://app.hypertask.ai/api/stripe/billing-portal", {
   method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" },
 });
@@ -117,4 +117,30 @@ test("provisioner rejects live keys before touching Stripe", async () => {
   process.env.STRIPE_SECRET_KEY = "sk_live_refused_fixture";
   await assert.rejects(provisionTestBillingPortal("/unused"), /live provisioning is forbidden/);
   process.env.STRIPE_SECRET_KEY = "sk_test_fixture";
+});
+
+test("portal availability requires sign-in and never calls Stripe", async () => {
+  user = null;
+  assert.equal((await GET()).status, 401);
+  assert.deepEqual([flagLookups, retrieved, sessions, legacy], [[], [], [], []]);
+});
+for (const [name, value, available] of [
+  ["missing configuration", undefined, false],
+  ["blank configuration", "  ", false],
+  ["invalid configuration", "not_a_configuration", false],
+  ["configured portal", " bpc_dedicated ", true],
+]) test(`portal availability reports ${name} without exposing the ID`, async () => {
+  if (value === undefined) delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
+  else process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = value;
+  const response = await GET();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { available });
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual([retrieved, sessions, legacy], [[], [], []]);
+});
+test("portal availability respects the server ticket flag", async () => {
+  enabled = false;
+  const response = await GET();
+  assert.deepEqual(await response.json(), { available: false });
+  assert.deepEqual([retrieved, sessions, legacy], [[], [], []]);
 });

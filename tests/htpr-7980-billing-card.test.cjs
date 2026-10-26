@@ -9,7 +9,7 @@ const axios = require("axios");
 const root = path.resolve(__dirname, "..");
 const slots = ["MONTHLY_PRICE_ID_BYOK", "YEARLY_PRICE_ID_BYOK", "MONTHLY_PRICE_ID_PRO", "YEARLY_PRICE_ID_PRO"];
 for (const [i, slot] of slots.entries()) process.env[`NEXT_PUBLIC_STRIPE_${slot}`] = `price_choice_${i}`;
-let team, refreshedTeam, enabled, userId, requests, redirects, refreshCount, dom, mounted;
+let team, refreshedTeam, enabled, portalAvailable, availabilityError, userId, requests, redirects, refreshCount, dom, mounted;
 function stub(rel, exports) {
   const filename = path.join(root, rel);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
@@ -41,13 +41,19 @@ function subscribed(status = "active", extra = {}) {
   }] };
 }
 beforeEach(() => {
-  enabled = true; userId = 985; refreshCount = 0; requests = []; redirects = [];
+  enabled = true; portalAvailable = true; availabilityError = false; userId = 985; refreshCount = 0; requests = []; redirects = [];
   team = { id: "team_selected", title: "Selected", stripe_customer_id: "", totalSeats: 3,
     googleAccountId: "account_owned", subscriptionPlan: [], googleAccount: { userId: 985 } };
   refreshedTeam = team;
   global.React = React;
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  axios.get = async () => ({ data: { customerEmail: null, invoices: [], upcomingInvoice: null } });
+  axios.get = async (url) => {
+    if (url === "/api/stripe/billing-portal") {
+      if (availabilityError) throw new Error("Unavailable");
+      return { data: { available: portalAvailable } };
+    }
+    return { data: { customerEmail: null, invoices: [], upcomingInvoice: null } };
+  };
   axios.post = async (url, body) => { requests.push({ url, body }); return { data: { url: "https://stripe.test/hosted" } }; };
 });
 afterEach(async () => {
@@ -135,4 +141,38 @@ test("a custom price with no saved amount never invents the public Pro price", (
 test("a terminal subscription row and stale pointer retain the unsubscribed Free path", () => {
   team = subscribed("canceled");
   assert.deepEqual(settingsBillingSummary(team), { plan: "Free", price: "$0", status: "Free", hasSubscription: false, canUpgrade: true });
+});
+
+for (const status of ["trialing", "active", "past_due"]) test(`${status} portal action stays hidden without server configuration`, async () => {
+  portalAvailable = false;
+  team = subscribed(status); team.stripe_customer_id = "cus_selected"; refreshedTeam = team;
+  await render();
+  assert.ok(![...document.querySelectorAll("button")].some(button => button.textContent === "Manage billing"));
+  assert.match(document.body.textContent, /PlanProPrice/);
+  assert.deepEqual(requests, []);
+  assert.deepEqual(redirects, []);
+});
+test("portal availability errors keep the action hidden", async () => {
+  availabilityError = true;
+  team = subscribed(); team.stripe_customer_id = "cus_selected"; refreshedTeam = team;
+  await render();
+  assert.ok(![...document.querySelectorAll("button")].some(button => button.textContent === "Manage billing"));
+  assert.deepEqual(requests, []);
+});
+test("unconfigured portal does not block existing Free checkout", async () => {
+  portalAvailable = false;
+  await render();
+  await click("Upgrade"); await click("Pro · Monthly");
+  assert.deepEqual(redirects, ["https://stripe.test/hosted"]);
+});
+
+test("portal stays hidden until availability is confirmed", async () => {
+  let resolveAvailability;
+  axios.get = () => new Promise(resolve => { resolveAvailability = resolve; });
+  team = subscribed(); team.stripe_customer_id = "cus_selected"; refreshedTeam = team;
+  await render();
+  assert.ok(![...document.querySelectorAll("button")].some(button => button.textContent === "Manage billing"));
+  await React.act(async () => resolveAvailability({ data: { available: true } }));
+  await click("Manage billing");
+  assert.deepEqual(requests, [{ url: "/api/stripe/billing-portal", body: { teamId: "team_selected" } }]);
 });

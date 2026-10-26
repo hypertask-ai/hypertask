@@ -9,6 +9,17 @@ import { createConfiguredBillingPortalSession } from "@/lib/stripeBillingPortal"
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+export async function GET() {
+  const user = await getServerCookieUser();
+  if (!user) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const available = await isFeatureEnabled(HTPR_7980_STRIPE_PORTAL_BILLING_FLAG, user.id) &&
+    Boolean(process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID?.trim().startsWith("bpc_"));
+  return NextResponse.json({ available }, { headers: { "Cache-Control": "no-store" } });
+}
+
 export async function POST(request: Request) {
   const user = await getServerCookieUser();
   if (!user) {
