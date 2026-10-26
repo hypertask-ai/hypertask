@@ -69,6 +69,7 @@ export function getBoardConfigBaseSchema() {
   return z
     .object({
       action: z.enum([
+        'get_hygiene',
         'get_playbook',
         'set_playbook',
         'get_instructions',

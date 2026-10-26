@@ -196,7 +196,7 @@ const RAW_TOOL_METADATA = {
   BOARD_CONFIG: {
     name: buildToolName('board_config'),
     description:
-      "Gets or sets a board's playbook or AI custom instructions. Use the matching action before agent work or when board-level guidance changes.",
+      "Gets a read-only board hygiene report (get_hygiene), or gets/sets a board's playbook or AI custom instructions. Hygiene reports untagged open tickets, possible duplicate tags, missing shared tag views and Title Case suggestions; it changes nothing.",
   },
 
   CREATE_BOARD: {
