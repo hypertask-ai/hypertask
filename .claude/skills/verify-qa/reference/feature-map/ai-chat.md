@@ -28,6 +28,16 @@ only and may validly be fewer or absent when no specific improvement is justifie
 Record the effective flag and response. If chips are returned, wait for them
 (about 10 s), click one and check it is sent and answered in the same chat.
 
+## Floating chat outline
+
+Open chat from a task, use the overflow menu's **Toggle Floating View**, then
+navigate to Inbox and reopen chat if navigation closed it. In AMOLED the
+floating window has a quiet 1px outline and 5px corners, including the outer
+phone sheet. Capture 1440x900 and 390x844 over the inbox. Compare the window
+size with the outline disabled; it must not change. Porcelain, Graphite and
+Dia keep their existing outlines and corners. The rollback flag is
+`htpr-8042-amoled-chat-border`.
+
 ## Unsent message drafts
 
 In both the docked sidebar and `/chat`, type while a reply streams.
