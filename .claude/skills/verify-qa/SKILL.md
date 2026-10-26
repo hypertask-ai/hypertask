@@ -65,6 +65,8 @@ Never use Valentin's account, password, or cookies. If the shot is a login page,
 
 ## Steps
 
+- Before diagnosing missing or red PR checks, read the PR merge state; resolve conflicts and rebase first, then inspect checks on the new head.
+- For a tool or route, name its parse or dispatch layer on the ticket, test through that entry point, and name the tested layer in the proof; helper-only tests do not count.
 0. **Pick the feature-map page** for the area the ticket touches, from `reference/feature-map/INDEX.md`. Read only that page. It says how a customer reaches the area, how to drive it, what usually breaks, what proof to collect, and the cleanup. If the area has no page, or this change altered the UI, add or update the page in the same pull request before you call the run done (maintain-verification-skill: the map stays honest with the app).
 1. **Doctor first.** On a login landing, run `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id from the table>` first: `identity ok` means fix state loading, not refresh; only `identity expired` means refresh that identity (YPER4-607, https://app.hypertask.ai/detail/project-4060/607). Do not judge the change until both are true:
    - The GitHub Production deployment for the merge sha is `success`.
