@@ -8,6 +8,7 @@ import { applySubTaskSetting } from '@/utils/helperFunctions/Views/SubtaskHelper
 import {
   BoardView,
   BUILTIN_VIEWS,
+  BUILTIN_VIEW_IDS,
   buildBuiltinViewContext,
   getActiveBoardViewId,
   isBuiltinView,
@@ -88,7 +89,7 @@ const useRenderedViews = (project: IProject | null) => {
 
     return views.filter((view) => {
       const count = viewTaskCounts.get(view.id) ?? 0
-      return count > 0 || view.id === defaultViewId || view.id === activeViewId
+      return count > 0 || view.id === defaultViewId || view.id === activeViewId || view.id === BUILTIN_VIEW_IDS.blockedByMe
     })
   }, [activeViewId, defaultViewId, showEmptyViewTabs, viewTaskCounts, views])
 

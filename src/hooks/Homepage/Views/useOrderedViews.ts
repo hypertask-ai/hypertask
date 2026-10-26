@@ -1,16 +1,25 @@
 import { useEffect, useMemo } from 'react'
-import { useRecoilValue } from '@/lib/state'
+import { useRecoilValue, useSetRecoilState } from '@/lib/state'
 import { IProject } from '@/models/model'
-import { optimisticViewTabsOrderAtom, viewTabsOrderAtom } from '@/store'
+import { activeBuiltinViewsAtom, boardLayoutAtom, boardLayoutPreferenceAtom, optimisticViewTabsOrderAtom, viewTabsOrderAtom } from '@/store'
 import { saveViewOrder } from '@/utils/api/viewOrder'
 import { asViewOrder, sortViewsByOrder } from '@/utils/helperFunctions/Views/ViewOrderHelperFunctions'
 import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, buildBuiltinViewContext, type BoardView } from '@/lib/constants/builtinViews'
-import { useFlag } from '@/hooks/useFlag'
-import { HTPR_7092_DECISIONS_FLAG } from '@/lib/flags/keys'
+import { useRouter } from 'next/navigation'
+import { getActiveBoardLayoutPreferenceFromProject, replaceProjectSurface, savedBoardLayoutToClient } from '@/utils/helperFunctions/Views/ViewsHelperFunctions'
+import { useFlag, useFlagLoaded } from '@/hooks/useFlag'
+import { HTPR_7092_DECISIONS_FLAG, HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/keys'
 
 const localOrderMigrations = new Set<number>()
 
 const useOrderedViews = (project: IProject | null): BoardView[] => {
+  const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
+  const blockedByMeLoaded = useFlagLoaded(HTPR_7804_BLOCKED_BY_ME_FLAG)
+  const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom)
+  const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom)
+  const setBoardLayout = useSetRecoilState(boardLayoutAtom)
+  const boardLayoutPreference = useRecoilValue(boardLayoutPreferenceAtom)
+  const router = useRouter()
   const decisionsEnabled = useFlag(HTPR_7092_DECISIONS_FLAG)
   const viewOrder = useRecoilValue(viewTabsOrderAtom)
   const optimisticViewOrder = useRecoilValue(optimisticViewTabsOrderAtom)
@@ -24,6 +33,22 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
   const effectiveOrder = projectId === undefined
     ? undefined
     : optimisticViewOrder[projectId] ?? userServerOrder ?? projectDefaultOrder ?? localOrder
+
+  useEffect(() => {
+    if (!blockedByMeLoaded || blockedByMeEnabled || !project || activeBuiltinViews[project.id] !== BUILTIN_VIEW_IDS.blockedByMe) return
+    setActiveBuiltinViews((active) => {
+      if (active[project.id] !== BUILTIN_VIEW_IDS.blockedByMe) return active
+      const next = { ...active }
+      delete next[project.id]
+      return next
+    })
+    setBoardLayout(savedBoardLayoutToClient(getActiveBoardLayoutPreferenceFromProject(project)) ?? boardLayoutPreference)
+    replaceProjectSurface({
+      currentHref: window.location.href,
+      surface: null,
+      replace: (destination, options) => router.replace(destination, options),
+    })
+  }, [activeBuiltinViews, blockedByMeEnabled, blockedByMeLoaded, boardLayoutPreference, project, router, setActiveBuiltinViews, setBoardLayout])
 
   useEffect(() => {
     if (
@@ -46,10 +71,13 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
     const context = buildBuiltinViewContext(project)
     const views: BoardView[] = [
       ...all.filter((view) => view.id !== unsavedViewId),
-      ...BUILTIN_VIEWS.filter((view) => !view.available || view.available(context)),
+      ...BUILTIN_VIEWS.filter((view) => (
+        (blockedByMeEnabled || view.id !== BUILTIN_VIEW_IDS.blockedByMe) &&
+        (!view.available || view.available(context))
+      )),
     ]
     return sortViewsByOrder(views, effectiveOrder, defaultViewId)
-  }, [project, defaultViewId, unsavedViewId, effectiveOrder])
+  }, [project, defaultViewId, unsavedViewId, effectiveOrder, blockedByMeEnabled])
   const viewsWithoutDecisions = useMemo(
     () => allViews.filter((view) => view.id !== BUILTIN_VIEW_IDS.decisions),
     [allViews],

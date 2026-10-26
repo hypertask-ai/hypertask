@@ -10,6 +10,7 @@ const builtinCases = [
   ["builtin:my-tasks", "My Tasks excludes owned agents", ["a", "c", "h"]],
   ["builtin:overdue", "Overdue excludes Done Archive Deleted and missing dates", ["b"]],
   ["builtin:blocked", "Blocked person or ticket dependency", ["a", "b", "c"]],
+  ["builtin:blocked-by-me", "Blocked by current viewer only", ["a"]],
   ["builtin:agents", "Agents", ["b", "c", "h", "e"]],
   ["builtin:current-cycle", "Current cycle", ["a", "b"]],
   ["builtin:next-cycle", "Next cycle", ["c"]],

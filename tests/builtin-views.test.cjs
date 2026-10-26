@@ -25,6 +25,7 @@ test("built-in views have stable ids in their fixed order", () => {
       ["builtin:my-tasks", "My Tasks"],
       ["builtin:overdue", "Overdue"],
       ["builtin:blocked", "Blocked"],
+      ["builtin:blocked-by-me", "Blocked by me"],
       ["builtin:agents", "Agents"],
       ["builtin:current-cycle", "Current cycle"],
       ["builtin:next-cycle", "Next cycle"],

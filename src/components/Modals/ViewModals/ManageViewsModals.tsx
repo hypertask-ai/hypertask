@@ -19,7 +19,7 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { asViewOrder, sortViewsByOrder } from "@/utils/helperFunctions/Views/ViewOrderHelperFunctions";
-import { BUILTIN_VIEWS, isBuiltinView, viewTabPreferenceKey, type BoardView } from "@/lib/constants/builtinViews";
+import { isBuiltinView, viewTabPreferenceKey, type BoardView } from "@/lib/constants/builtinViews";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { getSmartSplitLabel } from "@/lib/smartSplits";
 import SmartSplitModal from "./SmartSplitModal";
@@ -121,7 +121,7 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
         const { allViews = [], default_view_id, user_project_views } = currentProject.project_view ?? {}
         const unsavedViewId = user_project_views?.[0]?.unsavedView?.id
         const resetViews = sortViewsByOrder<BoardView>(
-            [...allViews.filter((view) => view.id !== unsavedViewId), ...BUILTIN_VIEWS],
+            [...allViews.filter((view) => view.id !== unsavedViewId), ...orderedViews.filter(isBuiltinView)],
             projectDefaultOrder,
             default_view_id
         )
