@@ -130,12 +130,12 @@ export async function POST(request: NextRequest) {
 
     const modelReset = await ensureHtpr7038ModelReset(user.id);
     let body: Record<string, unknown>;
-    const result = await readJsonBody<Record<string, unknown>>(request, {
+    const bodyResult = await readJsonBody<Record<string, unknown>>(request, {
       invalidJson: () => NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 }),
       invalidObject: () => NextResponse.json({ success: false, error: "Invalid preferences" }, { status: 400 }),
     });
-    if (!result.ok) return result.response;
-    body = result.body;
+    if (!bodyResult.ok) return bodyResult.response;
+    body = bodyResult.body;
 
     let calendarViewsOperation: CalendarViewsOperation | undefined;
     if (body.calendarViews !== undefined) {

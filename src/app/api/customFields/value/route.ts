@@ -34,7 +34,7 @@ async function setCustomFieldValue(request: NextRequest) {
 
     let body: Awaited<ReturnType<typeof request.json>>;
     let jsonError: unknown;
-    const result = await readJsonBody<typeof body>({
+    const bodyResult = await readJsonBody<typeof body>({
       json: async () => {
         try {
           body = await request.json();
@@ -48,7 +48,7 @@ async function setCustomFieldValue(request: NextRequest) {
       invalidJson: () => { throw jsonError },
       invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
     });
-    if (result.ok) body = result.body;
+    if (bodyResult.ok) body = bodyResult.body;
     const { fieldId, taskId, value } = body;
 
     if (!fieldId || !taskId) {
