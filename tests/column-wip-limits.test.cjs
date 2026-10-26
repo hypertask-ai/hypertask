@@ -36,7 +36,7 @@ function fixture({ allowed = true, enabled = true } = {}) {
     "@/utils/controllers/notifications/agentFirstTaskEmail": {},
     "@/lib/telemetry/activationOccurrences": {},
     "@/lib/telemetry/savedWork": { enqueueColumnRenamed: async () => null },
-    "./viewHelpers": { updateSectionInAllViews: async () => {} },
+    "./viewHelpers": { updateSectionInAllViews: async () => {}, removeSectionFromAllViews: async () => {} },
   };
   const update = load("src/utils/controllers/section/update.ts", mocks).default;
   return { section, writes, update: (newSection) => update(985, 11, newSection) };
@@ -114,5 +114,13 @@ test("flag Off refuses limit writes without blocking ordinary column edits", asy
   assert.equal((await f.update({ wipLimit: 2 })).status, 403);
   assert.deepEqual(f.writes, []);
   assert.equal((await f.update({ ranking: "A2", wipLimit: 3 })).status, 200);
+  assert.equal(f.section.wipLimit, 3);
+});
+
+test("flag Off lets legacy full-section deletion preserve unchanged limit metadata", async () => {
+  const f = fixture({ enabled: false });
+  const response = await f.update({ ...f.section, deleted: true });
+  assert.equal(response.status, 204);
+  assert.equal(f.section.deleted, true);
   assert.equal(f.section.wipLimit, 3);
 });
