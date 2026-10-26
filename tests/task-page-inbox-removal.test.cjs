@@ -135,9 +135,11 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
   global.window = { dispatchEvent: () => {} };
   global.document = { querySelector: () => null, getElementById: () => null };
   global.fetch = async (url, options) => {
-    requests.push(url);
+    assert.equal(options.method, "POST");
+    const body = JSON.parse(options.body);
+    requests.push(`${url}?${new URLSearchParams(Object.entries(body).map(([name, value]) => [name, String(value)]))}`);
     const res = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json() { return this; } };
-    await route({ method: options.method, headers: {}, query: Object.fromEntries(new URL(url, "https://app.hypertask.ai").searchParams) }, res);
+    await route({ method: options.method, headers: {}, query: {}, body }, res);
     return { ok: res.statusCode === 200 };
   };
   client.invalidateQueries = async (options) => {
