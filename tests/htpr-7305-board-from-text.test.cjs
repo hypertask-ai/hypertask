@@ -4,6 +4,7 @@ const path = require("node:path");
 const Module = require("node:module");
 const { test } = require("node:test");
 const React = require("react");
+const { notifyManager, defaultScheduler } = require("@tanstack/react-query");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
@@ -166,6 +167,8 @@ test("removing a match or adding a second board restores the contextual board be
 });
 
 test("a cold board list cannot race Enter or Send and save on the old board", async (t) => {
+  notifyManager.setScheduler(queueMicrotask);
+  t.after(() => notifyManager.setScheduler(defaultScheduler));
   await withPalette(t, { newWindow: true, boardChip: false, tab: "compose", url: "/project?id=7" }, async ({ flags, rerender, type, press, requests }) => {
     let resolveBoards;
     const api = require.cache[path.join(root, "src/utils/api/global/index.ts")].exports.default;
@@ -179,7 +182,6 @@ test("a cold board list cannot race Enter or Send and save on the old board", as
     api.getAllProjectsMinimal = async () => boards;
     await React.act(async () => {
       resolveBoards(boards);
-      await new Promise((resolve) => setTimeout(resolve, 5));
     });
     assert.equal(document.querySelector('[aria-label="Send message"]').disabled, false);
     await press("Enter", { code: "Enter" });
