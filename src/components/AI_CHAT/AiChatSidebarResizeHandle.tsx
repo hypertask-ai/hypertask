@@ -27,13 +27,12 @@ export function AiChatSidebarResizeHandle() {
   const widthRef = useRef(widthPx);
   widthRef.current = widthPx;
 
-  const needsMigration = rememberWidth && userId !== undefined && preferredWidths === null
-    && widthPx !== AI_CHAT_SIDEBAR_DEFAULT_PX;
+  const needsMigration = rememberWidth && userId !== undefined && preferredWidths === null;
   useEffect(() => {
-    if (needsMigration && userId !== undefined) {
+    if (needsMigration && userId !== undefined && widthPx !== AI_CHAT_SIDEBAR_DEFAULT_PX) {
       setPreferredWidths({ [userId]: widthRef.current });
     }
-  }, [needsMigration, userId, setPreferredWidths]);
+  }, [needsMigration, userId, widthPx, setPreferredWidths]);
 
   useEffect(() => {
     const onResize = () => {
