@@ -16,6 +16,8 @@ const pairedView = {
   id: "paired",
   project_view_id: "project-view-15",
   visibility: "Public",
+  userId: 6,
+  unsaved_User_Project_View: [],
   project_view: { id: "project-view-15", projectId: 15, project: { ownerId: 6, members: [] } },
   board_filters: {
     matchFilters: "ALL",

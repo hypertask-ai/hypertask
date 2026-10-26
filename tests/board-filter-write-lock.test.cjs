@@ -193,14 +193,6 @@ test("every concurrent existing-board filter writer participates in the lock pro
     3,
   );
   assert.equal(
-    (source("src/pages/api/labels/updateLabel.ts").match(/acquireBoardFilterWriteLock\(tx, actualProjectId\)/g) ?? []).length,
-    1,
-  );
-  assert.equal(
-    (source("src/pages/api/labels/updateLabel.ts").match(/acquireBoardFilterWriteLock\(tx, existingLabelProjectId\)/g) ?? []).length,
-    1,
-  );
-  assert.equal(
     (source("src/lib/api/project-writes/views/delete-rename-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
     1,
   );

@@ -4,10 +4,12 @@ import { currentProjectAtom, currentUserAtom } from '@/store';
 import globalAPIHandlers from '@/utils/api/global';
 import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react'
+import axios from "axios";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { ModalBody, ModalFooter } from 'reactstrap'
 import ConfirmDialog from '@/components/Modals/Common Modals/ConfirmDialog'
 import { useRecoilState } from '@/lib/state';
+import { getProjectLabelView } from "@/lib/projectLabelViews";
 import { ModalContainerCustom, ModalHeaderComp } from '@/components/Common/CommonModalComponents';
 
 const MAX_AI_PROMPT_LENGTH = 1000;
@@ -29,6 +31,11 @@ const EditSingleLabel = (
     const [prompt, setPrompt] = useState(label.ai_prompt ?? "")
     const queryClient = useQueryClient();   
     const [confirming, setConfirming] = useState<boolean>(false)
+    const [error, setError] = useState("");
+    const hasProjectView = getProjectLabelView(
+        currentProject?.project_view?.allViews ?? [],
+        label
+    ) !== undefined;
 
     const onKeyChange = (e:any)=>{
         setTitle(e.target.value)
@@ -38,23 +45,30 @@ const EditSingleLabel = (
         <ArrowLeft size={18} strokeWidth={1.75} className="close cursor-pointer hover:text-heading transition-all " onClick={()=>onClose&&onClose()} />
         );
 
-    const updateLabel = async() =>{
+    const updateLabel = async(projectView = false) =>{
         if (
             !title.trim() ||
             (legacySmartLabel && (!prompt.trim() || prompt.length > MAX_AI_PROMPT_LENGTH))
         ) return
         setConfirming(true)
-        await globalAPIHandlers.updateLabelAPI(
-            title,
-            label.id,
-            legacySmartLabel ? prompt.trim() : undefined
-        )
-        saveChanges()
-
+        setError("");
+        try {
+            await globalAPIHandlers.updateLabelAPI(
+                title.trim(),
+                label.id,
+                legacySmartLabel ? prompt.trim() : undefined,
+                projectView || undefined
+            )
+            await saveChanges()
+        } catch (error) {
+            const message = axios.isAxiosError(error) ? error.response?.data?.message : undefined;
+            setError(typeof message === "string" ? message : "Could not save tag. Try again.");
+            setConfirming(false);
+        }
     }
 
     const saveChanges = async()=>{
-        queryClient.refetchQueries({queryKey:[projectLabelsPrefix, label.projectId]})
+        await queryClient.refetchQueries({queryKey:[projectLabelsPrefix, label.projectId]})
         await queryClient.refetchQueries({queryKey:["projectsAll"]})
     
         onClose(true)
@@ -63,8 +77,15 @@ const EditSingleLabel = (
     const deleteTag = async() =>{
         setConfirming(true)
         setDeleteModal(false)
-        await globalAPIHandlers.deleteLabelAPI(label.id, currentProject?.id, currentUser?.id)
-        saveChanges()
+        setError("");
+        try {
+            await globalAPIHandlers.deleteLabelAPI(label.id, currentProject?.id, currentUser?.id)
+            await saveChanges()
+        } catch (error) {
+            const message = axios.isAxiosError(error) ? error.response?.data?.message : undefined;
+            setError(typeof message === "string" ? message : "Could not delete tag. Try again.");
+            setConfirming(false);
+        }
     }
 
     return (
@@ -109,7 +130,7 @@ const EditSingleLabel = (
                        placeholder="Describe which tasks belong in this smart label"
                        className="mt-2 min-h-[96px] w-full resize-y bg-transparent text-content font-normal text-white-black outline-none placeholder:text-text-light-gray"
                      />
-                     <span className={`mt-2 text-right text-micro ${prompt.length > MAX_AI_PROMPT_LENGTH ? "text-red-400" : "text-text-light-gray"}`}>
+                     <span className={`mt-2 text-right text-micro ${prompt.length > MAX_AI_PROMPT_LENGTH ? "text-destructive" : "text-text-light-gray"}`}>
                        {prompt.length}/{MAX_AI_PROMPT_LENGTH}
                      </span>
                    </label>
@@ -126,6 +147,23 @@ const EditSingleLabel = (
                 </>
              }
        
+             {error && <p role="alert" className="px-2 text-dense text-destructive">{error}</p>}
+             {!confirming && !legacySmartLabel && (
+               <div className="border-t border-light-black-border-1 px-2 py-2">
+                 {hasProjectView ? (
+                   <p className="text-dense text-text-light-gray">Project view ready. Tag renames update it.</p>
+                 ) : (
+                   <button
+                     type="button"
+                     disabled={!title.trim()}
+                     className="border-0 bg-transparent p-0 text-dense text-white-black hover:text-heading disabled:opacity-50"
+                     onClick={() => updateLabel(true)}
+                   >
+                     Create project view
+                   </button>
+                 )}
+               </div>
+             )}
              {deleteModal && (
                <ConfirmDialog
                  id="confirm-delete-tag"
@@ -140,7 +178,7 @@ const EditSingleLabel = (
              <ModalFooter className={`${!confirming?"visible":"hidden"} flex items-center justify-between border-t border-light-black-border-1 px-4 py-2`}>
                <button
                  type="button"
-                 className="cursor-pointer border-0 bg-transparent p-0 text-dense text-red-400 hover:text-red-300"
+                 className="cursor-pointer border-0 bg-transparent p-0 text-dense text-destructive hover:text-destructive/80"
                  onClick={() => setDeleteModal(true)}
                >
                  Delete tag

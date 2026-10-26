@@ -53,6 +53,25 @@ https://app.hypertask.ai/detail/project-15/7260 adds board select all behind `ht
 
 https://app.hypertask.ai/detail/project-15/7263 adds phone selection behind `htpr-7263-phone-hold-select`, on for Everyone by default. Hold a card for the existing 900 ms and release within 5 px to toggle its shared selection and show the existing checkboxes and action bar. With a selection, tapping another card toggles it; after deselecting the last card, taps open details again. Hold then move beyond 5 px to drag without changing selection. Scrolling before the hold, pinch, cancellation and column dragging must not select. Desktop and flag-Off behavior stay unchanged. Verify phone jitter, scrolling, hold-release, hold-move, checkbox taps and clearing the bar on a real touch device before release.
 
+## Project tag views
+
+On the QA account's own private board, open Commands → Manage tags. Edit an
+ordinary tag and choose **Create project view**. The existing saved-view tabs
+must contain one public view named after the tag. Reopen the editor: **Project
+view ready** replaces the creation action. Reload and open that view; only
+its tagged tickets belong there. Repeating the action must not add a view.
+
+Rename the tag using the same editor. The view title and saved label payload
+must update, while its view ID and bookmark stay stable. The authenticated
+`POST /api/labels/updateLabel` merge operation (`labelId`, `value`,
+`mergeIntoLabelId`) must keep task assignments and retarget source filters,
+not erase them. When both tags have project views, preserve the target view
+and keep source bookmarks filtered. An unrelated saved view must stay intact.
+Deleting a project tag must not leave an unfiltered project view behind.
+
+Capture the editor and resulting view at desktop and phone sizes in all four
+themes. Delete only this run's view/tag/task fixtures after verification.
+
 ## Cleanup
 
 None if you only viewed and switched. If you changed a saved filter or view
