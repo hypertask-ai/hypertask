@@ -628,6 +628,7 @@ jobs:
         run: |
           npm ci --prefer-offline --no-audit --no-fund
           npx prisma generate
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           npx playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y strace
