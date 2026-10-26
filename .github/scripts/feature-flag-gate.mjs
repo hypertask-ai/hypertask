@@ -783,7 +783,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
         if ((typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) &&
             typescript.isIdentifier(node.tagName) &&
             checker.getSymbolAtLocation(node.tagName) === symbol &&
-            isLiveCallSite(node, live)) {
+            isLiveCallSite(node, live) && jsxResultIsConsumed(node, checker, live)) {
           referenced = true;
           return;
         }

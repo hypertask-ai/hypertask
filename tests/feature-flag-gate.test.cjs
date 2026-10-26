@@ -2112,6 +2112,8 @@ import { OTHER_FLAG } from "@/lib/flags/keys";
 test('render-child gates require a consumed custom component callback', async (t) => {
   const cases = [
     ['render child', 'return <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>;', true],
+    ['named render child', 'const render = () => <Row limit={enabled ? 3 : undefined} />; return <Boundary>{render}</Boundary>;', true],
+    ['discarded named render child', 'const render = () => <Row limit={enabled ? 3 : undefined} />; const unused = <Boundary>{render}</Boundary>; return <Row />;', false],
     ['nested render children', 'return <Boundary>{() => <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>}</Boundary>;', true],
     ['discarded render child', 'const unused = <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>; return <Row />;', false],
     ['dead render child', 'return <>{false && <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>}</>;', false],
