@@ -16,8 +16,11 @@ import {
   releasePostHogAlertClaim,
 } from "@/lib/telemetry/posthogErrorAlert";
 
+import { recordPostHogDispatchFallback } from "@/utils/controllers/errors/recordPostHogDispatchFallback";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const MAX_BODY_BYTES = 32 * 1024;
 const GITHUB_DISPATCH_RETRY_DELAYS_MS = [1000, 2000, 4000];
@@ -93,6 +96,12 @@ function dispatchConfiguration() {
   };
 }
 
+class GitHubDispatchError extends Error {
+  constructor(readonly status: number) {
+    super(`GitHub workflow dispatch returned HTTP ${status}`);
+  }
+}
+
 async function dispatchWorkflow(
   workflowUrl: string,
   payload: Record<string, unknown>,
@@ -123,7 +132,7 @@ async function dispatchWorkflow(
     if (response) {
       if (response.status === 204) return;
       if (response.status < 500 || attempt === GITHUB_DISPATCH_RETRY_DELAYS_MS.length) {
-        throw new Error(`GitHub workflow dispatch returned HTTP ${response.status}`);
+        throw new GitHubDispatchError(response.status);
       }
     }
     await new Promise((resolve) => setTimeout(resolve, GITHUB_DISPATCH_RETRY_DELAYS_MS[attempt]));
@@ -191,9 +200,14 @@ export async function POST(request: NextRequest) {
         dispatch_signature: signWorkflowPayload(payload, requiredEnv("POSTHOG_ALERT_DISPATCH_SECRET")),
       }, configuration.ref, configuration.githubToken);
     } catch (error) {
-      await redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0", 1, key, owner);
-      console.error("[posthog-error-alert] issue dispatch failed", error);
-      return NextResponse.json({ error: "Dispatch failed" }, { status: 503 });
+      try {
+        if (issueAlert.environment !== "production" || !(error instanceof GitHubDispatchError) || (error.status !== 403 && error.status !== 429)) throw error;
+        await recordPostHogDispatchFallback(issueAlert, error.status);
+      } catch (deliveryError) {
+        await redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0", 1, key, owner);
+        console.error("[posthog-error-alert] issue delivery failed", deliveryError);
+        return NextResponse.json({ error: "Dispatch failed" }, { status: 503 });
+      }
     }
     try {
       await redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0", 1, key, owner, 7 * 24 * 60 * 60);

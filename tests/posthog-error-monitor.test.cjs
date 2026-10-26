@@ -15,6 +15,7 @@ function canaryFetch(ticketAt = 2) {
   return { calls, fetchImpl: async (url, options) => {
     calls.push({ url, options });
     if (url.endsWith("/error-test")) return response({}, 500);
+    if (url.endsWith("/query/")) return response({ results: [] });
     if (url.includes("/tasks?")) return response({ tasks: ++searches < ticketAt ? [] : [
       { id: 99, description: "legacy reporter yper4-331-123-1" },
       { id: 98, description: `Former poll yper4-331-123-1 PostHog issue ID: <code>${ISSUE_ID}</code>` },
@@ -171,4 +172,29 @@ test("review watchdog reopen returns Normal Done tickets to board 4060 active se
     assert.match(writes[1].url, /comments$/);
   }
   await assert.rejects(reportFailure({ token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001", fetchImpl: async (url) => response(url.includes("/tasks?") ? { tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] } : { projects: [{ id: 4060, sections: [{ id: 20, title: "Done" }] }] }) }), /active section is unavailable/);
+});
+
+
+test("canary verifies and closes an independent fallback only after matching the real PostHog issue", async () => {
+  const { runCanary } = await import(script);
+  const writes = [];
+  const receipt = `<p>posthog-dispatch-fallback:issue:${ISSUE_ID}:0199aa11-bb22-7c33-8d44-000000000001</p>`;
+  const fetchImpl = async (url, options) => {
+    if (url.endsWith("/error-test")) return response({}, 500);
+    if (url.endsWith("/query/")) return response({ results: [[ISSUE_ID]] });
+    if (url.includes("/tasks?")) return response({ tasks: new URL(url).searchParams.get("project_id") === "4060" ? [{ id: 101, description: receipt }] : [] });
+    if (url.includes("/issues/")) return response({ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }, { id: 4060, sections: [{ id: 888, section_title: "Done" }] }] });
+    if (url.endsWith("/tasks/update")) { writes.push(JSON.parse(options.body)); return response({ success: true }); }
+    assert.fail(url);
+  };
+  const options = { fetchImpl, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1" };
+  const result = await runCanary(options);
+  assert.equal(result.delivery, "fallback");
+  assert.equal(result.boardId, 4060);
+  assert.deepEqual(writes, [{ task_id: 101, sectionId: 888 }]);
+  writes.length = 0;
+  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("/issues/") ? response({ id: ISSUE_ID, description: "another customer's error" }) : fetchImpl(url, opts) }), /does not match the nightly canary/);
+  assert.equal(writes.length, 0);
+  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.endsWith("/query/") ? response({ results: [[ISSUE_ID], [ISSUE_ID]] }) : fetchImpl(url, opts) }), /ambiguous/);
 });

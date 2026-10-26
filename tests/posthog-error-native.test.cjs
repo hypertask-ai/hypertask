@@ -1,18 +1,26 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-const { createJiti } = require("jiti");
+const { load } = require("./task-route-loader.cjs");
 const { NextRequest } = require("next/server");
 const { Webhook } = require("svix");
 
-const root = path.resolve(__dirname, "..");
+const stubs = {};
 const ISSUE = "01a128a7-88f1-7753-b94b-4f8ec8f7cbdf";
 const webhookSecret = `whsec_${Buffer.from("test-webhook-secret").toString("base64")}`;
 const redis = new Map();
+const fallbackCalls = [];
+let fallbackFailure;
+let fallbackWait;
+let fallbackArrived;
 function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
+  stubs[relativePath.replace(/^src\//, "@/").replace(/\.ts$/, "")] = exports;
 }
+stubModule("src/utils/controllers/errors/recordPostHogDispatchFallback.ts", { recordPostHogDispatchFallback: async (...args) => {
+  fallbackCalls.push(args);
+  fallbackArrived?.();
+  await fallbackWait;
+  if (fallbackFailure) throw fallbackFailure;
+} });
 stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => true });
 stubModule("src/lib/redis.ts", { getRedis: async () => ({
   set: async (key, owner) => { if (redis.has(key)) return null; redis.set(key, { owner, ttl: 300 }); return "OK"; },
@@ -24,10 +32,9 @@ stubModule("src/lib/redis.ts", { getRedis: async () => ({
     return 1;
   },
 }) });
-const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
-const { POST } = jiti(path.join(root, "src/app/api/integrations/posthog/error-alert/route.ts"));
-const { parsePostHogIssueAlert } = jiti(path.join(root, "src/lib/telemetry/posthogErrorAlert.ts"));
-const { errorFingerprint } = jiti(path.join(root, "src/lib/errors/errorFingerprint.ts"));
+const { POST, maxDuration } = load("src/app/api/integrations/posthog/error-alert/route.ts", stubs);
+const { parsePostHogIssueAlert } = load("src/lib/telemetry/posthogErrorAlert.ts", stubs);
+const { errorFingerprint } = load("src/lib/errors/errorFingerprint.ts", stubs);
 
 function event(kind = "created", n = 1, properties = {}) {
   return { event: { event: `$error_tracking_issue_${kind}`, distinct_id: ISSUE, uuid: `0199aa11-bb22-7c33-8d44-${String(n).padStart(12, "0")}`, timestamp: new Date().toISOString(), properties: { ht_environment: "production", ...properties } } };
@@ -50,6 +57,10 @@ async function withEnv(run) {
   const originalFetch = global.fetch;
   Object.assign(process.env, env);
   redis.clear();
+  fallbackCalls.length = 0;
+  fallbackFailure = undefined;
+  fallbackWait = undefined;
+  fallbackArrived = undefined;
   try { await run(); }
   finally {
     global.fetch = originalFetch;
@@ -138,3 +149,58 @@ test("nightly run-specific messages produce distinct explicit PostHog fingerprin
   assert.notEqual(a, b);
   assert.equal(a, errorFingerprint("PostHog pipeline canary yper4-331-123-1", stack));
 });
+
+
+test("GitHub 403 and 429 deliver signed production native alerts to the independent board fallback once", async () => withEnv(async () => {
+  for (const status of [403, 429]) {
+    redis.clear();
+    fallbackCalls.length = 0;
+    global.fetch = async () => ({ status });
+    const raw = event("created", status);
+    assert.equal((await POST(request(raw, false))).status, 401);
+    assert.equal(fallbackCalls.length, 0);
+    assert.equal((await POST(request(raw))).status, 204);
+    assert.equal(fallbackCalls.length, 1);
+    assert.equal(fallbackCalls[0][0].issue_id, ISSUE);
+    assert.equal(fallbackCalls[0][1], status);
+    assert.equal((await POST(request(raw))).status, 204);
+    assert.equal(fallbackCalls.length, 1);
+  }
+}));
+
+test("fallback failure stays retryable, and preview or unrelated dispatch errors cannot acknowledge fallback delivery", async () => withEnv(async () => {
+  global.fetch = async () => ({ status: 403 });
+  fallbackFailure = new Error("board unavailable");
+  const raw = event();
+  assert.equal((await POST(request(raw))).status, 503);
+  assert.equal(redis.size, 0);
+  fallbackFailure = undefined;
+  assert.equal((await POST(request(raw))).status, 204);
+  assert.equal(fallbackCalls.length, 2);
+  redis.clear();
+  fallbackCalls.length = 0;
+  assert.equal((await POST(request(event("created", 2, { ht_environment: "preview" })))).status, 503);
+  assert.equal(fallbackCalls.length, 0);
+  global.fetch = async () => ({ status: 422 });
+  assert.equal((await POST(request(event("created", 3)))).status, 503);
+  assert.equal(fallbackCalls.length, 0);
+}));
+
+
+test("native event ownership serializes fallback writes beyond the function lifetime", async () => withEnv(async () => {
+  global.fetch = async () => ({ status: 403 });
+  let release;
+  fallbackWait = new Promise(resolve => { release = resolve; });
+  const arrived = new Promise(resolve => { fallbackArrived = resolve; });
+  const raw = event();
+  const first = POST(request(raw));
+  await arrived;
+  assert.equal(maxDuration, 60);
+  assert.ok(maxDuration < redis.get(`posthog:issue-alert:event:${raw.event.uuid}`).ttl);
+  assert.equal((await POST(request(raw))).status, 503);
+  assert.equal(fallbackCalls.length, 1);
+  release();
+  assert.equal((await first).status, 204);
+  assert.equal((await POST(request(raw))).status, 204);
+  assert.equal(fallbackCalls.length, 1);
+}));
