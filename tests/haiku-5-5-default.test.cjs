@@ -376,6 +376,7 @@ test("Android maps BYOK sources to catalog provider keys and preserves Free-plan
         let input;
         const api = stubbedModule("src/app/api/android/ai/composer/route.ts", {
           "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
+          "@/lib/flags/keys": { HTPR_7939_GROK_GEMINI4_MODELS_FLAG: "htpr-7939-grok-gemini4-models" },
           "next/server": { NextResponse: { json: (value) => value } },
           "@/lib/prisma": { project: { findFirst: async () => ({ id: 15, teamId: "fixture-team" }) } },
           "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 985 } }) },

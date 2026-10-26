@@ -751,6 +751,10 @@ test("task writer option ids map to provider options and legacy model strings fa
     taskWriteAccessWhere: () => ({}),
   });
 
+  let grokGemini4FlagOn = false;
+  stubModule("src/lib/flags.ts", {
+    isFeatureEnabled: async (key) => grokGemini4FlagOn && key === "htpr-7939-grok-gemini4-models",
+  });
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   const { defaultAiModelOption, preferredAiModelOption } = loadTs(
     "src/lib/aiModelOptions.ts",
@@ -842,9 +846,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     });
     assert.notEqual(flagOff.modelId, modelKey === "grok-4.7" ? "spacexai/grok-4.7" : "google/gemini-4-argon");
   }
-  stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async (key) => key === "htpr-7939-grok-gemini4-models",
-  });
+  grokGemini4FlagOn = true;
   for (const [modelKey, modelId] of [
     ["gemini-4-argon", "google/gemini-4-argon"],
     ["grok-4.7", "spacexai/grok-4.7"],
@@ -858,7 +860,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     });
     assert.equal(paidTeam.modelId, modelId);
   }
-  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
+  grokGemini4FlagOn = false;
 
   await assert.rejects(
     selectTaskWriterModel({
