@@ -1,6 +1,6 @@
 import { createSection } from "@/lib/api/typedClient";
 import { CommandMode } from "@/models/enums";
-import { IAgent, IProject, ISection, IUser } from "@/models/model";
+import { IAgent, IProject, IProjectView, ISection, IUser } from "@/models/model";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { createTeam } from "@/utils/api/Homepage";
@@ -303,7 +303,7 @@ export function createGeneralCommandActions(context: Context) {
           : undefined;
         updateProjectView(
           projectToUpdateIndex,
-          response.data.project_view,
+          response.data.project_view as IProjectView | null | undefined,
           Number.isSafeInteger(createdSection?.id)
             ? { ...createdSection, items: [] }
             : undefined
