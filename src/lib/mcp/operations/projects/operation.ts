@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -8,7 +9,6 @@ import prisma from '@/lib/prisma'
 import {
   normalizeTaskStatus,
   parseNumericCursor,
-  parseUpdatedSince,
   projectRows,
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
@@ -99,7 +99,38 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const where: any = {
+    if (listQuery?.filter.updated_since) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'filter.updated_since is not supported for projects',
+        },
+        { status: 400 },
+      )
+    }
+    if (sortBy === 'updatedAt') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'sort must be title or createdAt for projects',
+        },
+        { status: 400 },
+      )
+    }
+    if (sortOrder !== 'asc' && sortOrder !== 'desc') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'sort_order must be asc or desc',
+        },
+        { status: 400 },
+      )
+    }
+
+    const where: Prisma.ProjectWhereInput = {
       status: status ?? 'Normal',
       AND: [
         getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
@@ -107,37 +138,20 @@ export async function GET(request: NextRequest) {
           ? [
               {
                 OR: [
-                  { title: { contains: search, mode: 'insensitive' } },
-                  { name: { contains: search, mode: 'insensitive' } },
-                  { description: { contains: search, mode: 'insensitive' } },
+                  { title: { contains: search, mode: 'insensitive' as const } },
+                  { name: { contains: search, mode: 'insensitive' as const } },
+                  { description: { contains: search, mode: 'insensitive' as const } },
                 ],
               },
             ]
           : []),
       ],
     }
-    if (listQuery?.filter.updated_since) {
-      const since = parseUpdatedSince(listQuery.filter.updated_since)
-      if (!since) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Validation error',
-            message: 'filter.updated_since must be an ISO datetime',
-          },
-          { status: 400 },
-        )
-      }
-      where.updatedAt = { gte: since }
-    }
-
-    const orderBy: any = {}
+    const orderBy: Prisma.ProjectOrderByWithRelationInput = {}
     if (sortBy === 'title') {
       orderBy.title = sortOrder
     } else if (sortBy === 'createdAt') {
       orderBy.createdAt = sortOrder
-    } else if (sortBy === 'updatedAt') {
-      orderBy.updatedAt = sortOrder
     } else {
       orderBy.title = 'asc'
     }

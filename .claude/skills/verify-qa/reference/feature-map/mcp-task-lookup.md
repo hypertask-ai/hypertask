@@ -39,3 +39,13 @@
 ## Cleanup
 
 Read-only calls. No board writes or fixtures.
+
+## Project discovery query validation
+
+https://app.hypertask.ai/detail/project-15/8021 restores clear validation on
+`GET /api/mcp/projects`. Projects have a creation timestamp, not an update
+timestamp. A JSON or dotted `filter.updated_since`, `sort=updatedAt:desc`,
+and legacy `sort_by=updatedAt` must return 400, never 500. These failures must
+not change the caller's board scope. Plain discovery and `createdAt` or
+`title` sorting still return 200; check selected fields and the next cursor.
+Unsupported sort direction also returns 400 before database reads.
