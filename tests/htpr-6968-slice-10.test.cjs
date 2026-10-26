@@ -219,7 +219,7 @@ for (const name of Object.keys(endpoints)) {
     assert.deepEqual(fx.effects, old.effects);
   });
   for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", undefined]) {
-    if (method === notificationRoutes[name].method || method === notificationRoutes[name].alsoMethod) continue;
+    if (method === notificationRoutes[name].method || (notificationRoutes[name].alsoMethod && method === notificationRoutes[name].alsoMethod)) continue;
     test(`${name}: other method ${method} ${notificationRoutes[name].anyMethod ? "reaches the shared route" : "answers 405"}`, async () => {
       const scenario = { method }, fx = fixture(name);
       const result = await invoke(fx, name, scenario);
