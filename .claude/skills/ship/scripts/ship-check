@@ -328,6 +328,37 @@ live_proof_ok() {
   git -C "$source" cat-file -e "$sha^{commit}" 2>/dev/null || return 1
   git -C "$source" merge-base --is-ancestor "$sha" HEAD 2>/dev/null || return 1
   case $check in
+    reviewer-workflow)
+      [[ $REPO == hypertask-ai/reviewer && $BASE == main ]] || return 1
+      local ci review target head url run metadata jobs statuses kind
+      ci=$(sed -n 's/^ci:[[:space:]]*//p' "$f" | head -1)
+      review=$(sed -n 's/^review:[[:space:]]*//p' "$f" | head -1)
+      target=$(sed -n 's/^target:[[:space:]]*//p' "$f" | head -1)
+      head=$(sed -n 's/^head:[[:space:]]*//p' "$f" | head -1)
+      [[ $target =~ ^https://github\.com/hypertask-ai/hypertask/pull/[1-9][0-9]*$ && $head =~ ^[0-9a-f]{40}$ ]] || return 1
+      for kind in ci review; do
+        url=$ci; [ "$kind" != review ] || url=$review
+        [[ $url =~ ^https://github\.com/hypertask-ai/reviewer/actions/runs/[1-9][0-9]*$ ]] || return 1
+        run=${url##*/}
+        metadata=$(gh api "repos/$REPO/actions/runs/$run" 2>/dev/null) || return 1
+        jq -e --arg sha "$sha" --arg run "$run" --arg kind "$kind" --arg target "${target##*/}" --arg head "$head" '
+          (.id | tostring) == $run and .head_sha == $sha and .head_branch == "main"
+          and .status == "completed" and .conclusion == "success"
+          and (if $kind == "ci" then .path == ".github/workflows/ci.yml" and (.event == "push" or .event == "workflow_dispatch")
+            else .path == ".github/workflows/review.yml" and .event == "repository_dispatch"
+              and .display_title == ("Review hypertasks PR #" + $target + " @ " + $head) end)' <<<"$metadata" >/dev/null || return 1
+        jobs=$(gh api "repos/$REPO/actions/runs/$run/jobs?per_page=100" --paginate 2>/dev/null) || return 1
+        jq -es --arg kind "$kind" 'all(.[]; (.jobs | type) == "array") and any(.[].jobs[];
+          .status == "completed" and .conclusion == "success"
+          and (if $kind == "ci" then .name == "test"
+            else any(.steps[]; (.name | startswith("Review pull request with ")) and .conclusion == "success") end))' <<<"$jobs" >/dev/null || return 1
+      done
+      statuses=$(gh api "repos/hypertask-ai/hypertask/commits/$head/statuses?per_page=100" --paginate 2>/dev/null) || return 1
+      jq -es --arg url "$review" 'if all(.[]; type == "array") then add else error("invalid statuses") end
+        | [.[] | select(.target_url == $url)] | group_by(.context) | map(max_by(.id))
+        | any(.[]; .context == "ai-review" and .state == "success")
+          and any(.[]; .context == "claude-review" and .state == "success")' <<<"$statuses" >/dev/null
+      ;;
     systemd-user-unit\ *)
       unit=${check#systemd-user-unit }
       [[ $unit =~ ^[A-Za-z0-9@._-]+\.service$ ]] || return 1
@@ -368,6 +399,11 @@ check_deployed() {
         jq -e 'type == "array" and length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
         cmp=$(gh api "repos/$REPO/compare/$BASE...$sha" --jq .status 2>/dev/null) || fail "could not compare merge $sha with $BASE"
         [[ $cmp == identical || $cmp == behind ]] || fail "merge $sha is not on $BASE"
+        if [[ $REPO == hypertask-ai/reviewer && $BASE == main ]]; then
+          [[ $(sed -n 's/^check:[[:space:]]*//p' "$EVID/$1/live-proof" 2>/dev/null | head -1) == reviewer-workflow ]] && live_proof_ok "$1" "$sha" \
+            || fail "reviewer deployment needs exact-engine CI and live review proof in $EVID/$1/live-proof"
+          echo "deployed ok (reviewer workflow proof, merged ${sha:0:9} on $BASE)"; return
+        fi
         # Paginate so a green first page cannot hide a failed workflow for the same merge.
         runs=$(gh api "repos/$REPO/actions/runs?head_sha=$sha&per_page=100" --paginate 2>/dev/null) \
           || fail "could not read workflow runs for $sha"
