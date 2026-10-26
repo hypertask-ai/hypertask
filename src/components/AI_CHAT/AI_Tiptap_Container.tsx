@@ -351,7 +351,7 @@ export function AI_Tiptap_Container({
           {controlledComposer ? (
             controlledComposer.useTiptapEditor ? (
               <ControlledComposerEditor
-                agentMentionProjectId={agentSessionsEnabled ? controlledComposer.projectId ?? undefined : undefined}
+                agentMentionProjectId={agentSessionsEnabled && sidebarAgent ? controlledComposer.projectId ?? undefined : undefined}
                 value={controlledComposer.value}
                 onChange={controlledComposer.onChange}
                 onKeyDown={controlledComposer.onKeyDown}

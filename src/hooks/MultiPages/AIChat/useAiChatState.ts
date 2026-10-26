@@ -15,13 +15,14 @@ import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
 
 export function useAiChatState(parallelChatsEnabled = false) {
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+  const agentSidebarEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
 
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
@@ -169,7 +170,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
         return exists ? prev : [...prev, mentionData];
       });
     } else if (mentionData.type === "agent") {
-      if (agentSessionsEnabled && editor?.view.dom.closest('[data-testid="ai-sidebar"]')) {
+      if (agentSessionsEnabled && agentSidebarEnabled && currentProject?.id && currentUser && editor?.view.dom.closest('[data-testid="ai-sidebar"]')) {
         window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: mentionData.id, html: editor.getHTML(), text: editor.getText({ textSerializers: { mention: ({ node }) => `@${node.attrs.text || node.attrs.id}` } }) } }));
         return;
       }
