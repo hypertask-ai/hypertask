@@ -14,6 +14,13 @@ import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
 import { getSettingsPath } from "./settingsNavigation";
 import { useSettingsTeam } from "./useSettingsTeam";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7980_STRIPE_PORTAL_BILLING_FLAG } from "@/lib/flags/definitions/htpr-7980-stripe-portal-billing";
+import { settingsBillingSummary } from "@/lib/settingsBillingSummary";
+import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
+import OptionPickerModal from "@/components/Modals/OptionPicker";
+import { useRecoilValue } from "@/lib/state";
+import { currentUserAtom } from "@/store";
 
 type SettingsBillingInvoice = {
   amountPaid: number | null;
@@ -43,6 +50,10 @@ type SettingsBillingData = {
 
 const BillingSection = () => {
   const router = useRouter();
+  const portalBillingEnabled = useFlag(HTPR_7980_STRIPE_PORTAL_BILLING_FLAG);
+  const currentUser = useRecoilValue(currentUserAtom);
+  const [choosingPlan, setChoosingPlan] = useState(false);
+  const [openingCheckout, setOpeningCheckout] = useState(false);
   const { billing, ownerAndMembers, project, refetchTeam, team } =
     useSettingsTeam();
   const [confirmCancelSubscription, setConfirmCancelSubscription] =
@@ -59,6 +70,14 @@ const BillingSection = () => {
   const [billingEmailDraft, setBillingEmailDraft] = useState("");
   const [savingBillingEmail, setSavingBillingEmail] = useState(false);
 
+  const summary = portalBillingEnabled && team ? settingsBillingSummary(team) : null;
+  const isOwner = Boolean(currentUser?.id && ownerAndMembers.owner?.id === currentUser.id);
+  const checkoutOptions = storeSubscriptionPlans
+    .filter((plan) => plan.id === "BYOK" || plan.id === "Pro")
+    .flatMap((plan) => plan.types.map((type) => ({
+      id: type.stripePriceId ?? "",
+      label: `${plan.name} · ${type.title} · ${type.price} ${type.description}`,
+    }))).filter((option) => option.id.startsWith("price_"));
   const planLabel = billing?.storePlanId ?? "Free";
   const billingCycle = billing?.billingInterval ?? "Free Plan";
   const usedSeats =
@@ -103,7 +122,7 @@ const BillingSection = () => {
   useEffect(() => {
     let cancelled = false;
 
-    if (!team?.id || !team.stripe_customer_id) {
+    if (portalBillingEnabled || !team?.id || !team.stripe_customer_id) {
       setBillingData(null);
       setBillingError(null);
       setBillingLoading(false);
@@ -133,7 +152,7 @@ const BillingSection = () => {
     return () => {
       cancelled = true;
     };
-  }, [team?.id, team?.stripe_customer_id, project?.id]);
+  }, [team?.id, team?.stripe_customer_id, project?.id, portalBillingEnabled]);
 
   const saveBillingEmail = async () => {
     const email = billingEmailDraft.trim();
@@ -189,6 +208,36 @@ const BillingSection = () => {
     }
   };
 
+  const openCheckout = async (priceId: string) => {
+    setChoosingPlan(false);
+    if (!team?.id || !isOwner || openingCheckout || !summary?.canUpgrade) return;
+    setOpeningCheckout(true);
+    try {
+      const selectedTeam = await refetchTeam();
+      if (!selectedTeam || !settingsBillingSummary(selectedTeam).canUpgrade) {
+        toast.error("This team already has a plan. Use Manage billing.");
+        return;
+      }
+      if (!selectedTeam.stripe_customer_id) {
+        await axios.post("/api/stripe/ensure-customer", { teamId: selectedTeam.id });
+        await refetchTeam();
+      }
+      const response = await axios.post<{ url: string }>("/api/stripe/session/checkout", {
+        intent: "settings-billing-upgrade",
+        teamId: selectedTeam.id,
+        priceId,
+        mode: "Normal",
+        returnUrl: new URL(getSettingsPath("billing"), window.location.origin).href,
+        cancelUrl: new URL(getSettingsPath("billing"), window.location.origin).href,
+      });
+      window.location.assign(response.data.url);
+    } catch {
+      toast.error("Could not open checkout");
+    } finally {
+      setOpeningCheckout(false);
+    }
+  };
+
   const confirmCancel = async () => {
     if (!team?.stripe_customer_id) return;
 
@@ -208,6 +257,38 @@ const BillingSection = () => {
       setConfirmingCancel(false);
     }
   };
+
+  if (portalBillingEnabled) {
+    return (
+      <SettingsSectionShell title="Billing">
+        <SettingsCard title="Plan">
+          <BillingRow label="Plan" value={summary?.plan ?? "Loading"} />
+          <BillingRow label="Price" value={summary?.price ?? "Loading"} />
+          <BillingRow label="Status" value={summary?.status ?? "Loading"} />
+          {summary?.canUpgrade && <BillingActionRow label="Upgrade" action={
+            <button className={actionButtonClass} type="button"
+              disabled={!isOwner || openingCheckout} onClick={() => setChoosingPlan(true)}>
+              {openingCheckout ? "Opening checkout…" : "Upgrade"}
+            </button>
+          } />}
+          {team?.stripe_customer_id && <BillingActionRow label="Manage billing" action={
+            <button className={actionButtonClass} type="button"
+              disabled={!isOwner || openingPortal} onClick={openBillingPortal}>
+              {openingPortal ? "Opening billing…" : "Manage billing"}
+            </button>
+          } />}
+          {!isOwner && team && <BillingRow label="Billing access" value="Team owner only" />}
+        </SettingsCard>
+        {choosingPlan && isOwner && summary?.canUpgrade && <OptionPickerModal
+          header="Upgrade" options={checkoutOptions}
+          onClose={() => setChoosingPlan(false)}
+          onSelect={(option) => {
+            if (typeof option.id === "string") void openCheckout(option.id);
+          }}
+        />}
+      </SettingsSectionShell>
+    );
+  }
 
   return (
     <SettingsSectionShell title="Billing">

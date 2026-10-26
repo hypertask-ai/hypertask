@@ -49,6 +49,10 @@ test("billing shows the active BYOK plan when an older row comes first", () => {
     totalSeats: 1,
   };
 
+  stubModule(path.join(root, "src/components/Modals/OptionPicker/index.tsx"), { default: () => null });
+  stubModule(path.join(root, "src/hooks/useFlag.tsx"), { useFlag: () => false });
+  stubModule(path.join(root, "src/lib/state.tsx"), { useRecoilValue: () => null });
+  stubModule(path.join(root, "src/store/index.ts"), { currentUserAtom: {} });
   stubModule(require.resolve("next/navigation"), {
     useRouter: () => ({ push: () => {}, refresh: () => {} }),
   });

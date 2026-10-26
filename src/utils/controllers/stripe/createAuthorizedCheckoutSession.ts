@@ -1,7 +1,10 @@
 import prisma from "@/lib/prisma";
 import { deriveTeamBilling } from "@/lib/deriveCurrentBoardBilling";
+import { isTeamComped } from "@/lib/teamComp";
+import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7980_STRIPE_PORTAL_BILLING_FLAG } from "@/lib/flags/definitions/htpr-7980-stripe-portal-billing";
 import { HTPR_7938_FOURTEEN_DAY_TRIAL_FLAG } from "@/lib/flags/definitions/htpr-7938-fourteen-day-trial";
 import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import {
@@ -296,11 +299,12 @@ export async function createAuthorizedCheckoutSession(
 
   const body = rawBody as CheckoutRequestBody;
   const signupIntent = body.intent === "signup-straight-to-board";
+  const billingUpgradeIntent = body.intent === "settings-billing-upgrade";
   const preview = signupIntent && body.action === "preview";
   if (signupIntent && body.action !== undefined && body.action !== "preview") {
     return { status: 400, body: { message: "Unsupported checkout action" } };
   }
-  if (body.intent !== undefined && !signupIntent) {
+  if (body.intent !== undefined && !signupIntent && !billingUpgradeIntent) {
     return { status: 400, body: { message: "Unsupported checkout intent" } };
   }
   const teamId = nonEmptyString(body.teamId);
@@ -358,6 +362,9 @@ export async function createAuthorizedCheckoutSession(
   if (billingOwner.googleAccount.userId !== userId) {
     return { status: 403, body: { message: "Only the team owner can update billing" } };
   }
+  if (billingUpgradeIntent && !(await isFeatureEnabled(HTPR_7980_STRIPE_PORTAL_BILLING_FLAG, userId))) {
+    return { status: 403, body: { message: "Billing upgrade is not available" } };
+  }
   let enabled = false;
   try {
     enabled = await isFeatureEnabled(HTPR_7551_START_PLAN_CHECKOUT_FLAG, userId);
@@ -389,7 +396,7 @@ export async function createAuthorizedCheckoutSession(
         activeSubscriptionPlanId: true,
         googleAccount: { select: { userId: true } },
         team_activity: { select: { hasCompletedTrial: true } },
-        ...(signupIntent ? { compedUntil: true, compedPlan: true, subscriptionPlan: true } : {}),
+        ...((signupIntent || billingUpgradeIntent) ? { compedUntil: true, compedPlan: true, subscriptionPlan: true } : {}),
       },
     });
     if (!team) {
@@ -412,6 +419,9 @@ export async function createAuthorizedCheckoutSession(
       return { status: 400, body: { message: "Team account mismatch" } };
     }
 
+    if (billingUpgradeIntent && (mode !== "Normal" || isTeamComped(team) || isInternalCompTeam(team.id))) {
+      return { status: 409, body: { message: "Only unsubscribed Free teams can upgrade through checkout" } };
+    }
     let attempt = await reservation.read();
     if (attempt && attempt.desired.teamId !== team.id) {
       await reservation.clear();
@@ -491,6 +501,17 @@ export async function createAuthorizedCheckoutSession(
     const openSessions = teamSessions.filter(
       (session) => session.status === "open",
     );
+    if (billingUpgradeIntent && (subscriptions.some((subscription) =>
+      subscription.status !== "canceled" && subscription.status !== "incomplete_expired") ||
+      (team.activeSubscriptionPlanId && !subscriptions.some((subscription) =>
+        subscription.id === team.activeSubscriptionPlanId &&
+        (subscription.status === "canceled" || subscription.status === "incomplete_expired"))))) {
+      return { status: 409, body: { message: "An existing subscription must use Manage billing" } };
+    }
+    if (billingUpgradeIntent && teamSessions.some((session) => session.status === "complete" &&
+      !subscriptions.some((subscription) => subscription.id === checkoutSubscriptionId(session)))) {
+      return { status: 409, body: { message: "Finishing plan setup" } };
+    }
     let remainingOpenSessions = openSessions;
     if (!preview && attempt?.state === "in_flight") {
       let recoveredSession = await reconcileAttemptSession(

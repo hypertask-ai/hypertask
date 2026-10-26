@@ -28,7 +28,8 @@ const prismaModule = loadTs("src/lib/prisma.ts");
 const prisma = prismaModule.default ?? prismaModule;
 const stripeModule = loadTs("src/lib/stripe.ts");
 const flagsModule = loadTs("src/lib/flags.ts");
-flagsModule.isFeatureEnabled = async () => false;
+let billingUpgradeEnabled = false;
+flagsModule.isFeatureEnabled = async (key) => billingUpgradeEnabled && key === "htpr-7980-stripe-portal-billing";
 const seatModule = loadTs("src/lib/resolveSeatQuantity.ts");
 const reservationModule = loadTs(
   "src/utils/controllers/stripe/checkoutReservation.ts",
@@ -950,4 +951,51 @@ test("checkout webhooks never reset completed trial history to false", () => {
       /hasCompletedTrial:\s*subscription\.status\s*===/,
     );
   }
+});
+
+test("flagged Settings upgrade allows the owner of a genuinely unsubscribed Free team", async () => {
+  reset({ subscriptionPlan: [] });
+  billingUpgradeEnabled = true;
+  try {
+    const result = await createAuthorizedCheckoutSession(6, validBody({ intent: "settings-billing-upgrade" }));
+    assert.equal(result.status, 200);
+    assert.equal(result.body.url, "https://checkout.stripe.test/session-1");
+    assert.equal(createdCheckout.quantity, 7);
+    assert.equal(createdCheckoutCount, 1);
+  } finally { billingUpgradeEnabled = false; }
+});
+for (const status of ["trialing", "active", "past_due", "unpaid", "incomplete"]) {
+  test(`Settings upgrade refuses ${status} subscriptions under the checkout reservation`, async () => {
+    reset({ subscriptionPlan: [] });
+    billingUpgradeEnabled = true;
+    existingSubscriptions = [{ id: "sub_existing", status, items: { data: [{ price: { id: "price_byok_year" } }] } }];
+    try {
+      const result = await createAuthorizedCheckoutSession(6, validBody({ intent: "settings-billing-upgrade" }));
+      assert.equal(result.status, 409);
+      assert.equal(createdCheckoutCount, 0);
+      assert.equal(reservationRecord, null);
+    } finally { billingUpgradeEnabled = false; }
+  });
+}
+test("Settings upgrade refuses when its own flag is off", async () => {
+  reset({ subscriptionPlan: [] });
+  const result = await createAuthorizedCheckoutSession(6, validBody({ intent: "settings-billing-upgrade" }));
+  assert.equal(result.status, 403);
+  assert.equal(createdCheckoutCount, 0);
+});
+test("Settings upgrade still refuses non-owners before resolving flags or subscriptions", async () => {
+  reset({ subscriptionPlan: [] });
+  const result = await createAuthorizedCheckoutSession(99, validBody({ intent: "settings-billing-upgrade" }));
+  assert.equal(result.status, 403);
+  assert.equal(listedCustomer, undefined);
+  assert.equal(createdCheckoutCount, 0);
+});
+test("Settings upgrade preserves complimentary access", async () => {
+  reset({ subscriptionPlan: [], compedUntil: new Date("2099-01-01"), compedPlan: "Pro" });
+  billingUpgradeEnabled = true;
+  try {
+    const result = await createAuthorizedCheckoutSession(6, validBody({ intent: "settings-billing-upgrade" }));
+    assert.equal(result.status, 409);
+    assert.equal(createdCheckoutCount, 0);
+  } finally { billingUpgradeEnabled = false; }
 });

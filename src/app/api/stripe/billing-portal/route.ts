@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import prisma from "@/lib/prisma";
 import { generateCustomerPortalLink } from "@/lib/subscription";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7980_STRIPE_PORTAL_BILLING_FLAG } from "@/lib/flags/definitions/htpr-7980-stripe-portal-billing";
+import { createConfiguredBillingPortalSession } from "@/lib/stripeBillingPortal";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,6 +52,18 @@ export async function POST(request: Request) {
 
   if (!team.stripe_customer_id) {
     return NextResponse.json({ message: "No billing account" }, { status: 400 });
+  }
+
+  if (await isFeatureEnabled(HTPR_7980_STRIPE_PORTAL_BILLING_FLAG, user.id)) {
+    try {
+      const session = await createConfiguredBillingPortalSession(team.stripe_customer_id);
+      return NextResponse.json({ url: session.url });
+    } catch {
+      return NextResponse.json(
+        { message: "Billing portal configuration is unavailable" },
+        { status: 503 },
+      );
+    }
   }
 
   const url = await generateCustomerPortalLink(team.stripe_customer_id);
