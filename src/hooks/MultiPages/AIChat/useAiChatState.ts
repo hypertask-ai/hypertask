@@ -170,7 +170,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
       });
     } else if (mentionData.type === "agent") {
       if (agentSessionsEnabled && editor?.view.dom.closest('[data-testid="ai-sidebar"]')) {
-        window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: mentionData.id, html: editor.getHTML() } }));
+        window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: mentionData.id, html: editor.getHTML(), text: editor.getText({ textSerializers: { mention: ({ node }) => `@${node.attrs.text || node.attrs.id}` } }) } }));
         return;
       }
       setContextList((prev) => {

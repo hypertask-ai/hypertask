@@ -249,3 +249,23 @@ test("mention routing updates a cached external composer without overwriting lat
     assert.equal(updates.length, 1);
   } finally { view.close(); }
 });
+
+test("external composer serializes real agent names and ticket references, not generic mention labels", () => {
+  const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+  const { Editor } = require("@tiptap/core");
+  let options;
+  const source = loader({
+    "@tiptap/react": { useEditor: (value) => { options = value; return null; }, EditorContent: () => null },
+    "@/components/RTE/Components/AI_Chat/MentionData": { createMentionData: () => ({}) },
+  });
+  const ControlledComposerEditor = source("src/lib/controlledComposerEditor.tsx").ControlledComposerEditor;
+  const view = mount();
+  let editor;
+  try {
+    view.render(React.createElement(ControlledComposerEditor, { value: "", agentMentionProjectId: 15,
+      onChange() {}, onKeyDown() {}, onEditor() {}, placeholder: "Message", ariaLabel: "Message" }));
+    editor = new Editor({ ...options, element: document.createElement("div"),
+      content: '<p>Ask <span data-type="mention" data-id="agent" data-label="agent" text="Runner">Runner</span> about <span data-type="mention" data-id="12" data-label="task" text="HTPR-12 Work">HTPR-12 Work</span></p>' });
+    assert.equal(editor.getText(), "Ask @Runner about @HTPR-12 Work");
+  } finally { editor?.destroy(); view.close(); }
+});
