@@ -552,3 +552,26 @@ for (const expanded of [false, true]) {
     expect(measurements.width).toBeCloseTo(1136, 0)
   })
 }
+
+test('Board hygiene leaves Manage Tags unchanged', async ({ page }, testInfo) => {
+  test.skip(!process.env.SMOKE_BOARD_PATH, 'board fixture required')
+  await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('[aria-label="Board menu"]')).some(element =>
+    Object.keys(element).some(key => key.startsWith('__reactProps$'))))
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  await page.getByRole('button', { name: testInfo.project.name === 'Mobile' ? 'Commands' : 'Board menu', exact: true }).click()
+  await page.locator('#htc-search:visible, #htc-mobile-search:visible').fill('Manage tags')
+  await page.getByText('Manage tags', { exact: true }).last().click()
+  const modal = page.locator('#manage-tags-modal')
+  const boardId = new URL(page.url()).searchParams.get('id') ?? /project-(\d+)/.exec(page.url())?.[1]
+  expect(boardId).toBeTruthy()
+  const labels = await page.request.get(`/api/labels/getByProject?projectId=${boardId}`)
+  expect(labels.status()).toBe(200)
+  await expect(modal.locator('input[type="checkbox"]')).toHaveCount((await labels.json()).length + 1)
+  await page.evaluate(() => document.fonts.ready)
+  const before = await modal.locator('.modal-content').boundingBox()
+  expect(before).not.toBeNull()
+  await modal.getByText('Board hygiene', { exact: true }).click()
+  await expect(modal.getByText('Report only. Nothing changed.', { exact: true })).toBeAttached()
+  expect(await modal.locator('.modal-content').boundingBox()).toEqual(before)
+})
