@@ -268,9 +268,10 @@ export class ProjectService {
     try {
       const validatedInput = BoardConfigInputSchema.parse(params);
       const isPlaybook = validatedInput.action.endsWith('playbook');
-      const endpoint = `/mcp/projects/${validatedInput.project_id}/${
-        isPlaybook ? 'playbook' : 'instructions'
-      }`;
+      let resource = 'instructions';
+      if (isPlaybook) resource = 'playbook';
+      if (validatedInput.action === 'get_hygiene') resource = 'hygiene';
+      const endpoint = `/mcp/projects/${validatedInput.project_id}/${resource}`;
 
       if (validatedInput.action.startsWith('get_')) {
         return await this.apiClient.makeRequest<ProjectApiResponse>(
