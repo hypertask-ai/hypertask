@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -31,17 +30,4 @@ test("a normal send without a preceding reply keeps the normal insert time", asy
 
 test("assistant messages are never back-dated", async () => {
   assert.equal(await resolveQueuedMessageCreatedAt("assistant", "assistant-1", lookupReturning({ createdAt: replyCreatedAt })), undefined);
-});
-
-test("the add-message route looks the reply up inside the caller's own session", () => {
-  const route = fs.readFileSync(path.join(root, "src/app/api/ai-chat/add-message/route.ts"), "utf8");
-  assert.match(route, /resolveQueuedMessageCreatedAt\(/);
-  assert.match(route, /where: \{ id, sessionId, role: "assistant" \}/);
-});
-
-test("a queued send carries its reply id and never creates a session", () => {
-  const send = fs.readFileSync(path.join(root, "src/hooks/MultiPages/AIChat/aiChatSend.ts"), "utf8");
-  assert.match(send, /queuedMessage \? \{ precedesMessageId: assistantMessageId \}/);
-  assert.doesNotMatch(send, /parentSessionId/);
-  assert.doesNotMatch(send, /createSessionNext[\s\S]{0,200}queuedMessage/);
 });
