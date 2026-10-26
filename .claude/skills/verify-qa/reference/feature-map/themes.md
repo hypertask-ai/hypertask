@@ -25,7 +25,7 @@
 - New CSS leaks into Graphite or Porcelain.
 - Mobile first-screen preferences reject a newly supported theme.
 
-## Proof
+## What proof to collect
 
 Capture all five themes at both sizes, the three affected surfaces, selection/reload video, exact computed colours and type, old-theme before/after comparisons, and the core inbox cycle. Use actual picker clicks, not only injected cookies.
 
@@ -35,4 +35,4 @@ Use existing sandbox tasks read-only. Restore the QA browser's original theme co
 
 ## Icon source
 
-New shared glyphs use the official Iconoir 7.11.0 regular SVG paths (MIT, Luca Burgio). See `src/components/Common/IconoirIcons.LICENSE`.
+New shared glyphs use the official Iconoir 7.11.0 regular SVG paths (MIT, Luca Burgio). See `licenses/Iconoir.txt`.
