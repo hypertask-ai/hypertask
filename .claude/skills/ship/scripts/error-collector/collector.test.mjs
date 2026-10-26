@@ -732,14 +732,15 @@ check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe fail
     event({ ...vps, message: message.replace('run-u2003644.scope', 'run-r1b66062f07d0426abf597f7579b30ec8.scope') }),
     event({ ...vps, message: message.replace('Operation canceled.', 'Access denied.') }),
     event({ ...vps, message: message.replace('Operation canceled.', 'Operation canceled. Unexpected failure.') }),
+    event({ ...vps, message: `${message}\nAccess denied.` }),
     event({ ...vps, route: 'worker.service', message: message.replace('run-u2003644.scope', 'worker.service') }),
     event({ ...vps, service: 'vercel', message }),
   ]);
   assert.equal(await h.run(), 0);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 2);
-  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 4);
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
-  assert.equal(creates(h).length, 4);
+  assert.equal(creates(h).length, 5);
   assert.ok(creates(h).some(call => call.description.includes('Access denied.')));
 }));
 

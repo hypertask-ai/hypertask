@@ -116,7 +116,7 @@
   {
     "id": "powershell-shutdown-cancellation",
     "service": "vps-journal",
-    "match": "^run-(?:u\\d+|r[0-9a-f]{32})\\.scope: [^\\n]*\\[NamedPipeIPC_ServerListenerError:NamedPipe\\.Exception\\.Error\\][^\\n]* Error Message: Operation canceled\\.\\n",
+    "match": "^run-(?:u\\d+|r[0-9a-f]{32})\\.scope: [^\\n]*\\[NamedPipeIPC_ServerListenerError:NamedPipe\\.Exception\\.Error\\][^\\n]* Error Message: Operation canceled\\.\\n[^\\n]*$",
     "reason": "PowerShell disposes its diagnostic pipe listener on process exit; transient command scopes log the resulting cancellation as an error (YPER4-460)."
   },
   {
