@@ -33,6 +33,7 @@ stub('src/lib/prisma.ts', { default: {
   section: { findMany: async () => [] },
   task: { findFirst: async () => null, findMany: async () => [] },
   label: { findFirst: async () => ({ id: 'ai-feedback' }) },
+  agent: { findUnique: async () => ({ permissions: { role: 'write' } }) },
 } })
 stub('src/lib/flags.ts', {
   isFeatureEnabled: async (key, id) => key === 'htpr-7536-plain-ai-feedback' ? plainMode === 'EVERYONE' : key === 'htpr-6804-mcp-tools' ? catalogEnabled : key === 'htpr-7195-ai-feedback' && enabledFor(id),
@@ -56,7 +57,6 @@ stub('src/lib/mcp/auth.ts', {
   checkMcpRateLimit: async () => null,
 })
 stub('src/lib/mcp/directOperationClient.ts', { createDirectOperationClient: () => ({}) })
-stub('src/lib/mcp/mcpV2.ts', { isMcpV2Enabled: async () => false })
 stub('src/lib/telemetry/mcpSseAnalytics.ts', { recordLegacyMcpRequest: () => {} })
 stub('src/lib/mcp-server/legacy-sse.ts', { isLegacySseRequest: () => false })
 const vercelPath = require.resolve('@vercel/functions')
