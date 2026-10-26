@@ -84,3 +84,16 @@ Chat edits can send notifications, which cleanup cannot undo.
 Deleting a chat session removes its chat data and attachments, not created
 tickets or ticket edits. Delete only the test conversation/thread if cleanup
 is needed, never the account's entire chat history.
+
+## Independent parallel chats
+
+With `htpr-7765-parallel-chats` enabled, open a long reply in chat A,
+queue two follow-ups there, then switch to chats B and C and send in each.
+B and C must start before A finishes. Return to each chat: its own Stop
+and queue remain intact. A's follow-ups drain in order even while B or C
+is selected, using A's prior replies as history. Stop A while B runs;
+B must retain its Stop control and finish normally. Repeat with one failed
+reply. A late reply acceptance must not clear a new attachment in B.
+Capture overlapping request times, session/message IDs, final replies,
+and a reload proving each reply stayed in its own transcript. Flag off
+retains the prior shared reply guard. Per-user request limits still apply.
