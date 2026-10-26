@@ -55,6 +55,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8025-reactive-command-search";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG } from "@/lib/flags/definitions/htpr-7891-palette-share-key-labels";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
@@ -148,6 +149,7 @@ const Commands = (props: Props) => {
   const calendarSettings = useRecoilValue(calendarSettingsAtom);
   const pathname = usePathname();
   const router = useRouter();
+  const refreshSearchOnCommandsChange = useFlag(HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG);
   const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const onCalendar = !!pathname?.startsWith("/calendar");
@@ -460,7 +462,7 @@ const Commands = (props: Props) => {
     filterCommands,
     handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex,
     setSelectedCommand,
-  } = useHTC(allCommands_, emptyQueryCommands, !isMobile);
+  } = useHTC(allCommands_, emptyQueryCommands, !isMobile, refreshSearchOnCommandsChange);
   const hoveredCommand = useRef<CommandIdentity | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const commandRef = useRef<HTMLDivElement>(null);
