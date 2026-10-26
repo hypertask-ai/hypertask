@@ -288,8 +288,8 @@ test("every chat route bulk gate uses the shared confirmation helper", () => {
   assert.doesNotMatch(routeSource, /JSON\.stringify\((operation|requestedTasks)\)/);
   assert.equal(
     (routeSource.match(/await requireCrossMessageConfirmation\(/g) || []).length,
-    9,
-    "all nine confirmation gates must use the shared helper"
+    11,
+    "all eleven confirmation gates must use the shared helper"
   );
   assert.equal(
     (routeSource.match(/buildBulkOperationKey\(/g) || []).length,

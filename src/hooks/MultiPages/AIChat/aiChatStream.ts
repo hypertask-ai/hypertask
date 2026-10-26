@@ -1,3 +1,4 @@
+import { invalidateSlashSkills } from "@/lib/skills/slashSkills";
 import { IChatMessage, IChatSession } from "@/models/model";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import { TASK_EVENT } from "@/lib/realtime/shared";
@@ -175,6 +176,7 @@ export async function consumeAiChatStream(context: Context) {
                     break;
                   }
                   case "done":
+                    invalidateSlashSkills();
                     if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     sawDone = true;
                     console.log("🔥 Stream complete:", parsed);

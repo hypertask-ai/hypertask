@@ -35,8 +35,15 @@ export function slashTokenPrefix(charBefore: string): string {
 }
 
 const CACHE_TTL_MS = 60_000;
+let generation = 0;
 const cache = new Map<string, { at: number; skills: SlashSkill[] }>();
 const inflight = new Map<string, Promise<SlashSkill[]>>();
+
+export function invalidateSlashSkills() {
+  generation++;
+  cache.clear();
+  inflight.clear();
+}
 
 export async function fetchSlashSkills(
   projectId?: number | null
@@ -48,6 +55,7 @@ export async function fetchSlashSkills(
   const existing = inflight.get(key);
   if (existing) return existing;
 
+  const requestGeneration = generation;
   const request = (async () => {
     try {
       const url = projectId
@@ -65,12 +73,12 @@ export async function fetchSlashSkills(
           isProject: s.projectId != null,
         }));
       const skills = dedupeSkillsBySlug(mapped);
-      cache.set(key, { at: Date.now(), skills });
+      if (requestGeneration === generation) cache.set(key, { at: Date.now(), skills });
       return skills;
     } catch {
       return hit?.skills ?? [];
     } finally {
-      inflight.delete(key);
+      if (requestGeneration === generation) inflight.delete(key);
     }
   })();
 
