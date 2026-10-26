@@ -147,10 +147,13 @@ test("new protected work returns a refreshed preview, without archiving the conf
 
 
 test("agent activity can clear, but human and ordinary agent comments stay", () => {
-  const activity = { type: "Comment", comment: { activity: { action: "task.updated" } } };
+  const activity = { type: "Comment", comment: { activity: { type: "TaskMove", data: {} } } };
   assert.deepEqual(evaluate([row(1, activity)], rules(true)).notificationIds, [1]);
   assert.deepEqual(evaluate([row(1, { ...activity, fromAgentId: null })]).notificationIds, []);
   assert.deepEqual(evaluate([row(1, { type: "Comment", comment: { activity: null } })]).notificationIds, []);
+  for (const type of ["TaskAssigned", "TaskWaitingOn", "Unknown"]) {
+    assert.deepEqual(evaluate([row(1, { type: "Comment", comment: { activity: { type } } })]).notificationIds, []);
+  }
   const before = evaluate([row(1, activity)]).previewVersion;
   assert.notEqual(evaluate([row(1, { type: "Comment", comment: { activity: null } })]).previewVersion, before);
 });

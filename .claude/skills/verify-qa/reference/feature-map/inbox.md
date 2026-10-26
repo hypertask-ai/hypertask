@@ -87,7 +87,7 @@ Email recipients must not change: this restoration is inbox-only.
 With `htpr-8046-archive-safe` on, select Updates, Important or Agents and click
 **Archive safe**. The existing Inbox Zero confirmation shows the eligible count
 before anything is archived. Cancel leaves the Inbox unchanged. Confirm, reload,
-then undo the batch and reload again. Only moves and edits may disappear; Important
+then undo the batch and reload again. Only moves, edits and their structured agent activity may disappear; Important
 and Agents require agent-only events. Mentions, comments (including human replies),
 assignments, reminders, direct replies, blocked tickets, assigned tickets, pending
 decisions and tickets containing questions or mentions stay. Historical questions

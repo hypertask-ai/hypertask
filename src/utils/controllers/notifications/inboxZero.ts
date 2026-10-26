@@ -320,6 +320,8 @@ export const evaluateInboxZero = (
     NotificationType.TaskArchived,
   ]);
 
+  const pureActivityTypes = new Set(["TaskMove", "TaskDescriptionUpdate", "TaskDueDate", "TaskArchive"]);
+
   for (const item of items) {
     if (rules.safeUpdates) {
       const task = item.representative.task;
@@ -335,7 +337,13 @@ export const evaluateInboxZero = (
         item.notifications.every((notification) =>
           (pureUpdateTypes.has(notification.type) ||
             (notification.type === NotificationType.Comment &&
-              Boolean(notification.fromAgentId) && notification.comment?.activity != null)) &&
+              Boolean(notification.fromAgentId) &&
+              notification.comment?.activity !== null &&
+              typeof notification.comment?.activity === "object" &&
+              !Array.isArray(notification.comment.activity) &&
+              "type" in notification.comment.activity &&
+              typeof notification.comment.activity.type === "string" &&
+              pureActivityTypes.has(notification.comment.activity.type))) &&
           notification.directReply === false &&
           (!rules.safeUpdates?.agentOnly || Boolean(notification.fromAgentId))
         )
