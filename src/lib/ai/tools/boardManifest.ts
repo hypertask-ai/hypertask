@@ -1,3 +1,5 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
+import { isFeatureEnabled } from "@/lib/flags";
 import { tool } from "ai";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
@@ -45,6 +47,7 @@ export function createBoardManifestTool(context: ToolContext) {
           return { success: false, error: "Project not found or access denied" };
         }
 
+        const workLimits = await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, user.id);
         return sanitizeForJson({
           success: true,
           projectId: project.id,
@@ -54,7 +57,7 @@ export function createBoardManifestTool(context: ToolContext) {
             title: section.section_title,
             position: section.ranking,
             role: columnRoleFor(section),
-            wipLimit: section.wipLimit,
+            wipLimit: workLimits ? section.wipLimit : null,
           })),
           transitions: "any",
         });

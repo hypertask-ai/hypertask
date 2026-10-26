@@ -1,3 +1,4 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 
@@ -123,6 +124,7 @@ export const Section = ({
   const [loadedTask] = useState(() => (seeded || !hydrated ? null : firstDrawTask));
   const TaskRenderer = seeded ? SeededTask : loadedTask?.default ?? Task;
   const currentProject = project;
+  const workLimits = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
   const setActiveSection = useSetRecoilState(activeSectionAtom);
@@ -461,8 +463,8 @@ export const Section = ({
             >
               <TitleAndTasks
                 itemLen={section.items?.length ?? 0}
-                wipLimit={section.wipLimit}
-                wipCount={section.wipLimit == null ? 0 : getManageColumnRows([section], currentProject.tasks)[0].taskCount}
+                wipLimit={workLimits ? section.wipLimit : null}
+                wipCount={!workLimits || section.wipLimit == null ? 0 : getManageColumnRows([section], currentProject.tasks)[0].taskCount}
                 title={section.section_title}
                 id={section.sectionId!}
               />

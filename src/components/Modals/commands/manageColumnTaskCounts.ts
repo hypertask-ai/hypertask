@@ -7,7 +7,6 @@ type SectionWithId = {
 type TaskWithSection = {
   status?: string;
   sectionId?: number;
-  wipLimit?: number | null;
 };
 
 export const getManageColumnRows = <

@@ -1,3 +1,5 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
+import { isFeatureEnabled } from '@/lib/flags'
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
@@ -163,6 +165,10 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
     const hasAccess = await canAccessProject(existing.projectId, userId, agentId, teamScope)
     if (!hasAccess) {
       return { status: 403, json: { message: 'User does not have permission to update this section' } }
+    }
+
+    if (wipLimit !== undefined && !(await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, userId))) {
+      return { status: 403, json: { message: 'Column work limits are not enabled' } }
     }
 
     let resolvedRanking = ranking

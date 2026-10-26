@@ -17,7 +17,7 @@ const { getCurrentProject } = load("src/utils/helperFunctions/helperFunctions.ts
   "@/lib/media/heicToJpeg": {},
 });
 
-function fixture({ allowed = true } = {}) {
+function fixture({ allowed = true, enabled = true } = {}) {
   const section = { id: 11, projectId: 15, section_title: "In Progress", ranking: "A1", visibility: true, deleted: false, isDone: false, wipLimit: 3, autoAssignUserId: null, autoAssignAgentId: null };
   const writes = [];
   const prisma = {
@@ -31,7 +31,7 @@ function fixture({ allowed = true } = {}) {
   prisma.$transaction = async (run) => run(prisma);
   const mocks = {
     "@/lib/prisma": { default: prisma },
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags": { isFeatureEnabled: async () => enabled },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/utils/controllers/notifications/agentFirstTaskEmail": {},
     "@/lib/telemetry/activationOccurrences": {},
@@ -107,4 +107,12 @@ test("the rendered board sections retain limits through task grouping", () => {
   });
   assert.equal(result._sections[0].wipLimit, 2);
   assert.equal(result._sections[0].items.length, 1);
+});
+
+test("flag Off refuses limit writes without blocking ordinary column edits", async () => {
+  const f = fixture({ enabled: false });
+  assert.equal((await f.update({ wipLimit: 2 })).status, 403);
+  assert.deepEqual(f.writes, []);
+  assert.equal((await f.update({ ranking: "A2" })).status, 200);
+  assert.equal(f.section.wipLimit, 3);
 });

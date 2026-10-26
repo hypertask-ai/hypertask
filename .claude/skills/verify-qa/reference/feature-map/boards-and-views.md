@@ -158,6 +158,11 @@ failures must still log errors. Local behavior coverage:
 
 ## Column limits and card age
 
+https://app.hypertask.ai/detail/project-15/7975 is controlled by
+`htpr-7975-column-work-limits`, default Everyone. Off hides the limit
+editor and count denominator, refuses limit writes on the server, and
+restores stale-only ages without deleting saved limits.
+
 Open Commands, Manage board columns, then a column's settings. Set **Work
 limit** to a positive whole number, leave the field, and reload the board.
 The existing column count shows active tasks / limit. Above the limit it

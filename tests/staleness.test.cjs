@@ -141,7 +141,7 @@ test("the Kanban age line shows time in column for fresh tasks", () => {
     formatKanbanStalenessLine({
       ...s,
       commentLevel: stalenessLevel(s.daysSinceLastComment),
-    }),
+    }, true),
     "3d on board · 1d in column",
   );
 });

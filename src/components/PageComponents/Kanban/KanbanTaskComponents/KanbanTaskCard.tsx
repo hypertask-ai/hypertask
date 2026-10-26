@@ -1,3 +1,4 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React, { useContext } from "react";
@@ -221,6 +222,7 @@ const TaskStalenessLine = ({
   task: ITask;
 }) => {
   const snapshot = useFirstScreenSurface();
+  const showFresh = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   if (!enabled) return null;
 
   const now = snapshot ? Date.parse(snapshot.now) : undefined;
@@ -246,7 +248,7 @@ const TaskStalenessLine = ({
     daysSinceLastComment: commentDays,
     level,
     commentLevel,
-  });
+  }, showFresh);
 
   if (!ageLine) return null;
 

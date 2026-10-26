@@ -1,3 +1,4 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
@@ -51,6 +52,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void }) => {
   const queryClient = useQueryClient();
+  const workLimits = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   const lastColumnDeleteMessage = useFlag(HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG);
   const noEmptyBoardFlash = useFlag(HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG);
   const isMobile = useContext(MobileViewContext);
@@ -288,7 +290,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       else if (saveMode === "RENAME") {
         patch = { section_title: sendUpdateSection.section_title, isDone: sendUpdateSection.isDone };
       }
-      const latestSections = queryClient.getQueryData<ISection[]>([
+      const latestSections: ISection[] = queryClient.getQueryData<ISection[]>([
         globalConstants.GetAllManageColumnsPrefixKey,
         currentProject?.id,
         currentUser.id,
@@ -843,10 +845,10 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                                   aria-label={`${taskCount} ${
                                     taskCount === 1 ? "task" : "tasks"
                                   }`}
-                                  className={`manage-column-task-count shrink-0 text-meta font-medium tabular-nums ${overLimit ? "text-destructive" : "text-text-light-gray"}`}
-                                  title={section.wipLimit == null ? undefined : `${taskCount} active tasks; limit ${section.wipLimit}${overLimit ? "; over limit" : ""}`}
+                                  className={`manage-column-task-count shrink-0 text-meta font-medium tabular-nums ${workLimits && overLimit ? "text-destructive" : "text-text-light-gray"}`}
+                                  title={!workLimits || section.wipLimit == null ? undefined : `${taskCount} active tasks; limit ${section.wipLimit}${overLimit ? "; over limit" : ""}`}
                                 >
-                                  {taskCount}{section.wipLimit == null ? "" : ` / ${section.wipLimit}`}
+                                  {taskCount}{!workLimits || section.wipLimit == null ? "" : ` / ${section.wipLimit}`}
                                 </span>
                               </div>
                               <div className="flex shrink-0 gap-4 items-center">
@@ -907,7 +909,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
               />
             </div>
 
-            <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
+            {workLimits && <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
               <label htmlFor="edit-column-wip-limit" className="shrink-0 text-dense font-semibold text-white-black">
                 Work limit
               </label>
@@ -927,7 +929,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                   if (event.key === "Enter") event.currentTarget.blur();
                 }}
               />
-            </div>
+            </div>}
 
             <div className="border-b border-light-black-border-1 px-2 py-1">
               <SettingsToggle
