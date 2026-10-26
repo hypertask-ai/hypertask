@@ -1,8 +1,7 @@
 import { IconsGlobal } from "@/components/Common/IconsGlobal";
-import { FreePlanLimitLines } from "@/components/Modals/Settings/SettingsBillingRow";
-import { useFreePlanLimitFlags } from "@/hooks/useFreePlanLimitCopy";
 import { getTeamById } from "@/lib/serverActions";
-import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
+import { HTPR_7686_FREE_PLAN_COPY_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-copy";
+import { trialComparisonColumns, trialPlanBlurb } from "@/lib/subscriptionPlans";
 import { CreateCheckoutParams, IPricingSearchParams } from "@/models/model";
 import { StartPlanButton, requestCheckout } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
@@ -136,22 +135,21 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
 export const PlansTable = ()=>{
     const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
     const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-    const freePlanLimits = useFreePlanLimitFlags();
+    const showCorrectedCopy = useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG);
+    const columns = trialComparisonColumns(showCorrectedCopy);
     return(
         <>
         <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Start a Hypertask plan" : "Try the Pro plan for free for 14 days"}</h2>
-        <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">Unlimited AI. Risk free, cancel anytime.</p>
-        <div className="flex justify-center">
-            <FreePlanLimitLines align="center" flags={freePlanLimits} />
-        </div>
+        <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">{trialPlanBlurb(showCorrectedCopy)}</p>
         <div className="py-2 sm:py-6 max-h-[58svh] max-w-[80vw] overflow-auto lg:scrollbar-none scrollbar-thin scrollbar-thumb-inherit scrollbar-track-inherit text-left font-semibold ">
                 <div className="flex xs:gap-3 lg:gap-8">
-
+                    {columns.sharedTitles ? (
+                    <>
                     <div className="lg:px-4 xs:px-2 py-2">
                         <ColumnTitle content={""} />
                         <div className="flex flex-col font-bold">
                             {
-                                storeSubscriptionPlans[0].perks.map((perk, index) =>
+                                columns.sharedTitles.map((perk, index) =>
                                     <RowContent type="title" key={`perk-${index}`} AIPrefix={!!perk.titlePrefix} content={perk.title} />
 
                                 )
@@ -164,7 +162,7 @@ export const PlansTable = ()=>{
 
                         <div className="flex flex-col">
                             {
-                                storeSubscriptionPlans[1].perks.map((perk, index) =>
+                                columns.starter.map((perk, index) =>
                                     <RowContent type="amount" key={`perk-amount-${index}`} checkVariant="gray" showCheck={perk.excludeCheck ? false : true} content={perk.amount} />
 
 
@@ -181,7 +179,7 @@ export const PlansTable = ()=>{
 
                         <div className="flex flex-col items-center">
                             {
-                                storeSubscriptionPlans[0].perks.map((perk, index) =>
+                                columns.proWithAi.map((perk, index) =>
                                     <RowContent type="amount" key={`perk-amount-${index}`} showCheck={true} checkVariant={perk.titlePrefix ? "AI" : "black"} content={perk.amount} />
 
 
@@ -189,6 +187,13 @@ export const PlansTable = ()=>{
                             }
                         </div>
                     </div>
+                    </>
+                    ) : (
+                    <>
+                    <OwnPlanColumn perks={columns.starter} highlighted={false} />
+                    <OwnPlanColumn perks={columns.proWithAi} highlighted />
+                    </>
+                    )}
                 </div>
 
             </div>
@@ -202,3 +207,35 @@ const ColumnTitle = ({ content }: any) => {
         <span className="min-h-[40px] mb-2 block font-bold text-heading whitespace-nowrap" >{content}</span>
     )
 }
+
+const OwnPlanColumn = ({
+    perks,
+    highlighted,
+}: {
+    perks: { titlePrefix?: string; title: string; amount: string; excludeCheck?: boolean }[];
+    highlighted: boolean;
+}) => (
+    <div className={highlighted ? "xs:px-3 lg:px-6 bg-[#F3F3F3] dark:bg-active-elementBg py-2" : "lg:px-4 xs:px-2 py-2"}>
+        {highlighted ? (
+            <div className="flex gap-2 items-center font-bold">
+                <ColumnTitle content={"Pro with "} />
+                <span className="text-hypertasks-ai-purple text-heading min-h-[40px] mb-2">AI</span>
+            </div>
+        ) : (
+            <ColumnTitle content={"Starter"} />
+        )}
+        <div className={`flex flex-col ${highlighted ? "items-center" : ""}`}>
+            {perks.map((perk, index) => (
+                <div key={`perk-${index}`}>
+                    <RowContent type="title" AIPrefix={!!perk.titlePrefix} content={perk.title} />
+                    <RowContent
+                        type="amount"
+                        checkVariant={highlighted ? (perk.titlePrefix ? "AI" : "black") : "gray"}
+                        showCheck={highlighted ? true : !perk.excludeCheck}
+                        content={perk.amount}
+                    />
+                </div>
+            ))}
+        </div>
+    </div>
+);

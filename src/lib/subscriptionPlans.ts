@@ -253,3 +253,26 @@ export function subscriptionPlansFor(flags: FreePlanLimitFlags): ISubscriptionPl
 }
 
 export const storeSubscriptionPlans = subscriptionPlansFor(legacyFreePlan);
+
+const productionTrialBlurb = "Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.";
+
+export function trialPlanBlurb(corrected: boolean): string {
+  return corrected ? "Risk free, cancel anytime." : productionTrialBlurb;
+}
+
+export function trialComparisonColumns(corrected: boolean, plans: ISubscriptionPlan[] = storeSubscriptionPlans) {
+  if (!corrected) {
+    return {
+      sharedTitles: plans[0].perks,
+      starter: plans[1].perks,
+      proWithAi: plans[0].perks,
+    };
+  }
+  const starter = plans.find((plan) => plan.id === "BYOK") ?? plans[0];
+  const pro = plans.find((plan) => plan.id === "Pro") ?? plans[1];
+  return {
+    sharedTitles: null,
+    starter: starter.perks,
+    proWithAi: pro.perks.filter((perk) => !perk.amount.includes("$15 of tokens")),
+  };
+}

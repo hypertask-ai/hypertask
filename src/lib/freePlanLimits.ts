@@ -57,3 +57,7 @@ export function freePlanLimitLines(flags: FreePlanLimitFlags): FreePlanLimitLine
 export function freePlanLimitCopy(flags: FreePlanLimitFlags): string[] {
   return freePlanLimitLines(flags).map((line) => line.amount);
 }
+
+export function visibleFreePlanCopy(showCopy: boolean, flags: FreePlanLimitFlags): string[] {
+  return showCopy ? freePlanLimitCopy(flags) : [];
+}

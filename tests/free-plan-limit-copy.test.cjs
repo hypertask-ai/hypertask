@@ -4,6 +4,7 @@ const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const test = require("node:test");
 const { createJiti } = require("jiti");
+const { load } = require("./helpers/agent-connection.cjs");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, {
@@ -16,7 +17,6 @@ const limits = jiti(path.join(root, "src/lib/freePlanLimits.ts"));
 const plans = jiti(path.join(root, "src/lib/subscriptionPlans.ts"));
 const previousReact = global.React;
 global.React = React;
-const { FreePlanLimitLines } = jiti(path.join(root, "src/components/Modals/Settings/SettingsBillingRow.tsx"));
 process.on("exit", () => {
   if (previousReact === undefined) delete global.React;
   else global.React = previousReact;
@@ -26,8 +26,9 @@ const legacy = { planLimits: false, unlimitedTickets: false };
 const capped = { planLimits: true, unlimitedTickets: false };
 const boardsAndFilesOnly = { planLimits: true, unlimitedTickets: true };
 
-function text(flags) {
-  return renderToStaticMarkup(React.createElement(FreePlanLimitLines, { flags }))
+function text(flags, showCopy = true) {
+  const lines = limits.visibleFreePlanCopy(showCopy, flags);
+  return renderToStaticMarkup(React.createElement("span", null, lines.map((line) => React.createElement("span", { key: line }, line))))
     .replace(/&#x27;|&#39;|&apos;/g, "'");
 }
 
@@ -38,6 +39,14 @@ function freeAmounts(flags) {
     .filter((perk) => ["Boards", "Open tickets", "Files", "Teams already over a limit"].includes(perk.title))
     .map((perk) => perk.amount);
 }
+
+test("free plan lines stay hidden until the copy flag is on", () => {
+  assert.deepEqual(limits.visibleFreePlanCopy(false, legacy), []);
+  assert.deepEqual(limits.visibleFreePlanCopy(false, capped), []);
+  assert.equal(text(capped, false).includes("Up to 2 boards"), false);
+  assert.equal(text(legacy, false).includes("Unlimited tickets"), false);
+  assert.deepEqual(limits.visibleFreePlanCopy(true, legacy), limits.freePlanLimitCopy(legacy));
+});
 
 test("free plan copy with the limits flag off matches the legacy rule and states no file size", () => {
   const lines = limits.freePlanLimitCopy(legacy);
@@ -103,4 +112,59 @@ test("shown BYOK and Pro prices are $10 or $20 monthly and $96 or $192 yearly", 
   assert.equal(byok.types[1].description, "per user / year");
   assert.equal(pro.types[0].description, "per user / month");
   assert.equal(pro.types[1].description, "per user / year");
+});
+
+test("trial comparison keeps production columns until the copy flag is on", () => {
+  const off = plans.trialComparisonColumns(false);
+  assert.equal(plans.trialPlanBlurb(false).includes("unlimited AI"), true);
+  assert.equal(off.sharedTitles.some((perk) => perk.title === "LLM billing"), true);
+  assert.equal(off.starter.some((perk) => perk.amount.includes("$15 of tokens")), true);
+  assert.equal(off.starter.some((perk) => perk.amount === "Priority"), true);
+  assert.equal(off.proWithAi.some((perk) => perk.amount.includes("Your API keys")), true);
+  assert.equal(off.proWithAi.some((perk) => perk.amount === "Email"), true);
+
+  const on = plans.trialComparisonColumns(true);
+  assert.equal(plans.trialPlanBlurb(true), "Risk free, cancel anytime.");
+  assert.equal(plans.trialPlanBlurb(true).toLowerCase().includes("unlimited ai"), false);
+  assert.equal(on.sharedTitles, null);
+  assert.equal(on.starter.some((perk) => perk.title === "LLM billing" && perk.amount.includes("Your API keys")), true);
+  assert.equal(on.starter.some((perk) => perk.title === "Support" && perk.amount === "Email"), true);
+  assert.equal(on.starter.some((perk) => perk.amount.includes("$15")), false);
+  assert.equal(on.proWithAi.some((perk) => perk.title === "Support" && perk.amount === "Priority"), true);
+  assert.equal(on.proWithAi.some((perk) => perk.amount.includes("Your API keys")), false);
+  assert.equal(on.proWithAi.some((perk) => perk.amount.includes("$15 of tokens")), false);
+  assert.equal(on.proWithAi.some((perk) => perk.title === "LLM billing"), false);
+});
+
+test("the trial table renders each plan's own features only when the copy flag is on", () => {
+  const shown = { corrected: false };
+  const table = load("src/components/Modals/TrialPlan/TrialPlanComponents.tsx", {
+    "@/components/Common/IconsGlobal": { IconsGlobal: { Check: () => null } },
+    "@/lib/serverActions": { getTeamById: async () => null },
+    "@/lib/subscriptionPlans": plans,
+    "@/lib/flags/definitions/htpr-7686-free-plan-copy": { HTPR_7686_FREE_PLAN_COPY_FLAG: "htpr-7686-free-plan-copy" },
+    "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": { StartPlanButton: () => null, requestCheckout: async () => "" },
+    "@/hooks/useFlag": { useFlag: (name) => name === "htpr-7686-free-plan-copy" && shown.corrected, useFlagReady: () => true },
+    "@/lib/flags/keys": { HTPR_7551_START_PLAN_CHECKOUT_FLAG: "htpr-7551-start-plan-checkout" },
+    "next/navigation": { useRouter: () => ({ push() {} }) },
+  }).PlansTable;
+  const markup = (corrected) => {
+    shown.corrected = corrected;
+    return renderToStaticMarkup(React.createElement(table));
+  };
+  const off = markup(false);
+  const on = markup(true);
+  assert.equal(off.includes("unlimited AI"), true);
+  assert.equal(off.includes("$15 of tokens"), true);
+  assert.equal(on.includes("unlimited AI"), false);
+  assert.equal(on.includes("Risk free, cancel anytime."), true);
+  assert.equal(on.includes("$15 of tokens"), false);
+  assert.equal(on.includes("Your API keys"), true);
+  assert.equal(on.includes("Priority"), true);
+  const starter = on.slice(on.indexOf("Starter"), on.indexOf("Pro with "));
+  const pro = on.slice(on.indexOf("Pro with "));
+  assert.equal(starter.includes("Your API keys"), true);
+  assert.equal(starter.includes("Priority"), false);
+  assert.equal(pro.includes("Priority"), true);
+  assert.equal(pro.includes("Your API keys"), false);
 });

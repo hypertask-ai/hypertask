@@ -1,6 +1,4 @@
-import { FreePlanLimitLines } from "@/components/Modals/Settings/SettingsBillingRow";
 import { TeamStartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
-import { useFreePlanLimitFlags } from "@/hooks/useFreePlanLimitCopy";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
@@ -138,7 +136,6 @@ const TrialBody = ({
   startPlanCheckout?: React.ReactElement | null;
 }) => {
   const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-  const freePlanLimits = useFreePlanLimitFlags();
   const [selectedPlan, setSelectedPlan] = useState<TPlan>("Year");
   const [selectedTier, setSelectedTier] = useState<TTier>("Pro");
   const router = useRouter();
@@ -221,7 +218,6 @@ const TrialBody = ({
         {offerPlan.name}: {monthType.price} monthly or {yearType.price} yearly (
         {yearType.description})
       </p>
-      <FreePlanLimitLines align="center" flags={freePlanLimits} />
 
       <div className="flex flex-col sm:flex-row gap-3">
         <TrialCard

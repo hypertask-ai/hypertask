@@ -41,7 +41,10 @@ async function withButton(fn, backend) {
     isAxiosError: (error) => Boolean(error?.isAxiosError),
   };
   const router = { push: (url) => pushes.push(url), refresh: () => { refreshes++; } };
-  const flagMock = { useFlag: (name) => { assert.equal(name, key); return state.enabled; }, useFlagReady: () => state.flagReady };
+  const flagMock = { useFlag: (name) => {
+    if (name === "htpr-7686-free-plan-copy") return false;
+    assert.equal(name, key); return state.enabled;
+  }, useFlagReady: () => state.flagReady };
   const buttonModule = load("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx", {
     axios, "next/navigation": { useRouter: () => router },
     "@tanstack/react-query": {
@@ -63,9 +66,12 @@ async function withButton(fn, backend) {
   const legacy = load("src/components/Modals/TrialPlan/TrialPlanComponents.tsx", {
     "@/components/Common/IconsGlobal": { IconsGlobal: { Check: () => null } },
     "@/lib/serverActions": { getTeamById: async () => ({ ...state.board.team, totalSeats: 3, googleAccountId: "account" }) },
-    "@/lib/subscriptionPlans": { storeSubscriptionPlans: [{ perks: [] }, { perks: [] }] },
-    "@/hooks/useFreePlanLimitCopy": { useFreePlanLimitFlags: () => ({ planLimits: false, unlimitedTickets: false }) },
-    "@/components/Modals/Settings/SettingsBillingRow": { FreePlanLimitLines: () => null },
+    "@/lib/subscriptionPlans": {
+      storeSubscriptionPlans: [{ perks: [] }, { perks: [] }],
+      trialPlanBlurb: (corrected) => corrected ? "Risk free, cancel anytime." : "Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.",
+      trialComparisonColumns: () => ({ sharedTitles: [], starter: [], proWithAi: [] }),
+    },
+    "@/lib/flags/definitions/htpr-7686-free-plan-copy": { HTPR_7686_FREE_PLAN_COPY_FLAG: "htpr-7686-free-plan-copy" },
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
     "@/lib/flags/keys": flag,
@@ -105,8 +111,6 @@ async function withButton(fn, backend) {
     "@/lib/constants/APIRouteConstants": { CHECKOUT_SESSION_API_ENDPOINT: "/api/stripe/session/checkout" },
     axios: { ...axios, get: async () => ({ status: 200, data: backend?.team ?? freeBoard().team }) },
     "next/navigation": { useRouter: () => router }, "@/lib/subscriptionPlans": plans,
-    "@/hooks/useFreePlanLimitCopy": { useFreePlanLimitFlags: () => ({ planLimits: false, unlimitedTickets: false }) },
-    "@/components/Modals/Settings/SettingsBillingRow": { FreePlanLimitLines: () => null },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "lucide-react": { LogOut: () => null, Star: () => null },
     "@/hooks/MultiPages/HTC/useSignout": { useSignout: () => ({ handleHardReset: () => {} }) },
