@@ -11,6 +11,7 @@ const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
 });
 const { useAiChatSessions } = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
   "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/ai/chipEvents": { signalAiChip: () => {} },
   "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
   react: { useCallback: (callback) => callback, useRef: (current) => ({ current }), useEffect() {} },
   "@/lib/constants": { default: {} },
@@ -301,6 +302,7 @@ test("legacy history stays clean across repeated queue failures and recovery", a
   const { useSessionAndChatHistory } = load("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts", {
     react: { useCallback: (callback) => callback, useRef: (current) => ({ current }), useEffect() {}, useState: (initial) => [initial, () => {}] },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/store": { currentUserAtom: "user" },
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? { id: 985, uid: "qa-985" } : null, useRecoilState: () => [null, () => {}] },
     "@/utils/api/ai_chat": { AI_Chat_API: { addMessage: async () => ({ data: {} }) } },

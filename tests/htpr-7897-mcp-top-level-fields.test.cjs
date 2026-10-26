@@ -37,7 +37,7 @@ function spyTasks(topLevelInputFields = true, { ticketNumber = true } = {}) {
       calls.push(args)
       return JSON.stringify({ tasks: [{ id: 1, ticket: args.ticket_number ?? null }] })
     },
-  }], true, {}, false, false, false, false, false, topLevelInputFields)
+  }], true, {}, false, false, false, false, topLevelInputFields)
   return { calls, tasks: tools.find((tool) => tool.name === 'hypertask_tasks') }
 }
 

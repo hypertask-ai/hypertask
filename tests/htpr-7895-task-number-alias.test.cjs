@@ -36,7 +36,7 @@ function spyTasks(taskNumberAlias = true, { ticketNumber = true } = {}) {
       calls.push(args)
       return JSON.stringify({ tasks: [{ id: 1, ticket: args.ticket_number ?? null }] })
     },
-  }], true, {}, false, false, false, taskNumberAlias)
+  }], true, {}, false, false, taskNumberAlias)
   return { calls, tasks: tools.find((tool) => tool.name === 'hypertask_tasks') }
 }
 

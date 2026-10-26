@@ -15,6 +15,7 @@ function ui({ enabled = true, mobile = false, external = true, embedded = true, 
   const source = loader({
     "next/navigation": { usePathname: () => "/detail/project-15/42" },
     "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === "htpr-7316-chat-scope-ticket" && ticketScopeEnabled },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/store": atoms,
     "@/lib/state": {
       useRecoilValue: (key) => key === "board" ? { id: 15, title: "Current board name" } : key === "user" ? { id: 7 } : { taskId: 42, taskTicketNumber: "HTPR-42", taskTitle: "Ticket title" },
@@ -95,6 +96,7 @@ function externalSender({ enabled = true, embedded = true, scope = "ticket", tic
   const { useAgentChatSend } = load("src/app/agents/chat/useAgentChatSend.ts", {
     react: hooks, "react-hot-toast": { default: { error: assert.fail } },
     "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === "htpr-7316-chat-scope-ticket" && ticketScopeEnabled },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/hooks/MultiPages/AIChat/useDockedChatScope": { useDockedChatScope: () => [scope, noop] },
     "@/lib/state": { useRecoilValue: (key) => key === "board" ? { id: 15 } : { taskId, taskProjectId } },
     "@/store": { currentProjectAtom: "board", inViewObjectAtom: "ticket" },

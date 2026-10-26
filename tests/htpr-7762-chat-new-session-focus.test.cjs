@@ -40,6 +40,7 @@ function chat({ enabled = true, fullscreen = true } = {}) {
   const { useAiChatSessions } = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
     react: hooks,
     "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flag.default.key); return enabled; } },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": flag,
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null },
     "@/lib/constants": { default: {} },
@@ -78,6 +79,7 @@ function fullScreenNewChat(chat, { enabled = false, sessions = [], activeSession
     },
     "react/jsx-runtime": require("react/jsx-runtime"),
     "@/hooks/useFlag": { useFlag: (key) => key === flag.default.key && enabled },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": flag,
     "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch": { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: "htpr-7763-ctrl-tab-session-switch" },
