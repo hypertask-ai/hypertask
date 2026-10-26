@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { setTimeout } from "node:timers/promises";
 import { createIncident, escapeHtml, jsonRequest, mcpHeaders } from "./posthog-error-alert.mjs";
 
@@ -32,7 +33,7 @@ export function rateIssue(message, users, source) {
 
 export function issueQuery(issueId, productionOnly = true) {
   if (!UUID.test(issueId)) throw new Error("PostHog issue ID is invalid");
-  return `SELECT count(), uniqExactIf(coalesce(toString(properties.userId), toString(properties.user_id), distinct_id), distinct_id != 'hypertask-app' OR properties.userId IS NOT NULL OR properties.user_id IS NOT NULL), min(timestamp), max(timestamp), argMax(properties.$exception_list, timestamp), argMax(properties.ht_source, timestamp), argMax(coalesce(properties.ht_url, properties.$current_url), timestamp), countIf(distinct_id = 'hypertask-app' AND properties.userId IS NULL AND properties.user_id IS NULL)
+  return `SELECT count(), uniqExactIf(coalesce(toString(properties.userId), toString(properties.user_id), distinct_id), distinct_id != 'hypertask-app' OR properties.userId IS NOT NULL OR properties.user_id IS NOT NULL), min(timestamp), max(timestamp), argMax(properties.$exception_list, timestamp), argMax(properties.ht_source, timestamp), argMax(coalesce(properties.ht_url, properties.$current_url), timestamp), countIf(distinct_id = 'hypertask-app' AND properties.userId IS NULL AND properties.user_id IS NULL), argMax(coalesce(toString(properties.ht_featureFlag), ''), timestamp)
 FROM events WHERE event = '$exception' AND toString(properties.$exception_issue_id) = '${issueId}'
 ${productionOnly ? "AND (properties.ht_environment = 'production' OR (properties.ht_environment IS NULL AND properties.$current_url LIKE 'https://app.hypertask.ai/%'))" : ""}`;
 }
@@ -72,7 +73,7 @@ export async function readProductionIssue(fetchImpl, apiKey, issueId, { wait = s
     if (finalRead && !(await readStats(issueQuery(issueId, false)))[0]) {
       return { action: "retry", reason: "PostHog issue has no exceptions in any environment yet" };
     }
-    const [count, users, first, last, rawExceptions, source, url, unidentifiedHits] = await readStats(query);
+    const [count, users, first, last, rawExceptions, source, url, unidentifiedHits, featureFlag] = await readStats(query);
     if (!count) {
       if (finalRead) return { action: "skip", reason: "PostHog issue has only non-production exceptions" };
       continue;
@@ -87,6 +88,7 @@ export async function readProductionIssue(fetchImpl, apiKey, issueId, { wait = s
       issue_id: issueId, name: String(issue.name || "Error").slice(0, 120), message,
       count, users, unidentified_hits: unidentifiedHits, timestamp: first, last_seen: last, source, url,
       issue_url: `${POSTHOG}/project/${PROJECT}/error_tracking/${issueId}`,
+      feature_flag: typeof featureFlag === "string" && /^htpr-[1-9][0-9]*-[a-z0-9-]+$/.test(featureFlag) && existsSync(new URL(`../../src/lib/flags/definitions/${featureFlag}.ts`, import.meta.url)) ? featureFlag : undefined,
       ...rateIssue(message, users, source),
     };
   }
@@ -129,6 +131,21 @@ export async function severityLabels(fetchImpl, token, config) {
   return labels;
 }
 
+async function linkIssueFlag(fetchImpl, token, config, issue, task) {
+  if (!issue.feature_flag) return;
+  const ticket = `HTPR-${issue.feature_flag.split("-")[1]}`;
+  if (task.ticketNumber === ticket) return;
+  const key = `posthog-flag-${issue.issue_id}-${issue.feature_flag}`;
+  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/tasks/relations`, {
+    method: "POST", headers: mcpHeaders(token, key),
+    body: JSON.stringify({ source_task_id: task.id, target_ticket_number: ticket, target_project_id: config.boardId, relation_type: "RelatedTo" }),
+  });
+  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
+    method: "POST", headers: mcpHeaders(token, `${key}-comment`),
+    body: JSON.stringify({ task_id: task.id, content_type: "html", text: `<p><strong>Error names this feature flag.</strong></p><p><a href="${escapeHtml(config.appUrl)}/admin/flags/${issue.feature_flag}">${issue.feature_flag}</a></p>` }),
+  });
+}
+
 export async function upsertIssue(fetchImpl, token, config, issue) {
   let existing = await findIssueTicket(fetchImpl, token, config, issue.issue_id);
   if (!existing) {
@@ -146,6 +163,7 @@ export async function upsertIssue(fetchImpl, token, config, issue) {
         });
         return { action: "updated" };
       }
+      await linkIssueFlag(fetchImpl, token, config, issue, canonical);
       return { action: "created", incident };
     }
   }
@@ -178,11 +196,12 @@ export async function upsertIssue(fetchImpl, token, config, issue) {
       }),
     });
   }
+  await linkIssueFlag(fetchImpl, token, config, issue, existing);
   const note = issue.alert_kind === "issue_spiking"
     ? `PostHog detected a spike: ${issue.spike_count} hits in its detection window, baseline ${issue.spike_baseline}.`
     : issue.alert_kind === "issue_reopened" ? "PostHog reopened this issue after it was resolved." : "PostHog reported this issue again.";
   const severityNote = severityChanged ? `<p>Severity changed from ${escapeHtml(oldLabels.map((label) => label.name).join(" + ") || "unrated")} to ${escapeHtml(issue.severity)}. ${escapeHtml(issue.severity_reason)}</p>` : "";
-  const text = `<p><strong>${escapeHtml(note)}</strong></p><p>${escapeHtml(issue.severity)}: ${issue.count} production hits, ${issue.users} known users in the issue's production history (${issue.unidentified_hits} hits without a user identity).</p>${severityNote}<p>Last seen ${escapeHtml(issue.last_seen)}. <a href="${escapeHtml(issue.issue_url)}">PostHog issue</a></p><p>Next: Investigate the latest production errors in PostHog and record findings here.</p>`;
+  const text = `<p><strong>${escapeHtml(note)}</strong></p><p>${escapeHtml(issue.severity)}: ${issue.count} production hits, ${issue.users} known users in the issue's production history (${issue.unidentified_hits} hits without a user identity).</p>${severityNote}${issue.feature_flag ? "" : "<p>No confirmed feature flag.</p>"}<p>Last seen ${escapeHtml(issue.last_seen)}. <a href="${escapeHtml(issue.issue_url)}">PostHog issue</a></p><p>Next: Investigate the latest production errors in PostHog and record findings here.</p>`;
   await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
     method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ task_id: existing.id, text, content_type: "html" }),
   });

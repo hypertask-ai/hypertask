@@ -64,3 +64,24 @@ Quota changes are tracked separately: https://app.hypertask.ai/detail/project-40
 Small follow-up proposal: consistently detect named key/plan/allowance errors and explicit input-validation failures at existing catch boundaries, returning their existing 4xx response without reportError or tagging `extra.ht_expected_error=true`. Keep unclassified failures visible. Do not infer expectedness from every 4xx, JSON parse error or empty model reply. This change rates known messages P3 without suppressing other alerts.
 
 Backfill drafts and the prior log-backed root cause remain in the uncommitted `.unlazy/helper/backfill.json` and `.unlazy/helper/root-cause.md`.
+
+## Explicit feature attribution
+
+A catch boundary that knows which flagged path failed can pass
+`extra: { featureFlag: "htpr-6238-posthog-error-alert" }` to `reportError`.
+The server sanitizer retains a well-formed ticket flag as `ht_featureFlag`.
+The issue query reads that property from the latest production exception,
+including an empty value when the latest exception has no attribution.
+Only keys with a definition in `src/lib/flags/definitions/` are accepted.
+
+For a confirmed key, the writer relates the bug to the key's HTPR ticket through
+`POST /api/mcp/tasks/relations` and adds a comment linking its flag page.
+The relation is an upsert; the comment uses one issue-and-flag idempotency key,
+so created/reopened retries do not create duplicate links or comments.
+Deleted bug tickets remain untouched. Relation failures fail the alert job,
+leaving the existing issue marker available for a retry.
+
+Untagged, malformed and unknown keys produce no relation. The initial ticket
+or subsequent alert comment says “No confirmed feature flag.” Flags merely
+enabled for a user and filenames appearing in a stack are not causal proof;
+the writer never guesses from them. This does not automatically switch flags.
