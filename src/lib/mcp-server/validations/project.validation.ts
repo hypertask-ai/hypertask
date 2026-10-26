@@ -1,7 +1,7 @@
 
 import { z } from 'zod';
 import type { BoardColumnRole } from '@/lib/mcp/boards/columnRole';
-import { paginationSchema, sortBySchema, sortOrderSchema } from './common/pagination';
+import { paginationSchema, sortOrderSchema } from './common/pagination';
 import { withListQuerySchema } from './common/listQuery';
 import { estimateIndexOptionalSchema, statusFilterSchema } from './common/filters';
 
@@ -28,7 +28,7 @@ export function getListProjectsInputSchema() {
       .merge(paginationSchema),
   )
     .extend({
-      sort_by: sortBySchema,
+      sort_by: z.enum(['createdAt', 'title']).optional(),
       sort_order: sortOrderSchema,
     })
     .strict();

@@ -39,3 +39,22 @@
 ## Cleanup
 
 Read-only calls. No board writes or fixtures.
+
+## Project list query validation
+
+Use the same agent's bearer token for `GET /api/mcp/projects` and
+`hypertask_projects` with `action: "list"` through `/mcp`.
+
+- `sort_by=title`, `sort_by=createdAt`, and portable `sort=createdAt:desc`
+  return successful lists. Follow `nextCursor` with `cursor`; projected
+  `fields=id,title` still returns those fields.
+- Projects have no modification timestamp. `sort_by=updatedAt`, portable
+  `sort=updatedAt:desc`, and `filter={"updated_since":"2026-10-01T00:00:00Z"}`
+  return readable validation errors, not internal server errors.
+- Invalid sort fields and directions fail before project storage reads.
+- Collect the status and bounded JSON from both transports. These checks
+  are read-only and need no cleanup.
+
+`node --test tests/mcp-project-list-query.test.cjs` exercises the route and
+MCP input schema, unsupported queries, supported ordering, scope, projection
+and cursor pagination.
