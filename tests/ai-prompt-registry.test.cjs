@@ -58,11 +58,19 @@ test('route prompt literals are short and the detector rejects a known long inli
 
 test('prompt identification records only id and version, including composed chat prompts', () => {
   const { AGENT_SYSTEM_PROMPT } = load(path.join(root, 'src/lib/ai/chatStream/prompt.ts'));
-  assert.deepEqual(identifyPrompt([{ role: 'system', content: `${AGENT_SYSTEM_PROMPT}\nUser-specific context` }]), { promptId: 'agent-system-prompt', promptVersion: '1' });
+  assert.deepEqual(identifyPrompt([{ role: 'system', content: `${AGENT_SYSTEM_PROMPT}\nUser-specific context` }]), { promptId: 'agent-system-prompt', promptVersion: '2' });
   assert.deepEqual(identifyPrompt([{ role: 'user', content: [{ type: 'text', text: renderPrompt('task-summaries-system-2') }] }]), { promptId: 'task-summaries-system-2', promptVersion: '1' });
   assert.deepEqual(identifyPrompt([{ role: 'user', content: 'private dynamic content' }]), { promptId: 'dynamic-input', promptVersion: '1' });
   const { createPromptForTiptapForwardSlash } = load(path.join(root, 'src/app/api/ai/_lib/editorAiPrompts.ts'));
   const composed = createPromptForTiptapForwardSlash('WriteContent', '', 'fixture request');
   assert.ok(identifyPrompt([{ role: 'system', content: composed }]).promptId.startsWith('editor-ai-prompts-'));
   assert.throws(() => renderPrompt('agent-system-prompt'), /interpolation count/);
+});
+
+test('chat prompt sends product questions to the docs and forbids undocumented claims', () => {
+  const text = PROMPTS['agent-system-prompt'].parts.join('');
+  assert.match(text, /Call search_help_docs before answering any question about what Hypertask can or cannot do/);
+  assert.match(text, /Never answer these from memory/);
+  assert.match(text, /only when the returned articles state it/);
+  assert.match(text, /not documented and offer to file a ticket/);
 });
