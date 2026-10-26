@@ -44,7 +44,9 @@ const MobileTopBar = ({
   const onProject = pathname?.startsWith("/project") ?? false;
   const deferredControlsReady = !onProject || boardUsable;
   let fallbackTitle = "Board";
-  if (onCalendar) {
+  if (pathname === "/pages") {
+    fallbackTitle = "Pages";
+  } else if (onCalendar) {
     fallbackTitle = calendarTitle ?? "Calendar";
   } else if (onAgentChat) {
     fallbackTitle = calendarTitle ?? "Agents";

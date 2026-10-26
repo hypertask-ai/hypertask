@@ -140,6 +140,7 @@ const MobileHeaderStrip = ({
   const pathname = usePathname();
   const project = useRecoilValue(currentProjectAtom);
 
+  if (pathname === "/pages") return <Strip lead="Pages" items={[]} />;
   if (pathname?.startsWith("/inbox")) return <Strip lead="Inbox" items={[]} />;
   if (pathname?.startsWith("/calendar"))
     return <Strip lead={calendarTitle ?? "Calendar"} items={[]} />;

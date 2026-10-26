@@ -60,7 +60,7 @@ function pagesRoute(enabledFlags) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     fileName: 'page.tsx',
   }).outputText;
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   const mocks = {
     'next/navigation': { notFound: () => { throw new Error('not found'); } },
     '@/lib/auth/serverUser': { requireServerCookieUser: async () => ({ id: 985 }) },
@@ -69,8 +69,8 @@ function pagesRoute(enabledFlags) {
     '@/lib/flags/definitions/htpr-7309-pages-screens': { HTPR_7309_PAGES_SCREENS_FLAG: 'htpr-7309-pages-screens' },
     './PagesListScreen': { default: 'PagesListScreen', __esModule: true },
   };
-  new Function('require', 'module', 'exports', source)((name) => mocks[name] ?? require(name), module, module.exports);
-  return module.exports.default;
+  new Function('require', 'module', 'exports', source)((name) => mocks[name] ?? require(name), loadedModule, loadedModule.exports);
+  return loadedModule.exports.default;
 }
 
 for (const flags of [[], ['htpr-7298-standalone-pages'], ['htpr-7309-pages-screens']]) {
