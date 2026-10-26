@@ -501,13 +501,10 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   }
 });
 
-test("an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wrapper starts Off)", async () => {
-  const key = "htpr-6926-mcp-route-wrapper";
-  assert.deepEqual(
-    await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-    [false, false, false],
-  );
-  assert.equal((await flags.listFeatureFlagModes()).find((row) => row.key === key).mode, "OFF");
+test("permanent MCP wrapper is absent from the flag registry", async () => {
+  assert.equal("HTPR_6926_MCP_ROUTE_WRAPPER_FLAG" in flags, false);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6926-mcp-route-wrapper"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(row => row.key === "htpr-6926-mcp-route-wrapper"), false);
 });
 
 test("permanent assignee preservation is absent from the flag registry", async () => {
@@ -1010,7 +1007,6 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
   const seeded = localFlagModes(defaults, { "htpr-3533-google-calendar": false });
   assert.equal(seeded[key], "EVERYONE");
-  assert.equal(seeded["htpr-6926-mcp-route-wrapper"], "OFF");
   assert.equal(seeded["htpr-3533-google-calendar"], "OWNER_AND_QA");
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), true);
   assert.equal(await bugfixFlags.featureFlagCandidateUserIds(key), null);
