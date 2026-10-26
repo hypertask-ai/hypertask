@@ -447,6 +447,19 @@ function formatWriteSummary(
     return `${success}${countedFailureSummary}${uncountedFailureSummary}`;
   }
 
+  if (name === "hypertask_inbox_archive" && results.some((result) => Array.isArray(result.notifications))) {
+    const archived = results.filter((result) => result.success === true);
+    const count = archived.reduce((total, result) => total + (typeof result.archived_count === "number" ? result.archived_count : 0), 0);
+    const tickets = new Set(archived.flatMap((result) => Array.isArray(result.notifications)
+      ? result.notifications.flatMap((notification) => {
+        const task = resultObject(resultObject(notification)?.task);
+        return task && typeof task.title === "string"
+          ? [`${typeof task.ticketNumber === "string" ? `${task.ticketNumber}: ` : ""}${task.title}`]
+          : [];
+      }) : []));
+    return `Archived ${count} inbox ${plural(count, "message")}.${tickets.size ? ` Tickets: ${[...tickets].join("; ")}.` : ""}`;
+  }
+
   const completed = results.filter((result) => toolResultSucceeded(result)).length;
   if (completed === 0 && failed === 0 && uncountedFailures === 0) return null;
   const success =
