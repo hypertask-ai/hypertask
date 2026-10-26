@@ -48,7 +48,7 @@ export function useAiChat() {
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
-  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
+  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, parallelStreams,
   } = useAiChatState();
   useEffect(editWithAiEnabled ? () => {
     if (editTaskId === null) return;
@@ -60,7 +60,7 @@ export function useAiChat() {
   }, [editWithAiEnabled, editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId]);
 
   const sessionContext = {
-    agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
+    parallelStreams, agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
     createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
     deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, taskId, sessionsRef,
@@ -86,8 +86,8 @@ export function useAiChat() {
   const {
   handleSendMessage,
   } = createAiChatSend({
-    stopClosesStream, settleSendRef,
-    sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession,
+    parallelStreams, stopClosesStream, settleSendRef,
+    sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession, resolveHistorySession, sessionsRef,
     isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,

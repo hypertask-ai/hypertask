@@ -1,3 +1,4 @@
+import type { SessionStreams } from "@/lib/aiChat/sessionStreams";
 import { getNativeSidebarChat } from "@/lib/agents/chatViewerState";
 import { useCallback, useEffect, useRef } from "react";
 import globalConstants from "@/lib/constants";
@@ -11,12 +12,12 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
 import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sessionMessageQueue";
 
-type Context = { agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
+type Context = { parallelStreams?: SessionStreams; agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
 
 export function useAiChatSessions(context: Context) {
   const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const {
-  sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
+  parallelStreams, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
   createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
   deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
   currentAiOption, pathname, currentUser, taskId, sessionsRef,
@@ -97,25 +98,39 @@ export function useAiChatSessions(context: Context) {
   const drainingRef = useRef(false);
   const retryAtRef = useRef(0);
   const drainQueuedMessage = useCallback((finishedSessionId?: string) => {
-    if (sendInFlightRef.current) return;
-    if (drainingRef.current || Date.now() < retryAtRef.current) return;
+    const targetSessionId = finishedSessionId ?? persistentQueue?.sessionId;
+    const runtime = targetSessionId ? parallelStreams?.get(targetSessionId) : undefined;
+    if (runtime ? runtime.sendInFlightRef.current : sendInFlightRef.current) return;
+    if (runtime ? runtime.draining || Date.now() < runtime.retryAt : drainingRef.current || Date.now() < retryAtRef.current) return;
     if (persistentQueue) {
-      const sessionId = persistentQueue.sessionId;
-      if (!sessionId || (finishedSessionId && sessionId !== finishedSessionId)) return;
+      const sessionId = runtime ? targetSessionId : persistentQueue.sessionId;
+      if (!sessionId || (!runtime && finishedSessionId && sessionId !== finishedSessionId)) return;
       const next = persistentQueue.get(sessionId)[0];
       if (!next) return;
-      drainingRef.current = true;
+      const send = runtime ? runtime.send : handleSendMessageRef.current;
+      if (!send) return;
+      if (runtime) runtime.draining = true;
+      else drainingRef.current = true;
+      const retry = (delay: number) => {
+        if (runtime) runtime.retryAt = Date.now() + delay;
+        else retryAtRef.current = Date.now() + delay;
+      };
       let retryDelay = 15000;
-      void handleSendMessageRef.current(next.content, { queuedMessage: next, sessionId, onQueueBusy: (delay) => { retryDelay = delay; } })
+      void send(next.content, { queuedMessage: next, sessionId, onQueueBusy: (delay) => { retryDelay = delay; } })
         .then((sent) => {
           if (sent) persistentQueue.set(sessionId, persistentQueue.get(sessionId).filter((item) => item.id !== next.id));
-          else retryAtRef.current = Date.now() + retryDelay;
+          else retry(retryDelay);
         })
         .catch((error) => {
-          retryAtRef.current = Date.now() + retryDelay;
+          retry(retryDelay);
           console.error("Could not send queued chat message:", error);
         })
-        .finally(() => { drainingRef.current = false; });
+        .finally(() => {
+          if (runtime) {
+            runtime.draining = false;
+            if (!runtime.retryAt || runtime.retryAt <= Date.now()) queueMicrotask(() => drainQueuedMessage(sessionId));
+          } else drainingRef.current = false;
+        });
       return;
     }
     const queue = messageQueueRef.current;
@@ -131,14 +146,19 @@ export function useAiChatSessions(context: Context) {
     void handleSendMessageRef.current(next.content, {
       htmlForAttachments: next.html,
     });
-  }, [persistentQueue]);
+  }, [persistentQueue, parallelStreams]);
   useEffect(() => {
     if (!persistentQueue) return;
-    retryAtRef.current = 0;
-    drainQueuedMessage();
-    const timer = window.setInterval(() => drainQueuedMessage(), 2000);
+    const drain = () => {
+      if (parallelStreams) {
+        for (const sessionId of parallelStreams.sessionIds()) drainQueuedMessage(sessionId);
+      } else drainQueuedMessage();
+    };
+    if (!parallelStreams) retryAtRef.current = 0;
+    drain();
+    const timer = window.setInterval(drain, 2000);
     return () => window.clearInterval(timer);
-  }, [persistentQueue, persistentQueue?.sessionId, drainQueuedMessage]);
+  }, [persistentQueue, persistentQueue?.sessionId, parallelStreams, drainQueuedMessage]);
   const billing = modelBilling;
   const isApple = useDeviceContext();
   const isByokBlocked = shouldBlockAiDueToByokProvider(billing, currentAiOption?.source);
