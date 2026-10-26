@@ -83,8 +83,7 @@ export function createAiChipRecorder(emit: (payload: AiChipEventPayload) => void
         lastClickedText = null;
         return;
       }
-      if (signal.kind === "dismiss") return typeof signal.surface === "string";
-  if (signal.kind === "clicked") {
+      if (signal.kind === "clicked") {
         if (!active || active.resolved) return;
         active.resolved = true;
         lastClickedText = signal.text;
@@ -92,6 +91,7 @@ export function createAiChipRecorder(emit: (payload: AiChipEventPayload) => void
           event: "clicked",
           ...base(active),
           chipType: signal.chipType ?? active.chipType,
+          ...(signal.index < 0 ? { chips: [clip(signal.label ?? signal.text)] } : {}),
           chipIndex: signal.index,
           chipText: clip(signal.label ?? signal.text),
         });
