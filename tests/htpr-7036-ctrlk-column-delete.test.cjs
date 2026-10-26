@@ -111,12 +111,12 @@ function fixture({ enabled = true, last = false, empty = false, denied = false, 
     if (response.status >= 400) throw Object.assign(new Error("Refused"), { response });
     return response;
   };
-  const client = (typed) => {
+  const client = () => {
     const bindings = {
       sections, currentProject: { id: 15, section: sections, sections }, currentUser: { id: 6 },
       noEmptyBoardFlash: false, lastColumnDeleteMessage: false,
       updating: false, title: "Unused", ticketsFinished: false,
-      typedWrite: typed ? (body) => post(body, true) : undefined,
+      writeSection: (body) => post(body, true),
       axios: { post: (url, body) => { assert.equal(url, "/api/section/update"); return post(body, false); } },
       setUpdating() {}, setCurrentProject() {}, setEditSection() {}, updateCache() {},
       globalConstants: { GetAllManageColumnsPrefixKey: "manageColumns" },
@@ -130,38 +130,38 @@ function fixture({ enabled = true, last = false, empty = false, denied = false, 
   return { sections, tasks, effects, history, flags, broadcasts, requests, refetches, controller, post, client, visibleCards };
 }
 
+test(`Ctrl+K/header shared delete preserves cards after reload through the Web route`, async () => {
+  const f = fixture();
+  const beforeOthers = structuredClone(f.tasks.slice(2));
+  // The client row is stale and contains an untrusted project ID: use the authorized server row.
+  await f.client()({ ...f.sections[0], projectId: 16, section_title: "Stale title" }, "DELETE");
+  assert.equal(f.sections[0].deleted, true);
+  assert.deepEqual(f.tasks.slice(0, 2).map(({ sectionId, section, status }) => ({ sectionId, section, status })), [
+    { sectionId: 92, section: "First", status: "Normal" },
+    { sectionId: 92, section: "First", status: "Normal" },
+  ]);
+  assert.deepEqual(f.tasks.slice(2), beforeOthers, "archived and other-board cards stay untouched");
+  assert.deepEqual(f.visibleCards().map(({ id }) => id), [1, 2, 5]);
+  assert.deepEqual(f.effects, ["move-tasks", "delete-section", ["remove-views", 91, 15]]);
+  assert.deepEqual(f.flags, [[key, 985]]);
+  assert.deepEqual(f.history.map(({ timestamp, ...event }) => event), [1, 2].map((taskId) => ({ taskId, from: "Removing", to: "First", userId: 985 })));
+  assert.deepEqual(f.broadcasts, [[15, { originUserId: 985 }]]);
+  assert.deepEqual(f.refetches, [[{ queryKey: ["projectsAll"] }]]);
+  assert.equal(f.requests.length, 1);
+});
+
+test(`flag OFF keeps the old soft-delete and leaves recoverable Normal cards`, async () => {
+  const f = fixture({ enabled: false });
+  await f.client()(f.sections[0], "DELETE");
+  assert.equal(f.sections[0].deleted, true);
+  assert.deepEqual(f.tasks[0], { id: 1, projectId: 15, sectionId: 91, section: "Removing", status: "Normal" });
+  assert.deepEqual(f.visibleCards().map(({ id }) => id), [5]);
+  assert.deepEqual(f.history, []);
+  assert.deepEqual(f.flags, [[key, 985]]);
+  assert.deepEqual(f.broadcasts, [[15, { originUserId: 985 }]]);
+});
+
 for (const typed of [false, true]) {
-  test(`Ctrl+K/header shared delete preserves cards after reload through ${typed ? "Web" : "Pages"} route`, async () => {
-    const f = fixture();
-    const beforeOthers = structuredClone(f.tasks.slice(2));
-    // The client row is stale and contains an untrusted project ID: use the authorized server row.
-    await f.client(typed)({ ...f.sections[0], projectId: 16, section_title: "Stale title" }, "DELETE");
-    assert.equal(f.sections[0].deleted, true);
-    assert.deepEqual(f.tasks.slice(0, 2).map(({ sectionId, section, status }) => ({ sectionId, section, status })), [
-      { sectionId: 92, section: "First", status: "Normal" },
-      { sectionId: 92, section: "First", status: "Normal" },
-    ]);
-    assert.deepEqual(f.tasks.slice(2), beforeOthers, "archived and other-board cards stay untouched");
-    assert.deepEqual(f.visibleCards().map(({ id }) => id), [1, 2, 5]);
-    assert.deepEqual(f.effects, ["move-tasks", "delete-section", ["remove-views", 91, 15]]);
-    assert.deepEqual(f.flags, [[key, 985]]);
-    assert.deepEqual(f.history.map(({ timestamp, ...event }) => event), [1, 2].map((taskId) => ({ taskId, from: "Removing", to: "First", userId: 985 })));
-    assert.deepEqual(f.broadcasts, [[15, { originUserId: 985 }]]);
-    assert.deepEqual(f.refetches, [[{ queryKey: ["projectsAll"] }]]);
-    assert.equal(f.requests.length, 1);
-  });
-
-  test(`flag OFF keeps the old soft-delete and leaves recoverable Normal cards (${typed ? "Web" : "Pages"})`, async () => {
-    const f = fixture({ enabled: false });
-    await f.client(typed)(f.sections[0], "DELETE");
-    assert.equal(f.sections[0].deleted, true);
-    assert.deepEqual(f.tasks[0], { id: 1, projectId: 15, sectionId: 91, section: "Removing", status: "Normal" });
-    assert.deepEqual(f.visibleCards().map(({ id }) => id), [5]);
-    assert.deepEqual(f.history, []);
-    assert.deepEqual(f.flags, [[key, 985]]);
-    assert.deepEqual(f.broadcasts, [[15, { originUserId: 985 }]]);
-  });
-
   test(`a populated final column is refused without losing cards (${typed ? "Web" : "Pages"})`, async () => {
     const f = fixture({ last: true });
     await assert.rejects(f.post({ sectionId: 91, newSection: { deleted: true } }, typed), (error) => error.response.status === 400);
