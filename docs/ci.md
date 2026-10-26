@@ -359,8 +359,9 @@ Chip scores detect requests for existing sections, exact normalized copies of th
 current prompt's examples and edits to required writer text. Empty chip responses
 are recorded as unproven, not successful generation. These deterministic checks do
 not judge factual accuracy or semantic paraphrases. Known initial debt remains
-visible in the committed baseline; live totals may not increase independently for
-writer and chips. Transport failures and incomplete runs cannot become a baseline.
+visible in the committed baseline. Each live report includes separate writer and
+chip deltas. Quality deltas are report-only: one stochastic trial is not evidence
+of a stable regression. Transport failures and incomplete runs cannot become a baseline.
 Only score reports and cleanup IDs upload as artifacts; cookies, auth traffic and
 raw generated drafts do not. This is informational CI, not a new required check.
 

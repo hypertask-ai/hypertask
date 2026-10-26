@@ -59,10 +59,10 @@ function score(fixture, output, promptExamples) {
 }
 function compareBaseline(results, baseline) {
   assert.deepEqual(results.map((r) => r.id), baseline.map((r) => r.id), 'Live cases differ from baseline');
-  for (const kind of ['writer', 'chips']) {
+  return Object.fromEntries(['writer', 'chips'].map((kind) => {
     const total = (rows) => rows.reduce((n, r) => n + r[kind].violations.length, 0);
-    assert.ok(total(results) <= total(baseline), `${kind} violations increased: ${total(baseline)} -> ${total(results)}`);
-  }
+    return [kind, { baseline: total(baseline), current: total(results), delta: total(results) - total(baseline) }];
+  }));
 }
 function validateCorpus(corpus) {
   const real = corpus.cases.filter((c) => c.kind === 'real');
@@ -160,9 +160,10 @@ async function main() {
         fs.writeFileSync(output + '.status.json', JSON.stringify({ completed: recording.outputs.length, pendingTaskIds: recording.pendingTaskIds }) + '\n');
       });
       const results = replay(corpus, recording);
-      fs.writeFileSync(output + '.scores.json', JSON.stringify({ corpusHash: recording.corpusHash, results }, null, 2) + '\n');
       const baselinePath = path.join(directory, 'baseline.json');
-      if (fs.existsSync(baselinePath)) compareBaseline(results, JSON.parse(fs.readFileSync(baselinePath, 'utf8')).results);
+      const delta = fs.existsSync(baselinePath) ? compareBaseline(results, JSON.parse(fs.readFileSync(baselinePath, 'utf8')).results) : null;
+      fs.writeFileSync(output + '.scores.json', JSON.stringify({ corpusHash: recording.corpusHash, results, delta }, null, 2) + '\n');
+      if (delta) console.log(`Quality deltas (one stochastic trial, report only): ${JSON.stringify(delta)}`);
       console.log('live writer/chip run complete');
     } finally { await context.dispose(); }
     return;

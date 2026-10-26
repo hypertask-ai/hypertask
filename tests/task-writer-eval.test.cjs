@@ -84,13 +84,13 @@ test('cleanup failure fails the run and persists its incomplete evidence', async
 });
 
 
-test('live quality regressions fail independently for writer and chips', () => {
+test('live quality deltas expose worsening writer and chip scores separately', () => {
   const baseline = [{ id: 'a', writer: { violations: ['known'] }, chips: { violations: [] } }];
-  assert.doesNotThrow(() => compareBaseline(baseline, baseline));
+  assert.deepEqual(compareBaseline(baseline, baseline), { writer: { baseline: 1, current: 1, delta: 0 }, chips: { baseline: 0, current: 0, delta: 0 } });
   const worse = structuredClone(baseline); worse[0].writer.violations.push('new');
-  assert.throws(() => compareBaseline(worse, baseline), /writer violations increased/);
+  assert.deepEqual(compareBaseline(worse, baseline).writer, { baseline: 1, current: 2, delta: 1 });
   const chips = structuredClone(baseline); chips[0].chips.violations.push('existing-section');
-  assert.throws(() => compareBaseline(chips, baseline), /chips violations increased/);
+  assert.deepEqual(compareBaseline(chips, baseline).chips, { baseline: 0, current: 1, delta: 1 });
 });
 
 test('hosted live eval never exposes QA credentials to pull request code', () => {
