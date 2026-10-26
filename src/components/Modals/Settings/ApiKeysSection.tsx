@@ -796,8 +796,8 @@ const ApiKeysSection = () => {
   const haiku55Enabled = true;
   const flagProviderRows = grokGemini4Enabled ? providerRows : providerRows.filter((row) => row.source !== "xai");
   const visibleProviderRows = haikuDefaultEnabled || haiku55Enabled
-    ? flagProviderRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5") }))
-    : flagProviderRows;
+    ? flagProviderRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5" && (grokGemini4Enabled || label !== "Gemini 4 Argon")) }))
+    : flagProviderRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => grokGemini4Enabled || label !== "Gemini 4 Argon") }));
 
   const { billing } = useSettingsTeam();
   if (!billing || billing.storePlanId === "Free") return null;

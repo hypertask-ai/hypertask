@@ -163,10 +163,11 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
         const visible = vm.runInNewContext(visibilityExpression, {
           haiku55Enabled,
           haikuDefaultEnabled,
+          grokGemini4Enabled: false,
           flagModelOptions: catalog.aiModelOptions,
           isAiModelOptionVisible: catalog.isAiModelOptionVisible,
         });
-        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true)));
+        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true, false)));
       }
     }
   }

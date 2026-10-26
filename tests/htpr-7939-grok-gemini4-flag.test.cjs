@@ -20,14 +20,14 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
 
-test("the ticket flag is live for Everyone by default and not high risk", () => {
+test("the ticket flag is live for Owner and QA by default and money high risk", () => {
   const flag = loadTs("src/lib/flags/definitions/htpr-7939-grok-gemini4-models.ts");
   const definition = flag.default ?? flag;
   assert.equal(flag.HTPR_7939_GROK_GEMINI4_MODELS_FLAG, flagKey);
   assert.equal(definition.key, flagKey);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "EVERYONE");
-  assert.equal(definition.releaseRisk.highRisk, undefined);
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.releaseRisk.highRisk, "money");
   assert.ok(definition.releaseRisk.reason);
   assert.match(definition.shippedOn, /^\d{4}-\d{2}-\d{2}$/);
 });
