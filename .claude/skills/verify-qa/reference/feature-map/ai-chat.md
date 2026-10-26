@@ -242,7 +242,7 @@ disabled in an isolated browser, the prior keyboard behavior remains.
 ## Whole-inbox triage
 
 Ask chat to read at least 500 Inbox messages. Inspect `hypertask_inbox_list`
-results: `next_offset` advances until null, without repeated notification IDs
+results: pass `next_cursor` unchanged until null, without repeated notification IDs
 or read confirmations. Compact rows retain ticket names and short comments.
 Archive a small batch of this run's QA fixtures only. The preview must name
 all affected tickets and sibling messages. Confirm in a later message:

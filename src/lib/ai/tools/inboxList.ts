@@ -34,7 +34,7 @@ export function createInboxListTool(context: ToolContext) {
   return {
     hypertask_inbox_list: tool({
       description:
-        "Read inbox notifications without confirmation. When next_cursor is returned, pass it unchanged as cursor to continue until null, even if earlier items were archived. Request limit=500 for large passes. Keep each returned list_token to archive only listed IDs. If paging metadata is absent, this account uses the legacy first-page read. Set archived=true for archived items.",
+        "Read inbox notifications without confirmation. When next_cursor is returned, pass it unchanged as cursor to continue until null, even if earlier items were archived. Request limit=500 for large passes. Keep each returned list_token to archive only listed IDs. Use next_offset for archived history. If paging metadata is absent, this account uses the legacy first-page read. Set archived=true for archived items.",
       inputSchema: z.object({
         limit: z.coerce.number().int().min(1).max(500).default(50),
         offset: z.coerce.number().int().min(0).default(0),
@@ -143,7 +143,9 @@ export function createInboxListTool(context: ToolContext) {
             prisma.notification.findMany({
               include: notificationInboxInclude(user.id),
               where,
-              orderBy: [{ archivedAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
+              orderBy: batchesEnabled
+                ? [{ archivedAt: { sort: "desc", nulls: "last" } }, { id: "desc" }]
+                : { archivedAt: { sort: "desc", nulls: "last" } },
               take: limit,
               skip: offset,
             }),
