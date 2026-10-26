@@ -101,3 +101,16 @@ errors. Check both JSON and dotted filter query parameters. Unsupported
 sort directions must also fail before database access. These reads need
 no fixtures or cleanup. Local behavior coverage:
 `node --test tests/htpr-8017-project-list-sort.test.cjs`.
+
+## Repeated keyboard archive stays in its column
+
+For https://app.hypertask.ai/detail/project-15/8039, create two disposable
+columns on QA 985's sandbox (7049). Put two prefixed fixtures in Done and
+one in AI Review. Focus the first Done card after hydration settles.
+Press Ctrl+E repeatedly, then hold it: only the Done fixtures may archive.
+Focus must stop when Done empties, not jump to AI Review. Reload and read
+`POST /api/projects/boardTasks`: the AI Review fixture must remain Normal.
+Check a single archive and Undo restore the same fixture. Manual keyboard
+navigation into AI Review must still work. Capture desktop and phone
+shots, plus the main path video. Delete only the created fixtures and
+columns afterward. Flag: `htpr-8039-archive-column-boundary` (bugfix, Everyone).
