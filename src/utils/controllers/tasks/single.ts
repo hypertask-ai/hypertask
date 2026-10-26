@@ -86,6 +86,7 @@ type UpdateTaskSingleOptions = {
 class TaskDescriptionChangedError extends Error {}
 class TaskTitleChangedError extends Error {}
 class TaskTargetChangedError extends Error {}
+class FlagColumnMismatchError extends Error {}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -383,6 +384,17 @@ export async function updateTaskSingle(
               throw new Error("Section does not match sectionId");
             }
             updateData.section = targetSection.section_title;
+          }
+        }
+        if (sectionChanged && targetProject === 15 && updateData.section === "Flag: Everyone") {
+          const { listFeatureFlagModes } = await import("@/lib/flags");
+          const { unreleasedTicketFlags } = await import("@/lib/flags/taskColumn");
+          const blocked = unreleasedTicketFlags({
+            uniqueIndex: updateData.uniqueIndex,
+            description: [currentState.description_?.content ?? currentState.description, requestedMutation.description].filter(Boolean).join(" "),
+          }, await listFeatureFlagModes());
+          if (blocked.length) {
+            throw new FlagColumnMismatchError(`Cannot move to Flag: Everyone. Not released: ${blocked.map(({ key, mode }) => `${key} (${mode})`).join(", ")}.`);
           }
         }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
@@ -739,6 +751,9 @@ export async function updateTaskSingle(
     if (isPlanLimitReachedError(error)) {
       const refusal = planLimitResponse(error);
       return { status: refusal.status, json: refusal.body };
+    }
+    if (error instanceof FlagColumnMismatchError) {
+      return { status: 409, json: { message: error.message, code: "FLAG_COLUMN_MISMATCH" } };
     }
     if (error instanceof TaskTeamScopeError) return { status: 404, json: { message: error.message } };
     if (error instanceof ParentTaskNotFoundError) {
