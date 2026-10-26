@@ -1,19 +1,12 @@
 const assert = require("node:assert/strict");
-const path = require("node:path");
+const { load } = require("./task-route-loader.cjs");
 const test = require("node:test");
-const { createJiti } = require("jiti");
 
-const root = path.resolve(__dirname, "..");
+const stubs = {};
 const checks = [];
 
 function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = {
-    id: filename,
-    filename,
-    loaded: true,
-    exports,
-  };
+  stubs[relativePath.replace(/^src\//, "@/").replace(/\.ts$/, "")] = exports;
 }
 
 stubModule("src/lib/flags.ts", {
@@ -34,17 +27,10 @@ stubModule("src/lib/redis.ts", {
   },
 });
 stubModule("src/lib/telemetry/posthogErrorAlert.ts", {});
+stubModule("src/utils/controllers/errors/recordPostHogDispatchFallback.ts", { recordPostHogDispatchFallback: async () => assert.fail("hidden or unauthorized request used the fallback") });
 
-const jiti = createJiti(__filename, {
-  interopDefault: true,
-  alias: { "@": path.join(root, "src") },
-});
-const { POST: alertPost } = jiti(
-  path.join(root, "src/app/api/integrations/posthog/error-alert/route.ts"),
-);
-const { POST: testPost } = jiti(
-  path.join(root, "src/app/api/integrations/posthog/error-test/route.ts"),
-);
+const { POST: alertPost } = load("src/app/api/integrations/posthog/error-alert/route.ts", stubs);
+const { POST: testPost } = load("src/app/api/integrations/posthog/error-test/route.ts", stubs);
 
 let flagEnabled = false;
 let ownerSession = false;
