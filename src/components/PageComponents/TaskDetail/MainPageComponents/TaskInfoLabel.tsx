@@ -17,6 +17,7 @@ export const TaskInfoLabel: React.FC<TaskInfoLabelProps> = ({
 
   return (
     <span
+      data-task-property-label
       onClick={onClick}
       className={cn(
         _mbl ? "w-[88px] shrink-0 text-meta" : "w-[25%] @sm:w-1/2",

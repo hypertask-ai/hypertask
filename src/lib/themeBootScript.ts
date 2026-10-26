@@ -9,12 +9,13 @@ export const buildThemeBootScript = (
   systemLightTheme: ResolvedTheme,
   systemDarkTheme: ResolvedTheme,
   roundedEnabled = false,
+  graphite2Enabled = true,
 ): string => {
   const cookiePrefix = JSON.stringify(`${cookieName}=`)
   const lightTheme = JSON.stringify(systemLightTheme)
   const darkTheme = JSON.stringify(systemDarkTheme)
   const supportedThemes = JSON.stringify(
-    themeOptions.filter(({ value }) => value !== "rounded" || roundedEnabled).map(({ value }) => value),
+    themeOptions.filter(({ value }) => (value !== "rounded" || roundedEnabled) && (value !== "graphite-2" || graphite2Enabled)).map(({ value }) => value),
   )
   const domMetadata = JSON.stringify(resolvedThemeDomMetadata)
   const removableClasses = JSON.stringify([

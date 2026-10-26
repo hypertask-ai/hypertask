@@ -132,3 +132,5 @@ plan-specific behavior, the flagged pair for anything behind a feature flag.
    images). Say in the comment what changed between the two.
 5. Run the area's cleanup step so the QA account boards stay clean for the
    next run.
+
+| Themes | [themes.md](themes.md) | Settings and Ctrl+K selection, reload, all-theme desktop/phone comparison |

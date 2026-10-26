@@ -1,0 +1,144 @@
+.graphite-2 {
+  --primary: 225 10% 49%;
+
+  --bg-pageBackground: #17181b;
+  --bg-taskDetailPage: #17181b;
+  --bg-label-span: transparent;
+  --bg-hover-active: #26282d;
+  --bg-cardBackground: #1f2125;
+  --bg-modalBackground: #1f2125;
+  --bg-taskDetail-container: #17181b;
+  --bg-containerBackground: #17181b;
+  --bg-containerBackground-inverted: #d9d9d9;
+  --bg-comment-description: #1f2125;
+  --bg-back-button: #1f2125;
+  --bg-tooltip: #1f2125;
+  --bg-newComment-container: #1f2125;
+  --bg-task-tag: rgb(160, 160, 160);
+  --bg-sidebar: #17181b;
+  --bg-dropdown: #1f2125;
+  --bg-self-comment: #1f2125;
+  --bg-mention: transparent;
+  --bg-reactions: #17181b;
+  --bg-horizontal-scrollbar: #17181b;
+  --bg-ai-chat-tiptap: #1f2125;
+  --bg-ai-chat: #17181b;
+  --bg-mention-highlight: #3a331f;
+}
+
+.graphite-2 {
+  --hover-cardBackground: #26282d;
+}
+
+.graphite-2 {
+  --active-kanbanCardbg: #26282d;
+  --active-elementBg: #26282d;
+  --active-modal-element: #26282d;
+  --active-mentionList: #26282d;
+  --active-list-element: #26282d;
+}
+
+.graphite-2 {
+  --color-page-background: var(--bg-pageBackground);
+  --color-white-black: #ececed;
+  --color-white-black-inverted: #1f2125;
+  --color-text-light-gray: #9a9ca1;
+  --color-border: 231 8% 18%;
+  --color-border-comment-description: #2a2c31;
+  --bg-newcomment-well: #1f2125;
+  --color-my-comment: #ececed;
+  --color-kanban-column-scrollbar: transparent;
+  --em-rgb-color: #ececed;
+  --color-text-labelComponent: #9a9ca1;
+  --shadcn-primary: 225 10% 49%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 220 8% 16%;
+  --secondary-foreground: 0 0% 80%;
+  --muted: 220 5% 40%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 225 10% 49%;
+  --accent-foreground: 0 0% 0%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 85.7% 97.3%;
+  --border: 231 8% 18%;
+  --input: 231 8% 18%;
+  --ring: 225 10% 49%;
+  --button-arrow-disabled: gray;
+  --button-arrow: white;
+  --border-self-comment: 42, 44, 49;
+  --border-light-gray-thin: #2a2c31;
+  --color-mention-highlight: #d29f02;
+  --color-rich-text-link: #5896f1;
+  --color-horizontal-scrollbar-track: #26282d;
+  --color-archived-state: #86efac;
+  --color-pull-request-open: #4ade80;
+  --color-pull-request-checks-red: #f87171;
+  --color-pull-request-green: #4ade80;
+  --color-pull-request-merged: #c084fc;
+}
+
+.graphite-2 {
+  --focus-ring: #707788;
+  --border-active: #707788;
+}
+
+.graphite-2 {
+  --color-text-quiet: #6c6f74;
+}
+
+html.graphite-2 {
+  font-family: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
+}
+
+.graphite-2 .app-shell-rail,
+.graphite-2 .left-sidebar-flyout,
+.graphite-2 .right-sidebar-flyout,
+.graphite-2 .ai-chat-sidebar {
+  background-color: #17181b;
+  border-color: #2a2c31;
+}
+
+.graphite-2 .section-container,
+.graphite-2 .modal-content,
+.graphite-2 .table-view-header,
+.graphite-2 .table-view-row:not(:last-child) {
+  border-color: #2a2c31;
+}
+
+.graphite-2 .kanban-task-card,
+.graphite-2 [data-task-properties-rail] {
+  background-color: #1f2125;
+}
+
+.graphite-2 .kanban-task-card:hover {
+  background-color: #26282d;
+}
+
+.graphite-2 #title-input {
+  font-size: 24px !important;
+  font-weight: 600;
+}
+
+.graphite-2 .description-container :is(h1, h2, h3) {
+  font-size: 15px;
+}
+
+.graphite-2 [data-task-properties-rail] {
+  gap: 16px;
+  font-weight: 400;
+}
+
+.graphite-2 [data-task-property-label] {
+  color: var(--color-text-quiet);
+  font-weight: 400;
+}
+
+.graphite-2 .label-pill,
+.graphite-2 [data-task-properties-rail] .bg-label-span {
+  background: transparent !important;
+  color: #9a9ca1 !important;
+}
+
+.graphite-2 svg.lucide:not(.keep-stroke) {
+  stroke-width: 1.5;
+}

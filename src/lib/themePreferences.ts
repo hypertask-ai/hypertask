@@ -2,6 +2,7 @@ export const themeOptions = [
   { title: "Follow system", value: "system" },
   { title: "Light · Porcelain", value: "porcelain" },
   { title: "Dark · Graphite", value: "graphite" },
+  { title: "Graphite 2", value: "graphite-2" },
   { title: "OLED black · AMOLED", value: "amoled" },
   { title: "Paper · Dia", value: "dia" },
   { title: "Material (follows device)", value: "rounded" },
@@ -17,6 +18,7 @@ export const resolvedThemeDomMetadata: Record<
 > = {
   porcelain: { classes: ["light", "porcelain"], themeColor: "#ffffff" },
   graphite: { classes: ["dark", "graphite"], themeColor: "#232326" },
+  "graphite-2": { classes: ["dark", "graphite-2"], themeColor: "#17181b" },
   amoled: { classes: ["dark", "amoled"], themeColor: "#000000" },
   dia: { classes: ["light", "dia"], themeColor: "#f6f4ef" },
   "rounded-light": { classes: ["light", "rounded", "rounded-light"], themeColor: "#fcfcfc" },
@@ -32,8 +34,10 @@ const themePreferences = new Set<ThemePreference>(
 export const normalizeThemePreference = (
   theme?: string,
   roundedEnabled = false,
+  graphite2Enabled = true,
 ): ThemePreference | undefined => {
   if (theme === "rounded" && !roundedEnabled) return "system";
+  if (theme === "graphite-2" && !graphite2Enabled) return "system";
   const normalized =
     theme === "dark" ? "graphite" : theme === "light" ? "porcelain" : theme;
 

@@ -214,6 +214,7 @@ export enum CommandMode {
   ToggleRoundedTheme,
   BlockerComment,
   ArchiveColumn,
+  ToggleGraphite2Theme,
 }
 
 export enum ELogType {

@@ -17,6 +17,16 @@ import {
 } from "lucide-react";
 import {
   IconoirCalendar,
+  IconoirNavArrowLeft,
+  IconoirNavArrowRight,
+  IconoirMailIn,
+  IconoirPage,
+  IconoirPlus,
+  IconoirCpu,
+  IconoirTimer,
+  IconoirCreditCard,
+  IconoirLogIn,
+
   IconoirChat,
   IconoirKanban,
   IconoirRocket,
@@ -176,7 +186,7 @@ const AppShellRail = ({
         }`}
         aria-label={wide ? "Collapse sidebar" : "Expand sidebar"}
       >
-        {wide ? <ChevronLeft size={16} strokeWidth={1.5} /> : <ChevronRight size={16} strokeWidth={1.5} />}
+        {wide ? <><ChevronLeft size={16} strokeWidth={1.5} className="[.graphite-2_&]:hidden" /><IconoirNavArrowLeft size={16} strokeWidth={1.5} className="[html:not(.graphite-2)_&]:hidden" /></> : <><ChevronRight size={16} strokeWidth={1.5} className="[.graphite-2_&]:hidden" /><IconoirNavArrowRight size={16} strokeWidth={1.5} className="[html:not(.graphite-2)_&]:hidden" /></>}
         <Tooltip
           left={tooltipLeft}
           bottom={-8}
@@ -218,7 +228,7 @@ const AppShellRail = ({
             onTouchStart={prefetchInbox}
           >
             <span className="relative flex h-5 w-5 items-center justify-center">
-              <Inbox size={18} strokeWidth={1.5} />
+              <><Inbox size={18} strokeWidth={1.5} className="[.graphite-2_&]:hidden" /><IconoirMailIn size={18} strokeWidth={1.5} className="[html:not(.graphite-2)_&]:hidden" /></>
               {notificationsUnseen > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 h-[6px] w-[6px] rounded-full bg-[#51A4F1]" />
               )}
@@ -262,7 +272,7 @@ const AppShellRail = ({
                 void pageActions.beforeNavigate().then(() => router.push("/pages"));
               }}
               className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${pathname === "/pages" ? "bg-hover-active !text-white-black" : ""}`}>
-              <FileText size={18} strokeWidth={1.5} />
+              <><FileText size={18} strokeWidth={1.5} className="[.graphite-2_&]:hidden" /><IconoirPage size={18} strokeWidth={1.5} className="[html:not(.graphite-2)_&]:hidden" /></>
               <Tooltip left={tooltipLeft} bottom={-8} text="Go to pages" keyCombination={null} />
             </Link>
           </RailItem>
@@ -324,7 +334,7 @@ const AppShellRail = ({
               }`}
               aria-label="Running timers"
             >
-              <Timer size={18} strokeWidth={1.5} />
+              <><Timer size={18} strokeWidth={1.5} className="[.graphite-2_&]:hidden" /><IconoirTimer size={18} strokeWidth={1.5} className="[html:not(.graphite-2)_&]:hidden" /></>
               <Tooltip left={tooltipLeft} bottom={-8} text="Running timers" keyCombination={["7"]} />
             </button>
           </RailItem>
@@ -341,7 +351,7 @@ const AppShellRail = ({
               wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
             }`}
           >
-            <Plus size={18} strokeWidth={1.75} aria-hidden />
+            <><Plus size={18} strokeWidth={1.75} className="[.graphite-2_&]:hidden" /><IconoirPlus size={18} strokeWidth={1.75} className="[html:not(.graphite-2)_&]:hidden" /></>
             {wide && <span className="text-content font-medium">New Task</span>}
             <Tooltip left={tooltipLeft} bottom={-8} text="New Task" keyCombination={[isApple ? "CMD" : "CTRL", "J"]} />
           </button>
@@ -358,7 +368,7 @@ const AppShellRail = ({
             }`}
             aria-label="Agents"
           >
-            <Bot size={18} strokeWidth={1.5} />
+            <><Bot size={18} strokeWidth={1.5} className="[.graphite-2_&]:hidden" /><IconoirCpu size={18} strokeWidth={1.5} className="[html:not(.graphite-2)_&]:hidden" /></>
             <Tooltip left={tooltipLeft} bottom={-8} text="Agents" keyCombination={[]} />
           </Link>
         </RailItem>
@@ -442,7 +452,7 @@ const AppShellRail = ({
                   className="group relative flex h-full w-full items-center justify-center text-text-light-gray hover:text-white-black"
                   aria-label="Log in"
                 >
-                  <LogIn size={18} strokeWidth={1.5} />
+                  <><LogIn size={18} strokeWidth={1.5} className="[.graphite-2_&]:hidden" /><IconoirLogIn size={18} strokeWidth={1.5} className="[html:not(.graphite-2)_&]:hidden" /></>
                   <Tooltip left={tooltipLeft} bottom={-8} text="Log in" keyCombination={[]} />
                 </button>
               </RailItem>
@@ -466,7 +476,7 @@ const AppShellRail = ({
                   className="group relative flex h-full w-full items-center justify-center text-text-light-gray hover:text-white-black"
                   aria-label="Pricing"
                 >
-                  <CreditCard size={18} strokeWidth={1.5} />
+                  <><CreditCard size={18} strokeWidth={1.5} className="[.graphite-2_&]:hidden" /><IconoirCreditCard size={18} strokeWidth={1.5} className="[html:not(.graphite-2)_&]:hidden" /></>
                   <Tooltip left={tooltipLeft} bottom={-8} text="Pricing" keyCombination={[]} />
                 </a>
               </RailItem>
