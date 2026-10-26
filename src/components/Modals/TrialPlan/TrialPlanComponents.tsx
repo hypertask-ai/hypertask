@@ -154,7 +154,7 @@ export const PlansTable = ()=>{
                         <ColumnTitle content={""} />
                         <div className="flex flex-col font-bold">
                             {
-                                columns.sharedTitles.map((perk, index) =>
+                                (columns.sharedTitles ?? []).map((perk, index) =>
                                     <RowContent type="title" key={`perk-${index}`} AIPrefix={!!perk.titlePrefix} content={perk.title} />
 
                                 )
