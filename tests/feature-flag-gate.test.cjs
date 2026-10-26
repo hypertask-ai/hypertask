@@ -2049,3 +2049,39 @@ export function Provider() {
     assert.equal(result.pass, expected, `${name}: ${result.reason}`);
   }
 });
+
+test("documented flag-gate shapes stay accepted and reject ungated variants", async (t) => {
+  const reference = fs.readFileSync(path.join(root, ".claude/reference/flags.md"), "utf8");
+  const examples = [...reference.matchAll(/```tsx flag-gate:(\w+)\n([\s\S]*?)\n```/g)];
+  assert.deepEqual(examples.map(([, name]) => name), ["prop", "effect", "rows"]);
+  for (const [, name, source] of examples) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/components/Widget.tsx", source + "\n");
+    const accepted = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, name), dir);
+    assert.equal(accepted.pass, true, `${name}: ${accepted.reason}`);
+    writeFile(dir, "src/components/Widget.tsx", source.replace("useFlag(OTHER_FLAG)", "true") + "\n");
+    const ungated = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, `${name} ungated`), dir);
+    assert.equal(ungated.pass, false, `${name} must refuse an unused flag import`);
+  }
+});
+
+test("documented flag-gate shapes name unsupported prop, effect and map callbacks", async (t) => {
+  for (const [name, body] of [
+    ["mapped conditional prop", "return <>{items.map((item) => <button key={item.id} onClick={enabled ? doWork : undefined} />)}</>;"],
+    ["hidden effect branch", "useEffect(() => { if (!enabled) return; doWork(); }, [enabled]); return <div />;"],
+    ["map callback", "return <>{items.map((item) => <div key={item.id}>{enabled && <button onClick={doWork} />}</div>)}</>;"],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/components/Widget.tsx", `import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+declare function doWork(): void;
+declare const items: { id: string }[];
+export function Widget() { const enabled = useFlag(OTHER_FLAG); ${body} }
+`);
+    const result = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, name), dir);
+    assert.equal(result.pass, false, `${name}: ${result.reason}`);
+  }
+});
