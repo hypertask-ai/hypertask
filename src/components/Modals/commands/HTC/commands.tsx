@@ -17,7 +17,9 @@ import {
   showCommandsAtom,
 } from "@/store";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
+import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import { Search, Sparkles } from "lucide-react";
 import { ModalBody } from "reactstrap";
 import styles from "@/styles/linksModal.module.scss";
@@ -144,6 +146,10 @@ const Commands = (props: Props) => {
   const [, setTableTitleWrap] = useRecoilState(tableTitleWrapAtom);
   const calendarSettings = useRecoilValue(calendarSettingsAtom);
   const pathname = usePathname();
+  const router = useRouter();
+  const pagesScreens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
+  const pagesEnabled = pagesScreens && standalonePages;
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
@@ -388,7 +394,17 @@ const Commands = (props: Props) => {
         ? [{ group: "Get started", commandLists: getStartedCommands }, ...commandGroups]
         : commandGroups;
 
-    const mobileGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
+    const pageCommands: ICommandList[] = [];
+    if (pagesEnabled) {
+      pageCommands.push(
+        { key: "gotoPages", name: "Go to Pages", commandMode: CommandMode.Command },
+        { key: "newPage", name: "New page", commandMode: CommandMode.Command },
+      );
+      if (pathname?.startsWith("/detail/")) pageCommands.push({ key: "linkPage", name: "Link page", commandMode: CommandMode.Command });
+      if (pathname?.startsWith("/page/")) pageCommands.push({ key: "linkPageTicket", name: "Link ticket", commandMode: CommandMode.Command });
+    }
+    const groupsWithPages = pageCommands.length ? [{ group: "Pages", commandLists: pageCommands }, ...rankedCommandGroups] : rankedCommandGroups;
+    const mobileGroups = getMobileCommandGroups(groupsWithPages, isMobile);
     const rankedGroups = pageActions
       ? [{
           group: `This page (Version ${pageActions.version})`,
@@ -419,6 +435,8 @@ const Commands = (props: Props) => {
     getCommands,
     pinCommentActions,
     pageActions,
+    pagesEnabled,
+    pathname,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
     autoTaskDescriptionsEnabled,
@@ -618,6 +636,25 @@ const Commands = (props: Props) => {
         recordHTCCommandUsage(previousUsage, command)
       );
       (document.activeElement as HTMLElement).blur();
+      if (pagesEnabled && ["gotoPages", "newPage", "linkPage", "linkPageTicket"].includes(command.key)) {
+        resetShowCommands();
+        switch (command.key) {
+          case "gotoPages":
+            router.push(currentProject ? `/pages?project_id=${currentProject.id}` : "/pages");
+            break;
+          case "newPage":
+            if (pathname?.startsWith("/detail/")) window.dispatchEvent(new Event("pages-new-page"));
+            else router.push(currentProject ? `/pages?project_id=${currentProject.id}&new=1` : "/pages?new=1");
+            break;
+          case "linkPage":
+            window.dispatchEvent(new Event("pages-link-page"));
+            break;
+          case "linkPageTicket":
+            window.dispatchEvent(new Event("pages-link-ticket"));
+            break;
+        }
+        return;
+      }
       if (command.key === "deletePage") {
         if (!pageActions) return;
         resetShowCommands();

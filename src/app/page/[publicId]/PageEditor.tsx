@@ -40,6 +40,10 @@ import type { IUser, TCarousalItems } from "@/models/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import styles from "@/styles/tiptap.module.scss";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
+import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
+import type { LinkedPageTicket } from "@/lib/pages/browser";
+import PageLinkedTickets from "./PageLinkedTickets";
 
 type SerializedPage = {
   publicId: string;
@@ -47,6 +51,7 @@ type SerializedPage = {
   contentHtml: string;
   version: number;
   taskId: number | null;
+  linkedTasks: LinkedPageTicket[];
   projectId: number;
   task: {
     projectId: number;
@@ -84,6 +89,9 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [toggleHighlight, setToggleHighlight] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const pagesScreens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
+  const pagesEnabled = pagesScreens && standalonePages;
   const galleryEnabled = useFlag(HTPR_6872_PAGE_IMAGE_GALLERY_FLAG);
   const [galleryItems, setGalleryItems] = useState<TCarousalItems>();
   const railOn = useRecoilValue(appShellRailAtom);
@@ -176,8 +184,8 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
   const taskHref = page.task
     ? `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`
-    : `/project?id=${page.projectId}`;
-  const backLabel = page.task ? "Back to task" : "Back to board";
+    : pagesEnabled ? `/pages?project_id=${page.projectId}` : `/project?id=${page.projectId}`;
+  const backLabel = page.task ? "Back to task" : pagesEnabled ? "Back to Pages" : "Back to board";
 
   useEffect(() => {
     try {
@@ -495,6 +503,12 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
                 isMobile ? "text-[24px]" : "text-[32px]"
               }`}
             />
+
+            {pagesEnabled && (
+              <div className={isMobile ? "px-4" : ""}>
+                <PageLinkedTickets publicId={page.publicId} tickets={page.linkedTasks} />
+              </div>
+            )}
 
             <div
               ref={contentRef}

@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  FileText,
   Inbox,
   LogIn,
   Timer,
@@ -48,6 +49,9 @@ import { IAnnouncement } from "@/models/Announcements/model";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
 import { prefetchInboxQuery } from "@/hooks/Inbox/useGetNotifications";
 
 const FeedbackModal = dynamic(
@@ -95,6 +99,8 @@ const AppShellRail = ({
   notificationsUnseen = 0,
 }: AppShellRailProps) => {
   const isApple = useDeviceContext();
+  const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const pathname = usePathname();
   const router = useRouter();
   const { toggleAIChatInterface, toggleAnnouncements, toggleLeftSidebar } =
@@ -236,6 +242,16 @@ const AppShellRail = ({
             <Tooltip left={tooltipLeft} bottom={-8} text="Table layout" keyCombination={["3"]} />
           </button>
         </RailItem>
+        {pagesScreen && standalonePages && !isGuest && (
+          <RailItem wide={wide} label="Pages">
+            <Link href={boardProject ? `/pages?project_id=${boardProject.id}` : "/pages"}
+              aria-label="Go to pages"
+              className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${pathname === "/pages" ? "bg-hover-active !text-white-black" : ""}`}>
+              <FileText size={18} strokeWidth={1.5} />
+              <Tooltip left={tooltipLeft} bottom={-8} text="Go to pages" />
+            </Link>
+          </RailItem>
+        )}
         <RailItem wide={wide} label="Calendar">
           <button
             tabIndex={-1}

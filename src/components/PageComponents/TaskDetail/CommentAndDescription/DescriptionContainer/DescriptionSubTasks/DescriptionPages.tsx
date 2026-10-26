@@ -4,7 +4,13 @@ import { formatDistanceToNow } from "date-fns";
 import { FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { MouseEvent } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import toast from "react-hot-toast";
+import OptionPickerModal from "@/components/Modals/OptionPicker";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
+import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
+import { listBrowserPages, changePageLink, type BrowserPage } from "@/lib/pages/browser";
 
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -15,7 +21,40 @@ import { useTaskPages } from "./TaskPagesContext";
 const DescriptionPages = () => {
   const router = useRouter();
   const { editMode, currentTask } = useTaskContext();
-  const { pages, loading, hasPages, createAndOpenPage } = useTaskPages();
+  const { pages, loading, hasPages, createAndOpenPage, refetch } = useTaskPages();
+  const screens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const standalone = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
+  const pagesEnabled = screens && standalone;
+  const [pageOptions, setPageOptions] = useState<BrowserPage[] | null>(null);
+  const openLinkPicker = useCallback(async () => {
+    try {
+      setPageOptions(await listBrowserPages());
+    } catch {
+      toast.error("Could not load pages");
+    }
+  }, []);
+  useEffect(() => {
+    if (!pagesEnabled) return;
+    const link = () => { void openLinkPicker(); };
+    const create = () => { void createAndOpenPage(); };
+    window.addEventListener("pages-link-page", link);
+    window.addEventListener("pages-new-page", create);
+    return () => {
+      window.removeEventListener("pages-link-page", link);
+      window.removeEventListener("pages-new-page", create);
+    };
+  }, [createAndOpenPage, openLinkPicker, pagesEnabled]);
+  const linkPage = async (publicId: string) => {
+    if (!currentTask) return;
+    setPageOptions(null);
+    try {
+      await changePageLink({ publicId, taskId: currentTask.id });
+      refetch();
+      toast.success("Page linked");
+    } catch {
+      toast.error("Could not link page");
+    }
+  };
 
   const openPage = (event: MouseEvent<HTMLAnchorElement>, publicId: string) => {
     if (
@@ -43,14 +82,20 @@ const DescriptionPages = () => {
     router.push(pageHref);
   };
 
+  const linkPicker = pageOptions && <OptionPickerModal header="Link page to ticket"
+        options={pageOptions.filter((page) => !pages.some((linked) => linked.id === page.id)).map((page) => ({ id: page.publicId, label: page.title || "Untitled", hint: page.project.title }))}
+        onClose={() => setPageOptions(null)}
+        onSelect={(option) => { if (typeof option.id === "string") void linkPage(option.id); }} />;
+
   if (
     loading ||
-    !hasPages ||
     editMode === "description" ||
     editMode === "description-ai"
   ) {
     return null;
   }
+
+  if (!hasPages) return linkPicker;
 
   return (
     <div
@@ -59,6 +104,7 @@ const DescriptionPages = () => {
         taskDetailSpacing.mobile.descriptionContainer
       )}
     >
+      {linkPicker}
       <span className="text-[#8E9093] text-meta font-normal mt-3">
         Pages ({pages.length})
       </span>
@@ -99,6 +145,8 @@ const DescriptionPages = () => {
           <Plus size={8} className="mr-1" strokeWidth={1.75} />
           New page
         </span>
+        {pagesEnabled && <button type="button" onClick={() => void openLinkPicker()}
+          className="min-h-11 text-meta hover:text-white-black">+ Link page</button>}
       </div>
     </div>
   );

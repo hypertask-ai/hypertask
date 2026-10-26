@@ -524,3 +524,44 @@ for (const view of VIEWS) {
     expect(pageErrors, `${view.path} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
 }
+
+test('Pages list creates a document, links a ticket, persists, unlinks and separates archived pages', async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'Writes only to disposable PR fixtures')
+  const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
+  const fixture = JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'card-fixture.json'), 'utf8'))
+  test.skip(!fixture.flags['htpr-7298-standalone-pages'] || !fixture.flags['htpr-7309-pages-screens'], 'Pages screens are off in this flag mode')
+  const boardId = Number(fixture.detailPath.match(/project-(\d+)/)[1])
+  const title = `Pages smoke ${testInfo.project.name} ${Date.now()}`
+  await page.goto(withRealtime(`/pages?project_id=${boardId}`))
+  await expect(page.getByRole('main', { name: 'Pages', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'New page', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toBeVisible()
+  const publicId = new URL(page.url()).pathname.split('/').pop()!
+  try {
+    await page.getByRole('textbox', { name: 'Page title', exact: true }).fill(title)
+    await expect(page.getByText('Saved', { exact: true })).toBeVisible()
+    await page.reload()
+    await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toHaveValue(title)
+    await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
+    const linked = await page.request.post(`/api/pages/${publicId}/links`, { data: { task_id: fixture.taskId } })
+    expect(linked.ok()).toBe(true)
+    await page.reload()
+    await expect(page.getByText('Linked tickets (1)', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Back to task', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /^Unlink / }).click()
+    await expect(page.getByText('Linked tickets (0)', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Back to Pages', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Search pages' }).fill(title)
+    await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
+    const archived = await page.request.post(`/api/pages/${publicId}/archive`)
+    expect(archived.ok()).toBe(true)
+    await page.reload()
+    await page.getByRole('textbox', { name: 'Search pages' }).fill(title)
+    await expect(page.getByText('No pages found.', { exact: true })).toBeVisible()
+    await page.getByRole('tab', { name: /^Archived pages/ }).click()
+    await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
+  } finally {
+    await page.request.post(`/api/pages/${publicId}/archive`)
+  }
+})
