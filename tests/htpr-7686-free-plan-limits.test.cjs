@@ -14,9 +14,9 @@ const personalScope = { kind: "personal", ownerId: 7 };
 const messages = {
   boards: "This team's Free plan allows 2 boards. Upgrade to add more, or archive a board you no longer use.",
   tickets: "This team's Free plan allows 250 open tickets. Upgrade to add more, or archive tickets you're done with.",
-  file_size: "Files on the Free plan can be up to 10 MB. Upgrade to upload bigger files.",
+  file_size: "Files on the Free plan can be up to 25 MB. Upgrade to upload bigger files.",
 };
-const maxima = { boards: 2, tickets: 250, file_size: 10 * MiB };
+const maxima = { boards: 2, tickets: 250, file_size: 25 * MiB };
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const sourceModules = [
@@ -241,7 +241,7 @@ test("named limits and rollout flag match the approved Free plan", () => {
   const h = fixture();
   assert.equal(h.policy.FREE_PLAN_MAX_BOARDS, 2);
   assert.equal(h.policy.FREE_PLAN_MAX_TICKETS, 250);
-  assert.equal(h.policy.FREE_PLAN_MAX_FILE_BYTES, 10 * MiB);
+  assert.equal(h.policy.FREE_PLAN_MAX_FILE_BYTES, 25 * MiB);
   const definition = h.load("src/lib/flags/definitions/htpr-7686-free-plan-limits.ts");
   assert.equal(definition.HTPR_7686_FREE_PLAN_LIMITS_FLAG, flag);
   assert.equal(definition.default.defaultMode, "OWNER_AND_QA");
@@ -265,21 +265,21 @@ test("251st Free ticket is refused; subtasks count, archived/deleted tickets and
   assertLockBeforeCount(h, "task");
 });
 
-test("the second board, 250th ticket, and exactly 10 MiB file are allowed", async () => {
+test("the second board, 250th ticket, and exactly 25 MiB file are allowed", async () => {
   const h = fixture({ oneBoard: true, tickets: 249 });
   await h.policy.assertBoardRoom(h.db, teamScope, 1, actor);
   await h.policy.assertTicketRoom(h.db, teamScope, 1, actor);
-  await h.policy.assertFileSizeForProject(15, 10 * MiB, actor);
+  await h.policy.assertFileSizeForProject(15, 25 * MiB, actor);
   assert.deepEqual(h.logs, []);
 });
 
 for (const entitlement of ["paid", "comped", "past_due"]) {
-  test(`${entitlement} uses real isPaidTeam and allows boards, tickets and 11 MiB files`, async () => {
+  test(`${entitlement} uses real isPaidTeam and allows boards, tickets and 26 MiB files`, async () => {
     const h = fixture({ entitlement });
     assert.equal(await h.policy.isFreeScope(teamScope), false);
     await h.policy.assertBoardRoom(h.db, teamScope, 10, actor);
     await h.policy.assertTicketRoom(h.db, teamScope, 500, actor);
-    await h.policy.assertFileSizeForProject(15, 11 * MiB, actor);
+    await h.policy.assertFileSizeForProject(15, 26 * MiB, actor);
     assert.deepEqual(h.logs, []);
     assert.deepEqual(h.calls.filter(([kind]) => kind === "scope.lock" || kind.endsWith(".count")), []);
     assert.ok(h.calls.filter(([kind]) => kind === "team.read").every(([, query]) => query.where.id === "destination"));
@@ -307,10 +307,10 @@ test("personal ticket counts include only that owner's Normal tasks on Normal pe
   });
 });
 
-test("11 MiB is refused with one safe structured log; a throwing logger cannot replace the 402", async () => {
+test("26 MiB is refused with one safe structured log; a throwing logger cannot replace the 402", async () => {
   for (const loggerThrows of [false, true]) {
     const h = fixture({ loggerThrows });
-    await refused(h, h.policy.assertFileSizeForProject(15, 11 * MiB, actor), "file_size", teamScope, { bytes: 11 * MiB });
+    await refused(h, h.policy.assertFileSizeForProject(15, 26 * MiB, actor), "file_size", teamScope, { bytes: 26 * MiB });
     assert.deepEqual(h.calls.find(([kind]) => kind === "project.read")[1], {
       where: { id: 15 }, select: { teamId: true, ownerId: true },
     });
@@ -331,7 +331,7 @@ test("flag Off adds no scope, plan, count or locking queries on any shared guard
   await h.policy.assertTicketRoom(h.db, teamScope, 1, actor);
   await h.policy.assertProjectTicketRoom(h.db, 15, 1, actor);
   await h.policy.assertTaskCountTransition(h.db, { projectId: 20, status: "Normal" }, { projectId: 15, status: "Normal" }, actor);
-  await h.policy.assertFileSizeForProject(15, 11 * MiB, actor);
+  await h.policy.assertFileSizeForProject(15, 26 * MiB, actor);
   assertNoQuotaQueries(h);
 });
 
@@ -625,7 +625,7 @@ function attachmentFixture(options = {}) {
       HYPERTASKS_S3_BUCKET: "bucket",
       getHypertasksStoragePublicUrl: (objectKey) => `https://files.invalid/${objectKey}`,
       getHypertasksS3Client: () => ({
-        headObject: () => ({ promise: async () => { h.effects.push("attachment.head"); return { ContentLength: options.bytes ?? 11 * MiB }; } }),
+        headObject: () => ({ promise: async () => { h.effects.push("attachment.head"); return { ContentLength: options.bytes ?? 26 * MiB }; } }),
         deleteObject: ({ Key }) => ({ promise: async () => {
           h.effects.push(["attachment.delete", Key]);
           if (options.cleanupThrows) throw new Error("cleanup unavailable");
@@ -639,7 +639,7 @@ function attachmentFixture(options = {}) {
   return { ...h, controller, receipt, stored, key };
 }
 
-test("authorized attachment linking uses HEAD bytes, ignores forged tiny receipt size, cleans up and refuses 11 MiB", async () => {
+test("authorized attachment linking uses HEAD bytes, ignores forged tiny receipt size, cleans up and refuses 26 MiB", async () => {
   const h = attachmentFixture();
   await assert.rejects(h.controller.linkTaskAttachment(900, 985, h.receipt), (error) => {
     assert.deepEqual(plain(h.policy.planLimitResponse(error)), { status: 402, body: responseBody("file_size") });
@@ -648,7 +648,7 @@ test("authorized attachment linking uses HEAD bytes, ignores forged tiny receipt
   assert.deepEqual(h.stored, []);
   assert.deepEqual(h.effects, ["attachment.head", ["attachment.delete", h.key]]);
   assert.equal(h.logs.length, 1);
-  assert.equal(h.logs[0][1].bytes, 11 * MiB);
+  assert.equal(h.logs[0][1].bytes, 26 * MiB);
   assert.equal(h.logs[0][1].actorUserId, 985);
   assert.deepEqual(h.logs[0][1].scope, teamScope);
   assert.equal(h.calls.find(([kind]) => kind === "attachment.access")[1].where.project.authorizedUserId, 985);
@@ -661,12 +661,12 @@ test("attachment cleanup failure does not replace the original 402 or duplicate 
   assert.deepEqual(h.stored, []);
 });
 
-for (const options of [{ bytes: 10 * MiB }, { entitlement: "paid" }, { entitlement: "comped" }, { entitlement: "past_due" }, { enabled: false }]) {
+for (const options of [{ bytes: 25 * MiB }, { entitlement: "paid" }, { entitlement: "comped" }, { entitlement: "past_due" }, { enabled: false }]) {
   test(`attachment linking allows ${JSON.stringify(options)} within existing transport limits`, async () => {
     const h = attachmentFixture(options);
     await h.controller.linkTaskAttachment(900, 985, h.receipt);
     assert.equal(h.stored.length, 1);
-    assert.equal(h.stored[0].fileSize, options.enabled === false ? 1 : options.bytes ?? 11 * MiB);
+    assert.equal(h.stored[0].fileSize, options.enabled === false ? 1 : options.bytes ?? 26 * MiB);
     assert.deepEqual(h.effects, ["attachment.head", "attachment.persist"]);
     assert.deepEqual(h.logs, []);
     if (options.enabled === false) assertNoQuotaQueries(h);
@@ -825,7 +825,7 @@ test("recover HTTP route returns exact 402 body from the whole-tree guard withou
   assert.equal(h.logs.length, 1);
 });
 
-test("upload-finalize HTTP link step returns exact 402 for measured 11 MiB and removes staged bytes", async () => {
+test("upload-finalize HTTP link step returns exact 402 for measured 26 MiB and removes staged bytes", async () => {
   const h = attachmentFixture();
   routeStubs(h);
   Object.assign(h.stubs, {
@@ -893,9 +893,9 @@ test("recurring/agent-created tickets evaluate and log the acting user rather th
   assert.deepEqual(h.effects, []);
 });
 
-test("personal 11 MiB attachment is Free even with a paid workspace elsewhere", async () => {
+test("personal 26 MiB attachment is Free even with a paid workspace elsewhere", async () => {
   const h = fixture({ entitlement: "paid" });
-  await refused(h, h.policy.assertFileSizeForProject(30, 11 * MiB, actor), "file_size", personalScope, { bytes: 11 * MiB });
+  await refused(h, h.policy.assertFileSizeForProject(30, 26 * MiB, actor), "file_size", personalScope, { bytes: 26 * MiB });
   assert.equal(h.calls.some(([kind]) => kind === "team.read"), false);
 });
 
@@ -990,7 +990,7 @@ for (const newlyUploaded of [false, true]) {
       "@/lib/storage/hypertasksS3": {
         parseHypertasksStorageKeyFromUrl: () => "tasks/attachments/other-users-upload.bin",
       },
-      "@/lib/storage/uploadTaskAttachmentToS3": { TASK_ATTACHMENT_PREFIX: "tasks/attachments", getHypertasksObjectSize: async () => 11 * MiB },
+      "@/lib/storage/uploadTaskAttachmentToS3": { TASK_ATTACHMENT_PREFIX: "tasks/attachments", getHypertasksObjectSize: async () => 26 * MiB },
       "@/lib/storage/linkTaskAttachment": {
         TaskAttachmentLinkError: class extends Error {},
         discardUnlinkedTaskAttachment: async (key) => { removed.push(key); },
@@ -1100,7 +1100,7 @@ function uiAttachmentFixture(options = {}) {
     },
     "@/lib/storage/hypertasksS3": { parseHypertasksStorageKeyFromUrl: url => url.startsWith("https://files.invalid/") ? url.slice("https://files.invalid/".length).split("?")[0] : null },
     "@/lib/storage/uploadTaskAttachmentToS3": {
-      getHypertasksObjectSize: async measuredKey => { heads++; assert.equal(measuredKey, key); return options.unverified ? null : options.bytes ?? 11 * MiB; },
+      getHypertasksObjectSize: async measuredKey => { heads++; assert.equal(measuredKey, key); return options.unverified ? null : options.bytes ?? 26 * MiB; },
     },
     "@/lib/storage/linkTaskAttachment": {
       TaskAttachmentLinkError: class extends Error { constructor(message, status) { super(message); this.status = status; } },
@@ -1147,7 +1147,7 @@ function uiAttachmentFixture(options = {}) {
 
 for (const kind of ["comment", "edit", "description"]) {
   for (const key of ["tasks/attachments/composer.bin", "ai-chat/attachments/session/composer.bin", "tasks/legacy-composer.bin"]) {
-    test(`${kind} persistence refuses Free 11 MiB from ${key} before writes, ignoring a forged 1-byte size`, async () => {
+    test(`${kind} persistence refuses Free 26 MiB from ${key} before writes, ignoring a forged 1-byte size`, async () => {
       const h = uiAttachmentFixture({ key });
       const response = await h.request(kind);
       assert.equal(response.status, 402);
@@ -1155,14 +1155,14 @@ for (const kind of ["comment", "edit", "description"]) {
       assert.deepEqual(h.saved, []);
       assert.equal(h.heads(), 1);
     });
-    for (const options of [{ bytes: 10 * MiB }, { bytes: MiB }, { entitlement: "paid" }, { enabled: false }]) {
+    for (const options of [{ bytes: 25 * MiB }, { bytes: MiB }, { entitlement: "paid" }, { enabled: false }]) {
       test(`${kind} persistence still saves ${key} with ${JSON.stringify(options)}`, async () => {
         const h = uiAttachmentFixture({ key, ...options });
         const response = await h.request(kind);
         assert.equal(response.status, 200);
         const attachment = h.saved.find(row => row.kind === "attachment");
         assert.ok(attachment);
-        assert.equal(attachment.fileSize, String(options.enabled === false ? 1 : options.bytes ?? 11 * MiB));
+        assert.equal(attachment.fileSize, String(options.enabled === false ? 1 : options.bytes ?? 26 * MiB));
         assert.equal(h.heads(), options.enabled === false ? 0 : 1);
       });
     }
@@ -1188,7 +1188,7 @@ function verificationRoute(h) {
 }
 
 for (const existing of [false, true]) {
-  test(`comment preflight refuses Free 11 MiB, including an existing description source (${existing})`, async () => {
+  test(`comment preflight refuses Free 26 MiB, including an existing description source (${existing})`, async () => {
     const h = uiAttachmentFixture({ existing });
     const POST = verificationRoute(h);
     const response = await POST({ headers: new Headers(), json: async () => ({ action: "verify-task-attachments", taskId: 900, sources: [h.source], projectId: 20, fileSize: 1 }) });
@@ -1197,7 +1197,7 @@ for (const existing of [false, true]) {
     assert.equal(h.heads(), 1);
     assert.deepEqual(h.saved, []);
   });
-  for (const options of [{ bytes: 10 * MiB }, { entitlement: "paid" }, { enabled: false }]) {
+  for (const options of [{ bytes: 25 * MiB }, { entitlement: "paid" }, { enabled: false }]) {
     test(`comment preflight allows ${JSON.stringify(options)} (${existing})`, async () => {
       const h = uiAttachmentFixture({ existing, ...options });
       const POST = verificationRoute(h);
@@ -1219,7 +1219,7 @@ for (const options of [{ denied: true, status: 404 }, { unverified: true, status
   });
 }
 
-for (const options of [{ bytes: 10 * MiB }, { entitlement: "paid" }]) {
+for (const options of [{ bytes: 25 * MiB }, { entitlement: "paid" }]) {
   test(`create-modal receipt bind HTTP route still links ${JSON.stringify(options)}`, async () => {
     const h = attachmentFixture(options);
     routeStubs(h);
@@ -1234,11 +1234,11 @@ for (const options of [{ bytes: 10 * MiB }, { entitlement: "paid" }]) {
     const response = await POST({ headers: new Headers(), json: async () => ({ action: "link-task-attachment", taskId: 900, receipt: "signed" }) });
     assert.equal(response.status, 200);
     assert.equal(h.stored.length, 1);
-    assert.equal(h.stored[0].fileSize, options.bytes ?? 11 * MiB);
+    assert.equal(h.stored[0].fileSize, options.bytes ?? 26 * MiB);
   });
 }
 
-for (const options of [{}, { bytes: 10 * MiB }, { entitlement: "paid" }, { enabled: false }]) {
+for (const options of [{}, { bytes: 25 * MiB }, { entitlement: "paid" }, { enabled: false }]) {
   test(`create-global project-scoped upload precheck: ${JSON.stringify(options)}`, async () => {
     const h = uiAttachmentFixture({ key: "ai-chat/attachments/session/composer.bin", ...options });
     const check = h.verify(h.db, [h.source], { projectId: 15 }, actor);
@@ -1249,7 +1249,7 @@ for (const options of [{}, { bytes: 10 * MiB }, { entitlement: "paid" }, { enabl
       });
     } else {
       const sizes = await check;
-      assert.equal(sizes.get(h.source), options.enabled === false ? undefined : options.bytes ?? 11 * MiB);
+      assert.equal(sizes.get(h.source), options.enabled === false ? undefined : options.bytes ?? 26 * MiB);
     }
     assert.deepEqual(h.saved, []);
   });

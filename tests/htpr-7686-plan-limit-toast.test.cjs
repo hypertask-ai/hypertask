@@ -154,7 +154,7 @@ test("board refusal signal crosses useSections without clearing quick entry or a
   }
 });
 
-const fileMessage = "Files on the Free plan can be up to 10 MB. Upgrade to upload bigger files.";
+const fileMessage = "Files on the Free plan can be up to 25 MB. Upgrade to upload bigger files.";
 const fileRefusal = () => ({ ...refusal(402, "PLAN_LIMIT_REACHED", fileMessage), response: { status: 402, data: { code: "PLAN_LIMIT_REACHED", message: fileMessage, limit: "file_size" } } });
 const file = { name: "large.bin", size: 11 * 1024 * 1024, type: "application/octet-stream" };
 

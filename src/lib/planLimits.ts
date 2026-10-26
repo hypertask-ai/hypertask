@@ -6,7 +6,7 @@ import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-76
 
 export const FREE_PLAN_MAX_BOARDS = 2;
 export const FREE_PLAN_MAX_TICKETS = 250;
-export const FREE_PLAN_MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const FREE_PLAN_MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 export type PlanLimitScope =
   | { kind: "team"; teamId: string }
