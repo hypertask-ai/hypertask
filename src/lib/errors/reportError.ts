@@ -227,7 +227,7 @@ export async function reportError(unredactedReport: ErrorReport) {
   if (
     (unredactedReport.message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE ||
       unredactedReport.message === DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE) &&
-    await isFeatureEnabled(HTPR_7988_ALLOWANCE_ERROR_REPORT_FLAG)
+    await isFeatureEnabled(HTPR_7988_ALLOWANCE_ERROR_REPORT_FLAG, 0)
   ) return;
 
   const report: ErrorReport = {

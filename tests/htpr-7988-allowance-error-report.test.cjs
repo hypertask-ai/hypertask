@@ -53,6 +53,7 @@ for (const message of [policy.SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE, policy.DAILY
       assert.equal(calls.captures.length, 0);
       assert.equal(calls.tickets.length, 0);
       assert.equal(calls.flags[0][0], flagKey);
+      assert.equal(calls.flags[0][1], 0);
     }
   });
 }
