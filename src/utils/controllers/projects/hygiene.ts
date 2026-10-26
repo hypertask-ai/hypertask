@@ -10,7 +10,7 @@ export async function getBoardHygiene(projectId: number, userId: number, agentId
     select: {
       id: true,
       section: { where: { deleted: false }, select: { id: true, section_title: true, isDone: true } },
-      labels: { select: { id: true, value: true, createdAt: true, _count: { select: { task: true } } } },
+      labels: { select: { id: true, value: true, createdAt: true, _count: { select: { task: { where: { task: { status: "Normal" } } } } } } },
       project_view: { select: { allViews: { where: { visibility: "Public" }, select: { board_filters: true } } } },
     },
   });
