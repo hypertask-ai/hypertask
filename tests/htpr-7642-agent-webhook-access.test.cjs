@@ -155,7 +155,7 @@ async function assertDelivered(h, id) {
   assert.deepEqual(await h.deliver(id), { status: "delivered", statusCode: 200 });
   assert.equal(h.calls.posts.length, postsBefore + 1);
   assert.deepEqual(h.calls.posts.at(-1), {
-    url: h.state.subscription.url, secret: h.state.subscription.secret,
+    url: h.state.subscription.url, secret: h.state.subscription.secret, authHeader: null,
     event: row.event, deliveryId: id, body: originalBody,
   });
   assert.equal(row.status, "delivered");

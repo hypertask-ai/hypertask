@@ -127,7 +127,7 @@ function delivery({ enabled, header, corrupt }) {
       id: 's1', agentId: 'agent', projectId: null, url: 'https://receiver.example.invalid/hook', secret: 'whsec_x', active: true,
       agent: { revokedAt: null, userId: 42 },
       authHeaderName: header || corrupt ? 'Authorization' : null,
-      authHeaderValue: corrupt ? 'garbage' : header ? store.sealWebhookSigningKey('Bearer live-key') : null,
+      authHeaderValue: corrupt ? 'enc:garbage' : header ? store.sealWebhookSigningKey('Bearer live-key') : null,
     },
   };
   const update = async ({ data }) => { Object.assign(row, data); return row; };
