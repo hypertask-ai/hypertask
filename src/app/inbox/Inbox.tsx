@@ -733,6 +733,22 @@ const Inbox = ({
   const activeSplit = _notificationsTQ?.structuredData?.tabs[globalFocus.currSplit]?.project;
   const canArchiveSafe = archiveSafeEnabled &&
     (activeSplit === "Updates" || activeSplit === "Important" || activeSplit === "Agents");
+  const archiveSafeAction = canArchiveSafe ? (
+      <button
+        type="button"
+        className={`shrink-0 rounded px-3 text-dense text-text-light-gray hover:bg-hover-active ${isMbl ? "min-h-[44px]" : "min-h-8"}`}
+        onClick={() => setArchiveSafeRules({
+          ...DEFAULT_INBOX_ZERO_RULES,
+          safeUpdates: {
+            taskIds: (_notificationsTQ?.structuredData?.data[globalFocus.currSplit] ?? [])
+              .flatMap((notification) => notification.taskId == null ? [] : [notification.taskId]),
+            agentOnly: activeSplit !== "Updates",
+          },
+        })}
+      >
+        Archive safe
+      </button>
+  ) : null;
 
   return (
     <>
@@ -834,6 +850,7 @@ const Inbox = ({
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
               SelectedCount={showSelectedCount ? InboxSelectedCount : null}
+              trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
             >
               {_notificationsTQ?.structuredData?.tabs.map(
                 (tab: InboxTabMeta, index: number, tabs: InboxTabMeta[]) => (
@@ -901,24 +918,6 @@ const Inbox = ({
                   />
                 </div>
               )}
-              {canArchiveSafe && (
-                <div className="flex justify-end px-4 py-2">
-                  <button
-                    type="button"
-                    className="rounded px-3 py-1 text-dense text-text-light-gray hover:bg-hover-active"
-                    onClick={() => setArchiveSafeRules({
-                      ...DEFAULT_INBOX_ZERO_RULES,
-                      safeUpdates: {
-                        taskIds: (_notificationsTQ?.structuredData?.data[globalFocus.currSplit] ?? [])
-                          .flatMap((notification) => notification.taskId == null ? [] : [notification.taskId]),
-                        agentOnly: activeSplit !== "Updates",
-                      },
-                    })}
-                  >
-                    Archive safe
-                  </button>
-                </div>
-              )}
               <InboxNotifyNudge />
               {visibleNotifications?.map((notification, index) => (
                 <>
@@ -983,6 +982,7 @@ const Inbox = ({
                 tabs={_notificationsTQ?.structuredData?.tabs ?? []}
                 activeIndex={globalFocus.currSplit}
                 onSelect={navigateTabs}
+                trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
               />
             )}
           </div>
@@ -1029,11 +1029,13 @@ interface IProps {
   children?: ReactNode;
   contentGap?: boolean;
   SelectedCount?: typeof InboxSelectedCount | null;
+  trailingAction?: ReactNode;
 }
 const SplitTitlesContainer: FC<IProps> = ({
   children,
   contentGap = false,
   SelectedCount = null,
+  trailingAction,
 }) => {
   return (
     <div
@@ -1044,6 +1046,7 @@ const SplitTitlesContainer: FC<IProps> = ({
       <div className="pills-row group relative flex min-h-8 grow flex-wrap items-center gap-[9px]">
         {children}
       </div>
+      {trailingAction}
       <ButtonGroup SelectedCount={SelectedCount} />
     </div>
   );

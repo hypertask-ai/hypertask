@@ -27,7 +27,7 @@ test("pure unread moves and edits archive once per ticket, only in the selected 
 });
 
 test("a mixed ticket never loses a mention, question, assignment, reminder or comment", () => {
-  for (const type of ["Mentioned", "Assigned", "Comment", "TaskReminder", "TaskOverdue", "Reacted", "AgentMessage", "AddedToFollowerInTask"]) {
+  for (const type of ["Mentioned", "Assigned", "Comment", "TaskReminder", "TaskDueDate", "TaskOverdue", "Reacted", "AgentMessage", "AddedToFollowerInTask"]) {
     const result = evaluate([row(1), row(2, { type })]);
     assert.deepEqual(result.notificationIds, [], type);
     assert.equal(result.totalToArchive, 0, type);
@@ -151,7 +151,7 @@ test("agent activity can clear, but human and ordinary agent comments stay", () 
   assert.deepEqual(evaluate([row(1, activity)], rules(true)).notificationIds, [1]);
   assert.deepEqual(evaluate([row(1, { ...activity, fromAgentId: null })]).notificationIds, []);
   assert.deepEqual(evaluate([row(1, { type: "Comment", comment: { activity: null } })]).notificationIds, []);
-  for (const type of ["TaskAssigned", "TaskWaitingOn", "Unknown"]) {
+  for (const type of ["TaskAssigned", "TaskWaitingOn", "TaskDueDate", "Unknown"]) {
     assert.deepEqual(evaluate([row(1, { type: "Comment", comment: { activity: { type } } })]).notificationIds, []);
   }
   const before = evaluate([row(1, activity)]).previewVersion;

@@ -316,11 +316,10 @@ export const evaluateInboxZero = (
   const pureUpdateTypes: ReadonlySet<NotificationType> = new Set([
     NotificationType.TaskMoved,
     NotificationType.TaskUpdateDescription,
-    NotificationType.TaskDueDate,
     NotificationType.TaskArchived,
   ]);
 
-  const pureActivityTypes = new Set(["TaskMove", "TaskDescriptionUpdate", "TaskDueDate", "TaskArchive"]);
+  const pureActivityTypes = new Set(["TaskMove", "TaskDescriptionUpdate", "TaskArchive"]);
 
   for (const item of items) {
     if (rules.safeUpdates) {
