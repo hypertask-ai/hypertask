@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { errorPageHeading } from './lib/errorPage'
 import { withRealtime } from './lib/realtime'
 import { tieredId } from './lib/tier'
+import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from '../../src/lib/firstScreen/boardDisplay'
 
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
@@ -334,13 +335,16 @@ test('chat opener waits for hydration before accepting its first click', { tag: 
   expect(flags.flags['htpr-8038-chat-opener-ready']).toBe(true)
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
   await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
-  const sidebar = page.getByTestId('ai-sidebar')
   const opener = page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true })
-  if (!await sidebar.isVisible()) await opener.click()
-  await expect(sidebar).toBeVisible()
-  await page.getByRole('button', { name: 'Close AI chat', exact: true }).click()
-  await expect(sidebar).toBeHidden()
-  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+  const user = await (await page.request.get('/api/users/getById')).json()
+  await expect.poll(async () => (await page.context().cookies()).some(cookie => cookie.name === BOARD_DISPLAY_COOKIE)).toBe(true)
+  const cookie = (await page.context().cookies()).find(cookie => cookie.name === BOARD_DISPLAY_COOKIE)
+  if (!cookie) throw new Error('Missing warm-user display cookie')
+  const display = parseBoardDisplay(decodeURIComponent(cookie.value), Number(user.id), { desktopChat: true })
+  if (!display) throw new Error('Invalid warm-user display cookie')
+  await page.context().addCookies([{ ...cookie, value: encodeURIComponent(JSON.stringify({ ...display,
+    board: { ...display.board, openChat: false, chatSuppressed: true, chatPinned: false },
+  })) }])
   await page.addInitScript(() => {
     const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
     localStorage.setItem('recoil-persist', JSON.stringify({ ...saved,
