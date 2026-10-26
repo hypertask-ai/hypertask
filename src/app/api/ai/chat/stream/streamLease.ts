@@ -96,6 +96,9 @@ export async function acquireAiChatStreamLease(
     const key = activeStreamKey(userId, agentId, sessionId);
     const keys = [key];
     if (!sessionId && agentId && !isolateAgentLease) keys.push(activeStreamKey(userId));
+    if (!sessionId && cancellationIdentity) {
+      keys.push(activeStreamKey(userId, undefined, cancellationIdentity.sessionId));
+    }
     const activeKeyCount = keys.length;
     if (cancellationIdentity) {
       keys.push(cancellableStreamKey(

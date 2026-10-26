@@ -76,7 +76,7 @@ export function useAiChat() {
   handleCancelStream, audioTiptapCallback, toggleRecording, processAttachments, buildGuestBoard,
   waitForChatSession,
   } = useAiChatAttachments({
-    settleSendRef, stopClosesStream,
+    settleSendRef, stopClosesStream: stopClosesStream || !!parallelStreams,
     streamingSessionRef, currentStreamingSession, streamingAssistantMessageRef, streamingRequestRef, setCurrentStreamingSession,
     setIsTyping, setAgentStatus, chatRoute, token, editor,
     setIsRecording, addMessageToSessionQuery, scopedProjectId, ensureSessionForCurrentBoard,

@@ -42,6 +42,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     options?: { htmlForAttachments?: string; preserveComposer?: boolean; queuedMessage?: QueuedAiChatMessage; sessionId?: string; onQueueBusy?: (retryAfterMs: number) => void }
   ): Promise<boolean> => {
     if (isByokBlocked) return false;
+    if (parallelStreams && !runtime) {
+      toast.error("AI chat is still loading. Please try again.");
+      return false;
+    }
     if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     const preserveComposer = options?.preserveComposer;
 
@@ -112,13 +116,13 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       if (stopClosesStream && !ownsSend()) dropAcceptedFiles();
       streamingRequestRef.current = null;
       sendInFlightRef.current = false;
-      if (stopClosesStream) settleSendRef.current = null;
+      if (stopClosesStream || runtime) settleSendRef.current = null;
       searchHandoff?.onSettled();
       queueMicrotask(() => {
         drainQueuedMessage(completedSession);
       });
     };
-    if (stopClosesStream) settleSendRef.current = settleSend;
+    if (stopClosesStream || runtime) settleSendRef.current = settleSend;
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
     const streamTaskId =
@@ -137,6 +141,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
           : sessionsRef.current.find((candidate) => candidate.id === options.sessionId);
       } else session = await waitForChatSession();
       if (!session) {
+        if (queuedMessage && parallelStreams && options?.sessionId) {
+          persistentQueue?.set(options.sessionId, []);
+          parallelStreams.remove(options.sessionId);
+          return true;
+        }
         toast.error("AI chat is still loading. Please try again.");
         if (preserveComposer) throw new Error("AI chat session is unavailable");
         return false;

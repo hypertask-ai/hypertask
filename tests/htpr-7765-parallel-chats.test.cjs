@@ -221,3 +221,58 @@ test("late acceptance of A removes only A's submitted attachments, preserving B'
     assert.deepEqual(f.fileItems, [fresh]);
   });
 });
+
+test("parallel-first then flag-off still refuses another turn in that same session", { skip: !hasRedis }, async () => {
+  await redis.flushdb();
+  const first = await lease("A", "first");
+  assert.equal(typeof first, "object");
+  assert.equal(await lease("A", "after-rollback", false), "busy");
+  await releaseAiChatStreamLease(first);
+  assert.equal(typeof await lease("A", "after-release", false), "object");
+});
+
+test("unresolved session submission preserves its draft instead of starting a hidden legacy stream", async () => {
+  const f = fixture();
+  f.context.getDisplayedSession = () => undefined;
+  await transport(f, async () => {
+    assert.equal(await f.send("draft while loading"), false);
+    assert.deepEqual(f.sent, []);
+    assert.equal(f.context.editor.getText(), "draft while loading");
+  });
+});
+
+test("parallel Stop settles its mutex even when the older stop-close flag is off", async () => {
+  const f = fixture();
+  f.context.stopClosesStream = false;
+  await transport(f, async () => {
+    const a = f.send("a"); await flush();
+    const runtime = f.streams.get("A");
+    await useAiChatAttachments({ ...f.context, ...runtime, stopClosesStream: true, currentStreamingSession: "A" }).handleCancelStream();
+    assert.equal(runtime.sendInFlightRef.current, false);
+    const next = f.send("after-stop"); await flush();
+    assert.deepEqual(f.sent.map((item) => item.message), ["a", "after-stop"]);
+    f.finish("a"); f.finish("after-stop"); await Promise.all([a, next]);
+    assert.equal(runtime.sendInFlightRef.current, false);
+  });
+});
+
+test("deleting a background chat removes its queued follow-ups and background runtime", async () => {
+  const f = fixture();
+  f.context.deleteSessionInHistory = async () => true;
+  const controls = useAiChatSessions(f.context);
+  f.queue.set("A", [{ id: "queued", content: "never send", html: "never send", files: [], attachments: [] }]);
+  f.select("B");
+  await controls.deleteSession("A");
+  assert.deepEqual(f.streams.sessionIds(), ["B"]);
+  assert.deepEqual(f.queue.get("A"), []);
+});
+
+test("failed deletion preserves a background chat's pending messages", async () => {
+  const f = fixture();
+  f.context.deleteSessionInHistory = async () => false;
+  const controls = useAiChatSessions(f.context);
+  f.queue.set("A", [{ id: "queued", content: "keep", html: "keep", files: [], attachments: [] }]);
+  await controls.deleteSession("A");
+  assert.equal(f.queue.get("A")[0].content, "keep");
+  assert.deepEqual(f.streams.sessionIds(), ["A"]);
+});

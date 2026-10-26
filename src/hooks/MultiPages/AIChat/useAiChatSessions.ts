@@ -70,8 +70,12 @@ export function useAiChatSessions(context: Context) {
     if (resolvedBoardSessionRef.current?.session.id === sessionId) {
       resolvedBoardSessionRef.current = null;
     }
-    await deleteSessionInHistory(sessionId);
-  }, [deleteSessionInHistory]);
+    const deleted = await deleteSessionInHistory(sessionId);
+    if (deleted && parallelStreams) {
+      persistentQueue?.set(sessionId, []);
+      parallelStreams.remove(sessionId);
+    }
+  }, [deleteSessionInHistory, parallelStreams, persistentQueue]);
 
   const fileUpload = useFileUpload();
   const fileUploadRef = useRef(fileUpload);

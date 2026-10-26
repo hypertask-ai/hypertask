@@ -404,7 +404,7 @@ export const useSessionAndChatHistory = (
     async (sessionId: string) => {
       if (!hasRequiredData || !currentUser?.uid) {
         console.warn("Cannot delete session: missing user data");
-        return;
+        return false;
       }
 
       const queryKey = ["chat-sessions", currentUser.uid] as const;
@@ -425,14 +425,14 @@ export const useSessionAndChatHistory = (
               : [createDemoSession(currentUser)];
           setDemoSessions(nextSessions);
           setActiveSession(nextSessions[0].id);
-          return;
+          return true;
         }
 
         await AI_Chat_API.deleteSession(sessionId);
 
         if (onlySessionInCache) {
           await queryClient.invalidateQueries({ queryKey });
-          return;
+          return true;
         }
 
         const nextSessions = sessionsList.filter((s) => s.id !== sessionId);
@@ -457,9 +457,11 @@ export const useSessionAndChatHistory = (
         if (deletedWasActive) {
           setActiveSession(nextSessions[0]?.id ?? null);
         }
+        return true;
       } catch (error) {
         console.error("Error deleting chat session:", error);
         await queryClient.invalidateQueries({ queryKey });
+        return false;
       }
     },
     [

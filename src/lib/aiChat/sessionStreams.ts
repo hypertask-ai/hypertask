@@ -1,3 +1,4 @@
+import type { SetStateAction } from "react";
 import type { QueuedAiChatMessage } from "./sessionMessageQueue";
 
 type SessionStream = {
@@ -15,7 +16,7 @@ type SessionStream = {
     sessionId: string;
     onQueueBusy: (delay: number) => void;
   }) => Promise<boolean>;
-  setIsTyping(value: boolean): void;
+  setIsTyping(value: SetStateAction<boolean>): void;
   setAgentStatus(value: string | undefined): void;
   setCurrentStreamingSession(value: string | null): void;
 };
@@ -32,8 +33,8 @@ function createSessionStream(onChange: () => void) {
     draining: false,
     retryAt: 0,
     send: undefined,
-    setIsTyping(value: boolean) {
-      state.isTyping = value;
+    setIsTyping(value: SetStateAction<boolean>) {
+      state.isTyping = typeof value === "function" ? value(state.isTyping) : value;
       onChange();
     },
     setAgentStatus(value: string | undefined) {
@@ -60,6 +61,7 @@ export function createSessionStreams(onChange: () => void) {
       return stream;
     },
     sessionIds: () => [...sessions.keys()],
+    remove: (sessionId: string) => sessions.delete(sessionId),
   };
 }
 
