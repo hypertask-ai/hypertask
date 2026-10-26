@@ -34,7 +34,7 @@ write_proof() {
   printf 'sha: %s\nsource: %s\ncheck: reviewer-workflow\nci: https://github.com/hypertask-ai/reviewer/actions/runs/101\nreview: https://github.com/hypertask-ai/reviewer/actions/runs/202\ntarget: https://github.com/hypertask-ai/hypertask/pull/1658\nhead: %s\n' "$sha" "$E/source" "$head" > "$proof"
 }
 jq -n --arg sha "$sha" '{id:101,head_sha:$sha,head_branch:"main",path:".github/workflows/ci.yml",event:"push",status:"completed",conclusion:"success"}' > "$E/ci.json"
-jq -n --arg sha "$sha" --arg head "$head" '{id:202,head_sha:$sha,head_branch:"main",path:".github/workflows/review.yml",name:("Review hypertasks PR #1658 @ " + $head),event:"repository_dispatch",status:"completed",conclusion:"success"}' > "$E/review.json"
+jq -n --arg sha "$sha" --arg head "$head" '{id:202,head_sha:$sha,head_branch:"main",path:".github/workflows/review.yml",name:"Hypertask AI PR Review",display_title:("Review hypertasks PR #1658 @ " + $head),event:"repository_dispatch",status:"completed",conclusion:"success"}' > "$E/review.json"
 printf '{"jobs":[{"name":"test","conclusion":"success","status":"completed"}]}\n' > "$E/ci-jobs.json"
 printf '{"jobs":[{"conclusion":"success","status":"completed","steps":[{"name":"Review pull request with GPT-6.1 Sol high","conclusion":"success"}]}]}\n' > "$E/review-jobs.json"
 printf '[{"id":2,"context":"ai-review","state":"success","target_url":"https://github.com/hypertask-ai/reviewer/actions/runs/202"},{"id":1,"context":"claude-review","state":"success","target_url":"https://github.com/hypertask-ai/reviewer/actions/runs/202"}]\n' > "$E/statuses.json"
@@ -74,6 +74,10 @@ for file in ci review; do
   done
   cp "$E/original.json" "$E/$file.json"
 done
+cp "$E/review.json" "$E/original.json"
+jq '.display_title = "Review hypertasks PR #1665 @ other"' "$E/original.json" > "$E/review.json"
+check 1 'review title must identify intended target'
+cp "$E/original.json" "$E/review.json"
 for file in ci-jobs review-jobs; do
   cp "$E/$file.json" "$E/original.json"
   for change in '.jobs = []' '.jobs[0].conclusion = "skipped"' '.jobs[0].conclusion = "failure"'; do
@@ -88,6 +92,21 @@ for change in 'map(.state = "failure")' 'map(.target_url = "https://github.com/h
   check 1 "published verdict rejected: $change"
 done
 cp "$E/original.json" "$E/statuses.json"
+for file in ci review ci-jobs review-jobs statuses; do
+  cp "$E/$file.json" "$E/original.json"
+  printf 'invalid JSON\n' > "$E/$file.json"
+  check 1 "$file malformed API response rejected"
+  rm "$E/$file.json"
+  check 1 "$file API read error rejected"
+  cp "$E/original.json" "$E/$file.json"
+done
+cp "$E/review-jobs.json" "$E/original.json"
+jq '.jobs[0].steps = []' "$E/original.json" > "$E/review-jobs.json"
+check 1 'successful workflow without review execution rejected'
+cp "$E/original.json" "$E/review-jobs.json"
+sed -i '1i check: systemd-user-unit fake.service' "$proof"
+check 1 'later duplicate check cannot override first check'
+write_proof
 check 0 'valid proof still passes after rejected evidence'
 RELEASES='[{"tagName":"v1"}]' check 1 'existing release cannot use reviewer exception'
 SHIP_REPO=hypertask-ai/other check 1 'other repositories cannot use reviewer exception'

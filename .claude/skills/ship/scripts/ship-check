@@ -346,7 +346,7 @@ live_proof_ok() {
           and .status == "completed" and .conclusion == "success"
           and (if $kind == "ci" then .path == ".github/workflows/ci.yml" and (.event == "push" or .event == "workflow_dispatch")
             else .path == ".github/workflows/review.yml" and .event == "repository_dispatch"
-              and .name == ("Review hypertasks PR #" + $target + " @ " + $head) end)' <<<"$metadata" >/dev/null || return 1
+              and .display_title == ("Review hypertasks PR #" + $target + " @ " + $head) end)' <<<"$metadata" >/dev/null || return 1
         jobs=$(gh api "repos/$REPO/actions/runs/$run/jobs?per_page=100" --paginate 2>/dev/null) || return 1
         jq -es --arg kind "$kind" 'all(.[]; (.jobs | type) == "array") and any(.[].jobs[];
           .status == "completed" and .conclusion == "success"
@@ -400,7 +400,7 @@ check_deployed() {
         cmp=$(gh api "repos/$REPO/compare/$BASE...$sha" --jq .status 2>/dev/null) || fail "could not compare merge $sha with $BASE"
         [[ $cmp == identical || $cmp == behind ]] || fail "merge $sha is not on $BASE"
         if [[ $REPO == hypertask-ai/reviewer && $BASE == main ]]; then
-          grep -qx 'check: reviewer-workflow' "$EVID/$1/live-proof" 2>/dev/null && live_proof_ok "$1" "$sha" \
+          [[ $(sed -n 's/^check:[[:space:]]*//p' "$EVID/$1/live-proof" 2>/dev/null | head -1) == reviewer-workflow ]] && live_proof_ok "$1" "$sha" \
             || fail "reviewer deployment needs exact-engine CI and live review proof in $EVID/$1/live-proof"
           echo "deployed ok (reviewer workflow proof, merged ${sha:0:9} on $BASE)"; return
         fi
