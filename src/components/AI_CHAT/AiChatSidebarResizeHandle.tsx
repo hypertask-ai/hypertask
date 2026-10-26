@@ -63,19 +63,19 @@ export function AiChatSidebarResizeHandle() {
       setIsDragging(false);
       document.body.style.userSelect = "";
       document.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerup", onUp);
-      document.removeEventListener("pointercancel", onUp);
+      document.removeEventListener("pointerup", rememberWidth ? onUp : stopDragging);
+      document.removeEventListener("pointercancel", rememberWidth ? onUp : stopDragging);
     };
-    const onUp = rememberWidth ? () => {
+    const onUp = () => {
       if (userId !== undefined && draggedWidth !== undefined) {
         const width = draggedWidth;
         setPreferredWidths((widths) => ({ ...widths, [userId]: width }));
       }
       stopDragging();
-    } : stopDragging;
+    };
     document.addEventListener("pointermove", onMove);
-    document.addEventListener("pointerup", onUp);
-    document.addEventListener("pointercancel", onUp);
+    document.addEventListener("pointerup", rememberWidth ? onUp : stopDragging);
+    document.addEventListener("pointercancel", rememberWidth ? onUp : stopDragging);
   };
 
   const accent = isDragging || isHovered;
