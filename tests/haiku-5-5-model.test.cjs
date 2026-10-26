@@ -189,7 +189,7 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
 test("a flag read error does not change the model", async () => {
   const h = harness({ flagError: true });
   await h.makeModel().doGenerate(params);
-  assert.deepEqual(h.checks, [["htpr-7075-background-claude", 985]]);
+  assert.deepEqual(h.checks, []);
   await h.flush();
 });
 

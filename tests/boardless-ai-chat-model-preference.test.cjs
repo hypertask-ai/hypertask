@@ -52,7 +52,7 @@ stub("src/hooks/General/useGetUserPreferences.tsx", {
   useGetUserPreferences: () => ({ data: { aiModelPreferences: preferences } }),
 });
 stub("src/hooks/useTeamAiProviders.ts", {
-  useTeamAiProviders: () => ({ enabledProviders: ["openai", "google", "deepseek"], isLoading: false }),
+  useTeamAiProviders: () => ({ enabledProviders: ["openai", "google", "deepseek", "anthropic"], isLoading: false }),
 });
 stub("src/hooks/useTeamCustomEndpoint.ts", {
   useTeamCustomEndpoint: () => ({ configured: false, isLoading: false }),
