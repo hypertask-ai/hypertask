@@ -300,12 +300,16 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     );
   }, SAVE_DELAY);
 
-  const returnToTask = useCallback(async () => {
-    if (returningRef.current) return;
-    returningRef.current = true;
+  const flushPendingSaves = useCallback(async () => {
     flushTitleSave();
     flushContentSave();
     await Promise.all([titleSaveChainRef.current, contentSaveChainRef.current]);
+  }, [flushContentSave, flushTitleSave]);
+
+  const returnToTask = useCallback(async () => {
+    if (returningRef.current) return;
+    returningRef.current = true;
+    await flushPendingSaves();
 
     try {
       returnFromPage({
@@ -320,7 +324,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     } catch {
       router.replace(taskHref);
     }
-  }, [flushContentSave, flushTitleSave, router, taskHref]);
+  }, [flushPendingSaves, router, taskHref]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -415,11 +419,11 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   }, [isDeleting, page.publicId, router, taskHref]);
 
   useEffect(() => {
-    if (!isMobile) return;
+    if (!isMobile && !pagesEnabled) return;
 
-    setCurrentPageActions({ publicId: page.publicId, version, onDelete: deletePage });
+    setCurrentPageActions({ publicId: page.publicId, version, onDelete: deletePage, beforeNavigate: flushPendingSaves });
     return () => setCurrentPageActions(null);
-  }, [deletePage, isMobile, page.publicId, setCurrentPageActions, version]);
+  }, [deletePage, flushPendingSaves, isMobile, page.publicId, pagesEnabled, setCurrentPageActions, version]);
 
   const statusText =
     saveStatus === "saving"
@@ -506,7 +510,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
             {pagesEnabled && (
               <div className={isMobile ? "px-4" : ""}>
-                <PageLinkedTickets publicId={page.publicId} tickets={page.linkedTasks} />
+                <PageLinkedTickets publicId={page.publicId} tickets={page.linkedTasks} beforeNavigate={flushPendingSaves} />
               </div>
             )}
 

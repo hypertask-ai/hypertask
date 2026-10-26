@@ -12,9 +12,11 @@ import type { ITask } from "@/models/model";
 export default function PageLinkedTickets({
   publicId,
   tickets,
+  beforeNavigate,
 }: {
   publicId: string;
   tickets: LinkedPageTicket[];
+  beforeNavigate: () => Promise<void>;
 }) {
   const router = useRouter();
   const [picking, setPicking] = useState(false);
@@ -56,7 +58,12 @@ export default function PageLinkedTickets({
       <span>Linked tickets ({tickets.length})</span>
       {tickets.map((task) => (
         <span key={task.id} className="inline-flex min-w-0 max-w-full items-center gap-2">
-          <Link href={`/detail/project-${task.projectId}/${task.uniqueIndex}`} className="min-h-11 truncate py-3 hover:text-white-black hover:underline">
+          <Link href={`/detail/project-${task.projectId}/${task.uniqueIndex}`}
+            onClick={(event) => {
+              if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              void beforeNavigate().then(() => router.push(`/detail/project-${task.projectId}/${task.uniqueIndex}`));
+            }} className="min-h-11 truncate py-3 hover:text-white-black hover:underline">
             {task.ticketNumber ?? task.title}
           </Link>
           <button type="button" aria-label={`Unlink ${task.ticketNumber ?? task.title}`} disabled={changing}

@@ -16,6 +16,7 @@ import {
   tableTitleWrapAtom,
   showCommandsAtom,
 } from "@/store";
+import { pageCommandGroups, pageCreationTarget } from "@/lib/pages/commands";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import { usePathname, useRouter } from "next/navigation";
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
@@ -334,6 +335,7 @@ const Commands = (props: Props) => {
       ...(boardCommands.length > 0
         ? [{ group: "Boards", commandLists: boardCommands }]
         : []),
+      ...(pagesEnabled ? pageCommandGroups(pathname) : []),
       ...registryGroups.slice(boardsInsertIndex),
     ].map((group) => ({
       ...group,
@@ -394,17 +396,7 @@ const Commands = (props: Props) => {
         ? [{ group: "Get started", commandLists: getStartedCommands }, ...commandGroups]
         : commandGroups;
 
-    const pageCommands: ICommandList[] = [];
-    if (pagesEnabled) {
-      pageCommands.push(
-        { key: "gotoPages", name: "Go to Pages", commandMode: CommandMode.Command },
-        { key: "newPage", name: "New page", commandMode: CommandMode.Command },
-      );
-      if (pathname?.startsWith("/detail/")) pageCommands.push({ key: "linkPage", name: "Link page", commandMode: CommandMode.Command });
-      if (pathname?.startsWith("/page/")) pageCommands.push({ key: "linkPageTicket", name: "Link ticket", commandMode: CommandMode.Command });
-    }
-    const groupsWithPages = pageCommands.length ? [{ group: "Pages", commandLists: pageCommands }, ...rankedCommandGroups] : rankedCommandGroups;
-    const mobileGroups = getMobileCommandGroups(groupsWithPages, isMobile);
+    const mobileGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
     const rankedGroups = pageActions
       ? [{
           group: `This page (Version ${pageActions.version})`,
@@ -638,13 +630,18 @@ const Commands = (props: Props) => {
       (document.activeElement as HTMLElement).blur();
       if (pagesEnabled && ["gotoPages", "newPage", "linkPage", "linkPageTicket"].includes(command.key)) {
         resetShowCommands();
+        const navigate = async (href: string) => {
+          if (currentPageActions && pathname === `/page/${currentPageActions.publicId}`) await currentPageActions.beforeNavigate?.();
+          router.push(href);
+        };
         switch (command.key) {
           case "gotoPages":
-            router.push(currentProject ? `/pages?project_id=${currentProject.id}` : "/pages");
+            void navigate(currentProject ? `/pages?project_id=${currentProject.id}` : "/pages");
             break;
           case "newPage":
-            if (pathname?.startsWith("/detail/")) window.dispatchEvent(new Event("pages-new-page"));
-            else router.push(currentProject ? `/pages?project_id=${currentProject.id}&new=1` : "/pages?new=1");
+            const target = pageCreationTarget({ pathname, projectId: currentProject?.id });
+            if (target.kind === "current-surface") window.dispatchEvent(new Event("pages-new-page"));
+            else void navigate(target.href);
             break;
           case "linkPage":
             window.dispatchEvent(new Event("pages-link-page"));

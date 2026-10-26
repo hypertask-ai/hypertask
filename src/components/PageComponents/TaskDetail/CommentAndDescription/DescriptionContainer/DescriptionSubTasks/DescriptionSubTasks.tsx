@@ -1,6 +1,3 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
-import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -24,8 +21,6 @@ import { openCachedTaskDetail } from "@/lib/navigation/cachedTaskDetail";
 const DescriptionSubTask = () => {
   const { currentTask, editMode, toggleSubtaskLinkingModal, cachedLayout } = useTaskContext();
   const { loading, hasPages, createAndOpenPage } = useTaskPages();
-  const screens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
-  const standalone = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const inboxFlow = useSearchParams()?.get("inboxFlow");
   const queryClient = useQueryClient();
   const { authenticatedUserId } = useAuth();
@@ -125,10 +120,6 @@ const DescriptionSubTask = () => {
               <Plus size={8} className="mr-1" strokeWidth={1.75} />
               Add page
             </span>
-          )}
-          {screens && standalone && !loading && !hasPages && (
-            <button type="button" onClick={() => window.dispatchEvent(new Event("pages-link-page"))}
-              className="min-h-11 text-meta text-text-light-gray hover:text-white-black">+ Link page</button>
           )}
         </div>
 

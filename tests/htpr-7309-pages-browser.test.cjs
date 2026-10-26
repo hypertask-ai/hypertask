@@ -84,3 +84,18 @@ test('Pages server route still renders for a signed-in user with both flags', as
   assert.equal(view.type, 'PagesListScreen');
   assert.deepEqual(view.props.currentUser, { id: 985 });
 });
+
+const { pageCommandGroups, pageCreationTarget } = load('src/lib/pages/commands.ts', {});
+
+test('New page belongs to the displayed Pages surface, not a remembered board', () => {
+  assert.deepEqual(pageCreationTarget({ pathname: '/pages', projectId: 100 }), { kind: 'current-surface' });
+  assert.deepEqual(pageCreationTarget({ pathname: '/detail/project-200/7', projectId: 100 }), { kind: 'current-surface' });
+  assert.deepEqual(pageCreationTarget({ pathname: '/project', projectId: 100 }), { kind: 'navigate', href: '/pages?project_id=100&new=1' });
+  assert.deepEqual(pageCreationTarget({ pathname: '/page/document-on-another-board', projectId: 100 }), { kind: 'navigate', href: '/pages?new=1' });
+});
+
+test('task and page palettes include their relevant document actions', () => {
+  assert.deepEqual(pageCommandGroups('/detail/project-2/8')[0].commandLists.map((command) => command.name), ['Go to Pages', 'New page', 'Link page']);
+  assert.deepEqual(pageCommandGroups('/page/document')[0].commandLists.map((command) => command.name), ['Go to Pages', 'New page', 'Link ticket']);
+  assert.deepEqual(pageCommandGroups('/pages')[0].commandLists.map((command) => command.name), ['Go to Pages', 'New page']);
+});

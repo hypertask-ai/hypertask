@@ -76,6 +76,11 @@ export default function PagesListScreen({ currentUser }: { currentUser: IUser })
   }, [boardOnly, createPage, projectId]);
 
   useEffect(() => {
+    window.addEventListener("pages-new-page", newPage);
+    return () => window.removeEventListener("pages-new-page", newPage);
+  }, [newPage]);
+
+  useEffect(() => {
     if (searchParams?.get("new") !== "1") { requestedNew.current = false; return; }
     if (requestedNew.current) return;
     requestedNew.current = true;
