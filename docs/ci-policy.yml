@@ -145,10 +145,14 @@ ship_scripts_tests:
     - bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
     - python3 .claude/skills/ship/scripts/premerge-evidence.test.py
     - python3 .claude/skills/ship/scripts/ci-why.test.py
+    - bash .claude/skills/ship/scripts/board-check.test.sh
     - bash .claude/skills/ship/scripts/user-unit-check.test.sh
     - python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
     - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
     - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
+    - bash .claude/skills/ship/scripts/error-collector.test.sh
+    - node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
+    - bash .claude/skills/ship/scripts/ship-claim.test.sh
   fixtures: offline_with_temporary_home_and_no_secrets
 
 feature_map_weekly:

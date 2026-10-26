@@ -97,3 +97,14 @@ reply. A late reply acceptance must not clear a new attachment in B.
 Capture overlapping request times, session/message IDs, final replies,
 and a reload proving each reply stayed in its own transcript. Flag off
 retains the prior shared reply guard. Per-user request limits still apply.
+
+## Opening while chat starts
+
+With `htpr-8030-chat-open-race` enabled, load a board with chat closed,
+wait for `[data-ai-chat-ready="true"]`, then select **Open AI chat** once.
+Server-rendered buttons exist before their client handlers attach; board
+columns and `data-board-tasks-hydrated` alone do not prove interaction readiness.
+The sidebar and its board-scope picker must stay visible even when the chat runtime is still publishing state.
+Opening again must not close a chat already requested open. The existing
+**Close AI chat** button must still close it. Capture the first opening
+and use the unchanged `[data-ai-chat-scope]:visible > button` scope control.

@@ -154,9 +154,15 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
   });
   const focus = loadSource("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
     "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox": load("src/lib/flags/definitions/htpr-7970-bulk-blocked-inbox.ts", {}),
-    "@/lib/api/typedClient": {},
+    "@/lib/api/typedClient": {
+      toggleNotificationArchive: (body, headers) => global.fetch("/api/notifications/markAsDone", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      archiveNotifications: async () => {},
+    },
     "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/keys": { HTPR_6979_TYPED_WRITES_FLAG: "htpr-6979-typed-writes-sections-notifications" },
     "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive": {
       HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG: "htpr-7840-blocked-inbox-archive",
     },

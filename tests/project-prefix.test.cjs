@@ -779,6 +779,7 @@ test("review: feature flag payload is omitted in both command create paths when 
     for (const mode of ["Create Board", "CreateTeamBoard"]) {
       const posts = [];
       const actions = load("src/components/generalCommandActions.ts", {
+        "@/lib/api/typedClient": {},
         "@/models/enums": {},
         axios: { post: async (url, body) => { posts.push([url, body]); return { data: { id: 15 } }; } },
         "react-hot-toast": { error: message => { throw new Error(message); } },

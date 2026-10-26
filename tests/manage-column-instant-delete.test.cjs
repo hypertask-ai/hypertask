@@ -30,7 +30,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function setup(t, { typed = false, updating = false, pending = true } = {}) {
+function setup(t, { updating = false, pending = true } = {}) {
   const queryClient = new QueryClient();
   t.after(() => queryClient.clear());
   const sections = [1, 2, 3].map((id) => ({ id, section_title: `Column ${id}`, ranking: `A0${id}`, visibility: true }));
@@ -54,7 +54,7 @@ function setup(t, { typed = false, updating = false, pending = true } = {}) {
   queryClient.invalidateQueries = async () => {};
   const write = (...args) => {
     state.requests.push(args);
-    const body = typed ? args[0] : args[1];
+    const body = args[0];
     if (!body.newSection.deleted) return renameNetwork.promise;
     state.atDeletePost = { project: state.project, caches: keys.map((key) => queryClient.getQueryData(key)) };
     return network.promise;
@@ -62,7 +62,7 @@ function setup(t, { typed = false, updating = false, pending = true } = {}) {
   const bindings = {
     queryClient, noEmptyBoardFlash: false, lastColumnDeleteMessage: false, editSection: sections[1], currentProject: project,
     currentUser: { id: 985 }, globalConstants: { GetAllManageColumnsPrefixKey: "GetAllManageColumns" },
-    sections, updating, typedWrite: typed ? write : undefined, axios: { post: write },
+    sections, updating, writeSection: write,
     setCurrentProject: (value) => { state.project = typeof value === "function" ? value(state.project) : value; },
     setEditMode: (value) => { state.editMode = typeof value === "function" ? value(state.editMode) : value; },
     setDeleteModal: (value) => { state.deleteModal = value; }, setUpdating: () => {},
@@ -125,105 +125,102 @@ function assertRenamed(h) {
   assert.equal(h.queryClient.getQueryData(h.keys[3])[0].section_title, "Renamed column");
 }
 
-for (const typed of [false, true]) {
-  test(`removes all rendered lists after queued saves but before ${typed ? "typed" : "legacy"} POST, then keeps success refetch`, async (t) => {
-    const h = setup(t, { typed, updating: true });
-    const done = h.confirm();
-    assert.deepEqual(h.state.project, h.before[0].updatedProjects[0]);
-    h.keys.forEach((key, i) => assert.deepEqual(h.queryClient.getQueryData(key), h.before[i]));
-    assert.equal(h.state.requests.length, 0);
-    h.queue.resolve();
-    await new Promise(setImmediate);
-    assert.equal(h.state.requests.length, 1, "a stale updating closure must not drop the queued delete");
-    assertRemovedBeforePost(h);
-    const request = h.state.requests[0];
-    const body = typed ? request[0] : request[1];
-    if (!typed) assert.equal(request[0], "/api/section/update");
-    assert.equal(body.sectionId, 2);
-    assert.equal(body.newSection.deleted, true);
-    h.network.resolve({ status: 204 });
-    await done;
-    assertRemoved(h);
-    assert.deepEqual(h.state.refetches, [{ queryKey: ["projectsAll"] }]);
-    assert.deepEqual(h.state.errors, []);
-  });
+test(`removes all rendered lists after queued saves but before typed POST, then keeps success refetch`, async (t) => {
+  const h = setup(t, { updating: true });
+  const done = h.confirm();
+  assert.deepEqual(h.state.project, h.before[0].updatedProjects[0]);
+  h.keys.forEach((key, i) => assert.deepEqual(h.queryClient.getQueryData(key), h.before[i]));
+  assert.equal(h.state.requests.length, 0);
+  h.queue.resolve();
+  await new Promise(setImmediate);
+  assert.equal(h.state.requests.length, 1, "a stale updating closure must not drop the queued delete");
+  assertRemovedBeforePost(h);
+  const request = h.state.requests[0];
+  const body = request[0];
+  assert.equal(body.sectionId, 2);
+  assert.equal(body.newSection.deleted, true);
+  h.network.resolve({ status: 204 });
+  await done;
+  assertRemoved(h);
+  assert.deepEqual(h.state.refetches, [{ queryKey: ["projectsAll"] }]);
+  assert.deepEqual(h.state.errors, []);
+});
 
-  test(`with no pending save removes immediately before the ${typed ? "typed" : "legacy"} POST completes`, async (t) => {
-    const h = setup(t, { typed, pending: false });
-    const done = h.confirm();
-    await Promise.resolve();
-    assert.equal(h.state.requests.length, 1);
-    assertRemovedBeforePost(h);
-    h.network.resolve({ status: 204 });
-    await done;
-    assertRemoved(h);
-  });
+test(`with no pending save removes immediately before the typed POST completes`, async (t) => {
+  const h = setup(t, { pending: false });
+  const done = h.confirm();
+  await Promise.resolve();
+  assert.equal(h.state.requests.length, 1);
+  assertRemovedBeforePost(h);
+  h.network.resolve({ status: 204 });
+  await done;
+  assertRemoved(h);
+});
 
-  test(`${typed ? "typed refusal" : "network failure"} restores the column at its original index and uses the error toast`, async (t) => {
-    const h = setup(t, { typed });
-    const done = h.confirm();
-    h.queue.resolve();
-    await new Promise(setImmediate);
-    assertRemovedBeforePost(h);
-    h.network.reject(new Error("Server refused deletion"));
-    await done;
-    assertRestored(h);
-    assert.deepEqual(h.state.project, h.before[0].updatedProjects[0]);
-    h.keys.forEach((key, i) => assert.deepEqual(
-      JSON.parse(JSON.stringify(h.queryClient.getQueryData(key))), h.before[i],
-    ));
-  });
+test(`typed refusal restores the column at its original index and uses the error toast`, async (t) => {
+  const h = setup(t);
+  const done = h.confirm();
+  h.queue.resolve();
+  await new Promise(setImmediate);
+  assertRemovedBeforePost(h);
+  h.network.reject(new Error("Server refused deletion"));
+  await done;
+  assertRestored(h);
+  assert.deepEqual(h.state.project, h.before[0].updatedProjects[0]);
+  h.keys.forEach((key, i) => assert.deepEqual(
+    JSON.parse(JSON.stringify(h.queryClient.getQueryData(key))), h.before[i],
+  ));
+});
 
-  test(`a rename of another column saved while delete is queued survives a failed ${typed ? "typed" : "legacy"} delete`, async (t) => {
-    const h = setup(t, { typed, pending: false });
-    const renamed = h.rename();
-    await Promise.resolve();
-    const done = h.confirm();
-    assert.equal(h.state.requests.length, 1, "only the pending rename has posted");
-    h.renameNetwork.resolve({ status: 204 });
-    await renamed;
-    await new Promise(setImmediate);
-    assertRenamed(h);
-    assertRemovedBeforePost(h);
-    // Latest unrelated data must also survive rollback, not just the queued rename.
-    h.state.project = { ...h.state.project, project_title: "Latest board title" };
-    for (const key of h.keys.slice(0, 3)) {
-      h.queryClient.setQueryData(key, (cached) => Array.isArray(cached)
-        ? cached.map((project) => ({ ...project, project_title: "Latest board title" }))
-        : { ...cached, metadata: "latest", updatedProjects: cached.updatedProjects.map((project) => ({ ...project, project_title: "Latest board title" })) });
-    }
-    h.network.reject(new Error("Server refused deletion"));
-    await done;
-    assertRestored(h);
-    assertRenamed(h);
-    assert.equal(h.state.project.project_title, "Latest board title");
-    const full = h.queryClient.getQueryData(h.keys[0]);
-    assert.equal(full.metadata, "latest");
-    assert.ok(full.updatedProjects.every((project) => project.project_title === "Latest board title"));
-    for (const key of h.keys.slice(1, 3)) {
-      assert.ok(h.queryClient.getQueryData(key).every((project) => project.project_title === "Latest board title"));
-    }
-  });
+test(`a rename of another column saved while delete is queued survives a failed typed delete`, async (t) => {
+  const h = setup(t, { pending: false });
+  const renamed = h.rename();
+  await Promise.resolve();
+  const done = h.confirm();
+  assert.equal(h.state.requests.length, 1, "only the pending rename has posted");
+  h.renameNetwork.resolve({ status: 204 });
+  await renamed;
+  await new Promise(setImmediate);
+  assertRenamed(h);
+  assertRemovedBeforePost(h);
+  // Latest unrelated data must also survive rollback, not just the queued rename.
+  h.state.project = { ...h.state.project, project_title: "Latest board title" };
+  for (const key of h.keys.slice(0, 3)) {
+    h.queryClient.setQueryData(key, (cached) => Array.isArray(cached)
+      ? cached.map((project) => ({ ...project, project_title: "Latest board title" }))
+      : { ...cached, metadata: "latest", updatedProjects: cached.updatedProjects.map((project) => ({ ...project, project_title: "Latest board title" })) });
+  }
+  h.network.reject(new Error("Server refused deletion"));
+  await done;
+  assertRestored(h);
+  assertRenamed(h);
+  assert.equal(h.state.project.project_title, "Latest board title");
+  const full = h.queryClient.getQueryData(h.keys[0]);
+  assert.equal(full.metadata, "latest");
+  assert.ok(full.updatedProjects.every((project) => project.project_title === "Latest board title"));
+  for (const key of h.keys.slice(1, 3)) {
+    assert.ok(h.queryClient.getQueryData(key).every((project) => project.project_title === "Latest board title"));
+  }
+});
 
-  test(`a pending rename completing cannot resurrect the column during or after ${typed ? "typed" : "legacy"} deletion`, async (t) => {
-    const h = setup(t, { typed, pending: false });
-    const renamed = h.rename();
-    await Promise.resolve();
-    const done = h.confirm();
-    assert.deepEqual(h.state.project, h.before[0].updatedProjects[0]);
-    assert.equal(h.state.requests.length, 1);
-    h.renameNetwork.resolve({ status: 204 });
-    await renamed;
-    await new Promise(setImmediate);
-    assert.equal(h.state.requests.length, 2);
-    assertRenamed(h);
-    assertRemovedBeforePost(h);
-    await new Promise(setImmediate);
-    assertRemoved(h);
-    h.network.resolve({ status: 204 });
-    await done;
-    assertRemoved(h);
-    assert.deepEqual(h.state.refetches, [{ queryKey: ["projectsAll"] }]);
-    assert.deepEqual(h.state.errors, []);
-  });
-}
+test(`a pending rename completing cannot resurrect the column during or after typed deletion`, async (t) => {
+  const h = setup(t, { pending: false });
+  const renamed = h.rename();
+  await Promise.resolve();
+  const done = h.confirm();
+  assert.deepEqual(h.state.project, h.before[0].updatedProjects[0]);
+  assert.equal(h.state.requests.length, 1);
+  h.renameNetwork.resolve({ status: 204 });
+  await renamed;
+  await new Promise(setImmediate);
+  assert.equal(h.state.requests.length, 2);
+  assertRenamed(h);
+  assertRemovedBeforePost(h);
+  await new Promise(setImmediate);
+  assertRemoved(h);
+  h.network.resolve({ status: 204 });
+  await done;
+  assertRemoved(h);
+  assert.deepEqual(h.state.refetches, [{ queryKey: ["projectsAll"] }]);
+  assert.deepEqual(h.state.errors, []);
+});

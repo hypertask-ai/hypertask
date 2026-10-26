@@ -667,7 +667,7 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false section_title done_section
+  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit explicit_base unresolved moved=false section_title done_section
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
   local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-} deploy=${SHIP_DEPLOY:-}
@@ -686,6 +686,7 @@ guard() {
     REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
     SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker; SHIP_DEPLOY=$deploy
     explicit=false; [ "${SHIP_REPO+x}" != x ] || explicit=true
+    explicit_base=false; [ "${SHIP_BASE+x}" != x ] || explicit_base=true
     [[ $seg =~ ^[[:space:]]* ]]; rest=${seg:${#BASH_REMATCH[0]}}
     while [[ $rest =~ $assignment ]]; do
       setting=${BASH_REMATCH[1]}; v=${BASH_REMATCH[2]}
@@ -698,7 +699,7 @@ guard() {
       done
       case $setting in
         SHIP_REPO) REPO=$unquoted; explicit=true ;;
-        SHIP_BASE) BASE=$unquoted ;;
+        SHIP_BASE) BASE=$unquoted; explicit_base=true ;;
         SHIP_CHECKOUT|SHIP_WORKER|SHIP_DEPLOY) printf -v "$setting" '%s' "$unquoted" ;;
       esac
     done
@@ -781,6 +782,14 @@ PY
       is_done_section "$t" "$section_title"; done_section=$?
       [ "$done_section" = 3 ] && { echo "ship-check blocked moving $t to \"$section_title\": cannot match it against the columns of the ticket's board; retry when the board answers, or name the column exactly as the board shows it." >&2; exit 2; }
       if [ "$done_section" = 0 ]; then
+        if [ -s "$EVID/$t/repo" ]; then
+          if [ "$explicit" = false ]; then
+            REPO=$(cat "$EVID/$t/repo") || { echo "ship-check blocked moving $t: could not read bound repo." >&2; exit 2; }
+          fi
+          if [ "$explicit_base" = false ] && [ -s "$EVID/$t/base" ]; then
+            BASE=$(cat "$EVID/$t/base") || { echo "ship-check blocked moving $t: could not read bound base." >&2; exit 2; }
+          fi
+        fi
         checks="merged deployed docs"; [[ $t == HTPR-* ]] && checks="merged deployed proof docs"
         for c in $checks; do
           if [ "$c" = docs ]; then

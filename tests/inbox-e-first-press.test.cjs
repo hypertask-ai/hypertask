@@ -75,7 +75,14 @@ function makeFlow(t, {
     "./revision": { isInboxReadModelRevision: () => false },
   });
   const useFocus = load("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
-    "@/lib/api/typedClient": {},
+    "@/lib/api/typedClient": {
+      toggleNotificationArchive: (body, headers) => global.fetch("/api/notifications/markAsDone", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      archiveNotifications: async () => {},
+    },
     "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
     "@/lib/flags/keys": {},
     "@/store": atoms,

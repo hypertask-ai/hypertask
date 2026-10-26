@@ -141,7 +141,7 @@ test("all named inbox routines use the UI paths and clean up their notification"
   assertClean(app);
   const ui = fs.readFileSync("src/hooks/Inbox/useGlobalFocusHandler.tsx", "utf8");
   const undo = fs.readFileSync("src/utils/undoActions/helperFuncs.ts", "utf8");
-  assert.match(ui, /"\/api\/notifications\/markAsDone",\s*\{\s*method: "POST"/);
+  assert.match(ui, /toggleNotificationArchive\(/);
   assert.match(undo, /"\/api\/notifications\/markAsDone", \{\s*method: "POST"/);
   assert.match(fs.readFileSync("src/utils/controllers/tasks/getTask.ts", "utf8"), /fetchTaskDetail\(project, uniqueIndex, user.id\)/);
   assert.match(fs.readFileSync("src/app/detail/[...slug]/page.tsx", "utf8"), /fetchTaskDetail\(params.slug\[0\], params.slug\[1\], userObj.id\)/);
