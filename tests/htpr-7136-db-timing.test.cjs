@@ -52,7 +52,6 @@ function wrapped(timing, enabled = true) {
     './dbTiming': timing,
     './operationContext': { getMcpOperationContext: () => undefined },
     '@/lib/flags': { isFeatureEnabled: async () => enabled },
-    '@/lib/flags/keys': { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper' },
     '@/lib/mcp/auth': {}, '@/lib/mcp/readJsonBody': {}, '@/lib/mcp/tasks/agentMutationLeaseAdoption': {},
   }).wrapMcpRoute
 }
