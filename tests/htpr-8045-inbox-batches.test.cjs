@@ -264,3 +264,15 @@ test("a plain later yes replays the server-saved batch without model-retained ID
   assert.equal(f.rows[2].status, "Normal");
   assert.equal((await f.turn().archive({ confirmed: true })).success, false);
 });
+
+
+test("next page works across plain user turns without retaining a cursor UUID", async () => {
+  const f = fixture({ count: 601 });
+  const first = await f.turn().list({ limit: 500 });
+  assert.equal(first.next_offset, 500);
+  const next = await f.turn().list({ limit: 500, continue: true });
+  assert.deepEqual(next.user_notifications.map((row) => row.id), Array.from({ length: 101 }, (_, i) => i + 501));
+  assert.equal(next.next_cursor, null);
+  assert.deepEqual((await f.turn().list({ continue: true })).user_notifications, []);
+  assert.equal((await f.turn({ sessionId: "other" }).list({ continue: true })).success, false);
+});

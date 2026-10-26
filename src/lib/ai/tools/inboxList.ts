@@ -8,7 +8,7 @@ import prisma from "@/lib/prisma";
 import notificationGetAll, { notificationInboxInclude } from "@/utils/controllers/notifications/getAll";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_8045_INBOX_BATCHES_FLAG } from "@/lib/flags/definitions/htpr-8045-inbox-batches";
-import { recordInboxList, recordInboxCursor, readInboxCursor } from "./inboxListReceipt";
+import { recordInboxList, recordInboxCursor, readInboxCursor, recordInboxContinuation, readInboxContinuation } from "./inboxListReceipt";
 import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 
 import type { ToolContext } from "./context";
@@ -34,10 +34,11 @@ export function createInboxListTool(context: ToolContext) {
   return {
     hypertask_inbox_list: tool({
       description:
-        "Read inbox notifications without confirmation. When next_cursor is returned, pass it unchanged as cursor to continue until null, even if earlier items were archived. Request limit=500 for large passes. Keep each returned list_token to archive only listed IDs. Use next_offset for archived history. If paging metadata is absent, this account uses the legacy first-page read. Set archived=true for archived items.",
+        "Read inbox notifications without confirmation. Use continue=true for the next active-inbox page, including across user messages; the server remembers the cursor. Within a turn, next_cursor can also be passed unchanged as cursor. Continue until next_cursor is null, even if earlier items were archived. Request limit=500 for large passes. Keep each returned list_token to archive only listed IDs. Use next_offset for archived history. If paging metadata is absent, this account uses the legacy first-page read. Set archived=true for archived items.",
       inputSchema: z.object({
         limit: z.coerce.number().int().min(1).max(500).default(50),
         offset: z.coerce.number().int().min(0).default(0),
+        continue: z.boolean().default(false),
         cursor: z.object({ token: z.string().uuid(), offset: z.number().int().min(0) }).optional(),
         archived: z.boolean().default(false),
       }),
@@ -45,15 +46,22 @@ export function createInboxListTool(context: ToolContext) {
         sendStatus("hypertask_inbox_list");
         const batchesEnabled = await isFeatureEnabled(HTPR_8045_INBOX_BATCHES_FLAG, user.id);
         const limit = batchesEnabled ? input.limit : Math.min(input.limit, 100);
-        const offset = batchesEnabled ? (input.cursor?.offset ?? input.offset) : 0;
-        const cursorIds = batchesEnabled && input.cursor
-          ? await readInboxCursor(user.id, context.confirmationSessionId, input.cursor.token)
+        const cursor = batchesEnabled && input.continue && !input.archived
+          ? await readInboxContinuation(user.id, context.confirmationSessionId)
+          : input.cursor;
+        if (batchesEnabled && input.continue && !input.archived) {
+          if (cursor === undefined) return { success: false, error: "Inbox continuation expired. Start a fresh read." };
+          if (cursor === null) return { success: true, user_notifications: [], next_cursor: null, next_offset: null, message: "The previous inbox scan reached its end." };
+        }
+        const offset = batchesEnabled ? (cursor?.offset ?? input.offset) : 0;
+        const cursorIds = batchesEnabled && cursor
+          ? await readInboxCursor(user.id, context.confirmationSessionId, cursor.token)
           : undefined;
         if (cursorIds === null) return { success: false, error: "Inbox cursor expired. Start a fresh read." };
         const pageResult = async (total: number, rows: InboxToolRow[]) => {
           const ids = cursorIds ?? rows.map(({ id }) => Number(id));
           const cursorToken = batchesEnabled && !input.archived
-            ? input.cursor?.token ?? await recordInboxCursor(user.id, context.confirmationSessionId, ids)
+            ? cursor?.token ?? await recordInboxCursor(user.id, context.confirmationSessionId, ids)
             : undefined;
           const byId = new Map(rows.map((row) => [Number(row.id), row]));
           const notifications = cursorToken
@@ -61,6 +69,8 @@ export function createInboxListTool(context: ToolContext) {
             : rows;
           const pageTotal = cursorToken ? ids.length : total;
           const nextOffset = offset + (cursorToken ? limit : notifications.length);
+          const nextCursor = cursorToken && nextOffset < pageTotal ? { token: cursorToken, offset: nextOffset } : null;
+          if (batchesEnabled && !input.archived) await recordInboxContinuation(user.id, context.confirmationSessionId, nextCursor);
           return sanitizeForJson({
             success: true,
             user_notifications: batchesEnabled ? notifications.map((notification) => ({
@@ -92,7 +102,7 @@ export function createInboxListTool(context: ToolContext) {
               offset,
               snapshot_total: pageTotal,
               next_offset: nextOffset < pageTotal ? nextOffset : null,
-              next_cursor: cursorToken && nextOffset < pageTotal ? { token: cursorToken, offset: nextOffset } : null,
+              next_cursor: nextCursor,
               list_token: input.archived ? null : await recordInboxList(user.id, context.confirmationSessionId, notifications.map(({ id }) => Number(id)).filter((id) => id > 0)),
             } : {}),
           });

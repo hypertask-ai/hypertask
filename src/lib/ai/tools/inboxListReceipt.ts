@@ -64,3 +64,16 @@ export async function readPendingInboxArchive(userId: number, sessionId: string)
   return stored ? pendingArchiveSchema.parse(JSON.parse(stored)) : null;
 }
 
+const continuationSchema = z.object({ token: z.string().uuid(), offset: z.number().int().min(0) });
+const continuationKey = (userId: number, sessionId: string) => `ai_inbox_next:${userId}:${sessionId}`;
+
+export async function recordInboxContinuation(userId: number, sessionId: string, cursor: z.infer<typeof continuationSchema> | null) {
+  const redis = await getRedis();
+  await redis.set(continuationKey(userId, sessionId), JSON.stringify(cursor), "EX", 900);
+}
+
+export async function readInboxContinuation(userId: number, sessionId: string) {
+  const redis = await getRedis();
+  const stored = await redis.get(continuationKey(userId, sessionId));
+  return stored === null ? undefined : continuationSchema.nullable().parse(JSON.parse(stored));
+}
