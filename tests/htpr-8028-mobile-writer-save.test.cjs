@@ -64,16 +64,13 @@ test('writer failure saves the original rich description and form fields without
     CtrlEnterHandler: async (mode, values) => { assert.equal(mode, 'Save'); saved.push(values); return creationResult; },
   };
   const callback = run(`(${attr.initializer.expression.getText(ast)})`, context);
-  assert.equal(await callback(), true);
+  assert.equal(await callback(''), true);
   assert.equal(titles[0], 'Keep every dictated word & detail.');
   assert.equal(saved[0].title, titles[0]);
   assert.equal(saved[0].description, html);
-  assert.equal(saved[0].attachments, attachments);
-  assert.equal(saved[0].currentProject, formValues.currentProject);
-  assert.equal(saved[0].status, formValues.status);
-  assert.equal(saved[0].tags, formValues.tags);
+  assert.equal(saved[0].attachments, undefined, 'the save handler must read current attachments after uploads finish');
   creationResult = false;
-  assert.equal(await callback(), false);
+  assert.equal(await callback(''), false);
   assert.equal(context.editor.getHTML(), html);
   assert.equal(run(`(${attr.initializer.expression.getText(ast)})`, { ...context, mobileWriterSave: false }), undefined);
 });
@@ -85,9 +82,10 @@ function failureEffect() {
   const context = {
     isLoading: false, isMobileCreateFlow: true, hasError: false, isByokBlocked: false, currentDisplayResponse: '',
     mobileRequestFinished: false, mobileFallbackAttemptedRef: { current: false },
+    mobileFallbackPromptRef: { current: '' }, autoTrigger: true, userPrompt: '', initialPrompt: '',
     calls: 0, cleared: 0, handled: true,
   };
-  context.onCreateTaskFailure = async () => { context.calls++; return context.handled; };
+  context.onCreateTaskFailure = async prompt => { context.calls++; context.rawPrompt = prompt; return context.handled; };
   context.clearHistory = () => { context.cleared++; };
   return { context, render: () => run(`(${effect.arguments[0].getText(ast)})()`, context) };
 }
@@ -143,4 +141,78 @@ test('a fast empty request falls back even when React batches away the loading r
   context.mobileRequestFinished = completedStates[1];
   render(); await Promise.resolve();
   assert.equal(context.calls, 1);
+});
+
+test('raw fallback preserves a submitted writer note as literal text in the draft', async () => {
+  const ast = tree(modalPath);
+  const attr = find(ast, n => ts.isJsxAttribute(n) && n.name.getText(ast) === 'onCreateTaskFailure');
+  let html = '<p>Original description.</p>';
+  const note = 'New dictated detail: <keep> every & word\nSecond line';
+  const writes = [];
+  const { escapeHtml } = require('./task-route-loader.cjs').load('src/utils/helperFunctions/escapeHtml.ts');
+  const callback = run(`(${attr.initializer.expression.getText(ast)})`, {
+    mobileWriterSave: true, formValues: { title: 'Existing title', description: html, attachments: [] },
+    editor: { getHTML: () => html, getText: () => 'Original description.', commands: { setContent: value => { html = value; } } },
+    getCurrentTitle: () => 'Existing title', applyTaskWriterTitle() {}, handleChange() {}, escapeHtml,
+    CtrlEnterHandler: async (_, values) => { writes.push(values); return false; },
+  });
+  assert.equal(await callback(note), false);
+  assert.equal(writes[0].description, '<p>Original description.</p><p>New dictated detail: &lt;keep&gt; every &amp; word<br>Second line</p>');
+  assert.equal(html, writes[0].description, 'failed persistence leaves both original and new words in the draft');
+  assert.equal(writes[0].title, 'Existing title');
+});
+
+test('fallback waits for uploads, then reads the completed attachment rather than a stale form snapshot', async () => {
+  const ast = tree(modalPath);
+  const attr = find(ast, n => ts.isJsxAttribute(n) && n.name.getText(ast) === 'onCreateTaskFailure');
+  const handler = find(ast, n => ts.isVariableDeclaration(n) && n.name.getText(ast) === 'CtrlEnterHandler').initializer;
+  const end = handler.body.statements.findIndex(statement => statement.getText(ast).startsWith('const formValuesAtSave'));
+  assert(end >= 0);
+  const preamble = handler.body.statements.slice(0, end + 1).map(statement => statement.getText(ast)).join('\n');
+  const formValues = { title: 'Task', description: '<p>Words.</p>', attachments: [], currentProject: { id: 7049 }, tags: [{ id: 'keep-tag' }] };
+  const ref = { current: [] }, pending = new Map();
+  let finish;
+  pending.set('file', { promise: new Promise(resolve => { finish = () => { ref.current = [{ id: 7, file: { name: 'finished.txt', source: 'https://files.example/finished.txt' } }]; pending.clear(); resolve(); }; }) });
+  const save = run(`(async (param, formValuesOverride) => { ${preamble}; return formValuesAtSave; })`, {
+    console: { log() {} }, canSave: true, isRecording: false, uploadInProgress: false, createSubmissionRef: { current: false },
+    saveEpochRef: { current: 0 }, pendingAttachmentUploadsRef: { current: pending }, setUploadInProgress() {},
+    createTaskAttachmentsRef: ref, releaseCreateTaskUploadReservations() {}, formValues,
+  });
+  let saved;
+  const callback = run(`(${attr.initializer.expression.getText(ast)})`, {
+    mobileWriterSave: true, formValues, editor: { getHTML: () => formValues.description, getText: () => 'Words.' },
+    getCurrentTitle: () => 'Task', applyTaskWriterTitle() {},
+    CtrlEnterHandler: async (mode, values) => { saved = await save(mode, values); return true; },
+  });
+  const result = callback(''); finish(); await result;
+  assert.equal(saved.attachments.length, 1);
+  assert.equal(saved.attachments[0].file.name, 'finished.txt');
+  assert.equal(saved.currentProject, formValues.currentProject);
+  assert.equal(saved.tags, formValues.tags);
+});
+
+test('manual empty completion retains the submitted raw prompt even after context clears input', async () => {
+  const ast = tree(writerPath);
+  let finish;
+  const request = new Promise(resolve => { finish = resolve; });
+  const states = [], prompt = { current: '' };
+  const context = {
+    useCallback: fn => fn, isLoading: false, isByokBlocked: false, isMobileCreateFlow: true,
+    mobileCreateRequestPendingRef: { current: false }, currentDisplayResponse: '', autoTrigger: false,
+    presentation: 'overlay', initialPrompt: '', userPrompt: 'Keep this fresh dictated note.', isUploadingAttachments: false,
+    resolveTaskWriterSubmitPrompt: (_, __, ___, value) => value, uploadProgress: 0,
+    document: { getElementById: () => null }, DIV_ID_CONSTANTS: { titleInputModal: 'title' },
+    buildTaskWriterPrompt: prompt => prompt, onCreateTaskFailure() {}, mobileFallbackPromptRef: prompt,
+    setMobileRequestFinished: value => states.push(value), sendAIRequest: () => request,
+  };
+  const submit = run(`(${declaration(ast, 'onClickHandler')})`, context);
+  submit(); assert.deepEqual(states, [false]);
+  context.userPrompt = ''; finish(); await request; await Promise.resolve();
+  assert.deepEqual(states, [false, true]);
+  assert.equal(prompt.current, 'Keep this fresh dictated note.');
+  const fallback = failureEffect();
+  fallback.context.mobileRequestFinished = true;
+  fallback.context.mobileFallbackPromptRef.current = prompt.current;
+  fallback.render(); await Promise.resolve();
+  assert.equal(fallback.context.rawPrompt, 'Keep this fresh dictated note.');
 });

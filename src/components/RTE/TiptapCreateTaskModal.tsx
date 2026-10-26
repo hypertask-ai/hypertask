@@ -1,4 +1,5 @@
 import { PlanLimitRefusal } from "@/lib/planLimitsClient";
+import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { HTPR_8028_MOBILE_WRITER_SAVE_FLAG } from "@/lib/flags/definitions/htpr-8028-mobile-writer-save";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -463,7 +464,7 @@ const TiptapCreateTaskModal = () => {
 
   const CtrlEnterHandler = async (
     param?: TSendBackButtonParam,
-    formValuesOverride?: IForm,
+    formValuesOverride?: Partial<IForm>,
   ) => {
     console.log("🚀 ~ CtrlEnterHandler ~ canSave:", canSave);
     if (isRecording) return;
@@ -1009,12 +1010,18 @@ const TiptapCreateTaskModal = () => {
                 projectAssignees={projectAssignees}
                 mobileCreateTask={mobileCreateTask}
                 applyCreateTaskResult={applyCreateTaskResult}
-                onCreateTaskFailure={mobileWriterSave ? async () => {
-                  const description = editor?.getHTML() ?? formValues.description;
-                  const title = getCurrentTitle() || editor?.getText().trim().slice(0, 500) || "";
+                onCreateTaskFailure={mobileWriterSave ? async (prompt) => {
+                  let description = editor?.getHTML() ?? formValues.description;
+                  const rawPrompt = prompt.trim();
+                  if (rawPrompt && rawPrompt !== editor?.getText().trim()) {
+                    description += `<p>${escapeHtml(rawPrompt).replace(/\n/g, "<br>")}</p>`;
+                    editor?.commands.setContent(description);
+                    handleChange("description", description);
+                  }
+                  const title = getCurrentTitle() || editor?.getText().trim().slice(0, 500) || rawPrompt.slice(0, 500);
                   if (!title) return false;
                   applyTaskWriterTitle(title);
-                  return (await CtrlEnterHandler("Save", { ...formValues, title, description })) === true;
+                  return (await CtrlEnterHandler("Save", { title, description })) === true;
                 } : undefined}
                 project={projectForContext}
                 EscapeHandler={() => {

@@ -42,3 +42,9 @@ viewport, all four themes, desktop unchanged, and flag-off behavior. A
 transcript injected at the speech-output boundary does not prove microphone
 hardware or speech-service accuracy; name that limitation. Archive only the
 QA tasks created by the run.
+
+Also submit fresh dictation inside the phone writer, including literal angle
+brackets and line breaks. A failed or empty manual response must retain those
+new words in the saved description, or in the draft if persistence fails.
+Hold a form attachment upload until after fallback starts; release it and
+require the saved task to contain the completed file after reload.
