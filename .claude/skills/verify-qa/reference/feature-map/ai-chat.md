@@ -126,3 +126,14 @@ The sidebar and its board-scope picker must stay visible even when the chat runt
 Opening again must not close a chat already requested open. The existing
 **Close AI chat** button must still close it. Capture the first opening
 and use the unchanged `[data-ai-chat-scope]:visible > button` scope control.
+
+## Remembered sidebar width
+
+With `htpr-8013-sidebar-width` enabled, use QA 985's existing sidebar resize
+handle on a desktop board. Drag to a new width, close and reopen, then reload
+and open a ticket or another board. Each opening must retain the dragged width.
+Shrink the window until the sidebar hits its existing 85% viewport limit, then
+expand it again: the original dragged width must return. Temporary viewport
+clamping must not replace the preference. A second account starts at 420px and
+keeps its own drags. Phone chat remains full-width. The flag-off path retains
+the previous shared width and viewport clamping behavior.
