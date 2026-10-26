@@ -2174,3 +2174,33 @@ test('deletion-only sibling changes still require their own reachable ticket gat
   writeFile(dir, 'src/components/Widget.tsx', gated.replace('  if (!visible) return null;\n', ''));
   assert.equal((await evaluate('HTPR-1 [FEATURE] sibling control', base, commit(git, 'now refused'), dir)).pass, false);
 });
+
+test('changed module values and rebound exports cannot borrow a sibling gate', async (t) => {
+  const imports = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n';
+  const cases = [
+    ['changed module constant', 'const title = "Old";\nexport function Title() { return <h1>{title}</h1>; }\n', 'const title = "New";\nexport function Title() { return <h1>{title}</h1>; }\n'],
+    ['same-line module constant', 'const title = "Old"; export function Title() { return <h1>{title}</h1>; }\n', 'const title = "New"; export function Title() { return <h1>{title}</h1>; }\n'],
+    ['edited rebound entry', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>Old</aside>;\n', 'export let Other = () => <aside>New</aside>;\nOther = () => <aside>New</aside>;\n'],
+    ['only reassignment edited', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>Old</aside>;\n', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>New</aside>;\n'],
+  ];
+  for (const [name, before, after] of cases) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, 'src/components/Widget.tsx', imports + before);
+    const base = commit(git, 'existing UI');
+    writeFile(dir, 'src/components/Widget.tsx', imports + after + 'export function Gated() { return useFlag(OTHER_FLAG) ? <div>Feature</div> : null; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] sibling gate', base, commit(git, name), dir)).pass, false, name);
+  }
+});
+
+test('entry-scoped gates cannot come from unrelated module initializers', async (t) => {
+  const cases = [
+    ['module async call', 'async function load() { if (await isFeatureEnabled(OTHER_FLAG)) doWork(); }\nconst settings = load();\n'],
+    ['module JSX callback', 'const unused = <Boundary>{() => <Row limit={useFlag(OTHER_FLAG) ? 3 : undefined}/>}</Boundary>;\n'],
+    ['direct module gate', 'const enabled = useFlag(OTHER_FLAG);\nconst setting = enabled ? 1 : 2;\n'],
+  ];
+  for (const [name, decoy] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + decoy + 'export function Widget() { return <div>Ungated</div>; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] module decoy', base, commit(git, name), dir)).pass, false, name);
+  }
+});

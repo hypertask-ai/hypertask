@@ -426,10 +426,10 @@ function enclosingFunctionLike(node) {
   return null;
 }
 
-function isLiveCallSite(node, live) {
+function isLiveCallSite(node, live, allowModuleScope = true) {
   if (isStaticallyUnreachable(node)) return false;
   const enclosing = enclosingFunctionLike(node);
-  return !enclosing || live.has(enclosing);
+  return enclosing ? live.has(enclosing) : allowModuleScope;
 }
 
 function branchIsNullishOrEmpty(node) {
@@ -755,7 +755,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
     // An inline callback in a JSX attribute (onClick={() => send()}) runs when
     // the live element it sits in is rendered.
     for (const fn of functions) {
-      if (live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live)) continue;
+      if (live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live, !entries)) continue;
       live.add(fn);
       changed = true;
     }
@@ -771,19 +771,19 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
         if (isStaticallyUnreachable(node)) return;
         if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
             checker.getSymbolAtLocation(node.expression) === symbol &&
-            isLiveCallSite(node, live)) {
+            isLiveCallSite(node, live, !entries)) {
           referenced = true;
           return;
         }
         if (typescript.isIdentifier(node) && isJsxCallbackValue(node, checker, live) &&
-            checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live)) {
+            checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live, !entries)) {
           referenced = true;
           return;
         }
         if ((typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) &&
             typescript.isIdentifier(node.tagName) &&
             checker.getSymbolAtLocation(node.tagName) === symbol &&
-            isLiveCallSite(node, live) && jsxResultIsConsumed(node, checker, live)) {
+            isLiveCallSite(node, live, !entries) && jsxResultIsConsumed(node, checker, live)) {
           referenced = true;
           return;
         }
@@ -1129,7 +1129,7 @@ function exportedJsxEntryHasTicketGate(
     if (typescript.isFunctionLike(node) && !liveFunctions.has(node)) return;
     if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
         helperSymbols.has(checker.getSymbolAtLocation(node.expression)) &&
-        !isStaticallyUnreachable(node)) {
+        liveFunctions.has(enclosingFunctionLike(node)) && !isStaticallyUnreachable(node)) {
       let argument = node.arguments[0];
       while (argument && (typescript.isParenthesizedExpression(argument) ||
              typescript.isAsExpression(argument) || typescript.isTypeAssertionExpression(argument) ||
@@ -1183,15 +1183,26 @@ function hasUngatedExportedJsxEntry(
     typescript.forEachChild(node, collect);
   }
   collect(sourceFile);
+  const containsChangedLine = (node) => {
+    const startLine = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+    const endLine = sourceFile.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
+    return [...changedLines].some((line) => line >= startLine && line <= endLine);
+  };
+  const moduleChanged = sourceFile.statements.some((statement) => {
+    if (typescript.isImportDeclaration(statement) || typescript.isExportDeclaration(statement) ||
+        typescript.isInterfaceDeclaration(statement) || typescript.isTypeAliasDeclaration(statement) ||
+        typescript.isFunctionDeclaration(statement)) return false;
+    if (typescript.isVariableStatement(statement) &&
+        statement.declarationList.declarations.every((declaration) =>
+          declaration.initializer && typescript.isFunctionLike(unwrapArgumentExpression(declaration.initializer)))) return false;
+    return containsChangedLine(statement);
+  });
   const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   for (const fn of functions) {
     if (!isExportedUiEntry(fn, identifierExports) || !functionContainsJsx(fn)) continue;
     const entryFunctions = collectLiveFunctions(sourceFile, checker, new Set([fn]));
-    const entryChanged = [...entryFunctions].some((entry) => {
-      const startLine = sourceFile.getLineAndCharacterOfPosition(entry.getStart(sourceFile)).line + 1;
-      const endLine = sourceFile.getLineAndCharacterOfPosition(entry.getEnd()).line + 1;
-      return [...changedLines].some((line) => line >= startLine && line <= endLine);
-    });
+    const entryChanged = moduleChanged || !entryFunctions.has(fn) ||
+      [...entryFunctions].some(containsChangedLine);
     if (!entryChanged) continue;
     if (!exportedJsxEntryHasTicketGate(
       checker,
