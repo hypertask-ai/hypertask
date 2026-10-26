@@ -59,7 +59,7 @@ test("contract callers and boards are isolated from the browser smoke user", asy
         return row;
       },
       createMany: async ({ data }) => { records[model].push(...data); },
-      update: async ({ where, data }) => Object.assign(records[model].find(row => row.id === where.id), data),
+      update: async ({ where, data }) => Object.assign(records[model].find(row => Object.entries(where).every(([key, value]) => row[key] === value)), data),
       findUnique: async ({ where }) => records[model].find(row => row.id === where.id),
       count: async ({ where }) => records[model].filter(row => where.userId.in.includes(row.userId)).length,
     }];
@@ -92,6 +92,24 @@ await seedSessionFixtures({});`,
   const owner = contract.callers.owner;
   assert.notEqual(owner.id, smoke.id, "contract owner must not be the smoke user");
   const sidebar = files["/fixtures/agent-sidebar-fixture.json"];
+  let activityUserId;
+  const load = require('./helpers/htpr-7260-ui.cjs').loader({
+    '@/lib/prisma': { default: prisma },
+    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: activityUserId }) },
+    '@/utils/controllers/teams/hasTeamMembershipAccess': { hasTeamMembershipAccess: async () => true },
+  });
+  const activity = load('src/pages/api/activity/addLastActiveAt.ts').default;
+  const statuses = {};
+  for (const lane of ['Desktop', 'Mobile']) {
+    activityUserId = records.user.find(user => user.displayName === `Sidebar ${lane}`).id;
+    let body;
+    const response = { status: code => { statuses[lane] = code; return response; }, json: value => { body = value; } };
+    await activity({ method: 'POST', headers: {}, body: { userId: activityUserId } }, response);
+    assert.equal(statuses[lane], 200, `${lane} sidebar fixture must support the real board activity endpoint`);
+    assert.equal(body.userId, activityUserId);
+    assert(body.lastActiveAt instanceof Date);
+    assert.equal(body.totalTeamsOwned, 0);
+  }
   assert.equal(sidebar.projectId, boards[0].id);
   assert.deepEqual(Object.keys(sidebar.lanes), ["Desktop", "Mobile"]);
   assert.deepEqual(sidebar.personalChats.map(chat => chat.title), ["Desktop", "Mobile"].flatMap(lane =>
