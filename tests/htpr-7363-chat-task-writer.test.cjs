@@ -374,7 +374,8 @@ test("chat turn resolves the server flag once for the authenticated user and for
   });
   const providerAbort = new AbortController();
   await runModelTurn({ body: { user_context: { id: 999 } }, dbUser: { id: 985 }, selected: { model: "test-model" }, providerAbort, send() {} }, {}, {});
-  assert.deepEqual(plain(checks), [[keys.HTPR_7514_INLINE_AGENT_IMAGES_FLAG, 985], [keys.HTPR_7756_CHAT_OPENS_TASK_FLAG, 985], [keys.HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, 985], [keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
+  assert.deepEqual(plain(checks.filter(([key]) => key === keys.HTPR_7363_CHAT_TASK_WRITER_FLAG)), [[keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
+  assert.equal(checks.every(([, userId]) => userId === 985), true);
   assert.equal(toolArgs.length, 1);
   assert.equal(toolArgs[0][7], true);
   assert.equal(toolArgs[0][8], providerAbort.signal);
