@@ -136,3 +136,25 @@ Repeat with Ctrl+A (Cmd+A on Mac). Ctrl+Shift+A remains explicitly global.
 Archive the selected split, reload, and verify every unselected message remains.
 Existing ticket-wide archive and Undo behavior stays unchanged.
 Flag off retains the previous global checkbox behavior.
+
+## AI inbox triage command
+
+With `htpr-8044-triage-inbox` and `htpr-8045-inbox-batches` on, press
+Ctrl+K, search **Triage inbox**, then select it. A fresh full-screen human chat opens
+with the triage request; an agent-selected conversation is never reused. No new panel or archive engine is involved.
+
+Use a clean QA chat composer. Seed more than 100 QA-only notifications,
+including pure agent updates and a question/reminder that must stay. Require
+all pages to be read before the single archive preview. Check every previewed
+ticket, including sibling notifications. No archive occurs before a later
+explicit yes. After approval, compare the returned IDs with the preview,
+reload the inbox, then ask **Undo** and prove the entire batch returns.
+Questions and review decisions remain linked in the report. Treat ticket
+claims about money or outages as unverified, not current facts.
+
+Turn either flag off in an isolated flag-provider test: the new command
+must disappear, but **Clear inbox to zero** and the other Inbox commands
+must remain. Demo/tutorial palettes must not launch real inbox triage.
+Keep a draft in the chat composer and verify opening the command never
+sends or clears that draft. Capture the existing palette and full-screen chat at
+1440x900 and 390x844 in Porcelain, Graphite, AMOLED and Dia.

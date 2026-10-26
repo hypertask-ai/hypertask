@@ -8,8 +8,9 @@ import {
   useState,
 } from "react";
 import { CommandMode } from "@/models/enums";
-import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import {
+  aiChatPendingPromptAtom,
   boardLayoutAtom,
   calendarSettingsAtom,
   currentProjectAtom,
@@ -58,6 +59,10 @@ import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
+import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { INBOX_TRIAGE_PROMPT } from "@/lib/ai/prompts/inboxTriage";
+import { HTPR_8044_TRIAGE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8044-triage-inbox";
 import { HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8025-reactive-command-search";
 import { HTPR_8015_AMOLED_MODE_OUTLINE_FLAG } from "@/lib/flags/definitions/htpr-8015-amoled-mode-outline";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
@@ -112,6 +117,11 @@ const Commands = (props: Props) => {
     focusProxy,
   } = props;
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
+  const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
+  const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
+  const freshChatHandoff = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
+  const triageInboxEnabled = triageInboxFlag && safeInboxBatches && freshChatHandoff && !isDemo && !isInteractive;
+  const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   let selectedTasksFirst = false;
   if (kanbanSelectAllEnabled && contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
@@ -285,6 +295,7 @@ const Commands = (props: Props) => {
     const registryGroups = getCommands({
       context: "Others",
       ...contextOptions,
+      triageInboxEnabled,
       appShellRailOn,
       agentChatOn: onAgentChat,
       projectOptions: {
@@ -440,6 +451,7 @@ const Commands = (props: Props) => {
       : rankedGroups;
   }, [
     columnArchiveEnabled,
+    triageInboxEnabled,
     appShellRailOn,
     kanbanSelectAllEnabled,
     selectedTasksFirst,
@@ -674,6 +686,13 @@ const Commands = (props: Props) => {
             window.dispatchEvent(new Event("pages-link-ticket"));
             break;
         }
+        return;
+      }
+      if (command.key === "triageInbox") {
+        if (!triageInboxEnabled) return;
+        resetShowCommands();
+        setAiChatPendingPrompt({ query: INBOX_TRIAGE_PROMPT, fullScreen: true });
+        router.push(buildFullScreenChatPath(`${window.location.pathname}${window.location.search}${window.location.hash}`));
         return;
       }
       if (command.key === "deletePage") {
