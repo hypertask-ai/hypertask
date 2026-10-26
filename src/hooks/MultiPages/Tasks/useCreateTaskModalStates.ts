@@ -1,3 +1,5 @@
+import { HTPR_8031_AUTO_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8031-auto-title";
+import { describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
 import { PlanLimitRefusal, planLimitRefusalMessage } from "@/lib/planLimitsClient";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import toast from "react-hot-toast";
@@ -83,6 +85,7 @@ interface IProccessed {
 }
 
 const useCreateTaskModalGlobalStates = () => {
+  const autoTitleRecoveryEnabled = useFlag(HTPR_8031_AUTO_TITLE_FLAG);
   let showPlanLimitToast = false;
   if (useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG)) showPlanLimitToast = true;
   const [initializeDefaults, setInitializeDefaults] = useState(true);
@@ -394,6 +397,7 @@ const useCreateTaskModalGlobalStates = () => {
         modelSelected: titleModel,
         modelOptionId: titleModel,
         aiMode: "AiTaskWriter",
+        ...(autoTitleRecoveryEnabled ? { requestKind: "auto-title" } : {}),
         images64: [],
         pdfs64: [],
         docx64: [],
@@ -405,12 +409,16 @@ const useCreateTaskModalGlobalStates = () => {
     if (!response.ok) throw new Error("Title generation is unavailable");
 
     const generatedHtml = await response.text();
+    if (autoTitleRecoveryEnabled) {
+      const failure = describeTaskWriterStreamFailure(generatedHtml);
+      if (failure) throw new Error(failure);
+    }
     const generatedTitle = extractTitleAndDescription(generatedHtml).title
       ?.replace(/\s+/g, " ")
       .trim();
     if (!generatedTitle) throw new Error("No title was generated");
     return generatedTitle.slice(0, 80);
-  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption, defaultContext, _currentProject?.teamId]);
+  }, [autoTitleRecoveryEnabled, haiku55Enabled, haikuDefaultEnabled, defaultModelOption, defaultContext, _currentProject?.teamId]);
 
   const scheduleTitleGeneration = useCallback((description: string) => {
     const plainDescription = descriptionText(description);
@@ -440,13 +448,20 @@ const useCreateTaskModalGlobalStates = () => {
       return title;
     } catch (error) {
       if (saveEpochRef.current === epochAtRequest) {
+        const fallbackTitle = descriptionText(description).slice(0, 80);
+        if (autoTitleRecoveryEnabled && fallbackTitle) {
+          autoTitleCoordinator.taskWriterTitleApplied();
+          applyGeneratedTitle(fallbackTitle);
+          toast.error("Couldn’t generate a title. Using your description.");
+          return fallbackTitle;
+        }
         setTitleGenerationError("Couldn’t generate a title. Add one to save.");
       }
       throw error;
     } finally {
       if (saveEpochRef.current === epochAtRequest) setIsGeneratingTitle(false);
     }
-  }, [applyGeneratedTitle, autoTitleCoordinator, requestTitleFromDescription]);
+  }, [applyGeneratedTitle, autoTitleCoordinator, autoTitleRecoveryEnabled, requestTitleFromDescription]);
 
   const shouldGenerateTitleForSave = useCallback(
     (title: string, description: string) =>

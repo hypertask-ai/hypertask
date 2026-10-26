@@ -97,7 +97,7 @@ export const taskWriterRequestSchema = z.object({
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
   existingTaskId: z.number().int().positive().optional(),
   invokeSkills: z.boolean().optional().default(false),
-  requestKind: z.enum(["manual", "auto-description", "compose-task"]).optional().default("manual"),
+  requestKind: z.enum(["manual", "auto-description", "compose-task", "auto-title"]).optional().default("manual"),
 });
 
 export const tasksOutputSchema = z.object({
