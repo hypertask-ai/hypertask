@@ -7,7 +7,7 @@ const { NextRequest } = require('next/server')
 const { sessionModules, load } = require('./helpers/agent-cookie-bridge.cjs')
 const root = path.resolve(__dirname, '..')
 const mintFiles = [
-  'src/lib/mcp/tasks/services.ts', 'src/lib/mcp/tasks/updateTask.ts', 'src/lib/mcp/tasks/updateTaskV2.ts',
+  'src/lib/mcp/tasks/services.ts', 'src/lib/mcp/tasks/updateTask.ts',
   'src/lib/mcp/operations/drafts/[draft_id]/publish/operation.ts',
 ]
 function walk(directory) {
@@ -171,30 +171,29 @@ async function throughGuard(t, f, run) {
   return outgoing
 }
 
-for (const file of ['updateTask.ts', 'updateTaskV2.ts']) {
-  for (const [name, changes, expected] of [
-    ['title', { title: 'After' }, 'PUT /api/tasks/single'],
-    ['due date', { due_date: '2026-10-06' }, 'POST /api/tasks/setDueDate'],
-    ['priority', { priority: 2 }, 'POST /api/priority/setPriority'],
-    ['estimate', { estimate: 2 }, 'POST /api/estimate/setEstimate'],
-    ['move section', { sectionId: 20 }, 'PUT /api/tasks/moveTask'],
-    ['archive', { status: 'Archive' }, 'POST /api/tasks/(un)archive'],
-    ['unarchive', { status: 'Normal' }, 'POST /api/tasks/(un)archive'],
-  ]) {
-    test(`real ${file} ${name} outgoing request is admitted by proxy decision`, async t => {
-      const f = fixture()
-      if (name === 'unarchive') f.task.status = 'Archive'
-      const bridge = load(`src/lib/mcp/tasks/${file}`, f.mocks)
-      const execute = bridge.executeTaskUpdate ?? bridge.executeTaskUpdateV2
-      const outgoing = await throughGuard(t, f, async () => {
-        const { response } = await execute({ request: new NextRequest('http://localhost/api/mcp/tasks/update'), ctx: f.ctx, requestBody: { task_id: 101, ...changes }, strictSideEffectFailures: true })
-        assert.equal(response.status, 200, await response.clone().text())
-        assert.equal((await response.json()).success, true)
-      })
-      assert.deepEqual(outgoing, [expected])
+for (const [name, changes, expected] of [
+  ['title', { title: 'After' }, 'PUT /api/tasks/single'],
+  ['due date', { due_date: '2026-10-06' }, 'POST /api/tasks/setDueDate'],
+  ['priority', { priority: 2 }, 'POST /api/priority/setPriority'],
+  ['estimate', { estimate: 2 }, 'POST /api/estimate/setEstimate'],
+  ['move section', { sectionId: 20 }, 'PUT /api/tasks/moveTask'],
+  ['archive', { status: 'Archive' }, 'POST /api/tasks/(un)archive'],
+  ['unarchive', { status: 'Normal' }, 'POST /api/tasks/(un)archive'],
+]) {
+  test(`real updateTask.ts ${name} outgoing request is admitted by proxy decision`, async t => {
+    const f = fixture()
+    if (name === 'unarchive') f.task.status = 'Archive'
+    const bridge = load('src/lib/mcp/tasks/updateTask.ts', f.mocks)
+    const execute = bridge.executeTaskUpdate
+    const outgoing = await throughGuard(t, f, async () => {
+      const { response } = await execute({ request: new NextRequest('http://localhost/api/mcp/tasks/update'), ctx: f.ctx, requestBody: { task_id: 101, ...changes }, strictSideEffectFailures: true })
+      assert.equal(response.status, 200, await response.clone().text())
+      assert.equal((await response.json()).success, true)
     })
-  }
+    assert.deepEqual(outgoing, [expected])
+  })
 }
+
 
 test('real MCP create outgoing request is admitted by proxy decision', async t => {
   const f = fixture()

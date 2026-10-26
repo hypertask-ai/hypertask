@@ -4,6 +4,8 @@ import {
   type TAiModelKey,
 } from "@/lib/aiModelOptions";
 import {
+  BASETEN_BYOK_PROVIDER,
+  BASETEN_MODEL_SLUGS,
   getAiProviderByByokKey,
   type TByokProviderKey,
 } from "@/lib/aiProviders";
@@ -16,7 +18,7 @@ export type ByokTestResult = "works" | "invalid" | "no_credit" | "error";
 
 const TEST_MODEL_KEYS: Partial<Record<TByokProviderKey, TAiModelKey>> = {
   openai: "gpt-6-luna",
-  claude: "claude-haiku-4.5",
+  claude: "claude-haiku-5-5",
   google: "gemini-3.5-flash-lite",
   deepseek: "deepseek-v4.1-flash",
   moonshot: "kimi-k2.5",
@@ -30,8 +32,8 @@ type TestRequest = {
   url: string;
 };
 
-function testModel(provider: TByokProviderKey, haiku55Enabled: boolean) {
-  const modelKey = provider === "claude" && haiku55Enabled ? "claude-haiku-5-5" : TEST_MODEL_KEYS[provider];
+function testModel(provider: TByokProviderKey, _haiku55Enabled: boolean) {
+  const modelKey = TEST_MODEL_KEYS[provider];
   if (!modelKey) return null;
   const option = aiModelOptions.find(
     (candidate) => candidate.modelKey === modelKey
@@ -92,13 +94,21 @@ export function buildByokTestRequest(
     );
   }
 
+  if (provider === "baseten") {
+    return jsonRequest(
+      `${BASETEN_BYOK_PROVIDER.openAiCompatibleBaseUrl}/chat/completions`,
+      apiKey,
+      { id: BASETEN_MODEL_SLUGS["deepseek-v4.1-flash"], label: "DeepSeek V4.1 Flash" },
+    );
+  }
+
   if (provider === "gateway") {
     return jsonRequest(
       "https://ai-gateway.vercel.sh/v1/chat/completions",
       apiKey,
       haiku55Enabled
         ? { id: "anthropic/claude-haiku-5.5", label: "Haiku 5.5" }
-        : { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
+        : { id: "openai/gpt-6-luna", label: "GPT Luna 6" }
     );
   }
 
@@ -108,7 +118,7 @@ export function buildByokTestRequest(
       apiKey,
       haiku55Enabled
         ? { id: "anthropic/claude-haiku-5.5", label: "Haiku 5.5" }
-        : { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
+        : { id: "openai/gpt-6-luna", label: "GPT Luna 6" }
     );
   }
 

@@ -1,3 +1,4 @@
+import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { decryptByokSecret, encryptByokSecret } from "@/lib/crypto/byokCipher";
@@ -163,10 +164,12 @@ const handler: NextApiHandler = async (
       ]),
     );
 
+    const basetenEnabled = await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, user.id);
     const visibleProviders = BYOK_PROVIDER_KEYS.filter(
       (provider) =>
-        !isGdprSafeModeEnabled(snapshot.aiProviderSettings) ||
-        !isByokProviderRestrictedInGdprSafeMode(provider),
+        (provider !== "baseten" || basetenEnabled) &&
+        (!isGdprSafeModeEnabled(snapshot.aiProviderSettings) ||
+          !isByokProviderRestrictedInGdprSafeMode(provider)),
     );
     const keys = visibleProviders.map((provider) => {
       const row = map[provider];
@@ -269,7 +272,18 @@ const handler: NextApiHandler = async (
       }
     }
 
-    if (!(await isPaidTeam(teamId))) {
+    const hasKeyPayload =
+      typeof apiKey === "string" && apiKey.trim().length > 0;
+    const disablingBaseten = provider === "baseten" && enabled === false && !hasKeyPayload;
+    if (
+      provider === "baseten" &&
+      !disablingBaseten &&
+      !(await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, user.id))
+    ) {
+      return res.status(403).json({ message: "Baseten is unavailable" });
+    }
+
+    if (!disablingBaseten && !(await isPaidTeam(teamId))) {
       return res.status(402).json({
         message: "Adding your own API key requires a paid plan.",
         code: "UPGRADE_REQUIRED",
@@ -360,8 +374,6 @@ const handler: NextApiHandler = async (
       }
     }
 
-    const hasKeyPayload =
-      typeof apiKey === "string" && apiKey.trim().length > 0;
     if (hasKeyPayload) {
       if (provider === "gateway" && !apiKey.trim().startsWith("vck_")) {
         return res

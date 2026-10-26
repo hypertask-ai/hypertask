@@ -79,7 +79,7 @@ await seedSessionFixtures({});`,
     return board;
   }, payload => JSON.stringify(payload), 3600, path, "/fixtures/state.json", "/fixtures/card-fixture.json",
   async () => {}, async (file, content) => { files[file] = JSON.parse(content); }, async () => {},
-  { env: { GITHUB_OUTPUT: "/fixtures/output" } }, () => "invite-key", (file) => {
+  { argv: [], env: { GITHUB_OUTPUT: "/fixtures/output" } }, () => "invite-key", (file) => {
     assert.equal(file, path.join(root, "src/lib/mcp/auth/verifyJwt.ts"));
     return {
       createMcpToken: (userId, _email, _ttl, agentId) => `${userId}:${agentId}`,
@@ -157,4 +157,23 @@ await seedSessionFixtures({});`,
   }
   assert.ok(records.member_Team.filter(row => [contract.callers.guest.id, contract.callers.unaccepted.id].includes(row.userId)).length === 0);
   assert.deepEqual(records.member_Team.filter(row => row.teamId === boards[0].teamId).map(row => row.userId), [smoke.id, ...records.user.filter(user => user.displayName.startsWith("Sidebar ")).map(user => user.id)]);
+});
+
+
+test("opt-in journeys get a private seeded board without depending on Free plan board creation", async () => {
+  const start = source.indexOf('  if (process.argv.includes("--qa-journeys")) {');
+  const end = source.indexOf("  const sessionUser =", start);
+  assert.ok(start >= 0 && end > start);
+  const run = new (Object.getPrototypeOf(async function () {}).constructor)(
+    "process", "createBoard",
+    `const user = { id: 123 }, team = { id: 456 }, googleAccount = { id: 789 };
+${source.slice(start, end)}`,
+  );
+  for (const argv of [[], ["--qa-journeys"]]) {
+    const boards = [];
+    await run({ argv }, async data => { boards.push(data); });
+    assert.deepEqual(boards, argv.length ? [{
+      ownerId: 123, teamId: 456, googleAccountId: 789, title: "QA runner board", suffix: "qa",
+    }] : []);
+  }
 });

@@ -1,6 +1,11 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 
+export type ForceSignOutResult = {
+  browserCookiesCleared: boolean
+  serverSessionsRevoked: boolean
+}
+
 export const SESSION_COOKIE = 'ht_session'
 export const SESSION_TTL_SECONDS = 600 * 60 * 24 * 7
 const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/
@@ -154,8 +159,13 @@ export function sessionCookieOptions(maxAgeSeconds: number) {
 
 export function clearBetterAuthSessionCookies(response: {
   cookies: { set: (name: string, value: string, options: Record<string, unknown>) => void }
-}) {
-  for (const name of ['__Secure-better-auth.session_token', 'better-auth.session_token']) {
+}, cookieHeader = '') {
+  const names = new Set(['__Secure-better-auth.session_token', 'better-auth.session_token'])
+  for (const cookie of cookieHeader.split(';')) {
+    const name = cookie.split('=', 1)[0].trim()
+    if (/^(?:__Secure-)?better-auth\./.test(name)) names.add(name)
+  }
+  for (const name of names) {
     response.cookies.set(name, '', {
       httpOnly: true,
       secure: name.startsWith('__Secure-') || process.env.NODE_ENV === 'production',

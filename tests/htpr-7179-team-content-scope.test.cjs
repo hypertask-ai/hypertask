@@ -138,14 +138,14 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
 
     test(`${mode} ${actor}: real update preflight refuses B before persistence`, async () => {
       const f = teamFixture(mode, actor);
-      const { executeTaskUpdateV2 } = f.load('src/lib/mcp/tasks/updateTaskV2.ts', {
+      const { executeTaskUpdate } = f.load('src/lib/mcp/tasks/updateTask.ts', {
         '@/lib/pullRequests/taskPullRequests': {},
         './fields/persist': { persistTaskUpdates: async (_ctx, tasks) => { f.writes.push('task'); return { success: true, tasks: tasks.map(t => ({ id: t.id, title: `${f.projects.find(p => p.id === t.projectId).name}-sentinel` })) }; } },
       });
       for (const board of [15, 16, 25, 26]) {
         const before = f.writes.length;
         const request = req('tasks/update', 'POST', { task_id: board * 10, title: 'Updated' });
-        const result = await f.run(request, () => executeTaskUpdateV2({ request, ctx: f.state.ctx, requestBody: { task_id: board * 10, title: 'Updated' } }));
+        const result = await f.run(request, () => executeTaskUpdate({ request, ctx: f.state.ctx, requestBody: { task_id: board * 10, title: 'Updated' } }));
         await assertResult(result.response, actor !== 'bound' || board < 20, `${f.projects.find(p => p.id === board).name}-sentinel`, f.writes, before);
       }
     });
@@ -234,7 +234,9 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
     const f = teamFixture(mode);
     const operationContext = f.load('src/lib/mcp/operationContext.ts');
     const taskRoute = f.load('src/lib/mcp/operations/tasks/operation.ts');
-    const { createInProcessMcpClient } = f.load('src/lib/mcp/inProcessClient.ts', {
+    const auth = await f.mocks['@/lib/mcp/auth'].validateMcpAuth();
+    assert.deepEqual(auth.teamScope, teamScope);
+    const { createDirectOperationClient } = f.load('src/lib/mcp/directOperationClient.ts', {
       './auth': f.mocks['@/lib/mcp/auth'],
       './operationContext': operationContext,
       './operations': { executeMcpOperation: async request => {
@@ -244,8 +246,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         return taskRoute.GET(request);
       } },
     });
-    const { client, auth } = await createInProcessMcpClient('fixture');
-    assert.deepEqual(auth.teamScope, teamScope);
+    const client = createDirectOperationClient('fixture', auth);
     const allowed = await client.makeRequest('/mcp/tasks?task_id=150');
     assert.equal(allowed.tasks[0].title, 'A1-sentinel');
     await assert.rejects(client.makeRequest('/mcp/tasks?task_id=250'), error => {

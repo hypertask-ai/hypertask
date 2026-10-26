@@ -97,7 +97,7 @@ test("archive completion is published only after persistence succeeds", () => {
   assert.match(focusHandler, /if \(!notificationResponse\.ok\) return false/);
   assert.match(focusHandler, /notificationId,/);
   assert.match(focusHandler, /source: pathname\?\.startsWith\("\/detail"\)/);
-  assert.match(focusHandler, /tutorialArchive \? "&tutorial=1"/);
+  assert.match(focusHandler, /tutorialArchive \? \{ tutorial: 1 \}/);
   assert.match(
     focusHandler,
     /if \(!tutorialArchive\)[\s\S]*removeElementFromState/,
@@ -108,7 +108,7 @@ test("archive completion is published only after persistence succeeds", () => {
   );
   assert.match(
     require("./helpers/learn-tutorial-sources.cjs"),
-    /markAsDone\?id=\$\{target\.notificationId\}[\s\S]*source: "detail"/,
+    /markAsDone"[\s\S]*method: "POST"[\s\S]*id: target\.notificationId[\s\S]*source: "detail"/,
   );
   assert.match(archiveRoute, /returnedFromReminders: false/);
   assert.match(archiveRoute, /title: "Learn Hypertask"/);

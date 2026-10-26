@@ -10,7 +10,7 @@ import {
   FEATURE_FLAG_TICKET_PROJECT_ID,
   RETIRED_FEATURE_FLAG_KEYS,
 } from "@/lib/flags";
-import { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } from "@/lib/flags/removal";
+import { FLAG_REMOVAL_TICKETS_PER_RUN, PENDING_REMOVAL_TASK_ID, removalProfile, removalWindowForFlag, selectDueFlags } from "@/lib/flags/removal";
 import { createProvisionedTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 
@@ -20,7 +20,6 @@ export const dynamic = "force-dynamic";
 const REMOVAL_PROJECT_ID = FEATURE_FLAG_TICKET_PROJECT_ID;
 const REMOVAL_SECTION_TITLE = "Bugs";
 const REMOVAL_LABEL_VALUE = "Bug";
-const MAX_TICKETS_PER_RUN = 3;
 const REMOVAL_SWEEP_LOCK_NAMESPACE = 1_179_207_763;
 const REMOVAL_SWEEP_LOCK_KEY = 1;
 
@@ -30,10 +29,11 @@ function removalTitle(key: string) {
 
 function removalDescription(key: string, releasedAt: Date) {
   const released = releasedAt.toISOString().slice(0, 10);
+  const days = removalWindowForFlag({ key });
   return (
     `<p><strong>Delete the feature flag <code>${key}</code> and the code branch it guards.</strong></p>` +
     `<ul><li><p>It has been on <strong>Everyone</strong> since ${released}, which is more than ` +
-    `${FEATURE_FLAG_REMOVAL_DAYS} days, so the behaviour behind it is permanent.</p></li>` +
+    `${days} days, so the behaviour behind it is permanent.</p></li>` +
     `<li><p>Remove the key from <code>FEATURE_FLAG_DEFINITIONS</code>, delete every <code>useFlag</code> ` +
     `and server check for it, keep the enabled branch, and add a migration deleting the stored row.</p></li>` +
     `<li><p>Filed automatically by the feature flag removal sweep. Press <strong>Keep</strong> on ` +
@@ -78,20 +78,24 @@ async function sweep() {
     where: { key: { in: FEATURE_FLAG_KEYS }, removalTaskId: PENDING_REMOVAL_TASK_ID },
     data: { removalTaskId: null },
   });
-  const cutoff = new Date(Date.now() - FEATURE_FLAG_REMOVAL_DAYS * 24 * 60 * 60 * 1000);
-  const due = await prisma.featureFlag.findMany({
+  const stored = await prisma.featureFlag.findMany({
     where: {
       key: { in: FEATURE_FLAG_KEYS, notIn: [...RETIRED_FEATURE_FLAG_KEYS] },
       mode: "EVERYONE",
       keep: false,
       removalTaskId: null,
-      releasedAt: { not: null, lte: cutoff },
+      releasedAt: { not: null },
     },
-    select: { key: true, releasedAt: true },
+    select: { key: true, releasedAt: true, mode: true, keep: true, removalTaskId: true },
     orderBy: { releasedAt: "asc" },
-    take: MAX_TICKETS_PER_RUN,
   });
-  if (due.length === 0) return NextResponse.json({ filed: 0, failed: [] });
+  const eligible = selectDueFlags(stored.map((flag) => ({
+    ...flag,
+    ...removalProfile(flag.key),
+  })));
+  const due = eligible.slice(0, FLAG_REMOVAL_TICKETS_PER_RUN);
+  const deferred = eligible.length - due.length;
+  if (due.length === 0) return NextResponse.json({ filed: 0, failed: [], deferred });
 
   const project = await prisma.project.findFirst({
     where: { id: REMOVAL_PROJECT_ID, status: "Normal" },
@@ -118,6 +122,7 @@ async function sweep() {
   const failed: string[] = [];
   for (const flag of due) {
     if (!flag.releasedAt) continue;
+    const cutoff = new Date(Date.now() - removalWindowForFlag({ key: flag.key }) * 24 * 60 * 60 * 1000);
     const claimed = await prisma.featureFlag.updateMany({
       where: {
         key: { equals: flag.key, in: FEATURE_FLAG_KEYS },
@@ -190,5 +195,5 @@ async function sweep() {
     }
   }
 
-  return NextResponse.json({ filed: filed.length, keys: filed, failed });
+  return NextResponse.json({ filed: filed.length, keys: filed, failed, deferred });
 }

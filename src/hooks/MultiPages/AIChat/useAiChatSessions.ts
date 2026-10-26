@@ -1,20 +1,24 @@
+import type { SessionStreams } from "@/lib/aiChat/sessionStreams";
 import { getNativeSidebarChat } from "@/lib/agents/chatViewerState";
 import { useCallback, useEffect, useRef } from "react";
 import globalConstants from "@/lib/constants";
 import { IChatSession } from "@/models/model";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import { useFileUpload, type FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
+import { useFileUpload } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
 import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sessionMessageQueue";
 
-type Context = { agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
+type Context = { parallelStreams?: SessionStreams; agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
 
 export function useAiChatSessions(context: Context) {
+  const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const {
-  sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
-  createSession, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
+  parallelStreams, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
+  createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
   deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
   currentAiOption, pathname, currentUser, taskId, sessionsRef,
   dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
@@ -45,13 +49,18 @@ export function useAiChatSessions(context: Context) {
       resolvedBoardSessionRef.current = { projectId, session: createdSession };
       previousProjectIdRef.current = projectId;
     }
+    if (newSessionFocusEnabled && isFullScreenChat && createdSession) {
+      editor?.commands.focus("end");
+    }
     return createdSession;
   }, [
     clearMessageQueue,
     persistentQueue,
     createSession,
     currentProject?.id,
+    editor,
     isFullScreenChat,
+    newSessionFocusEnabled,
     setDockedChatScope,
   ]);
 
@@ -61,14 +70,20 @@ export function useAiChatSessions(context: Context) {
     if (resolvedBoardSessionRef.current?.session.id === sessionId) {
       resolvedBoardSessionRef.current = null;
     }
-    await deleteSessionInHistory(sessionId);
-  }, [deleteSessionInHistory]);
+    const deleted = await deleteSessionInHistory(sessionId);
+    if (deleted && parallelStreams) {
+      persistentQueue?.set(sessionId, []);
+      parallelStreams.remove(sessionId);
+    }
+  }, [deleteSessionInHistory, parallelStreams, persistentQueue]);
 
   const fileUpload = useFileUpload();
+  const fileUploadRef = useRef(fileUpload);
+  fileUploadRef.current = fileUpload;
   const handleSendMessageRef = useRef<
     (
       retryContent?: string,
-      options?: { htmlForAttachments?: string; queuedMessage?: QueuedAiChatMessage; sessionId?: string; onQueueBusy?: (retryAfterMs: number) => void; filesForAttachments?: FileItem[]; preserveComposer?: boolean }
+      options?: { htmlForAttachments?: string; queuedMessage?: QueuedAiChatMessage; sessionId?: string; onQueueBusy?: (retryAfterMs: number) => void }
     ) => Promise<boolean>
   >(async () => false);
 
@@ -87,25 +102,39 @@ export function useAiChatSessions(context: Context) {
   const drainingRef = useRef(false);
   const retryAtRef = useRef(0);
   const drainQueuedMessage = useCallback((finishedSessionId?: string) => {
-    if (sendInFlightRef.current) return;
-    if (drainingRef.current || Date.now() < retryAtRef.current) return;
+    const targetSessionId = finishedSessionId ?? persistentQueue?.sessionId;
+    const runtime = targetSessionId ? parallelStreams?.get(targetSessionId) : undefined;
+    if (runtime ? runtime.sendInFlightRef.current : sendInFlightRef.current) return;
+    if (runtime ? runtime.draining || Date.now() < runtime.retryAt : drainingRef.current || Date.now() < retryAtRef.current) return;
     if (persistentQueue) {
-      const sessionId = persistentQueue.sessionId;
-      if (!sessionId || (finishedSessionId && sessionId !== finishedSessionId)) return;
+      const sessionId = runtime ? targetSessionId : persistentQueue.sessionId;
+      if (!sessionId || (!runtime && finishedSessionId && sessionId !== finishedSessionId)) return;
       const next = persistentQueue.get(sessionId)[0];
       if (!next) return;
-      drainingRef.current = true;
+      const send = runtime ? runtime.send : handleSendMessageRef.current;
+      if (!send) return;
+      if (runtime) runtime.draining = true;
+      else drainingRef.current = true;
+      const retry = (delay: number) => {
+        if (runtime) runtime.retryAt = Date.now() + delay;
+        else retryAtRef.current = Date.now() + delay;
+      };
       let retryDelay = 15000;
-      void handleSendMessageRef.current(next.content, { queuedMessage: next, sessionId, onQueueBusy: (delay) => { retryDelay = delay; } })
+      void send(next.content, { queuedMessage: next, sessionId, onQueueBusy: (delay) => { retryDelay = delay; } })
         .then((sent) => {
           if (sent) persistentQueue.set(sessionId, persistentQueue.get(sessionId).filter((item) => item.id !== next.id));
-          else retryAtRef.current = Date.now() + retryDelay;
+          else retry(retryDelay);
         })
         .catch((error) => {
-          retryAtRef.current = Date.now() + retryDelay;
+          retry(retryDelay);
           console.error("Could not send queued chat message:", error);
         })
-        .finally(() => { drainingRef.current = false; });
+        .finally(() => {
+          if (runtime) {
+            runtime.draining = false;
+            if (!runtime.retryAt || runtime.retryAt <= Date.now()) queueMicrotask(() => drainQueuedMessage(sessionId));
+          } else drainingRef.current = false;
+        });
       return;
     }
     const queue = messageQueueRef.current;
@@ -113,18 +142,27 @@ export function useAiChatSessions(context: Context) {
     const [next, ...rest] = queue;
     messageQueueRef.current = rest;
     setQueuedMessages(rest);
+    if (next.files.length > 0) {
+      fileUploadRef.current.resetFiles(next.files);
+    } else {
+      fileUploadRef.current.clearFiles();
+    }
     void handleSendMessageRef.current(next.content, {
       htmlForAttachments: next.html,
-      filesForAttachments: next.files,
     });
-  }, [persistentQueue]);
+  }, [persistentQueue, parallelStreams]);
   useEffect(() => {
     if (!persistentQueue) return;
-    retryAtRef.current = 0;
-    drainQueuedMessage();
-    const timer = window.setInterval(() => drainQueuedMessage(), 2000);
+    const drain = () => {
+      if (parallelStreams) {
+        for (const sessionId of parallelStreams.sessionIds()) drainQueuedMessage(sessionId);
+      } else drainQueuedMessage();
+    };
+    if (!parallelStreams) retryAtRef.current = 0;
+    drain();
+    const timer = window.setInterval(drain, 2000);
     return () => window.clearInterval(timer);
-  }, [persistentQueue, persistentQueue?.sessionId, drainQueuedMessage]);
+  }, [persistentQueue, persistentQueue?.sessionId, parallelStreams, drainQueuedMessage]);
   const billing = modelBilling;
   const isApple = useDeviceContext();
   const isByokBlocked = shouldBlockAiDueToByokProvider(billing, currentAiOption?.source);
@@ -207,12 +245,12 @@ export function useAiChatSessions(context: Context) {
         return createdSession;
       }
       if (!needsBoardSession || typeof projectId !== "number") {
-        return sessionPagingEnabled ? getDisplayedSession() : currentSessions[0];
+        return sessionPagingEnabled || parallelStreams ? getDisplayedSession() : currentSessions[0];
       }
       if (!isCurrentIntent()) return undefined;
 
       if (previousProjectIdRef.current === projectId) {
-        if (sessionPagingEnabled) {
+        if (sessionPagingEnabled || parallelStreams) {
           resolvedBoardSessionRef.current = null;
           return getDisplayedSession();
         }
@@ -325,7 +363,7 @@ export function useAiChatSessions(context: Context) {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
-    taskId, sessionPagingEnabled, resolveHistorySession, getDisplayedSession,
+    taskId, sessionPagingEnabled, parallelStreams, resolveHistorySession, getDisplayedSession,
   ]);
 
   useEffect(() => {

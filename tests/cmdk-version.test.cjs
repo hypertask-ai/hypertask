@@ -40,7 +40,7 @@ function renderPalette({ mobile = false, env = buildEnv, rows = 2 } = {}) {
     react: React,
     "react-dom": require("react-dom"),
     "react/jsx-runtime": require("react/jsx-runtime"),
-    "next/navigation": { usePathname: () => "/project" },
+    "next/navigation": { useRouter: () => ({ push() {} }), usePathname: () => "/project" },
     reactstrap: {
       Modal: modal,
       ModalBody: ({ children, className }) => React.createElement("div", { className: `modal-body ${className}` }, children),

@@ -16,8 +16,11 @@ import {
   tableTitleWrapAtom,
   showCommandsAtom,
 } from "@/store";
+import { pageCommandGroups, pageCreationTarget } from "@/lib/pages/commands";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
+import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import { Search, Sparkles } from "lucide-react";
 import { ModalBody } from "reactstrap";
 import styles from "@/styles/linksModal.module.scss";
@@ -50,7 +53,13 @@ import type { CommandIdentity } from "./commandSelection";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
+import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8025-reactive-command-search";
+import { HTPR_8015_AMOLED_MODE_OUTLINE_FLAG } from "@/lib/flags/definitions/htpr-8015-amoled-mode-outline";
+import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
+import { HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG } from "@/lib/flags/definitions/htpr-7891-palette-share-key-labels";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
@@ -141,10 +150,19 @@ const Commands = (props: Props) => {
   const [, setTableTitleWrap] = useRecoilState(tableTitleWrapAtom);
   const calendarSettings = useRecoilValue(calendarSettingsAtom);
   const pathname = usePathname();
+  const router = useRouter();
+  const refreshSearchOnCommandsChange = useFlag(HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG);
+  const amoledModeOutline = useFlag(HTPR_8015_AMOLED_MODE_OUTLINE_FLAG);
+  const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
+  const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  let blockerCommentEnabled = false;
+  if (blockerCommentFlag) blockerCommentEnabled = true;
+  const shareKeyLabels = useFlag(HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
@@ -154,12 +172,12 @@ const Commands = (props: Props) => {
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName),
-    [isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels),
+    [isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName),
-    [keepAiChatClosedKeywords, aiChatAutoOpenCommandName]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels),
+    [keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels]
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled) getCommands = getRoundedCommands;
@@ -177,6 +195,12 @@ const Commands = (props: Props) => {
   const buildTimeLabel = buildId !== "dev" && !Number.isNaN(buildTime.getTime())
     ? `${buildTime.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${buildTime.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}`
     : "";
+  const basetenByokEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
+  let hiddenBasetenCommandKey: string | undefined;
+  if (!basetenByokEnabled) hiddenBasetenCommandKey = "settingsApiKeysBasetenApiKey";
+  const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
+  let hiddenXaiCommandKeys = "";
+  if (!grokGemini4Enabled) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai";
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -264,6 +288,8 @@ const Commands = (props: Props) => {
           (command) =>
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
+            command.key !== hiddenBasetenCommandKey &&
+            !hiddenXaiCommandKeys.split(" ").includes(command.key) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -317,6 +343,7 @@ const Commands = (props: Props) => {
       ...(boardCommands.length > 0
         ? [{ group: "Boards", commandLists: boardCommands }]
         : []),
+      ...(pagesEnabled && standalonePages ? pageCommandGroups(pathname) : []),
       ...registryGroups.slice(boardsInsertIndex),
     ].map((group) => ({
       ...group,
@@ -408,7 +435,12 @@ const Commands = (props: Props) => {
     getCommands,
     pinCommentActions,
     pageActions,
+    pagesEnabled,
+    standalonePages,
+    pathname,
     googleCalendarSettingsEnabled,
+    hiddenBasetenCommandKey,
+    hiddenXaiCommandKeys,
     autoTaskDescriptionsEnabled,
     currentProject,
     frequentlyUsed,
@@ -438,7 +470,7 @@ const Commands = (props: Props) => {
     filterCommands,
     handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex,
     setSelectedCommand,
-  } = useHTC(allCommands_, emptyQueryCommands, !isMobile);
+  } = useHTC(allCommands_, emptyQueryCommands, !isMobile, refreshSearchOnCommandsChange);
   const hoveredCommand = useRef<CommandIdentity | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const commandRef = useRef<HTMLDivElement>(null);
@@ -606,6 +638,30 @@ const Commands = (props: Props) => {
         recordHTCCommandUsage(previousUsage, command)
       );
       (document.activeElement as HTMLElement).blur();
+      if (pagesEnabled && standalonePages && ["gotoPages", "newPage", "linkPage", "linkPageTicket"].includes(command.key)) {
+        resetShowCommands();
+        const navigate = async (href: string) => {
+          if (currentPageActions && pathname === `/page/${currentPageActions.publicId}`) await currentPageActions.beforeNavigate?.();
+          router.push(href);
+        };
+        switch (command.key) {
+          case "gotoPages":
+            void navigate(currentProject ? `/pages?project_id=${currentProject.id}` : "/pages");
+            break;
+          case "newPage":
+            const target = pageCreationTarget({ pathname, projectId: currentProject?.id });
+            if (target.kind === "current-surface") window.dispatchEvent(new Event("pages-new-page"));
+            else void navigate(target.href);
+            break;
+          case "linkPage":
+            window.dispatchEvent(new Event("pages-link-page"));
+            break;
+          case "linkPageTicket":
+            window.dispatchEvent(new Event("pages-link-ticket"));
+            break;
+        }
+        return;
+      }
       if (command.key === "deletePage") {
         if (!pageActions) return;
         resetShowCommands();
@@ -706,7 +762,7 @@ const Commands = (props: Props) => {
         ariaLabel="Commands mode"
         disabled={writing}
         buttonClassName="rounded-[4px]"
-        className="flex-none rounded-[5px] bg-modalBackground p-1"
+        className={`flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:outline-[var(--border-light-gray-thin)]" : ""}`}
       />
     </div>
   ) : null;

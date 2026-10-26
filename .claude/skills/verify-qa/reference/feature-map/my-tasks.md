@@ -29,6 +29,10 @@ accounts when a flag is involved. For a removal, also search the page text
 for the removed label (for example "Quick add") and record that it is
 absent.
 
+### Automated evidence
+
+`node --test tests/htpr-6570-my-tasks-no-quick-add.test.cjs` checks that My Tasks source no longer references the removed Quick add component or flag; layout and keyboard behavior still need live proof.
+
 ## Cleanup
 
 Nothing to clean up for a look-only check. Hard-delete any task you created.

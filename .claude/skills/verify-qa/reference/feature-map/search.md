@@ -3,14 +3,14 @@
 Ticket: https://app.hypertask.ai/detail/project-15/6688
 Autocomplete is always available; its rollout switch has been removed. No new endpoint or permission is added: entity values use the existing access-scoped `/api/search/values` route; statuses, dates and `has:` values are local suggestions for already supported server filters.
 
-Commenter search is on for everyone (no feature flag): with search layout on, pick `commenter:@Hicham` for an exact person or type a name/email using the fuzzy-person flag; results show that person’s newest matching comment and open at it, text matches only their comments, and `-commenter:` excludes their tickets without exposing inaccessible boards.
-Flag `htpr-6881-search-fuzzy-person` (Owner + QA): typed `from:`/`assignee:` names or emails match every case/accent-insensitive substring in accessible requested boards; numeric chips stay exact and negation excludes all matches.
+Commenter search is on for everyone (no feature flag): with search layout on, pick `commenter:@Hicham` for an exact person or type a name/email using permanent fuzzy-person matching; results show that person’s newest matching comment and open at it, text matches only their comments, and `-commenter:` excludes their tickets without exposing inaccessible boards.
+Fuzzy-person search is permanent for everyone: typed `from:`/`assignee:` names or emails match every case/accent-insensitive substring in accessible requested boards; numeric chips stay exact and negation excludes all matches.
 
-## Reach it
+## How a customer reaches it
 
 Open `https://app.hypertask.ai/search` (or use the existing `/` search shortcut). A shared query uses **searchTerm**, e.g. `https://app.hypertask.ai/search?searchTerm=login%20is%3Aopen`. Sign in as Owner or QA; do not change the remaining flags. Use existing tasks only, without creating or modifying data.
 
-## Drive and prove it
+## How to drive it
 
 
 Search layout is on for everyone, with no layout flag: suggestions are one in-flow list aligned with the input instead of the floating 18rem box. Empty bar shows Recent searches once, then Tips below them. Typing shows Ask AI, matching operators, then people (name plus email), labels or boards with matched letters bold. Entity values get grey inline completion (`from:Val` shows `entin Yeo`); Tab accepts into a chip. No live results while typing: results load only after accepting a suggestion or recent, pressing Enter, or loading a `searchTerm` URL. Verify the off path with user 2343 (old floating box) and the on path with user 985.
@@ -28,6 +28,15 @@ With search layout on for everyone and `htpr-6994-search-esc-leaves` off: Esc wi
 6. While entering an operator value (including a fully typed value before acceptance), a coloured border frames just that filter, not the free text before it. Accepted chips use six distinct palettes: violet people, blue boards, rose labels, emerald status, amber dates, cyan `has`. Verify Porcelain and Graphite/AMOLED: chip text remains primary theme text; colours never replace readable labels.
 7. Search for an existing text term such as `login is:open`: literal, case-insensitive matches in result titles are marked. Filter values are not highlighted as text. Title text is rendered by React, not injected as HTML.
 
-## Automated evidence
+## What usually breaks
+
+- Keyboard acceptance loses focus, Escape returns to the wrong page, or suggestions stop following the selected operator.
+- Entity suggestions lose their access scope, date shortcuts use invalid boundaries, or result highlighting marks filter values.
+
+## What proof to collect
 
 `node --test tests/search-autocomplete*.test.cjs` exercises the real search input and reused `MentionListRows`, including keyboard acceptance, Escape propagation, typed dates, exclusions and entity lookup scope. Unit tests check parser-aligned operators and values, UTC dates, six colour mappings, full tips coverage and safe literal title highlighting. `npm test` also covers existing chip/parser/API regressions.
+
+## Cleanup
+
+None. Use existing tasks only, without creating or modifying data.

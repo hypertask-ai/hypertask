@@ -158,7 +158,7 @@ const source = file => readFileSync(path.join(__dirname, '..', file), 'utf8')
 
 test('agent scope runs after dependency restore/install even on a cache hit and before Prisma', () => {
   const workflow = source('.github/workflows/ci-tests.yml')
-  const job = workflow.slice(workflow.indexOf('  ci-tests:'), workflow.indexOf('  browser-smoke:'))
+  const job = workflow.slice(workflow.indexOf('  ci-prepare:'), workflow.indexOf('  ci-test:'))
   const guard = job.match(/      - name: Guard agent board scope\n[\s\S]*?(?=\n      - )/)?.[0]
   assert.ok(guard)
   assert.ok(job.indexOf('name: Restore node_modules cache') < job.indexOf(guard))

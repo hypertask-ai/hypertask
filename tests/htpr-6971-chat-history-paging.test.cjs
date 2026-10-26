@@ -45,7 +45,9 @@ async function withHistory(config, check) {
   });
   let resolver, history;
   const mapChanges = [];
+  const parallelStreams = config.preserveSelection ? load('src/lib/aiChat/sessionStreams.ts', {}).createSessionStreams(() => {}) : undefined;
   const useAiChatSessions = config.boardMap ? load('src/hooks/MultiPages/AIChat/useAiChatSessions.ts', {
+    '@/lib/flags/definitions/htpr-7762-chat-new-session-focus': { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: 'htpr-7762-chat-new-session-focus' },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/constants': { default: {} }, '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
     '@/components/Common/AttachmentsUpload/FileUploadHandler': { useFileUpload: () => ({}) },
@@ -68,6 +70,8 @@ async function withHistory(config, check) {
       '@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context': { useAiChatContext: () => history },
       '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
       '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
+      '@/lib/flags/definitions/htpr-7762-chat-new-session-focus': { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: 'htpr-7762-chat-new-session-focus' },
+      '@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch': { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: 'htpr-7763-ctrl-tab-session-switch' },
       '@/lib/state': { useRecoilValue: () => user, useRecoilState: (atom) => React.useState(atom === 'width' ? 280 : atom === 'scope' ? null : []) },
       '@/store': { fullScreenChatRailWidthAtom: 'width', fullScreenChatScopeAtom: 'scope' },
       '@/utils/aiChat/sortBoardsByRecent': { sortBoardsByRecent: (teams) => teams },
@@ -82,12 +86,12 @@ async function withHistory(config, check) {
     new Function('require', 'module', 'exports', compiled)((name) => mocks[name] ?? require(name), loaded, loaded.exports);
     Chat = loaded.exports.default;
   }
-  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, taskId !== undefined);
+  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, taskId !== undefined, config.preserveSelection ?? false);
     if (useAiChatSessions) {
       const sessionsRef = React.useRef(history.sessions); sessionsRef.current = history.sessions;
       const chatHistoryReadyRef = React.useRef(history.isSuccess); chatHistoryReadyRef.current = history.isSuccess;
       resolver = useAiChatSessions({
-        sessionsRef, chatHistoryReadyRef, sessionIntentGenerationRef: React.useRef(0), sessionSetupRef: React.useRef(null), resolvedBoardSessionRef: React.useRef(null), previousProjectIdRef: React.useRef(undefined),
+        parallelStreams, sessionsRef, chatHistoryReadyRef, sessionIntentGenerationRef: React.useRef(0), sessionSetupRef: React.useRef(null), resolvedBoardSessionRef: React.useRef(null), previousProjectIdRef: React.useRef(undefined),
         messageQueueRef: React.useRef([]), sendInFlightRef: React.useRef(false), currentProject: { id: 4 }, currentUser: user, taskId, pathname: '/board', sessionContextKey: 'fixture-board', dockedChatScope: null,
         aiChatBoardSessionMap: config.boardMap, setAiChatBoardSessionMap: (update) => mapChanges.push(update(config.boardMap)), setRecentChatBoardIds: () => {}, setQueuedMessages: () => {},
         clearMessageQueue: () => {}, selectSessionInHistory: history.selectSession, createSession: history.startNewSession, deleteSessionInHistory: history.deleteSession, resolveHistorySession: history.resolveHistorySession, getDisplayedSession: history.getDisplayedSession, sessionPagingEnabled: history.sessionPagingEnabled, shouldLoadChatHistory: false,
@@ -436,8 +440,10 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
     './AgentSidebarChatCommands': { AgentSidebarChatCommands: () => null },
     '@/lib/configs/general.config': { MOBILE_TARGET: 'min-h-[44px] min-w-[44px]' },
     '@/utils/undoActions/helperFuncs': { cn: (...values) => values.filter(Boolean).join(' ') },
+    '@/lib/flags/definitions/htpr-7773-chat-header-name': { HTPR_7773_CHAT_HEADER_NAME_FLAG: 'htpr-7773-chat-header-name' },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
+    '@/lib/flags/definitions/htpr-7575-phone-chat-delete': { HTPR_7575_PHONE_CHAT_DELETE_FLAG: 'htpr-7575-phone-chat-delete' },
     '../Common/Tooltip': { __esModule: true, default: () => null },
     '@/lib/contexts/mobileContext': { MobileViewContext: React.createContext(false) },
     '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
@@ -1022,18 +1028,10 @@ test('paged send rejects a changed or deleted displayed session during attachmen
   global.fetch = async () => new Response('fixture stream');
   try { for (const deleted of [false, true]) {
     const preparation = deferred(); let displayed = session(9), writes = 0, cleared = 0;
-    let draft = 'question', html = '<p>question</p>';
     const { handleSendMessage } = createAiChatSend({
-      sessionIntentGenerationRef: { current: 0 },
       sessionPagingEnabled: true, getDisplayedSession: () => displayed,
       waitForChatSession: async () => session(9), processAttachments: () => preparation.promise,
-      editor: {
-        getText: () => draft, getHTML: () => html, get isEmpty() { return !draft && !html; },
-        commands: {
-          clearContent: () => { cleared++; draft = ''; html = ''; },
-          setContent: (content) => { html = content; draft = content.replace(/<[^>]*>/g, ''); },
-        },
-      },
+      editor: { getText: () => 'question', getHTML: () => '<p>question</p>', commands: { clearContent: () => { cleared++; } } },
       sendInFlightRef: { current: false }, handleSendMessageRef: { current: null },
       addMessageToSessionQuery: () => { writes++; }, drainQueuedMessage: () => {}, isFullScreenChat: true,
       setIsTyping: () => {}, setAgentStatus: () => {}, setCurrentStreamingSession: () => {},
@@ -1047,9 +1045,7 @@ test('paged send rejects a changed or deleted displayed session during attachmen
     preparation.resolve([]);
     assert.equal(await sending, false);
     assert.equal(writes, 0);
-    assert.equal(cleared, 1, 'detach the active draft before session preparation');
-    assert.equal(draft, '', 'never restore the detached draft into a changed conversation');
-    assert.equal(html, '');
+    assert.equal(cleared, 0, 'do not erase the composer when its conversation changed');
   } } finally { global.fetch = originalFetch; }
 });
 
@@ -1222,6 +1218,7 @@ test('chat orchestration passes the live ticket flag into resolution and send gu
   for (const enabled of [false, true]) for (const available of [false, true]) {
     let resolution, sending;
     const { useAiChat } = load('src/hooks/MultiPages/AIChat/useAiChat.ts', {
+      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
       '@/lib/state': { useRecoilState: () => [null, () => {}] },
       '@/store': {},
       '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
@@ -1250,4 +1247,20 @@ test('flag-off session setup identity is exactly the production key without a pa
     assert.equal(evaluate(changed, context), legacyKey);
     assert.equal(evaluate(changed, { ...context, sessionPagingEnabled: true }), `${legacyKey}:${flag}`);
   }
+});
+
+
+test("parallel background updates preserve an explicitly selected non-paged chat", async () => {
+  await withHistory({ on: false, preserveSelection: true, boardMap: {}, fullscreen: true }, async ({ history, resolver, client, flush }) => {
+    await React.act(async () => { await history().selectSession(id(1)); });
+    await flush();
+    assert.equal(history().currentSession.id, id(1));
+    await React.act(async () => {
+      history().addMessageToSessionQuery(id(9), { id: "background-answer", sessionId: id(9), content: "A background reply", role: "assistant", createdAt: new Date(), isDelivered: true }, true);
+    });
+    await flush();
+    assert.equal(client.getQueryData(["chat-sessions", "user-6"]).data.sessions[0].id, id(9));
+    assert.equal(history().currentSession.id, id(1));
+    assert.equal((await resolver().ensureSessionForCurrentBoard()).id, id(1));
+  });
 });

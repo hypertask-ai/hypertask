@@ -8,6 +8,9 @@ on:
       - "src/lib/mcp-server/validations/**"
       - "src/lib/ai/**"
       - "scripts/ai-eval.cjs"
+      - "scripts/task-writer-eval.cjs"
+      - "tests/task-writer-eval.test.cjs"
+      - "tests/fixtures/task-writer-eval/**"
       - "tests/ai-eval.test.cjs"
       - "tests/ai-prompt-registry.test.cjs"
       - "tests/fixtures/ai/**"
@@ -20,6 +23,9 @@ on:
       - "src/lib/mcp-server/validations/**"
       - "src/lib/ai/**"
       - "scripts/ai-eval.cjs"
+      - "scripts/task-writer-eval.cjs"
+      - "tests/task-writer-eval.test.cjs"
+      - "tests/fixtures/task-writer-eval/**"
       - "tests/ai-eval.test.cjs"
       - "tests/ai-prompt-registry.test.cjs"
       - "tests/fixtures/ai/**"
@@ -48,6 +54,8 @@ jobs:
       # Chat schemas use generated Prisma enums, but evals never connect to a database.
       - run: npx prisma generate
       - run: node --test tests/ai-eval.test.cjs tests/ai-prompt-registry.test.cjs
+      - run: node --test tests/task-writer-eval.test.cjs
+      - run: node scripts/task-writer-eval.cjs --verify-baseline
       - run: node scripts/ai-eval.cjs
         env:
           AI_EVAL_LIVE: "0"

@@ -87,7 +87,7 @@ export function getListDraftsInputSchema() {
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message:

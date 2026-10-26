@@ -4,11 +4,9 @@ Scope: sections 1, 2 and 3 of https://app.hypertask.ai/detail/project-15/6804. G
 
 ## Rollout and compatibility
 
-`htpr-6804-mcp-tools` is checked server-side for the authenticated principal, with the existing **Owner + QA** default. It does not enable itself for everyone. Flag off preserves the current tool definitions and deferred discovery behavior exactly. This checkout has **74** resource tools, not the ticket's historical 73; the current HTTP catalog also advertises `hypertask_search_tools` and `hypertask_describe_tool`, for **76** entries. `tests/fixtures/mcp-6804/legacy-catalog.json` freezes that flag-off list.
+The consolidated catalog is permanent for authenticated MCP clients. The rollout flag was retired after more than 14 days on Everyone. Full human credentials receive resource tools without deferred meta-tool advertisements. Read-only or management-only credentials see only authorized resources and action enums. Managed agents do not see human-only profile or account administration actions; team-scoped management keys do not see account-wide connections or tokens. Existing REST authentication, board membership, ownership, team boundaries and permission checks remain authoritative.
 
-Flag on advertises **20** resource tools for a full human credential, without deferred meta-tool advertisements. Read-only or management-only credentials see only authorized resources and action enums. Managed agents do not see human-only profile or account administration actions; team-scoped management keys do not see account-wide connections or tokens. Existing REST authentication, board membership, ownership, team boundaries and permission checks remain authoritative.
-
-All 74 existing resource names plus both discovery names remain callable for clients with cached definitions. Hidden aliases forward the original arguments, bearer credential and invocation identity to the same existing implementation. The existing `hypertask_time` name is already consolidated; it accepts the previous flat arguments as well as the new nested input and returns the new envelope when enabled. Other aliases preserve their original response text and add structured content for JSON results. Turning the flag off intentionally removes new names from the advertised/callable catalog; clients should refresh discovery after a flag change.
+All 74 existing resource names plus both discovery names remain callable for clients with cached definitions. Hidden aliases forward the original arguments, bearer credential and invocation identity to the same existing implementation. The existing `hypertask_time` name is already consolidated; it accepts the previous flat arguments as well as the new nested input and returns the new envelope on MCP. Other aliases preserve their original response text and add structured content for JSON results. Turning the flag off intentionally removes new names from the advertised/callable catalog; clients should refresh discovery after a flag change.
 
 ## Usage inventory and resource decisions
 
@@ -26,7 +24,11 @@ Every advertised tool supplies an object `outputSchema` and returns matching `st
 
 For the new catalog, invalid arguments, unsupported actions, authorization failures, returned `Error:` strings, JSON failure objects and thrown execution errors produce `isError: true` tool results. Malformed JSON-RPC still uses protocol errors. Validation names the field and explains how to change it; for example, `project_id is required when unique_index is given; pass the project id or use ticket_number`. Permission errors request the proper credential and board membership; transient errors warn callers to inspect writes before retrying. Internal exception details and credential-looking strings are not echoed. Flag-off protocol and response behavior remains unchanged.
 
-HTTP and existing legacy SSE share catalog selection and the flagged output/error behavior. Already-open SSE sessions evaluate the current server flag and relayed credential scope for every tool list or call; switching the flag Off restores the original SDK handlers without reconnecting. Invocation identity retains the SSE session id. Only the response bindings change; transport, OAuth, annotations and Directory work belong to https://app.hypertask.ai/detail/project-15/6478. The eval harness and CI integration belong to https://app.hypertask.ai/detail/project-15/6505; `tests/fixtures/mcp-6804/golden-tasks.json` contains 25 seeded, realistic tasks as data only. Run mutating tasks only against an isolated fixture environment, never production or shared previews. Chat tool extraction belongs to https://app.hypertask.ai/detail/project-15/6506 and can consume this catalog later; it is not changed here.
+HTTP and existing legacy SSE share the permanent consolidated catalog and output/error behavior. Already-open SSE sessions resolve the relayed credential scope and remaining schema flags for every tool list or call. Invocation identity retains the SSE session id. Only the response bindings change; transport, OAuth, annotations and Directory work belong to https://app.hypertask.ai/detail/project-15/6478. The eval harness and CI integration belong to https://app.hypertask.ai/detail/project-15/6505; `tests/fixtures/mcp-6804/golden-tasks.json` contains 25 seeded, realistic tasks as data only. Run mutating tasks only against an isolated fixture environment, never production or shared previews. Chat tool extraction belongs to https://app.hypertask.ai/detail/project-15/6506 and can consume this catalog later; it is not changed here.
+
+## Scope-limited agent skills
+
+A team-bound agent sees only skills on boards readable within its credential's team. With `htpr-7663-scoped-agent-skills` enabled server-side (Owner + QA by default), MCP and app-chat skill lists without `project_id` return those readable board skills; flag off or a flag lookup failure refuses unfiltered team-bound discovery without weakening scope restrictions. With either flag state, a supplied `project_id` narrows the list and must be accessible. Account-wide personal skills remain unavailable for reads, writes, imports and prompt resolution. App chat applies the same scope to skill discovery and slash-skill resolution. Human sessions and credentials without a team binding retain personal-skill access. Built-in formatting skills remain available.
 
 ## Comment timestamps
 
@@ -76,3 +78,17 @@ Reports land in board 15, Bugs, with the ai-feedback label and Medium priority. 
 An agent comment without `kind`, a reply target, a person @mention, images or attachments goes to the hidden ticket agent log, not the conversation people read. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. This documents the existing routing; it does not change it.
 
 Comment-create receipts retain `routedTo`, `url` and either `activity` or `comment`. They also return `visibleToPeople: false` plus a resend `notice` for the log, or `visibleToPeople: true` for the comment thread.
+
+### Blocker comment
+
+In a ticket, select a comment and open its existing Commands palette (Ctrl+K, or long-press on a phone). **Mark as blocker**, beside **Pin comment**, gives it the same full 1px frame in red. **Unmark as blocker** removes the frame. Marking another comment replaces the previous marker; pinning remains independent.
+
+The CLI-facing `POST /api/mcp/tasks/waiting-on` endpoint and MCP `hypertask_set_task_waiting_on` tool (consolidated `hypertask_tasks`, action `waiting_on`) accept:
+
+```json
+{ "taskId": 42, "userId": 7, "blockerCommentId": 101 }
+```
+
+Both fields are updated atomically. The person must be a board member, and the comment must belong to that ticket and not be an activity entry. Omit either field to preserve it; send both as `null` to clear both. A comment-only update or clear leaves the blocking person unchanged. Task reads and marker-write receipts expose `blockerCommentId`. Deleting the marked comment clears the marker automatically.
+
+This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Everyone. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.

@@ -40,7 +40,7 @@ const RAW_TOOL_METADATA = {
   AGENT_WEBHOOK: {
     name: buildToolName('agent_webhook'),
     description:
-      'Gets or manages the signed outbound webhook for one managed agent. Actions: get, configure, test, replay, rotate, or delete. Agent credentials use agent_id=self; a human supplies an owned agent UUID. Configure accepts an HTTPS url, optional project_id filter, events, and active. Test sends a real signed webhook.test delivery. Replay requires delivery_id. Configure and rotate return the signing secret once; store it securely.',
+      'Gets or manages the signed outbound webhook for one managed agent. Actions: get, configure, test, replay, rotate, or delete. Agent credentials use agent_id=self; a human supplies an owned agent UUID. Configure accepts an HTTPS url, optional project_id filter, events, active, and an optional receiver auth header (auth_header_name with auth_header_value, or bearer_secret; clear_auth_header removes it). Test sends a real signed webhook.test delivery. Replay requires delivery_id. Configure and rotate return the signing secret once; store it securely.',
   },
 
   CREATE_AGENT: {
@@ -196,7 +196,7 @@ const RAW_TOOL_METADATA = {
   BOARD_CONFIG: {
     name: buildToolName('board_config'),
     description:
-      "Gets or sets a board's playbook or AI custom instructions. Use the matching action before agent work or when board-level guidance changes.",
+      "Gets a read-only board hygiene report (get_hygiene), or gets/sets a board's playbook or AI custom instructions. Hygiene reports untagged open tickets, possible duplicate tags, missing shared tag views and Title Case suggestions; it changes nothing.",
   },
 
   CREATE_BOARD: {
@@ -418,7 +418,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   SET_TASK_WAITING_ON: {
     name: buildToolName('set_task_waiting_on'),
     description:
-      'Sets the person blocking a task, using the same write as the app Blocked by person modal. Requires taskId (database ID) and userId (board member ID); pass userId null to clear. Use list_project_members to resolve the person. Does not change task assignees or task-to-task blocking relations.',
+      'Sets the person blocking a task, using the same write as the app Blocked by person modal. Requires taskId (database ID) and userId (board member ID) and/or blockerCommentId (a comment on this task). Send both to set the blocking person and reason atomically; pass both as null to clear both. Omitted fields stay unchanged. Use list_project_members to resolve the person. Does not change task assignees or task-to-task blocking relations.',
   },
 
   MOVE_TASK_BETWEEN_BOARDS: {

@@ -26,7 +26,6 @@ async function runTurn({ attachments = [], enabled = true, preserveEditorContent
   global.document = { visibilityState: "visible", addEventListener() {}, removeEventListener() {} };
   console.log = () => {};
   const context = {
-    sessionIntentGenerationRef: { current: 0 },
     isByokBlocked: false, isTyping: false, editor: { getHTML: () => "<p>Edit this task</p>", getText: () => "Edit this task", commands: { clearContent() {} } },
     fileUpload: { fileItems: attachments.map((file) => ({ file })), clearFiles() {} },
     messageQueueRef: { current: [] }, setQueuedMessages() {}, sendInFlightRef: { current: false },
@@ -55,6 +54,7 @@ async function runTurn({ attachments = [], enabled = true, preserveEditorContent
       react: { useEffect: (effect) => cleanups.push(effect()), useRef: (current) => ({ current }) },
       "@tanstack/react-query": { useQueryClient: () => queryClient },
       "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+      "@/lib/ai/chipEvents": { signalAiChip: () => {} },
       "@/lib/flags/keys": {},
       "@/lib/taskDetailReads": {},
       "@/lib/realtime/client": { connectRealtimeClient: async () => client, releaseRealtimeClientIfIdle() {} },
@@ -91,10 +91,12 @@ for (const enabled of [false, true]) {
     let sendContext;
     const flag = "htpr-7049-reload-after-image-chat";
     const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
+      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
       react: { useState: () => [0, () => {}], useEffect: () => {} },
       "@/lib/state": { useRecoilState: () => [null, () => {}] },
       "@/store": {},
       "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+      "@/lib/ai/chipEvents": { signalAiChip: () => {} },
       "@/lib/flags/keys": { HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG: flag },
       "./useAiChatState": { useAiChatState: () => ({}) },
       "./useAiChatSessions": { useAiChatSessions: () => ({}) },

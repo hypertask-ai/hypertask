@@ -37,6 +37,7 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/flags/keys") return keys;
     if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
     if (id === "@/lib/ai/prompts/registry") return registry;
+    if (id === "@/lib/ai/chipEvents") return { signalAiChip: () => {} };
     if (id.startsWith("@/") || id.startsWith(".")) throw new Error(`Unstubbed ${file}: ${id}`);
     return require(id);
   }, mod, mod.exports);
@@ -614,7 +615,6 @@ async function sendAfterIntro(session, question) {
   global.fetch = async (_url, init) => { payload = JSON.parse(init.body); return { ok: true, body: {} }; };
   try {
     const sender = createAiChatSend({
-      sessionIntentGenerationRef: { current: 0 },
       sessionPagingEnabled: true, getDisplayedSession: () => session, isByokBlocked: false, isTyping: false,
       fileUpload: { fileItems: [], clearFiles: noop }, messageQueueRef: { current: [] }, sendInFlightRef: { current: false },
       surface: "task_detail", inViewObject: { taskId: 43 }, waitForChatSession: async () => session,

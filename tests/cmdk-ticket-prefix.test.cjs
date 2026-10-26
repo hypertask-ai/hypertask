@@ -57,25 +57,26 @@ function paletteGroups(enabled, frequent = {}, contextOptions) {
     contextOptions, appShellRailOn: false, onAgentChat: false,
     onCalendar: false, onMyTasks: false, isMobile: false, showByokApiKeys: false,
     pinCommentActions: false, pageActions: null, selectedTasksFirst: false,
+    pagesEnabled: false, standalonePages: false, pathname: "/project",
     DESTRUCTIVE_COMMAND_MODES: [CommandMode.DeleteBoard, CommandMode.DeleteColumn],
     getActiveEmptySectionSettingFromProject: () => "Hidden",
     getActiveStalenessFromProject: () => false,
     getHTCFrecencyScore: () => 0,
   };
   const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible"]);
+  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible", "hiddenBasetenCommandKey", "hiddenXaiCommandKeys"]);
   const statements = [];
   function visit(node) {
     if ((ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => names.has(declaration.name.getText(source)))) ||
-        (ts.isIfStatement(node) && node.expression.getText(source) === "ticketPrefixEnabled")) {
+        (ts.isIfStatement(node) && ["ticketPrefixEnabled", "!basetenByokEnabled", "!grokGemini4Enabled"].includes(node.expression.getText(source)))) {
       statements.push(node.getText(source));
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  bindings.isTicketPrefixCommandVisible = evaluate(`(() => { ${statements.join("\n")} return isTicketPrefixCommandVisible; })()`, {
+  Object.assign(bindings, evaluate(`(() => { ${statements.join("\n")} return { isTicketPrefixCommandVisible, hiddenBasetenCommandKey, hiddenXaiCommandKeys }; })()`, {
     ...bindings, useCallback: (callback) => callback,
-  });
+  }));
   bindings.getCommands = registry.getAllCommands;
   return evaluate(initializer(palette, "allCommands_"), bindings);
 }

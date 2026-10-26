@@ -1,3 +1,4 @@
+import { HTPR_5908_RETYPE_LOWERCASE_FLAG } from "@/lib/flags/definitions/htpr-5908-retype-lowercase";
 import Highlight from "@tiptap/extension-highlight";
 import OrderedList from "@tiptap/extension-ordered-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -40,6 +41,9 @@ const useTiptapForAI = ({
   const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
   const localWritingAssistanceRef = useRef(localWritingAssistance);
   localWritingAssistanceRef.current = localWritingAssistance;
+  const retypeLowercase = useFlag(HTPR_5908_RETYPE_LOWERCASE_FLAG);
+  const retypeLowercaseRef = useRef(retypeLowercase);
+  retypeLowercaseRef.current = retypeLowercase;
   const autocapUndo = useFlag(HTPR_6906_AUTOCAP_UNDO_FLAG);
   const autocapUndoRef = useRef(autocapUndo);
   if (autocapUndo) autocapUndoRef.current = true;
@@ -87,12 +91,13 @@ const useTiptapForAI = ({
           () => projectIdRef.current
         ),
       }),
-      SlashCommands("ai-chat"),
+      SlashCommands("ai-chat", undefined, () => projectIdRef.current),
       DisableEnter,
       SafeSplitBlock,
       LocalWritingAssistance.configure({
         localCapitalizationEnabled: () => localWritingAssistanceRef.current,
         undoCapitalizationEnabled: () => autocapUndoRef.current,
+        retypeLowercaseEnabled: () => retypeLowercaseRef.current,
       }),
     ],
     editorProps: writingAssistanceEditorProps,

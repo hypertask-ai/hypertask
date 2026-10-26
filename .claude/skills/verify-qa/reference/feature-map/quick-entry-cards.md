@@ -22,6 +22,10 @@ On a board in Kanban view, the column **+** at the top (`.create-new-task-button
 
 Checklist written before QA; screenshots of the inline box from the column **+**, from `N` and in Table view, and of the cards after reload (desktop 1440x900, phone 390x844); the create request status; a short video. Record account ids, never credentials.
 
+### Automated evidence
+
+`node --test tests/htpr-6902-n-quick-add.test.cjs` exercises N and Shift+C opening inline entry on boards and tables, mobile inline behavior, and the bottom-row shortcut hint; task persistence still needs live proof.
+
 ## Cleanup
 
 Delete the QA cards created for the run (titles start with the `QA_TASK_PREFIX` from `e2e/smoke/lib/boardSetup.ts`).

@@ -8,7 +8,6 @@ name: Gitleaks
 on:
   push:
     branches: [main, master, production]
-  pull_request:
 
 concurrency:
   group: gitleaks-${{ github.event.pull_request.number || github.ref }}

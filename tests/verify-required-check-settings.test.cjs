@@ -141,6 +141,14 @@ test("pull_request with only app code skips all settings API reads", () => {
   assert.deepEqual(result.calls.map(([tool]) => tool), ["git", "git"]);
 });
 
+for (const event of ["schedule", "workflow_dispatch"]) {
+  test(`${event} runs the full settings check without git discovery`, () => {
+    const result = runSettings({ event });
+    assertVerified(result);
+    assert.deepEqual(result.calls.filter(([tool]) => tool === "git"), []);
+  });
+}
+
 test("push always runs the full settings check", () => {
   const result = runSettings({ event: "push", file: "src/app/page.tsx" });
   assertVerified(result);
@@ -168,9 +176,9 @@ test("403 rate limit waits until reset then verifies settings", () => {
 });
 
 test("403 reset beyond the wait cap fails without claiming verification", () => {
-  const result = runSettings({ httpStatus: 403, resetSeconds: 600 });
+  const result = runSettings({ httpStatus: 403, resetSeconds: 4000 });
   assertRejected(result);
-  assert.match(result.output, /wait cap exceeded.*settings were not verified/);
+  assert.match(result.output, /not a test failure: wait cap exceeded.*settings were not verified/);
   assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 1);
 });
 

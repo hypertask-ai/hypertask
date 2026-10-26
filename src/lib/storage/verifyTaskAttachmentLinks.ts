@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import {
-  assertFileSizeForProject,
+  assertUploadAllowedForProject,
   isPlanLimitsEnabled,
   isPlanLimitReachedError,
   type PlanLimitContext,
@@ -70,6 +70,7 @@ export async function verifyTaskAttachmentLinks(
   }
   if (projectId === undefined) throw new TaskAttachmentLinkError("Attachment destination is missing", 400);
 
+  let pendingBytes = 0;
   for (const { source, key } of objects) {
     const sourceWhere = {
       OR: [
@@ -88,14 +89,18 @@ export async function verifyTaskAttachmentLinks(
       },
       select: { id: true },
     })) continue;
-    const existing = await db.attachment.findFirst({
-      where: sourceWhere,
+    const existing = taskId === undefined ? null : await db.attachment.findFirst({
+      where: { ...sourceWhere, taskId },
       select: { id: true },
     });
     const bytes = await getHypertasksObjectSize(key);
     if (bytes === null) throw new TaskAttachmentLinkError("That upload could not be verified", 409);
     try {
-      await assertFileSizeForProject(projectId, bytes, ctx);
+      await assertUploadAllowedForProject(projectId, bytes, ctx, {
+        alreadyStored: Boolean(existing),
+        pendingBytes,
+        ...(inTransaction ? { tx: db } : {}),
+      });
     } catch (error) {
       if (isPlanLimitReachedError(error) && !existing && target.newlyUploadedSources?.includes(source)) {
         try {
@@ -113,6 +118,7 @@ export async function verifyTaskAttachmentLinks(
       throw error;
     }
     sizes.set(source, bytes);
+    if (!existing) pendingBytes += bytes;
   }
   return sizes;
 }
