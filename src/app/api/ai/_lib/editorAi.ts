@@ -795,6 +795,13 @@ export async function selectTaskWriterModel(args: {
     }
   }
 
+  if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
+    selection = selectionFromModelOption(
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled),
+    );
+    byokApiKey = await getSelectionApiKey(selection);
+  }
+
   if (selection.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok?.provider === "openrouter") {
     selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
   }
