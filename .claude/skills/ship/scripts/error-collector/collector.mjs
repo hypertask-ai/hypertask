@@ -142,7 +142,7 @@ function description(group, fp) {
     return `<p><strong>${html(group.service)} emitted ${html(group.normalized)} ${group.hourlyCount} times within one hour.</strong></p><p>This is a warning on stderr, not a thrown product error. Fix it at the source rather than hiding the warning.</p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
   }
   const fields = [ ['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message] ];
-  return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p>` : ''}`;
+  return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
 }
 
 function search(fp, board, env, incident) {
@@ -157,7 +157,7 @@ function search(fp, board, env, incident) {
         if (task.projectId !== board) throw new Error('wrong board in search');
         if (typeof task.description === 'string' && new RegExp(`error-fingerprint:${fp}(?![a-f0-9])`).test(task.description)) {
           const identity = incident && taskIncident(task);
-          if (incident && (identity?.route !== incident.route || identity?.root !== incident.root)) continue;
+          if (incident && (identity?.routeKey !== incident.routeKey || identity?.root !== incident.root)) continue;
           const match = { ticket: ticketRef(task), deleted: status === 'Deleted' };
           if (!found || match.deleted) found = match;
         }
@@ -415,7 +415,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       let found = search(fp, group.board, env);
       for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env, group.incident);
       if (!found && group.incident) {
-        const allowWrapper = !Object.values(state.pending).some(other => other.incident?.route === group.incident.route && other.incident.root !== group.incident.root && Math.abs(Date.parse(other.firstSeen) - Date.parse(group.firstSeen)) <= 10 * 60_000);
+        const allowWrapper = !Object.values(state.pending).some(other => other.incident?.routeKey === group.incident.routeKey && other.incident.root !== group.incident.root && Math.abs(Date.parse(other.firstSeen) - Date.parse(group.firstSeen)) <= 10 * 60_000);
         found = findRelatedIncident({ ...group, allowWrapper }, env);
         if (found?.prior && Object.values(state.fingerprints).some(record => record.ticket === found.ticket && record.incident?.root && record.incident.root !== group.incident.root)) found = undefined;
       }

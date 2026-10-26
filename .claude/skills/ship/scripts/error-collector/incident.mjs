@@ -28,8 +28,12 @@ export function incidentOf({ message = '', stack = '', route = '' }) {
   const root = model && field && /PrismaClientValidationError/.test(text) ? `prisma-validation:${model}:unknown-argument:${field}` : undefined;
   const wrapper = /^(?:Failed to list projects\s*\|\s*Internal server error|HTTP 500 hypertask_projects)$/.test(message.trim());
   if (!root && !wrapper) return;
-  path = redact(path);
-  return { route: path, root, ...(root ? { key: createHash('sha256').update(`${path}|${root}`).digest('hex').slice(0, 16) } : {}), wrapper };
+  const routeKey = createHash('sha256').update(path).digest('hex');
+  path = path.split('/').map(segment => {
+    try { segment = decodeURIComponent(segment); } catch {}
+    return redact(segment).replaceAll('/', '%2F');
+  }).join('/');
+  return { route: path, routeKey, root, ...(root ? { key: createHash('sha256').update(`${routeKey}|${root}`).digest('hex').slice(0, 16) } : {}), wrapper };
 }
 
 export function taskIncident(task) {
@@ -39,7 +43,7 @@ export function taskIncident(task) {
   const feedback = /Tool:\s*hypertask_projects\b/.test(text) && /HTTP status:\s*500\b/.test(text);
   const message = feedback ? 'HTTP 500 hypertask_projects' : /Sample message:\s*Failed to list projects\s*\|\s*Internal server error/.test(text) ? 'Failed to list projects | Internal server error' : text;
   const stored = /Error root:\s*(\/[^\s|]+)\s*\|\s*(prisma-validation:[\w]+:unknown-argument:[\w.]+)/.exec(text);
-  const incident = stored ? { route: redact(stored[1]), root: stored[2], wrapper: false } : incidentOf({ message, route });
+  const incident = stored ? { route: stored[1], routeKey: /Error route:\s*([a-f0-9]{64})/.exec(text)?.[1] ?? createHash('sha256').update(stored[1]).digest('hex'), root: stored[2], wrapper: false } : incidentOf({ message, route });
   if (!incident) return;
   const ts = /(?:First seen|Last seen):\s*(\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text)?.[1];
   return { ...incident, ts, feedback };
@@ -50,7 +54,7 @@ export function correlate(events, known = []) {
   return events.map(event => {
     let incident = incidentOf(event);
     if (incident?.wrapper) {
-      const matches = roots.filter(root => root.route === incident.route && Math.abs(Date.parse(root.ts) - Date.parse(event.ts)) <= 10 * 60_000);
+      const matches = roots.filter(root => root.routeKey === incident.routeKey && Math.abs(Date.parse(root.ts) - Date.parse(event.ts)) <= 10 * 60_000);
       const keys = new Set(matches.map(root => root.key));
       if (keys.size === 1) incident = matches[0];
     }
@@ -59,7 +63,7 @@ export function correlate(events, known = []) {
 }
 
 export function relatedTicket(group, tasks) {
-  const candidates = tasks.filter(task => task.status === 'Normal' && task.isDone !== true && !/^Done$/i.test(task.section ?? '')).map(task => ({ task, incident: taskIncident(task) })).filter(item => item.incident?.route === group.incident.route);
+  const candidates = tasks.filter(task => task.status === 'Normal' && task.isDone !== true && !/^Done$/i.test(task.section ?? '')).map(task => ({ task, incident: taskIncident(task) })).filter(item => item.incident?.routeKey === group.incident.routeKey);
   if (!group.incident.root) {
     const roots = candidates.filter(item => item.incident.root && Math.abs(Date.parse(item.incident.ts) - Date.parse(group.firstSeen)) <= 10 * 60_000);
     if (new Set(roots.map(item => item.incident.root)).size !== 1) return;

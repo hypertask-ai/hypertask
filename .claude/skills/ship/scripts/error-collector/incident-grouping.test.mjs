@@ -36,3 +36,14 @@ test('only one nearby open MCP failure is adopted; a distinct root blocks guesse
   const other = { ...feedback, id: 2, description: `<p>Routes: /api/mcp/projects</p><p>First seen: ${ts}</p><p>${event('other').message}</p>` };
   assert.equal(relatedTicket(group, [feedback, other]), undefined);
 });
+
+test('route display redaction never makes distinct endpoints share identity', () => {
+  const first = incidentOf(event('updatedAt', '/api/integrations/posthog/error-alert'));
+  const second = incidentOf(event('updatedAt', '/api/integrations/slack/installations'));
+  assert.notEqual(first.key, second.key);
+  assert.equal(first.route, '/api/integrations/posthog/error-alert');
+  assert.equal(second.route, '/api/integrations/slack/installations');
+  const hidden = incidentOf(event('updatedAt', '/api/person%40example.invalid/sk-abcdefghijklmnopqrstuv'));
+  assert.doesNotMatch(JSON.stringify(hidden), /person|%40example|sk-abcdefghijkl/);
+  assert.notEqual(incidentOf(event('updatedAt', '/api/' + 'a'.repeat(40))).key, incidentOf(event('updatedAt', '/api/' + 'b'.repeat(40))).key);
+});
