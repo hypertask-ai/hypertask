@@ -300,10 +300,18 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       ...(tutorialArchive ? { tutorial: 1 } : {}),
       intent: "archive",
     }, realtimeEchoHeaders()) : await fetch(
-      `/api/notifications/markAsDone?id=${notification.id}&taskId=${notification.taskId}&userId=${currentUser.id}&type=${notification.type}${tutorialArchive ? "&tutorial=1" : ""}&intent=archive`,
+      "/api/notifications/markAsDone",
       {
-        method: "GET",
-        headers: realtimeEchoHeaders(),
+        method: "POST",
+        headers: { ...realtimeEchoHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: notification.id,
+          taskId: notification.taskId,
+          userId: currentUser.id,
+          type: notification.type,
+          ...(tutorialArchive ? { tutorial: 1 } : {}),
+          intent: "archive",
+        }),
       },
     );
     if (!notificationResponse.ok) return false;

@@ -14,6 +14,11 @@ import { selectErrorBoardSection } from "./errorBoardTarget";
 import { symbolicateStack } from "./symbolicateStack";
 import { plainSummary, plainTitle } from "./plainIncident.mjs";
 import { capturePostHogException } from "@/lib/telemetry/posthogErrorTracking";
+import {
+  DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE,
+  SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE,
+} from "@/lib/aiAllowancePolicy";
+import { HTPR_7988_ALLOWANCE_ERROR_REPORT_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 export type ErrorReport = {
   message: string;
@@ -219,6 +224,12 @@ async function reportErrorTicket(report: ErrorReport) {
 }
 
 export async function reportError(unredactedReport: ErrorReport) {
+  if (
+    (unredactedReport.message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE ||
+      unredactedReport.message === DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE) &&
+    await isFeatureEnabled(HTPR_7988_ALLOWANCE_ERROR_REPORT_FLAG, 0)
+  ) return;
+
   const report: ErrorReport = {
     ...unredactedReport,
     message: redactSecrets(unredactedReport.message),

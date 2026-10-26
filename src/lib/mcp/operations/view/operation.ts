@@ -4,6 +4,7 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
+import { ValidationError } from '@/lib/mcp-server/utils/errors'
 import { SortingMode, SortingOrder, SubtaskSetting, EmptySections, ViewVisibility } from '@prisma/client'
 import { savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { createView, type CreateViewInput } from '@/lib/mcp/views/services'
@@ -330,7 +331,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, view })
   } catch (error) {
-    console.error('Error creating view:', error)
+    if (error instanceof ValidationError) {
+      console.warn('Error creating view:', error)
+    } else {
+      console.error('Error creating view:', error)
+    }
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 400 }

@@ -6,12 +6,19 @@ import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 import { callerCanFix, refusalFromZodIssues, quietFixableReports } from './callerFixable'
 import { HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7838-conflict-no-feedback'
+import { HTPR_7819_NOT_FOUND_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7819-not-found-no-feedback'
 
-async function conflictIsExpected(status: number, userId: number): Promise<boolean> {
-  if (status !== 409) return false
+const EXPECTED_ANSWER_FLAGS: Record<number, string> = {
+  409: HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG,
+  404: HTPR_7819_NOT_FOUND_NO_FEEDBACK_FLAG,
+}
+
+async function answerIsExpected(status: number, userId: number): Promise<boolean> {
+  const flag = EXPECTED_ANSWER_FLAGS[status]
+  if (!flag) return false
   try {
     const { isFeatureEnabled } = await import('@/lib/flags')
-    return await isFeatureEnabled(HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG, userId)
+    return await isFeatureEnabled(flag, userId)
   } catch {
     return false
   }
@@ -138,7 +145,7 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
         return text
       } catch (error) {
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
-        if (status !== 403 && !await conflictIsExpected(status, userId)) {
+        if (status !== 403 && !await answerIsExpected(status, userId)) {
           const callerCanFixRefusal = error instanceof ZodError && callerCanFix(refusalFromZodIssues(error.issues))
           if (callerCanFixRefusal && await quietFixableReports(userId)) {
             console.info('AI feedback not filed: the refusal tells the caller what to fix', { tool: tool.name })

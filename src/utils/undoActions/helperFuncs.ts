@@ -44,7 +44,11 @@ export async function UndoInboxArchive(data:any){
         if (failed?.status === 'rejected') throw failed.reason;
         return results.at(-1)?.status === 'fulfilled' ? restores.at(-1) : undefined;
     } else {
-      await fetch(`/api/notifications/markAsDone?id=${data.notification.id}&taskId=${data.notification.taskId}&userId=${data.currentUser.id}&type=${data.notification.type}`, { headers: realtimeEchoHeaders() })
+      await fetch("/api/notifications/markAsDone", {
+        method: "POST",
+        headers: { ...realtimeEchoHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ id: data.notification.id, taskId: data.notification.taskId, userId: data.currentUser.id, type: data.notification.type }),
+      })
 
     }
 

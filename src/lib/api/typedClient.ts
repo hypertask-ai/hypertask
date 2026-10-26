@@ -341,11 +341,11 @@ export const notificationSeenRoute = {
 } satisfies WriteRouteDescriptor;
 
 export const notificationArchiveRoute = {
-  method: "GET",
+  method: "POST",
   pathParams: z.undefined(),
   path: () => "/api/notifications/markAsDone",
-  query: notificationWrites.notificationArchiveQuerySchema,
-  body: z.undefined(),
+  query: z.undefined(),
+  body: notificationWrites.notificationArchiveQuerySchema,
   success: notificationWrites.notificationResponseSchema,
   errors: { 400: notificationWrites.notificationWriteErrorSchema, 401: notificationWrites.notificationWriteErrorSchema, 403: notificationWrites.notificationWriteErrorSchema, 404: notificationWrites.notificationWriteErrorSchema, 405: notificationWrites.notificationWriteErrorSchema, 500: notificationWrites.notificationWriteErrorSchema, 409: notificationWrites.notificationWriteErrorSchema },
 } satisfies WriteRouteDescriptor;
@@ -408,9 +408,10 @@ export async function setNotificationSeen(query: notificationWrites.Notification
 
 export async function toggleNotificationArchive(query: notificationWrites.NotificationArchiveQuery, headers: Record<string, string>) {
   const route = notificationArchiveRoute;
-  const response = await fetch(`${route.path()}?id=${query.id}&taskId=${query.taskId}&userId=${query.userId}&type=${query.type}${query.tutorial ? "&tutorial=1" : ""}${query.intent ? "&intent=archive" : ""}`, {
+  const response = await fetch(route.path(), {
     method: route.method,
-    headers: { ...headers, "X-Hypertask-Client": "htpr-6925" },
+    headers: { ...headers, "Content-Type": "application/json", "X-Hypertask-Client": "htpr-6925" },
+    body: JSON.stringify(query),
   });
   if (response.ok) {
     try {

@@ -393,8 +393,11 @@ export async function runCoreActionsSmoke(options: {
 
   const toggleInbox = async (action: string, notification: any, status: "Archive" | "Normal") => {
     const { data } = await request(action,
-      `/api/notifications/markAsDone?id=${notification.id}&taskId=${fixture.taskId}&userId=${fixture.userId}&type=${notification.type}`,
-      { method: "GET" },
+      "/api/notifications/markAsDone",
+      {
+        method: "POST",
+        body: JSON.stringify({ id: notification.id, taskId: fixture.taskId, userId: fixture.userId, type: notification.type }),
+      },
     );
     if (
       data?.success === false || typeof data?.error === "string" ||

@@ -17,7 +17,7 @@ const root = path.resolve(__dirname, "..");
 const notificationRoutes = {
   "(un)archiveBulk": { module: "archive-bulk", method: "POST", path: "src/pages/api/notifications/(un)archiveBulk.ts" },
   getByTask: { module: "task-seen", method: "POST", path: "src/pages/api/notifications/getByTask.ts" },
-  markAsDone: { module: "mark-done", method: "GET", path: "src/pages/api/notifications/markAsDone.ts" },
+  markAsDone: { module: "mark-done", method: "GET", alsoMethod: "POST", path: "src/pages/api/notifications/markAsDone.ts" },
   markAsUnseen: { module: "mark-unseen", method: "GET", path: "src/pages/api/notifications/markAsUnseen.ts" },
   moveTaskToInbox: { module: "move-task-to-inbox", method: "POST", path: "src/pages/api/notifications/moveTaskToInbox.ts" },
   sendEmailToFollower: { module: "follower-email", method: "POST", path: "src/pages/api/notifications/sendEmailToFollower.ts" },
@@ -219,7 +219,7 @@ for (const name of Object.keys(endpoints)) {
     assert.deepEqual(fx.effects, old.effects);
   });
   for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", undefined]) {
-    if (method === notificationRoutes[name].method) continue;
+    if (method === notificationRoutes[name].method || (notificationRoutes[name].alsoMethod && method === notificationRoutes[name].alsoMethod)) continue;
     test(`${name}: other method ${method} ${notificationRoutes[name].anyMethod ? "reaches the shared route" : "answers 405"}`, async () => {
       const scenario = { method }, fx = fixture(name);
       const result = await invoke(fx, name, scenario);

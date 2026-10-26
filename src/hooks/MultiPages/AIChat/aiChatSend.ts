@@ -7,6 +7,7 @@ import { extractStreamRefusalMessage } from "@/lib/aiChat/streamRefusal";
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild";
 import { CHAT_TRANSPORT_RETRY_DELAYS_MS, ChatRequestRefusedError, shouldRetryChatTransport } from "@/lib/aiChat/transportRetry";
 import { chatModelRequestFields } from "@/lib/aiModelOptions";
+import { signalAiChip } from "@/lib/ai/chipEvents";
 
 
 import type { useAiChatSessions } from "./useAiChatSessions";
@@ -17,7 +18,7 @@ import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sess
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
   Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "settleSendRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
-  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean; persistentQueue?: SessionMessageQueue; stopClosesStream?: boolean; navigateToTask?: (projectId: number, uniqueIndex: number) => void };
+  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean; chipSendSignal?: typeof signalAiChip; persistentQueue?: SessionMessageQueue; stopClosesStream?: boolean; navigateToTask?: (projectId: number, uniqueIndex: number) => void };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
   const {
@@ -29,7 +30,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   pathname, currentUser, billing, isDemo, streamingSessionRef,
   streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
   setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
-  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, stopClosesStream, navigateToTask,
+  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, chipSendSignal, stopClosesStream, navigateToTask,
   } = context;
 
 
@@ -90,6 +91,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     }
 
     if (!content.trim()) return false;
+    chipSendSignal?.({ kind: "send", text: content });
     let streamId = crypto.randomUUID();
     sendInFlightRef.current = true;
     if (stopClosesStream) streamingRequestRef.current = streamId;

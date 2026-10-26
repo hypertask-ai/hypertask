@@ -3,10 +3,22 @@ import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { isPaidTeam } from "@/lib/freeTier";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
+import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
+import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7923-unlimited-free-tickets";
+import {
+  FREE_PLAN_MAX_BOARDS,
+  FREE_PLAN_MAX_FILE_BYTES,
+  FREE_PLAN_MAX_FILE_BYTES_RAISED,
+  FREE_PLAN_MAX_TICKETS,
+  freeFileByteLimit,
+} from "@/lib/freePlanLimits";
 
-export const FREE_PLAN_MAX_BOARDS = 2;
-export const FREE_PLAN_MAX_TICKETS = 250;
-export const FREE_PLAN_MAX_FILE_BYTES = 10 * 1024 * 1024;
+export {
+  FREE_PLAN_MAX_BOARDS,
+  FREE_PLAN_MAX_TICKETS,
+  FREE_PLAN_MAX_FILE_BYTES,
+  FREE_PLAN_MAX_FILE_BYTES_RAISED,
+};
 
 export type PlanLimitScope =
   | { kind: "team"; teamId: string }
@@ -22,7 +34,7 @@ type PlanLimit = "boards" | "tickets" | "file_size";
 type ProjectScopeSource = { teamId: string | null; ownerId: number };
 type ScopeDb = Pick<Prisma.TransactionClient, "project">;
 
-function limitMessage(limit: PlanLimit, scope: PlanLimitScope): string {
+function limitMessage(limit: PlanLimit, scope: PlanLimitScope, max: number): string {
   const subject = scope.kind === "personal" ? "Your personal boards" : "This team's";
   if (limit === "boards") {
     return `${subject} Free plan allows ${FREE_PLAN_MAX_BOARDS} boards. Upgrade to add more, or archive a board you no longer use.`;
@@ -30,7 +42,7 @@ function limitMessage(limit: PlanLimit, scope: PlanLimitScope): string {
   if (limit === "tickets") {
     return `${subject} Free plan allows ${FREE_PLAN_MAX_TICKETS} open tickets. Upgrade to add more, or archive tickets you're done with.`;
   }
-  return `Files on the Free plan can be up to ${FREE_PLAN_MAX_FILE_BYTES / (1024 * 1024)} MB. Upgrade to upload bigger files.`;
+  return `Files on the Free plan can be up to ${max / (1024 * 1024)} MB. Upgrade to upload bigger files.`;
 }
 
 export class PlanLimitReachedError extends Error {
@@ -42,7 +54,7 @@ export class PlanLimitReachedError extends Error {
     readonly max: number,
     readonly scope: PlanLimitScope,
   ) {
-    super(limitMessage(limit, scope));
+    super(limitMessage(limit, scope, max));
     this.name = "PlanLimitReachedError";
   }
 }
@@ -72,6 +84,11 @@ export function planLimitResponse(error: PlanLimitReachedError) {
 
 export async function isPlanLimitsEnabled(actorUserId: number | null): Promise<boolean> {
   return actorUserId != null && isFeatureEnabled(HTPR_7686_FREE_PLAN_LIMITS_FLAG, actorUserId);
+}
+
+async function isTicketLimitEnabled(actorUserId: number | null): Promise<boolean> {
+  if (actorUserId == null || !await isPlanLimitsEnabled(actorUserId)) return false;
+  return !await isFeatureEnabled(HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG, actorUserId);
 }
 
 export function scopeForProject(project: ProjectScopeSource): PlanLimitScope {
@@ -132,7 +149,7 @@ export async function assertBoardRoom(tx: Prisma.TransactionClient, scope: PlanL
 }
 
 export async function assertTicketRoom(tx: Prisma.TransactionClient, scope: PlanLimitScope, delta: number, ctx: PlanLimitContext): Promise<void> {
-  if (delta <= 0 || !await isPlanLimitsEnabled(ctx.actorUserId) || !await isFreeScope(scope)) return;
+  if (delta <= 0 || !await isTicketLimitEnabled(ctx.actorUserId) || !await isFreeScope(scope)) return;
   await lockPlanLimitScope(tx, scope);
   const count = await tx.task.count({
     where: { status: "Normal", project: { ...scopeWhere(scope), status: "Normal" } },
@@ -141,7 +158,7 @@ export async function assertTicketRoom(tx: Prisma.TransactionClient, scope: Plan
 }
 
 export async function assertProjectTicketRoom(tx: Prisma.TransactionClient, projectId: number, delta: number, ctx: PlanLimitContext): Promise<void> {
-  if (delta <= 0 || !await isPlanLimitsEnabled(ctx.actorUserId)) return;
+  if (delta <= 0 || !await isTicketLimitEnabled(ctx.actorUserId)) return;
   const project = await tx.project.findUniqueOrThrow({
     where: { id: projectId },
     select: { teamId: true, ownerId: true, status: true },
@@ -165,7 +182,7 @@ export async function assertTaskCountTransition(
 ): Promise<void> {
   if (after.status !== "Normal" ||
       (before.status === "Normal" && before.projectId === after.projectId) ||
-      !await isPlanLimitsEnabled(ctx.actorUserId)) return;
+      !await isTicketLimitEnabled(ctx.actorUserId)) return;
   const destination = await tx.project.findUniqueOrThrow({
     where: { id: after.projectId },
     select: { teamId: true, ownerId: true, status: true },
@@ -191,8 +208,15 @@ export async function assertTaskCountTransition(
   await assertTicketRoom(tx, scope, 1, ctx);
 }
 
+export async function freeFileLimitBytes(actorUserId: number | null): Promise<number> {
+  const raised = actorUserId != null && await isFeatureEnabled(HTPR_7924_FREE_FILE_25MB_FLAG, actorUserId);
+  return freeFileByteLimit(raised);
+}
+
 export async function assertFileSizeForProject(projectId: number, bytes: number, ctx: PlanLimitContext): Promise<void> {
   if (bytes <= FREE_PLAN_MAX_FILE_BYTES || !await isPlanLimitsEnabled(ctx.actorUserId)) return;
+  const max = await freeFileLimitBytes(ctx.actorUserId);
+  if (bytes <= max) return;
   const scope = await limitScopeForProject(projectId);
-  if (await isFreeScope(scope)) refuse("file_size", FREE_PLAN_MAX_FILE_BYTES, scope, ctx, { bytes });
+  if (await isFreeScope(scope)) refuse("file_size", max, scope, ctx, { bytes });
 }
