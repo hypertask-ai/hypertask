@@ -36,7 +36,7 @@ export function settingsBillingSummary(team: ITeam) {
   const catalogPrice = storeSubscriptionPlans.flatMap((plan) => plan.types)
     .find((type) => type.stripePriceId === row?.priceId);
   let priceLabel = hasSubscription ? "See Stripe for pricing" : comped ? "Complimentary" : "$0";
-  if (price?.unit_amount != null && price.recurring) {
+  if (hasSubscription && price?.unit_amount != null && price.recurring) {
     const amount = new Intl.NumberFormat("en", { style: "currency", currency: price.currency }).format(price.unit_amount / 100);
     const interval = price.recurring.interval_count === 1 ? price.recurring.interval
       : `${price.recurring.interval_count} ${price.recurring.interval}s`;

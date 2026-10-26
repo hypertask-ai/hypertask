@@ -999,3 +999,23 @@ test("Settings upgrade preserves complimentary access", async () => {
     assert.equal(createdCheckoutCount, 0);
   } finally { billingUpgradeEnabled = false; }
 });
+
+test("Settings upgrade waits for a recovered completed checkout before changing price", async () => {
+  reset({ subscriptionPlan: [] });
+  billingUpgradeEnabled = true;
+  try {
+    const first = await createAuthorizedCheckoutSession(6, validBody({ intent: "settings-billing-upgrade" }));
+    assert.equal(first.status, 200);
+    const reserved = reservationRecord;
+    const session = checkoutSessionsById.get(reserved.sessionId);
+    session.status = "complete";
+    session.subscription = "sub_not_visible_yet";
+    checkoutListingHidden = true;
+    const result = await createAuthorizedCheckoutSession(6, validBody({ intent: "settings-billing-upgrade", priceId: "price_byok_year" }));
+    assert.equal(result.status, 409);
+    assert.equal(result.body.message, "Finishing plan setup");
+    assert.equal(createdCheckoutCount, 1);
+    assert.equal(reservationRecord, reserved);
+    assert.deepEqual(expiredCheckoutIds, []);
+  } finally { billingUpgradeEnabled = false; }
+});

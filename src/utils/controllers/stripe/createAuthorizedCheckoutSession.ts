@@ -508,10 +508,6 @@ export async function createAuthorizedCheckoutSession(
         (subscription.status === "canceled" || subscription.status === "incomplete_expired"))))) {
       return { status: 409, body: { message: "An existing subscription must use Manage billing" } };
     }
-    if (billingUpgradeIntent && teamSessions.some((session) => session.status === "complete" &&
-      !subscriptions.some((subscription) => subscription.id === checkoutSubscriptionId(session)))) {
-      return { status: 409, body: { message: "Finishing plan setup" } };
-    }
     let remainingOpenSessions = openSessions;
     if (!preview && attempt?.state === "in_flight") {
       let recoveredSession = await reconcileAttemptSession(
@@ -554,6 +550,11 @@ export async function createAuthorizedCheckoutSession(
 
     const reservedSession = attempt && await reconcileAttemptSession(stripe, attempt, teamSessions);
     const knownSessions = reservedSession ? [...teamSessions, reservedSession] : teamSessions;
+    if (billingUpgradeIntent && knownSessions.some((session) => session.status === "complete" &&
+      !subscriptions.some((subscription) => subscription.id === checkoutSubscriptionId(session)))) {
+      return { status: 409, body: { message: "Finishing plan setup" } };
+    }
+
     const awaitingPlanSubscription = knownSessions.some((session) => {
       if (session.status !== "complete" ||
         (session.metadata?.checkoutIntent !== "signup-straight-to-board" &&
