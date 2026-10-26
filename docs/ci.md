@@ -81,23 +81,21 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 
 ## Live required-check settings
 
-`Verify live required-check settings` runs the dependency-free
-[verifier](../.github/scripts/verify-required-check-settings.mjs) on free
-GitHub-hosted runners. Every `production` push verifies the default branch,
-exactly one active `production-required-checks` ruleset, its branch target and
-production include/exclude conditions, and the exact required-context set
-(including both review contexts, without aliasing).
+The hourly [Required Check Settings workflow](../.github/workflows/required-check-settings.yml)
+runs the dependency-free [verifier](../.github/scripts/verify-required-check-settings.mjs)
+on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
+checkout always uses `production`. It verifies the default branch, exactly one
+active `production-required-checks` ruleset, its branch target and production
+include/exclude conditions, and the exact required-context set (including both
+review contexts, without aliasing). Drift and unreadable settings still fail
+the monitor; this is not a required PR context. Detection can lag until the next
+hourly run, plus GitHub scheduling and any rate-limit wait.
 
-On pull requests, it reads settings only when the merge-base diff changes
-`.github/**`, `docs/ci-policy.yml`, or `docs/ci.md`. Checkout includes full history;
-the NUL-delimited diff disables rename detection so moving a CI file out of
-`.github/` cannot hide its deletion. An unreadable event, invalid SHA, failed diff,
-or empty/unknown diff verifies instead of skipping. Other PRs log an explicit
-skip and make **zero settings API calls**. No changed-files API is used.
-
-Before this change, every run made three settings API calls. Scoped PRs and
-production pushes still make three on a successful first attempt: repository
-metadata, ruleset list, and one full ruleset read. GitHub REST's
+CI Tests no longer reads repository settings on PRs or production pushes.
+Previously every production push and CI-policy PR made three settings API calls.
+The hourly monitor makes three on a successful first attempt: repository
+metadata, ruleset list, and one full ruleset read. Retries add calls.
+GitHub REST's
 [repository ruleset list](https://docs.github.com/en/rest/repos/rules#get-all-repository-rulesets)
 returns summaries, not rules or ref conditions; `includes_parents` includes parent
 rulesets, not full details. The
@@ -115,6 +113,14 @@ error and the step summary, so it is not mistaken for a test failure. Missing us
 rate-limit timing, an exceeded budget, other API errors, malformed settings, or a
 settings mismatch fail the check; nothing passes without reading the settings
 when verification is required. No paid runner, service, or dependency is added.
+
+Runner CI watches use the existing `gh-app-token` helper, never the saved user
+login: `token=$(gh-app-token) && test -n "$token" && GH_TOKEN="$token" gh pr checks <PR> --repo hypertask-ai/hypertask --watch --interval 120`.
+Stop if minting fails; do not fall back. Refresh the token before
+restarting a watch. The 120-second interval replaces gh's 10-second default;
+compare observed request counts over equal windows before claiming a fleet-wide
+reduction. The installation allowance used by `github.token` in Actions is a
+different quota from the runner app; moving runner watches does not replenish it.
 
 ## Premerge evidence
 
@@ -292,7 +298,7 @@ local app. Missing output, failed, skipped or cancelled browser smoke fails the 
 The sole no-contract exception is a successful docs-only browser job with an explicit
 `docs_only=true` scope output; it does not claim the contract executed.
 Activate the new production ruleset context in coordination with this policy update:
-CI Tests' `Verify live required-check settings` step compares the live ruleset's exact
+The hourly `Required Check Settings` monitor compares the live ruleset's exact
 context set against the workflow expectation. This change does not modify that ruleset.
 
 ## Agent board scope guard (HTPR-7496)
