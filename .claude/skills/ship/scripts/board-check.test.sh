@@ -40,14 +40,19 @@ if name == 'date':
     else: sys.exit(subprocess.call(['/usr/bin/date']+args))
 elif name == 'gh':
     assert args[:2] == ['api','graphql'], args
-    print(json.dumps(dict(data=dict(repository=dict(pullRequests=dict(nodes=f['prs'],pageInfo=dict(hasNextPage=False)))))))
+    pages = [f['prs'][i:i+100] for i in range(0,len(f['prs']),100)] or [[]]
+    for i, page in enumerate(pages if '--paginate' in args else pages[:1]):
+        print(json.dumps(dict(data=dict(repository=dict(pullRequests=dict(nodes=page,pageInfo=dict(hasNextPage=f.get('pr_more', i<len(pages)-1))))))))
 elif name == 'hypertask':
     if args[:2] == ['sections','list']:
         print(json.dumps(dict(success=True,sections=[dict(section_title=s) for s in f.get('sections',['AI Review','QA','In Progress'])])))
     elif args[:2] == ['tasks','list']:
         col = args[args.index('--section')+1]
         tasks = [t for t in f['tasks'] if t['section']==col]
-        print(json.dumps(dict(success=True,tasks=tasks,total=len(tasks)+f.get('extra',0))))
+        offset = int(args[args.index('--offset')+1]) if '--offset' in args else 0
+        if f.get('repeat_page'): offset = 0
+        page = tasks[offset:offset+100] if not f.get('empty_page') else []
+        print(json.dumps(dict(success=True,tasks=page,total=len(tasks)+f.get('extra',0))))
     elif args[:2] == ['tasks','get']:
         print(json.dumps(dict(success=True,tasks=[t for t in f['tasks'] if t['ticketNumber']==args[2]])))
     elif args[:2] == ['comment','list']:
@@ -137,19 +142,43 @@ r, _ = run(f)
 assert r.returncode != 0 and 'cannot read activity' in r.stderr
 f['activity_error'] = 4; f['extra'] = 1
 r, _ = run(f)
-assert r.returncode != 0 and 'list incomplete' in r.stderr
+assert r.returncode != 0 and 'no progress' in r.stderr
 f['extra'] = 0; f['sections'] = ['QA','In Progress']
 r, _ = run(f)
 assert r.returncode != 0 and 'no column named AI Review' in r.stderr
 print('ok auth failures, missing columns and truncated lists fail closed')
-f = dict(tasks=[task(n, 'AI Review' if n <= 51 else 'QA') for n in range(1,102)],
-         comments={},activities={},prs=[])
+f = dict(tasks=[], comments={}, activities={}, prs=[], pr_more=True)
+r, _ = run(f)
+assert r.returncode != 0 and 'PR list incomplete' in r.stderr, r.stderr
+print('ok incomplete PR pagination fails closed')
+f = dict(tasks=[task(n, 'AI Review') for n in range(1,103)],
+         comments={f'HTPR-{n}':[comment()] for n in range(1,103)},
+         activities={'HTPR-102':iso(1)+'\tAgent One\n'},
+         prs=[pr(n,f'HTPR-{n}',8) for n in range(1,103)])
 r, calls = run(f)
-assert r.returncode != 0 and 'over 100 distinct tickets' in r.stderr
+assert r.returncode == 0, r.stderr
+assert '\tHTPR-101\t' in r.stdout and '\tHTPR-102\t' not in r.stdout, r.stdout
+reads = [c[3] for c in calls if c[:3] == ['hypertask','comment','list']]
+assert len(reads) == len(set(reads)) == 102, reads
+assert sum(c[:3] == ['hypertask','tasks','list'] for c in calls) == 4, calls
+assert any(c[:3] == ['hypertask','tasks','list'] and '--offset' in c and c[c.index('--offset')+1]=='100' for c in calls)
+print('ok paginated PRs and columns, late-page stale work, fresh claims and deduplicated reads')
+f['repeat_page'] = True
+r, calls = run(f)
+assert r.returncode != 0 and 'changed while paging' in r.stderr, r.stderr
 assert not any(c[:3] == ['hypertask','comment','list'] for c in calls)
+print('ok overlapping column pages refuse misleading coverage')
+f = dict(tasks=[task(n) for n in range(1,503)],
+         comments={f'HTPR-{n}':[comment()] for n in range(1,503)},activities={},prs=[])
+r, calls = run(f)
+assert r.returncode != 0 and 'partial coverage: inspected 500 of 502 distinct tickets' in r.stderr, r.stderr
+reads = [c[3] for c in calls if c[:3] == ['hypertask','comment','list']]
+assert len(reads) == len(set(reads)) == 500, len(reads)
+assert '\tHTPR-500\t' in r.stdout and '\tHTPR-501\t' not in r.stdout
+print('ok bounded inspections retain the partial report and identify omitted coverage')
 f = dict(tasks=[task(1)],comments={'HTPR-1':[comment(agent=None)]*100},activities={},prs=[])
 r, _ = run(f)
 assert r.returncode != 0 and 'outside the bounded comment read' in r.stderr
-print('ok scan budget and potentially hidden older claims fail closed')
+print('ok potentially hidden older claims fail closed')
 print('BOARD CHECK VERIFIED')
 PY
