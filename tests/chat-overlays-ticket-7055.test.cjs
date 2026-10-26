@@ -23,7 +23,8 @@ function frame(flags, pathname) {
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: (key) => flags[key] ?? false, useFlagLoaded: () => true },
+    "@/hooks/useFlag": { useFlag: (key) => flags[key] ?? false, useFlagLoaded: () => true, useFlagReady: () => true },
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/lib/flags/keys": {
       HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: KEY,
     },

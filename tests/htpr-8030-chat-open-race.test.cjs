@@ -16,7 +16,7 @@ function opener({ enabled = true, open = false } = {}) {
   };
   const load = loader({
     "next/navigation": { usePathname: () => "/project" },
-    "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+    "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled, useFlagReady: () => true },
     "@/lib/flags/definitions/htpr-8030-chat-open-race": { HTPR_8030_CHAT_OPEN_RACE_FLAG: flag },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/lib/contexts/Multipages/AI_Agent/chatContext": {

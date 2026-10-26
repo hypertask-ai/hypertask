@@ -327,6 +327,49 @@ test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-
   expect(documentRequests, 'card click must not reload the document').toBe(0)
 })
 
+test('chat opener waits for hydration before accepting its first click', { tag: ['@id:chat-open-hydration'] }, async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  const mobile = testInfo.project.name === 'Mobile'
+  const flags = await (await page.request.get('/api/flags')).json()
+  expect(flags.flags['htpr-8038-chat-opener-ready']).toBe(true)
+  await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
+  const sidebar = page.getByTestId('ai-sidebar')
+  const opener = page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true })
+  if (!await sidebar.isVisible()) await opener.click()
+  await expect(sidebar).toBeVisible()
+  await page.getByRole('button', { name: 'Close AI chat', exact: true }).click()
+  await expect(sidebar).toBeHidden()
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+  await page.addInitScript(() => {
+    const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
+    localStorage.setItem('recoil-persist', JSON.stringify({ ...saved,
+      aiChatAutoOpenSuppressed: true, aiChatPinned: false, openAiChatByDefault: false,
+    }))
+  })
+  const bootstrap = Promise.withResolvers<void>()
+  await page.route('**/_next/static/**', async route => {
+    if (route.request().resourceType() === 'script') await bootstrap.promise
+    await route.continue()
+  })
+  try {
+    await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'commit' })
+    await expect(opener).toBeVisible()
+    await expect(opener).toBeDisabled()
+    await expect(opener).toHaveAttribute('aria-busy', 'true')
+    const clicked = opener.click()
+    bootstrap.resolve()
+    await clicked
+    const scope = page.getByTestId('ai-sidebar').locator('[data-ai-chat-scope]:visible > button').first()
+    await expect(scope).toBeVisible()
+    await scope.click()
+    await expect(page.locator('#option-picker')).toBeVisible()
+  } finally {
+    bootstrap.resolve()
+    await page.unroute('**/_next/static/**')
+  }
+})
+
 // Positive and negative controls for the error-screen check every view below relies on (YPER4-304).
 test('error-screen check catches real error pages and ignores quoted error text', { tag: ['@id:error-page-detector'] }, async ({ page }) => {
   const screens = [
