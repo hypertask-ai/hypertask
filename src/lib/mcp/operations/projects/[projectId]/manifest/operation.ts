@@ -59,6 +59,7 @@ export async function GET(
             section_title: true,
             isDone: true,
             ranking: true,
+            wipLimit: true,
           },
           orderBy: {
             ranking: 'asc',
@@ -89,7 +90,7 @@ export async function GET(
         title: section.section_title,
         position: section.ranking,
         role: columnRoleFor(section),
-        wipLimit: null,
+        wipLimit: section.wipLimit,
       })),
       transitions: 'any',
     })

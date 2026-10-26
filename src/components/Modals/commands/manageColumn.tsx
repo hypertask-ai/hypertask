@@ -63,6 +63,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   const [editMode, setEditMode] = useState<boolean>(false);
   const [editSection, setEditSection] = useState<ISection | null>(null);
   const [ticketsFinished, setTicketsFinished] = useState(false);
+  const [wipLimitDraft, setWipLimitDraft] = useState("");
   const [deleteModal, setDeleteModal] = useState<boolean>(false);
   const [assignOpen, setAssignOpen] = useState<boolean>(false);
   const currentUser = useRecoilValue(currentUserAtom);
@@ -224,12 +225,12 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     section: ISection,
     saveMode?: string,
     updatedRank?: string,
-    overrides?: { section_title?: string; isDone?: boolean },
+    overrides?: { section_title?: string; isDone?: boolean; wipLimit?: number | null },
     rollbackDelete?: () => void
   ) => {
     try {
       var updatedSections = [...sections];
-      if (!section || (updating && !rollbackDelete)) return;
+      if (!section || (updating && !rollbackDelete && saveMode !== "RENAME" && saveMode !== "LIMIT")) return;
       if (saveMode === "DELETE" && noEmptyBoardFlash && refuseLastColumnDelete(
         section,
         queryClient.getQueryData<IProjectsAll>(["projectsAll"])
@@ -253,6 +254,16 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         ];
         queryClient.setQueryData(queryKey, updatedSections);
         return queryClient.refetchQueries({ queryKey: ["projectsAll"] });
+      } else if (saveMode === "LIMIT") {
+        const wipLimit = overrides?.wipLimit ?? null;
+        sendUpdateSection = { ...section, wipLimit };
+        typedWrite ? await typedWrite({
+          sectionId: section.id,
+          newSection: { wipLimit },
+        }) : await axios.post("/api/section/update", {
+          sectionId: section.id,
+          newSection: { wipLimit },
+        });
       } else if (saveMode === "RENAME") {
         const nextTitle = overrides?.section_title ?? title;
         const nextIsDone = overrides?.isDone ?? ticketsFinished;
@@ -272,13 +283,24 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       } else {
         sendUpdateSection = { ...section, visibility: !section.visibility };
       }
-      updatedSections = updateSection(sections, sendUpdateSection, "Others");
-      updateCache(updatedSections, saveMode !== "RENAME");
-      if (saveMode === "RENAME" && currentProject) {
+      let patch: Partial<ISection> = sendUpdateSection;
+      if (saveMode === "LIMIT") patch = { wipLimit: sendUpdateSection.wipLimit };
+      else if (saveMode === "RENAME") {
+        patch = { section_title: sendUpdateSection.section_title, isDone: sendUpdateSection.isDone };
+      }
+      const latestSections = queryClient.getQueryData<ISection[]>([
+        globalConstants.GetAllManageColumnsPrefixKey,
+        currentProject?.id,
+        currentUser.id,
+      ]) ?? sections;
+      const latestSection = latestSections.find((candidate) => candidate.id === section.id) ?? section;
+      updatedSections = updateSection(latestSections, { ...latestSection, ...patch }, "Others");
+      updateCache(updatedSections, saveMode !== "RENAME" && saveMode !== "LIMIT");
+      if ((saveMode === "RENAME" || saveMode === "LIMIT") && currentProject) {
         const updateSections = (projectSections?: ISection[]) =>
           projectSections?.map((candidate) =>
             (candidate.id ?? candidate.sectionId) === section.id
-              ? { ...candidate, ...sendUpdateSection }
+              ? { ...candidate, ...patch }
               : candidate
           );
         const updateProject = (project: IProject) =>
@@ -292,7 +314,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
               }
             : project;
 
-        setCurrentProject(updateProject(currentProject));
+        setCurrentProject((project) => project ? updateProject(project) : project);
         queryClient.setQueryData<IProjectsAll>(["projectsAll"], (cached) =>
           cached
             ? {
@@ -305,7 +327,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           cached?.map(updateProject)
         );
         setEditSection((prev) =>
-          prev && prev.id === section.id ? { ...prev, ...sendUpdateSection } : prev
+          prev && prev.id === section.id ? { ...prev, ...patch } : prev
         );
         void queryClient.invalidateQueries({ queryKey: ["projectsAllMinimal"] });
       }
@@ -321,6 +343,8 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         typeof error.response.data.message === "string"
       ) {
         toast.error(error.response.data.message);
+      } else if (saveMode === "LIMIT") {
+        toast.error("Column limit could not be saved");
       } else if (rollbackDelete) {
         toast.error("Column could not be deleted");
       }
@@ -406,6 +430,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   const openEditView = (section: ISection) => {
     toggleEdit(section);
     setTitle(section.section_title);
+    setWipLimitDraft(section.wipLimit == null ? "" : String(section.wipLimit));
     setTicketsFinished(
       section.isDone ?? isDoneByName(section.section_title)
     );
@@ -422,6 +447,20 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     if (!editSection) return;
     void queueSave(() =>
       handleSectionUpdateVis(editSection, "RENAME", undefined, { isDone: next })
+    );
+  };
+
+  const saveWipLimit = () => {
+    if (!editSection) return;
+    const wipLimit = wipLimitDraft.trim() === "" ? null : Number(wipLimitDraft);
+    if (wipLimit !== null && (!Number.isInteger(wipLimit) || wipLimit <= 0 || wipLimit > 2147483647)) {
+      setWipLimitDraft(editSection.wipLimit == null ? "" : String(editSection.wipLimit));
+      toast.error("Work limit must be a positive whole number");
+      return;
+    }
+    if (wipLimit === (editSection.wipLimit ?? null)) return;
+    void queueSave(() =>
+      handleSectionUpdateVis(editSection, "LIMIT", undefined, { wipLimit })
     );
   };
 
@@ -782,7 +821,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
               >
                 {(provided) => (
                   <div {...provided.droppableProps} ref={provided.innerRef}>
-                    {columnRows.map(({ section, taskCount }, _index) => (
+                    {columnRows.map(({ section, taskCount, overLimit }, _index) => (
                         <Draggable
                           key={`section-${_index}`}
                           draggableId={`section-${_index}`}
@@ -804,9 +843,10 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                                   aria-label={`${taskCount} ${
                                     taskCount === 1 ? "task" : "tasks"
                                   }`}
-                                  className="manage-column-task-count shrink-0 text-meta font-medium tabular-nums text-text-light-gray"
+                                  className={`manage-column-task-count shrink-0 text-meta font-medium tabular-nums ${overLimit ? "text-destructive" : "text-text-light-gray"}`}
+                                  title={section.wipLimit == null ? undefined : `${taskCount} active tasks; limit ${section.wipLimit}${overLimit ? "; over limit" : ""}`}
                                 >
-                                  {taskCount}
+                                  {taskCount}{section.wipLimit == null ? "" : ` / ${section.wipLimit}`}
                                 </span>
                               </div>
                               <div className="flex shrink-0 gap-4 items-center">
@@ -863,6 +903,28 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                   if (e.key === "Enter") {
                     onSubmit();
                   }
+                }}
+              />
+            </div>
+
+            <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
+              <label htmlFor="edit-column-wip-limit" className="shrink-0 text-dense font-semibold text-white-black">
+                Work limit
+              </label>
+              <input
+                id="edit-column-wip-limit"
+                className="h-8 w-20 border-0 bg-transparent px-2 text-right text-dense font-medium text-white-black outline-none placeholder:text-text-light-gray focus:bg-active-modal-element"
+                type="number"
+                min={1}
+                max={2147483647}
+                step={1}
+                placeholder="No limit"
+                value={wipLimitDraft}
+                disabled={updating}
+                onChange={(event) => setWipLimitDraft(event.target.value)}
+                onBlur={saveWipLimit}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
                 }}
               />
             </div>

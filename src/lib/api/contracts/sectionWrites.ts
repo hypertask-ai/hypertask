@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const id = z.number().int().positive();
+export const wipLimitSchema = z.number().int().positive().max(2147483647).nullable();
 export const createSectionBodySchema = z.object({
   projectId: id,
   title: z.string(),
@@ -15,6 +16,7 @@ export const updateSectionBodySchema = z.object({
     deleted: z.boolean().optional(),
     visibility: z.boolean().optional(),
     isDone: z.boolean().nullable().optional(),
+    wipLimit: wipLimitSchema.optional(),
   }),
 });
 export const sectionResponseSchema = z.looseObject({

@@ -255,7 +255,9 @@ const TaskStalenessLine = ({
       className={`basis-full text-micro leading-none ${
         level === "hot"
           ? "text-[var(--color-card-age-hot)]"
-          : "text-[var(--color-card-age-warn)]"
+          : level === "warn"
+            ? "text-[var(--color-card-age-warn)]"
+            : "text-text-light-gray"
       }`}
     >
       {ageLine}

@@ -155,3 +155,20 @@ after: no view or board-default change is allowed. Existing labels still
 save their filter. Expected label refusals log warnings; unexpected storage
 failures must still log errors. Local behavior coverage:
 `node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
+
+## Column limits and card age
+
+Open Commands, Manage board columns, then a column's settings. Set **Work
+limit** to a positive whole number, leave the field, and reload the board.
+The existing column count shows active tasks / limit. Above the limit it
+turns red; its accessible label says **over limit**. It remains advisory:
+creating or moving a task is never blocked. Archived and deleted tasks do
+not count. A saved view or filter must not hide the board's total workload.
+Clear the field to remove the limit; reload to prove it stayed cleared.
+
+Settings → Board → Staleness controls the board's age display, warning
+and hot thresholds, and stale reminders. With Staleness enabled, cards
+show days on board and in column, including fresh cards in muted text;
+warning and hot cards retain their existing amber and red treatment.
+Check both desktop and phone in all four themes. Restore the QA board's
+original limit and staleness settings after the run.

@@ -649,6 +649,7 @@ export interface ILabel {
 }
 
 export interface ISection {
+  wipLimit?: number | null;
   section_title: string;
   ranking?: string;
   id?: number;

@@ -40,6 +40,7 @@ import {
   TBoardSubtaskSetting,
 } from "@/models/Views/model";
 import { CommandMode } from "@/models/enums";
+import { getManageColumnRows } from "@/components/Modals/commands/manageColumnTaskCounts";
 import ProgressiveTaskPlaceholder from "../KanbanTaskComponents/ProgressiveTaskPlaceholder";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import {
@@ -460,6 +461,8 @@ export const Section = ({
             >
               <TitleAndTasks
                 itemLen={section.items?.length ?? 0}
+                wipLimit={section.wipLimit}
+                wipCount={section.wipLimit == null ? 0 : getManageColumnRows([section], currentProject.tasks)[0].taskCount}
                 title={section.section_title}
                 id={section.sectionId!}
               />
@@ -612,10 +615,14 @@ export const Section = ({
 
 const TitleAndTasks = ({
   itemLen,
+  wipLimit,
+  wipCount,
   title,
   id,
 }: {
   itemLen: number;
+  wipLimit?: number | null;
+  wipCount: number;
   title: string;
   id: number;
 }) => {
@@ -633,8 +640,12 @@ const TitleAndTasks = ({
         >
           {title}
         </p>
-        <p className="kanban-column-count text-meta font-medium self-center text-text-light-gray mt-[2px]">
-          {itemLen > 0 ? itemLen : null}
+        <p
+          className={`kanban-column-count text-meta font-medium self-center mt-[2px] ${wipLimit != null && wipCount > wipLimit ? "!text-destructive" : "text-text-light-gray"}`}
+          title={wipLimit == null ? undefined : `${wipCount} active tasks; limit ${wipLimit}${wipCount > wipLimit ? "; over limit" : ""}`}
+          aria-label={wipLimit == null ? undefined : `${wipCount} active tasks; limit ${wipLimit}${wipCount > wipLimit ? "; over limit" : ""}`}
+        >
+          {wipLimit == null ? (itemLen > 0 ? itemLen : null) : `${wipCount} / ${wipLimit}`}
         </p>
       </div>
     </>

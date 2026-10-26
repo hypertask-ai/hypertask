@@ -46,7 +46,7 @@ export function formatKanbanStalenessLine(
     "daysOnBoard" | "daysInColumn" | "daysSinceLastComment" | "level"
   > & { commentLevel: StalenessLevel },
 ): string | null {
-  if (staleness.level === "none" || staleness.daysInColumn === null) {
+  if (staleness.daysInColumn === null) {
     return null;
   }
 

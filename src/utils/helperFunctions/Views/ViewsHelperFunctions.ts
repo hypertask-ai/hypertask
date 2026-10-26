@@ -156,6 +156,7 @@ export const getActiveColumnsViewFromProject = (
       ? {
           ...syncSectionAutoAssignFromCanonical(column, section),
           isDone: section.isDone,
+          wipLimit: section.wipLimit,
         }
       : column;
   });

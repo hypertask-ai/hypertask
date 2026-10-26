@@ -1161,6 +1161,7 @@ model Section {
   deleted       Boolean    @default(false)
   ranking       String     @default("A0200")
   isDone        Boolean?
+  wipLimit      Int?
   autoAssignUserId Int?
   autoAssignAgentId String?
   project       Project    @relation(fields: [projectId], references: [id])

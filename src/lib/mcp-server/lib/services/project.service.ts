@@ -63,7 +63,7 @@ export interface BoardManifestResponse {
     title: string;
     position: string;
     role: string;
-    wipLimit: null;
+    wipLimit: number | null;
   }>;
   transitions: string;
 }
