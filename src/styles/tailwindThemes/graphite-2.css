@@ -84,6 +84,7 @@
 
 .graphite-2 {
   --color-text-quiet: #6c6f74;
+  --font-size-description-heading: 15px;
 }
 
 html.graphite-2 {
@@ -94,24 +95,24 @@ html.graphite-2 {
 .graphite-2 .left-sidebar-flyout,
 .graphite-2 .right-sidebar-flyout,
 .graphite-2 .ai-chat-sidebar {
-  background-color: #17181b;
-  border-color: #2a2c31;
+  background-color: var(--bg-containerBackground);
+  border-color: var(--border-light-gray-thin);
 }
 
 .graphite-2 .section-container,
 .graphite-2 .modal-content,
 .graphite-2 .table-view-header,
 .graphite-2 .table-view-row:not(:last-child) {
-  border-color: #2a2c31;
+  border-color: var(--border-light-gray-thin);
 }
 
 .graphite-2 .kanban-task-card,
 .graphite-2 [data-task-properties-rail] {
-  background-color: #1f2125;
+  background-color: var(--bg-cardBackground);
 }
 
 .graphite-2 .kanban-task-card:hover {
-  background-color: #26282d;
+  background-color: var(--bg-hover-active);
 }
 
 .graphite-2 #title-input {
@@ -120,7 +121,7 @@ html.graphite-2 {
 }
 
 .graphite-2 .description-container :is(h1, h2, h3) {
-  font-size: 15px;
+  font-size: var(--font-size-description-heading);
 }
 
 .graphite-2 [data-task-properties-rail] {
@@ -136,7 +137,7 @@ html.graphite-2 {
 .graphite-2 .label-pill,
 .graphite-2 [data-task-properties-rail] .bg-label-span {
   background: transparent !important;
-  color: #9a9ca1 !important;
+  color: var(--color-text-light-gray) !important;
 }
 
 .graphite-2 svg.lucide:not(.keep-stroke) {
