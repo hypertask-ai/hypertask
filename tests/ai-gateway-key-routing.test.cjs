@@ -891,7 +891,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     teamContext,
   });
   assert.equal(legacySelection.provider, "claude");
-  assert.equal(legacySelection.modelId, "claude-haiku-5.5");
+  assert.equal(legacySelection.modelId, "claude-sonnet-5.5");
 });
 
 async function selectFreeTeamDefault() {
