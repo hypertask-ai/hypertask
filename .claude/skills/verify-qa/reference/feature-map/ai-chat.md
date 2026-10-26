@@ -194,3 +194,16 @@ the global cron merely for testing: it wakes other owners' agents. If no
 isolated heartbeat trigger and execution-step telemetry are available through
 approved product surfaces, record the live four-step case as UNREACHABLE;
 do not substitute mocked SDK results for a live heartbeat.
+
+## Following another ticket
+
+With `htpr-7736-chat-follows-task` enabled, pin the sidebar open on a QA
+account's ticket. Send a unique marker, then use Next task or a ticket link
+in the reply. The same conversation and marker must remain visible. Send
+again and inspect `/api/ai/chat/stream`: `session_id` must stay the same,
+while `default_context.task_id` names the newly opened ticket.
+**New chat** must create a separate conversation on the current ticket.
+Creating a ticket through Ctrl+J must still open its own introduction and
+conversation. Switching accounts must never show the previous account's chat.
+Flag off keeps the existing separate conversations per ticket. Compare sidebar
+bounds and composer placement before and after; no controls or layout change.

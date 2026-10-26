@@ -15,14 +15,14 @@ const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSumma
 };
 const staleTime = 1000 * 60 * 3;
 
-export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>) {
+export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: string | number | undefined = taskId) {
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
   const queryClient = useQueryClient();
   const summaryKey = ["chat-session-summaries", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, "history"];
   const transcriptPrefix = ["aiChatTranscript", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG];
   const transcriptKey = (id: string | null) => [...transcriptPrefix, id];
-  const identity = `${user?.uid}:${user?.id}:${taskId}:${enabled}`;
+  const identity = `${user?.uid}:${user?.id}:${selectionScope}:${enabled}`;
   const identityRef = useRef(identity);
   identityRef.current = identity;
   const [selection, setSelection] = useState<{ identity: string; id: string | null }>({ identity, id: null });
@@ -214,7 +214,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
         setCreating(false);
       }
     }
-  }, [identity, ready, queryClient]);
+  }, [identity, ready, queryClient, taskId]);
 
   const selectSession = useCallback(async (sessionId: string) => {
     if (!ready) return;
