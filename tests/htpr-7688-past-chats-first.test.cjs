@@ -287,7 +287,7 @@ test("roster batches authorized agent IDs once and marks only fresh ACTIVE runs 
   assert.deepEqual(body.agents.map(agent => [agent.id, agent.status, agent.deliveryMode]), [
     ["working", "working", "webhook"], ["quiet", null, "polling"], ["stale", null, null], ["done", null, null],
   ]);
-  assert.deepEqual(view.flagReads, [[flag.HTPR_7688_PAST_CHATS_FIRST_FLAG, 6]]);
+  assert.deepEqual(view.flagReads, [["htpr-8048-agent-sessions", 6], [flag.HTPR_7688_PAST_CHATS_FIRST_FLAG, 6]]);
   assert.equal(view.queries.length, 1);
   const query = view.queries[0];
   assert.deepEqual(query.where.agentId.in, ["working", "quiet", "stale", "done"]);

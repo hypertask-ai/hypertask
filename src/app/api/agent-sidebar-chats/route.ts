@@ -26,9 +26,14 @@ export async function GET(request: NextRequest) {
   if (!(await loadSidebarChatBoard(viewer.userId, projectId, viewer.agentId))) {
     return respond({ error: "Board not found" }, 404);
   }
+  const agentSessions = await isFeatureEnabled(HTPR_8048_AGENT_SESSIONS_FLAG, viewer.userId);
+  const agentId = request.nextUrl.searchParams.get("agentId");
+  const before = request.nextUrl.searchParams.get("before");
+  if ((agentId || before) && (!agentSessions || !agentId)) return respond({ error: "Agent sessions unavailable" }, 404);
   const agents = await prisma.agent.findMany({
     where: {
       revokedAt: null, archivedAt: null,
+      ...(agentId ? { id: agentId } : {}),
       ...accessibleAgentWhere(viewer.userId),
       members: { some: { projectId, status: "Accepted" } },
     },
@@ -43,7 +48,6 @@ export async function GET(request: NextRequest) {
     userTeamIds(viewer.userId), getAgentTeamIds(agents.map((agent) => agent.id)),
   ]);
   const pastChatsFirst = await isFeatureEnabled(HTPR_7688_PAST_CHATS_FIRST_FLAG, viewer.userId);
-  const agentSessions = await isFeatureEnabled(HTPR_8048_AGENT_SESSIONS_FLAG, viewer.userId);
   const roster = await Promise.all(agents.map(async (agent) => {
     if (agent.runtimeType === "NATIVE" && agent.userId !== viewer.userId) return null;
     const session = await prisma.chatSession.findUnique({
@@ -59,11 +63,17 @@ export async function GET(request: NextRequest) {
     } else if (agent.userId !== viewer.userId &&
       (!(await isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, agent.userId)) ||
         !teamIds.includes(agentTeamIds.get(agent.id) ?? ""))) return null;
+    if (before) {
+      const access = await loadUserAgentChatSession({ sessionId: before, userId: viewer.userId,
+        sidebarProjectId: projectId, actingAgentId: viewer.agentId, select: {} });
+      if (!access.ok || access.agentId !== agent.id) return null;
+    }
     const sessions = agentSessions ? await prisma.chatSession.findMany({
       where: { userId: agent.userId, agentId: agent.id,
         OR: [{ userId: viewer.userId }, { teamId: { in: teamIds } }] },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: 50,
+      take: 51,
+      ...(before ? { cursor: { id: before }, skip: 1 } : {}),
       select: { id: true, title: true, updatedAt: true, createdAt: true },
     }) : [];
     let status: string | null = null;
@@ -75,7 +85,7 @@ export async function GET(request: NextRequest) {
     return {
       id: agent.id, displayName: agent.displayName, photoURL: agent.photoURL,
       runtimeType: agent.runtimeType, sessionId: session?.id ?? null,
-      ...(agentSessions ? { sessions } : {}),
+      ...(agentSessions ? { sessions: sessions.slice(0, 50), hasMoreSessions: sessions.length > 50 } : {}),
       status,
       deliveryMode: agentChatDeliveryMode({ heartbeatAt: agent.heartbeatAt, subscription: agent.agentWebhookSubscription }),
     };

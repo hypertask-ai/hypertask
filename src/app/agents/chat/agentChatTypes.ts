@@ -36,6 +36,7 @@ export type SidebarChatAgent = {
   runtimeType: "NATIVE" | "EXTERNAL";
   sessionId: string | null;
   draftKey?: string;
+  hasMoreSessions?: boolean;
   sessions?: Pick<import("@/models/model").IChatSession, "id" | "title" | "createdAt" | "updatedAt">[];
   status: "connected" | "working" | "waiting" | "stalled" | "offline" | null;
   deliveryMode: "webhook" | "polling" | null;
@@ -55,6 +56,7 @@ export interface SidebarChatContext {
   onRetry: () => void;
   onSelectAgentSession?: (agent: SidebarChatAgent, sessionId: string) => void;
   onStartAgentSession?: (agent: SidebarChatAgent) => void;
+  onLoadMoreAgentSessions?: (agent: SidebarChatAgent) => void;
 }
 
 

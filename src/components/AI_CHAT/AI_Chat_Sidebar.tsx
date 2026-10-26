@@ -79,6 +79,29 @@ export const AI_Chat_Sidebar = ({
     }
   }, [enabled, projectId]);
 
+  const loadingAgentPages = useRef(new Set<string>());
+  const loadMoreAgentSessions = async (agent: SidebarChatAgent) => {
+    const before = agent.sessions?.at(-1)?.id;
+    if (!agentSessionsEnabled || !projectId || !before || !agent.hasMoreSessions || loadingAgentPages.current.has(agent.id)) return;
+    const generation = rosterGeneration.current;
+    loadingAgentPages.current.add(agent.id);
+    try {
+      const response = await fetch(`/api/agent-sidebar-chats?projectId=${projectId}&agentId=${encodeURIComponent(agent.id)}&before=${encodeURIComponent(before)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || !data.success || !Array.isArray(data.agents)) throw new Error(data.error ?? "Could not load older sessions");
+      if (generation !== rosterGeneration.current) return;
+      const page: SidebarChatAgent | undefined = data.agents.find((item: SidebarChatAgent) => item.id === agent.id);
+      if (!page) throw new Error("Agent sessions unavailable");
+      setAgents((previous) => previous.map((item) => item.id === agent.id ? {
+        ...item, hasMoreSessions: page.hasMoreSessions,
+        sessions: [...new Map([...(item.sessions ?? []), ...(page.sessions ?? [])].map((session) => [session.id, session])).values()],
+      } : item));
+      setRosterError(null);
+    } catch (error) {
+      if (generation === rosterGeneration.current) setRosterError(error instanceof Error ? error.message : "Could not load older sessions");
+    } finally { loadingAgentPages.current.delete(agent.id); }
+  };
+
   const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, options?: { sessionId?: string; newSession?: boolean; mentionHtml?: string; mentionText?: string }) => {
     const intent = ++intentRef.current;
     if (next.kind !== "ai" && !sidebarEnabled) return;
@@ -299,6 +322,7 @@ export const AI_Chat_Sidebar = ({
           onSelect: (next) => void selectTarget(next), onSelectSession: pastChatsFirst ? (id) => void selectTarget({ kind: "ai" }, id) : chat.selectSession, onRetry: () => void loadRoster(),
           ...(agentSessionsEnabled ? {
             onSelectAgentSession: (agent: SidebarChatAgent, sessionId: string) => void selectTarget({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId }),
+            onLoadMoreAgentSessions: (agent: SidebarChatAgent) => void loadMoreAgentSessions(agent),
             onStartAgentSession: (agent: SidebarChatAgent) => void selectTarget({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { newSession: true }),
           } : {}) } : undefined} />
 

@@ -171,6 +171,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     } else if (mentionData.type === "agent") {
       if (agentSessionsEnabled && editor?.view.dom.closest('[data-testid="ai-sidebar"]')) {
         window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: mentionData.id, html: editor.getHTML() } }));
+        return;
       }
       setContextList((prev) => {
         const exists = prev.some(

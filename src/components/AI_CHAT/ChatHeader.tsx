@@ -316,6 +316,12 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
             </ul>
           </div>
         )}
+        {agentSessionsEnabled && sidebarChats?.agents.some((agent) => agent.hasMoreSessions) && (
+          <button type="button" className="w-full px-3 py-2 text-left text-content text-icon-dark-gray hover:bg-active-modal-element"
+            onClick={() => sidebarChats.agents.filter((agent) => agent.hasMoreSessions).forEach((agent) => sidebarChats.onLoadMoreAgentSessions?.(agent))}>
+            Show older agent sessions
+          </button>
+        )}
         {sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
     );

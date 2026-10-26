@@ -85,7 +85,7 @@ test("flag Off denies new-session operations while preserving the default conver
 function picker({ agentsOnly = true, agents = [{ id: "agent", displayName: "Runner", runtimeType: "EXTERNAL", sessions: [{ id: "saved", title: "Fix inbox" }] }] } = {}) {
   const slots = [];
   let cursor = 0;
-  const selected = [], started = [];
+  const selected = [], started = [], pages = [];
   let closed = 0;
   const noop = () => {};
   const react = { useContext: () => false, useEffect: noop, useMemo: (fn) => fn(), useRef: (current) => slots[cursor++] ??= { current },
@@ -111,9 +111,9 @@ function picker({ agentsOnly = true, agents = [{ id: "agent", displayName: "Runn
     for (const child of [element.props?.children].flat(Infinity)) { const found = find(child); if (found) return found; }
     return null;
   }
-  return { selected, started, get closed() { return closed; }, render() { cursor = 0; return find(loadedModule.exports.AgentSidebarChatCommands({ agentsOnly,
+  return { selected, started, pages, get closed() { return closed; }, render() { cursor = 0; return find(loadedModule.exports.AgentSidebarChatCommands({ agentsOnly,
     context: { target: { kind: "ai" }, agents, error: null, onSelect: (target) => selected.push(target),
-      onSelectAgentSession: (agent, id) => selected.push([agent.id, id]), onStartAgentSession: (agent) => started.push(agent.id) },
+      onSelectAgentSession: (agent, id) => selected.push([agent.id, id]), onStartAgentSession: (agent) => started.push(agent.id), onLoadMoreAgentSessions: (agent) => pages.push(agent.id) },
     anchorRef: { current: { focus: noop } }, onClose: () => closed++ })); } };
 }
 
@@ -148,4 +148,68 @@ test("the feature has an Everyone default and a reversible server/client flag", 
   assert.equal(definition.kind, "feature");
   assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.releaseRisk.risk, "new");
+});
+
+
+test("Show more keeps the picker open while requesting the next agent page", () => {
+  const view = picker({ agents: [{ id: "agent", displayName: "Runner", hasMoreSessions: true, sessions: [{ id: "latest", title: "Latest" }] }] });
+  let rows = view.render();
+  rows.onClickHandler(rows.commandLists[0]);
+  rows = view.render();
+  rows.onClickHandler(rows.commandLists.find((row) => row.name === "Show more"));
+  assert.deepEqual(view.pages, ["agent"]);
+  assert.equal(view.closed, 0);
+  assert.deepEqual(view.selected, []);
+});
+
+test("roster paging reaches session 101 without exposing another team's titles", async () => {
+  let enabled = true;
+  const sessions = Array.from({ length: 101 }, (_, index) => ({ id: `saved-${index}`, title: `Session ${index}`, userId: 6, agentId: "agent", teamId: "team" }));
+  sessions.push({ id: "private", title: "Other team", userId: 6, agentId: "agent", teamId: "other-team" });
+  const queries = [];
+  const { GET } = load("src/app/api/agent-sidebar-chats/route.ts", {
+    "@/lib/prisma": { default: {
+      agent: { findMany: async () => [{ id: "agent", userId: 6, runtimeType: "EXTERNAL", displayName: "Runner", agentWebhookSubscription: null }] },
+      chatSession: {
+        findUnique: async () => ({ id: "default-session" }),
+        findMany: async (query) => {
+          queries.push(query);
+          const rows = sessions.filter((row) => row.userId === query.where.userId && row.agentId === query.where.agentId &&
+            query.where.OR.some((condition) => condition.userId === row.userId || condition.teamId?.in.includes(row.teamId)));
+          const start = query.cursor ? rows.findIndex((row) => row.id === query.cursor.id) + query.skip : 0;
+          return rows.slice(start, start + query.take);
+        },
+      },
+      agentRun: { findMany: async () => [] },
+    } },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
+    "@/lib/agents/chatAccess": {
+      loadSidebarChatBoard: async () => ({ id: 15 }), userTeamIds: async () => ["team"],
+      loadUserAgentChatSession: async ({ sessionId }) => ({ ok: sessionId !== "private", agentId: sessionId === "wrong-agent" ? "different" : "agent" }),
+    },
+    "@/lib/agents/chatService": { openAgentChat: async () => assert.fail("GET must not create sessions") },
+    "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}) },
+    "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", isFeatureEnabled: async (key) => key === FLAG ? enabled : true },
+    "@/utils/controllers/agents/boardMembers": { getAgentTeamIds: async () => new Map([["agent", "team"]]) },
+    "@/lib/agents/chatAvailability": { agentChatDeliveryMode: () => null, hasFreshAgentChatHeartbeat: () => false },
+    "@/lib/agents/runtimeState": {},
+    "@/lib/api/rateLimit": {}, "@/lib/agentRuns/service": {},
+  });
+  const get = (query = "") => GET({ headers: new Headers(), nextUrl: new URL(`https://app.hypertask.ai/api/agent-sidebar-chats?projectId=15${query}`) });
+  const first = (await (await get()).json()).agents[0];
+  assert.equal(first.sessions.length, 50);
+  assert.equal(first.hasMoreSessions, true);
+  const second = (await (await get("&agentId=agent&before=saved-49")).json()).agents[0];
+  assert.equal(second.sessions[0].id, "saved-50");
+  assert.equal(second.hasMoreSessions, true);
+  const third = (await (await get("&agentId=agent&before=saved-99")).json()).agents[0];
+  assert.deepEqual(third.sessions.map((row) => row.id), ["saved-100"]);
+  assert.equal(third.hasMoreSessions, false);
+  assert.deepEqual((await (await get("&agentId=agent&before=private")).json()).agents, []);
+  assert.deepEqual((await (await get("&agentId=agent&before=wrong-agent")).json()).agents, []);
+  assert.equal(queries.length, 3);
+  enabled = false;
+  assert.equal((await get("&agentId=agent&before=saved-49")).status, 404);
+  const legacy = (await (await get()).json()).agents[0];
+  assert.equal(Object.hasOwn(legacy, "sessions"), false);
 });

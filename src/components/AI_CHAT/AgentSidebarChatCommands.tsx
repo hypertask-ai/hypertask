@@ -39,6 +39,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
     ...(expandedAgentId === agent.id ? [
       { key: `new:${agent.id}`, name: "Start a new session", commandMode: CommandMode.GoToAgentChat },
       ...(agent.sessions ?? []).map((session) => ({ key: `agent-session:${session.id}`, name: session.title, payload: agent.id, commandMode: CommandMode.GoToAgentChat })),
+      ...(agent.hasMoreSessions ? [{ key: `more-agent:${agent.id}`, name: "Show more", payload: agent.id, commandMode: CommandMode.GoToAgentChat }] : []),
     ] : []),
   ]) : [
     { key: "ai", name: "AI chat", commandMode: CommandMode.GoToAgentChat },
@@ -63,6 +64,10 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
     if (agentsOnly) {
       const agent = context.agents.find((item) => item.id === command.key || item.id === command.payload || `new:${item.id}` === command.key);
       if (!agent) return;
+      if (command.key.startsWith("more-agent:")) {
+        context.onLoadMoreAgentSessions?.(agent);
+        return;
+      }
       if (command.key === agent.id) {
         setExpandedAgentId((previous) => previous === agent.id ? null : agent.id);
         return;
