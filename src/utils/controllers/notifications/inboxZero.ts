@@ -53,6 +53,7 @@ const inboxZeroNotificationSelect = (userId: number, safeUpdates = false) => ({
   fromAgentId: true,
   directReply: true,
   taskId: true,
+  ...(safeUpdates ? { comment: { select: { activity: true } } } : {}),
   task: {
     select: {
       status: true,
@@ -268,6 +269,7 @@ const previewVersionFor = (
         fromAgentId: notification.fromAgentId,
         ...(rules.safeUpdates ? {
           directReply: notification.directReply,
+          activity: notification.comment?.activity,
           safety: notification.task ? {
             blockerCommentId: notification.task.blockerCommentId,
             waitingOnUserId: notification.task.waitingOnUserId,
@@ -331,7 +333,9 @@ export const evaluateInboxZero = (
         task._count.decisionRequests === 0 &&
         !task.description?.includes(`name-${userId}`) &&
         item.notifications.every((notification) =>
-          pureUpdateTypes.has(notification.type) &&
+          (pureUpdateTypes.has(notification.type) ||
+            (notification.type === NotificationType.Comment &&
+              Boolean(notification.fromAgentId) && notification.comment?.activity != null)) &&
           notification.directReply === false &&
           (!rules.safeUpdates?.agentOnly || Boolean(notification.fromAgentId))
         )

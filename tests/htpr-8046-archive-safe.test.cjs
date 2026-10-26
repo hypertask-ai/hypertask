@@ -144,3 +144,13 @@ test("new protected work returns a refreshed preview, without archiving the conf
   assert.equal(body.preview.totalLeft, 1);
   assert.equal(writes, 0);
 });
+
+
+test("agent activity can clear, but human and ordinary agent comments stay", () => {
+  const activity = { type: "Comment", comment: { activity: { action: "task.updated" } } };
+  assert.deepEqual(evaluate([row(1, activity)], rules(true)).notificationIds, [1]);
+  assert.deepEqual(evaluate([row(1, { ...activity, fromAgentId: null })]).notificationIds, []);
+  assert.deepEqual(evaluate([row(1, { type: "Comment", comment: { activity: null } })]).notificationIds, []);
+  const before = evaluate([row(1, activity)]).previewVersion;
+  assert.notEqual(evaluate([row(1, { type: "Comment", comment: { activity: null } })]).previewVersion, before);
+});
