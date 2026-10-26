@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { FileText, Plus, Search } from "lucide-react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -17,9 +16,8 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { listBrowserPages } from "@/lib/pages/browser";
 import { useRecoilValue } from "@/lib/state";
 import type { IProject, IUser } from "@/models/model";
-import { appShellRailAtom, currentProjectAtom, showCommandsAtom } from "@/store";
+import { appShellRailAtom, currentProjectAtom } from "@/store";
 
-const HypertasksCommands = dynamic(() => import("@/components/commands"), { ssr: false });
 const createdPageSchema = z.object({ page: z.object({ publicId: z.string() }) });
 
 export default function PagesListScreen({ currentUser }: { currentUser: IUser }) {
@@ -28,7 +26,6 @@ export default function PagesListScreen({ currentUser }: { currentUser: IUser })
   const currentProject = useRecoilValue(currentProjectAtom);
   const showRail = useRecoilValue(appShellRailAtom);
   const isMobile = useContext(MobileViewContext);
-  const showCommands = useRecoilValue(showCommandsAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal(["projectsAllMinimal"]);
   const availableProjects: IProject[] = Array.isArray(projects) ? projects : [];
   const projectId = Number(searchParams?.get("project_id")) || currentProject?.id;
@@ -89,7 +86,6 @@ export default function PagesListScreen({ currentUser }: { currentUser: IUser })
   return (
     <>
       {railOn && <AppShellRail variant="global" currentUser={currentUser} />}
-      {showCommands.show && <HypertasksCommands />}
       {pickingBoard && (
         <OptionPickerModal
           header="New page: choose board"
