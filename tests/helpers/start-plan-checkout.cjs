@@ -104,6 +104,9 @@ function harness() {
   const controller = load("src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts", {
     "@/lib/prisma": prisma,
     "@/lib/deriveCurrentBoardBilling": billing,
+    "@/lib/teamComp": jiti(path.join(root, "src/lib/teamComp.ts")),
+    "@/lib/internalCompTeams": jiti(path.join(root, "src/lib/internalCompTeams.ts")),
+    "@/lib/flags/definitions/htpr-7980-stripe-portal-billing": load("src/lib/flags/definitions/htpr-7980-stripe-portal-billing.ts"),
     "@/lib/flags": { isFeatureEnabled: async (key, id) => {
       if (key === "htpr-7938-fourteen-day-trial") {
         h.trialFlagReads ??= []; h.trialFlagReads.push(id);
