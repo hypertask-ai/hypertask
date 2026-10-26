@@ -77,6 +77,7 @@ const AITaskWriterContainer: React.FC<
   EscapeHandler,
   returnTitleAndDescription,
   applyCreateTaskResult,
+  onCreateTaskFailure,
   mobileCreateTask,
   projectLabels,
   projectSections,
@@ -136,6 +137,8 @@ const AITaskWriterContainer: React.FC<
   const hasAutoTriggered = useRef(false);
   const hasSeededPrompt = useRef(false);
   const appliedCreateResponseRef = useRef("");
+  const [mobileRequestFinished, setMobileRequestFinished] = useState(false);
+  const mobileFallbackAttemptedRef = useRef(false);
   const hasFocusedMobilePrompt = useRef(false);
   const mobilePromptVisibilityObserver = useRef<MutationObserver | null>(null);
   const mobilePromptCanFocus = useRef(true);
@@ -231,15 +234,18 @@ const AITaskWriterContainer: React.FC<
       const taskTitle = document.getElementById(
         DIV_ID_CONSTANTS.titleInputModal,
       )?.innerHTML;
+      if (onCreateTaskFailure) setMobileRequestFinished(false);
       void sendAIRequest(
         buildTaskWriterPrompt(initialPrompt, taskTitle),
         loadingMessage,
         presentation === "description-suggestion"
           ? "auto-description"
           : "manual",
-      );
+      ).finally(() => {
+        if (onCreateTaskFailure) setMobileRequestFinished(true);
+      });
     },
-    [initialPrompt, presentation, sendAIRequest],
+    [initialPrompt, onCreateTaskFailure, presentation, sendAIRequest],
   );
 
   const onClickHandler = useCallback(() => {
@@ -399,6 +405,19 @@ const AITaskWriterContainer: React.FC<
       projectAssignees,
     ]
   );
+
+  useEffect(() => {
+    if (isLoading) {
+      mobileFallbackAttemptedRef.current = false;
+      return;
+    }
+    if (!isMobileCreateFlow || !onCreateTaskFailure || mobileFallbackAttemptedRef.current) return;
+    if (!hasError && !isByokBlocked && !(mobileRequestFinished && !currentDisplayResponse)) return;
+    mobileFallbackAttemptedRef.current = true;
+    void onCreateTaskFailure().then((handled) => {
+      if (handled) clearHistory();
+    });
+  }, [clearHistory, currentDisplayResponse, hasError, isByokBlocked, isLoading, isMobileCreateFlow, mobileRequestFinished, onCreateTaskFailure]);
 
   useEffect(() => {
     if (

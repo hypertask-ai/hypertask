@@ -1,5 +1,6 @@
 import { PlanLimitRefusal } from "@/lib/planLimitsClient";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
+import { HTPR_8028_MOBILE_WRITER_SAVE_FLAG } from "@/lib/flags/definitions/htpr-8028-mobile-writer-save";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -182,11 +183,13 @@ const TiptapCreateTaskModal = () => {
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const mobileWriterSaveFlag = useFlag(HTPR_8028_MOBILE_WRITER_SAVE_FLAG);
+  const mobileWriterSave = Boolean(isMbl && mobileWriterSaveFlag);
   const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
   let composeShortcutCapture = true;
   if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
   let newTaskWindow = false;
-  if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
+  if (composeEnabled && newTaskWindowFlag && !mobileWriterSave) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const [writerOpen, setShouldShowAITaskWriter] = useState(
@@ -1006,6 +1009,13 @@ const TiptapCreateTaskModal = () => {
                 projectAssignees={projectAssignees}
                 mobileCreateTask={mobileCreateTask}
                 applyCreateTaskResult={applyCreateTaskResult}
+                onCreateTaskFailure={mobileWriterSave ? async () => {
+                  const description = editor?.getHTML() ?? formValues.description;
+                  const title = getCurrentTitle() || editor?.getText().trim().slice(0, 500) || "";
+                  if (!title) return false;
+                  applyTaskWriterTitle(title);
+                  return (await CtrlEnterHandler("Save", { ...formValues, title, description })) === true;
+                } : undefined}
                 project={projectForContext}
                 EscapeHandler={() => {
                   closeAiTaskWriter();

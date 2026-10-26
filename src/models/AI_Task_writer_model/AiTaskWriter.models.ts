@@ -71,6 +71,7 @@ export interface IAITaskWriterContainerProps {
     projectId: number | undefined,
   ) => Promise<boolean>;
   mobileCreateTask?: IMobileCreateTaskWriter;
+  onCreateTaskFailure?: () => Promise<boolean>;
   returnUserInputHandler?: (input: string) => void;
   triggerAIWriterConfirm?: boolean;
   createTask?: boolean;
