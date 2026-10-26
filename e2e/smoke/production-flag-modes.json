@@ -54,7 +54,6 @@
     "htpr-6906-autocap-undo": "OWNER_AND_QA",
     "htpr-6921-slack-marketplace": "OWNER_AND_QA",
     "htpr-6924-rest-compat": "EVERYONE",
-    "htpr-6925-typed-api-client": "EVERYONE",
     "htpr-6929-compose-task-writer": "EVERYONE",
     "htpr-6934-server-first-screen": "EVERYONE",
     "htpr-6936-ask-ai-fullscreen": "EVERYONE",
