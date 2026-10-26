@@ -85,6 +85,7 @@ test("board scope is checked before counts, only public views are loaded, and th
   assert.deepEqual(calls[0].where, { id: 15, status: "Normal", ownerId: 985 });
   assert.deepEqual(calls[0].select.project_view.select.allViews.where, { visibility: "Public" });
   assert.deepEqual(calls[0].select.section.where, { deleted: false });
+  assert.deepEqual(calls[0].select.section.orderBy, { ranking: "asc" });
   assert.deepEqual(calls[0].select.labels.select._count.select.task.where, { task: { status: "Normal" } });
   assert.deepEqual(calls[1].where, { projectId: 15, status: "Normal", OR: [{ sectionId: { in: [1, 4] } }, { sectionId: null }], taskLabels: { none: {} } });
   accessible = false;
