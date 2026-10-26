@@ -152,3 +152,19 @@ test("first enable preserves the previous browser-wide drag", async (t) => {
     await React.act(async () => root.unmount());
   }
 });
+
+test("an untouched default keeps existing viewport clamping", async (t) => {
+  const app = await fixture(t);
+  assert.equal(app.width(), 420);
+  assert.equal(app.store.get(atoms.aiChatSidebarPreferredWidthsAtom), null);
+  await app.resize(390);
+  assert.equal(app.width(), 340);
+  await app.resize(1440);
+  assert.equal(app.width(), 340);
+  await app.drag(80);
+  assert.equal(app.width(), 420);
+  await app.resize(390);
+  assert.equal(app.width(), 340);
+  await app.resize(1440);
+  assert.equal(app.width(), 420, "a deliberate drag to the default width is remembered");
+});
