@@ -1,6 +1,7 @@
 "use client";
 
 import AgentAvatar from "@/components/Agents/AgentAvatar";
+import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { AI_Tiptap_Container } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
@@ -116,6 +117,7 @@ export function AgentChatPane({
   composerLocked, isDictationProcessing, setIsRecording, setIsDictationProcessing, insertDictation,
   mobileFullscreenFlag, dictationProjectId, isRecording, handleSend,
 }: Props) {
+  const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const contextEnabled = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
   useEffect(() => {
     if (embedded && !active) setIsRecording(false);
@@ -329,6 +331,7 @@ export function AgentChatPane({
               )}
               {reuseAiComposer ? (
                 <AI_Tiptap_Container
+                  sidebarAgent={agentSessionsEnabled && embedded ? selectedAgent.displayName : undefined}
                   controlledComposer={{
                     ...(contextEnabled && embedded ? { showScope: true } : {}),
                     value: draft,

@@ -1,3 +1,5 @@
+import { LinkableMention } from "@/components/RTE/Extensions/LinkableMention";
+import { createMentionData } from "@/components/RTE/Components/AI_Chat/MentionData";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -18,7 +20,9 @@ export function ControlledComposerEditor({
   ariaLabel,
   editorRef,
   onEditor,
+  agentMentionProjectId,
 }: {
+  agentMentionProjectId?: number;
   value: string;
   onChange: (value: string, cursor: number) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
@@ -27,6 +31,9 @@ export function ControlledComposerEditor({
   editorRef?: RefObject<Editor | null>;
   onEditor: (editor: Editor | null) => void;
 }) {
+  const activeEditor = useRef<Editor | null>(null);
+  const projectIdRef = useRef(agentMentionProjectId);
+  projectIdRef.current = agentMentionProjectId;
   const placeholderRef = useRef(placeholder);
   placeholderRef.current = placeholder;
   const onChangeRef = useRef(onChange);
@@ -44,6 +51,16 @@ export function ControlledComposerEditor({
         gapcursor: false,
         link: { autolink: false },
       }),
+      ...(agentMentionProjectId ? [LinkableMention.configure({
+        HTMLAttributes: { class: "mention" },
+        suggestion: createMentionData((item: { type: string; id: string | number }) => {
+          if (item.type === "agent" && activeEditor.current) {
+            window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: {
+              agentId: item.id, html: activeEditor.current.getHTML(), text: activeEditor.current.getText(),
+            } }));
+          }
+        }, () => projectIdRef.current),
+      })] : []),
       SafeSplitBlock,
       Placeholder.configure({
         placeholder: () => placeholderRef.current,
@@ -71,7 +88,8 @@ export function ControlledComposerEditor({
       const before = next.state.doc.textBetween(0, next.state.selection.from);
       onChangeRef.current(text, before.length);
     },
-  });
+  }, [!!agentMentionProjectId]);
+  activeEditor.current = editor;
 
   useEffect(() => {
     onEditor(editor);

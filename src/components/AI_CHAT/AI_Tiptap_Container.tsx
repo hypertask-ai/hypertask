@@ -53,6 +53,7 @@ import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles"
 import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
+import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
@@ -98,11 +99,14 @@ export function AI_Tiptap_Container({
   controlledComposer,
   disabled = false,
   active = true,
+  sidebarAgent,
 }: {
   controlledComposer?: ControlledComposer;
   disabled?: boolean;
   active?: boolean;
+  sidebarAgent?: string;
 } = {}) {
+  const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
@@ -145,6 +149,7 @@ export function AI_Tiptap_Container({
     fileItems,
     removeFile,
   } = useAiChatContext();
+  const visibleContextList = sidebarAgent ? contextList.filter((item) => item.type !== "agent") : contextList;
   const [audioProcessing, setAudioProcessing] = useState(false);
   const screenshotInputRef = useRef<HTMLInputElement>(null);
   const mobileDictating = Boolean(
@@ -287,8 +292,8 @@ export function AI_Tiptap_Container({
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
           >
             <ContextList
-              items={contextList}
-              onClick={handleRemoveContext}
+              items={visibleContextList}
+              onClick={(index) => handleRemoveContext(contextList.indexOf(visibleContextList[index]))}
               mobile
             />
             <AddContextButton onClick={handleAddContext} mobile />
@@ -320,8 +325,10 @@ export function AI_Tiptap_Container({
             />
           </div>
         )}
-        {!controlledComposer && !isMbl && contextList.length > 0 && (
-          <ContextList items={contextList} onClick={handleRemoveContext} />
+        {sidebarAgent && <ContextList mobile={isMbl} items={[{ type: "agent", id: sidebarAgent, name: `@${sidebarAgent}`, photoURL: null }]}
+          onClick={() => window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: null } }))} />}
+        {!controlledComposer && !isMbl && visibleContextList.length > 0 && (
+          <ContextList items={visibleContextList} onClick={(index) => handleRemoveContext(contextList.indexOf(visibleContextList[index]))} />
         )}
         <div
           className={`
@@ -344,6 +351,7 @@ export function AI_Tiptap_Container({
           {controlledComposer ? (
             controlledComposer.useTiptapEditor ? (
               <ControlledComposerEditor
+                agentMentionProjectId={agentSessionsEnabled ? controlledComposer.projectId ?? undefined : undefined}
                 value={controlledComposer.value}
                 onChange={controlledComposer.onChange}
                 onKeyDown={controlledComposer.onKeyDown}

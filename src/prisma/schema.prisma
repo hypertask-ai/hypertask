@@ -2507,6 +2507,7 @@ model ChatSession {
   taskId Int? // Deliberately no FK: tasks can be hard-deleted while chat history remains.
   projectId Int? // Deliberately no FK: projects can be deleted while chat history remains.
   agentId String? // Set when this session's conversation target is a native agent.
+  agentSessionKey String @default("default")
   agent Agent? @relation(fields: [agentId], references: [id])
   // The team this conversation belongs to, written once the first time the
   // thread is opened while the agent is on a team's board, and never rewritten.
@@ -2533,11 +2534,7 @@ model ChatSession {
   // Covers the team foreign key, which Postgres does not index for us: a team
   // deletion has to find the sessions pointing at it to null them out.
   @@index([teamId])
-  // One thread per agent: enforced in the DB (not just app-level dedup) so
-  // two concurrent "open this agent's chat" requests can't create two
-  // sessions. Postgres treats NULL as distinct, so plain (taskId-only or
-  // blank) sessions are unaffected.
-  @@unique([userId, agentId])
+  @@unique([userId, agentId, agentSessionKey], name: "userId_agentId")
   // Backs the sweep's stale-session scan (src/pages/api/queues/sweep.ts).
   @@index([updatedAt])
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
@@ -35,6 +36,7 @@ export const AI_Chat_Sidebar = ({
 }) => {
   const chat = useAiChatContext();
   const { showWelcomeScreen, minimized } = chat;
+  const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
@@ -77,22 +79,27 @@ export const AI_Chat_Sidebar = ({
     }
   }, [enabled, projectId]);
 
-  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string) => {
+  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, options?: { sessionId?: string; newSession?: boolean; mentionHtml?: string; mentionText?: string }) => {
     const intent = ++intentRef.current;
     if (next.kind !== "ai" && !sidebarEnabled) return;
+    const mentionText = options?.mentionText ?? (options?.mentionHtml ? chatRef.current.editor?.getText() ?? "" : undefined);
     let nativeSessionId: string | null = null;
-    if (next.kind === "native-agent") {
+    if (next.kind === "native-agent" || (agentSessionsEnabled && next.kind === "external-agent")) {
+      const agentId = next.agent.id;
       try {
         const response = await fetch("/api/agent-sidebar-chats", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectId, agentId: next.agent.id }) });
+          body: JSON.stringify({ projectId, agentId: next.agent.id, ...(agentSessionsEnabled ? { sessionId: options?.sessionId, newSession: options?.newSession } : {}) }) });
         const data = await response.json();
         if (!response.ok || !data.success || !data.session?.id) throw new Error(data.error ?? "Could not open chat");
         if (intent !== intentRef.current) return;
         if (target.kind !== "native-agent" && !chat.currentSession?.agentId) aiSessionRef.current = chat.currentSession?.id ?? null;
-        await AI_Chat_API.getSessionTranscript(data.session.id, undefined, projectId);
+        if (next.kind === "native-agent") await AI_Chat_API.getSessionTranscript(data.session.id, undefined, projectId);
         await queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
         if (intent !== intentRef.current) return;
-        nativeSessionId = data.session.id;
+        if (next.kind === "native-agent") nativeSessionId = data.session.id;
+        if (agentSessionsEnabled) next = { ...next, agent: { ...next.agent, sessionId: data.session.id,
+          draftKey: data.session.id === agents.find((agent) => agent.id === agentId)?.sessionId ? undefined : `${next.agent.id}:${data.session.id}` } };
+        if (options?.newSession) void loadRoster();
       } catch (error) {
         if (intent !== intentRef.current) return;
         setRosterError(error instanceof Error ? error.message : "Could not open chat");
@@ -106,9 +113,9 @@ export const AI_Chat_Sidebar = ({
     const latest = chatRef.current;
     const leaving = targetRef.current;
     if (leaving.kind !== "external-agent") {
-      const key = leaving.kind === "native-agent" ? leaving.agent.id : "ai";
+      const key = leaving.kind === "native-agent" ? (leaving.agent.draftKey ?? leaving.agent.id) : "ai";
       drafts.current.set(key, { html: latest.editor?.getHTML() ?? "", files: [...latest.fileItems] });
-      if (leaving.kind === "native-agent") writeDraft(currentUser.id, leaving.agent.id, latest.editor?.getText() ?? "");
+      if (leaving.kind === "native-agent") writeDraft(currentUser.id, leaving.agent.draftKey ?? leaving.agent.id, latest.editor?.getText() ?? "");
     }
     if (aiSessionId) {
       setTarget(next);
@@ -125,20 +132,53 @@ export const AI_Chat_Sidebar = ({
       }
       setTarget(next);
     }
+    if (agentSessionsEnabled) {
+      try {
+        const storageKey = `agentChat.sidebar.${currentUser.id}.${projectId}`;
+        if (next.kind === "ai") sessionStorage.removeItem(storageKey);
+        else sessionStorage.setItem(storageKey, JSON.stringify({ agentId: next.agent.id, sessionId: next.agent.sessionId }));
+      } catch {}
+    }
     if (next.kind === "external-agent") {
       if (leaving.kind === "native-agent") {
         const stored = drafts.current.get("ai");
         latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
         latest.resetFiles(stored?.files ?? []);
       }
-      setVisited((previous) => previous.some((agent) => agent.id === next.agent.id) ? previous : [...previous, next.agent]);
+      const selectedAgent = next.agent;
+      setVisited((previous) => previous.some((agent) => agent.id === selectedAgent.id && agent.sessionId === selectedAgent.sessionId) ? previous : [...previous, selectedAgent]);
+      if (mentionText !== undefined) writeDraft(currentUser.id, selectedAgent.draftKey ?? selectedAgent.id, mentionText);
     } else {
-      const stored = drafts.current.get(next.kind === "native-agent" ? next.agent.id : "ai") ??
-        (next.kind === "native-agent" ? { html: readDraft(currentUser.id, next.agent.id), files: [] } : undefined);
-      latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
+      const stored = drafts.current.get(next.kind === "native-agent" ? (next.agent.draftKey ?? next.agent.id) : "ai") ??
+        (next.kind === "native-agent" ? { html: readDraft(currentUser.id, next.agent.draftKey ?? next.agent.id), files: [] } : undefined);
+      latest.editor?.commands.setContent(options?.mentionHtml ?? stored?.html ?? "", { emitUpdate: false });
       latest.resetFiles(stored?.files ?? []);
     }
   };
+  const restoredSelection = useRef(false);
+  useEffect(() => { restoredSelection.current = false; }, [projectId, currentUser?.id]);
+  useEffect(() => {
+    if (!agentSessionsEnabled || !sidebarEnabled || !agents.length || restoredSelection.current) return;
+    restoredSelection.current = true;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(`agentChat.sidebar.${currentUser.id}.${projectId}`) ?? "null");
+      const agent = agents.find((item) => item.id === saved?.agentId);
+      if (agent && agent.sessions?.some((session) => session.id === saved.sessionId)) {
+        void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId: saved.sessionId });
+      }
+    } catch {}
+  }, [agentSessionsEnabled, sidebarEnabled, agents, currentUser?.id, projectId]);
+  useEffect(() => {
+    if (!agentSessionsEnabled || !sidebarEnabled) return;
+    const choose = (event: Event) => {
+      const detail = (event as CustomEvent<{ agentId: string | null; html?: string; text?: string }>).detail;
+      if (detail.agentId === null) { void selectTargetRef.current({ kind: "ai" }); return; }
+      const agent = agents.find((item) => item.id === detail.agentId);
+      if (agent) void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { mentionHtml: detail.html, mentionText: detail.text });
+    };
+    window.addEventListener("ht-sidebar-agent-selected", choose);
+    return () => window.removeEventListener("ht-sidebar-agent-selected", choose);
+  }, [agentSessionsEnabled, sidebarEnabled, agents]);
   const selectTargetRef = useRef(selectTarget);
   selectTargetRef.current = selectTarget;
 
@@ -183,7 +223,7 @@ export const AI_Chat_Sidebar = ({
       if (getNativeSidebarChat()) {
         const selected = targetRef.current;
         const latest = chatRef.current;
-        if (selected.kind === "native-agent") writeDraft(currentUser.id, selected.agent.id, latest.editor?.getText() ?? "");
+        if (selected.kind === "native-agent") writeDraft(currentUser.id, selected.agent.draftKey ?? selected.agent.id, latest.editor?.getText() ?? "");
         if (aiSessionRef.current) latest.selectSession(aiSessionRef.current);
         const stored = drafts.current.get("ai");
         latest.editor?.commands.setContent(stored?.html ?? "", { emitUpdate: false });
@@ -256,7 +296,11 @@ export const AI_Chat_Sidebar = ({
         )}
       >
         <ChatHeader sidebarChats={enabled && sidebarEnabled ? { projectId: projectId!, target, agents, error: rosterError,
-          onSelect: (next) => void selectTarget(next), onSelectSession: pastChatsFirst ? (id) => void selectTarget({ kind: "ai" }, id) : chat.selectSession, onRetry: () => void loadRoster() } : undefined} />
+          onSelect: (next) => void selectTarget(next), onSelectSession: pastChatsFirst ? (id) => void selectTarget({ kind: "ai" }, id) : chat.selectSession, onRetry: () => void loadRoster(),
+          ...(agentSessionsEnabled ? {
+            onSelectAgentSession: (agent: SidebarChatAgent, sessionId: string) => void selectTarget({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId }),
+            onStartAgentSession: (agent: SidebarChatAgent) => void selectTarget({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { newSession: true }),
+          } : {}) } : undefined} />
 
         {!minimized && (
           <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden", sidebarEnabled && target.kind === "external-agent" && "hidden")}>
@@ -270,13 +314,13 @@ export const AI_Chat_Sidebar = ({
               ) : showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
             </div>
 
-            <AI_Tiptap_Container disabled={generalChatPending} active={!sidebarEnabled || target.kind !== "external-agent"} />
+            <AI_Tiptap_Container sidebarAgent={agentSessionsEnabled && target.kind === "native-agent" ? target.agent.displayName : undefined} disabled={generalChatPending} active={!sidebarEnabled || target.kind !== "external-agent"} />
           </div>
         )}
-        {sidebarEnabled && !minimized && currentUser && embeddedAgents.map((agent) => (
-          <div key={`${projectId}:${agent.id}`} className={cn("min-h-0 min-w-0 flex-1 flex-col", target.kind === "external-agent" && target.agent.id === agent.id ? "flex" : "hidden")}>
+        {sidebarEnabled && !minimized && currentUser && embeddedAgents.map((agent, index) => (
+          <div key={`${projectId}:${agent.id}:${visited[index].sessionId}`} className={cn("min-h-0 min-w-0 flex-1 flex-col", target.kind === "external-agent" && target.agent.id === agent.id && target.agent.sessionId === visited[index].sessionId ? "flex" : "hidden")}>
             <AgentChatClient currentUser={currentUser} roomsEnabled={false}
-              embedded={{ projectId: projectId!, agent, requestId: intentRef.current, active: target.kind === "external-agent" && target.agent.id === agent.id }} />
+              embedded={{ projectId: projectId!, agent, requestId: intentRef.current, sessionId: agentSessionsEnabled ? visited[index].sessionId ?? undefined : undefined, draftKey: visited[index].draftKey, active: target.kind === "external-agent" && target.agent.id === agent.id && target.agent.sessionId === visited[index].sessionId }} />
           </div>
         ))}
       </div>

@@ -194,3 +194,21 @@ the global cron merely for testing: it wakes other owners' agents. If no
 isolated heartbeat trigger and execution-step telemetry are available through
 approved product surfaces, record the live four-step case as UNREACHABLE;
 do not substitute mocked SDK results for a live heartbeat.
+
+## Agent sessions in the sidebar
+
+On a board with an agent, open AI chat. With `htpr-8048-agent-sessions`
+enabled, the Bot button beside History lists the board's available agents.
+Expand an agent, start a new session, then reopen the list and resume its
+saved session. History mixes those sessions with personal chats and labels
+agent rows with the agent's name. Selecting an agent row must keep its agent
+as the destination, rather than sending to general AI chat.
+
+Type `@` in either sidebar composer, pick a board agent, and check the
+agent chip and destination. Remove the chip to return to AI chat. Preserve
+unsent drafts when switching between two sessions and after reloading the
+same browser tab. Check both native agents and connected external agents,
+empty rosters, denied board access, desktop and phone, all four themes.
+The default conversation used by agent notifications must keep its original
+session ID after separate sessions have been created. With the flag Off,
+keep the original conversation picker and reject new-session requests.

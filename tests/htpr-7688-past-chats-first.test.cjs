@@ -15,6 +15,7 @@ function load(file, mocks = {}) {
   }).outputText;
   new Function("require", "module", "exports", js)((name) => {
     if (name === "react/jsx-runtime") return require(name);
+    if (name === "@/lib/flags/definitions/htpr-8048-agent-sessions") return { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" };
     assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency ${name}`);
     return { __esModule: true, ...mocks[name] };
   }, loaded, loaded.exports);
@@ -164,7 +165,7 @@ function sidebar(initialSession = { id: "remembered", agentId: null }) {
   };
   const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
     react: { ...state.react, default: state.react },
-    "@/hooks/useFlag": { useFlag: key => key !== "htpr-7800-skill-runs-in-sidebar" }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
+    "@/hooks/useFlag": { useFlag: key => !["htpr-7800-skill-runs-in-sidebar", "htpr-8048-agent-sessions"].includes(key) }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
     "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
@@ -264,7 +265,7 @@ function roster(enabled) {
     "@/lib/agents/chatService": { openAgentChat: noop }, "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}) },
     "@/lib/agents/chatAvailability": availability,
     "@/utils/controllers/agents/boardMembers": { getAgentTeamIds: async () => new Map() },
-    "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return enabled; } },
+    "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return key === "htpr-8048-agent-sessions" ? false : enabled; } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag, "@/lib/agentStatus/chip": chip,
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/lib/api/rateLimit": { checkRestRateLimit: noop }, "@/lib/agentRuns/service": { browserMutationIsSameOrigin: noop },
