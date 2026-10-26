@@ -28,6 +28,12 @@ export async function UndoInboxArchive(data:any){
     });
   } else if (data.isBulkOperation) {
         const { notificationIds } = data;
+        if (data.syntheticNotifications?.length) {
+          await Promise.all(data.syntheticNotifications.map((notification: { id: string; taskId: number; type: string }) =>
+            fetch(`/api/notifications/markAsDone?id=${notification.id}&taskId=${notification.taskId}&userId=${data.currentUser.id}&type=${notification.type}`, { headers: realtimeEchoHeaders() })
+          ));
+          if (notificationIds.length === 0) return;
+        }
         
         const response = await fetch('/api/notifications/(un)archiveBulk', {
             method: 'POST',

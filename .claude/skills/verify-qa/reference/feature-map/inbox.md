@@ -38,3 +38,13 @@ account's inbox stays empty between runs.
 ## Gap
 
 The PR check runs on a disposable loopback app, and the live script on QA Sandbox; neither covers the phone layout yet (`--phone` exists on the live script but is not required).
+
+## Blocked by you bulk archive
+
+With `htpr-7970-bulk-blocked-inbox` and `htpr-7840-blocked-inbox-archive`
+on, select several blocked rows using the existing checkboxes, then archive.
+Also test Select all with 20 blocked rows. They must disappear immediately and
+stay gone after reload. Undo must restore them without clearing the blocker.
+Test a mixed selection containing a real notification and a blocked row for the
+same task: archive and undo must process that blocked task only once. Include an
+ordinary notification for a different task to cover the normal bulk path.
