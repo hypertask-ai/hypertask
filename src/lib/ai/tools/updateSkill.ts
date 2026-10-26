@@ -78,17 +78,18 @@ export function createUpdateSkillTool(context: ToolContext) {
           ...data,
           ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
         };
+        const draft = { ...skill, ...changes };
         if (skillDraftsEnabled && await requireCrossMessageConfirmation({
           userId: user.id,
           sessionId: confirmationSessionId,
-          operationKey: `update-skill:${skill.id}:${JSON.stringify({ skill, changes })}`,
+          operationKey: `update-skill:${skill.id}:${JSON.stringify(draft)}`,
           confirmed: input.confirmed,
           previewsIssuedThisRequest: bulkPreviewsIssued,
         }) === "preview") {
           return sanitizeForJson({
             success: false,
             confirmation_required: true,
-            skill: { ...skill, ...changes },
+            skill: draft,
             scope: skill.projectId === null ? "user" : "project",
             message: "Nothing has been saved. Show the full revised draft and its personal or board scope. Ask the user to confirm, edit or reject it. End your turn. Only after approval in a new message repeat this exact call with confirmed: true. Edits require a new preview.",
           });

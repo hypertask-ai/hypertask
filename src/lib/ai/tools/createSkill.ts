@@ -61,10 +61,10 @@ export function createCreateSkillTool(context: ToolContext) {
           }
           parsed = {
             name,
-            slug,
-            body: skillBody,
             description: input.description?.trim() || null,
             argumentHint: input.argument_hint?.trim() || null,
+            body: skillBody,
+            slug,
           };
         }
 

@@ -207,3 +207,27 @@ test("flag Off preserves direct creation and updates without draft confirmation"
   assert.equal(updated.success, true);
   assert.equal(h.skills[0].body, "Direct update");
 });
+
+test("the same reviewed draft can be confirmed using structured fields instead of SKILL.md", async () => {
+  const h = harness();
+  const markdown = `---\nname: ${draft.name}\ndescription: ${draft.description}\nargument-hint: '${draft.argument_hint}'\n---\n${draft.body}`;
+  const preview = await h.turn().create({ markdown });
+  assert.equal(preview.confirmation_required, true);
+  const saved = await h.turn().create({ ...draft, confirmed: true });
+  assert.equal(saved.success, true);
+  assert.equal(h.skills.length, 1);
+  assert.equal(h.skills[0].body, draft.body);
+});
+
+test("equivalent markdown and structured updates share the reviewed complete draft", async () => {
+  const h = harness();
+  await h.turn().create(draft);
+  const { skill } = await h.turn().create({ ...draft, confirmed: true });
+  const fields = { skill_id: skill.id, name: "Updated review", slug: "updated-review", description: "Updated description", argument_hint: "[change]", body: "Updated instructions" };
+  const markdown = "---\nname: Updated review\ndescription: Updated description\nargument-hint: '[change]'\n---\nUpdated instructions";
+  assert.equal((await h.turn().update({ skill_id: skill.id, markdown })).confirmation_required, true);
+  const saved = await h.turn().update({ ...fields, confirmed: true });
+  assert.equal(saved.success, true);
+  assert.equal(h.skills[0].name, "Updated review");
+  assert.equal(h.skills[0].body, "Updated instructions");
+});
