@@ -11,7 +11,7 @@ Proof bar follows Lauren Tan's verification skills: [create-verification-skill](
 
 ## Released flags: before merge and after a failure
 
-When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the HT Product Lead session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)
+When something looks wrong behind a flag, a flag-owner write/admin agent switches it Off immediately with `ht-flag set KEY off --failure "reason or evidence URL"`, then repairs. This works for every flag, including high-risk, bugfix and unclassified flags, without approval. The reason must be nonblank and at most 300 characters; no-op Off is refused and every switch is audited. Other modes retain their existing approval rules. Only Valentin's login can open /admin/flags. A revert PR is the second step, not the first; reverting code does not re-enable flags. (Valentin, 2026-10-25, https://app.hypertask.ai/detail/project-4060/734)
 
 Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
 
