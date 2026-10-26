@@ -435,3 +435,29 @@ production_revert_proposal:
   exclusions: [rate_limit, network, timeout, inconsistent_replay, unsupported_setup_failure, dependency_lock_changes, already_fixed]
   publication: separate_trusted_job_with_fresh_production_head_check
   deduplication: one_branch_per_culprit
+
+task_writer_quality_eval:
+  ticket: https://app.hypertask.ai/detail/project-15/7976
+  workflow: .github/workflows/task-writer-eval.yml
+  job: task-writer-live
+  required: false
+  triggers: [schedule, workflow_dispatch]
+  trusted_ref: production
+  cron_utc: "17 4 * * *"
+  identity: 985
+  fixture_board: 7049
+  fixture_section: 19409
+  real_pairs: 20
+  synthetic_ab_cases: 2
+  target_real_pairs: 40
+  source_decision: https://app.hypertask.ai/detail/project-15/7976#comment-314535
+  credentials: [QA_LOGIN_EMAIL, QA_LOGIN_PASSWORD]
+  new_provider_keys: false
+  script: scripts/task-writer-eval.cjs
+  offline_command: node scripts/task-writer-eval.cjs --verify-baseline
+  live_command: node scripts/task-writer-eval.cjs --live
+  max_writer_calls: 22
+  max_chip_calls: 22
+  timeout_minutes: 20
+  artifacts: [scores, pending_fixture_ids]
+  excluded_artifacts: [cookies, authentication_traffic, raw_drafts]
