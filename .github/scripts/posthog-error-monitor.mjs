@@ -46,6 +46,33 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env.HYP
   return { action: existing ? "updated" : "created", workflow };
 }
 
+export async function findCanaryIssue({ fetchImpl = fetch, apiKey, marker, deadline, now = Date.now }) {
+  const endpoint = "https://eu.posthog.com/api/projects/236160/error_tracking/issues/";
+  let next = `${endpoint}?limit=100`;
+  const seen = new Set();
+  const matches = new Set();
+  while (next) {
+    const url = new URL(next, endpoint);
+    if (url.origin !== new URL(endpoint).origin || url.pathname !== new URL(endpoint).pathname || url.username || url.password || seen.has(url.href) || seen.size >= 20) throw new Error("Canary REST issue pagination is invalid or incomplete");
+    if (now() >= deadline) throw new Error("Canary issue lookup exceeded fifteen minutes");
+    seen.add(url.href);
+    const response = await fetchImpl(url.href, {
+      method: "GET", headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(Math.min(30_000, deadline - now())),
+    });
+    if (!response.ok) throw new Error(`Canary PostHog lookup returned HTTP ${response.status}`);
+    const page = await response.json();
+    if (!Array.isArray(page.results) || !Object.hasOwn(page, "next") || (page.next != null && typeof page.next !== "string")) throw new Error("Canary REST issue lookup is incomplete");
+    for (const issue of page.results) {
+      if (typeof issue.description !== "string" || !issue.description.includes(marker)) continue;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(issue.id)) throw new Error("Canary fallback issue ID is invalid");
+      matches.add(issue.id);
+      if (matches.size > 1) throw new Error("Canary fallback issue lookup is ambiguous");
+    }
+    next = page.next || "";
+  }
+  return [...matches][0];
+}
+
 export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, testToken = process.env.POSTHOG_ERROR_TEST_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, runId = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT || "1", now = Date.now, wait = setTimeout, timeoutMs = 15 * 60 * 1000 } = {}) {
   if (!token || !testToken || !apiKey || !/^\d{1,20}$/.test(String(runId)) || !/^\d{1,3}$/.test(String(attempt))) {
     throw new Error("Nightly canary credentials or run identity are missing");
@@ -67,15 +94,7 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
     let delivery = "github";
     if (!ticket) {
       if (!fallbackIssueId) {
-        const found = await fetchImpl("https://eu.posthog.com/api/projects/236160/query/", {
-          method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(30_000),
-          body: JSON.stringify({ query: { kind: "HogQLQuery", query: `SELECT DISTINCT toString(properties.$exception_issue_id) FROM events WHERE event = '$exception' AND properties.ht_environment = 'production' AND toString(properties.$exception_list) LIKE '%${marker}%' LIMIT 2` }, refresh: "force_blocking" }),
-        });
-        if (!found.ok) throw new Error(`Canary PostHog lookup returned HTTP ${found.status}`);
-        const result = await found.json();
-        if (!Array.isArray(result.results) || result.hasMore || result.error || result.results.length > 1) throw new Error("Canary fallback issue lookup is incomplete or ambiguous");
-        fallbackIssueId = result.results[0]?.[0];
-        if (fallbackIssueId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(fallbackIssueId)) throw new Error("Canary fallback issue ID is invalid");
+        fallbackIssueId = await findCanaryIssue({ fetchImpl, apiKey, marker, deadline, now });
       }
       if (fallbackIssueId) {
         const fallback = await api(fetchImpl, token, `/tasks?project_id=4060&status=Normal&search=${fallbackIssueId}&limit=100`);

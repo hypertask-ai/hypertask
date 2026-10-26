@@ -15,7 +15,7 @@ function canaryFetch(ticketAt = 2) {
   return { calls, fetchImpl: async (url, options) => {
     calls.push({ url, options });
     if (url.endsWith("/error-test")) return response({}, 500);
-    if (url.endsWith("/query/")) return response({ results: [] });
+    if (url.includes("/error_tracking/issues/?")) return response({ results: [], next: null });
     if (url.includes("/tasks?")) return response({ tasks: ++searches < ticketAt ? [] : [
       { id: 99, description: "legacy reporter yper4-331-123-1" },
       { id: 98, description: `Former poll yper4-331-123-1 PostHog issue ID: <code>${ISSUE_ID}</code>` },
@@ -181,7 +181,7 @@ test("canary verifies and closes an independent fallback only after matching the
   const receipt = `<p>posthog-dispatch-fallback:issue:${ISSUE_ID}:0199aa11-bb22-7c33-8d44-000000000001</p>`;
   const fetchImpl = async (url, options) => {
     if (url.endsWith("/error-test")) return response({}, 500);
-    if (url.endsWith("/query/")) return response({ results: [[ISSUE_ID]] });
+    if (url.includes("/error_tracking/issues/?")) { assert.equal(options.method, "GET"); return response({ results: [{ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1" }], next: null }); }
     if (url.includes("/tasks?")) return response({ tasks: new URL(url).searchParams.get("project_id") === "4060" ? [{ id: 101, description: receipt }] : [] });
     if (url.includes("/issues/")) return response({ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
     if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }, { id: 4060, sections: [{ id: 888, section_title: "Done" }] }] });
@@ -194,7 +194,32 @@ test("canary verifies and closes an independent fallback only after matching the
   assert.equal(result.boardId, 4060);
   assert.deepEqual(writes, [{ task_id: 101, sectionId: 888 }]);
   writes.length = 0;
-  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("/issues/") ? response({ id: ISSUE_ID, description: "another customer's error" }) : fetchImpl(url, opts) }), /does not match the nightly canary/);
+  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes(`/issues/${ISSUE_ID}/`) ? response({ id: ISSUE_ID, description: "another customer's error" }) : fetchImpl(url, opts) }), /does not match the nightly canary/);
   assert.equal(writes.length, 0);
-  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.endsWith("/query/") ? response({ results: [[ISSUE_ID], [ISSUE_ID]] }) : fetchImpl(url, opts) }), /ambiguous/);
+  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("/error_tracking/issues/?") ? response({ results: [{ id: ISSUE_ID, description: "yper4-331-123-1" }, { id: "01a128a7-88f1-7753-b94b-4f8ec8f7cbde", description: "yper4-331-123-1" }], next: null }) : fetchImpl(url, opts) }), /ambiguous/);
+});
+
+test("canary issue discovery uses only bounded same-origin REST reads", async () => {
+  const { findCanaryIssue } = await import(script);
+  const endpoint = "https://eu.posthog.com/api/projects/236160/error_tracking/issues/";
+  const calls = [];
+  const options = { apiKey: "fixture", marker: "yper4-331-123-1", deadline: 900_000, now: () => 0 };
+  const found = await findCanaryIssue({ ...options, fetchImpl: async (url, request) => {
+    assert.equal(request.method, "GET");
+    assert.equal(Object.hasOwn(request, "body"), false);
+    calls.push(url);
+    return response({ results: url.includes("offset=100") ? [{ id: ISSUE_ID, description: "yper4-331-123-1" }] : [], next: url.includes("offset=100") ? null : `${endpoint}?limit=100&offset=100` });
+  } });
+  assert.equal(found, ISSUE_ID);
+  assert.equal(calls.length, 2);
+  let refusedCalls = 0;
+  for (const next of ["https://untrusted.example/issues/", `${endpoint}?limit=100`, "https://eu.posthog.com/api/projects/another/issues/"]) {
+    await assert.rejects(findCanaryIssue({ ...options, fetchImpl: async () => {
+      refusedCalls++;
+      return response({ results: [], next });
+    } }), /pagination is invalid/);
+  }
+  assert.equal(refusedCalls, 3);
+  await assert.rejects(findCanaryIssue({ ...options, fetchImpl: async () => response({}, 403) }), /HTTP 403/);
+  await assert.rejects(findCanaryIssue({ ...options, deadline: 0, fetchImpl: async () => assert.fail("expired lookup fetched") }), /exceeded fifteen minutes/);
 });
