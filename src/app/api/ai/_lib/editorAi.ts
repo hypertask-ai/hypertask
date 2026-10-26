@@ -25,7 +25,7 @@ import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
 import prisma from "@/lib/prisma";
-import { HTPR_7038_TASK_WRITER_SONNET_FLAG, HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
 export const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -619,14 +619,7 @@ export async function selectTaskWriterModel(args: {
   taskWriterAgentId?: string | null;
   teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
 }) {
-  let taskWriterSonnet = false;
-  if (args.aiFeature === "taskWriter" && args.userId) {
-    try {
-      const { isFeatureEnabled } = await import("@/lib/flags");
-      taskWriterSonnet = await isFeatureEnabled(HTPR_7038_TASK_WRITER_SONNET_FLAG, args.userId);
-    } catch {
-    }
-  }
+  const taskWriterSonnet = args.aiFeature === "taskWriter" && Boolean(args.userId);
   const agentId = args.agentId ?? (args.teamScope != null || taskWriterSonnet ? args.taskWriterAgentId : null);
   const teamContext =
     args.teamContext ??
