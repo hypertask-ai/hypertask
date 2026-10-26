@@ -50,7 +50,7 @@ export function findRegression({ cwd, good, bad, head, files, probe }) {
         const args = process.env.PROBE_IMAGE ? docker : ['--test', ...files];
         const r = probe ? probe(tree, files) : spawnSync(command, args, { cwd: tree, env, encoding: 'utf8', timeout: 180_000, maxBuffer: 16 * 1024 * 1024 });
         if (r.error || r.signal || infraFailure(`${r.stdout || ''}\n${r.stderr || ''}`) || r.status === 125 || r.status === 137) return null;
-        if (process.env.FAILED_RUN_ID) console.log(`Replay exit ${r.status}: ${String(r.stdout || '').slice(-2000)} ${String(r.stderr || '').slice(-1000)}`);
+        if (process.env.FAILED_RUN_ID) console.log(JSON.stringify({ exit: r.status, stdout: String(r.stdout || '').slice(-2000), stderr: String(r.stderr || '').slice(-1000) }));
         return r.status === 0;
       });
       if (results[0] === null || results[0] !== results[1]) throw new Error('Unstable or infrastructure failure; no revert');

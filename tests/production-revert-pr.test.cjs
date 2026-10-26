@@ -112,8 +112,10 @@ test('isolated rejected replay cannot forge runner outputs', { skip: !process.en
   t.after(() => rmSync(outside, { recursive: true, force: true }));
   const output = join(outside, 'output');
   writeFileSync(output, 'unchanged');
-  const source = `const fs = require('node:fs'); require('node:child_process').execFileSync('git', ['init', '-q', 'evil']); fs.writeFileSync('evil/.git/hooks/post-checkout', '#!/bin/sh\\nprintf forged > ${output}\\n', { mode: 0o755 }); try { fs.writeFileSync('.git', 'gitdir: ' + process.cwd() + '/evil/.git'); } catch {} try { fs.writeFileSync(${JSON.stringify(output)}, 'culprit=forged'); } catch {}\n`;
+  const source = `console.log('::set-output name=culprit::forged'); const fs = require('node:fs'); require('node:child_process').execFileSync('git', ['init', '-q', 'evil']); fs.writeFileSync('evil/.git/hooks/post-checkout', '#!/bin/sh\\nprintf forged > ${output}\\n', { mode: 0o755 }); try { fs.writeFileSync('.git', 'gitdir: ' + process.cwd() + '/evil/.git'); } catch {} try { fs.writeFileSync(${JSON.stringify(output)}, 'culprit=forged'); } catch {}\n`;
   const h = history(t, source);
-  assert.equal(findRegression(h), null);
+  const lines = []; t.mock.method(console, 'log', line => lines.push(line)); const old = process.env.FAILED_RUN_ID; process.env.FAILED_RUN_ID = '1';
+  try { assert.equal(findRegression(h), null); } finally { if (old === undefined) delete process.env.FAILED_RUN_ID; else process.env.FAILED_RUN_ID = old; }
+  assert.deepEqual(lines.map(line => JSON.parse(line).exit), [0, 0, 0, 0]);
   assert.equal(readFileSync(output, 'utf8'), 'unchanged');
 });
