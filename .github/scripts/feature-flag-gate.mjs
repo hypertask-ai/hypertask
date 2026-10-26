@@ -1016,9 +1016,6 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
     true,
     scriptKind,
   );
-  const baseSource = git(["ls-tree", "--name-only", baseRef, "--", path]).trim()
-    ? git(["show", `${baseRef}:${path}`]) : "";
-  const baseSourceFile = typescript.createSourceFile(path, baseSource, typescript.ScriptTarget.Latest, true, scriptKind);
   const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
   const host = {
     getSourceFile: (fileName) => fileName === targetPath ? sourceFile : undefined,
@@ -1371,9 +1368,6 @@ function sourceReferencesApiRoute(ref, path, apiRoute) {
     true,
     scriptKind,
   );
-  const baseSource = git(["ls-tree", "--name-only", baseRef, "--", path]).trim()
-    ? git(["show", `${baseRef}:${path}`]) : "";
-  const baseSourceFile = typescript.createSourceFile(path, baseSource, typescript.ScriptTarget.Latest, true, scriptKind);
   const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
   const host = {
     getSourceFile: (fileName) => fileName === path ? sourceFile : undefined,
