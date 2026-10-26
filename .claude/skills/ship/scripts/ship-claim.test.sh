@@ -105,6 +105,7 @@ cat "$FAKE_COMMENTS"
 EOF
 cat > "$D/ht" <<'EOF'
 #!/usr/bin/env bash
+if [[ "$2" == /mcp/tasks\?* ]] && [ -n "${FAKE_RELATED:-}" ]; then cat "$FAKE_RELATED"; exit; fi
 [ "$1 $2" = 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100' ] || [ "$1 $2" = 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100' ] || exit 1
 if [ -n "${FAKE_AGENT_LOG:-}" ]; then cat "$FAKE_AGENT_LOG"; else echo '{"success":true,"activities":[]}'; fi
 EOF
@@ -179,5 +180,14 @@ grep -q 'codex resume argsess' "$D/log" && ok "argument lands in the claim comme
 env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID ./ship-claim YPER4-999 >/dev/null 2>"$D/err"; eq "no resume id anywhere -> exit 2" "$?" 2
 grep -q 'pass the resume command' "$D/err" && ok "clear error names the argument" || bad "error text"
 ./ship-claim bogus >/dev/null 2>&1; eq "bad ticket -> exit 2" "$?" 2
+
+
+jq -n '{success:true,tasks:[{id:8020,ticketNumber:"HTPR-8020",projectId:15,status:"Normal",labels:[{name:"prod-error"}],description:"<p>Routes: /api/mcp/projects</p><p>First seen: 2026-10-26T08:55:00Z</p><p>Error root: /api/mcp/projects | prisma-validation:project:unknown-argument:updatedAt</p>"}]}' > "$D/alert.json"
+jq '.tasks[0].id=8021 | .tasks[0].ticketNumber="HTPR-8021" | .total=1' "$D/alert.json" > "$D/related.json"
+: > "$D/log"
+FAKE_TASK="$D/alert.json" FAKE_RELATED="$D/related.json" ./ship-claim HTPR-8020 "codex resume argsess" > "$D/related-out"
+eq "related open root stops a second claim" "$?" 3
+[ ! -s "$D/log" ] && ok "related alert check runs before all board writes" || bad "related alert wrote a claim"
+grep -q 'https://app.hypertask.ai/detail/project-15/8021' "$D/related-out" && ok "related alert names the existing full link" || bad "missing related link"
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]

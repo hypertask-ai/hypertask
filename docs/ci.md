@@ -370,3 +370,11 @@ To refresh a baseline, run the live script with a QA storage-state file in
 outside the committed fixture folder. Review the full output, promote it to
 `recorded.json`, then run `node scripts/task-writer-eval.cjs --save-baseline`.
 The offline replay binds the complete corpus hash and recomputes every score.
+
+
+## Incident correlation replay
+
+`ship-scripts-tests` also runs the isolated incident replay and claim-collision
+checks. Four recorded Vercel payloads join the original MCP failure report,
+producing one ticket and five occurrence activities. A different Prisma model,
+field or route stays separate. The replay uses fake board commands only.

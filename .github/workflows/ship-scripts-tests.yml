@@ -67,3 +67,10 @@ jobs:
           python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
           node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
+
+      - name: Replay incident grouping and claim collision checks
+        env:
+          HOME: ${{ runner.temp }}/ship-scripts-home
+        run: |
+          node --test .claude/skills/ship/scripts/error-collector/collector.test.mjs .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs .claude/skills/ship/scripts/error-collector/sources.test.mjs
+          bash .claude/skills/ship/scripts/ship-claim.test.sh

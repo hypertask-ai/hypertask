@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { correlate, relatedTicket } from './incident.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
@@ -150,7 +151,7 @@ function description(group, fp) {
     return `<p><strong>${html(group.service)} emitted ${html(group.normalized)} ${group.hourlyCount} times within one hour.</strong></p><p>This is a warning on stderr, not a thrown product error. Fix it at the source rather than hiding the warning.</p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
   }
   const fields = [ ['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message] ];
-  return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>`;
+  return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p>` : ''}`;
 }
 
 function search(fp, board, env) {
@@ -159,7 +160,7 @@ function search(fp, board, env) {
     let offset = 0;
     for (;;) {
       const query = new URLSearchParams({ status, search: `error-fingerprint:${fp}`, projectId: String(board), limit: '100', offset: String(offset) });
-      const value = payload(command('ht', ['GET', `/mcp/tasks?${query}`], env));
+      const value = payload(command(env.SHIP_CLAIM_HT ?? 'ht', ['GET', `/mcp/tasks?${query}`], env));
       if (!Array.isArray(value.tasks) || !Number.isSafeInteger(value.total) || value.total < 0 || (value.tasks.length === 0 && offset < value.total)) throw new Error('invalid search page');
       for (const task of value.tasks) {
         if (task.projectId !== board) throw new Error('wrong board in search');
@@ -172,6 +173,36 @@ function search(fp, board, env) {
       if (offset >= value.total) break;
       if (offset > 10000) throw new Error('search exceeds page budget');
     }
+  }
+  return found;
+}
+
+export function findRelatedIncident(group, env) {
+  const tasks = new Map();
+  const queries = [group.incident.route];
+  if (group.incident.route === '/api/mcp/projects') queries.push('hypertask_projects', 'list projects');
+  for (const text of queries) {
+    let offset = 0;
+    for (;;) {
+      const query = new URLSearchParams({ status: 'Normal', search: text, projectId: String(group.board), limit: '100', offset: String(offset) });
+      const page = payload(command(env.SHIP_CLAIM_HT ?? 'ht', ['GET', `/mcp/tasks?${query}`], env));
+      if (!Array.isArray(page.tasks) || !Number.isSafeInteger(page.total) || page.total < 0 || (!page.tasks.length && offset < page.total)) throw new Error('invalid related incident page');
+      for (const task of page.tasks) {
+        if (task.projectId !== group.board) throw new Error('wrong board in related incident search');
+        if (ticketRef(task) !== group.exclude) tasks.set(task.ticketNumber, task);
+      }
+      offset += page.tasks.length;
+      if (offset >= page.total) break;
+      if (offset >= 10000) throw new Error('related incident search exceeds page budget');
+    }
+  }
+  const found = relatedTicket(group, [...tasks.values()]);
+  if (found?.prior) {
+    const page = payload(command('ht', ['GET', `/mcp/tasks/${found.ticket}/agent-activity?limit=100`], env));
+    if (!Array.isArray(page.activities)) throw new Error('invalid related activity page');
+    if (page.activities.length === 100) throw new Error('related activity history truncated');
+    const roots = page.activities.flatMap(activity => activity.text?.match(/prisma-validation:\w+:unknown-argument:[\w.]+/g) ?? []);
+    if (roots.some(root => root !== group.incident.root)) return;
   }
   return found;
 }
@@ -207,6 +238,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   const staleHours = Number(env.ERROR_COLLECTOR_STALE_HOURS ?? 2);
   const staleWindow = (Number.isFinite(staleHours) && staleHours > 0 ? staleHours : 2) * HOUR;
   state.noiseWindows ??= {};
+  state.occurrences ??= {};
   const stats = (date, service) => {
     state.days[date] ??= {};
     return state.days[date][service] ??= { errors: 0, noise: 0, newGroups: 0, complete: false };
@@ -214,12 +246,15 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   const absorb = (fp, group, observed = true) => {
     const known = state.fingerprints[fp];
     if (known) {
+      if (group.incident && !known.deleted) {
+        for (const [id, occurrence] of Object.entries(group.occurrences ?? {})) state.occurrences[id] ??= { ...occurrence, ticket: known.ticket, queuedAt: iso(now) };
+      }
       const newRoutes = group.routes.filter(route => route && !known.routes?.includes(route));
       known.routes = [...new Set([...(known.routes ?? []), ...group.routes])];
       known.total += group.count;
       known.firstSeen = known.firstSeen < group.firstSeen ? known.firstSeen : group.firstSeen;
       known.lastSeen = known.lastSeen > group.lastSeen ? known.lastSeen : group.lastSeen;
-      if (!known.deleted) {
+      if (!known.deleted && !group.incident) {
         const activity = state.activities[known.ticket] ??= { count: 0, since: group.firstSeen, at: known.lastActivityAt };
         activity.routes = [...new Set([...(activity.routes ?? []), ...newRoutes])];
         activity.count += group.count;
@@ -231,6 +266,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       pending.firstSeen = pending.firstSeen < group.firstSeen ? pending.firstSeen : group.firstSeen;
       pending.lastSeen = pending.lastSeen > group.lastSeen ? pending.lastSeen : group.lastSeen;
       pending.routes = [...new Set([...pending.routes, ...group.routes])];
+      Object.assign(pending.occurrences ??= {}, group.occurrences);
       if (group.aliases) pending.aliases = [...new Set([...(pending.aliases ?? []), ...group.aliases])];
       if (group.noiseRule && group.hourlyCount > pending.hourlyCount) { pending.hourlyCount = group.hourlyCount; pending.hourLastSeen = group.hourLastSeen; }
     } else { state.pending[fp] = group; if (observed && !group.noiseRule) stats(day(group.firstSeen), group.service).newGroups++; }
@@ -257,13 +293,13 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         cursor = JSON.parse(encoded);
       }
       if (!Array.isArray(rows)) throw new Error('invalid source response');
-      const events = rows.map(validate).filter(event => event.ts > since && event.ts <= until);
+      const events = correlate(rows.map(validate).filter(event => event.ts > since && event.ts <= until), [...Object.values(state.pending), ...Object.values(state.fingerprints)].filter(group => group.incident).map(group => ({ ...group.incident, ts: group.lastSeen })));
       // A fingerprint keeps the board it was first routed to, so one kind of error never splits across boards.
       const boards = new Map();
       for (const event of events) {
         if (event.ticket === false) continue;
         const rule = noiseRule(event);
-        const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : fingerprint(event.service, event.message, event.route);
+        const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : event.incident?.key ?? fingerprint(event.service, event.message, event.route);
         const board = state.fingerprints[fp]?.board ?? state.pending[fp]?.board ?? state.stale[fp]?.board ?? boards.get(fp);
         if (board == null) boards.set(fp, event.board);
         else event.board = board;
@@ -275,7 +311,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         else counts.errors += event.count;
         if (rule?.id === 'forced-test') diagnostic(`skipped forced test error from ${event.service} (${event.count})`);
         if (event.ticket === false) continue;
-        const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : fingerprint(event.service, event.message, event.route);
+        const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : event.incident?.key ?? fingerprint(event.service, event.message, event.route);
         const stale = state.stale[fp] ?? revived.get(fp);
         if (stale) {
           if (event.ts <= stale.lastSeen) continue;
@@ -289,8 +325,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           }
           continue;
         }
-        if (!groups.has(fp)) groups.set(fp, { rules: FINGERPRINT_RULES, board: event.board, service: event.service,normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts });
-        merge(groups.get(fp), event);
+        if (!groups.has(fp)) groups.set(fp, { rules: FINGERPRINT_RULES, board: event.board, service: event.service,normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts, ...(event.incident ? { incident: event.incident, aliases: [], occurrences: {} } : {}) });
+        const group = groups.get(fp);
+        if (event.incident) {
+          group.aliases.push(fingerprint(event.service, event.message));
+          const id = createHash('sha256').update(JSON.stringify([event.service, event.route, event.message, event.ts])).digest('hex').slice(0, 24);
+          group.occurrences[id] = { text: `Occurrence ${event.ts}: ${redact(event.route)}; ${redact(normalize(event.message))}; ${event.count} hits. [error-occurrence:${id}]` };
+        }
+        merge(group, event);
       }
       for (const [fp, warning] of warnings) {
         const events = [...(state.noiseWindows[fp] ?? []), ...warning.events].sort((a, b) => a.ts.localeCompare(b.ts));
@@ -365,6 +407,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     try {
       let found = search(fp, group.board, env);
       for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env);
+      if (!found && group.incident) found = findRelatedIncident(group, env);
       if (!found) {
         if (now - Date.parse(group.lastSeen) > staleWindow) {
           const target = Object.values(state.fingerprints).find(record => record.ticket && !record.deleted && record.board === group.board && group.routes.some(route => route && record.routes?.includes(route)));
@@ -397,20 +440,40 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'prod-error', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
           if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
           else found = { ticket: ticketRef(payload(output).task), deleted: false };
-          state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, lastActivityAt: iso(now) };
+          state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };
         } finally { if (temp) await fs.rm(temp, { force: true }); }
       } else {
-        state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, lastActivityAt: null };
-        if (!found.deleted) {
+        state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: null };
+        if (!found.deleted && !group.incident) {
           const activity = state.activities[found.ticket] ??= { count: 0, since: group.firstSeen, at: null };
           activity.routes = [...new Set([...(activity.routes ?? []), ...group.routes.filter(Boolean)])];
           activity.count += group.count;
           activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
         }
       }
+      if (group.incident && !found.deleted) {
+        for (const [id, occurrence] of Object.entries(group.occurrences)) state.occurrences[id] ??= { ...occurrence, ticket: found.ticket, queuedAt: iso(now) };
+        if (found.prior) {
+          const id = createHash('sha256').update(`${found.ticket}|${found.prior}`).digest('hex').slice(0, 24);
+          state.occurrences[id] ??= { ticket: found.ticket, queuedAt: iso(now), text: `Original MCP report ${found.prior}; correlated with ${group.incident.root}. [error-occurrence:${id}]` };
+        }
+      }
       delete state.pending[fp];
       await checkpoint();
     } catch { diagnostic(`group ${fp} reporting failed; kept pending`); }
+  }
+  for (const [id, occurrence] of Object.entries(state.occurrences)) {
+    if (signal.aborted) break;
+    try {
+      const page = payload(command('ht', ['GET', `/mcp/tasks/${occurrence.ticket}/agent-activity?limit=100`], env));
+      if (!Array.isArray(page.activities)) throw new Error('invalid occurrence activity page');
+      if (!page.activities.some(activity => activity.text?.includes(`[error-occurrence:${id}]`))) {
+        if (page.activities.length === 100 && page.activities.every(activity => Date.parse(activity.createdAt) >= Date.parse(occurrence.queuedAt))) throw new Error('occurrence activity history truncated');
+        write('vcc', ['activity', 'add', occurrence.ticket, occurrence.text]);
+      }
+      delete state.occurrences[id];
+      await checkpoint();
+    } catch { diagnostic('occurrence activity failed; retry next run'); }
   }
   for (const [ticket, activity] of Object.entries(state.activities)) {
     if (signal.aborted) break;
@@ -485,7 +548,7 @@ async function install(env) {
   await fs.mkdir(units, { recursive: true });
   await fs.mkdir(join(home, '.local/state/error-collector'), { recursive: true, mode: 0o700 });
   if (HERE !== target) {
-    for (const name of ['collector.mjs', 'io.mjs', 'noise.json']) await fs.copyFile(join(HERE, name), join(target, name));
+    for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }
   const checker = join(HERE, HERE === target ? '' : '..', 'user-unit-check');

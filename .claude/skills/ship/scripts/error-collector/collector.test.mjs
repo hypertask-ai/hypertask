@@ -45,7 +45,9 @@ if (name === 'ht') {
   if (args[0] !== 'GET') throw new Error('WRITE FORBIDDEN');
   if (cfg.searchFail) exit();
   const url = new URL(args[1], 'https://fake.invalid');
-  if (url.pathname === '/mcp/projects/4060/sections') {
+  if (url.pathname.startsWith('/mcp/tasks/') && url.pathname.endsWith('/agent-activity')) {
+    console.log(JSON.stringify({ success: true, activities: read('activities.json', []).filter(item => item.ticket === url.pathname.split('/')[3]) }));
+  } else if (url.pathname === '/mcp/projects/4060/sections') {
     console.log(JSON.stringify({ success: true, sections: cfg.sections ?? [{ id: 10414, section_title: 'Backlog', projectId: 4060, deleted: false }] }));
   } else {
     if (url.pathname !== '/mcp/tasks') throw new Error('unexpected read');
@@ -70,6 +72,10 @@ if (name === 'ht') {
     console.log(JSON.stringify({ success: true, task: cfg.badReceipt ? { ticketNumber: 'invalid receipt' } : task }));
   } else if (plain[0] === 'activity' && plain[1] === 'add') {
     if (cfg.activityFail) exit();
+    const saved = read('activities.json', []);
+    saved.unshift({ ticket: plain[2], text: plain[3], createdAt: new Date().toISOString() });
+    writeFileSync(join(home, 'activities.json'), JSON.stringify(saved));
+    if (cfg.ambiguousActivity) exit();
     console.log('fake-activity-id');
   } else throw new Error('unexpected vcc command');
 } else throw new Error('unexpected command');
@@ -1473,4 +1479,39 @@ check('tickets', 'stale records retain fourteen UTC days without pruning ticket 
   assert.deepEqual(h.state().stale[fp], stale);
   assert.deepEqual(h.state().fingerprints, state.fingerprints);
   assert.deepEqual(h.state().activities, state.activities);
+}));
+
+check('incidents', 'recorded MCP wrapper and four Vercel payloads become one ticket with five activities', async () => withHarness(async h => {
+  const { plain } = await import('./incident.mjs');
+  const recorded = JSON.parse(readFileSync(join(HERE, 'fixtures/project-validation.json'), 'utf8')).tasks;
+  const first = { ...recorded[0], id: 8017, projectId: 15, status: 'Normal', section: 'Bugs' };
+  h.remote([first]);
+  const replay = recorded.slice(1).map((task, index) => event({ service: 'vercel', message: plain(task.description).split('Sample message: ')[1].replace(/\s+error-fingerprint:.*/s, '').trim(), route: index === 0 ? '/mcp' : '/api/mcp/projects', ts: new Date(NOW - 1000 - index).toISOString(), stack: '' }));
+  first.description = first.description.replace('2026-10-26T08:52:23.162Z', new Date(NOW - 2000).toISOString());
+  h.remote([first]);
+  h.events(replay);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 0);
+  assert.equal(activities(h, 'HTPR-8017').filter(call => call.args[3].includes('error-occurrence:')).length, 5);
+  assert.equal(Object.keys(h.state().fingerprints).length, 1);
+  assert.equal(Object.keys(h.state().occurrences).length, 0);
+  await h.run();
+  assert.equal(activities(h, 'HTPR-8017').filter(call => call.args[3].includes('error-occurrence:')).length, 5);
+  h.events([event({ service: 'vercel', message: replay[1].message.replaceAll('updatedAt', 'otherField'), route: '/api/mcp/projects', ts: new Date(NOW + 1000).toISOString(), stack: '' })]);
+  await h.run({ now: NOW + 2000 });
+  assert.equal(creates(h).length, 1, 'different field on the same route must get its own ticket');
+  assert.match(creates(h)[0].description, /unknown-argument:otherField/);
+}));
+
+check('incidents', 'new root ticket groups operations and preserves activities after ambiguous writes', async () => withHarness(async h => {
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.findMany()` invocation: Unknown argument `updatedAt`.';
+  h.events([event({ service: 'vercel', message, route: '/api/mcp/projects' }), event({ service: 'vercel', message: message.replace('findMany', 'count'), route: '/api/mcp/projects' })]);
+  h.config({ ambiguousActivity: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(Object.keys(h.state().occurrences).length, 2);
+  h.config({});
+  await h.run();
+  assert.equal(activities(h, 'HTPR-100').length, 2, 'saved activity markers recover ambiguous writes');
+  assert.equal(Object.keys(h.state().occurrences).length, 0);
 }));

@@ -120,3 +120,23 @@ Source-only read, without board writes or state changes (use an unused state pat
 ```sh
 ERROR_COLLECTOR_STATE_DIR=/tmp/realtime-collector-dry-run node .claude/skills/ship/scripts/error-collector/collector.mjs --once --sources realtime --dry-run
 ```
+
+
+## Related production incidents
+
+Prisma validation failures for one model and unknown field share a root key on
+the same route, regardless of the Prisma read operation. Project-list wrappers
+join only one root observed within ten minutes. Different fields, models and
+routes remain separate; ambiguous wrappers are not guessed.
+
+Before creating, the collector searches open route reports and the projects MCP
+tool report. One nearby automatic HTTP 500 report can own the incident. Each
+correlated occurrence gets a durable activity marker; retries read those markers
+before posting again. Other errors retain the existing fingerprint and six-hour
+activity policy. `ship-claim` performs the same read-only related-incident check
+before writing a claim on tagged product alerts.
+
+The sanitized five-report replay is `fixtures/project-validation.json`.
+`ship-scripts-tests` runs the real collector with private fake CLI commands,
+including distinct-root and ambiguous-activity controls. Production dry runs
+remain read-only and never replace that replay with live test errors.
