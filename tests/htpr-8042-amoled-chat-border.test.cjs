@@ -31,7 +31,7 @@ for (const enabled of [false, true]) {
       assert.ok(panel);
       assert.equal(panel.classList.contains("[.amoled_&]:outline-1"), enabled);
       assert.equal(panel.classList.contains("[.amoled_&]:outline-[var(--border-light-gray-thin)]"), enabled);
-      assert.equal(panel.classList.contains("[.amoled_&]:rounded-[5px]"), enabled);
+      assert.equal(panel.classList.contains("[.amoled_&]:[--bs-border-radius:5px]"), enabled);
       assert.ok(panel.classList.contains("h-[70svh]"));
       assert.ok(panel.classList.contains("w-[30vw]"));
       assert.equal(view.container.querySelector("header").textContent, "Saved conversation");
