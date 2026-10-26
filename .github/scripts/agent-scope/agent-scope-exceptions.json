@@ -16,22 +16,6 @@
     "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it."
   },
   {
-    "path": "src/lib/mcp/operations/projects/operation.ts",
-    "call": "prisma.project.count({ where })",
-    "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/8026",
-    "sha256": "1dfa5ce6c61d7c0aec565f7ab8a55a362e5b8091d0b5e9ca9548a07c508edd86",
-    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Both calls consume where with AND getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope), which intersects board access with the credential team. Search/status/date filters do not replace that AND."
-  },
-  {
-    "path": "src/lib/mcp/operations/projects/operation.ts",
-    "call": "prisma.project.findMany({ where, select: { id: true, title: true, description: true, name: true, uniqueIdentifier: true, ownerId: true, owner: { select: { id: true, email: true, displayName: true } }, status: true, sections: true, section: { select: { id: true, section_title: true } }, labels: { select: { id: true, value: true } }, createdAt: true, _count: { select: { members: true, tasks: { where: { status: 'Normal' } } } } }, orderBy: [orderBy, { id: 'asc' as const }], take: limit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
-    "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/8026",
-    "sha256": "1dfa5ce6c61d7c0aec565f7ab8a55a362e5b8091d0b5e9ca9548a07c508edd86",
-    "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. Both calls consume where with AND getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope), which intersects board access with the credential team. Search/status/date filters do not replace that AND."
-  },
-  {
     "path": "src/lib/mcp/operations/tasks/operation.ts",
     "call": "prisma.task.findMany({ where, include })",
     "occurrence": 1,

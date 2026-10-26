@@ -20,7 +20,10 @@ export function withListQueryDescription(
     LIST_QUERY_DESCRIPTION_TOOLS.has(name) &&
     !description.includes('Shared list params')
   ) {
-    return `${description}${LIST_QUERY_DESCRIPTION_SUFFIX}`
+    const suffix = name === buildToolName('list_projects')
+      ? ' Shared list params: query, filter (status), sort (title or createdAt, optionally :asc or :desc), fields, limit, and cursor. Boards do not track update times; updatedAt sorting and filter.updated_since are unsupported.'
+      : LIST_QUERY_DESCRIPTION_SUFFIX
+    return `${description}${suffix}`
   }
   return description
 }
