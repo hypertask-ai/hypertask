@@ -22,6 +22,7 @@ const { withPalette } = fixture.exports;
 
 async function withColdBoards(t, queueEnabled, check) {
   await withPalette(t, { newWindow: true, boardChip: false, tab: "compose", url: "/project?id=7" }, async (palette) => {
+    const { queryClient } = palette;
     let resolveBoards;
     const api = require.cache[path.join(root, "src/utils/api/global/index.ts")].exports.default;
     api.getAllProjectsMinimal = () => new Promise((resolve) => { resolveBoards = resolve; });
@@ -32,8 +33,13 @@ async function withColdBoards(t, queueEnabled, check) {
       api.getAllProjectsMinimal = async () => boards;
       await React.act(async () => {
         resolveBoards(boards);
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        const deadline = Date.now() + 10_000;
+        while (queryClient.isFetching() > 0 || queryClient.getQueryData(["projectsAllMinimal", 985]) === undefined) {
+          assert.ok(Date.now() < deadline, "the board query never settled");
+          await new Promise((resolve) => setTimeout(resolve, 1));
+        }
       });
+      await React.act(async () => {});
     };
     await check({ ...palette, boardsArrive });
   });
