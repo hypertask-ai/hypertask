@@ -703,12 +703,12 @@ export async function selectTaskWriterModel(args: {
       );
   if (selection.modelOption) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(selection.modelOption, teamContext.settings, haiku55Enabled)
+      filterModelOptionForTeam(selection.modelOption, teamContext.settings, haiku55Enabled, grokGemini4Enabled)
     );
   }
   if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled),
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled, grokGemini4Enabled),
     );
   }
   if (
@@ -719,7 +719,7 @@ export async function selectTaskWriterModel(args: {
     )
   ) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled),
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled, grokGemini4Enabled),
     );
   }
 
@@ -790,7 +790,7 @@ export async function selectTaskWriterModel(args: {
 
   if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled),
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled, grokGemini4Enabled),
     );
     byokApiKey = await getSelectionApiKey(selection);
   }

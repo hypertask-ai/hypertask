@@ -191,12 +191,12 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     }
     if (selection.modelOption) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(selection.modelOption, teamProviderSettings, haiku55Enabled)
+        filterModelOptionForTeam(selection.modelOption, teamProviderSettings, haiku55Enabled, grokGemini4Enabled)
       );
     }
     if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled),
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled, grokGemini4Enabled),
       );
     }
     if (
@@ -207,7 +207,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       )
     ) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled),
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled, grokGemini4Enabled),
       );
     }
     const haikuByok = defaultContext.byok?.provider === "openrouter" &&
@@ -277,6 +277,13 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
         );
       }
+    }
+
+    if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
+      selection = selectionFromModelOption(
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled, false),
+      );
+      byokApiKey = await getSelectionApiKey(selection);
     }
 
     if (selection.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok?.provider === "openrouter") {
