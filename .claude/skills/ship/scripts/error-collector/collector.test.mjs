@@ -731,6 +731,23 @@ check('reporting', 'SSH client resets under session scopes are noise, real failu
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
 }));
 
+check('reporting', 'a one-shot gate observer exiting 1 on purpose is noise, other failed units still file (YPER4-833)', () => withHarness(async h => {
+  const vps = { service: 'vps-journal', board: 4060, route: 'init.scope', stack: '' };
+  const failed = unit => `init.scope: Failed to start ${unit} - /usr/bin/bash /home/valentin/projects/ceo/runs/IGSH-976/observe-once.sh.`;
+  h.events([
+    event({ ...vps, message: failed('igsh976-observe-180200.service') }),
+    event({ ...vps, message: failed('igsh976-observe-181819.service') }),
+    event({ ...vps, message: failed('igsh976-collect-180200.service') }),
+    event({ ...vps, message: failed('error-collector.service') }),
+    event({ service: 'vercel', message: failed('igsh976-observe-180200.service') }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 2);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 2);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+}));
+
 check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures still file', () => withHarness(async h => {
   const message = 'run-u2003644.scope: (7.6.7:C:80) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: 1990196 in AppDomain: None.  Error Message: Operation canceled.';
   const vps = { service: 'vps-journal', board: 4060, route: 'run-u2003644.scope', stack: '' };

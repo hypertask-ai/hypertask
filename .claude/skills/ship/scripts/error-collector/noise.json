@@ -126,6 +126,12 @@
     "reason": "An SSH client closed its connection while the server was still sending it a debug notice; the client went away, the server is fine (YPER4-406, YPER4-450)."
   },
   {
+    "id": "vps-gate-observer-unmet",
+    "service": "vps-journal",
+    "match": "^init\\.scope: Failed to start igsh\\d+-observe-\\d+\\.service - ",
+    "reason": "One-shot Software Factory gate observer timers exit 1 on purpose while their gate is still unmet; the observer reports its own result (YPER4-833)."
+  },
+  {
     "id": "outside-pr-guard-dry-run",
     "service": "github-actions",
     "match": "^Outside PR guard failed\\b",
