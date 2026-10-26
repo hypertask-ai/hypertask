@@ -33,6 +33,8 @@ async function main() {
     userFindUnique: prismaMock.user.findUnique,
     assigneesFindMany: prismaMock.assignees.findMany,
     sectionFindUnique: prismaMock.section.findUnique,
+    flagFindUnique: prismaMock.featureFlag.findUnique,
+    flagFindMany: prismaMock.featureFlag.findMany,
     fetch: globalThis.fetch,
   }
 
@@ -63,6 +65,8 @@ async function main() {
       photoURL: null,
     })
     prismaMock.assignees.findMany = async () => []
+    prismaMock.featureFlag.findUnique = async () => null
+    prismaMock.featureFlag.findMany = async () => []
     prismaMock.section.findUnique = async () => ({
       section_title: 'QA',
       projectId: 20,
@@ -97,9 +101,8 @@ async function main() {
 
     const reasoned = await runMoveUpdate()
     const reasonedBody = await reasoned.response.json()
-    // The wrapper reports 500 for any internal-call failure; the reason (and
-    // its original status) travels in the message.
-    assert.equal(reasoned.response.status, 500)
+    assert.equal(reasoned.response.status, 409)
+    assert.equal(reasonedBody.code, 'task_move_refused')
     assert.equal(
       reasonedBody.error,
       'Failed to update 1 task(s). Section locked by a QA hold'
@@ -109,6 +112,8 @@ async function main() {
     prismaMock.user.findUnique = originals.userFindUnique
     prismaMock.assignees.findMany = originals.assigneesFindMany
     prismaMock.section.findUnique = originals.sectionFindUnique
+    prismaMock.featureFlag.findUnique = originals.flagFindUnique
+    prismaMock.featureFlag.findMany = originals.flagFindMany
     globalThis.fetch = originals.fetch
   }
 }
