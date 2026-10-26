@@ -57,6 +57,7 @@ function paletteGroups(enabled, frequent = {}, contextOptions) {
     contextOptions, appShellRailOn: false, onAgentChat: false,
     onCalendar: false, onMyTasks: false, isMobile: false, showByokApiKeys: false,
     pinCommentActions: false, pageActions: null, selectedTasksFirst: false,
+    pagesEnabled: false, standalonePages: false, pathname: "/project",
     DESTRUCTIVE_COMMAND_MODES: [CommandMode.DeleteBoard, CommandMode.DeleteColumn],
     getActiveEmptySectionSettingFromProject: () => "Hidden",
     getActiveStalenessFromProject: () => false,

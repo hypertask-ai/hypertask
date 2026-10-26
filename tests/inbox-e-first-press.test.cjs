@@ -59,8 +59,9 @@ function makeFlow(t, {
     location: new URL(nativePathname + (inboxFlow ? `?inboxFlow=${inboxFlow}` : ""), "https://app.hypertask.ai"),
     dispatchEvent: () => {},
   };
-  global.fetch = async url => {
-    const params = new URL(url, "https://app.hypertask.ai").searchParams;
+  global.fetch = async (url, options) => {
+    assert.equal(options.method, "POST");
+    const params = new URLSearchParams(Object.entries(JSON.parse(options.body)).map(([name, value]) => [name, String(value)]));
     const item = [notification, ...notifications, ...(currentTask.notifications ?? [])].find(row => row.id === params.get("id"));
     archived.push({ item, mode: "Notification" });
     assert.equal(params.get("taskId"), String(item.taskId));

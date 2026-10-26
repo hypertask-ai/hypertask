@@ -186,7 +186,7 @@ const ManageLabels = ({onClose}: Props) => {
                     className="block h-[44px] w-full rounded-sm bg-hoverCardBackground py-2 pl-10 pr-3 text-content font-normal leading-5 placeholder:text-text-light-gray outline-none"
                   />
                 </div>
-                <div className="max-h-[364px] overflow-y-scroll">
+                <div className="max-h-[364px] overflow-y-scroll" style={{ height: Math.min(364, filteredLabels.length ? 36 * (filteredLabels.length + 1) : 56) }}>
                   <details className="px-3 py-2 text-dense text-text-light-gray" data-testid="board-hygiene">
                     <summary className="cursor-pointer font-medium text-white-black">Board hygiene</summary>
                     {hygienePending && <p role="status">Checking tags and views…</p>}

@@ -25,7 +25,6 @@ class FakeRedis {
 }
 stub(require.resolve('ioredis'), { __esModule: true, default: FakeRedis })
 source('src/lib/flags.ts', {
-  HTPR_6804_MCP_TOOLS_FLAG: 'htpr-6804-mcp-tools',
   HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'htpr-7203-mcp-flat-schema',
   isFeatureEnabled: async (key) => key === 'htpr-7220-legacy-sse-keepalive' && flagOn,
 })

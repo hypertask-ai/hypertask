@@ -10,7 +10,7 @@ function setup({ enabled = true, flagError = false } = {}) {
     '@vercel/functions': { waitUntil: work => pending.push(work) },
     '@/lib/flags': { isFeatureEnabled: async (key) => {
       if (flagError) throw new Error('flags unavailable')
-      return key === flag ? enabled : true
+      return key === flag ? enabled : false
     } },
     './report': { fileAiFeedback: async (input) => { filed.push(input) } },
     './callerFixable': { callerCanFix: () => false, refusalFromZodIssues: () => ({}), quietFixableReports: async () => false },

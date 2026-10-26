@@ -157,7 +157,7 @@ test('flag evaluation uses verified human IDs, rejects missing identity and fail
   assert.equal(await isMcpV2Enabled(985), false)
 })
 
-test('handler evaluates verified principal and scope, not body IDs or agent IDs, and flag lookup failure retains baseline', async () => {
+test('handler evaluates verified principal and scope, not body IDs or agent IDs, and v2 lookup failure retains the consolidated catalog', async () => {
   let enabled = true
   const calls = []
   const auth = { user: { id: 985 }, agentId: 'agent-not-human' }
@@ -167,14 +167,14 @@ test('handler evaluates verified principal and scope, not body IDs or agent IDs,
     '@/lib/telemetry/mcpSseAnalytics': { recordLegacyMcpRequest: () => {} },
     '@/lib/mcp/auth': { ...overrides['@/lib/mcp/auth'], validateMcpAuth: async () => auth },
     '@/lib/mcp/agents/scopes': { getAgentRole: async () => 'read' },
-    '@/lib/flags': { HTPR_6804_MCP_TOOLS_FLAG: 'catalog', isFeatureEnabled: async (key, id) => { calls.push([key, id]); if (key === 'catalog' || key === 'htpr-7195-ai-feedback') return false; if (enabled === 'throw') throw new Error('lookup failed'); return enabled } },
+    '@/lib/flags': { isFeatureEnabled: async (key, id) => { calls.push([key, id]); if (key !== 'htpr-6927-mcp-v2') return false; if (enabled === 'throw') throw new Error('lookup failed'); return enabled } },
   })('src/lib/mcp-server/handler.ts').mcpHandler
   const on = JSON.parse(await (await handler(request('tools/list', { user_id: 6 }))).text()).result.tools
   assert.ok(on.every((tool) => tool.annotations.readOnlyHint))
   assert.ok(calls.every(([, id]) => id === auth.user.id))
   enabled = 'throw'
   const off = await (await handler(request('tools/list'))).text()
-  assert.equal(off, await rpc(old, baselineLegacy, 'tools/list', undefined, true))
+  assert.deepEqual(JSON.parse(off).result.tools.map((tool) => tool.name), selectMcpTools(legacy.filter((tool) => tool.name !== 'hypertask_report_feedback'), true, { agent: true }).filter((tool) => !tool.hidden).map((tool) => tool.name))
 })
 
 test('SDK streamable registration passes hints beside inputSchema and OFF omits them', () => {
@@ -234,16 +234,16 @@ test('legacy SSE registration preserves SDK annotations and resolves per-message
       callback('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: auth }))
       await new Promise((resolve) => setImmediate(resolve))
       assert.ok(sent.at(-1).result.tools.every((tool) => tool.annotations))
-      assert.equal(sent.at(-1).result.tools.some((tool) => tool.name === 'hypertask_create_task'), role === 'write')
+      assert.equal(sent.at(-1).result.tools.find((tool) => tool.name === 'hypertask_tasks').inputSchema.properties.action.enum.includes('create'), role === 'write')
     }
     const restricted = { ...auth, extra: { managementPermissions: { management: ['read'] }, mcpAuthContext: { user: { id: 985 }, agentId: null } } }
     callback('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: restricted }))
     await new Promise((resolve) => setImmediate(resolve))
-    assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name).sort(), ['hypertask_list_agents', 'hypertask_list_connections'])
+    assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name).sort(), ['hypertask_agents', 'hypertask_user_context'])
     v2Enabled = false
     callback('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: auth }))
     await new Promise((resolve) => setImmediate(resolve))
-    assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name), baselineLegacy.map((tool) => tool.name))
+    assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name), selectMcpTools(legacy.filter((tool) => tool.name !== 'hypertask_report_feedback'), true, { agent: true }).filter((tool) => !tool.hidden).map((tool) => tool.name))
     assert.ok(sent.at(-1).result.tools.every((tool) => !('annotations' in tool)))
   } finally {
     abort.abort()
