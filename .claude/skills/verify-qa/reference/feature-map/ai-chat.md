@@ -163,6 +163,9 @@ disabled and busy before their handlers attach, without moving. Release
 JavaScript; the first accepted click must open chat and its scope picker.
 A known Off flag preserves the legacy server button. Unknown flag state
 uses the safe loading state until the handler attaches.
+If startup adds `view=default` to the same board URL after Open, chat must
+stay open, including when automatic board opening is off. A different board
+or a genuinely different view retains its existing automatic-opening policy.
 
 With `htpr-8030-chat-open-race` enabled, load a board with chat closed,
 wait for `[data-ai-chat-ready="true"]`, then select **Open AI chat** once.

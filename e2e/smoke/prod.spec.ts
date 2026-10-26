@@ -350,6 +350,16 @@ test('chat opener waits for hydration before accepting its first click', { tag: 
     localStorage.setItem('recoil-persist', JSON.stringify({ ...saved,
       aiChatAutoOpenSuppressed: true, aiChatPinned: false, openAiChatByDefault: false,
     }))
+    document.addEventListener('click', event => {
+      if (!(event.target instanceof Element)) return
+      const button = event.target.closest('button')
+      if (!button || (button.getAttribute('aria-label') !== 'Open AI chat' && button.textContent?.trim() !== 'AI')) return
+      const key = Reflect.ownKeys(button).find(key => String(key).startsWith('__reactProps$'))
+      const props = key ? Reflect.get(button, key) : undefined
+      document.documentElement.dataset.chatOpenerClicks = String(Number(document.documentElement.dataset.chatOpenerClicks ?? '0') + 1)
+      document.documentElement.dataset.chatOpenerHandler = String(typeof props?.onClick === 'function')
+      document.documentElement.dataset.chatOpenerRoute = location.pathname + location.search
+    }, true)
   })
   const bootstrap = Promise.withResolvers<void>()
   await page.route('**/_next/static/**', async route => {
@@ -364,13 +374,23 @@ test('chat opener waits for hydration before accepting its first click', { tag: 
     const clicked = opener.click()
     bootstrap.resolve()
     await clicked
+    const click = await page.evaluate(() => ({ count: document.documentElement.dataset.chatOpenerClicks, handler: document.documentElement.dataset.chatOpenerHandler }))
+    expect(click).toEqual({ count: '1', handler: 'true' })
     const scope = page.getByTestId('ai-sidebar').locator('[data-ai-chat-scope]:visible > button').first()
     await expect(scope).toBeVisible()
     await scope.click()
     await expect(page.locator('#option-picker')).toBeVisible()
   } finally {
     bootstrap.resolve()
-    await page.unroute('**/_next/static/**')
+    if (!page.isClosed()) {
+      const startup = await page.evaluate(() => ({ route: location.pathname + location.search,
+        clickRoute: document.documentElement.dataset.chatOpenerRoute,
+        clicks: document.documentElement.dataset.chatOpenerClicks,
+        handler: document.documentElement.dataset.chatOpenerHandler,
+        sidebar: document.querySelector('[data-testid="ai-sidebar"]') !== null,
+      })).catch(() => null)
+      console.log('[chat opener startup]', JSON.stringify(startup))
+    }
   }
 })
 

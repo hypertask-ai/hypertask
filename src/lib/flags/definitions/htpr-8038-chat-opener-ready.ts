@@ -7,6 +7,6 @@ export default {
   kind: "bugfix",
   defaultMode: "EVERYONE",
   shippedOn: "2026-10-26",
-  description: "Makes chat openers available when their handlers attach.",
-  releaseRisk: { risk: "small", reason: "Only guards existing chat buttons before hydration; layout and chat actions stay unchanged." },
+  description: "Keeps startup from ignoring or closing chat.",
+  releaseRisk: { risk: "small", reason: "Guards existing chat buttons before hydration and treats the same board’s default-view URL as the same startup page." },
 } as const satisfies FeatureFlagDefinition;
