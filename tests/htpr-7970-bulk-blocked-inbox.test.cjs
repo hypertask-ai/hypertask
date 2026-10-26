@@ -15,7 +15,8 @@ function fixture(t, { enabled = true, rows = [blocked(42), blocked(43)], failTas
   queryClient.invalidateQueries = async () => { reconciliations.push(true); };
   const fetch = async (url, options) => {
     requests.push({ url, options });
-    return { ok: !url.includes(`taskId=${failTask}&`), status: 200 };
+    const taskId = options?.body ? JSON.parse(options.body).taskId : Number(new URL(url, "http://x").searchParams.get("taskId"));
+    return { ok: taskId !== failTask, status: 200 };
   };
   t.mock.method(global, "fetch", fetch);
   const mocks = {
@@ -117,4 +118,10 @@ test("one failed synthetic undo cannot skip unrelated restores", async t => {
   await assert.rejects(UndoInboxArchive({ isBulkOperation: true, currentUser: { id: 985 }, syntheticNotifications: [blocked(42), blocked(43)], notificationIds: [{ notificationId: 702, taskId: 44, userId: 985 }] }), /Connection lost/);
   assert.equal(requests.length, 3);
   assert.ok(requests.some(request => request.url.endsWith("(un)archiveBulk")));
+});
+
+test("an earlier HTTP failure on a synthetic restore is reported", async t => {
+  t.mock.method(global, "fetch", async url => ({ ok: !url.includes("taskId=42&"), status: 500 }));
+  const { UndoInboxArchive } = load("src/utils/undoActions/helperFuncs.ts", { "@/lib/constants/APIRouteConstants": {}, "@/lib/realtime/client": { realtimeEchoHeaders: () => ({}) }, "../api/global": {} });
+  await assert.rejects(UndoInboxArchive({ isBulkOperation: true, currentUser: { id: 985 }, syntheticNotifications: [blocked(42), blocked(43)], notificationIds: [] }), /status 500/);
 });

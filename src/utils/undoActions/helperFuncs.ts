@@ -28,7 +28,7 @@ export async function UndoInboxArchive(data:any){
     });
   } else if (data.isBulkOperation) {
         const { notificationIds } = data;
-        const restores: Promise<unknown>[] = (data.syntheticNotifications ?? []).map(
+        const restores: Promise<Response>[] = (data.syntheticNotifications ?? []).map(
           (notification: { id: string; taskId: number; type: string }) =>
             fetch(`/api/notifications/markAsDone?id=${notification.id}&taskId=${notification.taskId}&userId=${data.currentUser.id}&type=${notification.type}`, { headers: realtimeEchoHeaders() })
         );
@@ -42,6 +42,8 @@ export async function UndoInboxArchive(data:any){
         const results = await Promise.allSettled(restores);
         const failed = results.find(result => result.status === 'rejected');
         if (failed?.status === 'rejected') throw failed.reason;
+        const httpFailure = results.find(result => result.status === 'fulfilled' && result.value && (result.value as Response).ok === false);
+        if (httpFailure?.status === 'fulfilled') throw new Error(`Undo restore failed with status ${(httpFailure.value as Response).status}`);
         return results.at(-1)?.status === 'fulfilled' ? restores.at(-1) : undefined;
     } else {
       await fetch("/api/notifications/markAsDone", {
