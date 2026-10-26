@@ -1999,6 +1999,7 @@ model Attachment {
   task   Task? @relation(fields: [taskId], references: [id])
 
   @@index([commentId])
+  @@index([chatMessageId])
   // HTPR-6000: the minute-ly hard-delete sweep deletes Attachment rows by
   // taskId with no supporting index, forcing a full table scan per task deleted.
   @@index([taskId])
