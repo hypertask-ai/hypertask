@@ -282,8 +282,14 @@ export const WelcomeScreen = () => {
   const shownProjectId = currentProject?.id ?? null;
   useEffect(() => {
     if (!hydrated) return;
-    signalChip({ kind: "shown", surface: shownSurface, chipType: shownType, chips: shownChips, projectId: shownProjectId, taskId: taskId ?? null });
-  }, [hydrated, shownKey, shownProjectId, taskId]);
+    const controls: { chipType: string; label: string }[] = [];
+    if (taskId && !isEditMode) {
+      if (taskSummaryAction) controls.push({ chipType: "summary-action", label: taskSummaryAction.label });
+      if (shownGenerated.length > 0 && !taskQuestions.isLoading) controls.push({ chipType: "ask-all", label: "Ask all" });
+    }
+    signalChip({ kind: "shown", surface: shownSurface, chipType: shownType, chips: shownChips, projectId: shownProjectId, taskId: taskId ?? null, controls });
+    return () => signalChip({ kind: "dismiss", surface: shownSurface });
+  }, [hydrated, shownKey, shownProjectId, taskId, Boolean(taskSummaryAction), shownGenerated.length > 0 && !taskQuestions.isLoading]);
 
   const clickChip = (sent: string, index: number, chipType: string, label?: string) => {
     signalChip({ kind: "clicked", text: sent, index, chipType, label });

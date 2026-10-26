@@ -11,7 +11,8 @@ export type AiChipType = (typeof AI_CHIP_TYPES)[number];
 export type AiChipEventName = (typeof AI_CHIP_EVENTS)[number];
 
 export type AiChipSignal =
-  | { kind: "shown"; surface: AiChipSurface; chipType: AiChipType; chips: string[]; projectId?: number | null; taskId?: number | null }
+  | { kind: "shown"; surface: AiChipSurface; chipType: AiChipType; chips: string[]; projectId?: number | null; taskId?: number | null; controls?: { chipType: AiChipType; label: string }[] }
+  | { kind: "dismiss"; surface: AiChipSurface }
   | { kind: "clicked"; text: string; index: number; label?: string; chipType?: AiChipType }
   | { kind: "send"; text: string };
 
@@ -64,13 +65,26 @@ export function createAiChipRecorder(emit: (payload: AiChipEventPayload) => void
       if (signal.kind === "shown") {
         const chips = signal.chips.slice(0, AI_CHIP_MAX_CHIPS).map(clip);
         if (!chips.length) return;
-        if (active && active.surface === signal.surface && active.taskId === (signal.taskId ?? null) && sameChips(active.chips, chips)) return;
+        const projectId = signal.projectId ?? null;
+        const taskId = signal.taskId ?? null;
+        if (active && active.surface === signal.surface && active.chipType === signal.chipType && active.projectId === projectId && active.taskId === taskId && sameChips(active.chips, chips)) return;
         ignore();
-        active = { surface: signal.surface, chipType: signal.chipType, chips, projectId: signal.projectId ?? null, taskId: signal.taskId ?? null, resolved: false };
+        active = { surface: signal.surface, chipType: signal.chipType, chips, projectId, taskId, resolved: false };
         emit({ event: "shown", ...base(active) });
+        for (const control of signal.controls ?? []) {
+          emit({ event: "shown", ...base(active), chipType: control.chipType, chips: [clip(control.label)] });
+        }
         return;
       }
-      if (signal.kind === "clicked") {
+      if (signal.kind === "dismiss") {
+        if (!active || active.surface !== signal.surface) return;
+        ignore();
+        active = null;
+        lastClickedText = null;
+        return;
+      }
+      if (signal.kind === "dismiss") return typeof signal.surface === "string";
+  if (signal.kind === "clicked") {
         if (!active || active.resolved) return;
         active.resolved = true;
         lastClickedText = signal.text;
@@ -100,6 +114,7 @@ export function isAiChipSignal(value: unknown): value is AiChipSignal {
   if (!value || typeof value !== "object") return false;
   const signal = value as Record<string, unknown>;
   if (signal.kind === "send") return typeof signal.text === "string";
+  if (signal.kind === "dismiss") return typeof signal.surface === "string";
   if (signal.kind === "clicked") return typeof signal.text === "string" && typeof signal.index === "number";
   if (signal.kind === "shown") return Array.isArray(signal.chips) && typeof signal.surface === "string" && typeof signal.chipType === "string";
   return false;

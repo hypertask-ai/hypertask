@@ -170,3 +170,42 @@ test('chip buttons keep their text, order and send behaviour', () => {
   const send = read('src/hooks/MultiPages/AIChat/aiChatSend.ts');
   assert.match(send, /detail: \{ kind: "send", text: content \}/);
 });
+
+test('a dismissed chat logs ignored once and a later send from another chat logs nothing', () => {
+  const { events, recorder: r } = recorder();
+  r.handle(shown());
+  r.handle({ kind: 'dismiss', surface: 'welcome-board' });
+  r.handle({ kind: 'send', text: 'from another chat' });
+  assert.deepEqual(events.map(e => e.event), ['shown', 'ignored']);
+});
+
+test('dismissing another surface keeps the pending chips', () => {
+  const { events, recorder: r } = recorder();
+  r.handle(shown());
+  r.handle({ kind: 'dismiss', surface: 'new-ticket-questions' });
+  r.handle({ kind: 'send', text: 'typed' });
+  assert.deepEqual(events.map(e => e.event), ['shown', 'ignored', 'next_typed']);
+});
+
+test('the same chips on another board or after a dismissal are a new exposure', () => {
+  const { events, recorder: r } = recorder();
+  r.handle(shown());
+  r.handle(shown(['A', 'B', 'C'], { projectId: 10 }));
+  r.handle({ kind: 'dismiss', surface: 'welcome-board' });
+  r.handle(shown(['A', 'B', 'C'], { projectId: 10 }));
+  assert.deepEqual(events.map(e => e.event), ['shown', 'ignored', 'shown', 'ignored', 'shown']);
+  assert.equal(events[2].projectId, 10);
+});
+
+test('summary and ask all controls log their own shown events', () => {
+  const { events, recorder: r } = recorder();
+  r.handle(shown(['A'], { controls: [{ chipType: 'summary-action', label: 'Summarize' }, { chipType: 'ask-all', label: 'Ask all' }] }));
+  assert.deepEqual(events.map(e => e.chipType), ['suggested', 'summary-action', 'ask-all']);
+  assert.deepEqual(events[1].chips, ['Summarize']);
+});
+
+test('hidden or inactive ticket questions never signal shown', () => {
+  const list = read('src/components/AI_CHAT/MessageList.tsx');
+  assert.match(list, /if \(!active \|\| hidden \|\| !showTicketQuestions/);
+  assert.match(list, /kind: "dismiss", surface: "new-ticket-questions"/);
+});

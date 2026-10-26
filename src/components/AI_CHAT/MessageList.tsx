@@ -72,9 +72,10 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const newTicketQuestions = ticketQuestions.data?.questions?.filter(Boolean) ?? [];
   const newTicketQuestionsKey = showTicketQuestions ? JSON.stringify(newTicketQuestions) : "";
   useEffect(() => {
-    if (!showTicketQuestions || newTicketQuestions.length === 0) return;
+    if (!active || hidden || !showTicketQuestions || newTicketQuestions.length === 0) return;
     signalChip({ kind: "shown", surface: "new-ticket-questions", chipType: "generated-question", chips: newTicketQuestions, taskId: newTicketId ?? null });
-  }, [showTicketQuestions, newTicketId, newTicketQuestionsKey]);
+    return () => signalChip({ kind: "dismiss", surface: "new-ticket-questions" });
+  }, [active, hidden, showTicketQuestions, newTicketId, newTicketQuestionsKey]);
 
   useLayoutEffect(() => {
     registerMessageListRef(messageListRef.current);
