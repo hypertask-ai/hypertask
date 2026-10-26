@@ -28,23 +28,21 @@ export async function UndoInboxArchive(data:any){
     });
   } else if (data.isBulkOperation) {
         const { notificationIds } = data;
-        if (data.syntheticNotifications?.length) {
-          await Promise.all(data.syntheticNotifications.map((notification: { id: string; taskId: number; type: string }) =>
+        const restores: Promise<unknown>[] = (data.syntheticNotifications ?? []).map(
+          (notification: { id: string; taskId: number; type: string }) =>
             fetch(`/api/notifications/markAsDone?id=${notification.id}&taskId=${notification.taskId}&userId=${data.currentUser.id}&type=${notification.type}`, { headers: realtimeEchoHeaders() })
-          ));
-          if (notificationIds.length === 0) return;
-        }
-        
-        const response = await fetch('/api/notifications/(un)archiveBulk', {
+        );
+        if (notificationIds.length > 0) {
+          restores.push(fetch('/api/notifications/(un)archiveBulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...realtimeEchoHeaders() },
-            body: JSON.stringify({
-                notificationIds,
-                status: 'Normal'
-            })
-        });
-
-        return response;
+            body: JSON.stringify({ notificationIds, status: 'Normal' })
+          }));
+        }
+        const results = await Promise.allSettled(restores);
+        const failed = results.find(result => result.status === 'rejected');
+        if (failed?.status === 'rejected') throw failed.reason;
+        return results.at(-1)?.status === 'fulfilled' ? restores.at(-1) : undefined;
     } else {
       await fetch(`/api/notifications/markAsDone?id=${data.notification.id}&taskId=${data.notification.taskId}&userId=${data.currentUser.id}&type=${data.notification.type}`, { headers: realtimeEchoHeaders() })
 

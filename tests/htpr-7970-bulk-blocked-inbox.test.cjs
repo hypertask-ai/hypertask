@@ -104,3 +104,17 @@ test("the bugfix defaults to Everyone", () => {
   assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.releaseRisk.risk, "small");
 });
+
+
+test("one failed synthetic undo cannot skip unrelated restores", async t => {
+  const requests = [];
+  t.mock.method(global, "fetch", async (url, options) => {
+    requests.push({ url, options });
+    if (url.includes("id=-42&")) throw new Error("Connection lost");
+    return { ok: true };
+  });
+  const { UndoInboxArchive } = load("src/utils/undoActions/helperFuncs.ts", { "@/lib/constants/APIRouteConstants": {}, "@/lib/realtime/client": { realtimeEchoHeaders: () => ({}) }, "../api/global": {} });
+  await assert.rejects(UndoInboxArchive({ isBulkOperation: true, currentUser: { id: 985 }, syntheticNotifications: [blocked(42), blocked(43)], notificationIds: [{ notificationId: 702, taskId: 44, userId: 985 }] }), /Connection lost/);
+  assert.equal(requests.length, 3);
+  assert.ok(requests.some(request => request.url.endsWith("(un)archiveBulk")));
+});
