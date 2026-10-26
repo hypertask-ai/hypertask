@@ -36,7 +36,7 @@ async function harness(enabled, flatSchema = false, consolidated = true) {
   })
   const presence = await getAgentPresenceTool(985)
   const tool = consolidated
-    ? selectMcpTools([presence], true, {}, true, flatSchema).find((tool) => tool.name === 'hypertask_agents')
+    ? selectMcpTools([presence], true, {}, flatSchema).find((tool) => tool.name === 'hypertask_agents')
     : presence
   const args = (input) => consolidated ? { action: 'presence', input, response_format: 'detailed' } : input
   return { tool, args, calls, flagReads, getAgentPresenceTool, agentPresenceTool }

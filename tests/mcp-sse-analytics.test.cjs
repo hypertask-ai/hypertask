@@ -121,7 +121,6 @@ test('transport analytics evaluates remaining schema flags through an isolated f
   for (const endpoint of ['/sse', '/message', '/mcp']) {
     await call(endpoint)
     assert.deepEqual(flagChecks, [
-      { key: 'htpr-6927-mcp-v2', userId: 2343 },
       { key: 'htpr-7195-ai-feedback', userId: 2343 },
       { key: 'htpr-7902-team-id', userId: 2343 },
       { key: 'htpr-7203-mcp-flat-schema', userId: 2343 },
