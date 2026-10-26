@@ -2151,3 +2151,24 @@ test('changed component paths accept private gates without trusting unchanged si
     assert.equal(result.pass, expected, name);
   }
 });
+
+test('deletion anchors never turn an unchanged flag read into a new ticket gate', async (t) => {
+  const { dir, git } = makeRepo(t);
+  const source = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() {\n  const enabled = useFlag(OTHER_FLAG);\n  const unused = 0;\n  return enabled ? <div>Old</div> : null;\n}\n';
+  writeFile(dir, 'src/components/Widget.tsx', source);
+  const base = commit(git, 'existing gate');
+  writeFile(dir, 'src/components/Widget.tsx', source.replace('  const unused = 0;\n', '').replace('Old', 'New'));
+  assert.equal((await evaluate('HTPR-1 [FEATURE] existing gate', base, commit(git, 'delete next to flag'), dir)).pass, false);
+});
+
+test('deletion-only sibling changes still require their own reachable ticket gate', async (t) => {
+  const { dir, git } = makeRepo(t);
+  const source = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() { return null; }\nexport function Other() {\n  if (!visible) return null;\n  return <aside>Existing</aside>;\n}\n';
+  writeFile(dir, 'src/components/Widget.tsx', source);
+  const base = commit(git, 'existing siblings');
+  const gated = source.replace('return null; }', 'return useFlag(OTHER_FLAG) ? <div>New</div> : null; }');
+  writeFile(dir, 'src/components/Widget.tsx', gated);
+  assert.equal((await evaluate('HTPR-1 [FEATURE] sibling control', base, commit(git, 'still allowed'), dir)).pass, true);
+  writeFile(dir, 'src/components/Widget.tsx', gated.replace('  if (!visible) return null;\n', ''));
+  assert.equal((await evaluate('HTPR-1 [FEATURE] sibling control', base, commit(git, 'now refused'), dir)).pass, false);
+});

@@ -79,7 +79,7 @@ function refactorUiLineCounts(baseSha, headSha) {
   };
 }
 
-function addedLinesFor(baseSha, headSha, path) {
+function addedLinesFor(baseSha, headSha, path, includeDeletions = false) {
   const lines = new Set();
   const diff = git(["diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`, "--", path]);
   for (const row of diff.split("\n")) {
@@ -87,7 +87,7 @@ function addedLinesFor(baseSha, headSha, path) {
     if (!hunk) continue;
     const start = Number(hunk[1]);
     const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-    for (let line = start; line < start + Math.max(count, 1); line += 1) lines.add(line);
+    for (let line = start; line < start + (includeDeletions ? Math.max(count, 1) : count); line += 1) lines.add(line);
   }
   return lines;
 }
@@ -1172,6 +1172,7 @@ function hasUngatedExportedJsxEntry(
   registry,
   allowedKeys,
   addedLines,
+  changedLines,
   ref,
   path,
   importedFunctions,
@@ -1189,7 +1190,7 @@ function hasUngatedExportedJsxEntry(
     const entryChanged = [...entryFunctions].some((entry) => {
       const startLine = sourceFile.getLineAndCharacterOfPosition(entry.getStart(sourceFile)).line + 1;
       const endLine = sourceFile.getLineAndCharacterOfPosition(entry.getEnd()).line + 1;
-      return [...addedLines].some((line) => line >= startLine && line <= endLine);
+      return [...changedLines].some((line) => line >= startLine && line <= endLine);
     });
     if (!entryChanged) continue;
     if (!exportedJsxEntryHasTicketGate(
@@ -1209,7 +1210,7 @@ function hasUngatedExportedJsxEntry(
   return false;
 }
 
-function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
+function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, changedLines) {
   const source = git(["show", `${ref}:${path}`]);
   let scriptKind = typescript.ScriptKind.JS;
   if (path.endsWith(".tsx")) scriptKind = typescript.ScriptKind.TSX;
@@ -1278,6 +1279,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
     registry,
     allowedKeys,
     addedLines,
+    changedLines,
     ref,
     path,
     importedFunctions,
@@ -1679,6 +1681,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         headRegistry,
         ticketKeys,
         addedLinesFor(mergeBase, headSha, path),
+        addedLinesFor(mergeBase, headSha, path, true),
       );
       if (key) {
         const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);
