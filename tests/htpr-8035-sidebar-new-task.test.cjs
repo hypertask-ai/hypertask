@@ -85,6 +85,9 @@ for (const wide of [false, true]) {
     assert.match(buttons[0].props.className, /hidden.*md:flex/);
     assert.match(buttons[0].props.className, /bg-shadcn-primary/);
     assert.match(rail.html, /CTRL\+J/);
+    const position = (label) => rail.nodes.findIndex((node) => node.props["aria-label"] === label);
+    assert.ok(position("New Task") > position("Search"));
+    assert.ok(position("New Task") < position("Agents"));
     assert.match(rail.html, wide ? /w-\[130px\]/ : /w-\[48px\]/);
     for (const label of ["Your Kanban boards", "Board layout", "Table layout"]) {
       rail.nodes.find((node) => node.props["aria-label"] === label).props.onClick();

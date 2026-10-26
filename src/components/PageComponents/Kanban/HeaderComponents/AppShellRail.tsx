@@ -199,20 +199,7 @@ const AppShellRail = ({
             />
           </button>
         </RailItem>
-        {sidebarNewTask && composeEnabled && (
-          <button
-            type="button"
-            aria-label="New Task"
-            onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
-            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] bg-shadcn-primary text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
-              wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
-            }`}
-          >
-            <Plus size={18} strokeWidth={1.75} aria-hidden />
-            {wide && <span className="text-content font-medium">New Task</span>}
-            <Tooltip left={tooltipLeft} bottom={-8} text="New Task" keyCombination={[isApple ? "CMD" : "CTRL", "J"]} />
-          </button>
-        )}
+
       </div>
 
       <div className={`mt-3 flex flex-col gap-1 ${wide ? "w-full" : "items-center"}`}>
@@ -339,6 +326,23 @@ const AppShellRail = ({
               <Tooltip left={tooltipLeft} bottom={-8} text="Running timers" keyCombination={["7"]} />
             </button>
           </RailItem>
+        )}
+      </div>
+
+      <div className={`mt-3 flex flex-col ${wide ? "w-full" : "items-center"}`}>
+        {sidebarNewTask && composeEnabled && (
+          <button
+            type="button"
+            aria-label="New Task"
+            onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
+            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] bg-shadcn-primary text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
+              wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
+            }`}
+          >
+            <Plus size={18} strokeWidth={1.75} aria-hidden />
+            {wide && <span className="text-content font-medium">New Task</span>}
+            <Tooltip left={tooltipLeft} bottom={-8} text="New Task" keyCombination={[isApple ? "CMD" : "CTRL", "J"]} />
+          </button>
         )}
       </div>
 
