@@ -1,11 +1,6 @@
 name: Production Revert Proposal
 
 on:
-  pull_request:
-    paths:
-      - .github/scripts/production-revert-pr.mjs
-      - .github/workflows/production-revert-pr.yml
-      - tests/production-revert-pr.test.cjs
   workflow_run:
     workflows: [CI Tests]
     types: [completed]
@@ -27,7 +22,7 @@ concurrency:
 
 jobs:
   replay:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'failure')
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -38,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020

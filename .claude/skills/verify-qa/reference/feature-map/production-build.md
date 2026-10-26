@@ -26,3 +26,9 @@ Merge to `production`, then read the commit's `Vercel` status (`gh api repos/hyp
 ## Cleanup
 
 None.
+
+## Production revert proposals
+
+In GitHub Actions, dispatch Production Revert Proposal on production with failed CI run `40201291546`. Manual replay must identify culprit `73cc4b70870fb411935a3a169779a8fb8b49f168` and skip the publisher. Never manufacture a production break to test publication.
+
+Automated evidence: `production-revert-check.yml` checks six real-Git fixtures and historical causal replay on relevant PRs. The fixtures prove later-work preservation, flaky/rate-limit/timeout refusals, output/hook isolation, and partial publication recovery. Only the GitHub PR transport is faked. Keep the run URL and logs. Probe worktrees clean themselves; manual replay creates no live branch or PR.
