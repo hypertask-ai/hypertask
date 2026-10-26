@@ -72,12 +72,19 @@ const AiUsageSection = () => {
         console.error(requestError);
         if (!cancelled) {
           setData(null);
-          setError(
-            axios.isAxiosError(requestError) &&
-              requestError.response?.status === 403
-              ? "Only the team owner or a board admin can view AI usage."
-              : "AI usage is currently unavailable.",
-          );
+          const usageMessage = axios.isAxiosError<{ usageMessage?: unknown }>(requestError)
+            ? requestError.response?.data?.usageMessage
+            : undefined;
+          if (typeof usageMessage === "string") {
+            setError(usageMessage);
+          } else {
+            setError(
+              axios.isAxiosError(requestError) &&
+                requestError.response?.status === 403
+                ? "Only the team owner or a board admin can view AI usage."
+                : "AI usage is currently unavailable.",
+            );
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
