@@ -39,6 +39,8 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
+  let chipSignal: typeof signalAiChip | undefined;
+  if (chipEventsEnabled) chipSignal = signalAiChip;
   const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
   let pendingFollowup: typeof pendingFollowupState = null;
   if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
@@ -70,10 +72,10 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const newTicketQuestions = ticketQuestions.data?.questions?.filter(Boolean) ?? [];
   const newTicketQuestionsKey = showTicketQuestions ? JSON.stringify(newTicketQuestions) : "";
   useEffect(() => {
-    if (!chipEventsEnabled || !active || hidden || !showTicketQuestions || newTicketQuestions.length === 0) return;
-    signalAiChip({ kind: "shown", surface: "new-ticket-questions", chipType: "generated-question", chips: newTicketQuestions, taskId: newTicketId ?? null });
-    return () => signalAiChip({ kind: "dismiss", surface: "new-ticket-questions" });
-  }, [chipEventsEnabled, active, hidden, showTicketQuestions, newTicketId, newTicketQuestionsKey]);
+    if (!chipSignal || !active || hidden || !showTicketQuestions || newTicketQuestions.length === 0) return;
+    chipSignal({ kind: "shown", surface: "new-ticket-questions", chipType: "generated-question", chips: newTicketQuestions, taskId: newTicketId ?? null });
+    return () => chipSignal({ kind: "dismiss", surface: "new-ticket-questions" });
+  }, [chipSignal, active, hidden, showTicketQuestions, newTicketId, newTicketQuestionsKey]);
 
   useLayoutEffect(() => {
     registerMessageListRef(messageListRef.current);
@@ -143,7 +145,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
                 data-compose-question
                 className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-meta text-left w-full"
                 onClick={() => {
-                  if (chipEventsEnabled) signalAiChip({ kind: "clicked", text: question, index, chipType: "generated-question" });
+                  chipSignal?.({ kind: "clicked", text: question, index, chipType: "generated-question" });
                   handleSendMessage(question);
                 }}
               >
