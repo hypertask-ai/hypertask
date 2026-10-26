@@ -707,6 +707,23 @@ check('reporting', 'an SSH client hanging up is noise, other sshd failures are e
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 1);
 }));
 
+check('reporting', 'SSH client resets under session scopes are noise, real failures still file (YPER4-450)', () => withHarness(async h => {
+  const vps = { service: 'vps-journal', board: 4060, stack: '' };
+  h.events([
+    event({ ...vps, route: 'session-924033.scope', message: 'session-924033.scope: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
+    event({ ...vps, route: 'ssh.service', message: 'ssh.service: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
+    event({ ...vps, route: 'session-123.scope', message: 'session-123.scope: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe' }),
+    event({ ...vps, route: 'session-123.scope', message: 'session-123.scope: error: bind [127.0.0.1]:7979: Address already in use' }),
+    event({ ...vps, route: 'database.service', message: 'database.service: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
+    event({ service: 'vercel', message: 'session-924033.scope: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 2);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+}));
+
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
   h.events([event({ message: 'database ECONNRESET' }), event({ message: 'client request ECONNRESET' })]);
   await h.run();
