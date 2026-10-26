@@ -58,6 +58,7 @@ export interface IChatMessage {
   attachments?: IAttachment[];
   statusSteps?: string[];
   authorAgent?: { displayName: string } | null;
+  precedesMessageId?: string;
 }
 
 export type RedirectMode =
