@@ -1,6 +1,7 @@
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import { notificationBoardAccessWhere } from "./boardAccess";
 import { createHash } from "node:crypto";
+import { z } from "zod";
 
 import { NotificationType, Prisma } from "@prisma/client";
 
@@ -37,7 +38,12 @@ const KEEP_KEYS: Array<keyof InboxZeroKeep> = [
   "assignments",
 ];
 
-const inboxZeroNotificationSelect = {
+const safeUpdatesSchema = z.object({
+  taskIds: z.array(z.number().int().positive()).max(10000),
+  agentOnly: z.boolean(),
+});
+
+const inboxZeroNotificationSelect = (userId: number, safeUpdates = false) => ({
   id: true,
   notification_inviteId: true,
   type: true,
@@ -45,6 +51,7 @@ const inboxZeroNotificationSelect = {
   createdAt: true,
   fromUserId: true,
   fromAgentId: true,
+  directReply: true,
   taskId: true,
   task: {
     select: {
@@ -52,12 +59,33 @@ const inboxZeroNotificationSelect = {
       section: true,
       projectId: true,
       dueDate: true,
+      ...(safeUpdates ? {
+        blockerCommentId: true,
+        waitingOnUserId: true,
+        description: true,
+        _count: {
+          select: {
+            assignees: { where: { userId, agentId: null } },
+            decisionRequests: { where: { status: "Pending" } },
+            comments: {
+              where: {
+                OR: [
+                  { kind: "question" },
+                  { text: { contains: "question:", mode: "insensitive" } },
+                  { commentText: { contains: "question:", mode: "insensitive" } },
+                  { text: { contains: `name-${userId}` } },
+                ],
+              },
+            },
+          },
+        },
+      } : {}),
     },
   },
-} satisfies Prisma.NotificationSelect;
+}) satisfies Prisma.NotificationSelect;
 
 export type InboxZeroNotification = Prisma.NotificationGetPayload<{
-  select: typeof inboxZeroNotificationSelect;
+  select: ReturnType<typeof inboxZeroNotificationSelect>;
 }>;
 
 type InboxZeroDb = Pick<Prisma.TransactionClient, "notification" | "section">;
@@ -84,7 +112,13 @@ export const parseInboxZeroRules = (value: unknown): InboxZeroRules | null => {
     return null;
   }
 
+  const safeUpdates = input.safeUpdates === undefined
+    ? undefined
+    : safeUpdatesSchema.safeParse(input.safeUpdates);
+  if (safeUpdates && !safeUpdates.success) return null;
+
   return {
+    ...(safeUpdates?.success ? { safeUpdates: safeUpdates.data } : {}),
     threshold: input.threshold as InboxZeroThresholdDays,
     categories: Object.fromEntries(
       CATEGORY_KEYS.map((key) => [key, categories[key]])
@@ -99,11 +133,12 @@ export const loadActiveInboxZeroNotifications = ( // trufflehog:ignore
   userId: number,
   db: InboxZeroDb = prisma,
   principal?: { userId: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null },
+  safeUpdates = false,
 ) =>
   db.notification.findMany({
     where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(principal?.userId ?? userId, principal?.agentId, principal?.teamScope)] },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: inboxZeroNotificationSelect,
+    select: inboxZeroNotificationSelect(userId, safeUpdates),
   });
 
 export const loadDoneTitlesByProject = async (
@@ -231,6 +266,15 @@ const previewVersionFor = (
         createdAt: notification.createdAt.toISOString(),
         fromUserId: notification.fromUserId,
         fromAgentId: notification.fromAgentId,
+        ...(rules.safeUpdates ? {
+          directReply: notification.directReply,
+          safety: notification.task ? {
+            blockerCommentId: notification.task.blockerCommentId,
+            waitingOnUserId: notification.task.waitingOnUserId,
+            description: notification.task.description,
+            counts: notification.task._count,
+          } : null,
+        } : {}),
         taskId: notification.taskId,
         notificationInviteId: notification.notification_inviteId,
         task: notification.task
@@ -266,7 +310,34 @@ export const evaluateInboxZero = (
     pastReminders: new Set(),
   };
 
+  const safeTaskIds = new Set(rules.safeUpdates?.taskIds);
+  const pureUpdateTypes: ReadonlySet<NotificationType> = new Set([
+    NotificationType.TaskMoved,
+    NotificationType.TaskUpdateDescription,
+    NotificationType.TaskDueDate,
+    NotificationType.TaskArchived,
+  ]);
+
   for (const item of items) {
+    if (rules.safeUpdates) {
+      const task = item.representative.task;
+      if (
+        item.representative.taskId !== null &&
+        safeTaskIds.has(item.representative.taskId) &&
+        task && task.blockerCommentId === null &&
+        task.waitingOnUserId !== userId &&
+        task._count?.assignees === 0 &&
+        task._count.comments === 0 &&
+        task._count.decisionRequests === 0 &&
+        !task.description?.includes(`name-${userId}`) &&
+        item.notifications.every((notification) =>
+          pureUpdateTypes.has(notification.type) &&
+          notification.directReply === false &&
+          (!rules.safeUpdates?.agentOnly || Boolean(notification.fromAgentId))
+        )
+      ) matchesByCategory.read.add(item.key);
+      continue;
+    }
     if (isProtected(item, rules.keep)) continue;
 
     const { representative } = item;
@@ -326,7 +397,8 @@ export const evaluateInboxZero = (
   ) as InboxZeroCounts;
   const selectedItemKeys = new Set(
     CATEGORY_KEYS.flatMap((key) =>
-      rules.categories[key] ? Array.from(matchesByCategory[key]) : []
+      (rules.safeUpdates ? key === "read" : rules.categories[key])
+        ? Array.from(matchesByCategory[key]) : []
     )
   );
   const notificationIds = items.flatMap((item) =>

@@ -80,6 +80,9 @@ import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigat
 import { useWarmProjectsAllQuery } from "@/hooks/Homepage/useGetBoards";
 import { resolveInboxFocusScroll } from "@/lib/inboxFocusScroll";
 import SplitTitle from "@/components/notifications/inboxSplit/SplitTitle";
+import InboxZeroSheet from "@/components/notifications/InboxZeroSheet";
+import { DEFAULT_INBOX_ZERO_RULES, type InboxZeroRules } from "@/lib/inboxZero";
+import { HTPR_8046_ARCHIVE_SAFE_FLAG } from "@/lib/flags/definitions/htpr-8046-archive-safe";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { useMobileView } from "@/lib/contexts/mobileContext";
 import InboxNotifyNudge from "@/components/notifications/InboxNotifyNudge";
@@ -110,6 +113,8 @@ const Inbox = ({
   homepageRouter: string;
   originProject: string;
 }) => {
+  const archiveSafeEnabled = useFlag(HTPR_8046_ARCHIVE_SAFE_FLAG);
+  const [archiveSafeRules, setArchiveSafeRules] = useState<InboxZeroRules | null>(null);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
   const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
@@ -725,10 +730,16 @@ const Inbox = ({
     toast.dismiss(toastId);
   };
   const { isInboxZero } = useInboxZeroStyling();
+  const activeSplit = _notificationsTQ?.structuredData?.tabs[globalFocus.currSplit]?.project;
+  const canArchiveSafe = archiveSafeEnabled &&
+    (activeSplit === "Updates" || activeSplit === "Important" || activeSplit === "Agents");
 
   return (
     <>
       <FirstScreenMobileChrome currentUser={currentUser} />
+      {archiveSafeEnabled && archiveSafeRules && (
+        <InboxZeroSheet initialRules={archiveSafeRules} onClose={() => setArchiveSafeRules(null)} />
+      )}
       <input
         ref={commandFocusProxy}
         id="inbox-command-focus-proxy"
@@ -888,6 +899,24 @@ const Inbox = ({
                       setShowInboxSearch(false);
                     }}
                   />
+                </div>
+              )}
+              {canArchiveSafe && (
+                <div className="flex justify-end px-4 py-2">
+                  <button
+                    type="button"
+                    className="rounded px-3 py-1 text-dense text-text-light-gray hover:bg-hover-active"
+                    onClick={() => setArchiveSafeRules({
+                      ...DEFAULT_INBOX_ZERO_RULES,
+                      safeUpdates: {
+                        taskIds: (_notificationsTQ?.structuredData?.data[globalFocus.currSplit] ?? [])
+                          .flatMap((notification) => notification.taskId == null ? [] : [notification.taskId]),
+                        agentOnly: activeSplit !== "Updates",
+                      },
+                    })}
+                  >
+                    Archive safe
+                  </button>
                 </div>
               )}
               <InboxNotifyNudge />
