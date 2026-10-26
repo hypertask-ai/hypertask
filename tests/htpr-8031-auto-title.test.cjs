@@ -10,7 +10,7 @@ async function post({ requestKind = 'auto-title', enabled = true, streamError, o
   const route = load('src/app/api/ai/task-writer/route.ts', {
     'ai': { streamText: options => ({ textStream: (async function* () { yield output; if (streamError) options.onError({ error: streamError }); })() }) },
     'next/server': { NextResponse: { json: Response.json } },
-    '@/lib/flags': { isFeatureEnabled: async key => key === flag && enabled },
+    '@/lib/flags': { HTPR_8031_AUTO_TITLE_FLAG: flag, isFeatureEnabled: async key => key === flag && enabled },
     '@/lib/flags/definitions/htpr-8031-auto-title': { HTPR_8031_AUTO_TITLE_FLAG: flag },
     '@/app/api/ai/_lib/editorAi': {
       errorMessage: error => error.message, SSE_HEADERS: {},

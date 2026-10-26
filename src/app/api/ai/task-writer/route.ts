@@ -1,5 +1,3 @@
-import { HTPR_8031_AUTO_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8031-auto-title";
-import { isFeatureEnabled } from "@/lib/flags";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
 import { normalizeTaskWriterTicketType, readTaskWriterTicketType, ticketTypeSafeCut, TICKET_TYPE_HEADER } from "@/lib/ai/taskWriterTicketType";
@@ -91,8 +89,11 @@ export async function POST(request: NextRequest) {
 
     const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, skills, composeSkillsEnabled } =
       await prepareTaskWriterRun(body, userId);
-    const titleOnly = body.requestKind === "auto-title" &&
-      await isFeatureEnabled(HTPR_8031_AUTO_TITLE_FLAG, userId);
+    let titleOnly = false;
+    if (body.requestKind === "auto-title") {
+      const { HTPR_8031_AUTO_TITLE_FLAG, isFeatureEnabled } = await import("@/lib/flags");
+      titleOnly = await isFeatureEnabled(HTPR_8031_AUTO_TITLE_FLAG, userId);
+    }
     let skillsHeader: string | undefined;
     if (composeSkillsEnabled && skills.length) {
       const { HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, isFeatureEnabled } = await import("@/lib/flags");
