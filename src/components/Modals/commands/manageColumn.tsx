@@ -460,10 +460,15 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       toast.error("Work limit must be a positive whole number");
       return;
     }
-    if (wipLimit === (editSection.wipLimit ?? null)) return;
-    void queueSave(() =>
-      handleSectionUpdateVis(editSection, "LIMIT", undefined, { wipLimit })
-    );
+    void queueSave(async () => {
+      const latestSection = queryClient.getQueryData<ISection[]>([
+        globalConstants.GetAllManageColumnsPrefixKey,
+        currentProject?.id,
+        currentUser.id,
+      ])?.find((section) => section.id === editSection.id) ?? editSection;
+      if (wipLimit === (latestSection.wipLimit ?? null)) return;
+      await handleSectionUpdateVis(latestSection, "LIMIT", undefined, { wipLimit });
+    });
   };
 
   const saveTitleOnBlur = () => {
