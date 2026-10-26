@@ -98,7 +98,7 @@ function addedLinesFor(baseSha, headSha, path, includeDeletions = false) {
   return lines;
 }
 
-function staticBoolean(node) {
+function staticBoolean(node, returnedValue = false) {
   while (typescript.isParenthesizedExpression(node) || typescript.isAsExpression(node) ||
          typescript.isTypeAssertionExpression(node) || typescript.isNonNullExpression(node) ||
          typescript.isSatisfiesExpression(node)) node = node.expression;
@@ -109,9 +109,16 @@ function staticBoolean(node) {
   if (typescript.isStringLiteral(node) || typescript.isNoSubstitutionTemplateLiteral(node)) {
     return node.text.length > 0;
   }
+  if (returnedValue && (typescript.isObjectLiteralExpression(node) || typescript.isArrayLiteralExpression(node) ||
+      typescript.isArrowFunction(node) || typescript.isFunctionExpression(node) ||
+      typescript.isClassExpression(node) || typescript.isRegularExpressionLiteral(node) ||
+      typescript.isNewExpression(node) || typescript.isJsxElement(node) ||
+      typescript.isJsxSelfClosingElement(node) || typescript.isJsxFragment(node))) return true;
+  if (returnedValue && typescript.isTemplateExpression(node) &&
+      (node.head.text.length > 0 || node.templateSpans.some((span) => span.literal.text.length > 0))) return true;
   if (typescript.isNumericLiteral(node)) return Number(node.text) !== 0;
   if (typescript.isPrefixUnaryExpression(node) && node.operator === typescript.SyntaxKind.ExclamationToken) {
-    const operand = staticBoolean(node.operand);
+    const operand = staticBoolean(node.operand, returnedValue);
     return operand === null ? null : !operand;
   }
   return null;
@@ -1043,8 +1050,8 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
       if (!typescript.isReturnStatement(whenTrue) || !whenFalse || !typescript.isReturnStatement(whenFalse) ||
           !whenTrue.expression || !whenFalse.expression ||
           branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression)) return false;
-      const a = staticBoolean(whenTrue.expression), b = staticBoolean(whenFalse.expression);
-      return a === null || b === null || a !== b;
+      const a = staticBoolean(whenTrue.expression, true), b = staticBoolean(whenFalse.expression, true);
+      return a !== null && b !== null && a !== b;
     }
     if (typescript.isConditionalExpression(parent)) {
       if (child === parent.condition) {

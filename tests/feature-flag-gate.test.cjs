@@ -2461,3 +2461,32 @@ test('formatter return proof follows rendered components, never discarded hook o
     assert.equal((await evaluate('HTPR-1 [FEATURE] rendered formatter consumer', base, commit(git, name), dir)).pass, expected, name);
   }
 });
+
+test('early-return formatter truthiness refuses always-visible branches', async (t) => {
+  const cases = [
+    ['null versus text', 'null', '"Age"', true],
+    ['null versus nonempty template', 'null', '`Age ${data.days}`', true],
+    ['undefined versus text', 'undefined', '"Age"', true],
+    ['false versus text', 'false', '"Age"', true],
+    ['zero versus text', '0', '"Age"', true],
+    ['empty text versus text', '""', '"Age"', true],
+    ['object versus text', '{}', '"Age"', false],
+    ['array versus text', '[]', '"Age"', false],
+    ['arrow versus text', '() => {}', '"Age"', false],
+    ['function versus text', 'function() {}', '"Age"', false],
+    ['class versus text', 'class {}', '"Age"', false],
+    ['regexp versus text', '/old/', '"Age"', false],
+    ['constructed object versus text', 'new Boolean(false)', '"Age"', false],
+    ['wrapped object versus text', '({} as unknown)', '"Age"', false],
+    ['nonempty template versus text', '`Old ${data.days}`', '"Age"', false],
+    ['unknown call versus text', 'data.value()', '"Age"', false],
+    ['null versus unknown call', 'null', 'data.value()', false],
+    ['unknown template versus text', '`${data.days}`', '"Age"', false],
+  ];
+  for (const [name, disabled, enabled, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(data, enabled) { if (!enabled) return ${disabled}; return ${enabled}; }\n`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format({}, enabled); if (!label) return null; return <p>Age</p>; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter truthiness', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
