@@ -123,8 +123,11 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
         if (!currentProject) return
         const { allViews = [], default_view_id, user_project_views } = currentProject.project_view ?? {}
         const unsavedViewId = user_project_views?.[0]?.unsavedView?.id
+        const builtinViews = blockedByMeEnabled
+            ? BUILTIN_VIEWS
+            : BUILTIN_VIEWS.filter((view) => view.id !== BUILTIN_VIEW_IDS.blockedByMe)
         const resetViews = sortViewsByOrder<BoardView>(
-            [...allViews.filter((view) => view.id !== unsavedViewId), ...BUILTIN_VIEWS.filter((view) => blockedByMeEnabled || view.id !== BUILTIN_VIEW_IDS.blockedByMe)],
+            [...allViews.filter((view) => view.id !== unsavedViewId), ...builtinViews],
             projectDefaultOrder,
             default_view_id
         )

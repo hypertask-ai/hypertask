@@ -71,18 +71,18 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
     const context = buildBuiltinViewContext(project)
     const views: BoardView[] = [
       ...all.filter((view) => view.id !== unsavedViewId),
-      ...BUILTIN_VIEWS.filter((view) => (
-        (blockedByMeEnabled || view.id !== BUILTIN_VIEW_IDS.blockedByMe) &&
-        (!view.available || view.available(context))
-      )),
+      ...BUILTIN_VIEWS.filter((view) => !view.available || view.available(context)),
     ]
     return sortViewsByOrder(views, effectiveOrder, defaultViewId)
-  }, [project, defaultViewId, unsavedViewId, effectiveOrder, blockedByMeEnabled])
+  }, [project, defaultViewId, unsavedViewId, effectiveOrder])
   const viewsWithoutDecisions = useMemo(
     () => allViews.filter((view) => view.id !== BUILTIN_VIEW_IDS.decisions),
     [allViews],
   )
-  return decisionsEnabled ? allViews : viewsWithoutDecisions
+  const decisionViews = decisionsEnabled ? allViews : viewsWithoutDecisions
+  return blockedByMeEnabled
+    ? decisionViews
+    : decisionViews.filter((view) => view.id !== BUILTIN_VIEW_IDS.blockedByMe)
 }
 
 export default useOrderedViews

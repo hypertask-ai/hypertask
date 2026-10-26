@@ -90,11 +90,14 @@ const useRenderedViews = (project: IProject | null) => {
 
     return views.filter((view) => {
       const count = viewTaskCounts.get(view.id) ?? 0
-      return count > 0 || view.id === defaultViewId || view.id === activeViewId || (blockedByMeEnabled && view.id === BUILTIN_VIEW_IDS.blockedByMe)
+      return count > 0 || view.id === defaultViewId || view.id === activeViewId
     })
-  }, [activeViewId, blockedByMeEnabled, defaultViewId, showEmptyViewTabs, viewTaskCounts, views])
+  }, [activeViewId, defaultViewId, showEmptyViewTabs, viewTaskCounts, views])
 
-  return { views, orderedViews, renderedViews, viewTaskCounts }
+  const visibleViews = blockedByMeEnabled
+    ? views.filter((view) => view.id === BUILTIN_VIEW_IDS.blockedByMe || renderedViews.includes(view))
+    : renderedViews
+  return { views, orderedViews, renderedViews: visibleViews, viewTaskCounts }
 }
 
 export default useRenderedViews
