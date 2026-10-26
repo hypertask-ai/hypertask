@@ -1,5 +1,4 @@
 import { createSessionStreams } from "@/lib/aiChat/sessionStreams";
-import { HTPR_7765_PARALLEL_CHATS_FLAG } from "@/lib/flags/definitions/htpr-7765-parallel-chats";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { TAiModal } from "@/models/AI_Task_writer_model";
@@ -19,7 +18,7 @@ import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
 
-export function useAiChatState() {
+export function useAiChatState(parallelChatsEnabled = false) {
 
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
@@ -95,7 +94,6 @@ export function useAiChatState() {
   const [isTyping, setIsTyping] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<QueuedAiChatMessage[]>([]);
   const messageQueueRef = useRef<QueuedAiChatMessage[]>([]);
-  const parallelChatsEnabled = useFlag(HTPR_7765_PARALLEL_CHATS_FLAG);
   const [, refreshStreams] = useState(0);
   const sessionStreams = useMemo(() => createSessionStreams(() => refreshStreams((version) => version + 1)), [currentUser?.id]);
   const parallelStreams = parallelChatsEnabled ? sessionStreams : undefined;
@@ -213,7 +211,7 @@ export function useAiChatState() {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
+  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage, parallelChatsEnabled);
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {
     sessionQueue.sessionId = currentSession?.id;

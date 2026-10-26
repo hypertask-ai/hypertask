@@ -296,3 +296,11 @@ test("parallel Stop before response headers drops only accepted files with the o
     assert.deepEqual(f.fileItems, [fresh]);
   });
 });
+
+test("parallel chat improvement defaults to Everyone with its own reversible ticket flag", () => {
+  const { default: definition, HTPR_7765_PARALLEL_CHATS_FLAG: key } = load("src/lib/flags/definitions/htpr-7765-parallel-chats.ts", {});
+  assert.equal(key, "htpr-7765-parallel-chats");
+  assert.equal(definition.key, key);
+  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.kind, "improvement");
+});

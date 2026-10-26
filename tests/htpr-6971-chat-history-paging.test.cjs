@@ -85,7 +85,7 @@ async function withHistory(config, check) {
     new Function('require', 'module', 'exports', compiled)((name) => mocks[name] ?? require(name), loaded, loaded.exports);
     Chat = loaded.exports.default;
   }
-  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, taskId !== undefined);
+  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, taskId !== undefined, config.preserveSelection ?? false);
     if (useAiChatSessions) {
       const sessionsRef = React.useRef(history.sessions); sessionsRef.current = history.sessions;
       const chatHistoryReadyRef = React.useRef(history.isSuccess); chatHistoryReadyRef.current = history.isSuccess;
@@ -1246,4 +1246,19 @@ test('flag-off session setup identity is exactly the production key without a pa
     assert.equal(evaluate(changed, context), legacyKey);
     assert.equal(evaluate(changed, { ...context, sessionPagingEnabled: true }), `${legacyKey}:${flag}`);
   }
+});
+
+
+test("parallel background updates preserve an explicitly selected non-paged chat", async () => {
+  await withHistory({ on: false, preserveSelection: true }, async ({ history, client, flush }) => {
+    await React.act(async () => { await history().selectSession(id(1)); });
+    await flush();
+    assert.equal(history().currentSession.id, id(1));
+    await React.act(async () => {
+      history().addMessageToSessionQuery(id(9), { id: "background-answer", sessionId: id(9), content: "A background reply", role: "assistant", createdAt: new Date(), isDelivered: true }, true);
+    });
+    await flush();
+    assert.equal(client.getQueryData(["chat-sessions", "user-6"]).data.sessions[0].id, id(9));
+    assert.equal(history().currentSession.id, id(1));
+  });
 });

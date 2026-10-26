@@ -32,7 +32,8 @@ const createDemoSession = (user: IUser): IChatSession => {
 export const useSessionAndChatHistory = (
   taskId?: number,
   historyEnabled = true,
-  isTaskScoped = false
+  isTaskScoped = false,
+  preserveSessionSelection = false
 ) => {
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
@@ -500,7 +501,9 @@ export const useSessionAndChatHistory = (
 
         if (taskId === undefined) {
           if (isTaskScoped) return;
-          setActiveSession(sessions[0]?.id);
+          if (preserveSessionSelection) {
+            setActiveSession((selected) => sessions.some((session) => session.id === selected) ? selected : sessions[0]?.id);
+          } else setActiveSession(sessions[0]?.id);
           return;
         }
 
@@ -537,7 +540,7 @@ export const useSessionAndChatHistory = (
     isTaskScoped,
     sessionsData,
     taskId,
-    startNewSession, paged,
+    startNewSession, paged, preserveSessionSelection,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];

@@ -1,3 +1,4 @@
+import { HTPR_7765_PARALLEL_CHATS_FLAG } from "@/lib/flags/definitions/htpr-7765-parallel-chats";
 
 export { type AiChatProcessedAttachment } from "./aiChatShared";
 
@@ -17,6 +18,7 @@ import { aiChatEditTaskIdAtom } from "@/store";
 
 export function useAiChat() {
   const { navigateToTask } = useHypertasksNavigate();
+  const parallelChatsEnabled = useFlag(HTPR_7765_PARALLEL_CHATS_FLAG);
   const chatOpensTask = useFlag(HTPR_7756_CHAT_OPENS_TASK_FLAG);
   const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   let agentSidebarChatsEnabled = false;
@@ -48,8 +50,9 @@ export function useAiChat() {
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
-  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, parallelStreams,
-  } = useAiChatState();
+  sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, parallelStreams: sessionStreams,
+  } = useAiChatState(parallelChatsEnabled);
+  const parallelStreams = parallelChatsEnabled ? sessionStreams : undefined;
   useEffect(editWithAiEnabled ? () => {
     if (editTaskId === null) return;
     if (!showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
