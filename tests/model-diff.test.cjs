@@ -31,7 +31,7 @@ function assertPickerModelsListed(sources) {
 
 test("approved examples are discovered, with one finding per model class and no stale Haiku left", () => {
   const findings = report().findings;
-  for (const model of ["claude-fable-5.1", "gpt-6-astra", "gemini-4-argon", "kimi-k3.1-pro", "qwen3.8-plus"]) {
+  for (const model of ["claude-fable-5.1", "gpt-6-astra", "kimi-k3.1-pro", "qwen3.8-plus"]) {
     assert.ok(findings.some((finding) => finding.model.endsWith(`/${model}`)), model);
   }
   assert.equal(findings.filter((finding) => finding.kind === "stale").length, 0);
@@ -42,6 +42,7 @@ test("approved examples are discovered, with one finding per model class and no 
   assert.equal(findings.find((finding) => finding.model.endsWith("/gpt-6-astra")).action, "ask Valentin before shipping");
   assert.equal(findings.filter((finding) => finding.model.includes("claude-sonnet")).length, 1);
   assert.ok(!findings.some((finding) => finding.model.includes("image")));
+  assert.ok(!findings.some((finding) => /gemini-4-argon|grok-4\.7/.test(finding.model)));
 });
 
 test("stale detection still fires for a catalogue that keeps two versions of one class", () => {

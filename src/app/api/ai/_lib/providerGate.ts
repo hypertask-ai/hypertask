@@ -14,6 +14,7 @@ export function filterModelOptionForTeam(
   option: TAiModelOption,
   settings: unknown,
   haiku55Enabled = false,
+  grokGemini4Enabled = false,
 ): TAiModelOption {
   option = getAiModelOptionById(option.id, haiku55Enabled) ?? option;
   const definition = getAiModelDefinition(option.modelKey);
@@ -28,7 +29,7 @@ export function filterModelOptionForTeam(
   const enabled = aiModelOptions.filter((candidate) => {
     const candidateDefinition = getAiModelDefinition(candidate.modelKey);
     return (
-      isAiModelOptionVisible(candidate, haiku55Enabled) && candidateDefinition &&
+      isAiModelOptionVisible(candidate, haiku55Enabled, false, grokGemini4Enabled) && candidateDefinition &&
       candidateDefinition.provider !== "custom" &&
       resolveTeamProviderEnabled(settings, candidateDefinition.provider)
     );

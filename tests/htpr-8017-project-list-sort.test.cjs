@@ -43,6 +43,7 @@ function fixture() {
       }]; },
     } } },
     '@/lib/mcp/listQuery': listQuery,
+    '@/lib/mcp/listParams': load('src/lib/mcp/listParams.ts'),
     '@/lib/mcp/readListQuery': load('src/lib/mcp/readListQuery.ts', { './listQuery': listQuery }),
   });
   return { queries, get: query => GET(new NextRequest(`https://app.hypertask.ai/api/mcp/projects?${query}`)) };

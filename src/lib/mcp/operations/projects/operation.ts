@@ -3,6 +3,8 @@ import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
+import { z } from 'zod'
+import { parseSortOrderParam } from '@/lib/mcp/listParams'
 
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
@@ -83,10 +85,30 @@ export async function GET(request: NextRequest) {
       )
     }
     const search = listQuery?.query || searchParams.get('search') || undefined
-    const limit = Math.min(listQuery?.limit ?? parseInt(searchParams.get('limit') || '50'), 100)
-    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
+    const pagination = z.object({
+      limit: z.coerce.number().int().positive().safe().default(50),
+      offset: z.coerce.number().int().min(0).max(2_147_483_647).default(0),
+    }).safeParse({
+      limit: searchParams.get('limit') ?? undefined,
+      offset: searchParams.get('offset') ?? undefined,
+    })
+    if (!pagination.success) {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: pagination.error.issues[0].message },
+        { status: 400 },
+      )
+    }
+    const limit = Math.min(pagination.data.limit, 100)
+    const offset = pagination.data.offset
     const sortBy = listQuery?.sortBy || searchParams.get('sort_by') || 'title'
-    const sortOrder = listQuery?.sortOrder || searchParams.get('sort_order') || 'asc'
+    const legacySortOrder = parseSortOrderParam(searchParams.get('sort_order'), 'asc')
+    if (!legacySortOrder) {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'sort_order must be asc or desc' },
+        { status: 400 },
+      )
+    }
+    const sortOrder = listQuery?.sortOrder ?? legacySortOrder
     const cursorId = listQuery?.cursor ? parseNumericCursor(listQuery.cursor) : null
     if (listQuery?.cursor && cursorId === null) {
       return NextResponse.json(
