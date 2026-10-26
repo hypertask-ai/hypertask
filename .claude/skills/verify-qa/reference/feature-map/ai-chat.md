@@ -245,8 +245,8 @@ Ask chat to read at least 500 Inbox messages. Inspect `hypertask_inbox_list`
 results: pass `next_cursor` unchanged until null, without repeated notification IDs
 or read confirmations. Compact rows retain ticket names and short comments.
 Archive a small batch of this run's QA fixtures only. The preview must name
-all affected tickets and sibling messages. Confirm in a later message:
-`archived_count` must equal the returned notification list and the persisted
+all affected tickets and sibling messages. Confirm in a later message; the tool replays its server-saved preview
+without rematching names or retaining tool-only receipts. `archived_count` must equal the returned notification list and the persisted
 Inbox change. Changed targets or new siblings after preview require a fresh
 approval; nothing else may disappear. An expired or another chat's list token
 must refuse the archive. Never archive pre-existing QA inbox messages.

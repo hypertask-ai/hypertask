@@ -13,6 +13,7 @@ function fixture({ enabled = true, count = 601, agentId = null } = {}) {
   const redis = {
     set: async (key, value) => values.set(key, value),
     get: async (key) => values.get(key) ?? null,
+    del: async (key) => values.delete(key),
     getdel: async (key) => { const value = values.get(key) ?? null; values.delete(key); return value; },
   };
   function matches(row, where) {
@@ -245,4 +246,21 @@ test("an empty model reply still reports exact archived counts and every cleared
   });
   assert.match(summary, /Archived 3 inbox messages/);
   assert.match(summary, /QA-1: First; QA-2: Second/);
+});
+
+
+test("a plain later yes replays the server-saved batch without model-retained IDs or receipts", async () => {
+  const f = fixture({ count: 3 });
+  const turn = f.turn();
+  const listed = await turn.list();
+  assert.equal((await turn.archive({ notification_ids: [1, 2], list_tokens: [listed.list_token] })).confirmation_required, true);
+  assert.equal((await turn.archive({ confirmed: true })).confirmation_required, true);
+  assert.ok(f.rows.every((row) => row.status === "Normal"));
+  assert.equal((await f.turn({ sessionId: "other" }).archive({ confirmed: true })).success, false);
+  const result = await f.turn().archive({ confirmed: true });
+  assert.equal(result.success, true);
+  assert.equal(result.archived_count, 2);
+  assert.deepEqual(result.notifications.map((row) => row.id), [1, 2]);
+  assert.equal(f.rows[2].status, "Normal");
+  assert.equal((await f.turn().archive({ confirmed: true })).success, false);
 });

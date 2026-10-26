@@ -46,3 +46,21 @@ export async function readInboxCursor(userId: number, sessionId: string, token: 
   const stored = await redis.get(`ai_inbox_cursor:${userId}:${sessionId}:${token}`);
   return stored ? z.array(z.number().int()).parse(JSON.parse(stored)) : null;
 }
+
+const pendingArchiveSchema = z.object({
+  notification_ids: receiptIds.min(1),
+  list_tokens: z.array(z.string().uuid()).min(1),
+});
+const pendingArchiveKey = (userId: number, sessionId: string) => `ai_inbox_pending:${userId}:${sessionId}`;
+
+export async function recordPendingInboxArchive(userId: number, sessionId: string, batch: z.infer<typeof pendingArchiveSchema>) {
+  const redis = await getRedis();
+  await redis.set(pendingArchiveKey(userId, sessionId), JSON.stringify(batch), "EX", 900);
+}
+
+export async function readPendingInboxArchive(userId: number, sessionId: string) {
+  const redis = await getRedis();
+  const stored = await redis.get(pendingArchiveKey(userId, sessionId));
+  return stored ? pendingArchiveSchema.parse(JSON.parse(stored)) : null;
+}
+
