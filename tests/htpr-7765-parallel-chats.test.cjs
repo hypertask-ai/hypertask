@@ -304,3 +304,15 @@ test("parallel chat improvement defaults to Everyone with its own reversible tic
   assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.kind, "improvement");
 });
+
+test("manual send stays pinned to displayed B after a background A cache reorder", async () => {
+  const f = fixture();
+  f.select("B");
+  f.context.waitForChatSession = async () => f.context.sessionsRef.current[0];
+  await transport(f, async () => {
+    const sent = f.send("B-after-background-update"); await flush();
+    assert.deepEqual(f.sent.map((item) => item.session_id), ["B"]);
+    f.finish("B-after-background-update");
+    assert.equal(await sent, true);
+  });
+});

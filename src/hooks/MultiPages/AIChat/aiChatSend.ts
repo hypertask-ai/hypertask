@@ -135,10 +135,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     try {
       if (queuedMessage && !parallelStreams && persistentQueue?.sessionId !== options?.sessionId) return false;
       let session;
-      if (queuedMessage && parallelStreams && options?.sessionId) {
+      if (parallelStreams && sessionId) {
         session = sessionPagingEnabled
-          ? await resolveHistorySession(options.sessionId)
-          : sessionsRef.current.find((candidate) => candidate.id === options.sessionId);
+          ? await resolveHistorySession(sessionId)
+          : sessionsRef.current.find((candidate) => candidate.id === sessionId);
       } else session = await waitForChatSession();
       if (!session) {
         if (queuedMessage && parallelStreams && options?.sessionId) {

@@ -245,12 +245,12 @@ export function useAiChatSessions(context: Context) {
         return createdSession;
       }
       if (!needsBoardSession || typeof projectId !== "number") {
-        return sessionPagingEnabled ? getDisplayedSession() : currentSessions[0];
+        return sessionPagingEnabled || parallelStreams ? getDisplayedSession() : currentSessions[0];
       }
       if (!isCurrentIntent()) return undefined;
 
       if (previousProjectIdRef.current === projectId) {
-        if (sessionPagingEnabled) {
+        if (sessionPagingEnabled || parallelStreams) {
           resolvedBoardSessionRef.current = null;
           return getDisplayedSession();
         }
@@ -363,7 +363,7 @@ export function useAiChatSessions(context: Context) {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
-    taskId, sessionPagingEnabled, resolveHistorySession, getDisplayedSession,
+    taskId, sessionPagingEnabled, parallelStreams, resolveHistorySession, getDisplayedSession,
   ]);
 
   useEffect(() => {
