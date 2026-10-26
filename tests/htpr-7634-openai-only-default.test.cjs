@@ -630,7 +630,7 @@ test("picker hook consumes only the scoped server classification and obeys the c
   let enabled = true;
   const scopes = [];
   const context = { openaiOnlyDefaultEnabled: true, hasClaudeRoute: false, hasDirectOpenAiKey: true };
-  const hook = moduleWithStubs("src/hooks/useHaikuDefaultFlag.ts", {
+  const hook = moduleWithStubs("src/hooks/useAiDefaultModelContext.ts", {
     "@/hooks/useFlag": { useFlag: (key) => enabled && key === flag.HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG },
     "@/hooks/useTeamAiProviders": { useTeamAiProviders: (id) => { scopes.push(id); return { defaultModelContext: context }; } },
   });

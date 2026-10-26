@@ -71,7 +71,7 @@ stub("src/utils/controllers/projects/getAllIncludes.ts", { getProjectWhere: () =
 stub("src/app/api/ai/_lib/planGate.ts", {
   storePlanIdForProject: async () => plan,
   haiku55ModelEnabled: async () => false,
-  haikuDefaultModelEnabled: async () => false,
+  
   backgroundClaudeModelEnabled: async () => false,
 });
 const managed = new Set();

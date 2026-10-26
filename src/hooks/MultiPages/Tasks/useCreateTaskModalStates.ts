@@ -4,7 +4,7 @@ import { PlanLimitRefusal, planLimitRefusalMessage } from "@/lib/planLimitsClien
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import toast from "react-hot-toast";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 
 import {
   processHtmlForTaskId,
@@ -156,7 +156,7 @@ const useCreateTaskModalGlobalStates = () => {
   const [tempMentionProjectId, setTempMentionProjectId] = useState<string>("");
   const { postHyperMention } = useHyperMention();
   const { data: userPreferences } = useGetUserPreferences();
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
   const defaultBilling = deriveCurrentBoardBilling(_currentProject);
   const defaultContext = useAiDefaultModelContext(defaultBilling?.teamId);

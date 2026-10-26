@@ -8,14 +8,13 @@ import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
 
 import { getTeamGatewayApiKey, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
-import { batchBackgroundAiEnabled, haikuDefaultModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { batchBackgroundAiEnabled } from "@/app/api/ai/_lib/planGate";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import { batchEligibleFunding, batchEligibleModel, labelTaskContentHash } from "@/lib/ai/batch/batchJobs";
 import { submitSmartLabelBatch } from "@/lib/ai/labelClassifierBatch";
 import {
   gatewayFundingSourceForApiKey,
   gatewayProviderOptionsForModel,
-  resolveGatewayModel,
 } from "@/app/api/ai/_lib/modelProvider";
 import { convertHtmlToText } from "@/app/api/ai/_lib/taskContent";
 import { generalConfig } from "@/lib/configs/general.config";
@@ -35,7 +34,6 @@ import {
 import type { IUser } from "@/models/model";
 import createLabelActivity from "@/utils/controllers/activities/createLabelActivity";
 
-const MODEL = "google/gemini-3.1-flash-lite";
 const BACKFILL_LIMIT = 500;
 const BACKFILL_CONCURRENCY = 5;
 
@@ -85,21 +83,18 @@ export async function classifyTaskAgainstLabels(
     return null;
   }
 
-  const haikuDefaultEnabled = await haikuDefaultModelEnabled(tags?.userId);
-  const model = haikuDefaultEnabled
-    ? resolveAutomaticAiModel("gateway", "anthropic/claude-haiku-5.5", gatewayApiKey, {
-        haiku55Enabled: true,
-        lookup: { trustedTeamId: tags.teamId, projectId: tags.projectId, userId: tags.userId ?? 0 },
-        feature: "smart-label",
-      })
-    : resolveGatewayModel(MODEL, gatewayApiKey);
+  const model = resolveAutomaticAiModel("gateway", "anthropic/claude-haiku-5.5", gatewayApiKey, {
+    haiku55Enabled: true,
+    lookup: { trustedTeamId: tags.teamId, projectId: tags.projectId, userId: tags.userId ?? 0 },
+    feature: "smart-label",
+  });
   configureAiModelUsage(model, {
-    userId: haikuDefaultEnabled ? tags?.userId ?? 0 : tags?.userId ?? generalConfig.hyperAiId,
+    userId: tags?.userId ?? 0,
     teamId: tags?.teamId,
     projectId: tags?.projectId,
     taskId: tags?.taskId,
     agentId: tags?.agentId,
-    provider: haikuDefaultEnabled ? "anthropic" : "google",
+    provider: "anthropic",
     feature: "smart-label",
     reasoningFeature: "labels",
   });
@@ -467,15 +462,14 @@ async function trySmartLabelBatch(
     if (!teamId) return false;
     const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: teamId });
     if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey), await teamPlanAllowanceEnabled(teamId))) return false;
-    const haikuDefaultEnabled = await haikuDefaultModelEnabled(userId);
-    const model = gatewayCatalogModelSlug(haikuDefaultEnabled ? "anthropic/claude-haiku-5.5" : MODEL);
+    const model = gatewayCatalogModelSlug("anthropic/claude-haiku-5.5");
     if (!batchEligibleModel(model)) return false;
     await submitSmartLabelBatch({
       label,
       model,
       gatewayKey,
       teamId,
-      usageUserId: haikuDefaultEnabled ? userId : generalConfig.hyperAiId,
+      usageUserId: userId,
       tasks: tasks.flatMap((task) =>
         task.updatedAt
           ? [{

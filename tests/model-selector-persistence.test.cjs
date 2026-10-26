@@ -58,9 +58,7 @@ for (const filename of Object.keys(require.cache)) {
 }
 for (const [filename, cached] of originalCache) require.cache[filename] = cached;
 
-const flagValues = (haiku) => ({
-  "htpr-7038-haiku-default": haiku,
-});
+const flagValues = (haiku) => ({});
 
 async function withPicker(run, { preferenceHook = false, initialFlags, mobile = false, selectedId = "claude-haiku-5-5" } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://fixture.invalid/chat" });

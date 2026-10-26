@@ -147,7 +147,7 @@ test("Free plan gate admits Haiku and server availability preserves user checks"
   });
   await api.assertModelAllowedForPlan(null, haiku, null, undefined);
   assert.equal(await api.haiku55ModelEnabled(985), true);
-  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985]]);
+  assert.deepEqual(checks, []);
   fail = true;
   assert.equal(await api.haiku55ModelEnabled(985), true);
   assert.equal(await api.haiku55ModelEnabled(null), false);
@@ -254,7 +254,7 @@ test("server BYOK eligibility preserves Free-plan BYOK restrictions and skips un
             "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
             "@/lib/ai/customEndpoint": {},
             "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
-            "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, storePlanIdForProject: async () => plan },
+            "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled, storePlanIdForProject: async () => plan },
             "@/app/api/ai/chat/stream/modelFallback": fallback,
           });
           const context = await api.getAiDefaultModelContext({ userId: 985, trustedTeamId: "fixture-team" });

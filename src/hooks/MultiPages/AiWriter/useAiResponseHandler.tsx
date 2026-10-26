@@ -1,6 +1,6 @@
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import { currentProjectAtom } from '@/store';
 import { useState, useCallback } from 'react';
 import { useRecoilState } from '@/lib/state';
@@ -15,7 +15,7 @@ import { getAiModelPreferenceIds } from '@/lib/aiModelPreferences';
 export const useAIResponseHandler = (defaultMode: string, flaskUrl: string) => {
   const [currentProject] = useRecoilState(currentProjectAtom);
   const { data: userPreferences } = useGetUserPreferences();
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
   const defaultBilling = deriveCurrentBoardBilling(currentProject);
   const defaultContext = useAiDefaultModelContext(defaultBilling?.teamId);

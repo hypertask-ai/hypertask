@@ -136,7 +136,6 @@ test("a team that disabled Anthropic is reported, and callers return no result i
     const byok = moduleWithStubs("src/app/api/ai/_lib/byokKeys.ts", {
       "@/app/api/ai/_lib/planGate": {
         backgroundClaudeModelEnabled: async () => true,
-        haikuDefaultModelEnabled: async () => true,
         haiku55ModelEnabled: async () => true,
         storePlanIdForProject: async () => "Free",
       },
@@ -224,7 +223,6 @@ test("getAiDefaultModelContext reports Claude 5.5 mode for the no-user and user 
     const byok = moduleWithStubs("src/app/api/ai/_lib/byokKeys.ts", {
       "@/app/api/ai/_lib/planGate": {
         backgroundClaudeModelEnabled: async () => enabled,
-        haikuDefaultModelEnabled: async () => enabled,
         haiku55ModelEnabled: async () => enabled,
         storePlanIdForProject: async () => "Free",
       },
@@ -248,7 +246,7 @@ const ENTRY_POINTS = [
   ["chat titles", "src/lib/ai/chatStream/title.ts", /getAiDefaultModelContext[\s\S]*defaultModelKeyFor\(defaultContext/],
   ["custom instructions", "src/app/api/ai/_lib/customInstructions.ts", /getAiDefaultModelContext[\s\S]*defaultModelKeyFor\(defaultContext/],
   ["board memory", "src/app/api/ai/_lib/boardMemory.ts", /getAiDefaultModelContext[\s\S]*defaultModelKeyFor\(defaultContext/],
-  ["label classifier", "src/lib/ai/labelClassifier.ts", /haikuDefaultModelEnabled\(tags\?\.userId\)/],
+  ["label classifier", "src/lib/ai/labelClassifier.ts", /anthropic\/claude-haiku-5\.5/],
   ["demo board", "src/lib/demo/generateDemoBoard.ts", /backgroundClaudeModelEnabled\(null\)[\s\S]*DEMO_CLAUDE_MODEL/],
   ["native agent heartbeat and chat turns", "src/lib/ai/chatStream/turnModel.ts", /getAiDefaultModelContext/],
   ["task writer fallback", "src/app/api/ai/_lib/editorAi.ts", /sameModelRetry/],

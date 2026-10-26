@@ -3,7 +3,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -792,7 +791,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
 const ApiKeysSection = () => {
   const basetenEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
   const flagProviderRows = grokGemini4Enabled ? providerRows : providerRows.filter((row) => row.source !== "xai");
   const visibleProviderRows = haikuDefaultEnabled || haiku55Enabled

@@ -195,7 +195,7 @@ test("missing user fails closed without altering older models", async () => {
   await missingUser.flush();
   const h = harness({ flagError: true });
   await h.makeModel().doGenerate(params);
-  assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985]]);
+  assert.deepEqual(h.checks, [["htpr-7075-background-claude", 985]]);
   await h.flush();
 });
 
@@ -539,7 +539,7 @@ function editorWithFallback(h, credentialPicks, enabled = true, credential = "fi
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
     "@/lib/prisma": { userSetting: { findUnique: async () => null } },
-    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
     "@/app/api/ai/_lib/byokKeys": {
       resolveAiFallbackCredential: async (load) => load(),
       getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(byokProvider), byok: enabled && plan !== "Free" && byokProvider ? { provider: byokProvider, credential } : undefined }),
@@ -583,7 +583,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
   });
   const reply = moduleWithStubs("src/lib/ai/chatStream/modelReply.ts", {
-    "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled },
+    "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled },
     "@/app/api/ai/_lib/byokKeys": {
       resolveAiFallbackCredential: async (load) => load(),
       getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return "fixture-openai"; },
@@ -790,7 +790,7 @@ function automaticKeys(h, picks, { openai = true, credential = "vck_fixture" } =
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/ai/customEndpoint": {},
     "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
-    "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => true, storePlanIdForProject: async () => "Pro" },
+    "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => true, storePlanIdForProject: async () => "Pro" },
     "@/app/api/ai/chat/stream/modelFallback": load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts")),
   });
 }
@@ -904,7 +904,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
           "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
           "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
           "@/app/api/ai/_lib/modelProvider": h.api,
-          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
           "@/app/api/ai/_lib/byokKeys": {
             getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(provider), byok: enabled && plan !== "Free" && provider ? { provider, credential } : undefined }),
             getByokOrTeamGatewayApiKeyForModelOption: async () => credential,
