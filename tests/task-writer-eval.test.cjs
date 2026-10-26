@@ -117,3 +117,11 @@ test('word measurement uses parsed visible blocks and ignores script/style text'
   assert.equal(text('<p>up<strong>date</strong> kept</p>'), 'update kept');
   assert.ok(scoreWriter(simple, '<script>alert(1)</script ><p>real text</p>').violations.includes('empty-draft'));
 });
+
+
+test('addition targets exclude section names used only as placement references', () => {
+  assert.deepEqual(scoreChips(simple, good, ['Add a Goal heading above the Problem section'], []).violations, []);
+  assert.deepEqual(scoreChips(simple, good, ['Add a Problem heading above Done when'], []).violations, ['0:existing-section:problem']);
+  assert.deepEqual(scoreWriter(simple, good + '<h2>ICE assessment (estimated)</h2><p>21/30</p>').violations, ['forbidden:ICE']);
+  assert.deepEqual(scoreWriter(simple, good + '<h2>ICE score: 21/30</h2>').violations, ['forbidden:ICE']);
+});

@@ -11,7 +11,6 @@
         "count": 4,
         "violations": [
           "0:prompt-example",
-          "2:existing-section:problem",
           "3:prompt-example"
         ]
       }
@@ -58,9 +57,7 @@
       "chips": {
         "count": 4,
         "violations": [
-          "0:prompt-example",
-          "2:existing-section:problem",
-          "3:existing-section:requirements"
+          "0:prompt-example"
         ]
       }
     },
@@ -125,7 +122,8 @@
         "words": 389,
         "violations": [
           "too-long",
-          "forbidden:Hypothesis"
+          "forbidden:Hypothesis",
+          "forbidden:ICE"
         ]
       },
       "chips": {
@@ -142,7 +140,8 @@
         "words": 547,
         "violations": [
           "too-long",
-          "forbidden:Hypothesis"
+          "forbidden:Hypothesis",
+          "forbidden:ICE"
         ]
       },
       "chips": {
@@ -161,8 +160,7 @@
       "chips": {
         "count": 4,
         "violations": [
-          "0:prompt-example",
-          "3:existing-section:problem"
+          "0:prompt-example"
         ]
       }
     },
@@ -172,7 +170,8 @@
         "words": 556,
         "violations": [
           "too-long",
-          "forbidden:Hypothesis"
+          "forbidden:Hypothesis",
+          "forbidden:ICE"
         ]
       },
       "chips": {
@@ -201,7 +200,8 @@
         "words": 447,
         "violations": [
           "too-long",
-          "forbidden:Hypothesis"
+          "forbidden:Hypothesis",
+          "forbidden:ICE"
         ]
       },
       "chips": {
@@ -218,7 +218,8 @@
         "violations": [
           "too-long",
           "missing:Done when",
-          "forbidden:Hypothesis"
+          "forbidden:Hypothesis",
+          "forbidden:ICE"
         ]
       },
       "chips": {
@@ -234,7 +235,8 @@
         "words": 318,
         "violations": [
           "too-long",
-          "forbidden:Hypothesis"
+          "forbidden:Hypothesis",
+          "forbidden:ICE"
         ]
       },
       "chips": {
@@ -281,7 +283,8 @@
         "words": 924,
         "violations": [
           "too-long",
-          "forbidden:Hypothesis"
+          "forbidden:Hypothesis",
+          "forbidden:ICE"
         ]
       },
       "chips": {
@@ -311,9 +314,7 @@
       },
       "chips": {
         "count": 4,
-        "violations": [
-          "1:existing-section:control"
-        ]
+        "violations": []
       }
     }
   ]

@@ -17,7 +17,7 @@ const sectionName = (value) => {
   const name = normalize(value).replace(/^(?:\d+|[a-z])\s+/, '');
   if (/^(?:acceptance criteria|acceptance checks|success criteria|done when|done if|definition of done)$/.test(name)) return 'done when';
   if (/^variations?(?: description)?$/.test(name)) return 'variations';
-  if (/^ice(?: score| scoring)?$/.test(name)) return 'ice';
+  if (/^ice(?:$|\s+(?:score|scoring|assessment|estimated|proposed|rating)\b)/.test(name)) return 'ice';
   return name;
 };
 function sections(html) {
@@ -42,11 +42,12 @@ function scoreChips(fixture, html, questions, examples) {
   if (!questions.length) violations.push('empty-chips-unproven');
   for (const [index, question] of questions.entries()) {
     const normalized = normalize(question);
+    const target = normalized.match(/\b(?:add|include|insert|create|missing)\s+(?:(?:a|an|the|new|missing)\s+)*(.+)/)?.[1];
     if (examples.some((example) => normalize(example) === normalized)) violations.push(`${index}:prompt-example`);
     for (const heading of [...fixture.requiredSections, ...found]) {
       const name = sectionName(heading);
       const aliases = name === 'done when' ? ['done when', 'acceptance criteria', 'success criteria', 'definition of done'] : name === 'variations' ? ['variation', 'variations'] : [name];
-      if (found.has(name) && /\b(add|include|insert|create|missing)\b/.test(normalized) && aliases.some((alias) => ` ${normalized} `.includes(` ${alias} `))) violations.push(`${index}:existing-section:${name}`);
+      if (found.has(name) && target && aliases.some((alias) => target === alias || target.startsWith(`${alias} `))) violations.push(`${index}:existing-section:${name}`);
     }
     for (const phrase of [...fixture.protectedPhrases, 'Proposed properties']) {
       if (/\b(remove|replace|drop|rewrite|avoid)\b/.test(normalized) && normalized.includes(normalize(phrase)) && normalize(html).includes(normalize(phrase))) violations.push(`${index}:writer-required-text`);
