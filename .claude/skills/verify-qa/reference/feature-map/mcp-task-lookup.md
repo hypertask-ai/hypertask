@@ -18,6 +18,21 @@
 7. Check every `nextSteps` entry has a CLI command plus a tool name and arguments accepted by the `tools/list` catalog returned to that same credential. With MCP v2 on, require `hypertask_tasks` with `{"action":"list","input":{"project_id":ID}}`, `hypertask_tasks` with `{"action":"create","input":{"project_id":ID,"title":"My first task"}}`, and `hypertask_projects` with `{"action":"playbook","input":{"project_id":ID}}`. Legacy catalogs use `hypertask_list_tasks`, `hypertask_create_task`, and `hypertask_get_board_playbook` with top-level arguments. Write agents get 3 steps; read-only agents get 2, list and playbook, with no create. If hello or `tools/list` exposes the agent role, require the matching count; otherwise accept 2 or 3 but always require list and playbook. Without a board, require `startBoard: null` and empty `nextSteps`. Never execute the create step against production.
 8. Reuse the read-only login/hello script and env inputs in [CLI login](cli-install.md). Never print tokens; CLI runs need a temporary `HOME`. The script checks the same-credential catalog, action/input shapes, role-dependent counts and login completion within 5 s. The CLI prints the server's steps and waits at most about 1.5 s for the guide; timeout prints the old saved output. With no board, `--human` says "No board yet. Create one in your Hypertask web app." Check user-token and board-selection cases separately.
 
+## Project listing query checks
+
+Use the same agent credential for read-only `GET /api/mcp/projects` and
+`hypertask_projects` with `action: "list"` on `/mcp`.
+
+- `sort=updatedAt:desc` and legacy `sort_by=updatedAt` return a readable
+  validation error, never a server error. Project has no update timestamp.
+- `filter.updated_since` likewise returns a validation error before querying storage.
+- Default, `title` and `createdAt` sorting still return scoped projects.
+- Check both ascending and descending sorting, plus `limit=1` and the returned
+  cursor. The cursor advances without repeating the previous project.
+- For MCP calls, inspect the tool result error as well as the HTTP status.
+- Record sanitized request arguments, response status, counts and project IDs;
+  never record authorization headers or secrets. No fixtures need cleanup.
+
 ## What usually breaks
 
 - The wire schema (`getGetTasksBaseSchema`) and the service schema (`createTaskIdentificationArraySchema`) drift apart: one accepts a shape the other rejects (HTPR-7206).

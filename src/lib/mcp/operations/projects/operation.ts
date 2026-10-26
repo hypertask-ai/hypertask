@@ -2,6 +2,7 @@ import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
@@ -87,6 +88,18 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
     const sortBy = listQuery?.sortBy || searchParams.get('sort_by') || 'title'
     const sortOrder = listQuery?.sortOrder || searchParams.get('sort_order') || 'asc'
+    if (sortOrder !== 'asc' && sortOrder !== 'desc') {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'sort_order must be asc or desc' },
+        { status: 400 },
+      )
+    }
+    if (sortBy === 'updatedAt') {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'Projects do not have updatedAt; sort by title or createdAt instead' },
+        { status: 400 },
+      )
+    }
     const cursorId = listQuery?.cursor ? parseNumericCursor(listQuery.cursor) : null
     if (listQuery?.cursor && cursorId === null) {
       return NextResponse.json(
@@ -99,7 +112,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const where: any = {
+    const where: Prisma.ProjectWhereInput = {
       status: status ?? 'Normal',
       AND: [
         getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
@@ -128,16 +141,17 @@ export async function GET(request: NextRequest) {
           { status: 400 },
         )
       }
-      where.updatedAt = { gte: since }
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'Projects do not have updatedAt; filter.updated_since is not supported' },
+        { status: 400 },
+      )
     }
 
-    const orderBy: any = {}
+    const orderBy: Prisma.ProjectOrderByWithRelationInput = {}
     if (sortBy === 'title') {
       orderBy.title = sortOrder
     } else if (sortBy === 'createdAt') {
       orderBy.createdAt = sortOrder
-    } else if (sortBy === 'updatedAt') {
-      orderBy.updatedAt = sortOrder
     } else {
       orderBy.title = 'asc'
     }
