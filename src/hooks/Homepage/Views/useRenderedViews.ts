@@ -94,9 +94,11 @@ const useRenderedViews = (project: IProject | null) => {
     })
   }, [activeViewId, defaultViewId, showEmptyViewTabs, viewTaskCounts, views])
 
-  const visibleViews = blockedByMeEnabled
-    ? views.filter((view) => view.id === BUILTIN_VIEW_IDS.blockedByMe || renderedViews.includes(view))
-    : renderedViews
+  const viewsWithBlockedByMe = useMemo(
+    () => views.filter((view) => view.id === BUILTIN_VIEW_IDS.blockedByMe || renderedViews.includes(view)),
+    [views, renderedViews],
+  )
+  const visibleViews = blockedByMeEnabled ? viewsWithBlockedByMe : renderedViews
   return { views, orderedViews, renderedViews: visibleViews, viewTaskCounts }
 }
 

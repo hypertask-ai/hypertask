@@ -26,13 +26,13 @@ function loadHook(relative, stubs) {
   return loaded.exports.default;
 }
 
-function orderedHarness(enabled, active = {}, loaded = true) {
+function orderedHarness(enabled, active = {}, loaded = true, react) {
   const effects = [];
   let layout = "board";
   let destination;
   const atoms = { activeBuiltinViewsAtom: "active", viewTabsOrderAtom: "order", optimisticViewTabsOrderAtom: "optimistic", boardLayoutAtom: "layout", boardLayoutPreferenceAtom: "preference" };
   const hook = loadHook("src/hooks/Homepage/Views/useOrderedViews.ts", {
-    react: { useMemo: (fn) => fn(), useEffect: (fn) => effects.push(fn) },
+    react: react ?? { useMemo: (fn) => fn(), useEffect: (fn) => effects.push(fn) },
     "@/lib/state": {
       useRecoilValue: (atom) => atom === "active" ? active : atom === "preference" ? "board" : {},
       useSetRecoilState: (atom) => (update) => { if (atom === "layout") layout = update; else active = update(active); },
@@ -128,4 +128,38 @@ test("flag rollback restores the saved Table layout and removes the built-in sur
   harness.flush();
   assert.equal(harness.layout(), "table");
   assert.equal(harness.destination(), "/project?id=15");
+});
+
+test("Manage views can retain the ordered list without a flag-off render loop", async () => {
+  const React = require("react");
+  const { createRoot } = require("react-dom/client");
+  const { JSDOM } = require("jsdom");
+  const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/project?id=15" });
+  const original = { window: global.window, document: global.document, act: global.IS_REACT_ACT_ENVIRONMENT };
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  const container = dom.window.document.getElementById("root");
+  const root = createRoot(container);
+  const { hook } = orderedHarness(false, {}, true, React);
+  const board = project(15);
+  let renders = 0;
+  function ManageViewsList() {
+    if (++renders > 8) throw new Error("Ordered views never settle");
+    const ordered = hook(board);
+    const [displayed, setDisplayed] = React.useState([]);
+    React.useEffect(() => setDisplayed(ordered), [ordered]);
+    return React.createElement("p", null, displayed.map((view) => view.id).join(","));
+  }
+  try {
+    await React.act(async () => root.render(React.createElement(ManageViewsList)));
+    assert.equal(container.textContent, "home,builtin:decisions,builtin:my-tasks,builtin:overdue,builtin:blocked,builtin:agents");
+    assert.ok(renders <= 3, `Unexpected render count: ${renders}`);
+  } finally {
+    await React.act(async () => root.unmount());
+    global.window = original.window;
+    global.document = original.document;
+    global.IS_REACT_ACT_ENVIRONMENT = original.act;
+    dom.window.close();
+  }
 });
