@@ -391,7 +391,9 @@ export async function updateTaskSingle(
           const { unreleasedTicketFlags } = await import("@/lib/flags/taskColumn");
           const blocked = unreleasedTicketFlags({
             uniqueIndex: updateData.uniqueIndex,
-            description: requestedMutation.description ?? currentState.description_?.content ?? currentState.description,
+            description: typeof requestedMutation.description === "string"
+              ? requestedMutation.description
+              : currentState.description_?.content ?? currentState.description,
           }, await listFeatureFlagModes());
           if (blocked.length) {
             throw new FlagColumnMismatchError(`Cannot move to Flag: Everyone. Not released: ${blocked.map(({ key, mode }) => `${key} (${mode})`).join(", ")}.`);
