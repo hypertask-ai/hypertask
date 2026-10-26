@@ -149,7 +149,7 @@ test('raw fallback preserves a submitted writer note as literal text in the draf
   let html = '<p>Original description.</p>';
   const note = 'New dictated detail: <keep> every & word\nSecond line';
   const writes = [];
-  const { escapeHtml } = require('./task-route-loader.cjs').load('src/utils/helperFunctions/escapeHtml.ts');
+  const { escapeHtml } = require('./task-route-loader.cjs').load('src/utils/helperFunctions/escapeHtml.ts', {});
   const callback = run(`(${attr.initializer.expression.getText(ast)})`, {
     mobileWriterSave: true, formValues: { title: 'Existing title', description: html, attachments: [] },
     editor: { getHTML: () => html, getText: () => 'Original description.', commands: { setContent: value => { html = value; } } },
@@ -194,11 +194,13 @@ test('fallback waits for uploads, then reads the completed attachment rather tha
   assert.equal(saved.tags, formValues.tags);
 });
 
-test('manual empty completion retains the submitted raw prompt even after context clears input', async () => {
+test('manual empty completion retains the submitted raw prompt even after context clears input', { timeout: 5000 }, async () => {
   const ast = tree(writerPath);
   let finish;
   const request = new Promise(resolve => { finish = resolve; });
   const states = [], prompt = { current: '' };
+  let markFinished;
+  const finished = new Promise(resolve => { markFinished = resolve; });
   const context = {
     useCallback: fn => fn, isLoading: false, isByokBlocked: false, isMobileCreateFlow: true,
     mobileCreateRequestPendingRef: { current: false }, currentDisplayResponse: '', autoTrigger: false,
@@ -206,11 +208,11 @@ test('manual empty completion retains the submitted raw prompt even after contex
     resolveTaskWriterSubmitPrompt: (_, __, ___, value) => value, uploadProgress: 0,
     document: { getElementById: () => null }, DIV_ID_CONSTANTS: { titleInputModal: 'title' },
     buildTaskWriterPrompt: prompt => prompt, onCreateTaskFailure() {}, mobileFallbackPromptRef: prompt,
-    setMobileRequestFinished: value => states.push(value), sendAIRequest: () => request,
+    setMobileRequestFinished: value => { states.push(value); if (value) markFinished(); }, sendAIRequest: () => request,
   };
   const submit = run(`(${declaration(ast, 'onClickHandler')})`, context);
   submit(); assert.deepEqual(states, [false]);
-  context.userPrompt = ''; finish(); await request; await Promise.resolve();
+  context.userPrompt = ''; finish(); await finished;
   assert.deepEqual(states, [false, true]);
   assert.equal(prompt.current, 'Keep this fresh dictated note.');
   const fallback = failureEffect();
