@@ -422,3 +422,16 @@ agent_rules:
   - "Keep remote workflow actions pinned to the exact SHAs in .github/actions/action-archive-cache-manifest.txt; the host-level action archive cache serves the self-hosted review and analytics lanes only."
   - "Use per-job temporary directories on shared runner hosts; never use fixed /tmp filenames for workflow state."
   - "The live CI page must alert when the review or analytics runner lane is offline."
+
+production_revert_proposal:
+  workflow: .github/workflows/production-revert-pr.yml
+  trigger: failed_production_ci_workflow_run
+  manual_dispatch: historical_replay_only
+  production_mutation: forbidden
+  automatic_merge: false
+  repeats_per_probe: 2
+  maximum_commits: 50
+  required_proof: [last_green_passes, culprit_parent_passes, culprit_fails, current_head_fails, single_commit_revert_passes]
+  exclusions: [rate_limit, network, timeout, inconsistent_replay, unsupported_setup_failure, dependency_lock_changes, already_fixed]
+  publication: separate_trusted_job_with_fresh_production_head_check
+  deduplication: one_branch_per_culprit
