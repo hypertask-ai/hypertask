@@ -131,7 +131,7 @@ test("flag off retains existing width clamping and does not save a per-account p
   assert.equal(app.store.get(atoms.aiChatSidebarPreferredWidthsAtom), null);
 });
 
-test("first enable preserves the previous browser-wide drag", async (t) => {
+test("first enable preserves the previous browser-wide width until the next drag", async (t) => {
   const app = await fixture(t, false);
   await app.drag(180);
   assert.equal(app.width(), 600);
@@ -147,7 +147,7 @@ test("first enable preserves the previous browser-wide drag", async (t) => {
     }, React.createElement(Enabled))));
     assert.equal(Number(node.querySelector('[role="separator"]').getAttribute("aria-valuenow")), 600);
     window.dispatchEvent(new window.Event("pagehide"));
-    assert.equal(JSON.parse(localStorageValue()).aiChatSidebarPreferredWidths[985], 600);
+    assert.equal(JSON.parse(localStorageValue()).aiChatSidebarPreferredWidths, undefined);
   } finally {
     await React.act(async () => root.unmount());
   }

@@ -27,13 +27,6 @@ export function AiChatSidebarResizeHandle() {
   const widthRef = useRef(widthPx);
   widthRef.current = widthPx;
 
-  const needsMigration = rememberWidth && userId !== undefined && preferredWidths === null;
-  useEffect(() => {
-    if (needsMigration && userId !== undefined && widthPx !== AI_CHAT_SIDEBAR_DEFAULT_PX) {
-      setPreferredWidths({ [userId]: widthRef.current });
-    }
-  }, [needsMigration, userId, widthPx, setPreferredWidths]);
-
   useEffect(() => {
     const onResize = () => {
       setWidthPx((w) => clampAiChatSidebarWidthPx(
