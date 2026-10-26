@@ -1016,6 +1016,9 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
     true,
     scriptKind,
   );
+  const baseSource = git(["ls-tree", "--name-only", baseRef, "--", path]).trim()
+    ? git(["show", `${baseRef}:${path}`]) : "";
+  const baseSourceFile = typescript.createSourceFile(path, baseSource, typescript.ScriptTarget.Latest, true, scriptKind);
   const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
   const host = {
     getSourceFile: (fileName) => fileName === targetPath ? sourceFile : undefined,
@@ -1166,6 +1169,7 @@ function exportedJsxEntryHasTicketGate(
 
 function hasUngatedExportedJsxEntry(
   sourceFile,
+  baseSourceFile,
   checker,
   helperSymbols,
   flagSymbols,
@@ -1188,15 +1192,15 @@ function hasUngatedExportedJsxEntry(
     const endLine = sourceFile.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
     return [...changedLines].some((line) => line >= startLine && line <= endLine);
   };
-  const moduleChanged = sourceFile.statements.some((statement) => {
+  const moduleState = (file) => file.statements.filter((statement) => {
     if (typescript.isImportDeclaration(statement) || typescript.isExportDeclaration(statement) ||
         typescript.isInterfaceDeclaration(statement) || typescript.isTypeAliasDeclaration(statement) ||
         typescript.isFunctionDeclaration(statement)) return false;
-    if (typescript.isVariableStatement(statement) &&
-        statement.declarationList.declarations.every((declaration) =>
-          declaration.initializer && typescript.isFunctionLike(unwrapArgumentExpression(declaration.initializer)))) return false;
-    return containsChangedLine(statement);
-  });
+    return !typescript.isVariableStatement(statement) ||
+      !statement.declarationList.declarations.every((declaration) =>
+        declaration.initializer && typescript.isFunctionLike(unwrapArgumentExpression(declaration.initializer)));
+  }).map((statement) => statement.getText(file)).join("\n");
+  const moduleChanged = moduleState(sourceFile) !== moduleState(baseSourceFile);
   const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   for (const fn of functions) {
     if (!isExportedUiEntry(fn, identifierExports) || !functionContainsJsx(fn)) continue;
@@ -1221,7 +1225,7 @@ function hasUngatedExportedJsxEntry(
   return false;
 }
 
-function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, changedLines) {
+function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, changedLines, baseRef) {
   const source = git(["show", `${ref}:${path}`]);
   let scriptKind = typescript.ScriptKind.JS;
   if (path.endsWith(".tsx")) scriptKind = typescript.ScriptKind.TSX;
@@ -1234,6 +1238,9 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
     true,
     scriptKind,
   );
+  const baseSource = git(["ls-tree", "--name-only", baseRef, "--", path]).trim()
+    ? git(["show", `${baseRef}:${path}`]) : "";
+  const baseSourceFile = typescript.createSourceFile(path, baseSource, typescript.ScriptTarget.Latest, true, scriptKind);
   const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
   const host = {
     getSourceFile: (fileName) => fileName === path ? sourceFile : undefined,
@@ -1284,6 +1291,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
 
   if (isUiFile(path) && hasUngatedExportedJsxEntry(
     sourceFile,
+    baseSourceFile,
     checker,
     helperSymbols,
     flagSymbols,
@@ -1363,6 +1371,9 @@ function sourceReferencesApiRoute(ref, path, apiRoute) {
     true,
     scriptKind,
   );
+  const baseSource = git(["ls-tree", "--name-only", baseRef, "--", path]).trim()
+    ? git(["show", `${baseRef}:${path}`]) : "";
+  const baseSourceFile = typescript.createSourceFile(path, baseSource, typescript.ScriptTarget.Latest, true, scriptKind);
   const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
   const host = {
     getSourceFile: (fileName) => fileName === path ? sourceFile : undefined,
@@ -1693,6 +1704,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         ticketKeys,
         addedLinesFor(mergeBase, headSha, path),
         addedLinesFor(mergeBase, headSha, path, true),
+        mergeBase,
       );
       if (key) {
         const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);

@@ -2179,6 +2179,7 @@ test('changed module values and rebound exports cannot borrow a sibling gate', a
   const imports = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n';
   const cases = [
     ['changed module constant', 'const title = "Old";\nexport function Title() { return <h1>{title}</h1>; }\n', 'const title = "New";\nexport function Title() { return <h1>{title}</h1>; }\n'],
+    ['removed module assignment', 'let title = "Old";\ntitle = "New";\nexport function Title() { return <h1>{title}</h1>; }\n', 'let title = "Old";\nexport function Title() { return <h1>{title}</h1>; }\n'],
     ['same-line module constant', 'const title = "Old"; export function Title() { return <h1>{title}</h1>; }\n', 'const title = "New"; export function Title() { return <h1>{title}</h1>; }\n'],
     ['edited rebound entry', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>Old</aside>;\n', 'export let Other = () => <aside>New</aside>;\nOther = () => <aside>New</aside>;\n'],
     ['only reassignment edited', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>Old</aside>;\n', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>New</aside>;\n'],
