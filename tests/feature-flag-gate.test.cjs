@@ -2440,6 +2440,9 @@ test('formatter return proof follows rendered components, never discarded hook o
   const cases = [
     ['mounted component', `function Private() { ${guarded} } export function Widget() { return <Private/>; }`, true],
     ['returned JSX binding', `function Private() { ${guarded} } export function Widget() { const row = <Private/>; return row; }`, true],
+    ['discarded inline hook guard', `function useLabel() { const enabled = useFlag(OTHER_FLAG); if (format(enabled)) return \"Age\"; return null; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
+    ['live action handler', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const send = () => { if (format(enabled)) doWork(); }; return <button onClick={send}/>; }', true],
+    ['dead action branch', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const send = () => { if (format(enabled)) { if (false) doWork(); } }; return <button onClick={send}/>; }', false],
     ['discarded hook result', `function useLabel() { ${label} return label; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
     ['discarded inverted string hook', `function useLabel() { ${label} if (label) return \"Age\"; return null; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
     ['discarded inverted JSX helper', `function Private() { ${label} if (label) return <p>Age</p>; return null; } export function Widget() { Private(); return <p>Always</p>; }`, false],

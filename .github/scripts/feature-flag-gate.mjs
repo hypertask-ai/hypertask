@@ -162,10 +162,10 @@ function expressionHasSideEffect(node) {
   return node.getChildren().some(expressionHasSideEffect);
 }
 
-function branchHasBehavior(node) {
+function branchHasBehavior(node, pureReturns = true) {
   if (!node || isStaticallyUnreachable(node) || typescript.isEmptyStatement(node)) return false;
-  if (typescript.isBlock(node)) return node.statements.some(branchHasBehavior);
-  if (typescript.isReturnStatement(node)) return true;
+  if (typescript.isBlock(node)) return node.statements.some((statement) => branchHasBehavior(statement, pureReturns));
+  if (typescript.isReturnStatement(node)) return pureReturns || Boolean(node.expression && expressionHasSideEffect(node.expression));
   if (typescript.isThrowStatement(node) || typescript.isBreakStatement(node) ||
       typescript.isContinueStatement(node)) return true;
   if (typescript.isExpressionStatement(node)) return expressionHasSideEffect(node.expression);
@@ -174,11 +174,11 @@ function branchHasBehavior(node) {
       declaration.initializer && expressionHasSideEffect(declaration.initializer));
   }
   if (typescript.isIfStatement(node)) {
-    return branchHasBehavior(node.thenStatement) || branchHasBehavior(node.elseStatement);
+    return branchHasBehavior(node.thenStatement, pureReturns) || branchHasBehavior(node.elseStatement, pureReturns);
   }
   if (typescript.isForStatement(node) || typescript.isForInStatement(node) ||
       typescript.isForOfStatement(node) || typescript.isWhileStatement(node) ||
-      typescript.isDoStatement(node)) return branchHasBehavior(node.statement);
+      typescript.isDoStatement(node)) return branchHasBehavior(node.statement, pureReturns);
   if (typescript.isJsxElement(node) || typescript.isJsxSelfClosingElement(node) ||
       typescript.isJsxFragment(node)) return true;
   return typescript.isExpression(node) && expressionHasSideEffect(node);
@@ -856,8 +856,9 @@ function expressionResultIsObserved(node) {
   return false;
 }
 
-function controlsRuntimeBranch(node) {
+function controlsRuntimeBranch(node, pureReturns = true) {
   if (isStaticallyUnreachable(node)) return false;
+  const hasBehavior = (branch) => branchHasBehavior(branch, pureReturns);
   let controlsOutput = false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
@@ -867,7 +868,7 @@ function controlsRuntimeBranch(node) {
       const right = staticBoolean(parent.right);
       if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && right === false) ||
           (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && right === true)) return false;
-      controlsOutput = branchHasBehavior(parent.right) || expressionResultIsObserved(parent);
+      controlsOutput = hasBehavior(parent.right) || (pureReturns && expressionResultIsObserved(parent));
       continue;
     }
     if (typescript.isConditionalExpression(parent) && child === parent.condition) {
@@ -875,8 +876,8 @@ function controlsRuntimeBranch(node) {
           (branchIsNullishOrEmpty(parent.whenTrue) && branchIsNullishOrEmpty(parent.whenFalse))) {
         controlsOutput = false;
       } else {
-        controlsOutput = (branchHasBehavior(parent.whenTrue) || branchHasBehavior(parent.whenFalse) ||
-          expressionResultIsObserved(parent));
+        controlsOutput = (hasBehavior(parent.whenTrue) || hasBehavior(parent.whenFalse) ||
+          (pureReturns && expressionResultIsObserved(parent)));
       }
       continue;
     }
@@ -887,14 +888,14 @@ function controlsRuntimeBranch(node) {
            branchIsNullishOrEmpty(parent.elseStatement))) {
         controlsOutput = false;
       } else {
-        controlsOutput = branchHasBehavior(parent.thenStatement) || branchHasBehavior(parent.elseStatement);
+        controlsOutput = hasBehavior(parent.thenStatement) || hasBehavior(parent.elseStatement);
       }
       continue;
     }
     if ((typescript.isWhileStatement(parent) && child === parent.expression) ||
         (typescript.isDoStatement(parent) && child === parent.expression) ||
         (typescript.isForStatement(parent) && child === parent.condition)) {
-      controlsOutput = branchHasBehavior(parent.statement);
+      controlsOutput = hasBehavior(parent.statement);
       continue;
     }
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
@@ -906,7 +907,7 @@ function controlsRuntimeBranch(node) {
       if (parent.operatorToken.kind === typescript.SyntaxKind.CommaToken) return false;
       if (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
           parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken) {
-        if (child === parent.right) controlsOutput ||= expressionResultIsObserved(parent);
+        if (child === parent.right) controlsOutput ||= (pureReturns && expressionResultIsObserved(parent));
         continue;
       }
       const other = child === parent.left ? parent.right : parent.left;
@@ -1126,6 +1127,7 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
       !importedParameterControlsReturnValue(ref, path, imported, argumentIndex)) return false;
   const sourceFile = node.getSourceFile();
   const live = collectLiveFunctions(sourceFile, checker);
+  if (!renderFunctions.has(enclosingFunctionLike(call)) && !controlsRuntimeBranch(call, false)) return false;
   return gatesRuntimeBehavior(call, checker, sourceFile,
     (reference) => renderFunctions.has(enclosingFunctionLike(reference)) &&
       controlsReturnedValue(reference, { earlyOnly: true, after: call }), live);
