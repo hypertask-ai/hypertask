@@ -392,6 +392,21 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
   }
 
   const inputs = texts.map(toEmbeddingInput);
+  if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], apiKey);
+  return embedInputs(inputs, apiKey);
+}
+
+const inFlightSingleEmbeddings = new Map<string, Promise<number[][]>>();
+
+function shareInFlightEmbedding(input: string, apiKey: string) {
+  const running = inFlightSingleEmbeddings.get(input);
+  if (running) return running;
+  const started = embedInputs([input], apiKey).finally(() => inFlightSingleEmbeddings.delete(input));
+  inFlightSingleEmbeddings.set(input, started);
+  return started;
+}
+
+async function embedInputs(inputs: string[], apiKey: string) {
   const embeddings: number[][] = [];
 
   for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {

@@ -135,6 +135,12 @@ function normalizeInputPlacement(
   return placed
 }
 
+function ticketIdentity(value: unknown): { prefix: string; number: string } {
+  const identity = String(value).toLowerCase().trim()
+  const match = identity.match(/^([a-z]+)-?0*(\d+)$/) ?? identity.match(/^(?:([a-z][a-z0-9]*)-)?0*(\d+)$/)
+  return { prefix: match?.[1] ?? '', number: match?.[2] ?? identity }
+}
+
 function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool, taskNumberAlias = false): Record<string, unknown> {
   const shape = tool.parameters.shape
   const args = Object.fromEntries(Object.entries(input).map(([key, value]) => {
@@ -145,7 +151,11 @@ function legacyArguments(input: Record<string, unknown>, action: Action, tool: P
     const alias = args.task_number
     delete args.task_number
     if (args.ticket_number === undefined) args.ticket_number = alias
-    else if (String(args.ticket_number) !== String(alias)) throw new z.ZodError([{ code: 'custom', path: ['task_number'], message: 'Pass either ticket_number or task_number, not both with different values.' }])
+    else {
+      const ticket = ticketIdentity(args.ticket_number)
+      const task = ticketIdentity(alias)
+      if (ticket.number !== task.number || (ticket.prefix && task.prefix && ticket.prefix !== task.prefix)) throw new z.ZodError([{ code: 'custom', path: ['input', 'task_number'], message: `Pass either ticket_number or task_number, not both with different values: '${args.ticket_number}' and '${alias}'.` }])
+    }
   }
   if (action.legacy_action) args.action = action.legacy_action
   return args
@@ -250,6 +260,7 @@ export function selectMcpTools(
       ...(topLevelInputFields || inputWrapperFields || taskIdTicketReference ? {
         normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, taskIdTicketReference, pageAlias }),
       } : {}),
+      ...(renamedFieldHint ? { documentedFields: [...new Set([...Object.keys(parameters.shape), ...names.flatMap((name) => Object.keys(byName.get(actions[name].tool)!.parameters.shape)).map((field) => RENAMED_PARAMETERS[field] ?? field)])] } : {}),
       ...(ticketNumberShapeHint || renamedFieldHint ? {
         errorHints: {
           ...(ticketNumberShapeHint ? { ticketNumberShape: true } : {}),

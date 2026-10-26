@@ -28,6 +28,29 @@ only and may validly be fewer or absent when no specific improvement is justifie
 Record the effective flag and response. If chips are returned, wait for them
 (about 10 s), click one and check it is sent and answered in the same chat.
 
+## Retiring a model version
+
+A saved pick, a team feature override or a stored agent pin keeps an old
+model id after that version leaves the catalogue, so the retirement is proven
+from the saved value, not from a fresh pick.
+
+1. As QA 985, save the old id:
+   `POST /api/users/preferences` with `{"aiModelPreferences":{"aiChat":"<old id>"}}`.
+   `success: true` means the retired id stayed readable.
+2. `POST /api/app-shell/bootstrap` still returns that saved string, so the
+   migration happens on read, not by rewriting stored data.
+3. Open the AI chat on the account's board: the picker shows the replacement
+   model only, and the old label is gone. Settings > AI default models and the
+   Android composer (`POST /api/android/ai/composer`) list the same set.
+4. Send a message and record the `modelOptionId` in the `POST
+   /api/ai/chat/stream` body: it must be the replacement id, and the reply must
+   arrive from that model, not a fallback.
+5. Put the account's saved pick back to the replacement id.
+
+The Haiku 4.5 retirement ([HTPR-7940](https://app.hypertask.ai/detail/project-15/7940))
+was proven this way: a saved `claude-haiku-4.5` chat pick loaded Haiku 5.5 and
+the chat request carried `claude-haiku-5-5`.
+
 ## What usually breaks
 
 - Provider/gateway slug drift breaking a specific model entirely: Grok chat

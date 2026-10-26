@@ -144,7 +144,7 @@ export async function executeToolResult(
     }
   } catch (error) {
     const documentedFields = (error as { documentedFields?: string[] } | null)?.documentedFields
-    return toolErrorResult(error, { ...tool.errorHints, fields: documentedFields ?? Object.keys(tool.parameters.shape) })
+    return toolErrorResult(error, { ...tool.errorHints, fields: documentedFields ?? tool.documentedFields ?? Object.keys(tool.parameters.shape) })
   }
 }
 

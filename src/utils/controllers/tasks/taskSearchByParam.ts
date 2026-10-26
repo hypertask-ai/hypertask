@@ -1,5 +1,4 @@
 import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
-import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 import {
@@ -20,7 +19,7 @@ const taskSearchByParam = async (
 ) => {
   try {
     const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332");
-    const [projectIds, owner_members, hyperAI, haiku55Enabled, standaloneEnabled] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, standaloneEnabled] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
@@ -43,7 +42,6 @@ const taskSearchByParam = async (
           id: hyperAiId,
         },
       }),
-      haiku55ModelEnabled(userid),
       standalonePagesEnabled(userid),
     ]);
 
@@ -60,9 +58,6 @@ const taskSearchByParam = async (
       param === "all" || !normalizedModelQuery
         ? []
         : [...aiModelDefinitions, ...aiImageModelDefinitions]
-            .filter((model) => haiku55Enabled
-              ? model.key !== "claude-haiku-4.5"
-              : model.key !== "claude-haiku-5-5")
             .filter((model) =>
               [model.label, model.key].some((value) =>
                 normalizeModelMentionSearch(value).includes(

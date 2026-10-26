@@ -69,7 +69,7 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - PR and production-push CI Tests runs do not collect or publish V8 coverage. The separate non-required [`Coverage Nightly`](../.github/workflows/coverage-nightly.yml) workflow runs the full suite with coverage at **02:17 UTC daily**, or via `workflow_dispatch` on `production` only. It checks out the event's exact production SHA and reports as `coverage-nightly`, never `ci-tests`, so diagnostics cannot supersede a required correctness result. Its 60-minute timeout gives the covered suite more room than the unchanged 40-minute CI Tests gate.
 - Coverage remains report-only (`continue-on-error` on reporting). The nightly job keeps `npm run coverage:report`, the job summary, `automated-test-coverage-<commit>`, the report/critical-domain paths, and 30-day retention. Download coverage from **Coverage Nightly**, not CI Tests. No required check or runtime script consumes the uploaded coverage; `scripts/coverage-summary.mjs` reads the nightly `coverage/report/coverage-summary.json` within that job. See [testing](testing.md#coverage-baseline).
 - Dependabot still applies informational `full-ci` and lane labels; neither starts nor changes CI Tests or test selection. The `major-upgrade` label still starts its separate ticket workflow. No job-level label skip is added: normal PR events continue reporting both `ci-tests` and `browser-smoke`, including the existing docs-only scope path. Adding approval text after a failed agent-scope approval guard now requires a new commit to produce a fresh PR event; editing the body alone does not rerun that guard, and rerunning the old event retains its old body.
-- CI Tests runs the runner dispatcher Python fixtures (`runner-dispatch.test.py` and `runner-dispatch.cache.test.py`) and `runner-selfupdate.test.sh` from `.claude/skills/ship/scripts/` on GitHub-hosted runners, even for `.claude/`-only PRs. These offline fixtures need no installed runner scripts or credentials.
+- CI Tests runs the launch-admission fixtures (`session-policy-guard.test.py`), runner dispatcher Python fixtures (`runner-dispatch.test.py`, `runner-dispatch.cache.test.py` and `runner-snapshot.test.py`) and `runner-selfupdate.test.sh` from `.claude/skills/ship/scripts/` on GitHub-hosted runners, even for `.claude/`-only PRs. These offline fixtures need no installed runner scripts or credentials.
 - `contabo-1` is registered only to the private reviewer repository, carries `ai-review`, and runs as `htreviewrunner`. Application PR workflows cannot schedule it, and its subscription wrappers are unreachable from hosted runner jobs.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
 - The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. Both jobs run on every non-draft PR without a label gate. CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request uses the same four events. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
@@ -81,23 +81,21 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 
 ## Live required-check settings
 
-`Verify live required-check settings` runs the dependency-free
-[verifier](../.github/scripts/verify-required-check-settings.mjs) on free
-GitHub-hosted runners. Every `production` push verifies the default branch,
-exactly one active `production-required-checks` ruleset, its branch target and
-production include/exclude conditions, and the exact required-context set
-(including both review contexts, without aliasing).
+The hourly [Required Check Settings workflow](../.github/workflows/required-check-settings.yml)
+runs the dependency-free [verifier](../.github/scripts/verify-required-check-settings.mjs)
+on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
+checkout always uses `production`. It verifies the default branch, exactly one
+active `production-required-checks` ruleset, its branch target and production
+include/exclude conditions, and the exact required-context set (including both
+review contexts, without aliasing). Drift and unreadable settings still fail
+the monitor; this is not a required PR context. Detection can lag until the next
+hourly run, plus GitHub scheduling and any rate-limit wait.
 
-On pull requests, it reads settings only when the merge-base diff changes
-`.github/**`, `docs/ci-policy.yml`, or `docs/ci.md`. Checkout includes full history;
-the NUL-delimited diff disables rename detection so moving a CI file out of
-`.github/` cannot hide its deletion. An unreadable event, invalid SHA, failed diff,
-or empty/unknown diff verifies instead of skipping. Other PRs log an explicit
-skip and make **zero settings API calls**. No changed-files API is used.
-
-Before this change, every run made three settings API calls. Scoped PRs and
-production pushes still make three on a successful first attempt: repository
-metadata, ruleset list, and one full ruleset read. GitHub REST's
+CI Tests no longer reads repository settings on PRs or production pushes.
+Previously every production push and CI-policy PR made three settings API calls.
+The hourly monitor makes three on a successful first attempt: repository
+metadata, ruleset list, and one full ruleset read. Retries add calls.
+GitHub REST's
 [repository ruleset list](https://docs.github.com/en/rest/repos/rules#get-all-repository-rulesets)
 returns summaries, not rules or ref conditions; `includes_parents` includes parent
 rulesets, not full details. The
@@ -108,11 +106,21 @@ to preserve these assertions. Neither can replace the full ruleset read safely.
 Reads use `gh api --include`. A rate-limited 403 or 429 waits for
 `x-ratelimit-reset` / `retry-after` (the later time when both apply), logging
 `rate limited, waiting Ns until reset`, then retries only that failed read.
-Cumulative sleeps are capped at **300 seconds**, with a six-minute overall
-budget and a seven-minute step timeout inside the 40-minute job. Missing usable
+Cumulative sleeps are capped at **3900 seconds**, longer than one full
+installation window, with a 4,000-second overall budget and a 70-minute step
+timeout inside the 80-minute job. A cap failure names the GitHub API rate limit in the
+error and the step summary, so it is not mistaken for a test failure. Missing usable
 rate-limit timing, an exceeded budget, other API errors, malformed settings, or a
 settings mismatch fail the check; nothing passes without reading the settings
 when verification is required. No paid runner, service, or dependency is added.
+
+Runner CI watches use the existing `gh-app-token` helper, never the saved user
+login: `token=$(gh-app-token) && test -n "$token" && GH_TOKEN="$token" gh pr checks <PR> --repo hypertask-ai/hypertask --watch --interval 120`.
+Stop if minting fails; do not fall back. Refresh the token before
+restarting a watch. The 120-second interval replaces gh's 10-second default;
+compare observed request counts over equal windows before claiming a fleet-wide
+reduction. The installation allowance used by `github.token` in Actions is a
+different quota from the runner app; moving runner watches does not replenish it.
 
 ## Premerge evidence
 
@@ -152,6 +160,7 @@ The saved discovery fixture is synthetic, not current upstream/pricing proof.
 The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing the script/unit paths in `docs/ci-policy.yml`, including `.claude/skills/ship/scripts/**`, `.claude/skills/verify-qa/scripts/**`, `scripts/premerge-local.sh` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.
 
 - Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only`, `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`, `python3 .claude/skills/ship/scripts/ci-why.test.py`, `bash .claude/skills/ship/scripts/user-unit-check.test.sh`, `python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py` and `node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs`. The full shell suite also contains live authenticated checks and is deliberately excluded.
+- Runs `python3 .claude/skills/ship/scripts/ht-hax-runner.test.py` against isolated home folders and fake process/load tools. It checks load-only launches, pauses, active sessions, target bounds, setup failure and validation before enabling the keeper timer. Interactive lifecycle fixtures check brief delivery, final-line detection, saved output, idle cooldown, failed-start watcher cleanup and bounded timeout recovery; they start no real runners.
 - Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, and Git for repository-scope detection. Sets up Node 24 for the dependency-free QA identity tests, which use only temporary storage-state fixtures and a loopback HTTP server (YPER4-607). No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
 - Uses a temporary HOME and the harnesses' temporary state and local Git/GitHub/Hypertask fixtures. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
 
@@ -289,7 +298,7 @@ local app. Missing output, failed, skipped or cancelled browser smoke fails the 
 The sole no-contract exception is a successful docs-only browser job with an explicit
 `docs_only=true` scope output; it does not claim the contract executed.
 Activate the new production ruleset context in coordination with this policy update:
-CI Tests' `Verify live required-check settings` step compares the live ruleset's exact
+The hourly `Required Check Settings` monitor compares the live ruleset's exact
 context set against the workflow expectation. This change does not modify that ruleset.
 
 ## Agent board scope guard (HTPR-7496)

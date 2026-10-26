@@ -21,6 +21,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | reflect | Last /ship step, once after the last ticket's Clean up: three reviewers and a synthesizer turn this session's lessons into proposed repo skill edits for HT Product Lead to approve (pstack by Lauren Tan, MIT) | .claude/skills/reflect/SKILL.md |
 | drain-board | `/drain-board <board>`: works every open ticket on a board until each is Done or waiting on Valentin, one ledger gate per ticket | .claude/skills/drain-board/SKILL.md |
 | vcc | Claim, board writes, merge, deploy watch, report | .claude/skills/vcc/SKILL.md |
+| message-poteto | Hypertask-only pstack, token ladder and runner setup questions; blockers go to HT Product Lead first | .claude/skills/message-poteto/SKILL.md |
 | wireframe | New or changed visible UI, except a `[BUGFIX]` restoring intended behaviour, before code: full-app base kit on hypertask.app, clickable link and PNGs, one Question, UX Sign-off, Valentin's yes (Valentin, 2026-10-10) | .claude/skills/wireframe/SKILL.md |
 | reuse-existing-ui | Before UI code | .claude/skills/reuse-existing-ui/SKILL.md |
 | fix-bug | The fix, when it restores behaviour that used to work | .claude/skills/fix-bug/SKILL.md |

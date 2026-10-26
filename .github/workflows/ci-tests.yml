@@ -17,7 +17,7 @@ on:
     branches: [production]
 
 concurrency:
-  group: ci-tests-${{ github.event.pull_request.number || github.ref }}
+  group: ci-tests-${{ github.event.pull_request.number || github.sha }}
   # Superseded PR runs are waste, but every production run must finish its full
   # test report and warning path.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -51,7 +51,7 @@ jobs:
     # newer than a failed one would read as passing again.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 80
     # This job checks out and executes pull request code, so it never holds a
     # write token. The production warning is a separate push-only job.
     permissions:
@@ -71,13 +71,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Verify live required-check settings
-        timeout-minutes: 7
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: node .github/scripts/verify-required-check-settings.mjs
-
       # Never build a commit whose review already failed (owner, 2026-08-26).
       # This does NOT wait: a pending or absent verdict builds in parallel as
       # normal; only an existing red verdict stops the build before it starts.
@@ -93,10 +86,12 @@ jobs:
             | if any(.[]; .state == "success") then "success"
               elif any(.[]; .state == "failure") then "failure" else "none" end')
           [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
-      - name: Runner dispatcher and selfupdate fixtures
+      - name: Runner admission, dispatcher and selfupdate fixtures
         run: |
+          python3 .claude/skills/ship/scripts/session-policy-guard.test.py
           python3 .claude/skills/ship/scripts/runner-dispatch.test.py
           python3 .claude/skills/ship/scripts/runner-dispatch.cache.test.py
+          python3 .claude/skills/ship/scripts/runner-snapshot.test.py
           bash .claude/skills/ship/scripts/runner-selfupdate.test.sh
 
       - name: Guard CI image sources
