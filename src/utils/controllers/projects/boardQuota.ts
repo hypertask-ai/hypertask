@@ -4,11 +4,12 @@ import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7982_CANCELLED_FREE_FLAG } from "@/lib/flags/definitions/htpr-7982-cancelled-free";
+import { FREE_BOARD_LIMIT } from "@/lib/freePlanLimits";
 import { subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
 import { assertBoardRoom, assertTicketRoom, isFreeScope, isPlanLimitsEnabled, lockPlanLimitScope, scopeForProject, type PlanLimitContext } from "@/lib/planLimits";
 import { isTeamComped } from "@/lib/teamComp";
 
-export const FREE_BOARD_LIMIT = 3;
+export { FREE_BOARD_LIMIT };
 export const FREE_BOARD_LIMIT_MESSAGE = `Free plan includes ${FREE_BOARD_LIMIT} boards. Upgrade to create more.`;
 
 export class BoardLimitReachedError extends Error {

@@ -560,7 +560,7 @@ test("editor request defaults to Haiku and its unavailable-model fallback resolv
     const h = harness({ unavailableHaiku: true });
     const credentialPicks = [];
     const editor = editorWithFallback(h, credentialPicks);
-    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
+    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: {} } });
     assert.equal(selected.modelId, option.model);
     const result = await selected.model[method](params);
     if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
@@ -666,7 +666,7 @@ test("editor fallback respects team provider settings before resolving credentia
         const h = harness({ unavailableHaiku: true });
         const credentialPicks = [];
         const editor = editorWithFallback(h, credentialPicks, true, credential);
-        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openai } } } });
+        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: { providers: { openai } } } });
         if (openai === false) {
           await assert.rejects(selected.model[method](params), /model unavailable/);
           assert.equal(h.calls.length, 1);
@@ -728,7 +728,7 @@ test("editor request plan-aware defaults route paid and eligible BYOK to Haiku a
         const credentialPicks = [];
         const credential = provider === "gateway" ? "vck_fixture" : "fixture-direct";
         const editor = editorWithFallback(h, credentialPicks, enabled, credential, plan, provider);
-        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
+        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
         const useHaiku = enabled && (plan !== "Free");
         assert.equal(catalog.isHaiku55Model(selected.modelId), Boolean(useHaiku));
         if (!useHaiku) assert.equal(selected.modelId, "gpt-6-luna");
@@ -747,7 +747,7 @@ test("editor cross-provider fallback rebuilds gateway tags for generation and ev
       const h = harness({ unavailableHaiku: true, streamFailure });
       const picks = [];
       const editor = editorWithFallback(h, picks, true, "fixture-direct", "Pro", provider, "vck_fixture");
-      const selected = await editor.selectTaskWriterModel({ userId: 985, projectId: 15, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
+      const selected = await editor.selectTaskWriterModel({ userId: 985, projectId: 15, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
       const result = await selected.model[method]({ ...params, providerOptions: selected.providerOptions });
       if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
       assert.equal(h.calls.length, 2);
@@ -935,7 +935,7 @@ test("editor Haiku BYOK override respects OpenRouter provider restrictions", asy
     const h = harness();
     const picks = [];
     const editor = editorWithFallback(h, picks, true, "fixture-openrouter", "Pro", "openrouter");
-    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter } } } });
+    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter } } } });
     assert.equal(selected.provider, openrouter === true ? "openrouter" : "claude");
     assert.deepEqual(picks, openrouter === true ? [] : [option.id]);
     await h.flush();
@@ -950,7 +950,7 @@ test("editor Luna fallback removes Claude-native tools but preserves function to
   for (const [method, streamFailure] of [["doGenerate", "throw"], ["doStream", "throw"], ["doStream", "read"], ["doStream", "chunk"]]) {
     const h = harness({ unavailableHaiku: true, streamFailure });
     const editor = editorWithFallback(h, []);
-    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
+    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: {} } });
     assert.ok(selected.tools.web_search);
     const result = await selected.model[method]({ ...params, tools });
     if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");

@@ -57,11 +57,13 @@ test("preferences controller runs reset before a cache hit, bypasses stale cache
   assert.equal(result.res.aiModelPreferences.aiChat, "luna");
 });
 
-test("chat and every editor/task-writer saved-model surface await reset before reading and selecting", async () => {
+test("chat and every editor saved-model surface await reset before reading and selecting", async () => {
   const selected = new Error("selection reached");
   const model = { id: "fixture-model", modelKey: "fixture-model", source: "openai", model: "fixture-model" };
   for (const file of ["src/lib/ai/chatStream/turnModel.ts", "src/app/api/ai/_lib/editorAi.ts"]) {
-    for (const surface of ["aiChat", "taskWriter", "writeWithAi", "improveWriting", "askAi"]) {
+    for (const surface of file.includes("turnModel")
+      ? ["aiChat", "taskWriter", "writeWithAi", "improveWriting", "askAi"]
+      : ["aiChat", "writeWithAi", "improveWriting", "askAi"]) {
       const events = [];
       const preferences = { [surface]: "global-choice", teams: { team: { [surface]: "team-choice" } } };
       const stubs = {

@@ -21,6 +21,7 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const sourceModules = [
   "src/lib/planLimits.ts",
+  "src/lib/freePlanLimits.ts",
   "src/lib/flags/definitions/htpr-7923-unlimited-free-tickets.ts",
   "src/lib/flags/definitions/htpr-7982-cancelled-free.ts",
   "src/lib/freeTier.ts",

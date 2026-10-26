@@ -287,24 +287,6 @@ test("sign-in expiry copy is an Everyone bugfix including anonymous recipients a
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });
 
-test("task writer Sonnet pin is an Owner + QA feature and respects OFF", async () => {
-  const key = flags.HTPR_7038_TASK_WRITER_SONNET_FLAG;
-  assert.equal(key, "htpr-7038-task-writer-sonnet");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled(key, 6), true);
-  assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
-  assert.equal(await flags.isFeatureEnabled(key, 0), false);
-  row = { mode: "EVERYONE", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 7), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 985), false);
-});
-
 test("Haiku default is an Owner + QA feature, including system ID zero only after release", async () => {
   const key = flags.HTPR_7038_HAIKU_DEFAULT_FLAG;
   assert.equal(key, "htpr-7038-haiku-default");

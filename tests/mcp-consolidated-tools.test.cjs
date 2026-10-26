@@ -34,7 +34,6 @@ const { executeToolResult, formatToolResponse, actionableToolError } = load('src
 const { handleStatelessMcpRequest } = load('src/lib/mcp-server/stateless-http.ts')
 const { handleMcpHttp } = load('src/lib/mcp-server/mcp-http.ts')
 const { mcpHandler } = load('src/lib/mcp-server/handler.ts')
-const flags = load('src/lib/flags.ts')
 const legacy = resolvePortableTools(MCP_TOOLS)
 const ajv = new Ajv({ strict: false })
 require('ajv-formats')(ajv)
@@ -119,19 +118,17 @@ test('catalog flag on advertises 15 to 25 consolidated tools, with no duplicate 
   }
 })
 
-test('server flag defaults to Owner + QA and evaluates the authenticated user', async () => {
-  mode = null
-  for (const [id, enabled] of [[6, true], [985, true], [7, false]]) {
-    authUserId = id
-    assert.equal(await flags.isFeatureEnabled(flags.HTPR_6804_MCP_TOOLS_FLAG, id), enabled)
-    const listed = (await (await mcpHandler(request('tools/list'))).json()).result.tools
-    assert.equal(listed.length, enabled ? definitions.length : legacy.length + 1)
+test('authenticated users retain the consolidated catalog without a stored rollout mode', async () => {
+  for (const storedMode of [null, 'OFF', 'EVERYONE']) {
+    mode = storedMode
+    for (const id of [6, 985, 7]) {
+      authUserId = id
+      const listed = (await (await mcpHandler(request('tools/list'))).json()).result.tools
+      assert.ok(listed.some((tool) => tool.name === 'hypertask_tasks'))
+      assert.equal(listed.some((tool) => tool.name === 'hypertask_list_tasks'), false)
+      assert.equal(new Set(listed.map((tool) => tool.name)).size, listed.length)
+    }
   }
-  mode = 'OFF'
-  authUserId = 6
-  assert.equal((await (await mcpHandler(request('tools/list'))).json()).result.tools.length, legacy.length + 1)
-  const disabledCall = await (await mcpHandler(request('tools/call', { name: 'hypertask_tasks', arguments: { action: 'create', input: { project_id: 15, title: 'Not executed' } } }))).json()
-  assert.equal(disabledCall.error.code, -32602)
   mode = null
   authUserId = 985
 })
