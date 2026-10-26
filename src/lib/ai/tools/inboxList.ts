@@ -87,9 +87,10 @@ export function createInboxListTool(context: ToolContext) {
               from_user: notification.fromUser?.displayName,
               from_agent: notification.fromAgent?.displayName,
             })) : notifications,
-            ...buildCollectionMetadata(pageTotal, notifications.length),
+            ...buildCollectionMetadata(total, notifications.length),
             ...(batchesEnabled ? {
               offset,
+              snapshot_total: pageTotal,
               next_offset: nextOffset < pageTotal ? nextOffset : null,
               next_cursor: cursorToken && nextOffset < pageTotal ? { token: cursorToken, offset: nextOffset } : null,
               list_token: input.archived ? null : await recordInboxList(user.id, context.confirmationSessionId, notifications.map(({ id }) => Number(id)).filter((id) => id > 0)),

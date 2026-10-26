@@ -214,6 +214,8 @@ test("stable cursor does not skip later messages after archiving an earlier page
   const next = await f.turn().list({ limit: 500, cursor: first.next_cursor });
   assert.deepEqual(next.user_notifications.map((row) => row.id), Array.from({ length: 101 }, (_, i) => i + 501));
   assert.equal(next.next_cursor, null);
+  assert.equal(next.total, 600);
+  assert.equal(next.snapshot_total, 601);
   assert.equal((await f.turn().archive({ notification_ids: [601], list_tokens: [first.next_cursor.token] })).success, false);
 });
 
