@@ -14,6 +14,7 @@ function ui({ enabled = true, pathname = "/detail/project-15/42", taskId = 42, s
   const source = loader({
     "next/navigation": { usePathname: () => pathname },
     "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === chipFlag && reuseChip },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7316_CHAT_SCOPE_TICKET_FLAG: flag, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG: chipFlag, HTPR_7734_AGENT_CHAT_CONTEXT_FLAG: "htpr-7734-agent-chat-context" },
     "@/store": atoms,
     "@/lib/state": {
@@ -182,6 +183,7 @@ for (const enabled of [false, true]) {
         "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
         react: { useState: () => [0, noop], useEffect: noop },
         "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+        "@/lib/ai/chipEvents": { signalAiChip: () => {} },
         "@/lib/state": { useRecoilState: () => [null, noop] },
         "@/store": {},
         "./useAiChatState": { useAiChatState: () => ({ ticketScopeSelected }) },

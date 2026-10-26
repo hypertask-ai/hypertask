@@ -47,6 +47,7 @@ async function withSidebar(options, check) {
   };
   const mocks = {
     "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {
       HTPR_7586_ONE_QUESTIONS_CALL_FLAG: flag,
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeFlag,

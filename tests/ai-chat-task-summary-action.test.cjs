@@ -36,6 +36,6 @@ test("the task welcome screen sends the promoted action prompt", () => {
   assert.match(taskBranch, /taskSummaryAction\.label/);
   assert.match(
     taskBranch,
-    /handleSendMessage\(taskSummaryAction\.prompt\)/
+    /clickChip\(taskSummaryAction\.prompt/
   );
 });
