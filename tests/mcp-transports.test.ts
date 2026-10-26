@@ -52,7 +52,7 @@ function loadRoutes(feedbackRedis: Redis, background: Promise<unknown>[]) {
       if (request === '@/lib/telemetry/mcpSseAnalytics') return { recordLegacyMcpRequest: () => {} }
       if (request === './tools') return { MCP_TOOLS: [echoTool, feedbackTool] }
       if (request === './consolidated-tools') return {
-        selectMcpTools: (tools: typeof echoTool[], enabled: boolean, caller: { managementPermissions?: unknown } = {}, _v2 = false, flatSchema = false) => {
+        selectMcpTools: (tools: typeof echoTool[], enabled: boolean, caller: { managementPermissions?: unknown } = {}, flatSchema = false) => {
           assert.equal(flatSchema, flags.flatSchema)
           schemaSelections.push(flatSchema)
           if (!enabled) return tools

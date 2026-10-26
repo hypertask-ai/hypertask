@@ -145,6 +145,7 @@ for (const enabled of [true, false]) {
       react: { useState: () => [0, () => {}], useEffect() {} },
       "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask }) },
       "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+      "@/lib/ai/chipEvents": { signalAiChip: () => {} },
       "@/lib/flags/keys": { HTPR_7756_CHAT_OPENS_TASK_FLAG: flag },
       "@/lib/state": { useRecoilState: () => [null, () => {}] },
       "@/store": {},

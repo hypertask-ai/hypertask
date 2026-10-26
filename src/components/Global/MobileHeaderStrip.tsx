@@ -1,5 +1,8 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/keys";
+
 import { usePathname } from "next/navigation";
 import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
@@ -138,8 +141,10 @@ const MobileHeaderStrip = ({
   calendarTitle?: string | null;
 }) => {
   const pathname = usePathname();
+  const pagesScreens = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const project = useRecoilValue(currentProjectAtom);
 
+  if (pagesScreens && pathname === "/pages") return <Strip lead="Pages" items={[]} />;
   if (pathname?.startsWith("/inbox")) return <Strip lead="Inbox" items={[]} />;
   if (pathname?.startsWith("/calendar"))
     return <Strip lead={calendarTitle ?? "Calendar"} items={[]} />;
