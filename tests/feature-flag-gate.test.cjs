@@ -2406,10 +2406,10 @@ export function Widget() {
   }
 });
 
-test('formatter gate proof requires its result to reach live output', async (t) => {
+test('formatter gate proof requires an explicit live return branch', async (t) => {
   const cases = [
-    ['direct JSX output', 'return <p>{format(enabled)}</p>;', true],
-    ['assigned JSX output', 'const label = format(enabled); return <p>{label}</p>;', true],
+    ['unsupported direct JSX output', 'return <p>{format(enabled)}</p>;', false],
+    ['unsupported assigned JSX output', 'const label = format(enabled); return <p>{label}</p>;', false],
     ['assigned early-return output', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
     ['masked direct output', 'return <p>{format(enabled) || \"Age\"}</p>;', false],
     ['masked assigned output', 'const label = format(enabled); return <p>{label || \"Age\"}</p>;', false],

@@ -1109,30 +1109,8 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
       !importedParameterControlsReturnValue(ref, path, imported, argumentIndex)) return false;
   const sourceFile = node.getSourceFile();
   const live = collectLiveFunctions(sourceFile, checker);
-  const observed = (value) => {
-    if (isStaticallyUnreachable(value)) return false;
-    let inJsx = false;
-    let child = value;
-    for (let parent = value.parent; parent; child = parent, parent = parent.parent) {
-      if (typescript.isReturnStatement(parent)) return inJsx && isLiveCallSite(parent, live);
-      if (typescript.isArrowFunction(parent)) return inJsx && child === parent.body && live.has(parent);
-      if (typescript.isJsxExpression(parent) || typescript.isJsxElement(parent) ||
-          typescript.isJsxFragment(parent) || typescript.isJsxAttribute(parent) ||
-          typescript.isJsxAttributes(parent) || typescript.isJsxOpeningElement(parent) ||
-          typescript.isJsxSelfClosingElement(parent)) { inJsx = true; continue; }
-      if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
-          typescript.isTypeAssertionExpression(parent) || typescript.isNonNullExpression(parent) ||
-          typescript.isSatisfiesExpression(parent)) continue;
-      if (inJsx && typescript.isBinaryExpression(parent) && child === parent.right &&
-          (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
-           parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken)) continue;
-      if (inJsx && typescript.isConditionalExpression(parent) && child !== parent.condition) continue;
-      return false;
-    }
-    return false;
-  };
-  return observed(call) || gatesRuntimeBehavior(call, checker, sourceFile,
-    (reference) => controlsRuntimeBranch(reference) || controlsReturnedValue(reference) || observed(reference), live);
+  return gatesRuntimeBehavior(call, checker, sourceFile,
+    (reference) => controlsRuntimeBranch(reference) || controlsReturnedValue(reference), live);
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null) {
