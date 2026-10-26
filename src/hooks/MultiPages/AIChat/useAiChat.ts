@@ -123,13 +123,12 @@ export function useAiChat() {
   toggleSidebarMode, togglePopover, minimizeChat, restoreChat, retryStream,
   editMessage, tiptapKeydown, layoutKeydown,
   } = createAiChatKeyboard({
-    sharedShortcutsEnabled,
     setAiChatExplicitOpenAt, setIsSidebarMode, editor, setAiChatAutoOpenSuppressed, setAiChatPinned,
     setShowAIChat, setMinimized, setChatMounted, currentSession, handleSendMessage,
     isApple, showMentionList, isByokBlocked, isTyping, handleCancelStream,
     isFullScreenChat, showAiChatInterface, isSidebarMode, lastWorkspaceFocusRef, fileUpload,
     chatMounted, startNewSession,
-  });
+  }, sharedShortcutsEnabled ? { focusedShortcuts: true } : undefined);
   const {
   dropDownButtonAICallback, handleRemoveContext, handleAddContext, handleMessageListScroll, registerMessageListRef,
   scrollMessagesToBottom, copyResponse, createTaskFromResponse, toggleRenameChatModal, renameChat,

@@ -1,3 +1,4 @@
+import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
 import { useContext } from "react";
 import { MessageList } from "./MessageList";
@@ -12,7 +13,8 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 
 export const ChatWindow = () => {
-  const shortcuts = useChatShortcuts();
+  const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const shortcuts = useChatShortcuts({ enabled: sharedShortcutsEnabled });
   const isMbl = useContext(MobileViewContext);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover } =
@@ -25,7 +27,7 @@ export const ChatWindow = () => {
       <button
         type="button"
         ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "floating" : undefined}
-        onKeyDownCapture={shortcuts.onKeyDownCapture}
+        onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined}
         onClick={restoreChat}
         className="group flex items-center gap-2 rounded-t-lg border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-[0_-8px_30px_rgba(0,0,0,0.45)]"
       >
@@ -51,7 +53,7 @@ export const ChatWindow = () => {
   return (
     <div
       ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "floating" : undefined}
-      onKeyDownCapture={shortcuts.onKeyDownCapture}
+      onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined}
       tabIndex={shortcuts.enabled ? -1 : undefined}
       className={cn(
         "bg-ai-chat text-meta flex flex-col overflow-hidden chatwindow",

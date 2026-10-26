@@ -3,23 +3,21 @@ import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "reac
 import { useRecoilState } from "@/lib/state";
 import { aiChatPinnedSessionIdsAtom } from "@/store";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
-import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 import { CHAT_SHORTCUTS, adjacentChatSession, chatShortcutHint, dispatchChatShortcut, type ChatShortcutId } from "@/lib/aiChat/chatShortcuts";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
 
 export function useChatShortcuts(options: {
+  enabled: boolean;
   active?: boolean;
   onNewChat?: () => void | Promise<unknown>;
   onSelectSession?: (id: string) => void;
   sessionIds?: string[];
   onSearch?: () => void;
-} = {}) {
-  const requested = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
-  const enabled = requested && options.active !== false;
+}) {
+  const enabled = options.enabled && options.active !== false;
   const isApple = useDeviceContext();
   const chat = useAiChatContext();
   const [pinnedIds, setPinnedIds] = useRecoilState(aiChatPinnedSessionIdsAtom);
@@ -146,7 +144,7 @@ export function useChatShortcuts(options: {
     });
     if (event.nativeEvent.defaultPrevented) event.stopPropagation();
   };
-  const modal = picker && <OptionPickerModal
+  const modal = enabled && picker && <OptionPickerModal
     header={picker === "help" ? "Chat shortcuts" : "Search chats"}
     options={picker === "help"
       ? CHAT_SHORTCUTS.map((shortcut) => ({ id: shortcut.id, label: shortcut.label, hint: chatShortcutHint(shortcut.id, isApple) }))

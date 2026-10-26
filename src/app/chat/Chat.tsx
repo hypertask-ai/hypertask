@@ -391,6 +391,7 @@ function CtrlTabSessionSwitch({
 }
 
 export default function Chat({ initialSessionId }: ChatProps) {
+  const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
@@ -577,6 +578,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   };
 
   const shortcuts = useChatShortcuts({
+    enabled: sharedShortcutsEnabled,
     onNewChat: handleStartNewSession,
     sessionIds: displayedSessions.map((session) => session.id),
     onSelectSession: (id) => {
@@ -595,7 +597,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   };
 
   return (
-    <main ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "fullscreen" : undefined} onKeyDownCapture={shortcuts.onKeyDownCapture} tabIndex={shortcuts.enabled ? -1 : undefined} className="flex h-SVH-full min-h-0 w-full overflow-hidden bg-ai-chat text-white-black">
+    <main ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "fullscreen" : undefined} onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined} tabIndex={shortcuts.enabled ? -1 : undefined} className="flex h-SVH-full min-h-0 w-full overflow-hidden bg-ai-chat text-white-black">
       {shortcuts.modal}
       {ctrlTabSessionSwitchEnabled && !shortcuts.enabled && (
         <CtrlTabSessionSwitch

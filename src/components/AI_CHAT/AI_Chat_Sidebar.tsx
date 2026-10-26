@@ -1,5 +1,7 @@
 "use client";
 
+import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
+
 import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
@@ -34,6 +36,7 @@ export const AI_Chat_Sidebar = ({
 }: {
   inOffcanvas?: boolean;
 }) => {
+  const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const chat = useAiChatContext();
   const { showWelcomeScreen, minimized } = chat;
   const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
@@ -141,6 +144,7 @@ export const AI_Chat_Sidebar = ({
     }
   };
   const shortcuts = useChatShortcuts({
+    enabled: sharedShortcutsEnabled,
     active: target.kind !== "external-agent",
     onNewChat: async () => {
       resolvingGeneralChat.current = true;
@@ -251,7 +255,7 @@ export const AI_Chat_Sidebar = ({
     <div
       data-ai-chat-panel
       ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "sidebar" : undefined}
-      onKeyDownCapture={shortcuts.onKeyDownCapture}
+      onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined}
       tabIndex={shortcuts.enabled ? -1 : undefined}
       data-testid="ai-sidebar"
       className={cn(

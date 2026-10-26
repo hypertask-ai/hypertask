@@ -9,18 +9,19 @@ import type { useAiChatSessions } from "./useAiChatSessions";
 import type { useAiChatAttachments } from "./useAiChatAttachments";
 import { MOBILE_VIEWPORT_MAX_PX } from "./aiChatShared";
 
-type Context = { sharedShortcutsEnabled?: boolean } & Pick<ReturnType<typeof useAiChatState>, "setAiChatExplicitOpenAt" | "setIsSidebarMode" | "editor" | "setAiChatAutoOpenSuppressed" | "setAiChatPinned" | "setShowAIChat" | "setMinimized" | "setChatMounted" | "currentSession" | "showMentionList" | "isTyping" | "isFullScreenChat" | "showAiChatInterface" | "isSidebarMode" | "lastWorkspaceFocusRef" | "chatMounted"> &
+type Context = Pick<ReturnType<typeof useAiChatState>, "setAiChatExplicitOpenAt" | "setIsSidebarMode" | "editor" | "setAiChatAutoOpenSuppressed" | "setAiChatPinned" | "setShowAIChat" | "setMinimized" | "setChatMounted" | "currentSession" | "showMentionList" | "isTyping" | "isFullScreenChat" | "showAiChatInterface" | "isSidebarMode" | "lastWorkspaceFocusRef" | "chatMounted"> &
   Pick<ReturnType<typeof createAiChatSend>, "handleSendMessage"> &
   Pick<ReturnType<typeof useAiChatSessions>, "isApple" | "isByokBlocked" | "fileUpload" | "startNewSession"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
 
-export function createAiChatKeyboard(context: Context) {
+export function createAiChatKeyboard(context: Context, options?: { focusedShortcuts: true }) {
+  const sharedShortcutsEnabled = options?.focusedShortcuts === true;
   const {
   setAiChatExplicitOpenAt, setIsSidebarMode, editor, setAiChatAutoOpenSuppressed, setAiChatPinned,
   setShowAIChat, setMinimized, setChatMounted, currentSession, handleSendMessage,
   isApple, showMentionList, isByokBlocked, isTyping, handleCancelStream,
   isFullScreenChat, showAiChatInterface, isSidebarMode, lastWorkspaceFocusRef, fileUpload,
-  chatMounted, startNewSession, sharedShortcutsEnabled,
+  chatMounted, startNewSession,
   } = context;
 
 

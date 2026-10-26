@@ -17,7 +17,7 @@ function composerView(controlled = false) {
     "@/lib/skills/slashSkills": { SLASH_MENU_DOM_ID: "slash" },
     "./aiChatShared": {},
   });
-  const keyboard = createAiChatKeyboard({ sharedShortcutsEnabled: true, editor, handleSendMessage: () => actions.push("send") });
+  const keyboard = createAiChatKeyboard({ editor, handleSendMessage: () => actions.push("send") }, { focusedShortcuts: true });
   const source = loader({
     "next/navigation": { usePathname: () => "/project" },
     "@/hooks/useFlag": { useFlag: (key) => [FLAG, "htpr-7734-agent-chat-context"].includes(key) },

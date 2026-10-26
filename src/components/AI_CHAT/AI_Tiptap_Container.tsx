@@ -549,7 +549,8 @@ export function AI_Tiptap_Container({
 }
 
 function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabled = false, onRestoreFocus }: { mobile?: boolean; reuseChip?: boolean; ticketScopeEnabled?: boolean; onRestoreFocus: () => void }) {
-  const sharedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const requestedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const sharedShortcuts = requestedShortcuts && !mobile;
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);

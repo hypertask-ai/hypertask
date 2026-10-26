@@ -62,10 +62,10 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     "./aiChatShared": { MOBILE_VIEWPORT_MAX_PX: 768 },
   });
   context.tiptapKeydown = (event) => createAiChatKeyboard({
-    sharedShortcutsEnabled: true, isApple: false, editor: { isEmpty: false },
+    isApple: false, editor: { isEmpty: false },
     showMentionList: Boolean(document.getElementById("mentions")),
     handleSendMessage: () => actions.push("send"), fileUpload: {},
-  }).tiptapKeydown(event);
+  }, { focusedShortcuts: true }).tiptapKeydown(event);
   for (const id of ["scope", "model"]) root.querySelector(`#${id}`).onclick = () => actions.push(id);
   root.querySelector("[data-ai-chat-recorder]").onclick = () => actions.push("mic");
   root.querySelector("[data-ai-chat-recording-submit]").onclick = () => actions.push("dictation-submit");
@@ -88,7 +88,7 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { aiMentionList: "mentions" } },
     "@/lib/skills/slashSkills": { SLASH_MENU_DOM_ID: "slash-menu" },
   });
-  const render = () => { index = 0; hook = useChatShortcuts({ active }); hook.surfaceRef(root); return hook; };
+  const render = () => { index = 0; hook = useChatShortcuts({ enabled, active }); hook.surfaceRef(root); return hook; };
   render();
   root.querySelector("[data-ai-chat-composer]").addEventListener("keydown", (event) => context.tiptapKeydown(event));
   root.addEventListener("keydown", (nativeEvent) => {
