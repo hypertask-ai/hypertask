@@ -21,6 +21,8 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const sourceModules = [
   "src/lib/planLimits.ts",
+  "src/lib/flags/definitions/htpr-7923-unlimited-free-tickets.ts",
+  "src/lib/flags/definitions/htpr-7982-cancelled-free.ts",
   "src/lib/freeTier.ts",
   "src/app/api/ai/_lib/planGate.ts",
   "src/lib/subscriptionAccess.ts",
@@ -175,7 +177,9 @@ function fixture(options = {}) {
     "@/lib/prisma": { default: db },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       calls.push(["flag", key, userId]);
-      return key === flag && options.enabled !== false;
+      return key === "htpr-7982-cancelled-free"
+        ? options.cancelledFree === true
+        : key === flag && options.enabled !== false;
     } },
     "@/lib/subscriptionPlans": { allMonthlyPrices: [], allYearlyPrices: [] },
     "@/lib/flags/keys": {},
@@ -886,7 +890,9 @@ test("recurring/agent-created tickets evaluate and log the acting user rather th
   await assert.rejects(events.createTaskWithBoardWebhookOutbox(h.db, {
     userId: 7, agentId: "original-author-agent", actingUserId: 985, actingAgentId: "acting-agent",
   }, createdTask(h), "web", null, 15), (error) => error.code === "PLAN_LIMIT_REACHED");
-  assert.ok(h.calls.filter(([kind]) => kind === "flag").every(([, key, userId]) => key === flag && userId === 985));
+  const flagCalls = h.calls.filter(([kind]) => kind === "flag");
+  assert.ok(flagCalls.every(([, , userId]) => userId === 985));
+  assert.deepEqual([...new Set(flagCalls.map(([, key]) => key))].sort(), [flag, "htpr-7923-unlimited-free-tickets"]);
   assert.equal(h.logs.length, 1);
   assert.equal(h.logs[0][1].actorUserId, 985);
   assert.equal(h.logs[0][1].agentId, "acting-agent");
@@ -1267,3 +1273,46 @@ for (const body of [
     assert.deepEqual(h.saved, []);
   });
 }
+
+for (const status of ["unpaid", "canceled", "incomplete_expired"]) {
+  test(`ended subscription ${status} gets Free board admission without deleting data`, async () => {
+    const h = fixture({ enabled: false, cancelledFree: true, legacyTeams: [
+      { id: "customer-team", compedUntil: null, subscriptionPlan: [{ subscriptionStatus: status }] },
+    ] });
+    const before = plain({ projects: h.projects, tasks: h.tasks });
+    await assert.rejects(h.boards.assertBoardQuota(7), { name: "BoardLimitReachedError" });
+    assert.deepEqual(plain({ projects: h.projects, tasks: h.tasks }), before);
+    assert.deepEqual(h.writes, []);
+    assert.deepEqual(h.calls.find((call) => call[1] === "htpr-7982-cancelled-free"),
+      ["flag", "htpr-7982-cancelled-free", 7]);
+  });
+}
+
+for (const status of ["active", "trialing", "past_due", "Paid"]) {
+  test(`legitimate ${status} subscription still lifts the board cap`, async () => {
+    const h = fixture({ enabled: false, cancelledFree: true, legacyTeams: [
+      { id: "customer-team", compedUntil: null, subscriptionPlan: [{ subscriptionStatus: status }] },
+    ] });
+    assert.equal(await h.boards.isBoardLimitReached(7), false);
+    assert.equal(await h.boards.hasPaidPlan(7), true);
+  });
+}
+
+test("cancelled-Free flag Off preserves unpaid legacy admission", async () => {
+  const h = fixture({ enabled: false, cancelledFree: false, legacyTeams: [
+    { id: "customer-team", compedUntil: null, subscriptionPlan: [{ subscriptionStatus: "unpaid" }] },
+  ] });
+  assert.equal(await h.boards.isBoardLimitReached(7), false);
+  assert.equal(await h.boards.hasPaidPlan(7), true);
+});
+
+test("a replacement paid subscription or explicit comp survives cancellation", async () => {
+  for (const team of [
+    { id: "customer-team", subscriptionPlan: [{ subscriptionStatus: "canceled" }, { subscriptionStatus: "active" }] },
+    { id: "customer-team", compedUntil: new Date(Date.now() + 86_400_000), subscriptionPlan: [{ subscriptionStatus: "unpaid" }] },
+  ]) {
+    const h = fixture({ enabled: false, cancelledFree: true, legacyTeams: [team] });
+    assert.equal(await h.boards.hasPaidPlan(7), true);
+    assert.equal(await h.boards.isBoardLimitReached(7), false);
+  }
+});

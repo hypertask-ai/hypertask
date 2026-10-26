@@ -2,6 +2,9 @@ import { Prisma, Status } from "@prisma/client";
 
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7982_CANCELLED_FREE_FLAG } from "@/lib/flags/definitions/htpr-7982-cancelled-free";
+import { subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
 import { assertBoardRoom, assertTicketRoom, isFreeScope, isPlanLimitsEnabled, lockPlanLimitScope, scopeForProject, type PlanLimitContext } from "@/lib/planLimits";
 import { isTeamComped } from "@/lib/teamComp";
 
@@ -41,12 +44,16 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
     },
   });
 
+  const cancelledFree = await isFeatureEnabled(HTPR_7982_CANCELLED_FREE_FLAG, userId);
+
   return teams.some(
     (team) =>
       isInternalCompTeam(team.id) ||
       isTeamComped(team) ||
       team.subscriptionPlan.some(
-        (plan) => !TERMINAL_SUBSCRIPTION_STATUSES.has(plan.subscriptionStatus),
+        (plan) => cancelledFree
+          ? subscriptionStatusGrantsAccess(plan.subscriptionStatus)
+          : !TERMINAL_SUBSCRIPTION_STATUSES.has(plan.subscriptionStatus),
       ),
   );
 }

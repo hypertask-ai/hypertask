@@ -11,17 +11,31 @@ const catalog = readCatalog(fs.readFileSync(path.join(root, "src/lib/aiModelOpti
 const report = () => diffModels(catalog, structuredClone(fixture));
 const response = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
 
+const twoVersionCatalog = {
+  definitions: [
+    { key: "claude-haiku-4.5", modelClass: "claude-haiku", label: "Haiku 4.5", provider: "anthropic", priceTier: 1 },
+    { key: "claude-haiku-5-5", modelClass: "claude-haiku", label: "Haiku 5.5", provider: "anthropic", priceTier: 1 },
+  ],
+  options: [
+    { id: "claude-haiku-4.5", modelKey: "claude-haiku-4.5", model: "claude-haiku-4.5", source: "claude" },
+    { id: "claude-haiku-5-5", modelKey: "claude-haiku-5-5", model: "claude-haiku-5.5", source: "claude" },
+  ],
+};
+const staleFinding = () => diffModels(twoVersionCatalog, structuredClone(fixture)).findings.find((finding) => finding.kind === "stale");
+const findingOfKind = (kind) => kind === "stale" ? staleFinding() : report().findings.find((item) => item.kind === kind);
+
 function assertPickerModelsListed(sources) {
   const missing = diffModels(catalog, sources).findings.filter((finding) => finding.reason === "picker model missing from gateway list");
   assert.deepEqual(missing, [], "Every picker model must exist in the gateway fixture");
 }
 
-test("approved examples are discovered, with one finding per model class and old Haiku stale", () => {
+test("approved examples are discovered, with one finding per model class and no stale Haiku left", () => {
   const findings = report().findings;
   for (const model of ["claude-fable-5.1", "gpt-6-astra", "kimi-k3.1-pro", "qwen3.8-plus"]) {
     assert.ok(findings.some((finding) => finding.model.endsWith(`/${model}`)), model);
   }
-  assert.equal(findings.find((finding) => finding.model === "claude-haiku-4.5").kind, "stale");
+  assert.equal(findings.filter((finding) => finding.kind === "stale").length, 0);
+  assert.equal(findings.some((finding) => finding.model === "claude-haiku-4.5"), false);
   assert.equal(findings.find((finding) => finding.model.endsWith("/qwen3.8-plus")).modelClass, "qwen-plus");
   assert.equal(findings.find((finding) => finding.model.endsWith("/claude-sonnet-5.6")).action, "ship automatically");
   assert.equal(findings.find((finding) => finding.model.endsWith("/gpt-6.2-sol")).action, "waits for HTPR-7746");
@@ -29,6 +43,14 @@ test("approved examples are discovered, with one finding per model class and old
   assert.equal(findings.filter((finding) => finding.model.includes("claude-sonnet")).length, 1);
   assert.ok(!findings.some((finding) => finding.model.includes("image")));
   assert.ok(!findings.some((finding) => /gemini-4-argon|grok-4\.7/.test(finding.model)));
+});
+
+test("stale detection still fires for a catalogue that keeps two versions of one class", () => {
+  const stale = staleFinding();
+  assert.equal(stale.model, "claude-haiku-4.5");
+  assert.deepEqual(stale.current, ["claude-haiku-5-5"]);
+  assert.equal(stale.reason, "superseded by claude-haiku-5-5");
+  assert.equal(stale.action, "remove stale entry; migrate saved picks to the current model of its class");
 });
 
 test("serving variants share their base model family without changing name or version", () => {
@@ -110,7 +132,10 @@ test("gateway failure falls back to authenticated provider lists without claimin
   assert.deepEqual(fallback.sourcesUsed, ["openai", "anthropic"]);
   assert.ok(fallback.warnings.includes("gateway: HTTP 403"));
   assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
-  assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 1);
+  assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 0);
+  const stale = diffModels(twoVersionCatalog, sources).findings.filter((finding) => finding.kind === "stale");
+  assert.deepEqual(stale.map((finding) => finding.model), ["claude-haiku-4.5"]);
+  assert.equal(stale[0].action, "remove stale entry; migrate saved picks to the current model of its class");
   assert.equal(calls.find(([url]) => url === "https://api.openai.com/v1/models")[1].Authorization, "Bearer fixture-openai");
   assert.equal(calls.find(([url]) => url === "https://api.anthropic.com/v1/models")[1]["x-api-key"], "fixture-anthropic");
 });
@@ -151,7 +176,7 @@ test("CLI text and JSON use the same saved fixture and do not access the network
   const text = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8" });
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /Sources used: gateway, openai, anthropic/);
-  assert.match(text.stdout, /stale: claude-haiku-4.5/);
+  assert.doesNotMatch(text.stdout, /stale: /);
   assert.match(text.stdout, /waits for HTPR-7746/);
 });
 
@@ -300,7 +325,7 @@ test("watcher does not search or create an empty rollup", async () => {
 
 for (const kind of ["new-class", "new-version", "stale"]) {
   test(`watcher finds an exact ${kind} title on the second page without creating`, async () => {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     const now = new Date("2026-10-25T12:00:00Z");
     const ticket = kind === "new-class" ? rollupTicket([finding], now) : ticketFor(finding);
     const cursors = [];
@@ -322,7 +347,7 @@ for (const kind of ["new-class", "new-version", "stale"]) {
   });
 
   test(`watcher exhausts ${kind} pages before creating once with the stable marker idempotency key`, async () => {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     const now = new Date("2026-10-25T12:00:00Z");
     const ticket = kind === "new-class" ? rollupTicket([finding], now) : ticketFor(finding);
     const calls = [];
@@ -386,7 +411,7 @@ test("watcher CLI refuses incomplete or failing later pages with non-zero exit a
 
 test("watcher refuses writes on failed, partial, malformed or truncated searches, and with no discovery sources", async () => {
   for (const kind of ["new-class", "new-version", "stale"]) {
-    const finding = report().findings.find((item) => item.kind === kind);
+    const finding = findingOfKind(kind);
     for (const page of [response({}, 500), response({ success: false }), response({ success: true }),
       response({ success: true, tasks: [], total: 1 }), response({ success: true, tasks: [], total: 0, partial: true }),
       response({ success: true, tasks: [], total: 0, nextCursor: "123" })]) {

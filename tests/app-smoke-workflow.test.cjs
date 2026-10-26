@@ -355,7 +355,6 @@ test("app smoke validates the head before isolated build and route checks", asyn
 
 test("auto-merge waits for app smoke and runs when it completes", async () => {
   const workflow = await readFile(".github/workflows/automerge.yml", "utf8");
-  const ciWorkflow = await readFile(".github/workflows/ci-tests.yml", "utf8");
 
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
@@ -364,15 +363,23 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
-  assert.match(ciWorkflow, /name: Verify live required-check settings/);
-  const settingsScript = await readFile(
-    ".github/scripts/verify-required-check-settings.mjs",
-    "utf8",
-  );
-  const steps = yaml.load(ciWorkflow).jobs["ci-prepare"].steps;
-  const settingsIndex = steps.findIndex(
-    (step) => step.name === "Verify live required-check settings",
-  );
+});
+
+test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
+  const ciWorkflow = await readFile(".github/workflows/ci-tests.yml", "utf8");
+  const ciSteps = yaml.load(ciWorkflow).jobs["ci-prepare"].steps;
+  assert.equal(ciSteps.some((step) => step.run?.includes("verify-required-check-settings.mjs")), false);
+  const settingsWorkflow = yaml.load(await readFile(".github/workflows/required-check-settings.yml", "utf8"));
+  assert.deepEqual(Object.keys(settingsWorkflow.on).sort(), ["schedule", "workflow_dispatch"]);
+  assert.deepEqual(settingsWorkflow.on.schedule, [{ cron: "17 * * * *" }]);
+  assert.deepEqual(settingsWorkflow.permissions, { contents: "read" });
+  assert.equal(settingsWorkflow.concurrency["cancel-in-progress"], false);
+  const settingsJob = settingsWorkflow.jobs.verify;
+  assert.equal(settingsJob.if, "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production')");
+  assert.equal(settingsJob["runs-on"], "ubuntu-latest");
+  assert.equal(settingsJob["timeout-minutes"], 80);
+  const steps = settingsJob.steps;
+  const settingsIndex = steps.findIndex((step) => step.name === "Verify live required-check settings");
   const settingsStep = steps[settingsIndex];
   assert.equal(settingsStep.run, "node .github/scripts/verify-required-check-settings.mjs");
   assert.equal(settingsStep.if, undefined);
@@ -381,8 +388,10 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.equal(settingsStep.env.GH_TOKEN, "${{ github.token }}");
   assert.equal(settingsStep.env.REPO, "${{ github.repository }}");
   assert.match(steps[0].uses, /^actions\/checkout@/);
-  assert.equal(steps[0].with["fetch-depth"], 1);
+  assert.equal(steps[0].with.ref, "production");
+  assert.equal(steps[0].with["persist-credentials"], false);
   assert.ok(settingsIndex > 0);
+  const settingsScript = await readFile(".github/scripts/verify-required-check-settings.mjs", "utf8");
   assert.match(settingsScript, /GITHUB_EVENT_NAME !== "pull_request"/);
   assert.match(settingsScript, /"fetch", "--no-tags", "--depth=1", "origin", base, head/);
   assert.match(settingsScript, /"diff", "--name-only", "--no-renames", "-z", base, head/);

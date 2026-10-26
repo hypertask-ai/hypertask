@@ -9,10 +9,10 @@ const load = require("jiti")(__filename, {
 const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
 const { buildComposerConfig } = load(path.join(root, "src/app/api/android/ai/composer/config.ts"));
 
-function assertUniqueModelClasses(options, isVisible = () => true) {
+function assertUniqueModelClasses(options, isVisible = () => true, getDefinition = catalog.getAiModelDefinition) {
   const keysByClass = new Map();
   for (const option of options.filter(isVisible)) {
-    const definition = catalog.getAiModelDefinition(option.modelKey);
+    const definition = getDefinition(option.modelKey);
     assert.ok(definition, `Missing definition for ${option.modelKey}`);
     assert.equal(typeof definition.modelClass, "string", `Missing modelClass for ${option.modelKey}`);
     assert.ok(definition.modelClass.trim(), `Empty modelClass for ${option.modelKey}`);
@@ -33,7 +33,7 @@ test("every model definition has a non-empty modelClass, including hidden models
     assert.equal(typeof definition.modelClass, "string", `Missing modelClass for ${definition.key}`);
     assert.ok(definition.modelClass.trim(), `Empty modelClass for ${definition.key}`);
   }
-  assert.equal(catalog.getAiModelDefinition("claude-haiku-4.5").modelClass, "claude-haiku");
+  assert.equal(catalog.getAiModelDefinition("claude-haiku-4.5"), undefined);
   assert.equal(catalog.getAiModelDefinition("claude-haiku-5-5").modelClass, "claude-haiku");
   assert.equal(catalog.getAiModelDefinition("kimi-k2.5").modelClass, "kimi-k2.5-free");
   assert.equal(catalog.getAiModelDefinition("kimi-k3").modelClass, "kimi-k3");
@@ -91,7 +91,11 @@ test("reasoning and effort variants sharing a modelKey are not separate models",
 
 test("the same checker rejects Haiku 4.5 and 5.5 when both are visible", () => {
   assert.throws(
-    () => assertUniqueModelClasses(catalog.aiModelOptions, () => true),
+    () => assertUniqueModelClasses(
+      [{ modelKey: "claude-haiku-4.5" }, ...catalog.aiModelOptions],
+      () => true,
+      (key) => key === "claude-haiku-4.5" ? { modelClass: "claude-haiku" } : catalog.getAiModelDefinition(key),
+    ),
     {
       name: "AssertionError",
       message: "One AI model per class violated: claude-haiku has visible model keys claude-haiku-4.5, claude-haiku-5-5",

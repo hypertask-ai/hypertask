@@ -37,3 +37,27 @@ Save a checklist before testing, account ids and expected tiers (never credentia
 ## Cleanup
 
 Never enter card details, submit a payment, cancel a subscription, change a plan, edit billing data, or alter portal settings. Cancel only the uncompleted checkout via its back link. Before opening Plans, record whether the owned QA team already has a Stripe customer. If missing, Plans calls `POST /api/stripe/ensure-customer`, which creates a Stripe customer and saves the team linkage. Record any new linkage; do not delete the customer or clear billing data as cleanup. No task fixtures are required; all account writes stay within the test account's own team and QA runner board. Never use another person's account or a shared board. Any changed money path requires stopping and Supervisor Review, not Done.
+
+## Start plan trial duration
+
+The existing `htpr-7551-start-plan-checkout` eligibility flag must permit the QA identity before testing Start plan. Its default is Owner only; do not widen it or borrow owner credentials. Record an unavailable preview as UNREACHABLE with the actual refusal.
+
+When eligible, open a Free owned board and check Start a Hypertask plan. The preview response's positive `trialDays` must match both the displayed “after N days” offer and Stripe's trial period. `htpr-7938-fourteen-day-trial` selects fourteen days for new offers, default Owner + QA; prior saved offers keep their original duration. A used trial must show no free-trial promise. Compare desktop and phone in all themes without submitting payment.
+
+Switching the duration flag off must keep historical checkout reconciliation intact. Never fully revert the historical `start-plan` marker readers: completed checkouts still awaiting subscription visibility must block another checkout, including when their Redis reservation is gone. Use a duration-only rollback.
+
+## Free ticket admission
+
+For ticket-admission changes, do not enter checkout or change a plan. The existing `htpr-7686-free-plan-limits` rollout remains unchanged. `htpr-7923-unlimited-free-tickets` bypasses only ticket admission when enabled; Off restores the older admission path while the original rollout is enabled. Both default to Owner + QA.
+
+Use an owned Free QA team or personal scope with at least 300 Normal tickets. Create a ticket from the app, Slack, AI chat and MCP/API; read it back after creation. Restore an archived ticket and move a ticket into the scope. Verify board and attachment limits still reject an over-limit write. Do not populate a customer board or change either switch for a live test. If the designated Free fixture cannot see both switches, record that exact flag limitation and cover the shared guard in CI instead of widening access. Existing rollback tests execute both branches at 350 tickets and preserve board/file refusals: `tests/htpr-7923-unlimited-free-tickets.test.cjs` and `tests/htpr-7686-free-plan-limits.test.cjs`.
+
+Record the account, scope, existing ticket count, returned ticket identifiers and read-back results. Archive only test tickets created during this run. Slack or AI paths without configured credentials must be recorded as UNREACHABLE, not counted as exercised by a shared-guard unit test.
+
+## Cancellation and failed-payment admission
+
+`node --test tests/stripe-subscription-entitlement.test.cjs tests/failed-payment-plan-gate.test.cjs tests/htpr-7686-free-plan-limits.test.cjs tests/seat-billing-concurrency.test.cjs` covers scheduled cancellation retaining Pro, terminal and unpaid events becoming Free, replay, legitimate payment recovery, monthly/yearly updates, retained data and skipped seat billing. These tests exercise the real status policies with persistence/provider boundaries replaced; they do not prove Stripe delivery.
+
+`htpr-7982-cancelled-free` aligns legacy board admission with the shared paid-access policy. Off retains legacy admission. Active, trialing, past_due, replacement paid subscriptions and explicit comps retain admission. The existing newer Free-plan rollout still bypasses that legacy precheck; do not alter either rollout to manufacture a live test.
+
+Live QA remains read-only: record actual plan snapshots and reload persistence. A full cancellation or failed-payment event needs an authorized Stripe test-mode fixture, never a customer subscription. If unavailable, mark those paths UNREACHABLE and cite the behavioral suite as local evidence, not live proof. QA 985 may also bypass legacy admission through the newer Free-plan rollout; record that limitation explicitly.

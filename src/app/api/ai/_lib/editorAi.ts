@@ -76,7 +76,6 @@ const CLAUDE_MODELS = new Set([
   "claude-opus-5.5",
   "claude-opus-5-5",
   "claude-opus-5",
-  "claude-haiku-4.5",
   "claude-haiku-5.5",
   "claude-haiku-5-5",
 ]);
@@ -429,7 +428,8 @@ export function selectEditorModel(
     modelOption?: TAiModelOption;
   }
 ): SelectedModel {
-  const requestedModel = modelId?.trim() || undefined;
+  const trimmedModel = modelId?.trim();
+  const requestedModel = trimmedModel ? resolveHaikuModelId(trimmedModel) : undefined;
   const feature = options?.feature ?? "task-writer";
   const usageProvider = aiUsageProviderForCredential(
     provider,

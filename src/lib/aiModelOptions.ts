@@ -27,7 +27,6 @@ export type TAiModelKey =
   | "gemini-3.8-flash"
   | "gemini-4-argon"
   | "grok-4.7"
-  | "claude-haiku-4.5"
   | "claude-haiku-5-5"
   | "custom";
 
@@ -58,7 +57,6 @@ export type TAiModelOptionId =
   | "gemini-3.8-flash"
   | "gemini-4-argon"
   | "grok-4.7"
-  | "claude-haiku-4.5"
   | "claude-haiku-5-5"
   | "custom";
 
@@ -134,13 +132,6 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     label: "Sonnet 5.5",
     provider: "anthropic",
     priceTier: 2,
-  },
-  {
-    key: "claude-haiku-4.5",
-    modelClass: "claude-haiku",
-    label: "Haiku 4.5",
-    provider: "anthropic",
-    priceTier: 1,
   },
   {
     key: "claude-haiku-5-5",
@@ -443,15 +434,6 @@ export const aiModelOptions: TAiModelOption[] = [
     },
   },
   {
-    id: "claude-haiku-4.5",
-    source: "claude",
-    title: "Haiku 4.5",
-    model: "claude-haiku-4.5",
-    desc: "Fast and cheap Claude",
-    reasoning: "instant",
-    modelKey: "claude-haiku-4.5",
-  },
-  {
     id: "claude-haiku-5-5",
     source: "claude",
     title: "Haiku 5.5",
@@ -719,10 +701,9 @@ export function getAiModelOptionById(
   haiku55Enabled = false,
 ): TAiModelOption | undefined {
   const trimmed = id?.trim();
-  const normalized = trimmed && haiku55Enabled && (isHaiku45Model(trimmed) || isHaiku55Model(trimmed))
-    ? "claude-haiku-5-5" : trimmed;
-  if (!normalized) return undefined;
-  const aliased = RETIRED_OPTION_ID_ALIASES[normalized] ?? normalized;
+  if (!trimmed) return undefined;
+  const haiku = isHaiku45Model(trimmed) || isHaiku55Model(trimmed) ? "claude-haiku-5-5" : trimmed;
+  const aliased = RETIRED_OPTION_ID_ALIASES[haiku] ?? haiku;
   const resolved = haiku55Enabled ? upgradeLegacyClaudeOptionId(aliased) : aliased;
   return aiModelOptions.find((option) => option.id === resolved);
 }
@@ -875,23 +856,20 @@ export function isGrokGemini4ModelKey(modelKey: string | null | undefined): bool
 
 export function isAiModelOptionVisible(
   option: TAiModelOption,
-  haiku55Enabled: boolean,
+  _haiku55Enabled: boolean,
   deepseekFlashFastEnabled = false,
   grokGemini4Enabled = false,
 ): boolean {
-  if (option.modelKey === "deepseek-v4.1-flash-fast" && !deepseekFlashFastEnabled) return false;
   if (isGrokGemini4ModelKey(option.modelKey) && !grokGemini4Enabled) return false;
-  return haiku55Enabled
-    ? option.modelKey !== "claude-haiku-4.5"
-    : option.modelKey !== "claude-haiku-5-5";
+  return option.modelKey !== "deepseek-v4.1-flash-fast" || deepseekFlashFastEnabled;
 }
 
 export function isHaiku45Model(modelId: string): boolean {
   return /(?:^|\/)claude-haiku-4[.-]5(?:-\d{8})?$/.test(modelId);
 }
 
-export function resolveHaikuModelId(modelId: string, haiku55Enabled: boolean): string {
-  return haiku55Enabled && isHaiku45Model(modelId)
+export function resolveHaikuModelId(modelId: string, _haiku55Enabled = false): string {
+  return isHaiku45Model(modelId)
     ? modelId.includes("/") ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5"
     : modelId;
 }
