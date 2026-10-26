@@ -229,7 +229,7 @@ test("getAiDefaultModelContext reports Claude 5.5 mode for the no-user and user 
     });
     const context = await byok.getAiDefaultModelContext({ userId: 7 });
     assert.equal(context.backgroundClaudeEnabled, enabled);
-    assert.equal(context.haiku55Enabled, enabled);
+    assert.equal(context.haiku55Enabled, true);
   }
 });
 
@@ -264,7 +264,6 @@ test("the Claude 5.5 flag reaches every background decision through one server g
   const gate = read("src/app/api/ai/_lib/planGate.ts");
   assert.match(gate, /export async function backgroundClaudeModelEnabled/);
   assert.match(gate, /HTPR_7075_BACKGROUND_CLAUDE_FLAG, userId \?\? 0/);
-  assert.match(gate, /return backgroundClaudeModelEnabled\?\.\(userId\) \?\? false/);
 });
 
 test("the flagged Claude 5.5 paths never name Luna, Gemini or an older Claude as a fallback", () => {

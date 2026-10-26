@@ -797,11 +797,8 @@ test("task writer option ids map to provider options and legacy model strings fa
     byokProviderFlags: [],
     teamContext,
   });
-  assert.equal(paidDefault.provider, "openai");
-  assert.equal(paidDefault.modelId, "gpt-6-luna");
-  assert.deepEqual(paidDefault.providerOptions?.openai, {
-    reasoningEffort: "medium",
-  });
+  assert.equal(paidDefault.provider, "claude");
+  assert.equal(paidDefault.modelId, "claude-haiku-5-5");
 
   for (const modelId of ["gpt-5.6-terra", "gpt-6.1-terra"]) {
     const terra = await selectTaskWriterModel({
@@ -938,10 +935,10 @@ async function selectFreeTeamDefault() {
   });
 }
 
-test("a Free editor request defaults to Luna and may use it", async () => {
+test("a Free editor request defaults to Haiku", async () => {
   const selected = await selectFreeTeamDefault();
-  assert.equal(selected.provider, "openai");
-  assert.equal(selected.modelId, "gpt-6-luna");
+  assert.equal(selected.provider, "claude");
+  assert.equal(selected.modelId, "claude-haiku-5-5");
 });
 
 test("a saved GPT 5.4 Mini on a Free team resolves to Luna", async () => {

@@ -206,7 +206,7 @@ for (const mobile of [false, true]) {
       await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": true });
       assert.deepEqual(chosen, []);
       await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": false });
-      assert.deepEqual(chosen, ["gpt-6-luna"]);
+      assert.deepEqual(chosen, ["claude-haiku-5-5"]);
     }, { mobile, selectedId: "deepseek-v4.1-flash-fast" });
   });
 }

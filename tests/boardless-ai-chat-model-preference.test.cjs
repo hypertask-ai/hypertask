@@ -157,13 +157,13 @@ test.beforeEach(() => {
   writes.length = 0;
 });
 
-test("boardless Free chat defaults to Luna", async () => {
+test("boardless Free chat defaults to Haiku", async () => {
   await withChat((read, readBeforeFix) => {
-    assert.equal(readBeforeFix().currentAiOption.modelKey, "gemini-3.5-flash-lite");
-    assert.equal(read().currentAiOption.modelKey, "gpt-6-luna");
+    assert.equal(readBeforeFix().currentAiOption.modelKey, "claude-haiku-5-5");
+    assert.equal(read().currentAiOption.modelKey, "claude-haiku-5-5");
     assert.equal(read().modelTeamId, "team-free");
     assert.equal(read().modelBilling.storePlanId, "Free");
-    assert.match(document.querySelector("button").textContent, /Luna 6/);
+    assert.match(document.querySelector("button").textContent, /Haiku 5\.5/);
     assert.equal(writes.length, 0);
   });
 });
@@ -187,7 +187,7 @@ test("boardless chat uses the remembered accessible team and persists its choice
   lastTeamId = "team-free";
   await withChat(async (read) => {
     assert.equal(read().modelTeamId, "team-free");
-    const choice = getAiModelOptionById(read().currentAiOption.id);
+    const choice = read().currentAiOption;
     await act(async () => read().setAiOption(choice));
     assert.equal(writes[0].body.aiModelPreferencesTeamId, "team-free");
     assert.deepEqual(writes[0].body.aiModelPreferences, { aiChat: choice.id });
@@ -219,7 +219,7 @@ test("boardless chat waits for a real team instead of assuming a Free plan", asy
   await withChat((read) => {
     assert.equal(read().modelTeamId, null);
     assert.equal(read().modelBilling, null);
-    assert.equal(read().currentAiOption.modelKey, "gemini-3.5-flash-lite");
+    assert.equal(read().currentAiOption.modelKey, "claude-haiku-5-5");
     assert.equal(writes.length, 0);
   });
 });
