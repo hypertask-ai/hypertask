@@ -108,6 +108,7 @@ export async function acquireAiChatStreamLease(
       ));
     }
     const guardKeys = sessionId || (agentId && isolateAgentLease) ? [activeStreamKey(userId)] : [];
+    if (sessionId && agentId) guardKeys.push(activeStreamKey(userId, agentId));
     const token = randomUUID();
     if (keys.length + guardKeys.length > 1) {
       const acquired = Number(

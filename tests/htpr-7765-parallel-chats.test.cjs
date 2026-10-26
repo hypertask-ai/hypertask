@@ -308,11 +308,35 @@ test("parallel chat improvement defaults to Everyone with its own reversible tic
 test("manual send stays pinned to displayed B after a background A cache reorder", async () => {
   const f = fixture();
   f.select("B");
-  f.context.waitForChatSession = async () => f.context.sessionsRef.current[0];
+  let resolved = false;
+  f.context.waitForChatSession = async () => { resolved = true; return f.context.getDisplayedSession(); };
   await transport(f, async () => {
     const sent = f.send("B-after-background-update"); await flush();
     assert.deepEqual(f.sent.map((item) => item.session_id), ["B"]);
+    assert.equal(resolved, true);
     f.finish("B-after-background-update");
     assert.equal(await sent, true);
   });
+});
+
+test("manual sends wait for board initialization and keep the draft when it resolves another session", async () => {
+  const f = fixture();
+  f.context.waitForChatSession = async () => f.context.sessionsRef.current.find((session) => session.id === "B");
+  await transport(f, async () => {
+    assert.equal(await f.send("draft during board navigation"), false);
+    assert.deepEqual(f.sent, []);
+    assert.equal(f.context.editor.getText(), "draft during board navigation");
+  });
+});
+
+test("parallel agent sessions respect pre-deploy isolated-agent turns without serializing new sessions", { skip: !hasRedis }, async () => {
+  await redis.flushdb();
+  const agent = "agent-a";
+  const key = "ai-chat:stream-active:user:985:agent:agent-a";
+  await redis.set(key, "pre-deploy-agent-turn");
+  const start = (sessionId) => acquireAiChatStreamLease(985, { sessionId, streamId: `stream-${sessionId}` }, async () => redis, agent, true, true);
+  assert.equal(await start("A"), "busy");
+  await redis.del(key);
+  assert.equal(typeof await start("A"), "object");
+  assert.equal(typeof await start("B"), "object");
 });

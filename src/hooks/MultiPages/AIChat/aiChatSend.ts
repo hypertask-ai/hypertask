@@ -135,7 +135,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     try {
       if (queuedMessage && !parallelStreams && persistentQueue?.sessionId !== options?.sessionId) return false;
       let session;
-      if (parallelStreams && sessionId) {
+      if (queuedMessage && parallelStreams && sessionId) {
         session = sessionPagingEnabled
           ? await resolveHistorySession(sessionId)
           : sessionsRef.current.find((candidate) => candidate.id === sessionId);
