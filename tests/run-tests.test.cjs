@@ -1,0 +1,130 @@
+const assert = require("node:assert/strict");
+const { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const test = require("node:test");
+const yaml = require("js-yaml");
+
+const root = path.resolve(__dirname, "..");
+
+function fixture(t, sources) {
+  const directory = mkdtempSync(path.join(tmpdir(), "run-tests-timings-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const folder of ["scripts", "config", "tests/helpers", "node_modules/tsx/dist"]) mkdirSync(path.join(directory, folder), { recursive: true });
+  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs"]) {
+    copyFileSync(path.join(root, "scripts", file), path.join(directory, "scripts", file));
+  }
+  writeFileSync(path.join(directory, "tests/helpers/register-server-only.cjs"), "");
+  writeFileSync(path.join(directory, "config/quarantined-tests.json"), '{"tests":[]}');
+  writeFileSync(path.join(directory, "node_modules/tsx/dist/cli.mjs"), `import { readFileSync } from 'node:fs'; eval(readFileSync(process.argv[2], 'utf8'));`);
+  for (const [file, source] of Object.entries(sources)) writeFileSync(path.join(directory, "tests", file), source);
+  return directory;
+}
+
+function run(directory, files = [], overrides = {}) {
+  const result = spawnSync(process.execPath, ["scripts/run-tests.mjs", ...files], {
+    cwd: directory,
+    env: { ...process.env, NODE_TEST_CONTEXT: undefined, NODE_OPTIONS: "", CI: "true", TEST_CONCURRENCY: "2", GITHUB_STEP_SUMMARY: path.join(directory, "summary.md"), ...overrides },
+    encoding: "utf8",
+    timeout: 20000,
+  });
+  return { ...result, report: JSON.parse(readFileSync(path.join(directory, "test-durations.json"), "utf8")), summary: readFileSync(path.join(directory, "summary.md"), "utf8") };
+}
+
+test("runner publishes all files, descending top 20 and concurrency/serial accounting", (t) => {
+  const sources = Object.fromEntries(Array.from({ length: 21 }, (_, index) => [
+    `shared-${index}.test.cjs`, `require('node:test')('shared ${index}', () => {});`,
+  ]));
+  sources["action-archive-cache.test.cjs"] = `require('node:test')('isolated fixture', () => {});`;
+  sources["serial.test.ts"] = `console.log('serial TypeScript fixture');`;
+  const directory = fixture(t, sources);
+  const { status, stderr, stdout, report, summary } = run(directory);
+  assert.equal(status, 0, stderr);
+  assert.match(stdout, /isolated fixture/);
+  assert.match(stdout, /shared 0/);
+  assert.match(stdout, /serial TypeScript fixture/);
+  assert.equal(report.selectedFiles, 23);
+  assert.equal(report.recordedFiles, 23);
+  assert.equal(report.exitCode, 0);
+  assert.deepEqual(report.files.map(({ file }) => file).sort(), Object.keys(sources).map(file => `tests/${file}`).sort());
+  for (let index = 1; index < report.files.length; index++) assert.ok(report.files[index - 1].durationMs >= report.files[index].durationMs);
+  const isolated = report.files.filter(({ concurrency }) => concurrency === 1);
+  assert.deepEqual(isolated.map(({ file }) => file).sort(), ["tests/action-archive-cache.test.cjs", "tests/serial.test.ts"]);
+  assert.equal(report.concurrency, 2);
+  assert.equal(report.totalFileDurationMs, report.files.reduce((sum, file) => sum + file.durationMs, 0));
+  assert.equal(report.concurrencyAdjustedDurationMs, report.totalFileDurationMs / 2);
+  assert.equal(report.laneAdjustedDurationMs, report.files.reduce((sum, file) => sum + file.durationMs / file.concurrency, 0));
+  assert.equal(report.differencePercent, 100 * (report.concurrencyAdjustedDurationMs - report.durationMs) / report.durationMs);
+  assert.ok(report.durationMs >= Math.max(...report.files.map(({ durationMs }) => durationMs)));
+  const rows = summary.split("\n").filter(line => /^\| \d+ \|/.test(line));
+  assert.equal(rows.length, 20);
+  assert.deepEqual(rows.map(line => line.split(" | ")[1]), report.files.slice(0, 20).map(({ file }) => file));
+  assert.match(summary, /Recorded 23\/23/);
+  assert.match(summary, /serial isolated\/TypeScript lanes/);
+  assert.match(summary, /npm\/heavy-job startup is outside/);
+});
+
+test("runner honors selected files and overwrites previous timing JSON", (t) => {
+  const directory = fixture(t, {
+    "chosen.test.cjs": `require('node:test')('chosen fixture', () => {});`,
+    "other.test.cjs": `throw Error('unselected fixture ran');`,
+  });
+  writeFileSync(path.join(directory, "test-durations.json"), '{"stale":true}');
+  const { status, report, stdout, stderr } = run(directory, ["tests/chosen.test.cjs"]);
+  assert.equal(status, 0, stderr);
+  assert.match(stdout, /chosen fixture/);
+  assert.doesNotMatch(stdout, /unselected fixture ran/);
+  assert.equal(report.selectedFiles, 1);
+  assert.deepEqual(report.files.map(({ file }) => file), ["tests/chosen.test.cjs"]);
+  assert.equal(report.stale, undefined);
+});
+
+test("failed isolated files still publish partial evidence and preserve failure status", (t) => {
+  const directory = fixture(t, {
+    "action-archive-cache.test.cjs": `require('node:test')('failure fixture', () => { throw Error('fixture failed'); });`,
+    "later.test.cjs": `throw Error('should not run after isolated failure');`,
+  });
+  const { status, stdout, report, summary } = run(directory);
+  assert.equal(status, 1);
+  assert.match(stdout, /fixture failed/);
+  assert.equal(report.exitCode, 1);
+  assert.equal(report.selectedFiles, 2);
+  assert.equal(report.recordedFiles, 1);
+  assert.deepEqual(report.files.map(({ file }) => file), ["tests/action-archive-cache.test.cjs"]);
+  assert.match(summary, /Recorded 1\/2/);
+});
+
+test("production full-suite uploads timing JSON even after test failure, not on PRs", () => {
+  const workflow = yaml.load(readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8"));
+  const steps = workflow.jobs["ci-tests"].steps;
+  const shardSteps = workflow.jobs["ci-test"].steps;
+  const collect = shardSteps.find(step => step.name === "Collect test durations");
+  const upload = steps.find(step => step.name === "Upload test durations");
+  assert.deepEqual(workflow.on.push.branches, ["production"]);
+  assert.equal(collect.if, "always() && github.event_name == 'push' && steps.push-test.outcome != 'skipped'");
+  assert.match(collect.run, /cp test-durations.json "\$RUNNER_TEMP\/ci-shard-upload\/test-durations.json"/);
+  assert.ok(shardSteps.indexOf(collect) > shardSteps.findIndex(step => step.id === "push-test"));
+  assert.ok(shardSteps.indexOf(collect) < shardSteps.findIndex(step => step.name === "Upload shard result"));
+  assert.equal(upload.if, "always() && github.event_name == 'push' && needs.ci-prepare.outputs.run_tests == 'true'");
+  assert.equal(upload.uses, "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02");
+  assert.equal(upload.with.path, "ci-shard-results/**/test-durations.json");
+  assert.equal(upload.with.name, "test-durations");
+  assert.ok(steps.indexOf(upload) > steps.findIndex(step => step.name === "Download shard results"));
+});
+
+for (const extraFailure of [false, true]) {
+  test(`timing reporter retains quarantine semantics with unrelated failure=${extraFailure}`, (t) => {
+    const directory = fixture(t, {
+      "quarantined.test.cjs": `require('node:test')('known flaky #1', () => { throw Error('known failure'); });`,
+      "healthy.test.cjs": `require('node:test')('ordinary case', () => { ${extraFailure ? "throw Error('new failure');" : ""} });`,
+    });
+    writeFileSync(path.join(directory, "config/quarantined-tests.json"), JSON.stringify({ tests: [{ test: "known flaky #1" }] }));
+    const { status, report, stderr } = run(directory);
+    assert.equal(status, extraFailure ? 1 : 0, stderr);
+    assert.match(stderr, /- known flaky #1 \(unowned \)/);
+    assert.doesNotMatch(stderr, /- ordinary case/);
+    assert.equal(report.recordedFiles, 2);
+    assert.equal(report.exitCode, extraFailure ? 1 : 0);
+  });
+}

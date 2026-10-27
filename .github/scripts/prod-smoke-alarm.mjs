@@ -1,5 +1,6 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import timers from "node:timers/promises";
 
 const VARIABLE_NAME = "PROD_SMOKE_STREAK";
 const INCIDENT_TITLE = "[INCIDENT] Production smoke red on consecutive deploys";
@@ -135,18 +136,28 @@ async function updateStreak(fetchImpl, config, streak) {
   const base = `https://api.github.com/repos/${config.repository}/actions/variables`;
   const headers = authHeaders(config.githubToken);
   const body = JSON.stringify({ name: VARIABLE_NAME, value: typeof streak === "number" ? String(streak) : JSON.stringify(streak) });
-  let response = await fetchImpl(`${base}/${VARIABLE_NAME}`, {
-    method: "PATCH",
-    headers,
-    body,
-  });
-  await responseBody(response);
-  if (response.status === 404) {
-    response = await fetchImpl(base, { method: "POST", headers, body });
-    await responseBody(response);
-  }
-  if (!response.ok) {
-    throw new Error(`GitHub smoke streak update failed with HTTP ${response.status}`);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response;
+    try {
+      response = await fetchImpl(`${base}/${VARIABLE_NAME}`, {
+        method: "PATCH",
+        headers,
+        body,
+      });
+      await responseBody(response);
+      if (response.status === 404) {
+        response = await fetchImpl(base, { method: "POST", headers, body });
+        await responseBody(response);
+      }
+    } catch (error) {
+      if (attempt === 2) throw error;
+      response = undefined;
+    }
+    if (response?.ok) return;
+    if (response && (response.status < 500 || response.status > 599 || attempt === 2)) {
+      throw new Error(`GitHub smoke streak update failed with HTTP ${response.status}`);
+    }
+    await timers.setTimeout(1000 * (attempt + 1));
   }
 }
 
