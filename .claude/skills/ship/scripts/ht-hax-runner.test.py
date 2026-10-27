@@ -153,6 +153,7 @@ esac''')
 
     def run_loop(self, body, timeout='2'):
         self.env['HT_HAX_TICKET_TIMEOUT'] = timeout
+        self.env['HAX_SUBAGENT_DEPTH'] = '1'
         picker = self.home / 'projects/hypertask/.claude/skills/ship/scripts/ship-claim'
         picker.write_text('''#!/bin/sh
 [ "$1" = next ] || exit 99
@@ -191,6 +192,7 @@ echo finished-without-marker
             self.assertIn('Never pick another ticket.', line)
             self.assertNotIn('take the next ticket', line)
             self.assertIn('identity=RUNNER 8', line)
+            self.assertIn('depth=unset', line)
         self.assertEqual((self.state / 'runner-8.result').read_text(), 'DONE-UNKNOWN\n')
         self.assertEqual((self.state / 'runner-8.latest.log').read_text(), 'finished-without-marker\n')
         self.assertEqual((self.state / 'runner-8.log').read_text().count('result=DONE-UNKNOWN'), 2)

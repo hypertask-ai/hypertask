@@ -27,7 +27,8 @@ function pick(resume, run = command, claim = (ticket) => spawnSync(path.join(__d
       seen.add(task.ticketNumber);
       const fresh = JSON.parse(run('hypertask', ['tasks', 'get', task.ticketNumber, '--json']));
       if (fresh.success !== true || !Array.isArray(fresh.tasks) || fresh.tasks.length !== 1) throw new Error('Unreadable candidate');
-      if (!candidates(fresh.tasks).length) continue;
+      if (!candidates(fresh.tasks).length || fresh.tasks[0].projectId !== Number(project) ||
+        (filter.length && fresh.tasks[0].priority !== 'Urgent')) continue;
       const history = logs(task.ticketNumber, run).filter(row => !/^(Product Bot|Dev \d|Feature Dev|QA \d|Supervisor|worker|drain)\b/i.test(row.agent?.displayName || ''));
       if (liveClaims(history, { reference: 0 }).length || history.some(row => /^Question:/i.test(text(row)))) continue;
       const status = claim(task.ticketNumber);

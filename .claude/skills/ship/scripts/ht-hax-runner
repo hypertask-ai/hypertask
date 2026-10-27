@@ -123,12 +123,13 @@ case "${1:-}" in
       [[ "$ticket" =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || { log "invalid picked ticket"; exit 2; }
       echo "$(date -u +%FT%TZ) start $ticket" >> "$rlog"
       : > "$runlog"
+      printf 'RUNNING\n' > "$STATE/runner-$n.result"
       timeout --kill-after=30s "${seconds}s" "${LAUNCH[@]}" -p "$brief Ticket: $ticket" 2>&1 | tee "$runlog"
       status=${PIPESTATUS[0]}
       result=DONE-UNKNOWN
       if [ "$status" = 124 ] || [ "$status" = 137 ]; then result=TIMEOUT
       elif [ "$status" != 0 ]; then result=EXIT-$status
-      elif tail -n 1 "$runlog" | grep -Eq "^(・ |[•*-] )?RUNNER DONE $ticket .+"; then result=DONE; fi
+      elif tail -n 1 "$runlog" | grep -Eq "^([•*-] )?RUNNER DONE $ticket .+"; then result=DONE; fi
       printf '%s\n' "$result" > "$STATE/runner-$n.result"
       cat "$runlog" >> "$rlog"
       echo "$(date -u +%FT%TZ) end $ticket result=$result" >> "$rlog"

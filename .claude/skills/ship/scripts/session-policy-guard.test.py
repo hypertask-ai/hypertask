@@ -2,6 +2,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -25,6 +26,13 @@ class AdmissionTests(unittest.TestCase):
         self.bin.mkdir(parents=True)
         self.calls = self.home / "calls"
         self.repo = self.home / "projects/hypertask"
+        launcher = self.repo / ".claude/skills/ship/scripts/ht-hax-runner"
+        launcher.parent.mkdir(parents=True)
+        shutil.copy2(SCRIPTS / "ht-hax-runner", launcher)
+        installed = self.home / ".local/lib/hypertask/ht-hax-runner/ht-hax-runner"
+        installed.parent.mkdir(parents=True)
+        shutil.copy2(launcher, installed)
+        (self.bin / "ht-hax-runner").symlink_to(installed)
         setup = self.repo / ".claude/skills/setup-runner/scripts/setup-runner"
         setup.parent.mkdir(parents=True)
         setup.write_text('#!/bin/sh\necho setup >> "$HOME/calls"\n')
