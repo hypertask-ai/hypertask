@@ -928,3 +928,21 @@ test("a malformed-id retrieve error with items at another price is still reporte
   assert.equal(reports.length, 1);
   assert.match(reports[0], /Invalid subscription_item id: si_test/);
 });
+
+test("Free and ended subscriptions never reach Stripe seat updates", async () => {
+  for (const status of [null, "canceled", "incomplete_expired", "unpaid"]) {
+    const team = activeTeam(6);
+    if (status === null) team.activeSubscriptionPlanId = null;
+    else team.subscriptionPlan[0].subscriptionStatus = status;
+    const adapter = {
+      findTeam: async () => team,
+      resolveQuantity: async () => { throw new Error("Free team reached seat quantity resolution"); },
+      retrieveSubscriptionItem: async () => { throw new Error("Free team reached Stripe retrieval"); },
+      updateSubscriptionItem: async () => { throw new Error("Free team reached Stripe update"); },
+      reportFailure: async (error) => { throw error; },
+    };
+    const passthrough = async (_teamId, run) => run(() => {});
+    assert.equal(await syncSeatBillingOnJoin("team_1", adapter, passthrough), "SKIPPED", String(status));
+    assert.equal(await reconcileSeatBillingForTeam("team_1", adapter, passthrough), "SKIPPED", String(status));
+  }
+});

@@ -89,6 +89,11 @@ export async function POST(request: NextRequest) {
 
     const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, skills, composeSkillsEnabled } =
       await prepareTaskWriterRun(body, userId);
+    let titleOnly = false;
+    if (body.requestKind === "auto-title") {
+      const { HTPR_8031_AUTO_TITLE_FLAG, isFeatureEnabled } = await import("@/lib/flags");
+      titleOnly = await isFeatureEnabled(HTPR_8031_AUTO_TITLE_FLAG, userId);
+    }
     let skillsHeader: string | undefined;
     if (composeSkillsEnabled && skills.length) {
       const { HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, isFeatureEnabled } = await import("@/lib/flags");
@@ -108,6 +113,7 @@ export async function POST(request: NextRequest) {
       configureAiModelUsage(selected.model, {
         userId, teamId: selected.teamId, projectId: body.projectId,
         taskId: usageTaskId, provider: selected.usageProvider, feature: "task-writer",
+        reasoningFeature: "task-writer",
       });
       const result = await generateText({
         experimental_download: downloadWithoutBrotli,
@@ -143,8 +149,8 @@ export async function POST(request: NextRequest) {
 
         let held = "";
         const enqueueText = (text: string) => {
-          if (validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds) draft += text;
-          if (!text || dueDateContext || boardLabelIds) return;
+          if (titleOnly || validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds) draft += text;
+          if (!text || titleOnly || dueDateContext || boardLabelIds) return;
           if (!ticketTypeEnabled) {
             controller.enqueue(encoder.encode(text));
             return;
@@ -171,6 +177,7 @@ export async function POST(request: NextRequest) {
             taskId: usageTaskId,
             provider: selected.usageProvider,
             feature: "task-writer",
+            reasoningFeature: "task-writer",
           });
           const result = streamText({
             experimental_download: downloadWithoutBrotli,
@@ -203,6 +210,7 @@ export async function POST(request: NextRequest) {
             const filtered = filterOneImagePass(buffer, allowedImgSrcs);
             enqueueText(filtered.emit);
           }
+          if (titleOnly && streamError !== undefined) throw streamError;
           if (!producedText && streamError !== undefined && await isRealErrorEnabled(userId)) {
             const error = streamError;
             await reportError({
@@ -219,11 +227,16 @@ export async function POST(request: NextRequest) {
           const description = validateDraft && body.aiMode === "AiTaskWriter"
             ? extractTaskWriterProperties(ticketTypeEnabled ? readTaskWriterTicketType(draft).html : draft).description
             : draft;
-          if (validateDraft && !hasUsableTaskWriterDraft(description)) {
+          const validationContent = titleOnly
+            ? extractTaskWriterProperties(draft).title ?? ""
+            : description;
+          if ((validateDraft || titleOnly) && !hasUsableTaskWriterDraft(validationContent)) {
             enqueueError("error", TASK_WRITER_EMPTY_DRAFT_MESSAGE, "empty-task-writer-draft");
             return;
           }
-          if (dueDateContext || boardLabelIds) {
+          if (titleOnly) {
+            controller.enqueue(encoder.encode(draft));
+          } else if (dueDateContext || boardLabelIds) {
             const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds) : draft;
             const dated = dueDateContext ? applyTaskWriterDueDate(labeled, dueDateContext).html : labeled;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));

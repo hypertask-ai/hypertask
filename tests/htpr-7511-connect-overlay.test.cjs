@@ -340,7 +340,7 @@ test("the real shared picker polls only while visible, reports actual connection
     global.fetch = async (url) => { requests.push(url); return response({ eligible: true, connected, client: "Codex" }); };
     const { ConnectAIOnboardingScreen } = load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
       "@/hooks/useFlag": { useFlag: (key) => key === overlayKey, useFlagReady: () => true },
-      "@/lib/flags/keys": { ...keys, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: "htpr-7026-agent-connect-check" },
+      "@/lib/flags/keys": keys,
       "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "fixture install", LOGIN_COMMAND: "hypertask login" },
       "@/components/Modals/McpToken/components": { getIntegrationChipClassName: () => "text-meta", ConnectInstructions: () => null, TokenStatusBar: () => null },
       "@/components/Modals/McpToken/components/ConnectInstructions": { CopyableCodeBlock: () => null },
@@ -349,7 +349,7 @@ test("the real shared picker polls only while visible, reports actual connection
       "../GetStartedButton": { GetStartedButton: () => null },
     });
     const onConnected = () => { confirmed++; };
-    const render = (visible) => root.render(React.createElement(ConnectAIOnboardingScreen, { compact: true, serverEligible: true, overlay: true, visible, onConnected, onNextScreen() {} }));
+    const render = (visible) => root.render(React.createElement(ConnectAIOnboardingScreen, { compact: true, overlay: true, visible, onConnected, onNextScreen() {} }));
     try {
       await act(async () => render(false));
       assert.equal(requests.length, 0);

@@ -15,7 +15,7 @@ Sign in as QA user 985 (`~/.config/hypertask-videos/storageState-qa.json`) and c
 - Rollback: once any key is sealed, reverting below HTPR-7624 makes those endpoints sign with the stored ciphertext, so receivers reject the deliveries. Switch the flag Off instead.
 - Team-owner checks: only the team owner can manage workspace webhooks (403 otherwise), and a board must belong to the chosen team.
 
-## Proof to collect
+## What proof to collect
 
 - The create response's hint matches the last 4 of the one-time key, both on create and in the list.
 - The test delivery to a 2xx receiver flips `lastDeliveryOk` to true.

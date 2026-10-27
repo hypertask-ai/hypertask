@@ -1,4 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
 import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
@@ -29,7 +30,8 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
-  const { editTicketWithAi } = useCommentToAiChat();
+  const skillRunsInSidebar = useFlag(HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG);
+  const { editTicketWithAi, runCommentSkill } = useCommentToAiChat();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
@@ -138,10 +140,25 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
     };
   }
 
+  if (skillRunsInSidebar && (mode === "create-comment" || mode === "read-edit-comments")) {
+    const handleOtherAITrigger = handleAITrigger;
+    handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
+      if (event.detail.targetId !== id) return;
+      if (!/^\/[a-z0-9][a-z0-9-]*\s/.test(event.detail.prompt ?? "")) {
+        handleOtherAITrigger(event);
+        return;
+      }
+      setShouldShowAITaskWriter(false);
+      void runCommentSkill(currentTask.id, event.detail.prompt, editor?.getText() ?? "").then((sent) => {
+        if (!sent) toast.error("Could not run the skill. Please try again.");
+      }).catch(() => toast.error("Could not run the skill. Please try again."));
+    };
+  }
+
   useLayoutEffect(() => {
     window.addEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
     return () => window.removeEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
-  }, [id, newTaskWindow, setCommands, sidebarEditWithAi, editTicketWithAi, currentTask?.id]);
+  }, [id, newTaskWindow, setCommands, sidebarEditWithAi, editTicketWithAi, currentTask?.id, skillRunsInSidebar, runCommentSkill, mode, editor]);
 
   useEffect(() => {
     if (mode !== "create-comment") return;

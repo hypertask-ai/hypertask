@@ -9,8 +9,10 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  FileText,
   Inbox,
   LogIn,
+  Plus,
   Timer,
 } from "lucide-react";
 import {
@@ -37,7 +39,7 @@ import {
   showCommandsAtom,
   showGuestLoginAtom,
 } from "@/store";
-import { useRecoilState, useSetRecoilState } from "@/lib/state";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { CommandMode } from "@/models/enums";
 import useAppShellSurfaceShortcuts, {
   RAIL_TOGGLE_KEY,
@@ -48,6 +50,12 @@ import { IAnnouncement } from "@/models/Announcements/model";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { currentPageActionsAtom } from "@/store/currentPageActions";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
+import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
+import { HTPR_8035_SIDEBAR_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-8035-sidebar-new-task";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/definitions/htpr-6929-compose-task-writer";
 import { prefetchInboxQuery } from "@/hooks/Inbox/useGetNotifications";
 
 const FeedbackModal = dynamic(
@@ -95,7 +103,12 @@ const AppShellRail = ({
   notificationsUnseen = 0,
 }: AppShellRailProps) => {
   const isApple = useDeviceContext();
+  const sidebarNewTask = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const pathname = usePathname();
+  const pageActions = useRecoilValue(currentPageActionsAtom);
   const router = useRouter();
   const { toggleAIChatInterface, toggleAnnouncements, toggleLeftSidebar } =
     useGlobalUIState();
@@ -186,6 +199,7 @@ const AppShellRail = ({
             />
           </button>
         </RailItem>
+
       </div>
 
       <div className={`mt-3 flex flex-col gap-1 ${wide ? "w-full" : "items-center"}`}>
@@ -236,6 +250,21 @@ const AppShellRail = ({
             <Tooltip left={tooltipLeft} bottom={-8} text="Table layout" keyCombination={["3"]} />
           </button>
         </RailItem>
+        {pagesScreen && standalonePages && !isGuest && (
+          <RailItem wide={wide} label="Pages">
+            <Link href={boardProject ? `/pages?project_id=${boardProject.id}` : "/pages"}
+              aria-label="Go to pages"
+              onClick={(event) => {
+                if (!pageActions?.beforeNavigate || pathname !== `/page/${pageActions.publicId}` || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                void pageActions.beforeNavigate().then(() => router.push("/pages"));
+              }}
+              className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${pathname === "/pages" ? "bg-hover-active !text-white-black" : ""}`}>
+              <FileText size={18} strokeWidth={1.5} />
+              <Tooltip left={tooltipLeft} bottom={-8} text="Go to pages" keyCombination={null} />
+            </Link>
+          </RailItem>
+        )}
         <RailItem wide={wide} label="Calendar">
           <button
             tabIndex={-1}
@@ -297,6 +326,23 @@ const AppShellRail = ({
               <Tooltip left={tooltipLeft} bottom={-8} text="Running timers" keyCombination={["7"]} />
             </button>
           </RailItem>
+        )}
+      </div>
+
+      <div className={`mt-3 flex flex-col ${wide ? "w-full" : "items-center"}`}>
+        {sidebarNewTask && composeEnabled && (
+          <button
+            type="button"
+            aria-label="New Task"
+            onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
+            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] bg-shadcn-primary text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
+              wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
+            }`}
+          >
+            <Plus size={18} strokeWidth={1.75} aria-hidden />
+            {wide && <span className="text-content font-medium">New Task</span>}
+            <Tooltip left={tooltipLeft} bottom={-8} text="New Task" keyCombination={[isApple ? "CMD" : "CTRL", "J"]} />
+          </button>
         )}
       </div>
 

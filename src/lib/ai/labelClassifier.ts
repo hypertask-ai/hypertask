@@ -95,6 +95,7 @@ export async function classifyTaskAgainstLabels(
     agentId: tags?.agentId,
     provider: haikuDefaultEnabled ? "anthropic" : "google",
     feature: "smart-label",
+    reasoningFeature: "labels",
   });
   const result = await generateText({
     experimental_download: downloadWithoutBrotli,

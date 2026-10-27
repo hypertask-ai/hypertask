@@ -350,7 +350,7 @@ export function getFindRelatedTasksInputSchema() {
     .refine(
       (data) => {
         const methodCount = [
-          data.task_id,
+          data.task_id ?? data.id,
           data.ticket_number,
           data.unique_index,
         ].filter((value) => value !== undefined).length;
@@ -420,7 +420,7 @@ export function getUpdateTaskInputSchema() {
   return baseSchema
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
         return hasTaskId || hasTicketNumber || hasUniqueIndex;
@@ -432,11 +432,11 @@ export function getUpdateTaskInputSchema() {
     )
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',
@@ -497,7 +497,7 @@ export function getAssignUserBaseSchema() {
       .describe('User ID to assign or unassign (use intent: unassign to remove).'),
     user_ids: z
       .array(z.coerce.number().int().positive())
-      .min(1)
+      .min(1, 'user_ids is empty: name at least one user id, or use user_id, agent_id, or assign_self')
       .optional()
       .describe('For multiple mode: user IDs; each user follows intent (assign = idempotent, unassign = remove).'),
     agent_id: z
@@ -518,7 +518,7 @@ export function getAssignUserInputSchema() {
   return baseSchema
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
         return hasTaskId || hasTicketNumber || hasUniqueIndex;
@@ -530,11 +530,11 @@ export function getAssignUserInputSchema() {
     )
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',
@@ -556,12 +556,12 @@ export function getAssignUserInputSchema() {
     .refine(
       (data) => {
         const hasUserId = data.user_id !== undefined;
-        const hasUserIds = data.user_ids !== undefined && data.user_ids.length > 0;
+        const hasUserIds = data.user_ids !== undefined;
         const hasAgentId = data.agent_id !== undefined;
         return hasUserId || hasUserIds || hasAgentId || data.assign_self === true;
       },
       {
-        message: 'Either user_id, user_ids, agent_id, or assign_self must be provided',
+        message: 'Name who to assign or unassign: provide exactly one of user_id, user_ids, agent_id, or assign_self (agent tokens only)',
         path: ['user_id', 'user_ids', 'agent_id', 'assign_self'],
       }
     )
@@ -570,12 +570,20 @@ export function getAssignUserInputSchema() {
         const hasUserId = data.user_id !== undefined;
         const hasUserIds = data.user_ids !== undefined;
         const hasAgentId = data.agent_id !== undefined;
-        const hasAssignSelf = data.assign_self === true;
-        return [hasUserId, hasUserIds, hasAgentId, hasAssignSelf].filter(Boolean).length === 1;
+        return [hasUserId, hasUserIds, hasAgentId].filter(Boolean).length <= 1;
       },
       {
-        message: 'Cannot provide multiple assignee identification methods. Use one of user_id, user_ids, agent_id, or assign_self.',
-        path: ['user_id', 'user_ids', 'agent_id', 'assign_self'],
+        message: 'Cannot provide multiple assignee identification methods. Use one of user_id, user_ids, or agent_id.',
+        path: ['user_id', 'user_ids', 'agent_id'],
+      }
+    )
+    .refine(
+      (data) =>
+        data.assign_self !== true ||
+        (data.user_id === undefined && data.user_ids === undefined),
+      {
+        message: 'assign_self already names you; drop user_id and user_ids',
+        path: ['assign_self', 'user_id', 'user_ids'],
       }
     );
 }
@@ -652,7 +660,7 @@ export function getMoveTaskBetweenBoardsInputSchema() {
   return getMoveTaskBetweenBoardsBaseSchema()
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
         return hasTaskId || hasTicketNumber || hasUniqueIndex;
@@ -664,11 +672,11 @@ export function getMoveTaskBetweenBoardsInputSchema() {
     )
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message:

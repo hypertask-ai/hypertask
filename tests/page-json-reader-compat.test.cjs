@@ -20,9 +20,9 @@ for (const operation of ['create', 'patch', 'restore']) {
       assert.deepEqual(result.calls, [['json', null]]);
     }
   });
-  test(`${operation}: shared reader is invoked only ON with route-specific callbacks`, async () => {
+  test(`${operation}: shared reader is invoked in every mode with route-specific callbacks`, async () => {
     const reader = load('src/lib/mcp/readJsonBody.ts', {});
-    for (const mode of ['ON', 'OFF', 'FLAG_FAILURE', 'USER_FAILURE', 'NO_SESSION']) {
+    for (const mode of ['ON', 'OFF', 'USER_FAILURE', 'NO_SESSION']) {
       let readCount = 0;
       const mocks = { '@/lib/mcp/readJsonBody': { readJsonBody: async (request, callbacks) => {
         readCount++;
@@ -31,7 +31,7 @@ for (const operation of ['create', 'patch', 'restore']) {
         return reader.readJsonBody(request, callbacks);
       } } };
       const result = await run(operation, mode, { mocks });
-      assert.equal(readCount, mode === 'ON' ? 1 : 0);
+      assert.equal(readCount, 1);
       assert.deepEqual(contract(result), contract(await run(operation, 'OFF')));
     }
   });

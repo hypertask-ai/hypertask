@@ -21,6 +21,7 @@ const asArray = (value: unknown) =>
 export function createTaskIdentificationBaseSchema() {
   return z
     .object({
+      id: z.coerce.number().int().positive().optional(),
       task_id: z.coerce.number().int().positive().optional(),
       ticket_number: ticketNumberSchema.optional(),
       unique_index: z.coerce.number().int().positive().optional(),
@@ -33,7 +34,7 @@ export function createTaskIdentificationSchema() {
   return createTaskIdentificationBaseSchema()
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
         return hasTaskId || hasTicketNumber || hasUniqueIndex;
@@ -45,11 +46,11 @@ export function createTaskIdentificationSchema() {
     )
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined;
+        const hasTaskId = data.id !== undefined || data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',
@@ -73,6 +74,7 @@ export function createTaskIdentificationSchema() {
 export function createTaskIdentificationArraySchema() {
   return z
     .object({
+      id: taskIdSchema.optional(),
       task_id: z.preprocess(asArray, z.array(taskIdSchema).optional()),
       ticket_number: z.preprocess(asArray, z.array(ticketNumberSchema).optional()),
       unique_index: z.coerce.number().int().positive().optional(),
@@ -81,7 +83,7 @@ export function createTaskIdentificationArraySchema() {
     .strict()
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined && data.task_id.length > 0;
+        const hasTaskId = data.id !== undefined || (data.task_id !== undefined && data.task_id.length > 0);
         const hasTicketNumber = data.ticket_number !== undefined && data.ticket_number.length > 0;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
         return hasTaskId || hasTicketNumber || hasUniqueIndex;
@@ -93,11 +95,11 @@ export function createTaskIdentificationArraySchema() {
     )
     .refine(
       (data) => {
-        const hasTaskId = data.task_id !== undefined && data.task_id.length > 0;
+        const hasTaskId = data.id !== undefined || (data.task_id !== undefined && data.task_id.length > 0);
         const hasTicketNumber = data.ticket_number !== undefined && data.ticket_number.length > 0;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount === 1;
+        return methodCount <= 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',

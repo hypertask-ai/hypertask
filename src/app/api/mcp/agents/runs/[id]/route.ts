@@ -1,7 +1,6 @@
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import {
-  agentRunsEnabledFor,
   authenticateAgentRunRequest,
   readAgentRun,
 } from "@/lib/agentRuns/service";
@@ -31,9 +30,6 @@ export async function GET(
         { success: false, error: "Invalid or missing authentication" },
         401,
       );
-    }
-    if (!(await agentRunsEnabledFor(principal))) {
-      return noStore({ success: false, error: "Run not found" }, 404);
     }
 
     const id = (await params).id.trim();

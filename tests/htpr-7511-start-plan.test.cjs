@@ -41,7 +41,10 @@ async function withButton(fn, backend) {
     isAxiosError: (error) => Boolean(error?.isAxiosError),
   };
   const router = { push: (url) => pushes.push(url), refresh: () => { refreshes++; } };
-  const flagMock = { useFlag: (name) => { assert.equal(name, key); return state.enabled; }, useFlagReady: () => state.flagReady };
+  const flagMock = { useFlag: (name) => {
+    if (name === "htpr-7686-free-plan-copy") return false;
+    assert.equal(name, key); return state.enabled;
+  }, useFlagReady: () => state.flagReady };
   const buttonModule = load("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx", {
     axios, "next/navigation": { useRouter: () => router },
     "@tanstack/react-query": {
@@ -63,7 +66,12 @@ async function withButton(fn, backend) {
   const legacy = load("src/components/Modals/TrialPlan/TrialPlanComponents.tsx", {
     "@/components/Common/IconsGlobal": { IconsGlobal: { Check: () => null } },
     "@/lib/serverActions": { getTeamById: async () => ({ ...state.board.team, totalSeats: 3, googleAccountId: "account" }) },
-    "@/lib/subscriptionPlans": { storeSubscriptionPlans: [{ perks: [] }, { perks: [] }] },
+    "@/lib/subscriptionPlans": {
+      storeSubscriptionPlans: [{ perks: [] }, { perks: [] }],
+      trialPlanBlurb: (corrected) => corrected ? "Risk free, cancel anytime." : "Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.",
+      trialComparisonColumns: () => ({ sharedTitles: [], starter: [], proWithAi: [] }),
+    },
+    "@/lib/flags/definitions/htpr-7686-free-plan-copy": { HTPR_7686_FREE_PLAN_COPY_FLAG: "htpr-7686-free-plan-copy" },
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
     "@/lib/flags/keys": flag,
@@ -407,6 +415,20 @@ for (const selection of ["none", "different team"]) {
       assert.deepEqual(pushes, ["https://checkout.stripe.test/cs_1"]);
       state.enabled = false; await renderModal();
       assert.match(container.textContent, /14 day FREE trial/);
+    }, backend);
+  });
+}
+
+for (const trialDays of [7, 14]) {
+  test(`Start plan shows the real ${trialDays}-day preview and sends matching terms to Stripe`, async () => {
+    const backend = harness(); backend.fourteenDayTrial = trialDays === 14;
+    await withButton(async ({ state, render, container, getQuery, click, pushes }) => {
+      await render(); state.data = await getQuery().queryFn(); await render();
+      assert.equal(state.data.trialDays, trialDays);
+      assert.ok(container.textContent.includes(`$20 per user/month after ${trialDays} days`));
+      await click();
+      assert.equal(backend.calls[0].payload.subscription_data.trial_period_days, trialDays);
+      assert.deepEqual(pushes, ["https://checkout.stripe.test/cs_1"]);
     }, backend);
   });
 }

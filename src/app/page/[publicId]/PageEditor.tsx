@@ -25,7 +25,7 @@ import useDebounceWithCancel from "@/hooks/General/useDebounceWithCancel";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG } from "@/lib/flags/keys";
+import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG, HTPR_7298_STANDALONE_PAGES_FLAG, HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/keys";
 import { isContentCarouselImage } from "@/utils/helperFunctions/isContentCarouselImage";
 import { pageRoute } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -40,6 +40,8 @@ import type { IUser, TCarousalItems } from "@/models/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import styles from "@/styles/tiptap.module.scss";
+import type { LinkedPageTicket } from "@/lib/pages/browser";
+const PageLinkedTickets = dynamic(() => import("./PageLinkedTickets"), { ssr: false });
 
 type SerializedPage = {
   publicId: string;
@@ -47,6 +49,7 @@ type SerializedPage = {
   contentHtml: string;
   version: number;
   taskId: number | null;
+  linkedTasks: LinkedPageTicket[];
   projectId: number;
   task: {
     projectId: number;
@@ -84,6 +87,8 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [toggleHighlight, setToggleHighlight] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
+  const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const galleryEnabled = useFlag(HTPR_6872_PAGE_IMAGE_GALLERY_FLAG);
   const [galleryItems, setGalleryItems] = useState<TCarousalItems>();
   const railOn = useRecoilValue(appShellRailAtom);
@@ -176,8 +181,8 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
   const taskHref = page.task
     ? `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`
-    : `/project?id=${page.projectId}`;
-  const backLabel = page.task ? "Back to task" : "Back to board";
+    : pagesEnabled && standalonePages ? `/pages?project_id=${page.projectId}` : `/project?id=${page.projectId}`;
+  const backLabel = page.task ? "Back to task" : pagesEnabled && standalonePages ? "Back to Pages" : "Back to board";
 
   useEffect(() => {
     try {
@@ -292,12 +297,16 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     );
   }, SAVE_DELAY);
 
-  const returnToTask = useCallback(async () => {
-    if (returningRef.current) return;
-    returningRef.current = true;
+  const flushPendingSaves = useCallback(async () => {
     flushTitleSave();
     flushContentSave();
     await Promise.all([titleSaveChainRef.current, contentSaveChainRef.current]);
+  }, [flushContentSave, flushTitleSave]);
+
+  const returnToTask = useCallback(async () => {
+    if (returningRef.current) return;
+    returningRef.current = true;
+    await flushPendingSaves();
 
     try {
       returnFromPage({
@@ -312,7 +321,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     } catch {
       router.replace(taskHref);
     }
-  }, [flushContentSave, flushTitleSave, router, taskHref]);
+  }, [flushPendingSaves, router, taskHref]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -407,11 +416,11 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   }, [isDeleting, page.publicId, router, taskHref]);
 
   useEffect(() => {
-    if (!isMobile) return;
+    if (!isMobile && (!pagesEnabled || !standalonePages)) return;
 
-    setCurrentPageActions({ publicId: page.publicId, version, onDelete: deletePage });
+    setCurrentPageActions({ publicId: page.publicId, version, onDelete: deletePage, beforeNavigate: flushPendingSaves });
     return () => setCurrentPageActions(null);
-  }, [deletePage, isMobile, page.publicId, setCurrentPageActions, version]);
+  }, [deletePage, flushPendingSaves, isMobile, page.publicId, pagesEnabled, standalonePages, setCurrentPageActions, version]);
 
   const statusText =
     saveStatus === "saving"
@@ -495,6 +504,12 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
                 isMobile ? "text-[24px]" : "text-[32px]"
               }`}
             />
+
+            {pagesEnabled && standalonePages && (
+              <div className={isMobile ? "px-4" : ""}>
+                <PageLinkedTickets publicId={page.publicId} tickets={page.linkedTasks} beforeNavigate={flushPendingSaves} />
+              </div>
+            )}
 
             <div
               ref={contentRef}

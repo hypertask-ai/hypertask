@@ -27,6 +27,10 @@ DELIVER_TIMEOUT = 45  # longer than runner-deliver's lock waits (2 x 10 s) so a 
 FALLBACK_PORT = int(os.environ.get("RUNNER_WEBHOOK_FALLBACK_PORT", "8795"))
 HOP = {"connection", "keep-alive", "proxy-connection", "transfer-encoding", "te", "trailer", "upgrade"}
 SEEN_CAP = 4000
+# A person's chat message must reach the session whole (YPER4-657). Only a message longer than CHAT_TEXT_LIMIT is cut,
+# and then it says so and where to read the rest.
+CHAT_TEXT_CAP = 30000
+CHAT_TEXT_LIMIT = 20000
 LOCK = threading.Lock()
 EVENTS = {"comment.created", "comment.mention", "task.assigned", "chat.message", "comment.reaction"}
 OWNER_USER_ID = os.environ.get("RUNNER_WEBHOOK_OWNER_USER_ID", "6")  # Valentin Yeo, the only person who gives runners instructions
@@ -48,13 +52,15 @@ def log(msg):
     print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} runner-webhook: {msg}", file=sys.stderr, flush=True)
 
 
-def strip_html(text, limit=400):
-    text = str(text or "")[:20000]  # bound the input before any pattern runs
+def strip_html(text, limit=400, cut_note=None):
+    text = str(text or "")[:CHAT_TEXT_CAP]  # bound the input before any pattern runs
     text = re.sub(r"<(?:br|/p|/li|/div)[^<>]{0,200}>", " ", text)
     text = html.unescape(re.sub(r"<[^<>]{0,2000}>", "", text))
     text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
     text = re.sub(r"\s+", " ", text).strip().replace('"', "'")
-    return text if len(text) <= limit else text[: limit - 3] + "..."
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..." + (f" {cut_note}" if cut_note else "")
 
 
 def safe_join(base, name):
@@ -193,7 +199,7 @@ def build_message(n, p):
         if not sid or not mid:
             return None
         who = chat.get("userName") or actor
-        return (f'Agent Chat for {label(n)}: {who} wrote: "{strip_html(chat.get("text") or "")}". Answer in the same chat with: '
+        return (f'Agent Chat for {label(n)}: {who} wrote: "{strip_html(chat.get("text") or "", CHAT_TEXT_LIMIT, "The message is longer than this; read all of it in the chat in the app.")}". Answer in the same chat with: '
                 f'{CHAT_REPLY} {n} {sid} {mid} "<your answer>"')
     return None
 

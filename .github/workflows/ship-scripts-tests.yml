@@ -15,6 +15,9 @@ on:
       - '.claude/skills/verify-qa/scripts/**'
       - '.github/workflows/ship-scripts-tests.yml'
       - 'docs/ci-policy.yml'
+      - '.github/scripts/ci-runner-policy.cjs'
+      - '.github/workflows/pr-guards-trusted.yml'
+      - 'tests/ci-runner-policy.test.cjs'
 
 permissions:
   contents: read
@@ -37,6 +40,14 @@ jobs:
         with:
           node-version: ^24.22.1
           check-latest: true
+
+      - name: Install the workflow parser
+        run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
+
+      - name: CI runner policy fixtures
+        env:
+          NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules
+        run: node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs tests/pr-title-workflow.test.cjs tests/pr-ticket-binding.test.cjs
 
       - name: Install offline test dependencies
         shell: bash
@@ -62,6 +73,17 @@ jobs:
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/premerge-evidence.test.py
           python3 .claude/skills/ship/scripts/ci-why.test.py
+          bash .claude/skills/ship/scripts/board-check.test.sh
           bash .claude/skills/ship/scripts/user-unit-check.test.sh
+          python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
           python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
           node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
+          node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
+
+      - name: Replay incident grouping and claim collision checks
+        env:
+          HOME: ${{ runner.temp }}/ship-scripts-home
+        run: |
+          bash .claude/skills/ship/scripts/error-collector.test.sh
+          node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
+          bash .claude/skills/ship/scripts/ship-claim.test.sh

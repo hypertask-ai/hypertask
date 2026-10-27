@@ -1,12 +1,10 @@
 const { test } = require('node:test');
-const { assert, fixture, session, id, flag } = require('./ai-chat-session-fixture.cjs');
+const { assert, fixture, session, id } = require('./ai-chat-session-fixture.cjs');
 const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
 
 for (const [name, options, query] of [
-  ['OFF ignores opt-in and malformed paging', { on: false }, 'compat=htpr-6924&cursor=broken&limit=bad&sessionId=invalid'],
-  ['ON without opt-in', { on: true }, 'limit=bad'],
-  ['ON with wrong opt-in', { on: true }, 'compat=wrong'],
-  ['flag lookup failure', { flagError: true }, 'compat=htpr-6924&cursor=broken'],
+  ['missing opt-in', {}, 'limit=bad'],
+  ['wrong opt-in', {}, 'compat=wrong'],
 ]) test(`${name} returns exact legacy JSON and query`, async () => {
   const f = fixture(options);
   const expected = JSON.stringify({ success: true, sessions: [...f.rows].sort((a, b) => +b.updatedAt - +a.updatedAt) });
@@ -16,7 +14,6 @@ for (const [name, options, query] of [
   assert.deepEqual(f.calls[0].orderBy, { updatedAt: 'desc' });
   assert.equal(f.calls[0].take, undefined);
   assert.equal(f.calls[0].select, undefined);
-  assert.deepEqual(f.flags, [[flag, 6]]);
   assert.deepEqual(f.redisCalls, []);
 });
 
@@ -178,12 +175,12 @@ test('out-of-range cursor offsets are rejected rather than restarting or creatin
   assert.equal(f.writes.length, 0);
 });
 
-for (const on of [false, true]) test(`initial empty history creates a blank session, flag ${on}`, async () => {
-  const f = fixture({ on, rows: [] });
+test('initial empty history creates a blank session', async () => {
+  const f = fixture({ rows: [] });
   const body = await (await f.get('compat=htpr-6924')).json();
   assert.equal(f.writes.length, 1);
   assert.equal(body.sessions.length, 1);
-  assert.equal(on ? body.sessions[0].hasMessages : body.sessions[0].messages.length, on ? false : 0);
+  assert.equal(body.sessions[0].hasMessages, false);
 });
 
 test('auth and internal error retain exact original response bodies', async () => {
@@ -191,7 +188,7 @@ test('auth and internal error retain exact original response bodies', async () =
   const response = await denied.get('compat=htpr-6924');
   assert.equal(response.status, 401);
   assert.equal(await response.text(), '{"error":"Unauthorized"}');
-  assert.equal(denied.calls.length + denied.flags.length + denied.redisCalls.length, 0);
+  assert.equal(denied.calls.length + denied.redisCalls.length, 0);
   for (const options of [{ dbError: true }, { redisError: true }]) {
     const failed = await fixture(options).get('compat=htpr-6924&limit=2');
     assert.equal(failed.status, 500);

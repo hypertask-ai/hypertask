@@ -38,47 +38,38 @@ const route = taskWriteRoute({
 
     const restoreInbox = archiveStatus === "Normal";
 
+    const notificationIdList = validEntries.map(({ notificationId }) => notificationId);
+    const taskIds = [...new Set(validEntries.map(({ taskId }) => taskId).filter(Boolean))];
+    const archivedAt = restoreInbox ? null : new Date();
+
     const result = await prisma.$transaction(async (tx) => {
-      const operations = validEntries.map(({ notificationId, taskId }) => {
-        const archivedAt = restoreInbox ? null : new Date();
-        const ops = [
-          tx.notification.updateMany({
-            where: {
-              id: notificationId,
-              userId: session.userId,
-              status: { not: "Deleted" },
-            },
-            data: {
-              status: archiveStatus,
-              archivedAt,
-            },
-          }),
-        ];
-        if (taskId && archiveStatus !== "Normal") {
-          ops.push(
-            tx.notification.updateMany({
-              where: {
-                taskId,
-                userId: session.userId,
-                id: { not: notificationId },
-                status: { not: "Deleted" },
-              },
-              data: {
-                status: "Archive",
-                archivedAt,
-              },
-            })
-          );
-        }
-        return Promise.all(ops);
+      const archived = await tx.notification.updateMany({
+        where: {
+          id: { in: notificationIdList },
+          userId: session.userId,
+          status: { not: "Deleted" },
+        },
+        data: {
+          status: archiveStatus,
+          archivedAt,
+        },
       });
+      const siblings = !restoreInbox && taskIds.length > 0
+        ? await tx.notification.updateMany({
+          where: {
+            taskId: { in: taskIds },
+            userId: session.userId,
+            id: { notIn: notificationIdList },
+            status: { not: "Deleted" },
+          },
+          data: {
+            status: "Archive",
+            archivedAt,
+          },
+        })
+        : null;
 
-      const results = await Promise.all(operations);
-
-      const totalArchived = results.reduce((sum, [archived]) => sum + archived.count, 0);
-      const totalDeleted = results.reduce((sum, [, deleted]) => sum + (deleted?.count ?? 0), 0);
-
-      return { totalArchived, totalDeleted };
+      return { totalArchived: archived.count, totalDeleted: siblings?.count ?? 0 };
     });
 
     const excludeSocketId = socketIdFromHeader(request.rawHeaders ? request.rawHeaders["x-socket-id"] : request.headers.get("x-socket-id"));

@@ -32,6 +32,7 @@ type ComposerConfigInput = {
   storePlanId: StorePlanKind;
   providersWithByok: ReadonlySet<string>;
   haiku55Enabled?: boolean;
+  grokGemini4Enabled?: boolean;
   haikuDefaultEnabled?: boolean;
   defaultContext?: AiDefaultModelContext;
 };
@@ -64,7 +65,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
   const allowedOptions = enabled
     ? aiModelOptions.filter(
         (option) =>
-          isAiModelOptionVisible(option, Boolean(input.haiku55Enabled)) &&
+          isAiModelOptionVisible(option, Boolean(input.haiku55Enabled), false, Boolean(input.grokGemini4Enabled)) &&
           isAiFeatureModelEnabled(
             "aiChat",
             option.id,

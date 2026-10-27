@@ -14,7 +14,7 @@ const inboxKey = ["inbox", "data", 2343];
 function makeFlow(t, {
   currentTask = task, inboxFlow = "true", notifications = [notification],
   playlist = [task, nextTask], mobile = false, routerPathname = `/detail/project-${task.projectId}/${task.uniqueIndex}`,
-  nativePathname = `/detail/project-${task.projectId}/${task.uniqueIndex}`,
+  nativePathname = `/detail/project-${task.projectId}/${task.uniqueIndex}`, blockedArchive = false,
 } = {}) {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const queryClient = new QueryClient();
@@ -59,23 +59,32 @@ function makeFlow(t, {
     location: new URL(nativePathname + (inboxFlow ? `?inboxFlow=${inboxFlow}` : ""), "https://app.hypertask.ai"),
     dispatchEvent: () => {},
   };
-  global.fetch = async url => {
-    const params = new URL(url, "https://app.hypertask.ai").searchParams;
+  global.fetch = async (url, options) => {
+    assert.equal(options.method, "POST");
+    const params = new URLSearchParams(Object.entries(JSON.parse(options.body)).map(([name, value]) => [name, String(value)]));
     const item = [notification, ...notifications, ...(currentTask.notifications ?? [])].find(row => row.id === params.get("id"));
     archived.push({ item, mode: "Notification" });
     assert.equal(params.get("taskId"), String(item.taskId));
     assert.equal(params.get("userId"), "2343");
     return { ok: true };
   };
-  const useFlag = () => false;
+  const useFlag = key => key === "htpr-7840-blocked-inbox-archive" && blockedArchive;
   const optimistic = load("src/lib/inboxSync/optimistic.ts", {
     "@/lib/boardSync/pilot": {},
     "@/utils/helperFunctions/helperFunctions": { buildInboxQueryCache },
     "./revision": { isInboxReadModelRevision: () => false },
   });
   const useFocus = load("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
-    "@/lib/api/typedClient": {},
+    "@/lib/api/typedClient": {
+      toggleNotificationArchive: (body, headers) => global.fetch("/api/notifications/markAsDone", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      archiveNotifications: async () => {},
+    },
     "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
+    "@/lib/flags/keys": {},
     "@/store": atoms,
     "@/lib/state": state,
     "@tanstack/react-query": { useQueryClient: () => queryClient },
@@ -91,6 +100,7 @@ function makeFlow(t, {
   }).default;
   const useNavigate = load("src/hooks/MultiPages/Route/useHypertasksNavigate.ts", {
     "@/lib/constants": { default: {} },
+    "@/lib/flags/keys": {},
     "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "next/navigation": nextNavigation,
     "@tanstack/react-query": { useQueryClient: () => queryClient },
@@ -132,6 +142,7 @@ function makeFlow(t, {
     "../MultiPages/Route/useHypertasksNavigate": { default: useNavigate },
     "next/navigation": nextNavigation,
     "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
+    "@/lib/flags/keys": {},
     "../Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
   }).default;
   const { createTaskDetailKeyboard } = load("src/app/detail/[...slug]/taskDetailKeyboard.ts", {
@@ -347,7 +358,8 @@ function sourceCallback(file, env, name) {
   visit(tree);
   assert.ok(callback, `${file}: real ${name ?? "keyboard handoff effect"}`);
   const compiled = ts.transpileModule(`const callback = ${callback.getText(tree)};`, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    fileName: "callback.tsx",
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
   }).outputText;
   return new Function(...Object.keys(env), `${compiled}\nreturn callback;`)(...Object.values(env));
 }
@@ -710,3 +722,83 @@ for (const mobile of [false, true]) {
     assert.deepEqual(flow.toasts, []);
   });
 }
+
+const blockedNotification = {
+  ...notification, id: "-42", waitingOnSynthetic: true,
+  task: { ...task, waitingOnUserId: 2343, waitingOnSetAt: "2026-10-24T10:00:00Z" },
+};
+
+for (const hydrated of [false, true]) {
+  test(`E archives a blocked-by-me ticket from ${hydrated ? "hydrated" : "cached"} detail and keeps the next ticket`, t => {
+    const flow = makeFlow(t, {
+      blockedArchive: true, notifications: [blockedNotification],
+      currentTask: { ...blockedNotification.task, ...(hydrated ? { _count: { notifications: 0 }, notifications: [] } : {}) },
+    });
+    flow.pressE();
+    assert.deepEqual(flow.archived, [{ item: blockedNotification, mode: "Notification" }]);
+    assert.deepEqual(flow.queryClient.getQueryData(inboxKey).notifications, []);
+    assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+    assert.equal(flow.context.currentTask.waitingOnUserId, 2343);
+  });
+}
+
+test("Inbox list E archives a blocked-by-me row and removes it", async t => {
+  const flow = makeFlow(t, {
+    blockedArchive: true, notifications: [blockedNotification],
+    nativePathname: "/inbox", routerPathname: "/inbox",
+  });
+  let archive;
+  const env = {
+    selectedIdsArray: [], lastgClick: { current: null },
+    selectedKeyboardRow: { item: { kind: "notification", notification: blockedNotification } },
+    currentUser: { id: 2343 }, shortcutNudgesEnabled: false, tipsEnabled: false, noPhoneNudges: false,
+    setArchiveNudge: () => {}, index: 0,
+    markAsDone: (notification, _index, mode) => { archive = flow.archiveNotification(notification, mode, null); return archive; },
+  };
+  const eHandler = sourceCallback("src/components/notifications/inboxSplit/index.tsx", env, "eHandler");
+  const { KeyCodes } = load("src/lib/constants/keyboard-handler.ts", {});
+  const handleKeyDown = sourceCallback("src/components/notifications/inboxSplit/index.tsx", {
+    ...env, eHandler, KeyCodes, value: 0, isApple: false, Element: class {}, controller: {},
+    selectedKeyboardNotificationIndex: 0, bulkHandleKeyDown: () => {},
+    returnIfModalOrInputActive: () => false, showCommands: { show: false }, classNamesToReturnFrom: [],
+  }, "handleKeyDown");
+  await handleKeyDown({ key: "e", keyCode: 69, preventDefault() {} });
+  assert.ok(archive, "E must reach the archive action");
+  assert.equal(await archive, true);
+  assert.deepEqual(flow.archived, [{ item: blockedNotification, mode: "Notification" }]);
+  assert.deepEqual(flow.queryClient.getQueryData(inboxKey).notifications, []);
+  assert.equal(blockedNotification.task.waitingOnUserId, 2343);
+});
+
+
+test("an unarchived blocked row keeps its rendered marker and the next-ticket order", () => {
+  const React = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const Seen = sourceCallback("src/components/notifications/NotificationRow.tsx", {
+    React, useMemo: callback => callback(), cn: (...classes) => classes.filter(Boolean).join(" "),
+    Circle: props => React.createElement("i", props), Tooltip: () => null,
+  }, "Seen");
+  const blocked = renderToStaticMarkup(Seen({ notification: { ...blockedNotification, seen: true } }));
+  assert.match(blocked, /hsl\(0 62.8% 30.6%\)/);
+  assert.doesNotMatch(renderToStaticMarkup(Seen({ notification: { ...notification, seen: true } })), /hsl\(0 62.8% 30.6%\)/);
+  const { buildInboxTasksPlaylist } = load("src/lib/inbox/inboxTasksPlaylist.ts", {});
+  const rows = [blockedNotification, { ...notification, id: "702", taskId: 43, task: nextTask }];
+  assert.deepEqual(buildInboxTasksPlaylist(rows, false).map(item => item.uniqueIndex), [7002, 7003]);
+});
+
+
+test("the blocked archive flag keeps ordinary hydrated tickets archivable without cache membership", t => {
+  const flow = makeFlow(t, {
+    blockedArchive: true, notifications: [],
+    currentTask: { ...task, _count: { notifications: 1 }, notifications: [notification] },
+  });
+  flow.pressE();
+  assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
+  assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+});
+
+test("archiving a real blocked notification also removes its synthetic sibling", async t => {
+  const flow = makeFlow(t, { blockedArchive: true, notifications: [notification, blockedNotification] });
+  assert.equal(await flow.archiveNotification(notification, "Notification", null), true);
+  assert.deepEqual(flow.queryClient.getQueryData(inboxKey).notifications, []);
+});

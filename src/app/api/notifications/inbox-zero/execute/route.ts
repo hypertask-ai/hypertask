@@ -7,6 +7,8 @@ import {
   broadcastInboxChange,
   socketIdFromHeader,
 } from "@/lib/realtime/server";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8047_INBOX_ZERO_AGENT_ACTIONS_FLAG } from "@/lib/flags/definitions/htpr-8047-inbox-zero-agent-actions";
 import {
   evaluateInboxZero,
   loadActiveInboxZeroNotifications, // trufflehog:ignore
@@ -33,7 +35,8 @@ const loadPreview = async (
     userId,
     rules,
     now,
-    doneTitlesByProject
+    doneTitlesByProject,
+    await isFeatureEnabled(HTPR_8047_INBOX_ZERO_AGENT_ACTIONS_FLAG, userId)
   );
 };
 

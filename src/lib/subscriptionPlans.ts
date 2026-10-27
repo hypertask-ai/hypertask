@@ -1,3 +1,5 @@
+import { freePlanLimitLines, type FreePlanLimitFlags } from "@/lib/freePlanLimits";
+
 export interface ISubscriptionPlan {
   id: "Free" | "AI" | "Pro" | "BYOK";
   name: string;
@@ -33,7 +35,7 @@ export const yearly_pro_price_id = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_
 export const allMonthlyPrices = [prevMonthly1, prevMonthly2, monthly_byok_price_id, monthly_pro_price_id]
 export const allYearlyPrices = [prevYearly1, prevYearly2, yearly_byok_price_id, yearly_pro_price_id]
 
-export const storeSubscriptionPlans: ISubscriptionPlan[] = [
+const subscriptionPlanTemplates: ISubscriptionPlan[] = [
   {
     id: "BYOK",
     name: "BYOK",
@@ -208,31 +210,6 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
         unlimited: false,
       },
       {
-        title: "Boards",
-        amount: "Up to 2",
-        unlimited: false,
-      },
-      {
-        title: "Open tickets",
-        amount: "Up to 250",
-        unlimited: false,
-      },
-      {
-        title: "Archived tickets and archived boards",
-        amount: "Don't count, so archiving frees room",
-        unlimited: false,
-      },
-      {
-        title: "Files",
-        amount: "Up to 10 MB each on tickets and comments",
-        unlimited: false,
-      },
-      {
-        title: "Teams already over a limit",
-        amount: "Keep everything; you just can't add more until you're under it or upgrade",
-        unlimited: false,
-      },
-      {
         title: "CLI + MCP",
         amount: "Included",
         unlimited: true,
@@ -255,3 +232,47 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
     ]
   },
 ];
+
+const legacyFreePlan: FreePlanLimitFlags = { planLimits: false, unlimitedTickets: false };
+
+function withFreeLimits(plan: ISubscriptionPlan, flags: FreePlanLimitFlags): ISubscriptionPlan {
+  if (plan.id !== "Free") return plan;
+  const membersIndex = plan.perks.findIndex((perk) => perk.title === "Members");
+  const limitPerks = freePlanLimitLines(flags).map((line) => ({
+    title: line.title,
+    amount: line.amount,
+    unlimited: line.amount === "Unlimited tickets" || line.amount === "Unlimited boards",
+  }));
+  const perks = [...plan.perks];
+  perks.splice(Math.max(membersIndex, 0) + 1, 0, ...limitPerks);
+  return { ...plan, perks };
+}
+
+export function subscriptionPlansFor(flags: FreePlanLimitFlags): ISubscriptionPlan[] {
+  return subscriptionPlanTemplates.map((plan) => withFreeLimits(plan, flags));
+}
+
+export const storeSubscriptionPlans = subscriptionPlansFor(legacyFreePlan);
+
+const productionTrialBlurb = "Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.";
+
+export function trialPlanBlurb(corrected: boolean): string {
+  return corrected ? "Risk free, cancel anytime." : productionTrialBlurb;
+}
+
+export function trialComparisonColumns(corrected: boolean, plans: ISubscriptionPlan[] = storeSubscriptionPlans) {
+  if (!corrected) {
+    return {
+      sharedTitles: plans[0].perks,
+      starter: plans[1].perks,
+      proWithAi: plans[0].perks,
+    };
+  }
+  const starter = plans.find((plan) => plan.id === "BYOK") ?? plans[0];
+  const pro = plans.find((plan) => plan.id === "Pro") ?? plans[1];
+  return {
+    sharedTitles: null,
+    starter: starter.perks,
+    proWithAi: pro.perks.filter((perk) => !perk.amount.includes("$15 of tokens")),
+  };
+}

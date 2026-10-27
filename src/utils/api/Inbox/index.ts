@@ -1,19 +1,17 @@
-import type { setNotificationSeen } from "@/lib/api/typedClient";
+import { setNotificationSeen } from "@/lib/api/typedClient";
 import axios from "axios"
 
-export const markNotificationSeen = async (notificationId: number | null, write?: typeof setNotificationSeen) => {
+export const markNotificationSeen = async (notificationId: number | null) => {
     if (!notificationId) return
     try {
-        const response = write ? await write({ notificationId, seen: 0 }) : await axios.get(
-            `/api/notifications/markAsUnseen?notificationId=${notificationId}&seen=0`
-        )
+        const response = await setNotificationSeen({ notificationId, seen: 0 })
         return response.data
     } catch (error) {
         console.log(error)
     }
 }
 
-export const markAsUnseen = async(itemId:number|null, seen?:boolean,mode?:"byTaskId",write?:typeof setNotificationSeen)=>{
+export const markAsUnseen = async(itemId:number|null, seen?:boolean,mode?:"byTaskId")=>{
     if (!itemId) return
     try {
         if (mode==="byTaskId"){
@@ -22,7 +20,7 @@ export const markAsUnseen = async(itemId:number|null, seen?:boolean,mode?:"byTas
 
         }
         else{
-            const response = write ? await write({ notificationId: itemId, seen: seen ? 1 : 0 }) : await axios.get(`/api/notifications/markAsUnseen?notificationId=${itemId}&seen=${seen?1:0}`)
+            const response = await setNotificationSeen({ notificationId: itemId, seen: seen ? 1 : 0 })
             return response.data
         }
     } catch (error) {

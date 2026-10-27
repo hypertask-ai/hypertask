@@ -29,9 +29,15 @@ function identity(id) {
   const name = id.toLowerCase().split("/").at(-1)
     .replace(/-(?:\d{8}|\d{4}-\d{2}-\d{2})$/, "")
     .replace(/(\d)[.-](?=\d)/g, "$1.");
+  let family = name.replace(/v?(\d+(?:\.\d+)*)/g, "").replace(/-+/g, "-").replace(/-$/, "");
+  while (true) {
+    const base = family.replace(/-(?:batch|fast|preview|beta|experimental|latest|online|reasoning|non-reasoning|thinking)$/, "");
+    if (!base || base === family) break;
+    family = base;
+  }
   return {
     name,
-    family: name.replace(/v?(\d+(?:\.\d+)*)/g, "").replace(/-+/g, "-").replace(/-$/, ""),
+    family,
     version: (name.match(/\d+(?:\.\d+)*/)?.[0] ?? "0").split(".").map(Number),
   };
 }
@@ -124,7 +130,7 @@ function diffModels(catalog, sources) {
   for (const model of groups.values()) {
     const family = identity(model.id).family;
     const current = catalog.definitions.filter((row) => identity(row.key).family === family &&
-      (row.provider === model.provider || ({ moonshot: "moonshotai", zhipu: "zai" })[row.provider] === model.provider))
+      (row.provider === model.provider || ({ moonshot: "moonshotai", zhipu: "zai", xai: "spacexai" })[row.provider] === model.provider))
       .sort((a, b) => compareVersions(b.key, a.key));
     if (!current.length) add("new-class", model, family, [], "not in the current catalog");
     else if (compareVersions(model.id, current[0].key) > 0) {
@@ -134,7 +140,7 @@ function diffModels(catalog, sources) {
   for (const definition of catalog.definitions) {
     const newer = catalog.definitions.find((row) => row.modelClass === definition.modelClass && compareVersions(row.key, definition.key) > 0);
     const options = catalog.options.filter((row) => row.modelKey === definition.key);
-    const provider = ({ moonshot: "moonshotai", zhipu: "zai" })[definition.provider] ?? definition.provider;
+    const provider = ({ moonshot: "moonshotai", zhipu: "zai", xai: "spacexai" })[definition.provider] ?? definition.provider;
     const missing = sourcesUsed.includes("gateway") && options.some((option) =>
       !sources.gateway.data.some((model) => model.id === `${provider}/${option.model}` ||
         model.id === option.model || model.id === `${provider}/${option.directModel}` ||

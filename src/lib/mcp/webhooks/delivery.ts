@@ -25,6 +25,7 @@ export async function postSignedWebhook(input: {
   event: string
   deliveryId: string
   body: string
+  authHeader?: { name: string; value: string } | null
 }): Promise<SignedWebhookResult> {
   const startedAt = Date.now()
   let secret: string
@@ -67,6 +68,7 @@ export async function postSignedWebhook(input: {
     const res = await undiciRequest(input.url, {
       method: 'POST',
       headers: {
+        ...(input.authHeader ? { [input.authHeader.name]: input.authHeader.value } : {}),
         'content-type': 'application/json',
         'x-hypertask-event': input.event,
         'x-hypertask-timestamp': timestamp,

@@ -21,8 +21,8 @@ test("cached and network board URL selection both pass the reactive flag to sect
   const source = fs.readFileSync(path.join(root, "src/app/[...boardURL]/LandingPage.tsx"), "utf8");
   assert.match(source, /import \{ HTPR_7775_SAVED_URL_VIEW_FLAG \} from "@\/lib\/flags\/keys"/);
   assert.equal((source.match(/const restoreUrlViewSections = useFlag\(HTPR_7775_SAVED_URL_VIEW_FLAG\)/g) ?? []).length, 2);
-  assert.match(source, /pinProjectToUrlView\(localProject, currentView, \{ legacyAgentAssigneeMatch: !assigneeFixEnabled \}, restoreUrlViewSections\)/);
-  assert.match(source, /pinProjectToUrlView\(projects\[projectIndex\], currentView, \{ legacyAgentAssigneeMatch: !assigneeFixEnabled \}, restoreUrlViewSections\)/);
-  assert.match(source, /\[\s*assigneeFixEnabled,\s*restoreUrlViewSections,\s*boardAccessKey/);
-  assert.match(source, /\[assigneeFixEnabled, restoreUrlViewSections, data\?\.updatedProjects, projectIndex, currentView\]/);
+  assert.match(source, /pinProjectToUrlView\(localProject, currentView, \{ [^}]*legacyAgentAssigneeMatch: !assigneeFixEnabled[^}]*\}, restoreUrlViewSections\)/);
+  assert.match(source, /pinProjectToUrlView\(projects\[projectIndex\], currentView, \{ [^}]*legacyAgentAssigneeMatch: !assigneeFixEnabled[^}]*\}, restoreUrlViewSections\)/);
+  assert.match(source, /\[\s*assigneeFixEnabled,[\s\S]*?restoreUrlViewSections,[\s\S]*?boardAccessKey/);
+  assert.match(source, /\[assigneeFixEnabled,[\s\S]*?restoreUrlViewSections,[\s\S]*?data\?\.updatedProjects, projectIndex, currentView\]/);
 });

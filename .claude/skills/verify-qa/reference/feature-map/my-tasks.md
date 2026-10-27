@@ -12,7 +12,10 @@ page, wait for the table, then look at what sits between the filter row and
 the first table row. Many parts are behind Owner + QA flags (views, scopes,
 bulk selection, snooze), so check with the QA flag identity
 (`storageState-qa.json`) and with the plain account
-(`storageState-qa-normal.json`).
+(`storageState-qa-normal.json`). Pick a board tab, reload, and confirm the
+`board` URL parameter and selected list remain. On desktop, Tab and Shift+Tab
+cycle board tabs; C opens task creation and Back cancels it. The list uses
+the available page width beside the app rail.
 
 ## What usually breaks
 
@@ -28,6 +31,13 @@ Screenshot `/my-tasks` signed in, desktop and phone width, with both
 accounts when a flag is involved. For a removal, also search the page text
 for the removed label (for example "Quick add") and record that it is
 absent.
+
+### Automated evidence
+
+`node --test tests/htpr-6570-my-tasks-no-quick-add.test.cjs` checks that My Tasks source no longer references the removed Quick add component or flag; layout and keyboard behavior still need live proof.
+`npm run test:file -- tests/my-tasks-priority-filter-component.test.cjs tests/global-shortcut-routes.test.cjs`
+exercises board URL restoration, Tab bursts, full-width rendering and global
+C shortcut eligibility without the retired shortcuts/width flag.
 
 ## Cleanup
 

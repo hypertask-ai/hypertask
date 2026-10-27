@@ -158,13 +158,15 @@ const source = file => readFileSync(path.join(__dirname, '..', file), 'utf8')
 
 test('agent scope runs after dependency restore/install even on a cache hit and before Prisma', () => {
   const workflow = source('.github/workflows/ci-tests.yml')
-  const job = workflow.slice(workflow.indexOf('  ci-tests:'), workflow.indexOf('  browser-smoke:'))
+  const job = workflow.slice(workflow.indexOf('  ci-checks:'), workflow.indexOf('  ci-test:'))
+  const prepare = workflow.slice(workflow.indexOf('  ci-prepare:'), workflow.indexOf('  ci-checks:'))
   const guard = job.match(/      - name: Guard agent board scope\n[\s\S]*?(?=\n      - )/)?.[0]
   assert.ok(guard)
   assert.ok(job.indexOf('name: Restore node_modules cache') < job.indexOf(guard))
   assert.ok(job.indexOf('name: Install dependencies') < job.indexOf(guard))
   assert.ok(job.indexOf(guard) < job.indexOf('name: Generate Prisma client'))
-  assert.match(guard, /if: github.event_name == 'push' \|\| steps.scope.outputs.build_needed == 'true'\n/)
+  assert.match(job, /if: needs.ci-prepare.outputs.run_tests == 'true'/)
+  assert.doesNotMatch(guard, /if:/)
   assert.doesNotMatch(guard, /cache-hit|continue-on-error|setup-python/)
   assert.match(guard, /"\$PY312" -m venv "\$RUNNER_TEMP\/agent-scope-venv"/)
   assert.match(guard, /sys.version_info\[:2\] == \(3, 12\)/)
@@ -172,12 +174,12 @@ test('agent scope runs after dependency restore/install even on a cache hit and 
   assert.match(guard, /run.py --self-test\n\s+python .github\/scripts\/agent-scope\/run.py\n/)
   assert.match(guard, /SEMGREP_SEND_METRICS: "off"/)
   assert.match(guard, /SEMGREP_ENABLE_VERSION_CHECK: "0"/)
-  const approval = job.match(/      - name: Agent scope debt needs a recorded approval\n[\s\S]*?(?=\n      - )/)?.[0]
+  const approval = prepare.match(/      - name: Agent scope debt needs a recorded approval\n[\s\S]*?(?=\n      - )/)?.[0]
   assert.ok(approval)
   assert.match(approval, /if: github.event_name == 'pull_request'/)
   assert.match(approval, /BASE_SHA: \$\{\{ github.event.pull_request.base.sha \}\}/)
   assert.match(approval, /run: node .github\/scripts\/agent-scope\/baseline-approval.mjs/)
-  assert.ok(job.indexOf('git fetch --depth=1 origin "$BASE_SHA" "$HEAD_SHA"') < job.indexOf(approval))
+  assert.ok(prepare.indexOf('name: Determine change scope') < prepare.indexOf(approval))
   assert.match(job, /uses: actions\/cache\/restore@0057852bfaa89a56745cba8c7296529d2fc39830[\s\S]*?key: agent-scope-pip-.*hashFiles\('\.github\/scripts\/agent-scope\/requirements.txt'\)/)
 })
 

@@ -74,6 +74,13 @@ CSID=${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}
 [ -n "$RESUME" ] || { echo "ship-claim: no session id found; pass the resume command: ship-claim $T \"<resume command>\"" >&2; exit 2; }
 RID=${RESUME##* }
 
+if [[ $T == HTPR-* ]]; then
+  task=$("$HT" tasks get "$T" --json) || { echo "ship-claim: cannot read alert before claiming" >&2; exit 2; }
+  printf '%s' "$task" | node "$(dirname "$(readlink -f "$0")")/error-collector/claim-incident.mjs"
+  rc=$?
+  [ "$rc" = 0 ] || exit "$rc"
+fi
+
 "$VCC" comment add "$T" --text "<p><strong>Claimed.</strong> Session working it now.</p><p>Next: I examine and fix it. Requested by Valentin in a Claude session, $(date +%F). Resume this Claude session: $RESUME</p>" >/dev/null \
   || { echo "ship-claim: claim comment failed" >&2; exit 2; }
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
@@ -91,7 +98,8 @@ W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); LOG=$(mktemp); MERGED=$(mktemp); tra
   || { echo "ship-claim: cannot re-read agent log on $T; do not start work until the claim is confirmed" >&2; exit 2; }
 
 # Agents now assigned (one read). A failed read leaves the file empty, which skips rule (a).
-"$HT" tasks get "$T" --json 2>/dev/null | jq -r '.tasks[0] | [.agent.id?, (.assignees[]?.agent.id?)] | .[] | select(. != null)' > "$ASG" 2>/dev/null || : > "$ASG"
+"$HT" tasks get "$T" --json > "$MERGED" 2>/dev/null \
+  && jq -r '.tasks[0] | [.agent.id?, (.assignees[]?.agent.id?)] | .[] | select(. != null)' "$MERGED" > "$ASG" 2>/dev/null || : > "$ASG"
 
 # An old competing claim is ignored only when its agent shows no activity in the last 6 h. Read failure = still active.
 agent_idle() {
@@ -113,7 +121,26 @@ for _ in 1 2 3 4 5 6 7 8; do
   break
 done
 case "$res" in
-  WIN) echo "ship-claim: $T claimed, you are first. Start work."; exit 0 ;;
+  WIN)
+    if jq -e --arg rid "$RID" '[.comments[], .activities[]?] | any(.[];
+      (.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed.") and (contains($rid) | not))' "$W" >/dev/null; then
+      project=$(jq -r '.tasks[0] | .projectId // .boardId // empty' "$MERGED" 2>/dev/null)
+      case "$T" in HTPR-*) project=${project:-15} ;; YPER4-*) project=${project:-4060} ;; esac
+      questions=$(jq -r --arg project "$project" --arg number "${T#*-}" '
+        .comments | sort_by(.createdAt, .id) | .[]
+        | ((.text // .commentText // "") | gsub("<[^>]*>"; " ") | gsub("[[:space:]]+"; " ")) as $text
+        | select($text | test("Question:"; "i"))
+        | (if $project == "" then "comment-" + (.id | tostring)
+           else "https://app.hypertask.ai/detail/project-" + $project + "/" + $number + "#comment-" + (.id | tostring) end)
+          + " " + $text' "$W") || exit 2
+      echo "ship-claim: takeover. Read existing questions, replies and reactions before asking anything."
+      echo "ship-claim: reuse any unanswered question; edit your own or bump the original in agent activity, never post it again."
+      [ -z "$questions" ] || printf '%s\n' "$questions"
+      links=$(printf '%s\n' "$questions" | cut -d' ' -f1 | paste -sd ' ' -)
+      "$VCC" activity add "$T" "Takeover: review questions and replies; reuse unanswered questions, never re-ask. ${links:-Read older comment pages before asking.} Resume: $RESUME" >/dev/null \
+        || { echo "ship-claim: takeover handoff failed" >&2; exit 2; }
+    fi
+    echo "ship-claim: $T claimed, you are first. Start work."; exit 0 ;;
   NOOURS) echo "ship-claim: own claim comment not visible yet on $T; re-run ship-claim read-only check before working" >&2; exit 2 ;;
   LOSE*)
     IFS=$'\t' read -r _ other oid old same <<< "$res"

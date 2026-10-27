@@ -149,6 +149,8 @@ function loadArchiveHandler({
   };
   const sharedRoute = loadSharedRoute(getSessionUser);
   const stubs = {
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags/definitions/htpr-7907-column-archive": { HTPR_7907_COLUMN_ARCHIVE_FLAG: "htpr-7907-column-archive" },
     "./route": sharedRoute,
     "@/lib/prisma": {
       __esModule: true,

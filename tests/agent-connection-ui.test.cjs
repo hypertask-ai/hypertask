@@ -3,17 +3,16 @@ const assert = require("node:assert/strict");
 const React = require("react");
 const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
-const FLAG = "htpr-7026-agent-connect-check";
 const OVERLAY_FLAG = "htpr-7550-connect-overlay";
 const planFlag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 
-function loadScreen(enabled = true, startPlanEnabled = false, planFlagReady = true) {
+function loadScreen(startPlanEnabled = false, planFlagReady = true) {
   return load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
     "@/hooks/useFlag": {
-      useFlag: (key) => key === planFlag.HTPR_7551_START_PLAN_CHECKOUT_FLAG ? startPlanEnabled : key === OVERLAY_FLAG ? false : (assert.equal(key, FLAG), enabled),
+      useFlag: (key) => key === planFlag.HTPR_7551_START_PLAN_CHECKOUT_FLAG ? startPlanEnabled : (assert.equal(key, OVERLAY_FLAG), false),
       useFlagReady: () => planFlagReady,
     },
-    "@/lib/flags/keys": { ...planFlag, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG: OVERLAY_FLAG },
+    "@/lib/flags/keys": { ...planFlag, HTPR_7550_CONNECT_OVERLAY_FLAG: OVERLAY_FLAG },
     "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "install fixture", LOGIN_COMMAND: "hypertask login" },
     "@/components/Modals/McpToken/components": {
       getIntegrationChipClassName: () => "text-meta",
@@ -42,7 +41,7 @@ async function withDOM(fn) {
   }
 }
 
-test("compact shared picker is terminal-first, reuses CLI and MCP config, and keeps the old onboarding when flag off", async () => {
+test("compact shared picker is terminal-first, reuses CLI and MCP config, and keeps full onboarding", async () => {
   await withDOM(async ({ container, reactRoot, act, dom }) => {
     global.fetch = async () => ({ ok: true, json: async () => ({ connected: false }) });
     const Screen = loadScreen();
@@ -56,30 +55,28 @@ test("compact shared picker is terminal-first, reuses CLI and MCP config, and ke
     const mcp = [...container.querySelectorAll("button")].find((button) => button.textContent === "MCP");
     await act(async () => mcp.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
     assert.match(container.textContent, /Shared config for claude-code/);
-    const Off = loadScreen(false);
-    await act(async () => reactRoot.render(React.createElement(Off, { compact: true, onNextScreen() {} })));
+    const Full = loadScreen();
+    await act(async () => reactRoot.render(React.createElement(Full, { onNextScreen() {} })));
     assert.match(container.textContent, /Which AI will you drive Hypertask with/);
     assert.ok([...container.querySelectorAll("button")].some((button) => button.textContent.includes("Hypertask AI, built in")));
     assert.doesNotMatch(container.textContent, /Waiting for your agent/);
   });
 });
 
-test("shared confirmation uses the selected tool with flag off and the resolved client only with flag on", async () => {
-  for (const enabled of [false, true]) {
-    await withDOM(async ({ container, reactRoot, act, dom }) => {
-      global.fetch = async (url) => {
-        if (url.startsWith("/api/users/ai-connection-status")) {
-          assert.match(url, /\?since=/);
-        }
-        return { ok: true, json: async () => ({ connected: true, client: "Cursor" }) };
-      };
-      const Screen = loadScreen(enabled);
-      await act(async () => reactRoot.render(React.createElement(Screen, { onNextScreen() {} })));
-      const tool = [...container.querySelectorAll("button")].find((button) => button.textContent === "Claude Code");
-      await act(async () => tool.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
-      assert.equal(container.querySelector('[role="status"]').textContent, `Connected! ${enabled ? "Cursor" : "Claude Code"} just talked to Hypertask.`);
-    });
-  }
+test("shared confirmation always uses the resolved client", async () => {
+  await withDOM(async ({ container, reactRoot, act, dom }) => {
+    global.fetch = async (url) => {
+      if (url.startsWith("/api/users/ai-connection-status")) {
+        assert.match(url, /\?since=/);
+      }
+      return { ok: true, json: async () => ({ connected: true, client: "Cursor" }) };
+    };
+    const Screen = loadScreen();
+    await act(async () => reactRoot.render(React.createElement(Screen, { onNextScreen() {} })));
+    const tool = [...container.querySelectorAll("button")].find((button) => button.textContent === "Claude Code");
+    await act(async () => tool.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+    assert.equal(container.querySelector('[role="status"]').textContent, "Connected! Cursor just talked to Hypertask.");
+  });
 });
 
 test("live check polls every four seconds only while visible, uses returned client, and stops at connected", async () => {
@@ -114,7 +111,7 @@ test("live check polls every four seconds only while visible, uses returned clie
   });
 });
 
-test("armed signup renders compact instructions and resolves the connected client with session flag off", async () => {
+test("server-eligible signup renders compact instructions and resolves the connected client", async () => {
   await withDOM(async ({ container, reactRoot, act }) => {
     let connected = false;
     const intervals = new Map();
@@ -124,8 +121,8 @@ test("armed signup renders compact instructions and resolves the connected clien
       assert.equal(url, "/api/users/ai-connection-status?mode=first");
       return { ok: true, json: async () => ({ eligible: true, connected, client: "Codex" }) };
     };
-    const Screen = loadScreen(false);
-    await act(async () => reactRoot.render(React.createElement(Screen, { compact: true, serverEligible: true, onNextScreen() {} })));
+    const Screen = loadScreen();
+    await act(async () => reactRoot.render(React.createElement(Screen, { compact: true, onNextScreen() {} })));
     assert.match(container.textContent, /Waiting for your agent/);
     assert.doesNotMatch(container.textContent, /Which AI will you drive/);
     assert.deepEqual([...container.querySelectorAll("button")].slice(0, 3).map((button) => button.textContent), ["Claude Code", "Cursor", "Codex"]);
@@ -137,26 +134,24 @@ test("armed signup renders compact instructions and resolves the connected clien
   });
 });
 
-test("board card honors server eligibility with flag off, existing connection, dismissal and board scope", async () => {
-  for (const [enabled, state, expected] of [
-    [false, { eligible: false, boardId: 7 }, false],
-    [false, { eligible: true, connected: false, dismissed: false, boardId: 7 }, true],
-    [false, { eligible: true, connected: true, boardId: 7 }, false],
-    [false, { eligible: true, dismissed: true, boardId: 7 }, false],
-    [false, { eligible: true, boardId: 8 }, false],
-    [true, { connected: true, boardId: 7 }, false],
-    [true, { dismissed: true, boardId: 7 }, false],
-    [true, { boardId: 8 }, false],
-    [true, { connected: false, dismissed: false, boardId: 7 }, true],
+test("board card honors existing connection, dismissal and board scope without requiring eligibility", async () => {
+  for (const [state, expected] of [
+    [{ eligible: false, boardId: 7 }, true],
+    [{ eligible: true, connected: false, dismissed: false, boardId: 7 }, true],
+    [{ eligible: true, connected: true, boardId: 7 }, false],
+    [{ eligible: true, dismissed: true, boardId: 7 }, false],
+    [{ eligible: true, boardId: 8 }, false],
+    [{ connected: true, boardId: 7 }, false],
+    [{ dismissed: true, boardId: 7 }, false],
+    [{ boardId: 8 }, false],
+    [{ connected: false, dismissed: false, boardId: 7 }, true],
   ]) {
     await withDOM(async ({ container, reactRoot, act, dom }) => {
       const requests = [];
       global.fetch = async (url, options) => { requests.push({ url, method: options?.method }); return { ok: true, json: async () => state }; };
       global.IntersectionObserver = class { observe() {} disconnect() {} };
       const { AgentConnectCard } = load("src/components/PageComponents/Onboarding/AgentConnectCard.tsx", {
-        "@/hooks/useFlag": { useFlag: () => enabled },
-        "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
-        "next/dynamic": () => (props) => { assert.equal(props.compact, true); assert.equal(props.serverEligible, state.eligible === true); return React.createElement("div", null, "Shared connection screen"); },
+        "next/dynamic": () => (props) => { assert.equal(props.compact, true); return React.createElement("div", null, "Shared connection screen"); },
       });
       await act(async () => reactRoot.render(React.createElement(AgentConnectCard, { projectId: 7, userId: 42 })));
       assert.equal(!!container.querySelector("section"), expected);
@@ -172,14 +167,12 @@ test("board card honors server eligibility with flag off, existing connection, d
   }
 });
 
-test("board card clears armed eligibility when user or board changes and ignores aborted responses", async () => {
+test("board card clears previous state when user or board changes and ignores aborted responses", async () => {
   await withDOM(async ({ container, reactRoot, act }) => {
     const pending = [];
     global.fetch = async (url, options) => new Promise((resolve) => pending.push({ resolve, signal: options.signal }));
     global.IntersectionObserver = class { observe() {} disconnect() {} };
     const { AgentConnectCard } = load("src/components/PageComponents/Onboarding/AgentConnectCard.tsx", {
-      "@/hooks/useFlag": { useFlag: () => false },
-      "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
       "next/dynamic": () => () => React.createElement("div", null, "Shared connection screen"),
     });
     const render = (userId, projectId) => reactRoot.render(React.createElement(AgentConnectCard, { userId, projectId }));
@@ -193,7 +186,7 @@ test("board card clears armed eligibility when user or board changes and ignores
     await act(async () => render(99, 8));
     await act(async () => respond(pending[1], { eligible: true, boardId: 7 }));
     assert.equal(container.querySelector("section"), null);
-    await act(async () => respond(pending[2], { eligible: false, boardId: 8 }));
+    await act(async () => respond(pending[2], { eligible: false, connected: true, boardId: 8 }));
     assert.equal(container.querySelector("section"), null);
   });
 });
@@ -228,7 +221,7 @@ test("connected email shares the current layout, escapes the client and has exac
 test("signup checkout rollout never promises fourteen days or no card to flagged users; OFF keeps the original onboarding offer", async () => {
   for (const [enabled, ready] of [[true, true], [false, true], [false, false]]) {
     await withDOM(async ({ container, reactRoot, act }) => {
-      const Screen = loadScreen(false, enabled, ready);
+      const Screen = loadScreen(enabled, ready);
       await act(async () => reactRoot.render(React.createElement(Screen, { onNextScreen() {} })));
       if (ready && !enabled) assert.match(container.textContent, /Full access free for 14 days. No credit card needed/);
       else assert.doesNotMatch(container.textContent, /14 days|No credit card needed/);

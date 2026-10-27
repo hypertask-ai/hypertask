@@ -104,6 +104,15 @@ case "$(lastline)" in
   *'Agent Chat for Runner 3: Valentin Yeo wrote: "are you there?". Answer in the same chat with: /lib/runner-chat-reply 3 sess-42 m-7 "<your answer>"') ok "chat message carries the exact reply command";;
   *) bad "chat message: $(lastline)";;
 esac
+# YPER4-657: a person's chat message arrives whole, not cut at 400 characters.
+: > "$TMUX_LOG"
+longtext=$(python3 -c 'print(("chat proof sentence 42. " * 70)[:2000])')
+longchat=$(jq -nc --arg t "$longtext" '{event:"chat.message", actor:{userId:6, displayName:"Valentin Yeo"}, chat:{sessionId:"sess-657", messageId:"m-657", text:$t, userName:"Valentin Yeo"}}')
+post 3 chat.message d-657 "$longchat" >/dev/null; wait_sent 1
+case "$(lastline)" in
+  *"\"$longtext\"."*) ok "2,000-character chat reaches the session whole";;
+  *) bad "long chat was cut: $(lastline)";;
+esac
 : > "$TMUX_LOG"
 asg=$(jq -nc '{event:"task.assigned", agentId:"a", projectId:15, taskId:11, ticketNumber:"HTPR-7000", taskTitle:"A task", actor:{userId:6, displayName:"Valentin Yeo"}}')
 post 3 task.assigned d-7 "$asg" >/dev/null; wait_sent 1 && ok "assignment delivered" || bad "assignment not delivered"

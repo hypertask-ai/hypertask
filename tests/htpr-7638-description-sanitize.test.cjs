@@ -270,6 +270,7 @@ test("inert AI clipboard parsing preserves normal text in both clipboard modes",
   const { useAiChatPresentation } = load("src/hooks/MultiPages/AIChat/useAiChatPresentation.ts", {
     react: { useEffect: noop, useRef: value => ({ current: value }) },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {}, "@/lib/state": { useRecoilValue: () => false }, "@/store": {},
     "@/utils/aiChat/focusRequestWindow": {}, "react-hot-toast": { default: { success: noop, error: error => { throw new Error(error); } } },
     "@/lib/aiChat/chatOpenSession": {}, "./aiChatShared": { MOBILE_VIEWPORT_MAX_PX: 768 },

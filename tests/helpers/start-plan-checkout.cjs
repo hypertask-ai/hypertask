@@ -104,8 +104,17 @@ function harness() {
   const controller = load("src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts", {
     "@/lib/prisma": prisma,
     "@/lib/deriveCurrentBoardBilling": billing,
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); h.flagReads.push(id); if (h.flagFailure) throw new Error("flag lookup unavailable"); return h.enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (key, id) => {
+      if (key === "htpr-7938-fourteen-day-trial") {
+        h.trialFlagReads ??= []; h.trialFlagReads.push(id);
+        if (h.trialFlagFailure) throw new Error("trial flag lookup unavailable");
+        return Boolean(h.fourteenDayTrial);
+      }
+      assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); h.flagReads.push(id);
+      if (h.flagFailure) throw new Error("flag lookup unavailable"); return h.enabled;
+    } },
     "@/lib/flags/keys": flag,
+    "@/lib/flags/definitions/htpr-7938-fourteen-day-trial": { HTPR_7938_FOURTEEN_DAY_TRIAL_FLAG: "htpr-7938-fourteen-day-trial" },
     "@/lib/resolveSeatQuantity": { resolveSeatQuantity: async () => h.seats },
     "@/lib/stripe": stripeModule,
     "@/lib/subscriptionPlans": plans,

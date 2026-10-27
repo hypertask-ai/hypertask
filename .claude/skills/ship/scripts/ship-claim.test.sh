@@ -91,6 +91,7 @@ eq "someone else's hand-over does not cancel A's claim" "$(dec)" "$(printf 'LOSE
 cat > "$D/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_LOG"
+if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "activity last" ]; then
   [ -z "${FAKE_ACTIVITY_FAIL:-}" ] || exit 1
   [ -z "${FAKE_ACTIVITY:-}" ] || printf '%s\tx\n' "$FAKE_ACTIVITY"
@@ -104,6 +105,7 @@ cat "$FAKE_COMMENTS"
 EOF
 cat > "$D/ht" <<'EOF'
 #!/usr/bin/env bash
+if [[ "$2" == /mcp/tasks\?* ]] && [ -n "${FAKE_RELATED:-}" ]; then cat "$FAKE_RELATED"; exit; fi
 [ "$1 $2" = 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100' ] || [ "$1 $2" = 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100' ] || exit 1
 if [ -n "${FAKE_AGENT_LOG:-}" ]; then cat "$FAKE_AGENT_LOG"; else echo '{"success":true,"activities":[]}'; fi
 EOF
@@ -136,6 +138,27 @@ cp fixtures/ship-claim-y243-comments.json "$D/c.json"
 SHIP_CLAIM_RESUME="claude --resume $R8" FAKE_TASK=$PWD/fixtures/ship-claim-y243-task.json ./ship-claim YPER4-243 >/dev/null; eq "flow: Y243 replay -> proceed" "$?" 0
 SHIP_CLAIM_RESUME="claude --resume $R8" ./ship-claim YPER4-243 >/dev/null; eq "flow: Y243 replay, task read fails -> still proceeds (hand-over)" "$?" 0
 
+mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 2' "$(claim other-sess)")" \
+   "$(c 11 2026-10-11T09:10:00.000Z a1 'RUNNER 2' '<p>Question: <strong>Add the four new models?</strong></p>')" \
+   "$(c 12 2026-10-11T09:30:00.000Z a1 'RUNNER 2' '<p>Handed over to RUNNER 3.</p>')" \
+   "$(c 13 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
+: > "$D/log"; out=$(./ship-claim YPER4-999); rc=$?
+eq "takeover with existing question succeeds" "$rc" 0
+[[ $out == *'https://app.hypertask.ai/detail/project-4060/999#comment-11'* && $out == *'Add the four new models?'* ]] \
+  && ok "takeover shows original question and link" || bad "takeover omitted existing question: $out"
+grep -q '^activity add YPER4-999 Takeover:.*comment-11' "$D/log" \
+  && ok "takeover records question handoff in agent lane" || bad "takeover handoff missing"
+eq "takeover creates only its claim comment" "$(grep -c '^comment add ' "$D/log")" 1
+grep -q 'comment update\|--kind question' "$D/log" && bad "takeover changed or repeated the question" || ok "takeover leaves original question unchanged"
+out=$(FAKE_HANDOFF_FAIL=1 ./ship-claim YPER4-999 2>&1); rc=$?
+eq "failed takeover handoff stops work" "$rc" 2
+[[ $out == *'takeover handoff failed'* && $out != *'Start work.'* ]] \
+  && ok "failed handoff never authorizes work" || bad "handoff failure output: $out"
+printf '{"tasks":[{"projectId":42}]}' > "$D/takeover-task.json"
+out=$(FAKE_TASK=$D/takeover-task.json ./ship-claim YPER4-999)
+[[ $out == *'https://app.hypertask.ai/detail/project-42/999#comment-11'* ]] \
+  && ok "takeover uses the board returned by the API" || bad "wrong question board: $out"
+
 # Old competing claim in the full flow: activity decides.
 mk "$(c 10 2026-10-11T00:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 FAKE_ACTIVITY=$(date -u -d '-1 hour' +%FT%TZ) ./ship-claim YPER4-999 >/dev/null; eq "flow: old claim with recent activity -> step back" "$?" 3
@@ -157,5 +180,18 @@ grep -q 'codex resume argsess' "$D/log" && ok "argument lands in the claim comme
 env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID ./ship-claim YPER4-999 >/dev/null 2>"$D/err"; eq "no resume id anywhere -> exit 2" "$?" 2
 grep -q 'pass the resume command' "$D/err" && ok "clear error names the argument" || bad "error text"
 ./ship-claim bogus >/dev/null 2>&1; eq "bad ticket -> exit 2" "$?" 2
+
+
+jq -n '{success:true,tasks:[{id:8020,ticketNumber:"HTPR-8020",projectId:15,status:"Normal",labels:[{name:"prod-error"}],description:"<p>Routes: /api/mcp/projects</p><p>First seen: 2026-10-26T08:55:00Z</p><p>Error root: /api/mcp/projects | prisma-validation:project:unknown-argument:updatedAt</p>"}]}' > "$D/alert.json"
+jq '.tasks[0].id=8019 | .tasks[0].ticketNumber="HTPR-8019" | .total=1' "$D/alert.json" > "$D/related.json"
+: > "$D/log"
+FAKE_TASK="$D/alert.json" FAKE_RELATED="$D/related.json" ./ship-claim HTPR-8020 "codex resume argsess" > "$D/related-out"
+eq "related open root stops a second claim" "$?" 3
+[ ! -s "$D/log" ] && ok "related alert check runs before all board writes" || bad "related alert wrote a claim"
+grep -q 'https://app.hypertask.ai/detail/project-15/8019' "$D/related-out" && ok "related alert names the existing full link" || bad "missing related link"
+
+jq '.tasks[0].id=8022 | .tasks[0].ticketNumber="HTPR-8022"' "$D/related.json" > "$D/later.json"
+FAKE_RELATED="$D/later.json" node ./error-collector/claim-incident.mjs < "$D/alert.json" > "$D/canonical-out"
+eq "earliest root remains claimable with a later duplicate" "$?" 0
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]

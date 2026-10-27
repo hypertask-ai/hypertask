@@ -10,6 +10,7 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const flag = "htpr-7318-ticket-chat-reminder";
+const skillFlag = "htpr-7800-skill-runs-in-sidebar";
 const noop = () => {};
 const fixture = [
   { id: "old", title: "Older conversation", userId: 985, taskId: 43, updatedAt: "2024-01-01T12:00:00Z", messages: [{}] },
@@ -35,12 +36,11 @@ function load(file, mocks = {}) {
   return mod.exports;
 }
 
-function route({ viewer = 985, restCompat = false, sessions = fixture } = {}) {
+function route({ viewer = 985, sessions = fixture } = {}) {
   const queries = [];
   const { GET } = load("src/app/api/ai-chat/task-sessions/route.ts", {
     "@/lib/api/rateLimit": { checkRestRateLimit: async () => null },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => viewer === null ? null : ({ userId: viewer, user: { id: viewer } }) },
-    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "rest-compat", isFeatureEnabled: async () => restCompat },
     "@/utils/edgeHelpers": { isValidUser: () => ({ isValid: viewer !== null, user: viewer === null ? null : { id: viewer } }) },
     "next/headers": { cookies: async () => ({ get: () => ({ value: "authenticated-cookie" }) }) },
     "next/server": { NextResponse: { json: Response.json } },
@@ -56,29 +56,27 @@ function route({ viewer = 985, restCompat = false, sessions = fixture } = {}) {
   return { queries, get: (query = "taskId=43") => GET({ headers: new Headers(), nextUrl: new URL(`https://app.hypertask.ai/api/ai-chat/task-sessions?${query}`) }) };
 }
 
-for (const restCompat of [false, true]) {
-  test(`server still allows the viewer's three newest nonempty ticket chats, including older chats (REST compatibility ${restCompat})`, async () => {
-    const api = route({ restCompat });
-    const response = await api.get();
-    assert.equal(response.status, 200);
-    const { sessions } = await response.json();
-    assert.deepEqual(sessions.map(session => session.id), ["newest", "second", "old"]);
-    assert.deepEqual(api.queries[0], {
-      where: { userId: 985, taskId: 43, messages: { some: {} } },
-      select: { id: true, title: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 3,
-    });
-    assert.deepEqual(Object.keys(sessions[0]).sort(), ["id", "title", "updatedAt"]);
+test("server still allows the viewer's three newest nonempty ticket chats, including older chats", async () => {
+  const api = route();
+  const response = await api.get();
+  assert.equal(response.status, 200);
+  const { sessions } = await response.json();
+  assert.deepEqual(sessions.map(session => session.id), ["newest", "second", "old"]);
+  assert.deepEqual(api.queries[0], {
+    where: { userId: 985, taskId: 43, messages: { some: {} } },
+    select: { id: true, title: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 3,
   });
+  assert.deepEqual(Object.keys(sessions[0]).sort(), ["id", "title", "updatedAt"]);
+});
 
-  test(`server still refuses other users' sessions, even with a spoofed userId (REST compatibility ${restCompat})`, async () => {
-    const api = route({ viewer: 986, restCompat });
-    const response = await api.get("taskId=43&userId=985");
-    assert.deepEqual((await response.json()).sessions.map(session => session.id), ["foreign"]);
-    assert.equal(api.queries[0].where.userId, 986);
-    const emptyViewer = route({ viewer: 987, restCompat });
-    assert.deepEqual((await (await emptyViewer.get()).json()).sessions, []);
-  });
-}
+test("server still refuses other users' sessions, even with a spoofed userId", async () => {
+  const api = route({ viewer: 986 });
+  const response = await api.get("taskId=43&userId=985");
+  assert.deepEqual((await response.json()).sessions.map(session => session.id), ["foreign"]);
+  assert.equal(api.queries[0].where.userId, 986);
+  const emptyViewer = route({ viewer: 987 });
+  assert.deepEqual((await (await emptyViewer.get()).json()).sessions, []);
+});
 
 test("server rejects anonymous and invalid ticket requests before reading sessions", async () => {
   const anonymous = route({ viewer: null });
@@ -99,6 +97,7 @@ async function withReminder(options, check) {
   const values = { currentUserAtom: { id: options.viewer ?? 985 }, showAIChatInterfaceAtom: false, aiChatAutoOpenSuppressedAtom: true, aiChatEditTaskIdAtom: 43, currentProjectAtom: { id: 15 } };
   const requests = [], selected = [], resumedEvents = [], openWrites = [];
   let enabled = options.enabled !== false;
+  let skillEnabled = options.skillEnabled === true;
   let taskId = 43;
   let restored = 0;
   let chat = options.cold ? undefined : { chatHistoryReady: true };
@@ -110,7 +109,8 @@ async function withReminder(options, check) {
   });
   if (chat) chat = runtime();
   const mocks = {
-    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : true },
+    "@/hooks/useFlag": { useFlag: key => key === skillFlag ? skillEnabled : key === flag ? enabled : true },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: flag },
     "@/lib/contexts/Multipages/AI_Agent/chatContext": { useOptionalAiChatContext: () => chat },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => chat },
@@ -131,6 +131,7 @@ async function withReminder(options, check) {
   if (options.sidebar) {
     Sidebar = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
       ...mocks,
+      "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: skillFlag },
       "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "past-chats" },
       "@/app/agents/chat/AgentChatClient": { default: () => React.createElement("div", { "data-external-chat": true }) },
       "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: noop },
@@ -168,6 +169,7 @@ async function withReminder(options, check) {
       ready: async () => { chat = { ...runtime(), chatHistoryReady: true }; await render(); },
       settled: async () => { chat = { ...chat, sendSettledVersion: (chat.sendSettledVersion ?? 0) + 1 }; await render(); },
       disable: async () => { enabled = false; await render(); },
+      disableSkill: async () => { skillEnabled = false; await render(); },
       viewer: async id => { values.currentUserAtom = { id }; await render(); },
       ticket: async id => { taskId = id; await render(); },
     });
@@ -311,6 +313,26 @@ test("flag off leaves the sidebar resume event unhandled and does not open chat"
       assert.equal(event.defaultPrevented, false);
       assert.equal(block(), null);
       assert.deepEqual(view.selected, []);
+      assert.deepEqual(view.openWrites, []);
+      assert.equal(view.restored, 0);
+    });
+  }
+});
+
+test("skill flag alone handles resume until switched off, then leaves resume unhandled", async () => {
+  for (const skillEnabled of [false, true]) {
+    await withReminder({ enabled: false, skillEnabled, sidebar: true }, async view => {
+      if (skillEnabled) {
+        const event = new CustomEvent("ht-ticket-chat-resume", { cancelable: true, detail: { sessionId: "newest" } });
+        await React.act(async () => { assert.equal(window.dispatchEvent(event), false); });
+        assert.equal(event.defaultPrevented, true);
+        assert.deepEqual(view.selected, ["newest"]);
+        await view.disableSkill();
+      }
+      const event = new CustomEvent("ht-ticket-chat-resume", { cancelable: true, detail: { sessionId: "old" } });
+      assert.equal(window.dispatchEvent(event), true);
+      assert.equal(event.defaultPrevented, false);
+      assert.deepEqual(view.selected, skillEnabled ? ["newest"] : []);
       assert.deepEqual(view.openWrites, []);
       assert.equal(view.restored, 0);
     });

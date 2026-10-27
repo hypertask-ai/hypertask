@@ -1263,10 +1263,10 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   assert.match(clear, /clearCalendarReadModels\(\)/);
   assert.match(
     signout,
-    /localReadModelsCleared = await clearAllLocalReadModels\(\)/,
+    /localReadModelsCleared = await Promise\.race/,
   );
   assert.ok(
-    signout.indexOf("if (!localReadModelsCleared)") <
-      signout.indexOf("await signOutAllAccounts()"),
+    signout.indexOf("await signOutAllAccounts()") <
+      signout.indexOf("if (!localReadModelsCleared)"),
   );
 });

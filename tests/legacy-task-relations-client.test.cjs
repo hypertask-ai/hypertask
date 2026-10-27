@@ -48,8 +48,8 @@ const descriptionFile = "src/components/PageComponents/TaskDetail/CommentAndDesc
 
 async function shapes() {
   return [
-    (await fixture({ enabled: false, compat: "htpr-6924" }).invoke()).body,
-    (await fixture({ enabled: true, compat: "htpr-6924" }).invoke()).body,
+    (await fixture().invoke()).body,
+    (await fixture({ compat: "htpr-6924" }).invoke()).body,
   ];
 }
 

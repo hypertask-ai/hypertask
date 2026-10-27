@@ -2,6 +2,14 @@
 
 import { extractMessageLinks } from "@/lib/agents/messageLinks";
 import { useCallback, useRef } from "react";
+import { usePathname } from "next/navigation";
+import { useRecoilValue } from "@/lib/state";
+import { currentProjectAtom, inViewObjectAtom } from "@/store";
+import { useDockedChatScope } from "@/hooks/MultiPages/AIChat/useDockedChatScope";
+import { isDockedChatTicketScope } from "@/hooks/MultiPages/AIChat/dockedChatScope";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
+import type { AgentChatContext } from "@/lib/agents/chatContext";
 import toast from "react-hot-toast";
 import { MAX_MESSAGE_LENGTH, TChatMessage } from "./agentChatTypes";
 import { bumpRosterChatRecency } from "./rosterSort";
@@ -67,7 +75,21 @@ export function useAgentChatSend({
   setStopping, loadMessages, draft, dismissMention, composerEditorRef, composerRef, focusComposer,
   composerLocked, roster, selectedId, selectAgent, messages, projectIdForPrefix,
 }: Props) {
-  const sendMessageText = useCallback(async (text: string, queuedId?: string) => {
+  const contextEnabled = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
+  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
+  const [scope] = useDockedChatScope();
+  const currentProject = useRecoilValue(currentProjectAtom);
+  const inViewObject = useRecoilValue(inViewObjectAtom);
+  const pathname = usePathname();
+  const onTask = !!pathname?.startsWith("/detail") && inViewObject?.taskId != null;
+  const selectedTaskId = isDockedChatTicketScope(scope, onTask, ticketScopeEnabled) ? inViewObject.taskId : null;
+  const context: AgentChatContext | undefined = contextEnabled && embedded ? {
+    project_id: selectedTaskId != null ? inViewObject.taskProjectId ?? currentProject?.id ?? embedded.projectId
+      : typeof scope === "number" ? scope : scope === "all" ? undefined : currentProject?.id ?? embedded.projectId,
+    ...(selectedTaskId != null ? { task_id: selectedTaskId, scope: "ticket" } : {}),
+    surface_path: pathname ?? undefined,
+  } : undefined;
+  const sendMessageText = useCallback(async (text: string, queuedId?: string, messageContext?: AgentChatContext) => {
     const targetSessionId = sessionIdRef.current;
     const targetAgentId = selectedIdRef.current;
     if (!targetSessionId) return;
@@ -89,7 +111,7 @@ export function useAgentChatSend({
       const res = await fetch(`/api/agent-chat/${targetSessionId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(embedded ? { "x-hypertask-sidebar-project": String(embedded.projectId) } : {}) },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, ...(contextEnabled && embedded && messageContext ? { default_context: messageContext } : {}) }),
       });
       const data = (await res.json()) as {
         success?: boolean;
@@ -120,7 +142,7 @@ export function useAgentChatSend({
       setMessages((prev) => (prev ?? []).filter((m) => m.id !== optimistic.id));
       if (queuedId) {
         blockedQueueIdRef.current = queuedId;
-        messageQueueRef.current = [{ id: queuedId, content: text }, ...messageQueueRef.current];
+        messageQueueRef.current = [{ id: queuedId, content: text, ...(messageContext ? { context: messageContext } : {}) }, ...messageQueueRef.current];
         setQueuedMessages(messageQueueRef.current);
       } else {
         setAwaiting(false);
@@ -133,7 +155,7 @@ export function useAgentChatSend({
         setSending(false);
       }
     }
-  }, [liveSortEnabled, embedded?.projectId]);
+  }, [liveSortEnabled, embedded?.projectId, contextEnabled]);
 
   const removeQueuedMessage = useCallback((id: string) => {
     messageQueueRef.current = messageQueueRef.current.filter(
@@ -152,7 +174,7 @@ export function useAgentChatSend({
     if (blockedQueueIdRef.current === next.id) return;
     messageQueueRef.current = rest;
     setQueuedMessages(rest);
-    void sendMessageText(next.content, next.id);
+    void sendMessageText(next.content, next.id, next.context);
   }, [sendMessageText]);
 
   const drainQueuedMessageRef = useRef(drainQueuedMessage);
@@ -191,12 +213,12 @@ export function useAgentChatSend({
     focusComposer();
     if (composerLocked) {
 
-      const queued = { id: `queued-${Date.now()}`, content: text };
+      const queued = { id: `queued-${Date.now()}`, content: text, ...(context ? { context } : {}) };
       messageQueueRef.current = [...messageQueueRef.current, queued];
       setQueuedMessages(messageQueueRef.current);
       return;
     }
-    await sendMessageText(text);
+    await sendMessageText(text, undefined, context);
   };
   const handleSendRef = useRef(handleSend);
   handleSendRef.current = handleSend;

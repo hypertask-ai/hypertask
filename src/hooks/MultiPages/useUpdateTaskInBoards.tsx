@@ -26,6 +26,8 @@ import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQ
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG } from "@/lib/flags/definitions/htpr-8039-archive-column-boundary";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
 type UpdateOptions = {
@@ -176,8 +178,10 @@ const applyProjectFilters = (
 
 const UpdateKanban = () => {
   const queryClient = useQueryClient();
+  const archiveColumnBoundary = useFlag(HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
+  const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
   const setactiveitem = useSetRecoilState(activeItemAtom);
   const setInViewObject = useSetRecoilState(inViewObjectAtom);
   const [_currentProject, __] = useRecoilState(currentProjectAtom)
@@ -255,6 +259,7 @@ const UpdateKanban = () => {
     ]);
     const filterRuntimeContext = {
       legacyAgentAssigneeMatch: !assigneeFixEnabled,
+      legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
       ...(Array.isArray(runningTimers)
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
         : {}),
@@ -374,16 +379,23 @@ const UpdateKanban = () => {
       sectionIndex,
       projectId,
       sectionId,
-      itemIndex
+      itemIndex,
+      scope = "board",
     }: {
       sections: ISection[],
       sectionIndex: number,
       projectId: number,
       itemIndex: number,
-      sectionId: number
+      sectionId: number,
+      scope?: "board" | "column",
     }
   ) => {
-    const nextId = nextFocusAfterRemoval(sections, sectionIndex, itemIndex);
+    const nextId = nextFocusAfterRemoval(
+      sections,
+      sectionIndex,
+      itemIndex,
+      archiveColumnBoundary ? scope : "board",
+    );
     updateActiveItemAndItemInView(nextId, projectId, sectionId);
   }
   async function removeFromListWithStatus(
@@ -451,6 +463,7 @@ const UpdateKanban = () => {
         sectionId,
         itemIndex,
         projectId,
+        scope: status === "Archive" ? "column" : "board",
       });
   
       mutationHandler(projectToUpdateIndex, updatedSections, allData, updatedTasksArray);

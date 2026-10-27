@@ -4,7 +4,7 @@ import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7756_CHAT_OPENS_TASK_FLAG, HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
 
 import { loadCurrentTaskContext } from "@/app/api/ai/_lib/currentTaskContext";
 import { type ModelMessage } from "ai";
@@ -42,9 +42,11 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
     : null;
   const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
+  const chatOpensTaskEnabled = await isFeatureEnabled(HTPR_7756_CHAT_OPENS_TASK_FLAG, dbUser.id);
   const bulkScopeConfirmationEnabled = await isFeatureEnabled(HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, dbUser.id);
   const instructions = [
     AGENT_SYSTEM_PROMPT,
+    chatOpensTaskEnabled ? "When the user asks to open a task, including one from a previous list, call hypertask_get_tasks with open=true and exactly that task. This is navigation, not detail enrichment. Do not say Opened or claim navigation happened before the tool returns navigation_emitted=true. If it fails or no navigation was emitted, say you could not open the task." : null,
     resolvedBody.surface && await isFeatureEnabled(HTPR_7760_CHAT_SURFACE_FLAG, dbUser.id)
       ? chatSurfacePrompt(resolvedBody.surface)
       : null,

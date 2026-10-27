@@ -680,7 +680,7 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
           signal: AbortSignal.timeout(30000),
         });
       } catch (error) {
-        if (!readOnly || attempt >= 2) throw error;
+        if (!readOnly || noWait || attempt >= 2) throw error;
         await sleep(attempt++ === 0 ? 1000 : 3000);
         continue;
       }
@@ -693,7 +693,7 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
         await sleep(ms);
         continue;
       }
-      if (!readOnly || attempt >= 2 || response.status < 500) {
+      if (!readOnly || noWait || attempt >= 2 || response.status < 500) {
         throw new Error(`GitHub API returned HTTP ${response.status}`);
       }
       await sleep(attempt++ === 0 ? 1000 : 3000);
@@ -822,7 +822,7 @@ export async function run(args, options = {}) {
   }
 }
 
-async function runGate(args, { env = process.env, fetchImpl = fetch, github = createGithub({ env, fetchImpl }), log = console.log, now = Date.now } = {}) {
+async function runGate(args, { env = process.env, fetchImpl = fetch, github, log = console.log, now = Date.now, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   let reconcile = false;
   let number;
   for (let index = 0; index < args.length; index++) {
@@ -833,7 +833,14 @@ async function runGate(args, { env = process.env, fetchImpl = fetch, github = cr
   if (!reconcile && number == null) throw new Error('Read-only mode requires --pr <number>');
   const repo = env.REPO || env.GITHUB_REPOSITORY || 'hypertask-ai/hypertask';
   const runUrl = env.RUN_URL || `https://github.com/${repo}/actions${env.GITHUB_RUN_ID ? `/runs/${env.GITHUB_RUN_ID}` : ''}`;
-  const options = { github, repo, env, fetchImpl, commentCache: new Map(), parentCache: new Map(), budget: { remaining: READ_BUDGET, stopped: false } };
+  const commentCache = new Map();
+  const parentCache = new Map();
+  github ??= createGithub({ env, fetchImpl, now, sleep: async (ms) => {
+    commentCache.clear();
+    parentCache.clear();
+    await sleep(ms);
+  } });
+  const options = { github, repo, env, fetchImpl, commentCache, parentCache, budget: { remaining: READ_BUDGET, stopped: false } };
   if (!reconcile) {
     const pr = await github(`repos/${repo}/pulls/${number}`);
     const verdict = await readVerdict(pr, options);

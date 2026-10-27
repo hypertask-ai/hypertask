@@ -17,14 +17,13 @@ import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import type { IntegrationId } from "@/components/Modals/McpToken/utils";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG, HTPR_7026_AGENT_CONNECT_CHECK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { GetStartedButton } from "../GetStartedButton";
 
 interface IConnectAIOnboardingScreen {
   onNextScreen: () => void;
   compact?: boolean;
   visible?: boolean;
-  serverEligible?: boolean;
   overlay?: boolean;
   onConnected?: () => void;
 }
@@ -112,13 +111,10 @@ interface ConnectionStatusProps {
   onConnected: (client: string) => void;
   first?: boolean;
   visible?: boolean;
-  serverEligible?: boolean;
   overlay?: boolean;
 }
 
-function ConnectionStatus({ label, onConnected, first = false, visible = true, serverEligible = false, overlay = false }: ConnectionStatusProps) {
-  const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
-  const showClient = enabled ? true : serverEligible;
+function ConnectionStatus({ label, onConnected, first = false, visible = true, overlay = false }: ConnectionStatusProps) {
   const [connected, setConnected] = useState(false);
   const [client, setClient] = useState(label);
   const enteredAt = useRef(new Date().toISOString());
@@ -142,7 +138,7 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
 
         const data = (await response.json()) as { connected?: boolean; client?: string };
         if (!cancelled && data.connected) {
-          const connectedLabel = showClient ? data.client || label : label;
+          const connectedLabel = data.client || label;
           setConnected(true);
           setClient(connectedLabel);
           onConnected(connectedLabel);
@@ -162,7 +158,7 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
       controller.abort();
       if (intervalId) clearInterval(intervalId);
     };
-  }, [connected, showClient, first, label, onConnected, overlay, visible]);
+  }, [connected, first, label, onConnected, overlay, visible]);
 
   return (
     <div role="status" className="flex items-center gap-2 text-content">
@@ -184,22 +180,17 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
 }
 
 export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (props) => {
-  const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
   const overlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
   const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const planMessage = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Start on Free. Choose a plan when you are ready." : "Full access free for 14 days. No credit card needed."}</>;
-  const screen = (flagEnabled ? true : props.serverEligible === true)
-    ? <ConnectAISetup {...props} planMessage={planMessage} overlay={overlayEnabled && props.overlay} onConnected={overlayEnabled ? props.onConnected : undefined} />
-    : <ConnectAISetup onNextScreen={props.onNextScreen} planMessage={planMessage} />;
-  return screen;
+  return <ConnectAISetup {...props} planMessage={planMessage} overlay={overlayEnabled && props.overlay} onConnected={overlayEnabled ? props.onConnected : undefined} />;
 };
 
 const ConnectAISetup: React.FC<IConnectAIOnboardingScreen & { planMessage: React.ReactNode }> = ({
   onNextScreen,
   compact: isCompact = false,
   visible = true,
-  serverEligible = false,
   overlay = false,
   onConnected,
   planMessage,
@@ -276,7 +267,7 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen & { planMessage: React
     ));
 
   const liveStatus = isCompact ? (
-    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} serverEligible={serverEligible} overlay={overlay} />
+    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} overlay={overlay} />
   ) : null;
 
   if (isCompact && connected) {

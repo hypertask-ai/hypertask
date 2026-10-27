@@ -3,11 +3,15 @@ import type { ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agen
 import { useOptionalAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/chatContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilState } from "@/lib/state";
-import { showQuickTipsAtom } from "@/store";
+import { aiChatSidebarWidthPxAtom, showQuickTipsAtom } from "@/store";
+import { clampAiChatSidebarWidthPx } from "@/lib/configs/style.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8030_CHAT_OPEN_RACE_FLAG } from "@/lib/flags/definitions/htpr-8030-chat-open-race";
+import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 import {
   MOBILE_OVERLAY_SHEET_Z,
   mobileOverlayAppSheetBodyClass,
@@ -63,7 +67,15 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
     currentSession,
     togglePopover,
   } = chat;
-  const { toggleAIChatInterface } = useGlobalUIState();
+  const idempotentChatOpen = useFlag(HTPR_8030_CHAT_OPEN_RACE_FLAG);
+  const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
+  const { openAIChatInterface, toggleAIChatInterface } = useGlobalUIState();
+  const [, setSidebarWidth] = useRecoilState(aiChatSidebarWidthPxAtom);
+
+  useEffect(() => {
+    if (!isMbl || !showAiChatInterface || !isSidebarMode) return;
+    setSidebarWidth(width => clampAiChatSidebarWidthPx(width, window.innerWidth));
+  }, [isMbl, showAiChatInterface, isSidebarMode, setSidebarWidth]);
 
   const togglePopoverRef = useRef(togglePopover);
   togglePopoverRef.current = togglePopover;
@@ -98,7 +110,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
       {!showAiChatInterface && !isMbl && (
         <button
           tabIndex={-1}
-          onClick={toggleAIChatInterface}
+          onClick={idempotentChatOpen ? openAIChatInterface : toggleAIChatInterface}
           aria-label="Open AI chat"
           className="group fixed right-1 top-2 z-[60] flex h-[20px] items-center justify-center text-text-light-gray hover:text-white-black"
         >
@@ -115,7 +127,10 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
               ariaLabel="AI Chat"
               defaultLibraryHeader={false}
               zIndex={MOBILE_OVERLAY_SHEET_Z}
-              panelClassName={cn(mobileOverlayAppSheetPanelClass)}
+              panelClassName={cn(
+                mobileOverlayAppSheetPanelClass,
+                amoledChatBorder && "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:-outline-offset-1 [.amoled_&]:outline-[var(--border-light-gray-thin)] [.amoled_&]:!rounded-[5px]",
+              )}
               bodyClassName={cn(mobileOverlayAppSheetBodyClass, aiChatMobileComposerPad)}
               headerClassName={mobileOverlayAppSheetHandleHeaderClass}
               handleRowClassName={mobileOverlayAppSheetHandleRowClass}

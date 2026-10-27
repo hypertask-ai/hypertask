@@ -655,6 +655,13 @@ const settings: CommandGroup = {
       keywords: "settings google api key use byok",
     },
     {
+      key: "settingsApiKeysXaiApiKey",
+      name: "Settings: xAI API key",
+      commandMode: CommandMode.Setting,
+      payload: "apiKeys",
+      keywords: "settings xai api key use byok",
+    },
+    {
       key: "settingsApiKeysDeepseekApiKey",
       name: "Settings: DeepSeek API key",
       commandMode: CommandMode.Setting,
@@ -737,6 +744,13 @@ const settings: CommandGroup = {
       commandMode: CommandMode.Setting,
       payload: "ai-models",
       keywords: "settings google enable disable team",
+    },
+    {
+      key: "settingsAiModelsXai",
+      name: "Settings: xAI",
+      commandMode: CommandMode.Setting,
+      payload: "ai-models",
+      keywords: "settings xai enable disable team",
     },
     {
       key: "settingsAiModelsDeepseek",
@@ -1311,6 +1325,7 @@ export const getAllCommands = (
   keepAiChatClosedKeywords = "",
   aiChatAutoOpenCommandName = "",
   blockerCommentEnabled = false,
+  shareKeyLabels = false,
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
@@ -1322,7 +1337,7 @@ export const getAllCommands = (
       blockerCommentEnabled: blockerCommentEnabled && commandOptions.commentOptions.blockerCommentEnabled,
     } : undefined,
   });
-  const task = getTaskCommands(commandOptions);
+  const task = getTaskCommands(commandOptions, shareKeyLabels);
   const board = getBoardCommands(commandOptions);
   const appShell = getAppShellCommands();
   const agentChat = getAgentChatCommands();

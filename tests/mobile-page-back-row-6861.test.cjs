@@ -74,12 +74,31 @@ test("title gets 16px side padding only on mobile with desktop class byte-identi
   assert.equal(classes(false), "w-full bg-transparent p-0 font-semibold leading-tight text-white-black outline-none placeholder:text-text-light-gray focus:ring-0 text-[32px]");
 });
 
-test("page actions are transient, published only on mobile and use the existing confirmed delete", async () => {
+test("page actions are transient, with desktop navigation only behind Pages, using the existing confirmed delete", async () => {
   assert.match(read("src/store/currentPageActions.ts"), /default: null/);
-  assert.match(editor, /if \(!isMobile\) return;/);
-  assert.match(editor, /setCurrentPageActions\(\{ publicId: page.publicId, version, onDelete: deletePage \}\)/);
-  assert.match(editor, /return \(\) => setCurrentPageActions\(null\)/);
-  assert.match(editor, /\[deletePage, isMobile, page.publicId, setCurrentPageActions, version\]/);
+  const publish = find(editor, (node) => ts.isCallExpression(node) && node.expression.getText() === "useEffect" && node.arguments[0]?.getText().includes("setCurrentPageActions(")).arguments[0];
+  const deletePage = () => {};
+  const flushPendingSaves = async () => {};
+  for (const isMobile of [false, true]) {
+    for (const pagesEnabled of [false, true]) {
+      const updates = [];
+      const cleanup = evaluate(`(${publish.getText()})()`, {
+        isMobile, pagesEnabled, standalonePages: true, page: { publicId: "example" }, version: 7,
+        deletePage, flushPendingSaves, setCurrentPageActions: (value) => updates.push(value),
+      });
+      if (!isMobile && !pagesEnabled) {
+        assert.deepEqual(updates, []);
+        assert.equal(cleanup, undefined);
+      } else {
+        assert.equal(updates[0].publicId, "example");
+        assert.equal(updates[0].version, 7);
+        assert.equal(updates[0].onDelete, deletePage);
+        assert.equal(updates[0].beforeNavigate, flushPendingSaves);
+        cleanup();
+        assert.equal(updates[1], null);
+      }
+    }
+  }
   const callback = find(editor, (node) => ts.isVariableDeclaration(node) && node.name.getText() === "deletePage").initializer.arguments[0];
   let calls = 0;
   const runDelete = (confirm, isDeleting) => evaluate(`(${callback.getText()})()`, {

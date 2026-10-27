@@ -27,7 +27,7 @@ function moduleWithStubs(file, stubs) {
   const loadedModule = { exports: {} };
   vm.runInNewContext(code, {
     module: loadedModule, exports: loadedModule.exports, Error, Date, AbortController,
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
       if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
@@ -232,7 +232,7 @@ test("flag on: real chat tool and CLI handler have identical writer title, body,
   assert.equal(toStoredHtml(h.saved[0].description), h.saved[0].description);
   assert.equal(h.calls.length, 2);
   assert.deepEqual(h.usage[0], h.usage[1]);
-  assert.deepEqual(h.usage[0], { userId: 985, teamId: "team", projectId: 15, taskId: null, agentId: "agent", provider: "fixture", feature: "task-writer" });
+  assert.deepEqual(h.usage[0], { userId: 985, teamId: "team", projectId: 15, taskId: null, agentId: "agent", provider: "fixture", feature: "task-writer", reasoningFeature: "task-writer" });
   assert.equal(h.selections[0].taskWriterAgentId, "agent");
   assert.equal(h.retrieval[0].prompt.includes(brief.trim()), true);
   for (const call of h.calls) {
@@ -369,7 +369,7 @@ test("chat turn resolves the server flag once for the authenticated user and for
   });
   const providerAbort = new AbortController();
   await runModelTurn({ body: { user_context: { id: 999 } }, dbUser: { id: 985 }, selected: { model: "test-model" }, providerAbort, send() {} }, {}, {});
-  assert.deepEqual(plain(checks), [[keys.HTPR_7514_INLINE_AGENT_IMAGES_FLAG, 985], [keys.HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, 985], [keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
+  assert.deepEqual(plain(checks), [[keys.HTPR_7514_INLINE_AGENT_IMAGES_FLAG, 985], [keys.HTPR_7756_CHAT_OPENS_TASK_FLAG, 985], [keys.HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, 985], [keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
   assert.equal(toolArgs.length, 1);
   assert.equal(toolArgs[0][7], true);
   assert.equal(toolArgs[0][8], providerAbort.signal);

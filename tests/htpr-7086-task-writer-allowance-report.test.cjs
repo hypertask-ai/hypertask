@@ -20,7 +20,7 @@ function moduleWithStubs(file, stubs) {
     module: loadedModule, exports: loadedModule.exports,
     require: (id) => (id in stubs ? stubs[id] : id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
     ReadableStream, Response, TextEncoder, TextDecoder, Error, AbortController,
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
   }, { filename });
   return loadedModule.exports;
 }
