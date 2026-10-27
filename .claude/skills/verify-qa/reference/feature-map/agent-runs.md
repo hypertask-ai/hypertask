@@ -19,6 +19,9 @@ webhook settings.
 4. If its recorded deliveries contain a run ID, read that run through
    `/api/mcp/agents/runs/<runId>`. Require matching run and agent IDs.
    Repeat with QA 2343 and require 404 for the other owner's run.
+   Read `/api/mcp/agents/runs/<runId>/activities` with the same
+   accounts: owner 200 with an activities array, other owner 404.
+   Activity reads have no rollout flag; authorization still applies.
    If no recorded run exists, mark positive read and cross-owner read
    UNREACHABLE; retain the successful webhook discovery as closest proof.
 5. Read an invented run ID as QA 985 and require 404. Read that same
@@ -30,7 +33,7 @@ webhook settings.
 
 - An obsolete flag check hides lifecycle events or cancels queued runs.
 - Removing the parent rollout accidentally removes the independent
-  activity or runtime-title flag.
+  runtime-title flag.
 - A read exposes another owner's run or webhook payload.
 
 ## What proof to collect
@@ -39,7 +42,8 @@ Record deployment SHA, signed-in doctor screenshot, bootstrap identity,
 HTTP statuses, lifecycle event names, and run/agent IDs only. Capture
 before/after discovery output. Run the core inbox cycle after deployment.
 Targeted tests cover lifecycle creation, reuse, delivery, stop, ownership,
-replay payloads, and the remaining independent flags.
+replay payloads, activity feeds without rollout flags, and the independent
+runtime-title flag.
 
 ## Cleanup
 

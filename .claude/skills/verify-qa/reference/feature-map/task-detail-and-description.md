@@ -63,6 +63,23 @@ attachments keep their labels and destinations. Check after reload and at
 The `htpr-8096-ctrl-o-ticket-titles` bugfix flag defaults to Everyone. Off
 preserves the old link labels; test Off only in an isolated route test.
 
+## Background smart labels
+
+Creating a task schedules `scheduleClassifyNewTaskAiLabels`; changing its title
+or description schedules `scheduleClassifyTaskAiLabels`. Use only disposable
+`[qa-runner]` tasks on QA 985's private QA runner board. Create, edit and reload;
+verify saved text and existing labels survive. Save the create/update responses
+and label readback. Never change funding, plans or keys to exhaust an allowance.
+
+With `htpr-8099-smart-label-refusal` on, typed daily/monthly allowance refusals
+skip classification without clearing labels or raising server-error alerts.
+Real provider faults still report. Exercise direct and wrapped refusals, funding
+lookup failure, success, Off and unavailable flag-store cases through the
+scheduled dispatch in `tests/htpr-8099-smart-label-refusal.test.cjs`. Record live
+refusal coverage as UNREACHABLE unless a QA team is already exhausted; local
+fixtures do not replace live proof. Read production task-route logs after the
+live create/edit to confirm their background jobs did not emit allowance errors.
+
 ## Cleanup
 
 If you created a test task, hard-delete it via the product UI. Never leave a

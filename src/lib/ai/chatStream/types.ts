@@ -9,7 +9,7 @@ export type ProviderId =
 
 export type AuthedUser = { id: number; email: string; displayName?: string | null };
 
-export type SseEvent = "status" | "content" | "title" | "done" | "error" | "agent" | "open_task";
+export type SseEvent = "status" | "content" | "title" | "done" | "error" | "agent" | "open_task" | "task_created" | "task_updated";
 
 export type ToolExecution = { name: string; result: unknown };
 

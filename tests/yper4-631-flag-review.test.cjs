@@ -33,6 +33,7 @@ const evidence = {
 let ctx;
 let limited;
 let roleRefusal;
+let persistedRole;
 let reviews;
 let stored;
 let changes;
@@ -49,7 +50,10 @@ let transactionTail = Promise.resolve();
 let wrapped;
 const prisma = {
   user: { findUnique: async () => ({ email: ownerEmail }) },
-  agent: { findUniqueOrThrow: async ({ where }) => ({ displayName: where.id }) },
+  agent: {
+    findUniqueOrThrow: async ({ where }) => ({ displayName: where.id }),
+    findUnique: async () => ({ permissions: { role: persistedRole } }),
+  },
   task: { findMany: async () => [] },
   featureFlag: {
     findUnique: async ({ where }) => stored.get(where.key) ?? null,
@@ -226,7 +230,7 @@ function assertNoChange() {
 }
 test.beforeEach(() => {
   ctx = { user: { id: 6 }, agentId: "agent-b", agentRole: "write" };
-  limited = null; roleRefusal = null; ownerEmail = "valentin.yeo@gmail.com";
+  limited = null; roleRefusal = null; persistedRole = "write"; ownerEmail = "valentin.yeo@gmail.com";
   reviews = new Map(); stored = new Map([[key, { key, mode: "OWNER_AND_QA" }]]); changes = [];
   locks = []; broadcasts = 0; writeFails = false; consumeFails = false; legacyAllowed = true; legacyKey = key; legacyMode = "Off"; wrapped = 0;
   delete process.env.VERCEL_GIT_COMMIT_SHA;
@@ -308,7 +312,7 @@ for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA"]) {
 }
 for (const pathKind of ["review", "failure"]) {
   for (const scenario of ["removed", "agent", "deleted-agent", "deleted-reaction", "wrong-user", "wrong-emoji", "edited-comment", "deleted-task", "missing-comment"]) {
-    test(`${pathKind} refuses policy ${scenario}`, async () => {
+    test(`${pathKind} ${pathKind === "review" ? "refuses" : "ignores"} policy ${scenario}`, async () => {
       await seedReview();
       const reaction = policy.reactions[0];
       if (scenario === "removed") policy.reactions = [];
@@ -321,7 +325,9 @@ for (const pathKind of ["review", "failure"]) {
       if (scenario === "deleted-task") policy.status = "Deleted";
       if (scenario === "missing-comment") policy = null;
       const response = await switchFlag(pathKind === "review" ? undefined : { key, mode: "OFF", failure });
-      assert.equal(response.status, 403); assertNoChange();
+      assert.equal(response.status, pathKind === "review" ? 403 : 200);
+      if (pathKind === "review") assertNoChange();
+      else { assert.equal(changes.length, 1); assert.equal(changes[0].newMode, "OFF"); }
     });
   }
   test(`${pathKind} refuses stored and unstored default no-ops`, async () => {
@@ -350,29 +356,83 @@ test("failure-Off on a classified non-bugfix flag succeeds with audit evidence",
   assert.equal(changes[0].agentId, "agent-b");
   assert.equal(broadcasts, 1);
   assert.equal(reviews.size, 0);
-  assert.deepEqual(locks, ["flag-lock", "policy-advisory-lock", "policy-comment-lock", "policy-reaction-lock", "policy-check", "change-write", "flag-write"]);
+  assert.deepEqual(locks, ["flag-lock", "change-write", "flag-write"]);
 });
-for (const category of ["money", "access", "data-deletion", "customer-email"]) {
-  test(`failure-Off refuses high-risk ${category}`, async () => {
-    const flag = definitions.find((flag) => flag.releaseRisk?.highRisk === category);
-    assert.ok(flag, `fixture for ${category}`);
+for (const flag of [
+  ...["money", "access", "data-deletion", "customer-email"].map((category) => definitions.find((flag) => flag.releaseRisk?.highRisk === category)),
+  bugfix, { key: "legacy-unclassified" },
+]) {
+  test(`failure-Off switches ${flag.key} without approval and records exactly one audit`, async () => {
+    policy = null;
+    stored.set(flag.key, { key: flag.key, mode: "EVERYONE" });
     const response = await switchFlag({ key: flag.key, mode: "OFF", failure });
-    assert.equal(response.status, 403); assert.match(response.body.error, /high-risk/); assertNoChange();
+    assert.equal(response.status, 200);
+    assert.equal(response.body.previousMode, "EVERYONE");
+    assert.equal(stored.get(flag.key).mode, "OFF");
+    assert.equal(changes.length, 1);
+    assert.equal(changes[0].key, flag.key);
+    assert.equal(changes[0].oldMode, "EVERYONE");
+    assert.equal(changes[0].newMode, "OFF");
+    assert.equal(changes[0].userId, 6);
+    assert.equal(changes[0].agentId, "agent-b");
+    assert.equal(changes[0].agentName, "agent-b");
+    assert.equal(changes[0].source, "api");
+    assert.equal(changes[0].reason, `live-qa-failed:${failure}`);
+    assert.deepEqual(locks, ["flag-lock", "change-write", "flag-write"]);
   });
 }
-for (const flagKey of ["unknown-flag", "htpr-7036-ctrlk-column-delete-keeps-cards", bugfix.key]) {
-  test(`failure-Off refuses unclassified or bugfix ${flagKey}`, async () => {
-    assert.equal((await switchFlag({ key: flagKey, mode: "OFF", failure })).status, 403); assertNoChange();
+for (const flagKey of ["unknown-flag", "htpr-6091-feature-flags"]) {
+  test(`failure-Off refuses unknown or retired ${flagKey}`, async () => {
+    assert.equal((await switchFlag({ key: flagKey, mode: "OFF", failure })).status, 400);
+    assertNoChange();
+    assert.equal(stored.has(flagKey), false);
   });
 }
-test("failure cannot switch Everyone on", async () => {
-  assert.equal((await switchFlag({ key, mode: "EVERYONE", failure })).status, 403); assertNoChange();
+for (const mode of ["EVERYONE", "OWNER_ONLY", "OWNER_AND_QA"]) {
+  test(`failure cannot switch ${mode} on`, async () => {
+    assert.equal((await switchFlag({ key, mode, failure })).status, 403); assertNoChange();
+  });
+}
+for (const reason of ["Emergency safety stop", "http://qa.test/failure", "x".repeat(300)]) {
+  test(`failure-Off accepts a nonblank reason: ${reason.slice(0, 30)}`, async () => {
+    policy = null;
+    assert.equal((await switchFlag({ key, mode: "OFF", failure: reason })).status, 200);
+    assert.equal(changes.length, 1);
+    assert.equal(changes[0].reason, `live-qa-failed:${reason}`);
+  });
+}
+for (const role of ["read", "write", "admin"]) {
+  for (const fromContext of [true, false]) {
+    test(`failure-Off unconditionally enforces ${role} from ${fromContext ? "auth context" : "persisted permissions"}`, async () => {
+      ctx.agentRole = fromContext ? role : undefined;
+      persistedRole = role;
+      roleRefusal = null;
+      policy = null;
+      const response = await switchFlag({ key, mode: "OFF", failure });
+      assert.equal(response.status, role === "read" ? 403 : 200);
+      if (role === "read") { assert.equal(response.body.code, "insufficient_scope"); assertNoChange(); }
+      else assert.equal(changes.length, 1);
+    });
+  }
+}
+test("competing failure-Off requests create one audit under serialized transactions", async () => {
+  const responses = await Promise.all([switchFlag({ key, mode: "OFF", failure }), switchFlag({ key, mode: "OFF", failure })]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 403]);
+  assert.equal(changes.length, 1);
+  assert.equal(broadcasts, 1);
+});
+test("failure-Off rolls back the audit when the flag write fails", async (t) => {
+  t.mock.method(console, "error", () => {});
+  writeFails = true;
+  assert.equal((await switchFlag({ key, mode: "OFF", failure })).status, 500);
+  assert.equal(stored.get(key).mode, "OWNER_AND_QA");
+  assertNoChange();
 });
 for (const body of [
   { key, mode: "EVERYONE" }, { key, mode: "EVERYONE", review: 1, reason: "x" },
   { key, mode: "OFF", review: 1, failure }, { key, mode: "OFF", reason: "x", failure },
   ...[null, "1", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1].map((review) => ({ key, mode: "EVERYONE", review })),
-  ...["http://qa.test/x", "not a URL", "https://qa.test/" + "x".repeat(300), null].map((url) => ({ key, mode: "OFF", failure: url })),
+  ...["", " ", "\t\n", "x".repeat(301), null, 42, {}, []].map((url) => ({ key, mode: "OFF", failure: url })),
 ]) {
   test(`invalid switch evidence ${JSON.stringify(body)} is refused`, async () => {
     assert.equal((await switchFlag(body)).status, 400); assertNoChange();
@@ -391,12 +451,14 @@ for (const [name, setup] of [
     const expected = ctx ? 403 : 401;
     assert.equal((await record()).status, expected);
     assert.equal((await switchFlag()).status, expected);
+    assert.equal((await switchFlag({ key, mode: "OFF", failure })).status, expected);
     assert.equal(reviews.size, 0); assertNoChange();
   });
 }
 test("rate limit applies before auth to record and switch", async () => {
   ctx = null; limited = NextResponse.json({ error: "rate limited" }, { status: 429 });
-  assert.equal((await record()).status, 429); assert.equal((await switchFlag()).status, 429); assertNoChange();
+  assert.equal((await record()).status, 429); assert.equal((await switchFlag()).status, 429);
+  assert.equal((await switchFlag({ key, mode: "OFF", failure })).status, 429); assertNoChange();
 });
 for (const [name, fields] of [
   ["unknown flag", { key: "unknown-flag" }], ["retired flag", { key: "htpr-6091-feature-flags" }],

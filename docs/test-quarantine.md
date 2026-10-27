@@ -10,6 +10,11 @@ Quarantine is only for a test the detector proved flaky and whose cause is not y
 node scripts/detect-flaky-tests.mjs --since 2026-10-10 --until 2026-10-24 --out docs/flaky-tests-report.md
 ```
 
+For sharded CI, the collector reads each failed `test-shard` job, not the
+`ci-tests` summary. Each job has its own cached log. A test failure on one
+shard stays visible when another shard fails before running tests.
+Older, unsharded `ci-tests` jobs remain supported.
+
 The report separates three counts:
 
 - Same-SHA ci-tests jobs that failed and later passed. Cancelled runs and browser-smoke-only failures are not in this count.

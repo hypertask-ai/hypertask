@@ -19,6 +19,7 @@ import { HTPR_7895_TASK_NUMBER_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7
 import { HTPR_7897_MCP_INPUT_FIELDS_FLAG } from '@/lib/flags/definitions/htpr-7897-mcp-input-fields'
 import { HTPR_7917_MCP_INPUT_WRAPPERS_FLAG } from '@/lib/flags/definitions/htpr-7917-mcp-input-wrappers'
 import { HTPR_7914_TICKET_NUMBER_HINT_FLAG } from '@/lib/flags/definitions/htpr-7914-ticket-number-hint'
+import { HTPR_7934_NEAREST_FIELD_HINT_FLAG } from '@/lib/flags/definitions/htpr-7934-nearest-field-hint'
 import { HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG } from '@/lib/flags/definitions/htpr-7894-task-id-ticket-reference'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
@@ -196,7 +197,7 @@ export async function handleLegacySseRequest(
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
                 ...(ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
-              }, await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, userId), await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, userId), await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, userId), await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, userId)), userId)
+              }, await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, userId), await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, userId), await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, userId), await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, userId), false, await isFeatureEnabled(HTPR_7934_NEAREST_FIELD_HINT_FLAG, userId)), userId)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

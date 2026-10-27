@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -13,7 +14,13 @@ import {
 import { convertHtmlToText } from "@/app/api/ai/_lib/taskContent";
 import { resolveSystemModel } from "@/app/api/ai/_lib/systemModelLadder";
 import prisma from "@/lib/prisma";
-import { HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import {
+  HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG,
+  HTPR_7728_COMMENT_SUMMARY_REFUSAL_FLAG,
+  HTPR_7858_COMMENT_SUMMARY_REUSE_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
+import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
 
 export const OPEN_QUESTION_SUMMARY_RULES = `
 - Keep open questions open: a question the comment asks but does not answer stays a question in the TL;DR, for example "Open: what evidence would show the check passed?". Never answer it.
@@ -35,6 +42,7 @@ export async function generateAndStoreCommentSummary(commentId: number) {
         id: true,
         text: true,
         summary: true,
+        summaryTextHash: true,
         activity: true,
         creatorId: true,
         agentId: true,
@@ -67,6 +75,12 @@ export async function generateAndStoreCommentSummary(commentId: number) {
         });
       }
       return null;
+    }
+
+    const reuseEnabled = await isFeatureEnabled(HTPR_7858_COMMENT_SUMMARY_REUSE_FLAG, comment.creatorId ?? comment.task.userId);
+    const summaryTextHash = createHash("sha256").update(comment.text).digest("hex");
+    if (reuseEnabled && comment.summary && comment.summaryTextHash === summaryTextHash) {
+      return comment.summary;
     }
 
     const targetLines = getCommentSummaryTargetLines(wordCount);
@@ -121,11 +135,14 @@ TL;DR:`,
 
     const stored = await prisma.comment.updateMany({
       where: { id: comment.id, text: comment.text },
-      data: { summary },
+      data: { summary, summaryTextHash },
     });
 
     return stored.count > 0 ? summary : null;
   } catch (error) {
+    if (findSharedAiAllowanceError(error) && await isFeatureEnabled(HTPR_7728_COMMENT_SUMMARY_REFUSAL_FLAG, 0).catch(() => false)) {
+      return null;
+    }
     console.error("[commentSummaries] failed to generate summary:", error);
     return null;
   }

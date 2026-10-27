@@ -1751,6 +1751,49 @@ test('only the real React useCallback binds a callback', async (t) => {
   }
 });
 
+test("new catch-all route files do not parse Git revision output as source", async (t) => {
+  for (const folder of ["[...slug]", "[[...slug]]"]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    const file = `src/app/detail/${folder}/Restorer.tsx`;
+    writeFile(dir, file, 'export const Restorer = () => <div>Restored</div>;\n');
+    const head = commit(git, "add route restorer");
+    const result = await evaluate("HTPR-7680 [BUGFIX] restore inbox", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    assert.equal(result.ownerReview, "exempt-ui");
+  }
+});
+
+test("deleted catch-all route files do not parse Git revision output as source", async (t) => {
+  for (const folder of ["[...slug]", "[[...slug]]"]) {
+    const { dir, git } = makeRepo(t);
+    const file = `src/app/detail/${folder}/Restorer.tsx`;
+    writeFile(dir, file, 'export const Restorer = () => <div>Restored</div>;\n');
+    const base = commit(git, "base route restorer");
+    fs.unlinkSync(path.join(dir, file));
+    const head = commit(git, "delete route restorer");
+    const result = await evaluate("HTPR-7680 [BUGFIX] remove restorer", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    assert.equal(result.ownerReview, "exempt-ui");
+  }
+});
+
+test("catch-all route files still reject wider exposure and invalid syntax", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const file = "src/app/detail/[...slug]/Providers.tsx";
+  writeFile(dir, "src/components/Banner.tsx", "export const Banner = () => <div>Consent</div>;\n");
+  writeFile(dir, file, 'import { Banner } from "@/components/Banner";\nexport const Providers = () => <>{!currentUser && <Banner />}</>;\n');
+  const base = commit(git, "guest banner in catch-all route");
+  writeFile(dir, file, 'import { Banner } from "@/components/Banner";\nexport const Providers = () => <Banner />;\n');
+  const widened = await evaluate("HTPR-7680 [BUGFIX] restore inbox", base, commit(git, "widen banner"), dir);
+  assert.equal(widened.pass, false);
+  assert.match(widened.reason, /Banner condition removed\) without a flag/);
+  writeFile(dir, file, "export const Providers = () => <;\n");
+  const malformed = await evaluate("HTPR-7680 [BUGFIX] restore inbox", base, commit(git, "invalid route source"), dir);
+  assert.equal(malformed.pass, false);
+  assert.match(malformed.reason, /UI exposure could not be parsed safely: invalid/);
+});
+
 test("BUGFIX and INFRA cannot drop an existing banner condition (PR 1580)", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/components/Global/Banner.tsx", "export const Banner = () => <div>Consent</div>;\n");

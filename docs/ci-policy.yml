@@ -1,4 +1,4 @@
-version: 10
+version: 11
 last_updated: 2026-10-27
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
@@ -148,10 +148,11 @@ ship_scripts_tests:
   runs_on: ubuntu-latest
   required: false
   pull_request_base: production
-  paths: [".claude/skills/ship/scripts/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs"]
+  paths: [".claude/skills/ship/scripts/**", ".claude/skills/vcc/bin/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs"]
   node_major: 24
   commands:
     - node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs
+    - bash .claude/skills/vcc/bin/vcc.test.sh
     - bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
     - python3 .claude/skills/ship/scripts/premerge-evidence.test.py
     - python3 .claude/skills/ship/scripts/ci-why.test.py
@@ -159,7 +160,7 @@ ship_scripts_tests:
     - bash .claude/skills/ship/scripts/user-unit-check.test.sh
     - python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
     - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
-    - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
+    - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
     - bash .claude/skills/ship/scripts/error-collector.test.sh
     - node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
     - bash .claude/skills/ship/scripts/ship-claim.test.sh
@@ -322,6 +323,19 @@ policies:
     producer_hold_requires_independent_release_session: true
   deploys:
     merge_to_production_deploys_via_vercel: true
+    ignored_build_step:
+      ticket: https://app.hypertask.ai/detail/project-4060/871
+      command: node scripts/vercel-ignore-build.cjs
+      baseline: VERCEL_GIT_PREVIOUS_SHA
+      candidate: VERCEL_GIT_COMMIT_SHA
+      skip_exit_code: 0
+      build_exit_code: 1
+      skip_paths: ["docs/**", ".claude/**", ".agents/skills/**", "skills/**", ".github/**", "tests/**", "e2e/**", "root Markdown"]
+      unknown_or_empty_comparison: build
+      rename_detection: disabled
+      health_comparison: same_script_between_live_and_tip
+      health_empty_tree_comparison: skip
+      scheduled_health_checks: unchanged
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
     automatic_rollback:
@@ -365,7 +379,7 @@ ci_tests:
     paths: ["docs/**", ".claude/**", "scripts/self_hosted_agent/**", ".github/**", "*.md"]
     always_run_paths: [".github/workflows/ci-tests.yml", ".github/scripts/**"]
     markdown_matches_at_any_depth: false
-    diff: exact_pr_base_sha_to_head_sha_no_renames_nul_delimited
+    diff: merge_base_to_head_sha_no_renames_nul_delimited
     detection_before: [setup-node, dependencies, caches, docker]
     unknown_or_empty_diff: run_everything
     detector_failure: run_everything

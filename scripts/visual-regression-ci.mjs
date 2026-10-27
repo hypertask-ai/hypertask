@@ -36,6 +36,19 @@ export function failedScreens(report) {
   return failed;
 }
 
+export async function validateBaseline(directory) {
+  for (const [project, width, height] of [["desktop", 1440, 900], ["phone", 390, 844]]) {
+    for (const screen of ["board", "task-detail", "comment-box", "ctrl-j", "inbox"]) {
+      const file = path.join(directory, project, `${screen}.png`);
+      const png = await readFile(file);
+      if (png.length < 24 || png.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
+          png.readUInt32BE(16) !== width || png.readUInt32BE(20) !== height) {
+        throw new Error(`Invalid visual baseline: ${project}/${screen}.png`);
+      }
+    }
+  }
+}
+
 function command(root, env, args, input) {
   const result = spawnSync(args[0], args.slice(1), { cwd: root, env, input, stdio: [input ? "pipe" : "ignore", "inherit", "inherit"] });
   if (result.error) throw result.error;
@@ -84,6 +97,12 @@ async function startServer(root, env, log) {
 async function summarize(workspace, temp) {
   const lines = ["## Visual Regression", "", "Base-generated expected PNGs → head comparison; Porcelain, desktop + phone, five screens each.", ""];
   for (const phase of ["base", "head"]) {
+    if (phase === "base" && process.env.VISUAL_BASE_CACHE_HIT === "true") {
+      await validateBaseline(path.join(temp, "visual-expected"));
+      lines.push("- **base**: restored ten validated screenshots from the exact production cache key.");
+      continue;
+    }
+    if (phase === "head" && process.env.VISUAL_BASE_ONLY === "true") continue;
     let report;
     try {
       report = JSON.parse(await readFile(path.join(temp, `visual-${phase}.json`), "utf8"));
@@ -110,46 +129,83 @@ async function main() {
     return;
   }
   assertLocalCi(process.env);
-  const head = path.join(workspace, "head");
-  const base = path.join(workspace, "base");
-  await cp(path.join(head, "e2e/visual"), path.join(base, "e2e/visual"), { recursive: true });
-  await cp(path.join(head, "scripts/seed-browser-smoke.mjs"), path.join(base, "scripts/seed-browser-smoke.mjs"));
-  const expected = path.join(temp, "visual-expected");
-  await mkdir(expected, { recursive: true, mode: 0o700 });
-  for (const phase of ["base", "head"]) {
-    const root = path.join(workspace, phase);
-    const stateDir = path.join(temp, `visual-${phase}`, "auth");
-    await mkdir(stateDir, { recursive: true, mode: 0o700 });
-    const env = {
-      ...process.env,
-      BASE_URL: "http://127.0.0.1:3100",
-      TZ: "UTC",
-      BROWSER_SMOKE_STATE_FILE: path.join(stateDir, "smoke-state.json"),
-      VISUAL_SNAPSHOT_DIR: expected,
-      VISUAL_RESULTS_DIR: path.join(workspace, "test-results", "visual", phase),
-      PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(temp, `visual-${phase}.json`),
-    };
-    command(root, env, ["npm", "ci", "--prefer-offline", "--no-audit", "--no-fund"]);
-    const require = createRequire(path.join(root, "package.json"));
-    if (require("@playwright/test/package.json").version !== "1.64.0") throw new Error("Visual captures require Playwright 1.64.0");
-    command(root, env, ["npx", "prisma", "generate"]);
-    command(root, env, ["npx", "prisma", "db", "execute", "--stdin"], "DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
-    const Redis = require("ioredis");
-    const redis = new Redis(env.REDIS_URL);
-    try { await redis.flushdb(); } finally { redis.disconnect(); }
-    command(root, env, ["npx", "prisma", "migrate", "deploy"]);
-    command(root, env, ["node", "scripts/seed-browser-smoke.mjs", "--visual"]);
-    command(root, env, ["npx", "next", "build", "--webpack"]);
-    const stop = await startServer(root, env, path.join(temp, `visual-${phase}-server.log`));
-    try {
-      command(root, env, ["npx", ...captureArguments(phase)]);
-      const report = JSON.parse(await readFile(env.PLAYWRIGHT_JSON_OUTPUT_NAME, "utf8"));
-      if (report.stats?.expected !== 10 || report.stats?.skipped || report.errors?.length || failedScreens(report).length) {
-        throw new Error(`${phase}: expected all ten visual screens to pass`);
-      }
-    } finally {
-      await stop();
+  const timings = new Map(["base build", "base seed+capture", "head build", "head seed+capture", "compare"].map(phase => [phase, null]));
+  let currentPhase = process.env.VISUAL_BASE_CACHE_HIT === "true" ? "head seed+capture" : "base seed+capture";
+  let phaseStarted = performance.now();
+  const recordPhase = nextPhase => {
+    const now = performance.now();
+    timings.set(currentPhase, (timings.get(currentPhase) ?? 0) + now - phaseStarted);
+    currentPhase = nextPhase;
+    phaseStarted = now;
+  };
+  try {
+    const head = path.join(workspace, "head");
+    const base = path.join(workspace, "base");
+    await cp(path.join(head, "e2e/visual"), path.join(base, "e2e/visual"), { recursive: true });
+    await cp(path.join(head, "scripts/seed-browser-smoke.mjs"), path.join(base, "scripts/seed-browser-smoke.mjs"));
+    const expected = path.join(temp, "visual-expected");
+    await mkdir(expected, { recursive: true, mode: 0o700 });
+    const cachedBase = process.env.VISUAL_BASE_CACHE_HIT === "true";
+    if (cachedBase) {
+      await validateBaseline(expected);
+      console.log("Visual base cache hit: ten validated screenshots; skipping base build and capture");
     }
+    for (const phase of ["base", "head"]) {
+      if (phase === "base" && cachedBase) continue;
+      if (phase === "head" && process.env.VISUAL_BASE_ONLY === "true") continue;
+      recordPhase(`${phase} seed+capture`);
+      const root = path.join(workspace, phase);
+      const stateDir = path.join(temp, `visual-${phase}`, "auth");
+      await mkdir(stateDir, { recursive: true, mode: 0o700 });
+      const env = {
+        ...process.env,
+        BASE_URL: "http://127.0.0.1:3100",
+        TZ: "UTC",
+        BROWSER_SMOKE_STATE_FILE: path.join(stateDir, "smoke-state.json"),
+        VISUAL_SNAPSHOT_DIR: expected,
+        VISUAL_RESULTS_DIR: path.join(workspace, "test-results", "visual", phase),
+        PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(temp, `visual-${phase}.json`),
+      };
+      command(root, env, ["npm", "ci", "--prefer-offline", "--no-audit", "--no-fund"]);
+      const require = createRequire(path.join(root, "package.json"));
+      if (require("@playwright/test/package.json").version !== "1.64.0") throw new Error("Visual captures require Playwright 1.64.0");
+      command(root, env, ["npx", "prisma", "generate"]);
+      command(root, env, ["npx", "prisma", "db", "execute", "--stdin"], "DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+      const Redis = require("ioredis");
+      const redis = new Redis(env.REDIS_URL);
+      try { await redis.flushdb(); } finally { redis.disconnect(); }
+      command(root, env, ["npx", "prisma", "migrate", "deploy"]);
+      command(root, env, ["node", "scripts/seed-browser-smoke.mjs", "--visual"]);
+      recordPhase(`${phase} build`);
+      command(root, env, ["npx", "next", "build", "--webpack"]);
+      recordPhase(`${phase} seed+capture`);
+      const stop = await startServer(root, env, path.join(temp, `visual-${phase}-server.log`));
+      try {
+        if (phase === "head") recordPhase("compare");
+        command(root, env, ["npx", ...captureArguments(phase)]);
+        const report = JSON.parse(await readFile(env.PLAYWRIGHT_JSON_OUTPUT_NAME, "utf8"));
+        if (report.stats?.expected !== 10 || report.stats?.skipped || report.errors?.length || failedScreens(report).length) {
+          throw new Error(`${phase}: expected all ten visual screens to pass`);
+        }
+        if (phase === "base") await validateBaseline(expected);
+      } finally {
+        recordPhase(`${phase} seed+capture`);
+        await stop();
+      }
+    }
+  } finally {
+    recordPhase(null);
+    const durations = [...timings].map(([phase, ms]) => [phase, ms === null ? "not reached" : `${(ms / 1000).toFixed(1)} s`]);
+    const total = ([...timings.values()].reduce((sum, ms) => sum + (ms ?? 0), 0) / 1000).toFixed(1);
+    console.log(`Visual Regression timings: ${durations.map(([phase, duration]) => `${phase}=${duration}`).join("; ")}; total=${total} s`);
+    const lines = [
+      "## Visual Regression phase timings", "",
+      "| Phase | Duration |", "| --- | ---: |",
+      ...durations.map(([phase, duration]) => `| ${phase} | ${duration} |`), "",
+      `Total measured step time: **${total} s**.`, "",
+      "Build rows time only `next build`. Seed+capture rows include harness/dependency/DB setup, seeding, server readiness and teardown. Playwright captures and compares head screenshots in one command; that command and report validation are charged to compare, not head seed+capture. Unreached phases are marked rather than reported as zero.", "",
+    ];
+    await appendFile(process.env.GITHUB_STEP_SUMMARY ?? path.join(workspace, "visual-summary.md"), lines.join("\n"));
   }
 }
 

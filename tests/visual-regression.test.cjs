@@ -111,6 +111,23 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.doesNotMatch(source("docs/ci.md"), /visual\/harness\.mjs|visual\/baseline/);
 });
 
+test("baseline caches restore an exact production key and only production pushes save successful PNGs", () => {
+  const workflow = yaml.load(source(".github/workflows/visual-regression.yml"));
+  assert.deepEqual(workflow.on.push.branches, ["production"]);
+  const steps = workflow.jobs["visual-regression"].steps;
+  const restore = steps.find(step => step.id === "baseline-cache");
+  assert.match(restore.uses, /^actions\/cache\/restore@[a-f0-9]{40}$/);
+  assert.equal(restore.with.path, "${{ runner.temp }}/visual-expected");
+  assert.equal(restore.with["restore-keys"], undefined);
+  for (const input of ["runner.os", "runner.arch", "steps.baseline.outputs.image", "steps.baseline.outputs.sha", "head/e2e/visual/**", "head/scripts/seed-browser-smoke.mjs", "head/scripts/premerge-local-search.mjs", "head/scripts/visual-regression-ci.mjs", "head/.github/workflows/visual-regression.yml"]) assert.ok(restore.with.key.includes(input), input);
+  const save = steps.find(step => step.name === "Save successful production baseline");
+  assert.equal(save.if, "github.event_name == 'push' && steps.baseline-cache.outputs.cache-hit != 'true'");
+  assert.match(save.uses, /^actions\/cache\/save@[a-f0-9]{40}$/);
+  assert.equal(save.with.path, restore.with.path);
+  assert.equal(save.with.key, "${{ steps.baseline-cache.outputs.cache-primary-key }}");
+  assert.ok(steps.indexOf(save) > steps.findIndex(step => step.name === "Build and capture base, then compare head"));
+});
+
 test("paired lifecycle resets each schema, seeds both from the same harness, builds sequentially and never updates head snapshots", async () => {
   const { captureArguments, assertLocalCi } = await runner;
   assert.ok(captureArguments("base").includes("--update-snapshots=all"));
@@ -123,7 +140,7 @@ test("paired lifecycle resets each schema, seeds both from the same harness, bui
   assert.throws(() => assertLocalCi({ ...env, REDIS_URL: "redis://external.invalid" }));
   const code = source("scripts/visual-regression-ci.mjs");
   const loop = code.slice(code.indexOf('for (const phase of ["base", "head"])', code.indexOf("async function main")));
-  const steps = ['["npm", "ci"', '["npx", "prisma", "generate"]', '"DROP SCHEMA public CASCADE; CREATE SCHEMA public;"', 'redis.flushdb()', '["npx", "prisma", "migrate", "deploy"]', '["node", "scripts/seed-browser-smoke.mjs", "--visual"]', '["npx", "next", "build", "--webpack"]', 'await startServer(', '...captureArguments(phase)', 'finally {\n      await stop()'];
+  const steps = ['["npm", "ci"', '["npx", "prisma", "generate"]', '"DROP SCHEMA public CASCADE; CREATE SCHEMA public;"', 'redis.flushdb()', '["npx", "prisma", "migrate", "deploy"]', '["node", "scripts/seed-browser-smoke.mjs", "--visual"]', '["npx", "next", "build", "--webpack"]', 'await startServer(', '...captureArguments(phase)', 'await stop()'];
   let previous = -1;
   for (const step of steps) { const index = loop.indexOf(step); assert.ok(index > previous, step); previous = index; }
   assert.match(code, /cp\(path\.join\(head, "e2e\/visual"\), path\.join\(base, "e2e\/visual"\)/);

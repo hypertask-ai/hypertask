@@ -4,6 +4,7 @@ import parameterDocs from './config/descriptions/parameters.json'
 import { hasDataPermission, hasManagementReadPermission, hasManagementWritePermission, type ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { PortableTool } from './stateless-http'
 import { CONSOLIDATED_OUTPUT_SCHEMA, formatToolResponse } from './tool-response'
+import { nearestFieldName } from './nearest-field'
 import { createMetaTools } from './deferred-tools'
 import { annotationsForActions } from './config/tool-annotations'
 import type { AgentRole } from '@/lib/mcp/agents/scopes'
@@ -174,6 +175,7 @@ export function selectMcpTools(
   ticketNumberShapeHint = false,
   taskIdTicketReference = false,
   renamedFieldHint = false,
+  nearestFieldHint = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     return legacyTools.flatMap((tool) => {
@@ -259,10 +261,11 @@ export function selectMcpTools(
         normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, taskIdTicketReference, pageAlias }),
       } : {}),
       ...(renamedFieldHint ? { documentedFields: [...new Set([...Object.keys(parameters.shape), ...names.flatMap((name) => Object.keys(byName.get(actions[name].tool)!.parameters.shape)).map((field) => RENAMED_PARAMETERS[field] ?? field)])] } : {}),
-      ...(ticketNumberShapeHint || renamedFieldHint ? {
+      ...(ticketNumberShapeHint || renamedFieldHint || nearestFieldHint ? {
         errorHints: {
           ...(ticketNumberShapeHint ? { ticketNumberShape: true } : {}),
           ...(renamedFieldHint ? { renamedField: true } : {}),
+          ...(nearestFieldHint ? { nearestField: true } : {}),
         },
       } : {}),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
@@ -277,7 +280,16 @@ export function selectMcpTools(
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
         const inputIssues = (error: z.ZodError) => Object.assign(
-          new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] }))),
+          new z.ZodError(error.issues.map((issue) => {
+            const suggestions = nearestFieldHint && issue.code === 'unrecognized_keys'
+              ? issue.keys.map((key) => nearestFieldName(key, Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field))).filter((field): field is string => field !== undefined)
+              : []
+            return {
+              ...issue,
+              path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)],
+              ...(suggestions.length ? { fieldHint: `Did you mean ${suggestions.join(' or ')}?` } : {}),
+            }
+          })),
           { documentedFields: Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field) },
         )
         const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined

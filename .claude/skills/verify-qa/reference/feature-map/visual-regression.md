@@ -21,6 +21,8 @@ Read the run log for the per-screen lines (`[desktop] › ... › inbox (Ns)`). 
 
 Run ids, conclusions and head SHAs of three consecutive green runs; the log lines with per-screen capture times; the downloaded `visual-regression` artifact PNG for the screen in question. Doctor: merge SHA production deployment success. Record no credentials.
 
+For timing-only instrumentation, one successful PR run and one successful released-code dispatch suffice; three runs remain required for flake fixes. Save the five-row phase table and its matching log line. Sum the five phase durations and compare with GitHub's `Build and capture base, then compare head` step timestamps; the gap must be at most 30 seconds. Record whether the rendered summary was actually reachable; log reconciliation and exact-output tests do not prove visual observation of GitHub's table.
+
 ## Cleanup
 
 Nothing to clean: dispatched runs write only GitHub artifacts.

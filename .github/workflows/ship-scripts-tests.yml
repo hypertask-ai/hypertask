@@ -6,6 +6,7 @@ on:
     branches: [production]
     paths:
       - '.claude/skills/ship/scripts/**'
+      - '.claude/skills/vcc/bin/**'
       - '.claude/skills/scriptify/scripts/**'
       - '.claude/skills/maintain-verification-skill/scripts/**'
       - '.claude/systemd/**'
@@ -70,6 +71,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          bash .claude/skills/vcc/bin/vcc.test.sh
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/premerge-evidence.test.py
           python3 .claude/skills/ship/scripts/ci-why.test.py
@@ -77,7 +79,7 @@ jobs:
           bash .claude/skills/ship/scripts/user-unit-check.test.sh
           python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
           python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
-          node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
+          node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
 
       - name: Replay incident grouping and claim collision checks

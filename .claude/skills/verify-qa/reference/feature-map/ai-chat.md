@@ -28,6 +28,21 @@ only and may validly be fewer or absent when no specific improvement is justifie
 Record the effective flag and response. If chips are returned, wait for them
 (about 10 s), click one and check it is sent and answered in the same chat.
 
+## Ticket-first creation
+
+With `htpr-7758-progressive-chat-create`, request one ticket on QA Sandbox.
+The saved title-only ticket link appears before its description finishes.
+Open that link while writing continues. The completed writer title, body,
+priority and size must arrive without reloading. Reload both chat and ticket;
+the link and completed content must remain. Ordinary chat must not navigate.
+If writing fails, keep the saved ticket and show the unfinished-body notice;
+never retry by creating another ticket. Saved title or description edits,
+archive and cross-board moves must prevent the background replacement.
+Record desktop and phone send-to-visible-link timings separately from
+body completion, with sample counts and errors. Keep Task Writer inputs,
+models, prompts and output unchanged; prepare context before publishing so
+the new ticket cannot become its own duplicate-search result.
+
 ## Floating chat outline
 
 Open chat from a task, use the overflow menu's **Toggle Floating View**, then
@@ -72,6 +87,20 @@ from the saved value, not from a fresh pick.
 The Haiku 4.5 retirement ([HTPR-7940](https://app.hypertask.ai/detail/project-15/7940))
 was proven this way: a saved `claude-haiku-4.5` chat pick loaded Haiku 5.5 and
 the chat request carried `claude-haiku-5-5`.
+
+## On-demand tool discovery
+
+With `htpr-7862-chat-deferred-tools` enabled, common ticket and inbox
+operations stay immediately available. Ask for a read-only saved-view lookup
+on QA 985's own private board. Record the existing view tool's stream
+status and compare the answer's view identifiers with the board's saved views.
+Follow with a common task lookup and verify its result against the board.
+The stream does not expose discovery calls separately. Use
+`tests/ai-chat-deferred-tools.test.cjs` for provider-request evidence that
+`hypertask_search_tools` finds `hypertask_list_views`, describing it activates
+its schema, and the following step executes the original tool. Those tests
+also verify per-conversation isolation and the full original flag-off catalog.
+Do not request writes, token minting or revocation for this check.
 
 ## What usually breaks
 
@@ -147,3 +176,21 @@ expand it again: the original dragged width must return. Temporary viewport
 clamping must not replace the preference. A second account starts at 420px and
 keeps its own drags. Phone chat remains full-width. The flag-off path retains
 the previous shared width and viewport clamping behavior.
+
+## Automatic heartbeat step budget
+
+Native agent heartbeat turns enter through `/api/cron/native-agent-heartbeat`,
+which reserves an execution and calls `/api/ai/chat/stream` with authenticated
+heartbeat headers. With `htpr-7857-heartbeat-step-cap` enabled, the shared
+model-reply dispatch permits four completed AI steps in total, including an
+empty-response retry. User-requested agent chats and flag-off heartbeat turns
+retain 32 steps. Tools and permissions are unchanged.
+
+Run the real-SDK dispatch cases in `tests/ai-chat-deferred-tools.test.cjs`:
+four heartbeat steps, 32 user-requested steps, 32 flag-off steps, and one empty
+stream step plus three retry steps. Preserve the heartbeat durability tests.
+After deploy, check the flag mode and exercise a normal QA chat. Never invoke
+the global cron merely for testing: it wakes other owners' agents. If no
+isolated heartbeat trigger and execution-step telemetry are available through
+approved product surfaces, record the live four-step case as UNREACHABLE;
+do not substitute mocked SDK results for a live heartbeat.

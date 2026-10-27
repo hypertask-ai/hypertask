@@ -76,7 +76,13 @@ reject set "$key" everyone --failure "$live_qa"
 reject set "$key" everyone --review 0
 reject set "$key" everyone --review 1.5
 reject set "$key" everyone --review 9007199254740992
-reject set "$key" off --failure http://qa.test/fail
+for failure_reason in 'Emergency safety stop' 'http://qa.test/fail' "$(printf '%0300d' 0)"; do
+  "$script" set "$key" off --failure "$failure_reason" --dry-run |
+    jq -e --arg reason "$failure_reason" '.body.failure == $reason and .body.mode == "OFF"' >/dev/null
+done
+for failure_reason in '' ' ' $'\t\n' "$(printf '%0301d' 0)"; do
+  reject set "$key" off --failure "$failure_reason"
+done
 reject set "$key" everyone --review 42 --reason "$reason"
 reject review "$key" off --ai-review "$ai_review" --independent "$independent" --live-qa "$live_qa"
 reject review "$key" everyone --ai-review https://github.com/other/repo/pull/123 --independent "$independent" --live-qa "$live_qa"

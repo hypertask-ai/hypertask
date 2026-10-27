@@ -23,7 +23,8 @@ export function createToolContext(
   abortSignal?: AbortSignal,
   inlineAgentImagesEnabled = false,
   teamScope?: AgentTokenTeamScope | null,
-  bulkScopeConfirmationEnabled = false
+  bulkScopeConfirmationEnabled = false,
+  skillDraftsEnabled = false
 ) {
   if (actingAgentId && teamScope === undefined) throw new Error("Agent team scope is unavailable");
   const requestingUserId = user.id;
@@ -80,7 +81,7 @@ export function createToolContext(
       : null;
   };
   const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued, bulkScopeConfirmationEnabled, bulkScopePreviews });
-  return { bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
+  return { skillDraftsEnabled, bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
 }
 
 export type ToolContext = ReturnType<typeof createToolContext>;

@@ -10,14 +10,18 @@ import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7768_CHAT_SKILL_DRAFTS_FLAG } from "@/lib/flags/keys";
 import { signalAiChip } from "@/lib/ai/chipEvents";
-import { HTPR_7765_PARALLEL_CHATS_FLAG, HTPR_7756_CHAT_OPENS_TASK_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, HTPR_7765_PARALLEL_CHATS_FLAG, HTPR_7756_CHAT_OPENS_TASK_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
 
 import { useRecoilState } from "@/lib/state";
 import { aiChatEditTaskIdAtom } from "@/store";
 
 export function useAiChat() {
   const { navigateToTask } = useHypertasksNavigate();
+  const skillDraftsFlag = useFlag(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG);
+  let skillDraftsEnabled = false;
+  if (skillDraftsFlag) skillDraftsEnabled = true;
   const parallelChatsEnabled = useFlag(HTPR_7765_PARALLEL_CHATS_FLAG);
   const chatOpensTask = useFlag(HTPR_7756_CHAT_OPENS_TASK_FLAG);
   const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
@@ -27,6 +31,9 @@ export function useAiChat() {
   const [editTaskId, setEditTaskId] = useRecoilState(aiChatEditTaskIdAtom);
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
+  const progressiveChatCreateFlag = useFlag(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG);
+  let progressiveChatCreateEnabled: true | undefined;
+  if (progressiveChatCreateFlag) progressiveChatCreateEnabled = true;
   const reloadTaskAfterChat = useFlag(HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG);
   const connectionRetry = useFlag(HTPR_7099_CHAT_CONNECTION_LOST_FLAG);
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
@@ -93,7 +100,7 @@ export function useAiChat() {
   const {
   handleSendMessage,
   } = createAiChatSend({
-    parallelStreams, stopClosesStream, settleSendRef,
+    skillDraftsEnabled, parallelStreams, stopClosesStream, settleSendRef,
     sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession, resolveHistorySession, sessionsRef,
     isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
@@ -104,7 +111,7 @@ export function useAiChat() {
     pathname, currentUser, billing, isDemo, streamingSessionRef,
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
-    appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, chipSendSignal,
+    appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, progressiveChatCreateEnabled, connectionRetry, chipSendSignal,
     navigateToTask: chatOpensTask ? navigateToTask : undefined,
   }, askAiFullscreenEnabled ? {
     preserveComposer: true,

@@ -114,3 +114,20 @@ Check a single archive and Undo restore the same fixture. Manual keyboard
 navigation into AI Review must still work. Capture desktop and phone
 shots, plus the main path video. Delete only the created fixtures and
 columns afterward. Flag: `htpr-8039-archive-column-boundary` (bugfix, Everyone).
+
+## MCP permanent board deletion
+
+For https://app.hypertask.ai/detail/project-15/8075, the released deletion
+path no longer depends on a feature flag. `POST /api/mcp/projects/archive`
+with `{ "project_id": N, "status": "Deleted" }` still requires a write-capable,
+board-scoped caller and the existing owner's/admin's deletion permission.
+Archive (including omitted status) and Normal still use the quota-aware
+status controller.
+
+Run `npm run test:file -- tests/mcp-project-delete.test.cjs` for the actual
+POST handler: deletion with flag services unavailable, unauthenticated and
+out-of-scope refusals, controller permission refusals, archive and restore.
+On production, use only invalid IDs or an inaccessible board to verify the
+refused path, and reload an accessible board to prove it remains available.
+Do not delete or archive shared production boards. Successful destructive
+deletion is covered locally, not claimed as live verification.

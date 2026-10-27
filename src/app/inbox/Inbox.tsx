@@ -80,6 +80,9 @@ import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigat
 import { useWarmProjectsAllQuery } from "@/hooks/Homepage/useGetBoards";
 import { resolveInboxFocusScroll } from "@/lib/inboxFocusScroll";
 import SplitTitle from "@/components/notifications/inboxSplit/SplitTitle";
+import InboxZeroSheet from "@/components/notifications/InboxZeroSheet";
+import { DEFAULT_INBOX_ZERO_RULES, type InboxZeroRules } from "@/lib/inboxZero";
+import { HTPR_8046_ARCHIVE_SAFE_FLAG } from "@/lib/flags/definitions/htpr-8046-archive-safe";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { useMobileView } from "@/lib/contexts/mobileContext";
 import InboxNotifyNudge from "@/components/notifications/InboxNotifyNudge";
@@ -110,6 +113,8 @@ const Inbox = ({
   homepageRouter: string;
   originProject: string;
 }) => {
+  const archiveSafeEnabled = useFlag(HTPR_8046_ARCHIVE_SAFE_FLAG);
+  const [archiveSafeRules, setArchiveSafeRules] = useState<InboxZeroRules | null>(null);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
   const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
@@ -725,10 +730,32 @@ const Inbox = ({
     toast.dismiss(toastId);
   };
   const { isInboxZero } = useInboxZeroStyling();
+  const activeSplit = _notificationsTQ?.structuredData?.tabs[globalFocus.currSplit]?.project;
+  const canArchiveSafe = archiveSafeEnabled &&
+    (activeSplit === "Updates" || activeSplit === "Important" || activeSplit === "Agents");
+  const archiveSafeAction = canArchiveSafe ? (
+      <button
+        type="button"
+        className={`shrink-0 rounded px-3 text-dense text-text-light-gray hover:bg-hover-active ${isMbl ? "min-h-[44px]" : "min-h-8"}`}
+        onClick={() => setArchiveSafeRules({
+          ...DEFAULT_INBOX_ZERO_RULES,
+          safeUpdates: {
+            taskIds: (_notificationsTQ?.structuredData?.data[globalFocus.currSplit] ?? [])
+              .flatMap((notification) => notification.taskId == null ? [] : [notification.taskId]),
+            agentOnly: activeSplit !== "Updates",
+          },
+        })}
+      >
+        Archive safe
+      </button>
+  ) : null;
 
   return (
     <>
       <FirstScreenMobileChrome currentUser={currentUser} />
+      {archiveSafeEnabled && archiveSafeRules && (
+        <InboxZeroSheet initialRules={archiveSafeRules} onClose={() => setArchiveSafeRules(null)} />
+      )}
       <input
         ref={commandFocusProxy}
         id="inbox-command-focus-proxy"
@@ -823,6 +850,7 @@ const Inbox = ({
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
               SelectedCount={showSelectedCount ? InboxSelectedCount : null}
+              trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
             >
               {_notificationsTQ?.structuredData?.tabs.map(
                 (tab: InboxTabMeta, index: number, tabs: InboxTabMeta[]) => (
@@ -954,6 +982,7 @@ const Inbox = ({
                 tabs={_notificationsTQ?.structuredData?.tabs ?? []}
                 activeIndex={globalFocus.currSplit}
                 onSelect={navigateTabs}
+                trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
               />
             )}
           </div>
@@ -1000,11 +1029,13 @@ interface IProps {
   children?: ReactNode;
   contentGap?: boolean;
   SelectedCount?: typeof InboxSelectedCount | null;
+  trailingAction?: ReactNode;
 }
 const SplitTitlesContainer: FC<IProps> = ({
   children,
   contentGap = false,
   SelectedCount = null,
+  trailingAction,
 }) => {
   return (
     <div
@@ -1015,6 +1046,7 @@ const SplitTitlesContainer: FC<IProps> = ({
       <div className="pills-row group relative flex min-h-8 grow flex-wrap items-center gap-[9px]">
         {children}
       </div>
+      {trailingAction}
       <ButtonGroup SelectedCount={SelectedCount} />
     </div>
   );

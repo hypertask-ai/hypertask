@@ -21,7 +21,6 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | reflect | Last /ship step, once after the last ticket's Clean up: three reviewers and a synthesizer turn this session's lessons into proposed repo skill edits for HT Product Lead to approve (pstack by Lauren Tan, MIT) | .claude/skills/reflect/SKILL.md |
 | drain-board | `/drain-board <board>`: works every open ticket on a board until each is Done or waiting on Valentin, one ledger gate per ticket | .claude/skills/drain-board/SKILL.md |
 | vcc | Claim, board writes, merge, deploy watch, report | .claude/skills/vcc/SKILL.md |
-| message-poteto | Hypertask-only pstack, token ladder and runner setup questions; blockers go to HT Product Lead first | .claude/skills/message-poteto/SKILL.md |
 | wireframe | New or changed visible UI, except a `[BUGFIX]` restoring intended behaviour, before code: full-app base kit on hypertask.app, clickable link and PNGs, one Question, UX Sign-off, Valentin's yes (Valentin, 2026-10-10) | .claude/skills/wireframe/SKILL.md |
 | reuse-existing-ui | Before UI code | .claude/skills/reuse-existing-ui/SKILL.md |
 | fix-bug | The fix, when it restores behaviour that used to work | .claude/skills/fix-bug/SKILL.md |
@@ -41,7 +40,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | verify-visual | Before merging a UI PR: did it move a main screen? Read the GitHub Visual Regression result and diff PNGs; no heavy VPS runs | .claude/skills/verify-visual/SKILL.md |
 | verify-qa | After deploy | .claude/skills/verify-qa/SKILL.md |
 
-`prototype` is the `/prototype` slash command, not a `/ship` step. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
+Design work uses the shared `figma-design` skill in `~/.agents/skills/figma-design/SKILL.md`. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
 
 `wireframe` is required before new or changed visible UI code, except a `[BUGFIX]` restoring intended behaviour: build options from the live app (Ctrl+K for menus, no invented UI), publish a clickable link, then move to **UX Sign-off** (board 15 column 22502). The last comment has the wireframe link, `New elements: <ComponentName>, ...` (or `New elements: none`), and one yes/no `Question:` @mentioning Valentin. Wait for his yes before code; every new component file still needs his yes naming it, including in a `[BUGFIX]`. The `ux-signoff` check enforces this (Valentin, 2026-10-10).
 

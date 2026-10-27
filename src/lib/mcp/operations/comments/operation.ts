@@ -160,8 +160,8 @@ export type AddCommentResponse = {
 type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentTokenTeamScope | null; displayName: string; source: 'agent' }
 
 async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
-  const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor } = await import('@/lib/agentRuns/service')
-  if (!(await runtimeAgentRunsEnabledFor(principal)) || !(await agentRunActivitiesEnabledFor(principal))) return null
+  const { runtimeAgentRunsEnabledFor } = await import('@/lib/agentRuns/service')
+  if (!(await runtimeAgentRunsEnabledFor(principal))) return null
   const { AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH } = await import('@/lib/agentRuns/model')
   const text = (await htmlToLogText(html)).slice(0, AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
   return text ? { principal, text } : null

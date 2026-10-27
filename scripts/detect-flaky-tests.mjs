@@ -120,7 +120,7 @@ function fetchJobs(runId, attempt) {
 }
 
 function fetchFailedLog(runId, attempt, jobId) {
-  const name = `log-${runId}-${attempt}.txt`;
+  const name = `log-${runId}-${attempt}-${jobId || "all"}.txt`;
   const cached = readCache(name);
   if (cached !== null && cached.length > 200) return cached;
   let text = "";
@@ -165,32 +165,42 @@ function changedFiles(shaA, shaB) {
   return text.split("\n").filter(Boolean);
 }
 
+function failureLogJobs(payload, job) {
+  if (job.name !== "ci-tests" || job.conclusion !== "failure") return [job];
+  const shards = (payload.jobs || []).filter((item) =>
+    /^test-shard(?: \(\d+\))?$/.test(item.name) && item.conclusion === "failure");
+  return shards.length ? shards : [job];
+}
+
 function jobPair(run) {
   const attempts = [];
   for (let attempt = 1; attempt <= run.attempt; attempt += 1) {
-    const job = ciTestsJob(fetchJobs(run.id, attempt));
+    const payload = fetchJobs(run.id, attempt);
+    const job = ciTestsJob(payload);
     if (!job) continue;
-    attempts.push({
-      attempt,
-      conclusion: job.conclusion || "",
-      url: attemptUrl(run, attempt),
-      id: job.id,
-    });
+    for (const loggedJob of failureLogJobs(payload, job)) {
+      attempts.push({
+        attempt,
+        conclusion: loggedJob.conclusion || "",
+        url: attemptUrl(run, attempt),
+        id: loggedJob.id,
+      });
+    }
   }
   const failures = attempts.filter((item) => item.conclusion === "failure");
   const passes = attempts.filter((item) => item.conclusion === "success");
   return { failures, passes };
 }
 
-function latestNamedJob(run, jobName) {
+function latestNamedJobs(run, jobName) {
   const payload = fetchJobs(run.id, run.attempt || 1);
   const job = (payload.jobs || []).find((item) => item.name === jobName);
-  if (!job || (job.conclusion !== "failure" && job.conclusion !== "success")) return null;
-  return {
-    conclusion: job.conclusion,
-    url: job.html_url || attemptUrl(run, run.attempt || 1),
-    id: job.id,
-  };
+  if (!job || (job.conclusion !== "failure" && job.conclusion !== "success")) return [];
+  return failureLogJobs(payload, job).map((loggedJob) => ({
+    conclusion: loggedJob.conclusion,
+    url: loggedJob.html_url || attemptUrl(run, run.attempt || 1),
+    id: loggedJob.id,
+  }));
 }
 
 function testsForJob(jobName, classified) {
@@ -217,8 +227,7 @@ function collectSameCode(runs) {
       const outcomes = [];
       for (const run of group) {
         try {
-          const job = latestNamedJob(run, jobName);
-          if (job) outcomes.push({ run, job });
+          for (const job of latestNamedJobs(run, jobName)) outcomes.push({ run, job });
         } catch (error) {
           process.stderr.write(`jobs ${run.id}: ${error.message}\n`);
         }
@@ -228,7 +237,7 @@ function collectSameCode(runs) {
       for (const failure of failures) {
         const pass = passes.find((item) => item.run.sha !== failure.run.sha);
         if (!pass) continue;
-        const key = `${jobName}:${failure.run.sha}:${failure.run.attempt}`;
+        const key = `${jobName}:${failure.run.sha}:${failure.run.attempt}:${failure.job.id}`;
         if (seen.has(key)) continue;
         seen.add(key);
         const log = fetchFailedLog(failure.run.id, failure.run.attempt || 1, failure.job.id);
@@ -306,7 +315,7 @@ function main() {
       const passUrl = pair.passes[pair.passes.length - 1].url;
       let sawTest = false;
       for (const failure of pair.failures) {
-        const key = `${run.id}:${failure.attempt}`;
+        const key = `${run.id}:${failure.attempt}:${failure.id}`;
         if (seenJobs.has(key)) continue;
         seenJobs.add(key);
         const log = fetchFailedLog(run.id, failure.attempt, failure.id);

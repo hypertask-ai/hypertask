@@ -16,6 +16,30 @@ a **Create skill** button; an existing skill has **Edit**, **Delete** and an
 **Enabled** switch. Watch `GET` and `POST /api/ai/skills?projectId=<board>`
 to see the list and the save.
 
+## Save a workflow from AI chat
+
+On a private QA board, ask the sidebar chat to turn the current session
+into a skill, or ask `/chat` to create one from a plain description.
+Use a unique throwaway slug. The reply must show the slug, name,
+description, trigger, body, enabled state and personal or board scope.
+Check the actual prior actions and their order appear as reusable
+instructions, not an invented transcript.
+
+Before approving, reload the skills list: the draft must not exist.
+Reject one draft and verify it stays absent. Edit another draft or change
+its scope: the revised draft needs its own approval before saving.
+Confirm in a new message, then reload Settings and verify the stored body
+and scope. Asking for the same slug again must offer an update, never
+silently overwrite or create a near-duplicate. Preview and approve the
+update separately.
+
+Invoke the saved `/slug` in chat, the ticket comment skill picker,
+Ctrl+J and the Task Writer. Use harmless instructions with a unique
+marker, verify that marker reaches each response, and clean up every
+throwaway skill and ticket. Board skills still override personal skills
+with the same slug. MCP and CLI skill writes retain their existing
+permission and write routes.
+
 ## What usually breaks
 
 - A skill pasted without a frontmatter header did not save

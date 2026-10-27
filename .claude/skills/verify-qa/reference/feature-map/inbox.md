@@ -73,6 +73,24 @@ that account's own agent, without mentioning the person. The comment must
 create one human inbox item even with quiet-owner mode on. An agent-only
 assignment is not a human assignment. With the flag off, quiet-owner mode
 keeps its previous behavior. Untyped agent chatter and the person's own
-human comments stay quiet. Check the Agents split when the default split
-hides agent updates. Archive the item, reload, and confirm it stays gone.
+human comments stay quiet. Check the Important split, not only All or Agents: typed comments for an
+explicit human assignee must earn the ordinary Important slot. A newer agent
+move must not hide that comment. Keep agent identity, Important permission,
+project split mutes, and stale/done routing intact. For an owner-specific report,
+read that owner's actual inbox through the approved CLI; a QA fixture alone
+does not prove the reported ticket works. Archive the QA item, reload, and
+confirm it stays gone.
 Email recipients must not change: this restoration is inbox-only.
+
+## Archive safe
+
+With `htpr-8046-archive-safe` on, select Updates, Important or Agents and click
+**Archive safe**. The existing Inbox Zero confirmation shows the eligible count
+before anything is archived. Cancel leaves the Inbox unchanged. Confirm, reload,
+then undo the batch and reload again. Only moves, edits and their structured agent activity may disappear; Important
+and Agents require agent-only events. Mentions, comments (including human replies),
+assignments, reminders, direct replies, blocked tickets, assigned tickets, pending
+decisions and tickets containing questions or mentions stay. Historical questions
+are conservatively kept too. A new protected event between preview and confirm
+must refresh the preview instead of archiving. Flag off hides the entry point and
+the server refuses the safe rule; ordinary Inbox Zero remains available.

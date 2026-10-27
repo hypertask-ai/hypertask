@@ -24,6 +24,7 @@ import { aiPromptCachingEnabled, configureAiModelUsage } from "@/app/api/ai/_lib
 import { createUserContent } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
 import { generateConversationTitle } from "@/lib/ai/chatStream/title";
+import { HTPR_7768_CHAT_SKILL_DRAFTS_FLAG } from "@/lib/flags/keys";
 import { buildTools } from "@/lib/ai/tools";
 import type { StreamState } from "./streamState";
 
@@ -44,8 +45,10 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
   const chatOpensTaskEnabled = await isFeatureEnabled(HTPR_7756_CHAT_OPENS_TASK_FLAG, dbUser.id);
   const bulkScopeConfirmationEnabled = await isFeatureEnabled(HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, dbUser.id);
+  const skillDraftsEnabled = await isFeatureEnabled(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG, dbUser.id);
   const instructions = [
     AGENT_SYSTEM_PROMPT,
+    skillDraftsEnabled ? renderPrompt("chat-skill-drafts") : null,
     chatOpensTaskEnabled ? "When the user asks to open a task, including one from a previous list, call hypertask_get_tasks with open=true and exactly that task. This is navigation, not detail enrichment. Do not say Opened or claim navigation happened before the tool returns navigation_emitted=true. If it fails or no navigation was emitted, say you could not open the task." : null,
     resolvedBody.surface && await isFeatureEnabled(HTPR_7760_CHAT_SURFACE_FLAG, dbUser.id)
       ? chatSurfacePrompt(resolvedBody.surface)
@@ -77,10 +80,18 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     },
   ];
   const toolExecutions: ToolExecution[] = [];
+  const taskProgress: string[] = [];
+  const streamedContent: string[] = [];
   const tools = buildTools(
     dbUser,
     resolvedBody,
-    state.send,
+    (event, data) => {
+      if (event === "task_created" && typeof data.content === "string") {
+        taskProgress.push(data.content);
+        streamedContent.push(data.content);
+      }
+      return state.send(event, data);
+    },
     (execution) => {
       toolExecutions.push(execution);
     },
@@ -110,7 +121,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     state.providerAbort.signal,
     inlineAgentImagesEnabled,
     actingAgent ? actingAgent.teamScope : null,
-    bulkScopeConfirmationEnabled
+    bulkScopeConfirmationEnabled,
+    skillDraftsEnabled
   );
   if (
     heartbeatExecutionId &&
@@ -132,9 +144,17 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     }
   }
   state.generationStartedAt = Date.now();
-  const reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions });
-  if (!reply) return;
-  const { chunks } = reply;
+  let reply: Awaited<ReturnType<typeof generateModelReply>> = undefined;
+  let replyFailure: { error: unknown } | undefined;
+  try {
+    reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions, onContent: (content) => streamedContent.push(content) });
+  } catch (error) {
+    if (!taskProgress.length) throw error;
+    replyFailure = { error };
+  }
+  if (!reply && !taskProgress.length) return;
+  const chunks = taskProgress.length ? streamedContent : reply?.chunks ?? [];
+  if (!reply) chunks.push("<p>Reply stopped. Your saved ticket remains.</p>");
 
   state.turnDeadline?.clear();
 
@@ -209,6 +229,9 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
       }
     }
   }
+
+  if (replyFailure) throw replyFailure.error;
+  if (!reply) return;
 
   if (heartbeatExecutionId) {
     if (assistantPersisted) {

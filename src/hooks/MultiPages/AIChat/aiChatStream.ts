@@ -1,3 +1,4 @@
+import { invalidateSlashSkills } from "@/lib/skills/slashSkills";
 import { IChatMessage, IChatSession } from "@/models/model";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import { TASK_EVENT } from "@/lib/realtime/shared";
@@ -5,7 +6,7 @@ import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
-type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "navigateToTask"> & {
+type Context = Pick<AiChatSendContext, "skillDraftsEnabled" | "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "progressiveChatCreateEnabled" | "navigateToTask"> & {
   isCurrentStream?: () => boolean;
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
@@ -16,7 +17,7 @@ type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQu
 export async function consumeAiChatStream(context: Context) {
   const {
   isCurrentStream, response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
-  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, navigateToTask,
+  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, progressiveChatCreateEnabled = false, navigateToTask,
   } = context;
 
 
@@ -24,6 +25,7 @@ export async function consumeAiChatStream(context: Context) {
       const decoder = new TextDecoder("utf-8");
       let done = false;
       let aiContent = "";
+      let savedTaskContent = "";
       let buffer = "";
       let currentEventType = "";
       let replyAuthorAgent: { id: string; name: string } | null = null;
@@ -105,8 +107,19 @@ export async function consumeAiChatStream(context: Context) {
                     }
                     break;
                   }
+                  case "task_updated":
+                    if (!progressiveChatCreateEnabled) break;
+                    if (Number.isSafeInteger(parsed.taskId) && parsed.taskId > 0) {
+                      window.dispatchEvent(new CustomEvent(TASK_EVENT, { detail: { taskId: parsed.taskId } }));
+                    }
+                    break;
+                  case "task_created":
                   case "content":
-                    if (navigationFailed) break;
+                    if (navigationFailed || typeof parsed.content !== "string") break;
+                    if (currentEventType === "task_created") {
+                      if (!progressiveChatCreateEnabled) break;
+                      savedTaskContent += parsed.content;
+                    }
                     if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     aiContent += parsed.content;
 
@@ -147,7 +160,7 @@ export async function consumeAiChatStream(context: Context) {
                     console.log("🔥 Received error event:", rawError);
                     const errorAssistantMessage: IChatMessage = {
                       id: assistantMessageId,
-                      content: errorText,
+                      content: savedTaskContent + errorText,
                       role: "assistant",
                       createdAt: new Date(),
                       sessionId: session.id,
@@ -163,6 +176,7 @@ export async function consumeAiChatStream(context: Context) {
                     break;
                   }
                   case "done":
+                    if (context.skillDraftsEnabled) invalidateSlashSkills();
                     if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     sawDone = true;
                     console.log("🔥 Stream complete:", parsed);
@@ -201,7 +215,7 @@ export async function consumeAiChatStream(context: Context) {
                           : "Sorry, an error occurred while processing your request.";
                         const errorMessage: IChatMessage = {
                           id: assistantMessageId,
-                          content: errorText,
+                          content: savedTaskContent + errorText,
                           role: "assistant",
                           createdAt: new Date(),
                           isDelivered: true,

@@ -9,8 +9,9 @@ const routePath = path.resolve(
   "../src/lib/mcp/operations/projects/archive/operation.ts",
 );
 
-function loadRoute({ authenticated = true, enabled = true, result } = {}) {
+function loadRoute({ authenticated = true, accessible = true, result } = {}) {
   const calls = [];
+  const statusCalls = [];
   const routeJavascript = ts.transpileModule(fs.readFileSync(routePath, "utf8"), {
     compilerOptions: {
       esModuleInterop: true,
@@ -22,7 +23,10 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
     "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/planLimits": { isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 402, body: {} }) },
-    "@/utils/controllers/projects/boardQuota": { updateProjectStatus: async () => { throw new Error("archive path not expected"); } },
+    "@/utils/controllers/projects/boardQuota": { updateProjectStatus: async (projectId, status, actor) => {
+      statusCalls.push({ projectId, status, actor });
+      return { id: projectId, status };
+    } },
     "@/lib/mcp/agents/readRoleGuard": { requireAgentWriteRole: async () => null },
     "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "next/server": {
@@ -37,11 +41,10 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
     },
     "@/lib/prisma": {
       __esModule: true,
-      default: { project: { findFirst: async () => ({ id: 15 }) } },
+      default: { project: { findFirst: async () => accessible ? { id: 15 } : null } },
     },
     "@/lib/flags": {
-      HTPR_6470_PROJECT_DELETE_FLAG: "htpr-6470-project-delete",
-      isFeatureEnabled: async () => enabled,
+      isFeatureEnabled: async () => { throw new Error("Feature flags unavailable"); },
     },
     "@/utils/controllers/projects/delete": {
       __esModule: true,
@@ -59,18 +62,44 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
       ? require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
       : stubs[request] ?? require(request),
   );
-  return { POST: routeModule.exports.POST, calls };
+  return { POST: routeModule.exports.POST, calls, statusCalls };
 }
 
 const request = (body) => ({ json: async () => body });
 
-test("project deletion is unavailable while its feature flag is off", async () => {
-  const route = loadRoute({ enabled: false });
+test("project deletion no longer depends on feature flag availability", async () => {
+  const route = loadRoute();
+  const response = await route.POST(request({ project_id: 15, status: "Deleted" }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { message: "Success" });
+  assert.deepEqual(route.calls, [{ projectId: 15, userId: 6 }]);
+});
+
+test("project deletion still refuses boards outside the agent's scope", async () => {
+  const route = loadRoute({ accessible: false });
   const response = await route.POST(request({ project_id: 15, status: "Deleted" }));
 
   assert.equal(response.status, 404);
+  assert.deepEqual(response.body, { success: false, error: "Board not found" });
   assert.deepEqual(route.calls, []);
 });
+
+for (const status of [undefined, "Archive", "Normal"]) {
+  test(`board status ${status ?? "default archive"} still uses the quota-aware controller`, async () => {
+    const route = loadRoute();
+    const response = await route.POST(request({ project_id: 15, status }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, { success: true, project: { id: 15, status: status ?? "Archive" } });
+    assert.deepEqual(route.statusCalls, [{
+      projectId: 15,
+      status: status ?? "Archive",
+      actor: { actorUserId: 6, agentId: "agent-1", entryPoint: "mcp.projects.archive" },
+    }]);
+    assert.deepEqual(route.calls, []);
+  });
+}
 
 test("project deletion requires MCP authentication", async () => {
   const route = loadRoute({ authenticated: false });

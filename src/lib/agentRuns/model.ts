@@ -11,7 +11,6 @@ import type {
   AgentWebhookRun,
 } from "@/lib/agentWebhooks/events";
 
-export { AGENT_RUN_ACTIVITY_FEATURE_FLAG } from "../flags/definitions/htpr-6122-agent-run-activities";
 export const AGENT_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
 export const AGENT_CHAT_TIMEOUT_MESSAGE = "Agent did not answer, try again";
 export const AGENT_CHAT_STOPPED_MESSAGE = "Run stopped";

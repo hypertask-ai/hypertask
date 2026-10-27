@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8046_ARCHIVE_SAFE_FLAG } from "@/lib/flags/definitions/htpr-8046-archive-safe";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import {
   broadcastInboxChange,
   socketIdFromHeader,
 } from "@/lib/realtime/server";
-import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_8047_INBOX_ZERO_AGENT_ACTIONS_FLAG } from "@/lib/flags/definitions/htpr-8047-inbox-zero-agent-actions";
 import {
   evaluateInboxZero,
@@ -25,7 +26,7 @@ const loadPreview = async (
   db: Pick<Prisma.TransactionClient, "notification" | "section">,
   now: Date
 ) => {
-  const notifications = await loadActiveInboxZeroNotifications(userId, db);
+  const notifications = await loadActiveInboxZeroNotifications(userId, db, undefined, Boolean(rules.safeUpdates));
   const doneTitlesByProject = await loadInboxZeroDoneTitlesByProject(
     notifications,
     db
@@ -78,6 +79,9 @@ export async function POST(request: Request) {
   const rules = parseInboxZeroRules(input?.rules);
   if (!rules) {
     return NextResponse.json({ message: "Invalid Inbox Zero rules" }, { status: 400 });
+  }
+  if (rules.safeUpdates && !(await isFeatureEnabled(HTPR_8046_ARCHIVE_SAFE_FLAG, session.userId))) {
+    return NextResponse.json({ message: "Archive safe is unavailable" }, { status: 404 });
   }
   const requestedPreviewVersion =
     typeof input?.previewVersion === "string" ? input.previewVersion : null;

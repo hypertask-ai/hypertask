@@ -96,7 +96,7 @@ export function listToolsFull(tools: readonly CatalogTool[]): ListedTool[] {
 }
 
 export function searchToolCatalog(
-  tools: readonly CatalogTool[],
+  tools: readonly Pick<CatalogTool, 'name' | 'description' | 'hidden'>[],
   query: string,
   limit = 20
 ): Array<{ name: string; description: string }> {

@@ -93,6 +93,7 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - App CI (CI Tests, App Smoke, Secret Guard, Gitleaks, Revert Guard, PR checks, Auto-merge, Production Health) runs on GitHub-hosted `ubuntu-latest` runners; review discovery is a local 30-second systemd timer and occupies no Actions runner. AI review runs from the private reviewer repository on that repo's own `[self-hosted, ai-review]` runner.
 - CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. ESLint still covers the full repository, but unchanged file results are restored through its content-validated cache; a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
 - TypeScript and the selected PR tests (full suite on production pushes) remain correctness checks on every non-docs CI Tests run. The Test step is `CI_TEST_SHARDS` jobs (2) that split that same file list by count. One aggregate job is still named `ci-tests`, and it is green only after every shard succeeds and the uploaded file lists union to the full set with no duplicate. Dependency installation and test selection stay in `ci-prepare`. `ci-checks` restores dependencies and runs the board-scope guard, typecheck and lint beside the two test shards, not before them. The required `ci-tests` aggregate waits for successful preparation, static checks, both shards and the exact-file execution proof. Docs-only runs require both heavy jobs to be skipped explicitly. Only production pushes save caches; each job uses its own workspace. The shard count is the workflow env `CI_TEST_SHARDS`.
+- Production-push CI Tests publishes each shard’s `test-durations.json` in the **test-durations** artifact (14-day retention) and lists each shard’s slowest 20 files in its job summary, including ordinary test failures. Cancellation or abrupt termination may leave incomplete or missing timing evidence. Whole-file process wall times include startup and teardown, not summed nested-test time; serial TypeScript invocations are timed around `tsx`. The JSON and summary compare summed file time / worker concurrency with elapsed runner time and also account for the existing serial lanes. Compare with the **Test full suite** step timestamps for end-to-end timing; npm/heavy-job startup lies outside the runner measurement.
 - PR and production-push CI Tests runs do not collect or publish V8 coverage. The separate non-required [`Coverage Nightly`](../.github/workflows/coverage-nightly.yml) workflow runs the full suite with coverage at **02:17 UTC daily**, or via `workflow_dispatch` on `production` only. It checks out the event's exact production SHA and reports as `coverage-nightly`, never `ci-tests`, so diagnostics cannot supersede a required correctness result. Its 60-minute timeout gives the covered suite more room than the unchanged 40-minute CI Tests gate.
 - Coverage remains report-only (`continue-on-error` on reporting). The nightly job keeps `npm run coverage:report`, the job summary, `automated-test-coverage-<commit>`, the report/critical-domain paths, and 30-day retention. Download coverage from **Coverage Nightly**, not CI Tests. No required check or runtime script consumes the uploaded coverage; `scripts/coverage-summary.mjs` reads the nightly `coverage/report/coverage-summary.json` within that job. See [testing](testing.md#coverage-baseline).
 - Dependabot still applies informational `full-ci` and lane labels; neither starts nor changes CI Tests or test selection. The `major-upgrade` label still starts its separate ticket workflow. No job-level label skip is added: normal PR events continue reporting both `ci-tests` and `browser-smoke`, including the existing docs-only scope path. Adding approval text after a failed agent-scope approval guard now requires a new commit to produce a fresh PR event; editing the body alone does not rerun that guard, and rerunning the old event retains its old body.
@@ -103,8 +104,30 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.
-- Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live.
+- Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live. Non-app-only merges use the ignored build step below.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
+
+## Vercel ignored builds
+
+`vercel.json` runs `node scripts/vercel-ignore-build.cjs` before dependency installation.
+Exit 0 cancels the build; exit 1 continues it. The comparison uses
+`VERCEL_GIT_PREVIOUS_SHA`, the last successful deployment for this project and branch,
+and `VERCEL_GIT_COMMIT_SHA`. It never substitutes `HEAD^`, so app changes earlier in
+a batch still deploy. Vercel's [turbo-ignore implementation](https://github.com/vercel/turborepo/blob/main/packages/turbo-ignore/src/get-comparison.ts)
+uses the same previous-deployment variable.
+
+Only documentation, skills, CI and tests can skip: `docs/`, `.claude/`,
+`.agents/skills/`, `skills/`, `.github/`, `tests/`, `e2e/`, and root Markdown files.
+Everything else builds, including source Markdown, assets, Prisma, package files,
+`vercel.json`, build scripts, packages, types and build configuration. Unknown,
+missing, shallow, divergent or empty deployment comparisons build rather than skip.
+Renames include the removed path, preventing a source-to-docs move from hiding app changes.
+
+Production health and drift checks use the same command with `--between <live> <tip>`.
+This mode accepts identical trees: a live build needs no replacement after an empty
+commit. Canceled deployments retain the existing push-health behavior; scheduled
+core-action, drift and Pusher checks keep running. The cron definitions are unchanged.
+No workflow, preview or required-check gate is disabled.
 
 ## Live required-check settings
 
@@ -254,8 +277,12 @@ unit tests still run. Its legacy docs-only exclusions remain `docs/`, `.claude/`
 `.github/workflows/ci-tests.yml` and `.github/scripts/` always exercise CI. Live
 settings, review and approval guards remain mandatory. No detector job is added.
 
-The detector fetches exact base/head SHAs and uses NUL-delimited
-`git diff --no-renames --name-only`; moving source into docs cannot hide a
+The detector fetches the base/head SHAs, deepens the shallow fetch (50, 200,
+1000) until `git merge-base` is visible, and diffs merge base to head with
+NUL-delimited `git diff --no-renames --name-only`. Diffing the moving
+production tip instead counted every later production commit as changed and
+sent skill-only PRs down the full lane (YPER4 fast lane). No merge base found
+means run everything; moving source into docs cannot hide a
 removed source file. Its self-check covers both outputs and fail-closed cases:
 `node .github/scripts/ci-change-scope.cjs --self-check` (run in CI, not here).
 
@@ -263,8 +290,20 @@ removed source file. Its self-check covers both outputs and fail-closed cases:
 
 `Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on non-draft production PRs touching screen or harness files; manual runs accept `base` and `head` refs.
 It builds base then head on one GitHub-hosted runner, each with a fresh disposable database; base creates temporary expected PNGs and head compares against them.
+The job summary reports five phase timings and one matching log line: base build, base seed+capture, head build, head seed+capture and compare. Build rows measure only `next build`; seed+capture includes setup, readiness and teardown. Head capture and comparison share one Playwright command, charged to compare. Partial failures retain elapsed timings and mark unreached phases explicitly.
 Chromium 1.64.0 captures board, task detail, the scrolled comment-box scene, Ctrl+J and inbox in Porcelain at 1440×900 and 390×844.
 On failure, download `visual-regression-diffs` (7-day retention) and compare each screen's expected, actual and diff PNGs; the step summary lists failed screens or setup failures.
+Production pushes capture the ten base PNGs once and save them with `actions/cache`.
+PRs and manual comparisons restore only the exact key: base SHA, OS/architecture,
+runner image version, and the head visual harness, seed, search stub, paired runner
+and workflow hashes. There are no fallback keys; changed harnesses miss the cache.
+Only successful production pushes save; PR-created caches cannot supply production
+baselines. A hit validates all ten PNG signatures and viewport dimensions, skips
+the base lifecycle, and still seeds, builds and compares the head. A miss retains
+the existing paired lifecycle. Missing or malformed cached screenshots fail closed.
+Phase timings mark skipped base work as `not reached`; summaries name cache reuse.
+Only PNGs are cached, never databases, auth state or browser traces.
+
 An intended visual change is approved by a human in the PR description with `Visual change approved: <ticket URL>`; the job still shows the diff and does not auto-approve it.
 This v1 signal is not required by a ruleset and does not replace existing browser-smoke, layout locks or premerge evidence. No committed PNG baselines or storage-state artifacts are used.
 
@@ -442,3 +481,17 @@ The offline replay binds the complete corpus hash and recomputes every score.
 `ship-scripts-tests` runs the collector's supported offline runner and claim
 checks: four Vercel reports join the original MCP report with five activities.
 Different roots/routes stay separate. All board commands are private fakes.
+
+## Provider-neutral Done enforcement
+
+`vcc` checks section changes through the installed `ship-check move` entry point.
+Completed columns require the same merged PR, deployment, documentation and
+app QA evidence as the Claude hook. Numeric references, section IDs and renamed
+completed columns use board reads. Failed reads or a missing checker refuse writes.
+The checker comes from the installed production skill, never the caller's worktree.
+Protected wrapper and guard changes require an independent lead merge.
+This is workflow enforcement, not an OS sandbox against same-user file edits.
+
+`ship-scripts-tests` runs the offline wrapper fixtures. They cover refusal before
+the board write and successful forwarding with completed proof, without real
+credentials or live board mutations. No new required check is added.

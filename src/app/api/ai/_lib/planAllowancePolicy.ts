@@ -17,6 +17,7 @@ import {
 } from "@/lib/aiAllowancePolicy";
 
 type FundingSource = "shared" | "managed" | "customer";
+const FLAT_TEAM_PRICE_IDS = new Set(["price_1U7MmqIhmcH60VccoCD7iFea"]);
 const POLICY_CACHE_TTL_MS = 5 * 60 * 1000;
 const owners = new Map<string, { userId: number; uid?: string; expiresAt: number }>();
 const seatSnapshots = new Map<string, { seats: number; month: string; expiresAt: number }>();
@@ -94,6 +95,7 @@ async function paidSeats(teamId: string): Promise<number> {
           subscriptionId: true,
           subscriptionStatus: true,
           subscriptionItemId: true,
+          priceId: true,
           subscriptionObject: true,
         },
       },
@@ -101,21 +103,26 @@ async function paidSeats(teamId: string): Promise<number> {
   });
   if (!team) throw new Error("AI allowance team is unavailable");
   const row = pickEntitlingSubscriptionRow(team.subscriptionPlan, team.activeSubscriptionPlanId);
-  const subscription = row?.subscriptionObject as { items?: { data?: Array<{ id?: string; quantity?: number }> } } | null;
+  const subscription = row?.subscriptionObject as { items?: { data?: Array<{ id?: string; quantity?: number; price?: { id?: string } }> } } | null;
   const itemId = row?.subscriptionId === team.activeSubscriptionPlanId
     ? team.activeSubscriptionPlanItemId || row?.subscriptionItemId
     : row?.subscriptionItemId;
   const items = subscription?.items?.data;
   const item = Array.isArray(items) ? items.find((value) => value?.id === itemId) : undefined;
-  if (row && subscriptionStatusGrantsAccess(row.subscriptionStatus) && item && Number.isSafeInteger(item.quantity) && item.quantity! > 0) return item.quantity!;
+  const memberSeats = Math.max(1, new Set([
+    team.googleAccount.userId,
+    ...team.members.map((member) => member.userId),
+  ]).size);
+  if (row && subscriptionStatusGrantsAccess(row.subscriptionStatus) && item && Number.isSafeInteger(item.quantity) && item.quantity! > 0) {
+    const flatPrice = FLAT_TEAM_PRICE_IDS.has(item.price?.id || row.priceId);
+    const compedSingleItem = item.quantity === 1 && (isInternalCompTeam(team.id) || isTeamComped(team));
+    return flatPrice || compedSingleItem ? Math.max(item.quantity!, memberSeats) : item.quantity!;
+  }
   if (isInternalCompTeam(team.id) || isTeamComped(team) ||
     (row?.subscriptionStatus.toLowerCase() === "trialing" &&
       subscriptionStatusGrantsAccess(row.subscriptionStatus) && !itemId &&
       (row.subscriptionObject == null || (Array.isArray(items) && items.length === 0)))) {
-    return Math.max(1, new Set([
-      team.googleAccount.userId,
-      ...team.members.map((member) => member.userId),
-    ]).size);
+    return memberSeats;
   }
   console.warn("[ai-allowance] Missing or invalid saved entitling Stripe seat item; using one seat", { teamId });
   return 1;
