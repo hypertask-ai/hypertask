@@ -83,7 +83,8 @@ def findings(text, markdown=False):
             issues.append("replace file paths and branch names")
         if re.search(r"\bPR\s*#?\d+\b|(?<!\w)#\d+\b", line, re.I):
             issues.append("use a linked PR reference")
-        for sentence in re.split(r"(?<=[.!?])\s+|\n+", line):
+        line = re.sub(r"\s+", " ", line)
+        for sentence in re.split(r"(?<=[.!?])\s+", line):
             if len(re.findall(r"\b[\w’'-]+\b", sentence)) > 25:
                 issues.append("shorten sentences to 25 words")
             if re.match(r"\s*(?:I'll\b|I’ll\b|Let me\b|Great\b|Sure\b|I hope this helps\b)", sentence, re.I):

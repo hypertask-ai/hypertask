@@ -120,6 +120,10 @@ class CommentStyleTest(unittest.TestCase):
     def test_markdown_passes(self):
         self.assert_allowed("**Ready.**\n\n[PR #123](https://github.com/a/b/pull/123)", "done", "--markdown")
 
+    def test_source_line_wrapping_does_not_split_sentences(self):
+        self.assert_refused("<p><strong>Ready.</strong></p><p>" + "word " * 15
+                            + "\n" + "word " * 15 + ".</p>", "25 words")
+
     def test_file_and_equals_forms_are_checked(self):
         source = self.home / "comment.md"
         source.write_text("<p><strong>Sure, fixed.</strong></p>")
