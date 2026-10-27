@@ -132,3 +132,22 @@ test("required CI invokes the real command on exact PR commits, without a new jo
   assert.ok(step.run.includes('npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"'));
   assert.equal(require("../package.json").scripts["lint:styles"], "node scripts/lint-changed-styles.mjs");
 });
+
+
+test("resolves const classes and styles without looping on cyclic references", async () => {
+  const { lintStyles } = await implementation;
+  assert.equal(lintStyles('const cls = "text-[11px]"; <div className={cls} />', "src/Probe.tsx").length, 1);
+  assert.equal(lintStyles('const style = {fontSize: "11px"}; <div style={style} />', "src/Probe.tsx").length, 1);
+  assert.deepEqual(lintStyles('const cls = "text-micro"; <div className={cls} />', "src/Probe.tsx"), []);
+  assert.deepEqual(lintStyles('const cls = cls; <div className={cls} />', "src/Probe.tsx"), []);
+});
+
+test("adding a comment beside unchanged multiline CSS debt passes", (t) => {
+  const f = fixture(t);
+  f.write("src/probe.scss", ".probe {\n  color:\n    #123456;\n}\n");
+  const base = f.commit();
+  f.write("src/probe.scss", ".probe {\n  color: /* clarification */\n    #123456;\n}\n");
+  assert.equal(f.check(base).status, 0);
+  f.write("src/probe.scss", ".probe {\n  color: /* clarification */\n    #654321;\n}\n");
+  assert.equal(f.check(base).status, 1);
+});

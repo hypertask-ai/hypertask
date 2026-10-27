@@ -6,6 +6,7 @@ import { Linter } from "eslint";
 import parser from "@typescript-eslint/parser";
 import scss from "postcss-scss";
 
+const number = /(?:^|[\s,(])[-+]?(?:\d*\.)?\d+/g;
 const color = /#[\da-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(\s*[-.\d]/gi;
 const palette = /(?:^|:)!?(?:text|bg|border(?:-[trblxyse])?|divide|outline|ring(?:-offset)?|fill|stroke|from|via|to|decoration|placeholder|accent|caret|shadow)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|[1-9]00|950)(?:\/[^\s]+)?!?$/;
 const typography = /(?:^|:)!?(?:text|leading)-\[(?:length:)?-?[\d.]+(?:px|rem|em|%)?\]/;
@@ -18,9 +19,14 @@ export function lintStyles(source, filename) {
     tree.walkDecls((decl) => {
       const tokenOwner = /^(?:src\/styles\/globals\.scss|src\/app\/globals\.css|src\/styles\/tailwindThemes\/[^/]+)$/.test(filename);
       if (tokenOwner && decl.prop.startsWith("--")) return;
-      color.lastIndex = 0;
-      if (color.test(decl.value) || (/^(?:font-size|line-height)$/.test(decl.prop) && /(?:^|[\s,(])[-.\d]/.test(decl.value))) {
-        findings.push({ line: decl.source.start.line, endLine: decl.source.end.line, message: advice });
+      const raw = source.slice(decl.source.start.offset, decl.source.end.offset + 1);
+      const valueOffset = raw.indexOf(":") + 1;
+      const value = raw.slice(valueOffset).replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
+      const matches = [...value.matchAll(new RegExp(color))];
+      if (/^(?:font-size|line-height)$/.test(decl.prop)) matches.push(...value.matchAll(new RegExp(number)));
+      for (const match of matches) {
+        const offset = decl.source.start.offset + valueOffset + match.index + match[0].search(/\S/);
+        findings.push({ line: source.slice(0, offset).split("\n").length, message: advice });
       }
     });
     tree.walkAtRules("apply", (rule) => {
@@ -35,8 +41,19 @@ export function lintStyles(source, filename) {
     meta: { schema: [] },
     create(context) {
       const { sourceCode } = context;
-      function inspect(node, style = false) {
-        if (!node || typeof node !== "object") return;
+      function inspect(node, style = false, visited = new WeakSet()) {
+        if (!node || typeof node !== "object" || visited.has(node)) return;
+        visited.add(node);
+        if (node.type === "Identifier") {
+          for (let scope = sourceCode.getScope(node); scope; scope = scope.upper) {
+            const variable = scope.set.get(node.name);
+            if (!variable) continue;
+            for (const definition of variable.defs) {
+              if (definition.parent?.kind === "const") inspect(definition.node.init, style, visited);
+            }
+            return;
+          }
+        }
         if ((node.type === "Literal" && typeof node.value === "string") || node.type === "TemplateElement") {
           const raw = sourceCode.getText(node);
           const matches = [...raw.matchAll(new RegExp(color))];
@@ -51,14 +68,14 @@ export function lintStyles(source, filename) {
           return;
         }
         if (style && node.type === "Property" && ["fontSize", "lineHeight"].includes(node.key.name ?? node.key.value)) {
-          if (node.value.type === "Literal" && (typeof node.value.value === "number" || /(?:^|[\s,(])[-.\d]/.test(node.value.value))) {
+          if (node.value.type === "Literal" && (typeof node.value.value === "number" || new RegExp(number).test(node.value.value))) {
             context.report({ node: node.value, message: advice });
           }
         }
         for (const [key, child] of Object.entries(node)) {
-          if (["parent", "loc", "range", "tokens", "comments"].includes(key)) continue;
-          if (Array.isArray(child)) child.forEach((item) => inspect(item, style));
-          else if (child && typeof child === "object") inspect(child, style);
+          if (["parent", "loc", "range", "tokens", "comments", "key"].includes(key)) continue;
+          if (Array.isArray(child)) child.forEach((item) => inspect(item, style, visited));
+          else if (child && typeof child === "object") inspect(child, style, visited);
         }
       }
       return {
