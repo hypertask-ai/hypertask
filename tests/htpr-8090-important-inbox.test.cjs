@@ -62,7 +62,9 @@ async function inbox({ flagOn = true, kind = "qa", assigned = true, muted = fals
   const jiti = require("jiti")(path.join(root, `tests/8090-important-${++entry}.cjs`), {
     interopDefault: true, alias: { "@": path.join(root, "src") }, cache: false,
   });
-  const loaded = jiti(path.join(root, "src/utils/controllers/notifications/getAll.ts"));
+  const controllerPath = path.join(root, "src/utils/controllers/notifications/getAll.ts");
+  delete require.cache[controllerPath];
+  const loaded = jiti(controllerPath);
   const result = await (loaded.default ?? loaded)("6");
   assert.equal(result.status, 200);
   const important = result.json.structuredData.tabs.find((tab) => tab.project === "Important");
