@@ -45,13 +45,16 @@ const PlansSection = () => {
   const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const showFreePlanCopy = useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG);
+  const unlimitedBoards = useFlag(HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG);
   const freePlanLimits = {
     planLimits: useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG),
-    unlimitedBoards: useFlag(HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG),
     unlimitedTickets: useFlag(HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG),
     raisedFileLimit: useFlag(HTPR_7924_FREE_FILE_25MB_FLAG),
   };
-  const { planLimits, unlimitedBoards, unlimitedTickets, raisedFileLimit } = freePlanLimits;
+  const { planLimits, unlimitedTickets, raisedFileLimit } = freePlanLimits;
+  const displayedFreePlanLimits = unlimitedBoards
+    ? { ...freePlanLimits, unlimitedBoards: true }
+    : freePlanLimits;
   const freePlanDescription = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : null}</>;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -71,7 +74,7 @@ const PlansSection = () => {
 
   const plans = useMemo(
     () =>
-      [...subscriptionPlansFor(freePlanLimits)].sort(
+      [...subscriptionPlansFor(displayedFreePlanLimits)].sort(
         (left, right) => STORE_PLAN_RANK[left.id] - STORE_PLAN_RANK[right.id],
       ),
     [planLimits, unlimitedBoards, unlimitedTickets, raisedFileLimit],
@@ -213,7 +216,7 @@ const PlansSection = () => {
                     {selectedType.price} {plan.id === "Free"
                       ? !planFlagReady || startPlanEnabled ? freePlanDescription : selectedType.description
                       : selectedType.description}
-                    {plan.id === "Free" && visibleFreePlanCopy(showFreePlanCopy, freePlanLimits).map((line) => (
+                    {plan.id === "Free" && visibleFreePlanCopy(showFreePlanCopy, displayedFreePlanLimits).map((line) => (
                       <span key={line} className="block text-dense font-medium text-text-light-gray">
                         {line}
                       </span>
