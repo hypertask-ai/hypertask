@@ -9,7 +9,7 @@ const source = fs.readFileSync(
   'utf8',
 )
 
-function loadMutateTaskLabels(existing, resolveLabelIds = async (_projectId, labels) => labels) {
+function loadMutateTaskLabels(existing, resolveLabelIds = async (_projectId, labels) => labels, edited = false) {
   const start = source.indexOf('export async function mutateTaskLabels')
   const end = source.indexOf('export async function createTask', start)
   assert.notEqual(start, -1)
@@ -31,6 +31,7 @@ function loadMutateTaskLabels(existing, resolveLabelIds = async (_projectId, lab
       })
       const tx = {
         taskLabel: prisma.taskLabel,
+        comment: { findFirst: async () => edited ? { id: 1 } : null },
         acquireTaskLock: () => previousTaskLock,
       }
       try {
@@ -129,3 +130,20 @@ test('unknown exclusion labels fail before mutation', async () => {
   )
   assert.deepEqual(creates, [])
 })
+
+
+for (const edited of [false, true]) {
+  test(`inferred labels respect earlier label edits, including cleared sets: ${edited}`, async () => {
+    const existing = [];
+    const { mutateTaskLabels } = loadMutateTaskLabels(existing, undefined, edited);
+    await mutateTaskLabels(42, 15, { add: ['Bug'], onlyIfUnedited: true }, actor);
+    assert.deepEqual(existing.map(({ labelId }) => labelId), edited ? [] : ['Bug']);
+  });
+}
+
+test('inferred labels preserve labels already chosen by a person', async () => {
+  const existing = [{ taskId: 42, labelId: 'FEATURE', label: { id: 'FEATURE', value: 'FEATURE' } }];
+  const { mutateTaskLabels } = loadMutateTaskLabels(existing);
+  await mutateTaskLabels(42, 15, { add: ['Bug'], onlyIfUnedited: true }, actor);
+  assert.deepEqual(existing.map(({ labelId }) => labelId), ['FEATURE']);
+});

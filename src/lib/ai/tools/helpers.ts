@@ -155,7 +155,7 @@ export async function applyPriorityUpdate(
 
   if (options.onlyIfUnchangedDefault) {
     if (constant.priority_index === 0) return { error: null };
-    await prisma.priority.updateMany({
+    const { count } = await prisma.priority.updateMany({
       where: { taskId, priority_index: 0 },
       data: {
         taskId,
@@ -165,6 +165,12 @@ export async function applyPriorityUpdate(
         priority_index: constant.priority_index,
         Priority_Value: constant.Priority_Value,
       },
+    });
+    if (count) await createPriorityActivity({
+      userObj: activityUser,
+      taskId,
+      toPriority: { priority_index: constant.priority_index, Priority_Value: constant.Priority_Value },
+      fromPriority: { priority_index: 0, Priority_Value: "No Priority" },
     });
     return { error: null };
   }
@@ -252,7 +258,7 @@ export async function applyEstimateUpdate(
 
   if (options.onlyIfUnchangedDefault) {
     if (constant.estimate_index === 0) return { error: null };
-    await prisma.estimate.updateMany({
+    const { count } = await prisma.estimate.updateMany({
       where: { taskId, estimate_index: 0 },
       data: {
         taskId,
@@ -262,6 +268,12 @@ export async function applyEstimateUpdate(
         estimate_index: constant.estimate_index,
         estimate_value: constant.estimate_value,
       },
+    });
+    if (count) await createEstimateActivity({
+      fromUser: activityUser,
+      taskId,
+      toEstimate: { estimate_index: constant.estimate_index, estimate_value: constant.estimate_value },
+      fromEstimate: { estimate_index: 0, estimate_value: "No size" },
     });
     return { error: null };
   }

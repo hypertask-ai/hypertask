@@ -263,7 +263,7 @@ export function createCreateTaskTool(context: ToolContext) {
                 description,
                 priority: z.enum(["No Priority", "Urgent", "High", "Medium", "Low"]).parse(PriorityConstants.find((p) => p.priority_index === priorityIndex)?.Priority_Value ?? "No Priority"),
                 estimate: estimateIndex,
-                ...(labels.length ? { add_labels: labels } : {}),
+                ...(!input.labels?.length && labels.length ? { add_labels: labels } : {}),
                 image_urls: input.image_urls,
                 inline_images: input.inline_images,
               }, {

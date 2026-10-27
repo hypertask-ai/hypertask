@@ -11,7 +11,7 @@ function harness(options = {}) {
   const writing = new Promise((resolve) => { release = resolve; });
   const { createCreateTaskTool } = load("src/lib/ai/tools/createTask.ts", {
     ai: { tool: (definition) => definition },
-    "@/lib/flags": { isFeatureEnabled: async (key) => key === flag && options.enabled !== false },
+    "@/lib/flags": { isFeatureEnabled: async (key) => (key === flag && options.enabled !== false) || (key === "htpr-7513-writer-project-labels" && options.writerLabels) },
     "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
     "@/lib/prisma": { default: {
       agent: { findFirst: async () => ({ id: "agent" }) },
@@ -145,8 +145,8 @@ test("an unconfirmed bulk preview creates nothing", async () => {
   assert.equal(h.events.length, 0);
 });
 
-function updaterHarness({ conflict = false, editedProperties = false } = {}) {
-  const changes = [], priorities = [], estimates = [];
+function updaterHarness({ conflict = false, editedProperties = false, inferredLabels = false } = {}) {
+  const changes = [], priorities = [], estimates = [], labelMutations = [];
   const task = { id: 1, projectId: 7049, uniqueIndex: 1, title: "Initial title", ...(editedProperties ? { priority: { priority_index: 4 }, estimate: { estimate_index: 6 } } : {}) };
   const { createTaskUpdater } = load("src/lib/ai/tools/updateOneTask.ts", {
     "@/lib/prisma": { default: {
@@ -162,7 +162,7 @@ function updaterHarness({ conflict = false, editedProperties = false } = {}) {
     "@/utils/controllers/activities/createArchiveActivity": { default: async () => {} },
     "@/pages/api/queues/duedateQueue": {},
     "@/utils/controllers/activities/createTaskDueDateActivity": { default: async () => {} },
-    "@/lib/mcp/tasks/services": {},
+    "@/lib/mcp/tasks/services": { mutateTaskLabels: async (...args) => { labelMutations.push(args); } },
     "@/lib/mcp/tasks/mappers": { taskDetailInclude: () => ({}) },
     "@/lib/realtime/server": { broadcastBoardChange: async () => {}, broadcastTaskChange: async () => {} },
     "@/lib/ai/tools/execution": { resolveTaskForTool: async () => ({ task }) },
@@ -173,8 +173,8 @@ function updaterHarness({ conflict = false, editedProperties = false } = {}) {
     },
   });
   const expected = { expectedTitle: "Initial title", expectedDescription: "", expectedProjectId: 7049, expectedStatus: "Normal" };
-  return { changes, priorities, estimates, expected,
-    execute: () => createTaskUpdater({ user: { id: 985 }, actingAgentId: null, body: {} }, { title: draft.title, description: draft.html, priority: "High", estimate: 3 }, expected)({ task_id: 1, project_id: 7049 }),
+  return { changes, priorities, estimates, labelMutations, expected,
+    execute: () => createTaskUpdater({ user: { id: 985 }, actingAgentId: null, body: {} }, { title: draft.title, description: draft.html, priority: "High", estimate: 3, ...(inferredLabels ? { add_labels: ["inferred"] } : {}) }, expected)({ task_id: 1, project_id: 7049 }),
   };
 }
 
@@ -227,6 +227,7 @@ for (const choice of ["untouched", "changed", "cleared"]) {
       rows[name] = { ...rows[name], ...data };
       return { count: 1 };
     };
+    const activities = [];
     const empty = {};
     const { applyPriorityUpdate, applyEstimateUpdate } = load("src/lib/ai/tools/helpers.ts", {
       "@/lib/prisma": { default: {
@@ -235,8 +236,8 @@ for (const choice of ["untouched", "changed", "cleared"]) {
       } },
       "@/lib/mcp/agents": empty, "@/lib/auth/agentTeamScope": empty,
       "@/utils/controllers/projects/getAllIncludes": empty,
-      "@/utils/controllers/activities/CreatePriorityActivity": empty,
-      "@/utils/controllers/activities/createEstimateActivity": empty,
+      "@/utils/controllers/activities/CreatePriorityActivity": { default: async (data) => { activities.push(["priority", data]); } },
+      "@/utils/controllers/activities/createEstimateActivity": { default: async (data) => { activities.push(["estimate", data]); } },
       "@/lib/mcp/tasks/mappers": empty, "@/lib/agents/publicAgent": empty,
       "@/utils/controllers/getMemberAndOwnerForBoard": empty,
       "@/lib/mcp/attachments/constants": empty,
@@ -245,6 +246,13 @@ for (const choice of ["untouched", "changed", "cleared"]) {
     });
     assert.deepEqual(await applyPriorityUpdate(1, "High", 985, { id: 985 }, { onlyIfUnchangedDefault: true }), { error: null });
     assert.deepEqual(await applyEstimateUpdate(1, 3, 985, { id: 985 }, { onlyIfUnchangedDefault: true }), { error: null });
+    assert.deepEqual(activities.map(([type]) => type), choice === "untouched" ? ["priority", "estimate"] : []);
+    if (choice === "untouched") {
+      assert.equal(activities[0][1].toPriority.priority_index, 2);
+      assert.equal(activities[1][1].toEstimate.estimate_index, 3);
+      assert.equal(activities[0][1].fromPriority.priority_index, 0);
+      assert.equal(activities[1][1].fromEstimate.estimate_index, 0);
+    }
     if (choice === "cleared") assert.deepEqual(rows, {});
     else {
       assert.equal(rows.priority.priority_index, choice === "untouched" ? 2 : 4);
@@ -252,3 +260,30 @@ for (const choice of ["untouched", "changed", "cleared"]) {
     }
   });
 }
+
+
+test("completion never reapplies labels already saved on the provisional ticket", async () => {
+  const h = harness();
+  const pending = h.execute({ project_id: 7049, brief: "Keep my label edits", labels: ["initial"] });
+  await started(h);
+  assert.deepEqual(h.saved[0].labels, ["initial"]);
+  h.saved[0].labels = [];
+  h.release();
+  assert.equal((await pending).success, true);
+  assert.equal(h.updates[0].input.add_labels, undefined);
+  assert.deepEqual(h.saved[0].labels, []);
+});
+
+
+test("inferred writer labels are preserved behind the edit-aware label mutation", async () => {
+  const h = harness({ writerLabels: true, draft: { ...draft, labelIds: ["inferred"] } });
+  const pending = h.execute();
+  await started(h);
+  assert.deepEqual(h.saved[0].labels, []);
+  h.release();
+  assert.equal((await pending).success, true);
+  assert.deepEqual(h.updates[0].input.add_labels, ["inferred"]);
+  const updater = updaterHarness({ inferredLabels: true });
+  assert.equal((await updater.execute()).success, true);
+  assert.deepEqual(updater.labelMutations[0][2], { add: ["inferred"], remove: undefined, onlyIfUnedited: true });
+});

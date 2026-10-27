@@ -244,7 +244,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
       await mutateTaskLabels(
         task.id,
         task.projectId,
-        { add: input.add_labels, remove: input.remove_labels },
+        { add: input.add_labels, remove: input.remove_labels, ...(expected ? { onlyIfUnedited: true } : {}) },
         labelActor
       );
     }
