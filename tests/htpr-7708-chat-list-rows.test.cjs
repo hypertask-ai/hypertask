@@ -36,6 +36,7 @@ const names = [
 
 function rows({ mobile = false, inline, enabled = true } = {}) {
   const CommandList = load("src/components/Modals/commands/HTC/CommandList.tsx", {
+    "lucide-react": require("lucide-react"),
     "@/store": { currentProjectAtom: {} },
     "@/lib/state": { useRecoilState: () => [null, noop] },
     "@/utils/getCurrentUser": { getCurrentUserFromCookies: () => ({ id: 7 }) },

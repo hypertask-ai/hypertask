@@ -64,8 +64,7 @@ export function useAiChat() {
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, parallelStreams: sessionStreams,
   } = useAiChatState(parallelChatsEnabled);
-  let parallelStreams = sessionStreams;
-  if (!parallelChatsEnabled) parallelStreams = undefined;
+  const parallelStreams = parallelChatsEnabled ? sessionStreams : undefined;
   useEffect(editWithAiEnabled ? () => {
     if (editTaskId === null) return;
     if (!showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
@@ -141,7 +140,16 @@ export function useAiChat() {
     toggleCreateTaskGlobally, inViewObject, setShowRenameChatModal, currentSession, updateSessionTitle,
   });
 
+  const runningSessionIds = parallelStreams
+    ? parallelStreams.sessionIds().filter((id) => parallelStreams.get(id).isTyping)
+    : [];
+  if (!parallelStreams && isTyping) {
+    const runningSessionId = currentStreamingSession ?? currentSession?.id;
+    if (runningSessionId) runningSessionIds.push(runningSessionId);
+  }
+
   return {
+    runningSessionIds,
     minimized,
     minimizeChat,
     restoreChat,

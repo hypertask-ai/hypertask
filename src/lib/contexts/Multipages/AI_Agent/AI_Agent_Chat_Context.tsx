@@ -36,6 +36,7 @@ export interface Message {
 }
 
 export interface ChatContextType {
+  runningSessionIds: string[];
   isTyping: boolean;
   sendSettledVersion: number;
   isRecording: boolean;

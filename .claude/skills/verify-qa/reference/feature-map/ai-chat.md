@@ -104,6 +104,17 @@ size with the outline disabled; it must not change. Porcelain, Graphite and
 Dia keep their existing outlines and corners. The rollback flag is
 `htpr-8042-amoled-chat-border`.
 
+## Running chat indicators
+
+The sidebar header and chat history show a spinning icon while that chat
+replies. Open the conversation picker while chats A and B are replying;
+both saved-chat rows show their own indicator, even after selecting idle C.
+Finish or stop A: only A clears. Finish B: B clears too. Failed replies
+also clear their indicator. Minimize a running chat: its header still
+shows the indicator. Selection, rename, delete and new-chat controls remain
+unchanged. Verify desktop and phone in all four themes. The rollback flag
+is `htpr-7764-chat-running`; Off hides indicators without stopping replies.
+
 ## Unsent message drafts
 
 In both the docked sidebar and `/chat`, type while a reply streams.

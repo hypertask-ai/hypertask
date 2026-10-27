@@ -49,6 +49,7 @@ async function withHistory({ enabled = true, mobile = true, paging = false } = {
     "@/hooks/useFlag": { useFlag: (key) => key === phoneFlag ? enabled : key === pagingFlag && paging },
     "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: pagingFlag },
     "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: phoneFlag },
+    "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
     "@/lib/flags/definitions/htpr-7773-chat-header-name": { HTPR_7773_CHAT_HEADER_NAME_FLAG: "htpr-7773-chat-header-name" },
       "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
     "../Common/Tooltip": { __esModule: true, default: ({ children }) => children },
