@@ -15,7 +15,7 @@ const QUERY = `query { repository(owner:"hypertask-ai",name:"hypertask") {
     oid committedDate messageHeadline parents(first:2) { nodes { oid } }
     associatedPullRequests(first:10) { nodes { number title mergedAt baseRefName mergeCommit { oid } } }
     statusCheckRollup { contexts(first:100) { pageInfo { hasNextPage } nodes {
-      ... on CheckRun { name status conclusion completedAt startedAt detailsUrl databaseId }
+      ... on CheckRun { name status conclusion completedAt startedAt createdAt detailsUrl databaseId }
       ... on StatusContext { context state createdAt targetUrl }
     } } }
   } } } } }
@@ -44,19 +44,14 @@ function snapshot(data) {
     if (!SHA.test(commit.oid) || commit.statusCheckRollup?.contexts?.pageInfo?.hasNextPage) {
       throw new Error('Incomplete production checks');
     }
-    const contexts = new Map();
-    for (const row of commit.statusCheckRollup?.contexts?.nodes || []) {
-      const name = row.name || row.context;
-      const state = row.status && row.status !== 'COMPLETED' ? 'PENDING' : row.conclusion || row.state;
-      const at = row.completedAt || row.startedAt || row.createdAt;
-      const existing = contexts.get(name);
-      if (!existing || Date.parse(at) > Date.parse(existing.at) ||
-          (at === existing.at && (row.databaseId || 0) > (existing.id || 0))) {
-        contexts.set(name, { name, state, at, url: row.detailsUrl || row.targetUrl, id: row.databaseId });
-      }
-    }
+    const contexts = (commit.statusCheckRollup?.contexts?.nodes || []).map(row => ({
+      name: row.name || row.context,
+      state: row.status && row.status !== 'COMPLETED' ? 'PENDING' : row.conclusion || row.state,
+      at: row.completedAt || row.startedAt || row.createdAt,
+      url: row.detailsUrl || row.targetUrl, id: row.databaseId
+    })).sort((a, b) => a.id && b.id ? b.id - a.id : Date.parse(b.at) - Date.parse(a.at));
     return { sha: commit.oid, parents: commit.parents.nodes.map(parent => parent.oid),
-      title: commit.messageHeadline, at: commit.committedDate, contexts: [...contexts.values()],
+      title: commit.messageHeadline, at: commit.committedDate, contexts,
       prs: commit.associatedPullRequests.nodes.filter(pr => pr.baseRefName === 'production' && pr.mergeCommit?.oid === commit.oid) };
   });
 }
@@ -65,16 +60,18 @@ function plan(commits, required, now = Date.now()) {
   const failures = [], recovered = [], pending = [];
   for (const name of required) {
     const latest = commits.flatMap(commit => commit.contexts.filter(row => row.name === name && Date.parse(row.at) <= now))[0];
-    if (latest && !['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(latest.state)) {
-      pending.push(name); continue;
-    }
+    if (latest && !['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(latest.state)) pending.push(name);
     const observations = commits.flatMap(commit => {
-      const check = commit.contexts.find(row => row.name === name && Date.parse(row.at) <= now);
+      const check = commit.contexts.find(row => row.name === name && Date.parse(row.at) <= now &&
+        ['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(row.state));
       return check && ['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(check.state)
         ? [{ commit, check }] : [];
     });
     if (!observations.length) continue;
-    if (observations[0].check.state === 'SUCCESS') { recovered.push(name); continue; }
+    if (observations[0].check.state === 'SUCCESS') {
+      if (!pending.includes(name)) recovered.push(name);
+      continue;
+    }
     const boundary = observations.findIndex(row => row.check.state === 'SUCCESS');
     const first = observations[(boundary < 0 ? observations.length : boundary) - 1];
     const green = boundary < 0 ? null : observations[boundary];

@@ -243,7 +243,7 @@ test('reclaim expiry uses the surviving claim, not an older released mention', (
 test('pending or cancelled rerun cannot recover an incident using an older green parent', async t => {
   const dir = tmp(t); await runTick(dir, fake());
   for (const state of ['PENDING', 'CANCELLED']) {
-    const commits = recorded(); commits[0].contexts = [{ name: 'browser-smoke', state, at: '2026-10-26T17:54:01Z' }];
+    const commits = recorded().slice(1); commits[0].contexts = [{ name: 'browser-smoke', state, at: '2026-10-26T17:54:01Z' }];
     const api = fake(commits);
     assert.equal((await runTick(dir, api)).action, 'pending');
     assert.equal(api.writes.filter(args => args[0] === 'activity').length, 0);
@@ -252,4 +252,27 @@ test('pending or cancelled rerun cannot recover an incident using an older green
   const commits = recorded(); commits[0].contexts = [{ name: 'browser-smoke', state: 'SUCCESS', at: '2026-10-26T18:00:00Z' }];
   const api = fake(commits); await runTick(dir, api, { now: now + 600000 });
   assert.equal(api.writes.filter(args => args[0] === 'activity').length, 1);
+});
+
+test('a newer pending production head cannot hide its parent completed failure', async t => {
+  const commits = recorded();
+  const job = fixture.runs[2].jobs.find(row => row.name === 'browser-smoke');
+  assert.ok(Date.parse(job.started_at) < now && Date.parse(job.completed_at) > now);
+  commits[0].contexts = [{ name: job.name, state: 'PENDING', at: job.started_at, url: job.html_url }];
+  const p = plan(commits, ['browser-smoke'], now);
+  assert.equal(p.failures[0].culprit, sha);
+  assert.deepEqual(p.recovered, []);
+  const api = fake(commits); await runTick(tmp(t), api);
+  assert.equal(api.writes.filter(args => args[1] === 'create').length, 1);
+  assert.equal(api.proposals[0][0].culprit, sha);
+});
+
+test('same-commit pending reruns retain completed failure evidence instead of an older green parent', () => {
+  const commits = recorded().slice(1);
+  commits[0].contexts.unshift({ name: 'browser-smoke', state: 'PENDING', at: '2026-10-26T17:54:30Z' });
+  const p = plan(commits, ['browser-smoke'], now);
+  assert.equal(p.failures[0].culprit, sha);
+  assert.deepEqual(p.recovered, []);
+  commits[0].contexts[0] = { name: 'browser-smoke', state: 'SUCCESS', at: '2026-10-26T17:54:40Z' };
+  assert.deepEqual(plan(commits, ['browser-smoke'], now).recovered, ['browser-smoke']);
 });
