@@ -77,6 +77,25 @@ export async function ghApi(args, { exec = spawnSync, sleep = (ms) => new Promis
   }
 }
 
+export async function retryGithubRequest(request, {
+  now = Date.now, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  log = console.error, budget = createRateLimitBudget({ now, maxWaitMs: 3600000, timeBudgetMs: 3660000 }),
+} = {}) {
+  for (;;) {
+    try {
+      return await request();
+    } catch (error) {
+      const headers = new Map(Object.entries(error.response?.headers ?? {}).map(([key, value]) =>
+        [key.toLowerCase(), String(value)]));
+      const wait = rateLimitWait(error.status, headers, error.message, now());
+      if (wait == null) throw error;
+      const ms = budget.reserve(wait);
+      log(`GitHub rate limited; retrying after ${Math.ceil(ms / 1000)}s`);
+      await sleep(ms);
+    }
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const stateFile = process.env.GH_API_RETRY_STATE;

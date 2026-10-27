@@ -17,6 +17,7 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
   const ticket = title.split(' ')[0];
   const url = `https://github.com/${repo}/pull/123`;
   const previous = process.env.HYPERTASK_MCP_TOKEN;
+  const previousMetadata = process.env.PR_METADATA;
   process.env.HYPERTASK_MCP_TOKEN = token;
   try {
     const args = {
@@ -35,7 +36,9 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
         } };
       },
     };
-    await new AsyncFunction('github', 'context', 'core', 'require', step.with.script)(
+    process.env.PR_METADATA = JSON.stringify((await args.github.rest.pulls.get()).data);
+    const entry = dispatch ? workflow.jobs['bind-ticket'].steps[1] : step;
+    await new AsyncFunction('github', 'context', 'core', 'require', entry.with.script)(
       args.github, args.context, args.core,
       specifier => {
         assert.equal(specifier, './.github/scripts/pr-title.cjs');
@@ -44,6 +47,8 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
     );
     return { writes, failures, outputs };
   } finally {
+    if (previousMetadata === undefined) delete process.env.PR_METADATA;
+    else process.env.PR_METADATA = previousMetadata;
     if (previous === undefined) delete process.env.HYPERTASK_MCP_TOKEN;
     else process.env.HYPERTASK_MCP_TOKEN = previous;
   }
@@ -116,7 +121,7 @@ test('production manual CI uses the same binding entry and refuses malformed PR 
   assert.equal(admitted({ event_name: 'pull_request', ref: 'refs/heads/production' }), false);
   assert.equal(job.steps[0].with.ref, 'production');
   assert.equal(job.steps[0].with['persist-credentials'], false);
-  assert.equal(job.steps[1].with.script, step.with.script);
+  assert.match(job.steps[1].with.script, /pr-title\.cjs/);
   const manual = await run({ dispatch: true, login: 'hypertask-runners[bot]' });
   assert.deepEqual(JSON.parse(manual.writes[0].options.body), {
     ticket_number: 'YPER4-731', pull_request_url: 'https://github.com/hypertask-ai/hypertask/pull/123',

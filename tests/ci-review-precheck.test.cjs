@@ -63,8 +63,8 @@ test("known failed review still refuses to start tests", () => {
   assert.doesNotMatch(result.output, /tests reached/);
 });
 
-test("two consecutive rate-limited pushes still start tests without retries", () => {
-  for (let push = 0; push < 2; push++) {
+test("ten consecutive rate-limited pushes still start tests without retries", () => {
+  for (let push = 0; push < 10; push++) {
     const result = runPrecheck({ status: 1 });
     assert.equal(result.status, 0, result.output);
     assert.match(result.output, /tests reached/);
