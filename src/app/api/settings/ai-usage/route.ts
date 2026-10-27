@@ -401,6 +401,7 @@ export async function GET(request: Request) {
     }
     if (
       reportAuthFailed &&
+      reportStatuses.every((status) => status < 400 || status === 401 || status === 403) &&
       await isFeatureEnabled(HTPR_7743_AI_USAGE_AUTH_FLAG, user.id).catch(() => false)
     ) {
       if (!gatewayReportAuthWarningLogged) {

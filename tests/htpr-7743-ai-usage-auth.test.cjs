@@ -96,7 +96,7 @@ test("flag off and flag lookup failure retain the legacy 502", async (t) => {
   assert.deepEqual(f.warnings, []);
 });
 
-for (const statuses of [[429, 429, 429], [500, 200, 503]]) {
+for (const statuses of [[429, 429, 429], [500, 200, 503], [401, 503, 200], [403, 429, 200]]) {
   test(`transient report ${statuses.join("/")} remains retryable`, async (t) => {
     const f = fixture(t, { statuses });
     const response = await f.read();
