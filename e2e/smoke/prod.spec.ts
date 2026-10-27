@@ -643,8 +643,10 @@ test('floating chat elevation supports shared styling and rollback without chang
     const chat = page.locator('.chatwindow')
     const opener = page.getByRole('button', { name: 'Open AI chat', exact: true })
     if (await opener.isVisible()) await opener.click()
-    if (!(await chat.isVisible())) {
-      await page.getByTestId('ai-sidebar').locator('button[aria-haspopup="menu"]').click()
+    const sidebar = page.getByTestId('ai-sidebar')
+    await expect(chat.or(sidebar)).toBeVisible()
+    if (await sidebar.isVisible()) {
+      await sidebar.locator('button[aria-haspopup="menu"]').click()
       await page.getByRole('menuitem', { name: 'Toggle Floating View', exact: true }).click()
     }
     await expect(chat).toBeVisible()
