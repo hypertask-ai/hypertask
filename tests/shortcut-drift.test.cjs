@@ -67,7 +67,20 @@ for (const finding of cases.values()) {
 }
 
 test("live shortcut drift is report-only, including snapshot changes", (t) => {
+  const globals = [global.document, global.window, global.setTimeout];
   const inventory = buildInventory();
+  assert.deepEqual([global.document, global.window, global.setTimeout], globals);
+  assert.equal(inventory.mode, "report-only");
+  assert.deepEqual(inventory.platforms.map(({ platform }) => platform), ["Windows", "Apple"]);
+  for (const platform of inventory.platforms) {
+    assert.deepEqual(platform.composedGT, ["Timers"]);
+    assert.deepEqual(platform.bindings.find(({ scope, action }) =>
+      scope === "Calendar" && action === "create")?.keys, ["C"]);
+    assert.ok(platform.help.some(({ scope, action }) => scope === "Calendar" && action === "create"));
+    assert.ok(Array.isArray(platform.findings));
+  }
+  assert.deepEqual(buildInventory(), inventory);
+  assert.deepEqual([global.document, global.window, global.setTimeout], globals);
   t.diagnostic(renderReport(inventory));
   const file = path.join(__dirname, "../docs/keyboard-shortcut-inventory.json");
   if (fs.readFileSync(file, "utf8") !== serializeInventory(inventory)) {
