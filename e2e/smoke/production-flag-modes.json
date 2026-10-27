@@ -14,7 +14,6 @@
     "htpr-6122-agent-run-activities": "EVERYONE",
     "htpr-6155-chat-agent-brief": "EVERYONE",
     "htpr-6177-auto-task-descriptions": "OFF",
-    "htpr-6238-posthog-error-alert": "EVERYONE",
     "htpr-6243-manager-loop-activity": "EVERYONE",
     "htpr-6283-agent-chat-live-sort": "EVERYONE",
     "htpr-6284-agent-mention-routing": "EVERYONE",
