@@ -64,7 +64,7 @@ const AttachmentsUpload = (props: IProps) => {
       }`}
     >
       {!_mbl && mode !== "create-comment" && (
-        <hr className=" w-full text-[#212429] dark:text-icon-dark-gray my-2 h-[0.2px] opacity-20 " />
+        <hr className="w-full text-[var(--color-attachment-divider)] my-2 h-[0.2px] opacity-20" />
       )}
 
       {

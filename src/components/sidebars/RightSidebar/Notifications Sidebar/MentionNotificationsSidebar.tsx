@@ -74,7 +74,7 @@ const MentionNotificationSidebar = () => {
                   handleNotificationChange(e.target.value as NotificationLevel)
                 }
                 className={cn("w-3 h-3 cursor-pointer appearance-none rounded-full !border-thin border-text-light-gray bg-transparent checked:border-white-black fill-white", 
-                  notificationLevel === option.value ? "dark:bg-white bg-[#202124] p-1" : "bg-transparent")}
+                  notificationLevel === option.value ? "bg-[var(--bg-notification-level-selected)] p-1" : "bg-transparent")}
                 
               />
               <span className="text-content font-normal text-white-black">{option.label}</span>

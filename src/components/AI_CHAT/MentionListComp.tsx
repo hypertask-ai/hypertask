@@ -68,7 +68,7 @@ export function MentionListRows({
                   onMouseEnter={() => setSelectedIndex(index)}
                   className={`item ${
                     index === selectedIndex
-                      ? "bg-[#ececec] dark:bg-active-modal-element"
+                      ? "bg-[var(--bg-chat-mention-selected)]"
                       : ""
                   }`}
                   onClick={() => selectItem(index)}

@@ -773,7 +773,7 @@ const Commands = (props: Props) => {
         ariaLabel="Commands mode"
         disabled={writing}
         buttonClassName="rounded-[4px]"
-        className={`flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:outline-[var(--border-light-gray-thin)]" : ""}`}
+        className={`flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
       />
     </div>
   ) : null;

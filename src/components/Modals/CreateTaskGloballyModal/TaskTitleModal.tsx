@@ -120,7 +120,7 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
                                 <textarea
                                     className={
                                         `px-0 border-0 border-b-2 rounded-none
-                                        ${currentFocusedElement === "Title" ? "border-gray-300 dark:border-gray-600" : "border-transparent"}
+                                        ${currentFocusedElement === "Title" ? "border-[var(--border-task-title-focus)]" : "border-transparent"}
                                     `
                                     }
                                     rows={1}

@@ -810,12 +810,12 @@ const CTRL_INDEX = ({
   return (
     <div className="flex-grow justify-end mr-4 flex gap-1  text-content font-bold text-white-black">
       <kbd
-        className={` py-[1px] mx-[1.5px] h-fit rounded-[2px]  border-gray-200 bg-[#555B64] dark:border-gray-500`}
+        className={`py-[1px] mx-[1.5px] h-fit rounded-[2px] bg-[#555B64] border-[var(--border-keycap)]`}
       >
         {isApple}
       </kbd>
       <kbd
-        className={`px-1 py-[1px] mx-[1.5px] h-fit rounded-[2px]  border-gray-200 bg-[#555B64]  dark:border-gray-500`}
+        className={`px-1 py-[1px] mx-[1.5px] h-fit rounded-[2px] bg-[#555B64] border-[var(--border-keycap)]`}
       >
         {index}
       </kbd>

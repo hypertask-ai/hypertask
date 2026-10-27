@@ -616,7 +616,7 @@ const AIModelDropDownList = ({
           {submenu === "model" ? (
             <div
               className={cn(
-                "z-10 max-h-[360px] overflow-y-auto rounded-[4px] bg-modalBackground p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.45)] scrollbar-thin scrollbar-track-transparent scrollbar-thumb-black/20 dark:scrollbar-thumb-[#4F5766]",
+                "z-10 max-h-[360px] overflow-y-auto rounded-[4px] bg-modalBackground p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.45)] scrollbar-thin scrollbar-track-transparent scrollbar-thumb-menu-scroll",
                 stackSubmenus
                   ? "relative mt-1 w-full"
                   : cn("absolute w-[220px] max-w-[calc(100vw-16px)]", submenuPositionClass)

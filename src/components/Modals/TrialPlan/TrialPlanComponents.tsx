@@ -120,10 +120,10 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
     if (!flagReady) return null;
     if (startPlanEnabled) return <StartPlanButton teamId={teamId} />;
     if (fetchingInfo){
-        return (<p className="text-[#444444] text-content sm:text-emphasis dark:text-text-light-gray font-normal">Checking plan access…</p>)
+        return (<p className="text-content sm:text-emphasis text-[var(--color-plan-message)] font-normal">Checking plan access…</p>)
     }
     if (teamInfo?.hasCompletedTrial){
-        return (<p className="text-[#444444] text-content sm:text-emphasis dark:text-text-light-gray font-normal">You have already used your free trial</p>)
+        return (<p className="text-content sm:text-emphasis text-[var(--color-plan-message)] font-normal">You have already used your free trial</p>)
     }
     return (
         <>
@@ -153,7 +153,7 @@ export const PlansTable = ()=>{
                         ["starter", columns.starter, false],
                         ["pro", columns.proWithAi, true],
                     ] as const).map(([key, perks, highlighted]) => (
-                        <div key={key} className={highlighted ? "xs:px-3 lg:px-6 bg-sidebar dark:bg-active-elementBg py-2" : "lg:px-4 xs:px-2 py-2"}>
+                        <div key={key} className={highlighted ? "xs:px-3 lg:px-6 bg-[var(--bg-plan-highlight)] py-2" : "lg:px-4 xs:px-2 py-2"}>
                             <div className={highlighted ? "flex gap-2 items-center font-bold" : undefined}>
                                 <ColumnTitle content={highlighted ? "Pro with " : "Starter"} />
                                 {highlighted ? <span className="text-hypertasks-ai-purple text-heading min-h-[40px] mb-2">AI</span> : null}
@@ -197,7 +197,7 @@ export const PlansTable = ()=>{
                             }
                         </div>
                     </div>
-                    <div className="xs:px-3  lg:px-6  bg-[#F3F3F3] dark:bg-active-elementBg py-2">
+                    <div className="xs:px-3 lg:px-6 bg-[var(--bg-plan-feature)] py-2">
                         <div className="flex gap-2 items-center font-bold">
                             <ColumnTitle content={"Pro with "} />
                             <span className="text-hypertasks-ai-purple text-heading min-h-[40px] mb-2">AI</span>

@@ -106,3 +106,45 @@
 
   }
 }
+
+:root {
+  --border-keycap: var(--color-gray-200);
+  --bg-quick-tip-key: #555b64;
+  --bg-chat-mention-selected: #ececec;
+  --bg-editor-mention-selected: #ececec;
+  --bg-editor-menu: #ffffff;
+  --bg-editor-option-selected: #ececec;
+  --bg-help-tooltip: #ffffff;
+  --border-help-tooltip-arrow: #ffffff;
+  --border-help-tooltip-hidden-arrow: currentColor;
+  --bg-notification-key: transparent;
+  --color-notification-key: currentColor;
+  --bg-notification-level-selected: #202124;
+  --bg-plan-highlight: var(--bg-sidebar);
+  --bg-plan-feature: #f3f3f3;
+  --color-plan-message: #444444;
+  --bg-typing-dot: var(--color-gray-500);
+  --color-attachment-divider: #212429;
+  --color-card-age-hot: var(--color-red-600);
+  --color-card-age-warn: var(--color-amber-600);
+  --color-task-age-hot: var(--color-red-600);
+  --color-task-age-warn: var(--color-amber-600);
+  --color-view-caption: var(--color-gray-600);
+  --color-draft-status: var(--color-green-700);
+  --stroke-task-link: 4px;
+  --border-board-avatar: #f7f7f7;
+  --style-editor-key-border: solid;
+  --border-onboarding-key: var(--color-gray-200);
+  --width-onboarding-key-border: 0px;
+  --border-task-title-focus: var(--color-gray-300);
+  --color-file-spinner-track: var(--color-gray-200);
+  --filter-calendar-picker: none;
+  --color-menu-scrollbar-thumb: color-mix(in oklab, var(--color-black) 20%, transparent);
+  --color-onboarding-scrollbar-thumb: #d3d1cb;
+  --color-list-scrollbar-thumb: var(--color-gray-500);
+  --color-list-scrollbar-hover: var(--color-gray-500);
+  --outline-floating-panel: none;
+  --offset-floating-panel-outline: 0px;
+  --radius-chat-window: var(--bs-border-radius);
+  --radius-chat-sheet: 1rem 1rem 0 0;
+}

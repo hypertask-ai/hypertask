@@ -47,9 +47,9 @@ export const ReadOnlySection = ({
           ${isMbl ? "" : "overflow-y-auto "}
           w-full sm:pb-20 h-full  max-h-inherit 
           scrollbar-thin 
-          hover:scrollbar-thumb-gray-500 
-          scrollbar-thumb-gray-500
-          scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]
+          hover:scrollbar-thumb-list-scroll-hover
+          scrollbar-thumb-list-scroll
+          scrollbar-track-kanban-column-scrollbar
           `}
       >
         <div className="task-detail-heading-tag bg-containerBackground px-2 py-2">

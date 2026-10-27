@@ -360,7 +360,7 @@ export function DaySection({
         ref={provided.innerRef}
         className={`${
           view !== "month"
-            ? "overflow-y-auto h-full max-h-inherit scrollbar-thin hover:scrollbar-thumb-gray-500 scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
+            ? "overflow-y-auto h-full max-h-inherit scrollbar-thin hover:scrollbar-thumb-list-scroll-hover scrollbar-thumb-list-scroll scrollbar-track-kanban-column-scrollbar"
             : ""
         } ${view === "day" ? "min-w-[754px]" : "space-y-1"}`}
       >
@@ -462,7 +462,7 @@ export function DaySection({
           }`}
           onClick={() => toggleManageTasksModal?.()}
         >
-          <p className="text-gray-600 dark:text-gray-300 text-micro">
+          <p className="text-[var(--color-view-caption)] text-micro">
             {tasksForDate.length - tasksToShow.length} more
           </p>
         </div>

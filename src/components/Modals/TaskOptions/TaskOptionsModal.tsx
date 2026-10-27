@@ -346,7 +346,7 @@ const TaskOption = ({
 
 const SingleKey = ({ item }: { item: "CTRL" | string }) => {
   return (
-    <kbd className="px-[6px] pt-[1px] text-content mx-[1.5px] rounded-[2px] pb-0 border-gray-200 bg-[#555B64] font-bold dark:border-gray-500">
+    <kbd className="px-[6px] pt-[1px] text-content mx-[1.5px] rounded-[2px] pb-0 bg-[#555B64] font-bold border-[var(--border-keycap)]">
       {item}
     </kbd>
   );

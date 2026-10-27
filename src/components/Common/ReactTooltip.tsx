@@ -70,12 +70,12 @@ const ReactTooltipContent = ({
     data-hover-tooltip-content={topLayer || undefined}
     style={style}
     className={cn(
-      `bg-[#ffff] dark:bg-[#1A1D21] hidden sm:flex sm:flex-col gap-2 items-center ${topLayer ? "" : "z-[9999]"} absolute text-wrap text-white-black
+      `bg-[var(--bg-help-tooltip)] hidden sm:flex sm:flex-col gap-2 items-center${topLayer ? "" : "z-[9999]"} absolute text-wrap text-white-black
       sm:w-[200px] text-center text-dense py-3 px-2 rounded-md cursor-pointer
       shadow-lg ${topLayer ? "scale-100" : `scale-0 group-hover${groupHoverId}:scale-100`} transition-transform duration-100
       ${showAbove
-        ? "before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-8 before:border-transparent before:border-t-white dark:before:border-t-[#1A1D21]"
-        : "after:content-[''] after:absolute after:bottom-full after:left-1/2 after:-translate-x-1/2 after:border-8 after:border-transparent after:border-t-white dark:before:border-t-[#1A1D21]"
+        ? "before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-8 before:border-transparent before:border-t-[var(--border-help-tooltip-arrow)]"
+        : "after:content-[''] after:absolute after:bottom-full after:left-1/2 after:-translate-x-1/2 after:border-8 after:border-transparent after:border-t-white before:border-t-[var(--border-help-tooltip-hidden-arrow)]"
       }`,
       className,
     )}

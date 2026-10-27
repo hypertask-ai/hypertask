@@ -94,7 +94,7 @@ const InboxDraftRow = ({
         }}
       >
         <span className="flex w-full min-w-0 items-center justify-between md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0">
-          <span className="shrink-0 text-dense font-semibold uppercase text-green-700 dark:text-green-300">
+          <span className="shrink-0 text-dense font-semibold uppercase text-[var(--color-draft-status)]">
             Draft
           </span>
           <span className="shrink-0 text-dense font-semibold text-text-light-gray md:hidden">
