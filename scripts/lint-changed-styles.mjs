@@ -44,6 +44,7 @@ export function lintStyles(source, filename) {
       function constantValue(node, seen = new WeakSet()) {
         if (!node || seen.has(node)) return undefined;
         seen.add(node);
+        if (["TSAsExpression", "TSTypeAssertion", "TSSatisfiesExpression", "TSNonNullExpression", "ChainExpression"].includes(node.type)) return constantValue(node.expression, seen);
         if (node.type === "Identifier") {
           for (let scope = sourceCode.getScope(node); scope; scope = scope.upper) {
             const variable = scope.set.get(node.name);

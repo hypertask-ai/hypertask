@@ -158,4 +158,9 @@ test("member access checks only the selected static property", async () => {
   const source = 'const styles = {label: "text-content", raw: "text-[11px]", unrelated: "#123456"}; <div className={styles.label} />';
   assert.deepEqual(lintStyles(source, "src/Probe.tsx"), []);
   assert.equal(lintStyles(source.replace("styles.label", 'styles["raw"]'), "src/Probe.tsx").length, 1);
+  for (const assertion of ["as const", "satisfies Record<string, string>"]) {
+    const asserted = source.replace("};", `} ${assertion};`);
+    assert.deepEqual(lintStyles(asserted, "src/Probe.tsx"), []);
+    assert.equal(lintStyles(asserted.replace("styles.label", "styles.raw"), "src/Probe.tsx").length, 1);
+  }
 });
