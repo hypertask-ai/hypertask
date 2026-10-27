@@ -6,7 +6,7 @@ const path = require("node:path");
 const jiti = createJiti(__filename, { alias: { "@": path.resolve(__dirname, "../src") } });
 const { safeErrorExtra } = jiti("../src/lib/telemetry/errorSanitization.ts");
 const ID = "01a128a7-88f1-7753-b94b-4f8ec8f7cbdf";
-const FLAG = "htpr-6238-posthog-error-alert";
+const FLAG = "htpr-7077-task-writer-real-error";
 const NOW = "2026-10-26T12:00:00Z";
 Object.assign(process.env, {
   ERROR_ALERT_APP_URL: "https://app.hypertask.ai",
@@ -40,7 +40,7 @@ async function replay(featureFlag, { relationStatus = 200 } = {}) {
     }
     if (url.endsWith("/tasks/relations")) {
       if (relationStatus !== 200) return response({ error: "relation failed" }, relationStatus);
-      assert.deepEqual(body, { source_task_id: 100, target_ticket_number: "HTPR-6238", target_project_id: 15, relation_type: "RelatedTo" });
+      assert.deepEqual(body, { source_task_id: 100, target_ticket_number: "HTPR-7077", target_project_id: 15, relation_type: "RelatedTo" });
       relations.set(`${body.source_task_id}:${body.target_ticket_number}`, body);
       return response({ success: true, relation: { id: 1 } });
     }
