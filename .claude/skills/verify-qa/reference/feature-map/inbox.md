@@ -53,3 +53,14 @@ stay gone after reload. Undo must restore them without clearing the blocker.
 Test a mixed selection containing a real notification and a blocked row for the
 same task: archive and undo must process that blocked task only once. Include an
 ordinary notification for a different task to cover the normal bulk path.
+
+## Boundary keyboard jumps
+
+With blocked tickets present, use a list longer than the desktop viewport.
+Move into its middle, press `gg`, then hold Shift for `gg`.
+The first shortcut must focus and reveal the first displayed row; the second
+must focus and reveal the last. Repeat in Important and Blocked by you:
+their displayed date order differs. Include a draft at a boundary when present.
+Neither shortcut may reorder rows or scroll a hidden split. J/K and Enter must
+continue from the newly focused row. With `htpr-8083-inbox-boundaries` off,
+the previous raw-notification boundary behavior remains.
