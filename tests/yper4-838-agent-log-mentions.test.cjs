@@ -122,3 +122,14 @@ test('denied source run never writes or delivers', async () => {
   assert.equal(calls.committed.length, 0);
   assert.equal(calls.deliveries.length, 0);
 });
+
+for (const initial of ['<p>Blocked after two tries. HT Product Lead</p>', html.replace('agent-lead', 'agent-other')]) {
+  test('same visible text and key with changed recipients creates the requested delivery', async () => {
+    const { create, calls } = harness();
+    await create(initial);
+    await create(html);
+    assert.equal(calls.committed.length, 2);
+    assert.equal(calls.deliveries.at(-1).agentId, 'lead');
+    assert.notEqual(calls.committed[0].idempotencyKey, calls.committed[1].idempotencyKey);
+  });
+}
