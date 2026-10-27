@@ -615,4 +615,41 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
   }
 })
 
+
+test('floating chat shares the command palette shadow without changing the phone sheet', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'Desktop', 'covers desktop and phone in one session')
+  test.setTimeout(90_000)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/my-tasks')
+  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
+  const chat = page.locator('.chatwindow')
+  const opener = page.getByRole('button', { name: 'Open AI chat', exact: true })
+  if (await opener.isVisible()) await opener.click()
+  if (!(await chat.isVisible())) {
+    await page.getByTestId('ai-sidebar').locator('button[aria-haspopup="menu"]').click()
+    await page.getByRole('menuitem', { name: 'Toggle Floating View', exact: true }).click()
+  }
+  await expect(chat).toBeVisible()
+  const desktopBounds = await chat.boundingBox()
+  await page.keyboard.press('Control+j')
+  const palette = page.locator('#htc .modal-content')
+  await expect(palette).toBeVisible()
+  const shadow = await chat.evaluate(element => getComputedStyle(element).boxShadow)
+  expect(shadow).not.toBe('none')
+  await expect(palette).toHaveCSS('box-shadow', shadow)
+  await expect(page.locator('#htc')).toHaveCSS('box-shadow', 'none')
+  await page.evaluate(() => document.documentElement.style.setProperty('--shadow-floating', 'rgb(1, 2, 3) 1px 2px 3px 4px'))
+  const changedShadow = await chat.evaluate(element => getComputedStyle(element).boxShadow)
+  expect(changedShadow).not.toBe(shadow)
+  expect(changedShadow).toContain('rgb(1, 2, 3) 1px 2px 3px 4px')
+  await expect(palette).toHaveCSS('box-shadow', changedShadow)
+  await page.evaluate(() => document.documentElement.style.removeProperty('--shadow-floating'))
+  await expect(chat).toHaveCSS('box-shadow', shadow)
+  expect(await chat.boundingBox()).toEqual(desktopBounds)
+  await page.keyboard.press('Escape')
+  await expect(palette).toBeHidden()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.locator('[data-ai-chat-mobile-header]')).toBeVisible()
+  await expect(chat).toHaveCSS('box-shadow', 'none')
+
 })

@@ -23,6 +23,7 @@
   --inbox-text-left-offset: 20px;
   // Pinned comment marker, the same in every theme (was a raw left-edge colour).
   --border-pinned: #ffb980;
+  --shadow-floating: 12px 12px 80px 0px rgb(0, 0, 0);
 }
 
 @media (min-width: 768px) {
@@ -260,6 +261,10 @@ body {
 // }
 * {
   -ms-overflow-style: none;
+}
+
+#htc.paletteModalSizing {
+  box-shadow: none;
 }
 
 .linksModal {

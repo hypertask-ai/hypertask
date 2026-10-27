@@ -194,3 +194,15 @@ the global cron merely for testing: it wakes other owners' agents. If no
 isolated heartbeat trigger and execution-step telemetry are available through
 approved product surfaces, record the live four-step case as UNREACHABLE;
 do not substitute mocked SDK results for a live heartbeat.
+
+## Floating panel elevation
+
+On desktop, open AI chat, open its header menu, then select **Toggle Floating
+View**. Press Ctrl+J with that window still open. Compare the computed
+`box-shadow` of `.chatwindow` and `#htc .modal-content`: they must match.
+The palette's outer `#htc` dialog must have no additional shadow.
+Changing `--shadow-floating` on the document must change both panels together.
+Restore the token, close Ctrl+J, then resize to 390x844: the chat sheet must
+retain no shadow. Check all themes, including Rounded's light and dark modes;
+legacy Dark and Light resolve to Graphite and Porcelain. Capture before/after
+geometry and screenshots without creating a ticket or sending a chat message.

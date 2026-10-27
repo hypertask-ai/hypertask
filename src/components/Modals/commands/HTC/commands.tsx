@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { CommandMode } from "@/models/enums";
+import { cn } from "@/utils/undoActions/helperFuncs";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import {
   boardLayoutAtom,
@@ -857,7 +858,7 @@ const Commands = (props: Props) => {
         keyboard={false}
         className={`paletteModalSizing sm:top-[24%] sm:min-w-[560px] sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
-        contentClassName={composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden"}
+        contentClassName={cn("shadow-floating", composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden")}
       >
         {isInteractive && (
           <TutorialTooltip

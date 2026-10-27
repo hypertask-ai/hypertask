@@ -48,13 +48,8 @@ export const ChatWindow = () => {
         amoledChatBorder && !isMbl && "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:-outline-offset-1 [.amoled_&]:outline-[var(--border-light-gray-thin)] [.amoled_&]:[--bs-border-radius:5px]",
         isMbl
           ? "h-full min-h-0 w-full flex-1 rounded-none"
-          : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded"
+          : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded shadow-floating"
       )}
-      style={{
-        boxShadow: isMbl
-          ? undefined
-          : "0 0px 75px 45px rgb(0 0 0 / 0.5), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)",
-      }}
     >
       <ChatHeader />
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
