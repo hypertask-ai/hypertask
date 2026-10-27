@@ -28,7 +28,9 @@ export function useAiChat() {
   const [editTaskId, setEditTaskId] = useRecoilState(aiChatEditTaskIdAtom);
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
-  const progressiveChatCreateEnabled = useFlag(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG);
+  const progressiveChatCreateFlag = useFlag(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG);
+  let progressiveChatCreateEnabled: true | undefined;
+  if (progressiveChatCreateFlag) progressiveChatCreateEnabled = true;
   const reloadTaskAfterChat = useFlag(HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG);
   const connectionRetry = useFlag(HTPR_7099_CHAT_CONNECTION_LOST_FLAG);
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
