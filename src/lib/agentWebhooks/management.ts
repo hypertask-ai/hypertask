@@ -8,17 +8,14 @@ import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import {
-  AGENT_RUN_FEATURE_FLAG,
-} from "@/lib/agentRuns/model";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AGENT_RUN_WEBHOOK_EVENTS,
   AGENT_WEBHOOK_DELIVERY_CONTRACT,
-  availableAgentWebhookEventDefinitions,
-  availableAgentWebhookEvents,
+  AGENT_WEBHOOK_EVENT_DEFINITIONS,
+  AGENT_WEBHOOK_EVENTS,
   parseAgentWebhookEvents,
 } from "./events";
 import {
@@ -138,12 +135,8 @@ export async function upsertAgentWebhook(input: {
   body: Record<string, unknown>;
 }) {
   await assertAgentWebhookOwner(input.userId, input.agentId, input.principal);
-  const runsEnabled = await isFeatureEnabled(
-    AGENT_RUN_FEATURE_FLAG,
-    input.userId,
-  );
-  const availableEvents = availableAgentWebhookEvents(runsEnabled);
-  const eventDefinitions = availableAgentWebhookEventDefinitions(runsEnabled);
+  const availableEvents = AGENT_WEBHOOK_EVENTS;
+  const eventDefinitions = AGENT_WEBHOOK_EVENT_DEFINITIONS;
 
   const rawUrl = input.body.url;
   const requestedUrl = typeof rawUrl === "string" ? rawUrl.trim() : undefined;
@@ -341,12 +334,8 @@ export async function manageAgentWebhook(input: {
   }
 
   if (input.action === "get") {
-    const runsEnabled = await isFeatureEnabled(
-      AGENT_RUN_FEATURE_FLAG,
-      input.userId,
-    );
-    const availableEvents = availableAgentWebhookEvents(runsEnabled);
-    const eventDefinitions = availableAgentWebhookEventDefinitions(runsEnabled);
+    const availableEvents = AGENT_WEBHOOK_EVENTS;
+    const eventDefinitions = AGENT_WEBHOOK_EVENT_DEFINITIONS;
     return {
       success: true,
       scope: "agent" as const,

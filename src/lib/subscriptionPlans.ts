@@ -241,7 +241,7 @@ function withFreeLimits(plan: ISubscriptionPlan, flags: FreePlanLimitFlags): ISu
   const limitPerks = freePlanLimitLines(flags).map((line) => ({
     title: line.title,
     amount: line.amount,
-    unlimited: line.amount === "Unlimited tickets",
+    unlimited: line.amount === "Unlimited tickets" || line.amount === "Unlimited boards",
   }));
   const perks = [...plan.perks];
   perks.splice(Math.max(membersIndex, 0) + 1, 0, ...limitPerks);

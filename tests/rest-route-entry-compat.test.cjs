@@ -85,7 +85,7 @@ async function run(operation, requestedMode = 'OFF', options = {}) {
       return mode === 'NO_SESSION' ? null : { userId };
     } },
     '@/lib/flags': { SHARED_AGENT_CHAT_FLAG: 'shared-agent-chat', isFeatureEnabled: async (...args) => {
-      if (args[0] === 'htpr-7038-reset-saved-model-choices' || args[0] === 'htpr-7052-chat-names') return false;
+      if (args[0] === 'htpr-7052-chat-names') return false;
       return mode === 'ON';
     } },
     '@/lib/api/rateLimit': { checkRestRateLimit: async (...args) => { limits.push(args); return options.limited ? new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again shortly.' }), { status: 429, headers: { 'content-type': 'application/json', 'Retry-After': '17' } }) : null; } },

@@ -248,7 +248,7 @@ export const AI_Chat_Sidebar = ({
       )}
       style={desktopWidthStyle}
     >
-      {!inOffcanvas && !isMbl && <AiChatSidebarResizeHandle />}
+      <AiChatSidebarResizeHandle />
 
       <div
         className={cn(

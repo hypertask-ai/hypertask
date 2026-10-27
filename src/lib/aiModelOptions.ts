@@ -12,7 +12,7 @@ export type TAiReasoningVariant = "instant" | "thinking" | "mini";
 
 export type TAiModelKey =
   | "gpt-6-luna"
-  | "gpt-5.6-terra"
+  | "gpt-6.1-terra"
   | "gpt-6.1-sol"
   | "claude-sonnet-5-5"
   | "claude-opus-5-5"
@@ -36,9 +36,9 @@ export type TAiModelOptionId =
   | "gpt-6-luna"
   | "gpt-6-luna-light"
   | "gpt-6-luna-high"
-  | "gpt-5.6-terra"
-  | "gpt-5.6-terra-light"
-  | "gpt-5.6-terra-high"
+  | "gpt-6.1-terra"
+  | "gpt-6.1-terra-light"
+  | "gpt-6.1-terra-high"
   | "gpt-6.1-sol"
   | "gpt-6.1-sol-light"
   | "gpt-6.1-sol-high"
@@ -104,9 +104,9 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 2,
   },
   {
-    key: "gpt-5.6-terra",
+    key: "gpt-6.1-terra",
     modelClass: "gpt-terra",
-    label: "Terra 5.6",
+    label: "Terra 6.1",
     provider: "openai",
     priceTier: 2,
   },
@@ -300,35 +300,35 @@ export const aiModelOptions: TAiModelOption[] = [
     providerOptions: { openai: { reasoningEffort: "high" } },
   },
   {
-    id: "gpt-5.6-terra",
+    id: "gpt-6.1-terra",
     source: "openai",
-    title: "GPT Terra 5.6",
-    model: "gpt-5.6-terra",
+    title: "GPT Terra 6.1",
+    model: "gpt-6.1-terra",
     desc: "Balanced mid tier",
     reasoning: "instant",
-    modelKey: "gpt-5.6-terra",
+    modelKey: "gpt-6.1-terra",
     effort: "standard",
     providerOptions: { openai: { reasoningEffort: "medium" } },
   },
   {
-    id: "gpt-5.6-terra-light",
+    id: "gpt-6.1-terra-light",
     source: "openai",
-    title: "GPT Terra 5.6 Light",
-    model: "gpt-5.6-terra",
+    title: "GPT Terra 6.1 Light",
+    model: "gpt-6.1-terra",
     desc: "Fastest Terra replies",
     reasoning: "instant",
-    modelKey: "gpt-5.6-terra",
+    modelKey: "gpt-6.1-terra",
     effort: "light",
     providerOptions: { openai: { reasoningEffort: "low" } },
   },
   {
-    id: "gpt-5.6-terra-high",
+    id: "gpt-6.1-terra-high",
     source: "openai",
-    title: "GPT Terra 5.6 High",
-    model: "gpt-5.6-terra",
+    title: "GPT Terra 6.1 High",
+    model: "gpt-6.1-terra",
     desc: "Deep Terra reasoning",
     reasoning: "thinking",
-    modelKey: "gpt-5.6-terra",
+    modelKey: "gpt-6.1-terra",
     effort: "high",
     providerOptions: { openai: { reasoningEffort: "high" } },
   },
@@ -649,6 +649,9 @@ export function isLunaBlockedForPlan(
 }
 
 const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
+  "gpt-5.6-terra": "gpt-6.1-terra",
+  "gpt-5.6-terra-light": "gpt-6.1-terra-light",
+  "gpt-5.6-terra-high": "gpt-6.1-terra-high",
   "gpt-5.6-luna": "gpt-6-luna",
   "gpt-5.6-luna-light": "gpt-6-luna-light",
   "gpt-5.6-luna-high": "gpt-6-luna-high",

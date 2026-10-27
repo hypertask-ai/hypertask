@@ -1,5 +1,6 @@
 "use client";
 
+import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-8083-inbox-boundaries";
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 
@@ -197,6 +198,7 @@ const InboxSplit = ({
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
+  const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
   const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
@@ -326,7 +328,7 @@ const InboxSplit = ({
 
   const focusKeyboardRow = (
     row: InboxKeyboardTimelineRow,
-    direction?: -1 | 1,
+    direction?: -1 | 1 | "boundary",
   ) => {
     setActiveKeyboardRowKey(row.key);
     if (row.item.kind === "notification") {
@@ -343,6 +345,8 @@ const InboxSplit = ({
       scrollToCenterIfNearTop(activeElement);
     } else if (activeElement && direction === 1) {
       scrollToCenterIfNearBottom(activeElement);
+    } else if (activeElement && direction === "boundary") {
+      activeElement.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   };
 
@@ -521,6 +525,11 @@ const InboxSplit = ({
     ) {
       lastgClick.current = null;
       e.preventDefault();
+      if (inboxBoundaryOrder) {
+        const targetRow = keyboardRows[e.shiftKey ? keyboardRows.length - 1 : 0];
+        if (targetRow) focusKeyboardRow(targetRow, "boundary");
+        return;
+      }
       const targetIndex = jumpToInboxBoundary(
         _notifications,
         e.shiftKey,
@@ -911,6 +920,7 @@ const InboxSplit = ({
   }, [
     _notifications,
     decisionCommentLinks,
+    inboxBoundaryOrder,
     activeDrafts,
     keyboardRows,
     selectedKeyboardRow?.key,

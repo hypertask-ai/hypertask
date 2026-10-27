@@ -69,3 +69,20 @@ Check a board, task, Inbox, My Tasks, Calendar and Search; cancel with Escape,
 then reopen with Ctrl+J. Check both sidebar widths and all four themes.
 The button must not appear at 390x844, or when its flag is off. Existing
 navigation must still work, and the main content must not move horizontally.
+
+## Archive one column
+
+With `htpr-7907-column-archive` on, open a board and choose **Archive all
+tickets in a column** from Ctrl+K. The existing column picker names the
+column; the confirmation counts every active ticket, including tickets
+hidden by view filters. Cancel must change nothing. Confirm once, verify
+that only that column empties, reload, and check the board archive. One
+Undo (or Ctrl+Z) must restore every successful archive. Permission refusals
+name the tickets left unchanged and must not stop the other tickets.
+
+Use only your own `[qa-runner]` fixtures on the private QA runner board.
+Keep at least one fixture in another column and compare its status before
+and after. Repeat the picker, confirmation and Undo at 1440x900 and
+390x844, in all four themes. Check an empty column and single-ticket
+archive too. With the flag off, the command must be absent. Archive only
+your created fixtures after the check.

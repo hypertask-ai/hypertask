@@ -1,7 +1,6 @@
 import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { openWebhookSigningKey } from "@/lib/webhooks/signingKeyStore";
 import { AGENT_WEBHOOK_AUTH_HEADER_FLAG } from "@/lib/flags/definitions/htpr-7905-agent-webhook-auth-header";
 import { postSignedWebhook } from "@/lib/mcp/webhooks/delivery";
@@ -115,26 +114,6 @@ export async function deliverAgentWebhook(
       });
       return { status: "skipped" };
     }
-  }
-
-  const carriesRun =
-    delivery.event.startsWith("run.") ||
-    (typeof payload === "object" &&
-      payload !== null &&
-      !Array.isArray(payload) &&
-      "runId" in payload);
-  if (
-    carriesRun &&
-    !(await isFeatureEnabled(
-      AGENT_RUN_FEATURE_FLAG,
-      delivery.subscription.agent.userId,
-    ))
-  ) {
-    await prisma.agentWebhookDelivery.update({
-      where: { id: delivery.id },
-      data: { status: "cancelled", processingAt: null },
-    });
-    return { status: "skipped" };
   }
 
   const authHeader = await openAuthHeader(

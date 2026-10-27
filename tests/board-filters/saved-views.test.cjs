@@ -116,8 +116,8 @@ test("sort board orders within columns while list header flattens across columns
   const { _sections } = board.getCurrentProject(project);
   assert.deepEqual(_sections.map((section) => section.id), [1, 2, 3, 4, 5, 6]);
   assert.deepEqual(sectionIds(_sections), ["a", "b", "g", "h", "c", "d", "e", "f"]);
-  assert.equal(shouldFlattenSortedRows(true, true, false, false), true);
-  assert.equal(shouldFlattenSortedRows(true, false, false, false), false);
+  assert.equal(shouldFlattenSortedRows(true, true, false), true);
+  assert.equal(shouldFlattenSortedRows(true, false, false), false);
   const compare = table.getSortComparator("ticket", "asc", new Map());
   assert.deepEqual(ids(_sections.flatMap((section) => section.items).sort(compare)), ["f", "a", "d", "b", "h", "e", "c", "g"]);
 });
