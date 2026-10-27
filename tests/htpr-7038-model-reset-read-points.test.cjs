@@ -22,8 +22,19 @@ function defaultExport(value) { return { __esModule: true, default: value }; }
 const resetModule = "@/lib/ai/htpr7038ModelReset";
 const preferenceFile = "src/utils/controllers/users/fetch_preferences.ts";
 
+test("released reset checks completion without a feature flag dependency", async () => {
+  const users = [];
+  const reset = load("src/lib/ai/htpr7038ModelReset.ts", {
+    "@/lib/prisma": defaultExport({ htpr7038ModelChoiceResetDone: {
+      findUnique: async ({ where }) => { users.push(where.userId); return { userId: where.userId }; },
+    } }),
+  });
+  assert.equal(await reset.ensureHtpr7038ModelReset(7), "done");
+  assert.deepEqual(users, [7]);
+});
+
 test("preferences controller runs reset before a cache hit, bypasses stale cache after reset, and reads normally after failure", async () => {
-  for (const result of ["reset", "done", "disabled", "failed"]) {
+  for (const result of ["reset", "done", "failed"]) {
     const events = [];
     const previous = { aiModelPreferences: { aiChat: "luna" } };
     const current = { aiModelPreferences: { aiChat: "claude-haiku-5-5" } };
@@ -44,8 +55,9 @@ test("preferences controller runs reset before a cache hit, bypasses stale cache
 
   // Exercise real fail-open behavior, not a reset stub that already hides errors.
   const reset = load("src/lib/ai/htpr7038ModelReset.ts", {
-    "@/lib/flags": { isFeatureEnabled: async () => { throw new Error("synthetic lookup failure"); } },
-    "@/lib/flags/keys": {},
+    "@/lib/prisma": defaultExport({ htpr7038ModelChoiceResetDone: {
+      findUnique: async () => { throw new Error("synthetic lookup failure"); },
+    } }),
   });
   const controller = load(preferenceFile, {
     [resetModule]: reset,
@@ -67,7 +79,7 @@ test("chat and every editor saved-model surface await reset before reading and s
       const events = [];
       const preferences = { [surface]: "global-choice", teams: { team: { [surface]: "team-choice" } } };
       const stubs = {
-        [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); await Promise.resolve(); events.push("reset-done"); return "disabled"; } },
+        [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); await Promise.resolve(); events.push("reset-done"); return "done"; } },
         "@/lib/prisma": defaultExport({ userSetting: { findUnique: async () => { events.push("read"); return { aiModelPreferences: preferences }; } } }),
         "@/lib/aiModelPreferences": { getAiModelPreferenceIds: (value, requested, team) => {
           assert.equal(value, preferences); assert.equal(requested, surface); assert.equal(team, "team");
@@ -97,7 +109,7 @@ test("chat and every editor saved-model surface await reset before reading and s
 test("preferences API GET reaches the shared controller and POST resets before reading or saving a pick", async () => {
   const events = [];
   const api = load("src/app/api/users/preferences/route.ts", {
-    [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); return "disabled"; } },
+    [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); return "done"; } },
     "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: ["aiChatOpenNewTickets", "aiChatOpenTickets", "aiChatOpenBoards"] },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => ({ userId: 7, user: { id: 7 } }) },
     "@/lib/flags": { isFeatureEnabled: async () => true },
