@@ -55,3 +55,11 @@ test('QA skill stays under 500 words with working local references', () => {
     assert.ok(existsSync(resolve(skill, '..', path)), `missing reference ${path}`);
   }
 });
+
+test('all login rows render in one uninterrupted table', () => {
+  const text = readFileSync(new URL('../reference/logins.md', import.meta.url), 'utf8');
+  const table = text.match(/^\| Type[^\n]*\n(?:\|[^\n]*\n)+/m)?.[0];
+  assert.ok(table, 'login table must exist');
+  assert.equal(table.trim().split('\n').length, 11);
+  assert.match(table, /\| Admin \| 6 \| None permitted/);
+});
