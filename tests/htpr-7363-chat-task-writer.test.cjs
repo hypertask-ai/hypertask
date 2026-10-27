@@ -71,7 +71,7 @@ function harness(options = {}) {
       if (options.preparationError) throw options.preparationError;
       return { model, modelId: "writer-model", teamId: "team", usageProvider: "fixture", settings: {}, tools: undefined };
     },
-    retrieveTaskWriterContext: async (args) => { retrieval.push(plain(args)); return ""; },
+    retrieveTaskWriterContext: async (args) => { retrieval.push(plain(args)); options.onRetrieve?.(); return ""; },
     createDocumentAttachmentSummary: () => "",
     createTaskWriterUserContent: (input) => input,
     extractImgSrcs: () => new Set(),
@@ -126,6 +126,10 @@ function harness(options = {}) {
     "@/lib/ai/chatStream/errors": errors,
   });
   const create = moduleWithStubs("src/lib/ai/tools/createTask.ts", {
+    "@/lib/flags/definitions/htpr-7758-progressive-chat-create": { HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG: "htpr-7758-progressive-chat-create" },
+    "@/lib/ai/taskWriterDuplicateGuard": duplicateGuard,
+    "@/utils/helperFunctions/escapeHtml": load(path.join(root, "src/utils/helperFunctions/escapeHtml.ts")),
+    "./updateOneTask": { createTaskUpdater: () => { throw new Error("Legacy creation must not update another ticket"); } },
     "@/lib/flags/keys": keys,
     "@/lib/flags": { isFeatureEnabled: async () => false },
     ai,
@@ -177,6 +181,7 @@ function harness(options = {}) {
   });
   return { tool, saved, calls, usage, selections, confirmations, retrieval, reports, run,
     get maxActive() { return maxActive; },
+    write: (input, onPrepared) => draft.generateTaskWriterDraft(run.taskWriterRequestSchema.parse(input), 985, null, signal, undefined, onPrepared),
     execute: (input) => tool.execute(tool.inputSchema.parse(input)),
     post: (input) => route.POST({ json: async () => input }),
   };
@@ -375,4 +380,40 @@ test("chat turn resolves the server flag once for the authenticated user and for
   assert.equal(toolArgs[0][8], providerAbort.signal);
   assert.equal(toolArgs[0][9], true);
   assert.equal(toolArgs[0][11], true);
+});
+
+
+test("early publication runs after all writer context is read, before one unchanged generation", async () => {
+  const h = harness();
+  let published = false;
+  const result = await h.write({ projectId: 15, PROMPT: "Keep the original brief", aiMode: "AiTaskWriter", requestKind: "manual" }, async () => {
+    assert.equal(h.selections.length, 1);
+    assert.equal(h.retrieval.length, 1);
+    assert.equal(h.calls.length, 0);
+    published = true;
+  });
+  assert.equal(published, true);
+  assert.equal(h.calls.length, 1);
+  assert.equal(result.title, "Writer title");
+  assert.equal(result.html, "<p>Writer body.</p>");
+  assert.equal(result.priority, 2);
+  assert.equal(result.estimate, 3);
+});
+
+test("a refused early save never starts the writer model", async () => {
+  const h = harness();
+  await assert.rejects(h.write({ projectId: 15, PROMPT: "Original brief", aiMode: "AiTaskWriter", requestKind: "manual" }, async () => {
+    throw new Error("Save refused");
+  }), /Save refused/);
+  assert.equal(h.calls.length, 0);
+});
+
+
+test("stopping during context preparation cannot publish a ticket", async () => {
+  const controller = new AbortController();
+  const h = harness({ controller, onRetrieve: () => controller.abort() });
+  let published = false;
+  await assert.rejects(h.write({ projectId: 15, PROMPT: "Original brief", aiMode: "AiTaskWriter", requestKind: "manual" }, async () => { published = true; }), /abort/i);
+  assert.equal(published, false);
+  assert.equal(h.calls.length, 0);
 });

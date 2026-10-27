@@ -159,6 +159,10 @@ function harness(options = {}) {
     "@/lib/ai/chatStream/errors": errors,
   });
   const create = moduleWithStubs("src/lib/ai/tools/createTask.ts", {
+    "@/lib/flags/definitions/htpr-7758-progressive-chat-create": { HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG: "htpr-7758-progressive-chat-create" },
+    "@/lib/ai/taskWriterDuplicateGuard": duplicateGuard,
+    "@/utils/helperFunctions/escapeHtml": load(path.join(root, "src/utils/helperFunctions/escapeHtml.ts")),
+    "./updateOneTask": { createTaskUpdater: () => { throw new Error("Legacy creation must not complete another ticket"); } },
     ai,
     "@/app/api/ai/chat/stream/bulkTools": { buildBulkOperationKey: (kind, tasks) => JSON.stringify([kind, tasks]) },
     "@/lib/ai/bulkConfirmation": { requireCrossMessageConfirmation: async (args) => { confirmations.push(args); return options.confirmed ? "execute" : "preview"; } },

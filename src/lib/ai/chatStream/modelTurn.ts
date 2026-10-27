@@ -77,10 +77,18 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     },
   ];
   const toolExecutions: ToolExecution[] = [];
+  const taskProgress: string[] = [];
+  const streamedContent: string[] = [];
   const tools = buildTools(
     dbUser,
     resolvedBody,
-    state.send,
+    (event, data) => {
+      if (event === "task_created" && typeof data.content === "string") {
+        taskProgress.push(data.content);
+        streamedContent.push(data.content);
+      }
+      return state.send(event, data);
+    },
     (execution) => {
       toolExecutions.push(execution);
     },
@@ -132,9 +140,17 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     }
   }
   state.generationStartedAt = Date.now();
-  const reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions });
-  if (!reply) return;
-  const { chunks } = reply;
+  let reply: Awaited<ReturnType<typeof generateModelReply>> = undefined;
+  let replyFailure: { error: unknown } | undefined;
+  try {
+    reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions, onContent: (content) => streamedContent.push(content) });
+  } catch (error) {
+    if (!taskProgress.length) throw error;
+    replyFailure = { error };
+  }
+  if (!reply && !taskProgress.length) return;
+  const chunks = taskProgress.length ? streamedContent : reply?.chunks ?? [];
+  if (!reply) chunks.push("<p>Reply stopped. Your saved ticket remains.</p>");
 
   state.turnDeadline?.clear();
 
@@ -209,6 +225,9 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
       }
     }
   }
+
+  if (replyFailure) throw replyFailure.error;
+  if (!reply) return;
 
   if (heartbeatExecutionId) {
     if (assistantPersisted) {

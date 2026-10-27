@@ -28,6 +28,21 @@ only and may validly be fewer or absent when no specific improvement is justifie
 Record the effective flag and response. If chips are returned, wait for them
 (about 10 s), click one and check it is sent and answered in the same chat.
 
+## Ticket-first creation
+
+With `htpr-7758-progressive-chat-create`, request one ticket on QA Sandbox.
+The saved title-only ticket link appears before its description finishes.
+Open that link while writing continues. The completed writer title, body,
+priority and size must arrive without reloading. Reload both chat and ticket;
+the link and completed content must remain. Ordinary chat must not navigate.
+If writing fails, keep the saved ticket and show the unfinished-body notice;
+never retry by creating another ticket. Saved title or description edits,
+archive and cross-board moves must prevent the background replacement.
+Record desktop and phone send-to-visible-link timings separately from
+body completion, with sample counts and errors. Keep Task Writer inputs,
+models, prompts and output unchanged; prepare context before publishing so
+the new ticket cannot become its own duplicate-search result.
+
 ## Floating chat outline
 
 Open chat from a task, use the overflow menu's **Toggle Floating View**, then

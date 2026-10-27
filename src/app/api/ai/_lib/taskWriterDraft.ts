@@ -13,6 +13,7 @@ export async function generateTaskWriterDraft(
   agentId?: string | null,
   abortSignal?: AbortSignal,
   teamScope?: AgentTokenTeamScope | null,
+  onPrepared?: () => Promise<void>,
 ) {
   const startedAt = Date.now();
   const {
@@ -38,6 +39,10 @@ export async function generateTaskWriterDraft(
     feature: "task-writer",
     reasoningFeature: "task-writer",
   });
+  abortSignal?.throwIfAborted();
+  await onPrepared?.();
+  abortSignal?.throwIfAborted();
+  const generationStartedAt = Date.now();
   const { text } = await generateText({
     experimental_download: downloadWithoutBrotli,
     model: selected.model,
@@ -72,7 +77,8 @@ export async function generateTaskWriterDraft(
     requestKind: body.requestKind,
     model: selected.modelId,
     prepareMs: Math.round(preparedAt - startedAt),
-    writerMs: Math.round(generatedAt - preparedAt),
+    writerMs: Math.round(generatedAt - generationStartedAt),
+    ...(onPrepared ? { publishMs: Math.round(generationStartedAt - preparedAt) } : {}),
     parseMs: Math.round(parsedAt - generatedAt),
     totalMs: Math.round(parsedAt - startedAt),
   })}`);

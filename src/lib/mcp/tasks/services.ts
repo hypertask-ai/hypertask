@@ -348,6 +348,7 @@ export async function mutateTaskLabels(
         add?: (string | number)[];
         remove?: (string | number)[];
         skipIfPresent?: (string | number)[];
+        onlyIfUnedited?: boolean;
     },
     userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null },
     fromAgent?: ActingAgent | null,
@@ -362,6 +363,10 @@ export async function mutateTaskLabels(
             where: { taskId },
             include: { label: true },
         });
+        if (changes.onlyIfUnedited && (existing.length > 0 || await tx.comment.findFirst({
+            where: { taskId, activity: { path: ['type'], equals: 'TaskLabel' } },
+            select: { id: true },
+        }))) return [];
         const existingIds = new Set(existing.map(row => row.labelId));
         if (skipIfPresentIds.some(labelId => existingIds.has(labelId))) return [];
         let changed = false;
@@ -442,6 +447,7 @@ export async function createTask(data: {
     agentTokenGeneration?: string | null;
     creationChannel: CreationChannel;
     analyticsAgentId?: string | null;
+    initializeWriterDefaults?: boolean;
 }) {
     const { projectId, title, description, sectionId, sectionTitle, userId, priorityIndex, estimateIndex, projectUniqueIdentifier, labels: labelIds, parentTaskId, agentId, assigneeIds, creationChannel, analyticsAgentId } = data;
 
@@ -587,6 +593,7 @@ export async function createTask(data: {
         },
         body: JSON.stringify({
             title,
+            ...(data.initializeWriterDefaults ? { initializeWriterDefaults: true } : {}),
             userId,
             projectId,
             projectIdentifier: projectUniqueIdentifier,
