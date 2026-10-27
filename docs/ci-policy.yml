@@ -32,6 +32,15 @@ topology:
   # ubuntu-latest; their implementation lives in .github/workflows/ and is not
   # duplicated here.
 
+runner_policy:
+  ticket: https://app.hypertask.ai/detail/project-4060/844
+  script: .github/scripts/ci-runner-policy.cjs
+  enforcement: trusted_production_code_against_candidate_git_objects
+  required_context: pr-title
+  visibility_source: live_github_repository_api
+  public_runner: ubuntu-latest
+  private_hosted_approval: null
+
 pr_job_budget:
   parallel_job_limit: 20
   normal_synchronize_before: 17
