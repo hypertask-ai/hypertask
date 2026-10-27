@@ -8,6 +8,7 @@ import { isTeamComped } from "@/lib/teamComp";
 import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import { isSubscriptionActive } from "@/lib/constants/constants";
 import { reportError } from "@/lib/errors/reportError";
+import { refreshStripeSubscriptionSnapshotWithLockHeld } from "@/lib/stripeSubscriptionSnapshot";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 
 export type SeatBillingResult =
@@ -56,6 +57,7 @@ export type SeatBillingAdapter = {
     plan: SeatBillingTeam["subscriptionPlan"][number],
     assertHeld: () => void,
   ) => Promise<boolean>;
+  refreshSubscriptionSnapshot?: (teamId: string, subscriptionId: string, assertHeld: () => void) => Promise<unknown>;
   updateSubscriptionItem: (
     itemId: string,
     update: {
@@ -97,6 +99,7 @@ const productionAdapter: SeatBillingAdapter = {
       },
     }),
   resolveQuantity: resolveSeatQuantity,
+  refreshSubscriptionSnapshot: refreshStripeSubscriptionSnapshotWithLockHeld,
   retrieveSubscriptionItem: (itemId) =>
     stripe.subscriptionItems.retrieve(itemId).then((item) => ({
       id: item.id,
@@ -326,6 +329,7 @@ async function syncSeatBilling(
       desiredQuantity === currentQuantity ||
       (!exact && desiredQuantity < currentQuantity)
     ) {
+      await adapter.refreshSubscriptionSnapshot?.(teamId, activePlan.subscriptionId, assertHeld);
       return "OK";
     }
 
@@ -348,6 +352,7 @@ async function syncSeatBilling(
       },
     );
     assertHeld();
+    await adapter.refreshSubscriptionSnapshot?.(teamId, activePlan.subscriptionId, assertHeld);
     return exact ? "RECONCILED" : "SEATED";
   } catch (error) {
     if (error instanceof OrphanedSubscriptionItemError) {

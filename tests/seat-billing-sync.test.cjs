@@ -47,6 +47,16 @@ function stub({ team, quantity, throws = false }) {
   updateThrows = throws;
 
   prisma.team.findUnique = async () => teamRow;
+  prisma.subscriptionPlan.findFirst = async () => ({
+    ...teamRow.subscriptionPlan[0], id: "row_test", teamId: "team_1",
+    subscriptionObject: null,
+    team: { activeSubscriptionPlanId: "sub_test", stripe_customer_id: "cus_test" },
+  });
+  prisma.subscriptionPlan.updateMany = async () => ({ count: 1 });
+  subscriptionModule.stripe.subscriptions.retrieve = async () => ({
+    id: "sub_test", customer: "cus_test", status: teamRow.subscriptionPlan[0].subscriptionStatus,
+    items: { data: [{ id: "si_test", quantity: stripeQuantity, price: { id: "price_test" } }] },
+  });
   prisma.user.findUnique = async () => ({ email: "owner@example.com" });
   subscriptionModule.stripe.subscriptionItems.retrieve = async (id) => ({
     id,
@@ -57,6 +67,7 @@ function stub({ team, quantity, throws = false }) {
   subscriptionModule.stripe.subscriptionItems.update = async (id, args) => {
     updates.push({ id, ...args });
     if (updateThrows) throw new Error("card_declined");
+    stripeQuantity = args.quantity;
     return { id, ...args };
   };
 }
