@@ -25,8 +25,6 @@ module.exports = async ({ github, context, core, fetchImpl = fetch }) => {
   core.setOutput('sha', pr.head.sha);
   core.setOutput('title', pr.title);
 
-  await require('./ci-runner-policy.cjs').checkPullRequest({ pr, core });
-
   if (pr.user.login.endsWith('[bot]') && !shape.test(pr.title)) {
     core.info(`Skipping ${pr.user.login}: bots do not follow the agent title rule.`);
     return;

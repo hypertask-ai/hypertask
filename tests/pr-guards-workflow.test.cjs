@@ -18,6 +18,7 @@ async function publish(name, outcomes, completedRun = false, { current = {}, eva
   const gets = [];
   const associations = [];
   const headSha = completedRun ? 'b'.repeat(40) : SHA;
+  if (name === 'pr-guards-trusted' && !completedRun) outcomes = { 'runner-policy': 'success', ...outcomes };
   const previous = process.env.RESULTS;
   process.env.RESULTS = JSON.stringify(Object.fromEntries(Object.entries(outcomes).map(([id, outcome]) => [id, { outcome, outputs: { sha: SHA, ...(id === 'title' ? { title: TITLE } : {}), ...evaluated[id] } }])));
   try {
@@ -174,12 +175,20 @@ test('trusted guards fail their own contexts and the job without overwriting sem
   assert.deepEqual(result.posts.map(post => post.context).sort(), ['outside-pr-guard', 'pr-size', 'pr-title'].sort());
   assert.ok(result.posts.every(post => post.state === 'success'));
   assert.deepEqual(result.failures, []);
-  for (const [id, context] of [['outside', 'outside-pr-guard'], ['size', 'pr-size'], ['title', 'pr-title']]) {
+  for (const [id, context] of [['outside', 'outside-pr-guard'], ['size', 'pr-size'], ['title', 'pr-title'], ['runner-policy', 'pr-title']]) {
     for (const outcome of ['failure', 'skipped', 'cancelled']) {
       const failed = await publish('pr-guards-trusted', { ...green, [id]: outcome });
       assert.equal(failed.posts.find(post => post.context === context).state, 'failure', `${id}/${outcome}`);
       assert.equal(failed.failures.length, 1);
     }
+  }
+});
+
+test('runner policy missing or evaluated on another head fails the title context closed', async () => {
+  for (const options of [{ outcomes: { 'runner-policy': undefined } }, { evaluated: { 'runner-policy': { sha: 'b'.repeat(40) } } }]) {
+    const result = await publish('pr-guards-trusted', { outside: 'success', size: 'success', title: 'success', ...options.outcomes }, false, options);
+    assert.equal(result.posts.find(post => post.context === 'pr-title').state, 'failure');
+    assert.equal(result.failures.length, 1);
   }
 });
 
@@ -211,7 +220,7 @@ test('trusted publishers compare each guard evaluated head with the fresh API he
 });
 
 test('a guard with no evaluated SHA cannot publish a green verdict', async () => {
-  for (const [id, context] of [['outside', 'outside-pr-guard'], ['size', 'pr-size'], ['title', 'pr-title']]) {
+  for (const [id, context] of [['outside', 'outside-pr-guard'], ['size', 'pr-size'], ['title', 'pr-title'], ['runner-policy', 'pr-title']]) {
     const result = await publish('pr-guards-trusted', { outside: 'success', size: 'success', title: 'success' }, false,
       { evaluated: { [id]: { sha: '' } } });
     assert.equal(result.posts.find(post => post.context === context).state, 'failure');
@@ -265,7 +274,7 @@ test('pending title status also skips same-head edits and all pending statuses s
 
 test('global reconciliation keeps original events, serialization and isolated workflows', () => {
   const trusted = workflow('pr-guards-trusted').jobs['pr-guards-trusted'];
-  assert.deepEqual(trusted.steps.filter(step => step.id).map(step => step.id), ['outside', 'size', 'title']);
+  assert.deepEqual(trusted.steps.filter(step => step.id).map(step => step.id), ['outside', 'size', 'title', 'runner-policy']);
   assert.doesNotMatch(JSON.stringify(trusted), /feature-flag|ux-signoff/);
   assert.doesNotMatch(JSON.stringify(trusted.steps.filter(step => step.id !== 'title')), /MCP_TOKEN/);
   assert.deepEqual(trusted.steps.find(step => step.id === 'title').env, {

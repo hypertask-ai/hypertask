@@ -86,7 +86,7 @@ test('trusted PR title execution scans candidate Git data and publishes failure 
   fs.writeFileSync(path.join(dir, 'docs/ci-policy.yml'), yaml.dump(policy));
   const workflow = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/pr-guards-trusted.yml'), 'utf8'));
   const job = workflow.jobs['pr-guards-trusted'];
-  const title = job.steps.find(step => step.id === 'title').with.script;
+  const runner = job.steps.find(step => step.id === 'runner-policy').with.script;
   const publish = job.steps.find(step => step.name === 'Publish original guard contexts').with.script;
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   process.chdir(dir); process.env.PATH = `${dir}/bin:${originalPath}`; delete process.env.GH_TOKEN;
@@ -100,10 +100,10 @@ test('trusted PR title execution scans candidate Git data and publishes failure 
     const context = { repo: { owner: 'fixture', repo: 'app' }, payload: { pull_request: pr } };
     const core = { info() {}, setOutput: (key, value) => { outputs[key] = value; }, setFailed: message => { throw new Error(message); } };
     let outcome = 'success';
-    try { await new AsyncFunction('github', 'context', 'core', 'require', title)(github, context, core, () => ({ checkPullRequest })); }
+    try { await new AsyncFunction('github', 'context', 'core', 'require', runner)(github, context, core, () => ({ checkPullRequest })); }
     catch (error) { outcome = 'failure'; assert.doesNotMatch(error.message, /Candidate code executed/); }
     const previous = process.env.RESULTS;
-    process.env.RESULTS = JSON.stringify({ outside: { outcome: 'success', outputs: { sha } }, size: { outcome: 'success', outputs: { sha } }, title: { outcome, outputs } });
+    process.env.RESULTS = JSON.stringify({ outside: { outcome: 'success', outputs: { sha } }, size: { outcome: 'success', outputs: { sha } }, title: { outcome: 'success', outputs: { sha, title: pr.title } }, 'runner-policy': { outcome, outputs } });
     try { await new AsyncFunction('github', 'context', 'core', publish)(github, context, { ...core, setFailed() {} }); }
     finally { if (previous === undefined) delete process.env.RESULTS; else process.env.RESULTS = previous; }
     assert.equal(posts.find(post => post.context === 'pr-title').state, state);

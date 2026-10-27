@@ -47,7 +47,7 @@ jobs:
       - name: CI runner policy fixtures
         env:
           NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules
-        run: node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs
+        run: node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs tests/pr-title-workflow.test.cjs tests/pr-ticket-binding.test.cjs
 
       - name: Install offline test dependencies
         shell: bash
