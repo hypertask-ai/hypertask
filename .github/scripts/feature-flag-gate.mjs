@@ -1002,6 +1002,9 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
 
 function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
+  for (let parent = node.parent; parent && !typescript.isFunctionLike(parent); parent = parent.parent) {
+    if (typescript.isTryStatement(parent)) return false;
+  }
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     if (typescript.isReturnStatement(parent) && child === parent.expression) return !earlyOnly;
