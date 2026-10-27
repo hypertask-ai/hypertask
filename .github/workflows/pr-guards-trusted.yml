@@ -16,7 +16,7 @@ permissions:
   statuses: write
 
 concurrency:
-  group: pr-guards-trusted-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
