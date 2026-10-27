@@ -11,6 +11,7 @@ let state = require("../src/lib/state.tsx");
 let atoms = require("../src/store/index.ts");
 const config = require("../src/lib/configs/style.config.ts");
 const { useStore } = require("jotai");
+const { loader } = require("./helpers/htpr-7260-ui.cjs");
 
 function handle(enabled) {
   const source = fs.readFileSync(path.join(__dirname, "../src/components/AI_CHAT/AiChatSidebarResizeHandle.tsx"), "utf8");
@@ -35,11 +36,11 @@ function handle(enabled) {
   return exports.AiChatSidebarResizeHandle;
 }
 
-async function fixture(t, enabled = true) {
+async function fixture(t, enabled = true, mobileSidebar = false) {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai" });
   const previous = { window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
-  window.innerWidth = 1440;
+  window.innerWidth = mobileSidebar ? 390 : 1440;
   delete require.cache[require.resolve("../src/lib/state.tsx")];
   delete require.cache[require.resolve("../src/store/index.ts")];
   state = require("../src/lib/state.tsx");
@@ -47,9 +48,31 @@ async function fixture(t, enabled = true) {
   let root = createRoot(document.getElementById("root"));
   let store;
   let Handle = handle(enabled);
+  const noop = () => null;
+  const Mobile = React.createContext(mobileSidebar);
+  const Sidebar = mobileSidebar ? loader({
+    "@/lib/state": state,
+    "@/store": atoms,
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/app/agents/chat/AgentChatClient": { default: noop },
+    "@/lib/agents/chatDrafts": { readDraft: noop, writeDraft: noop },
+    "@/lib/agents/chatViewerState": { getNativeSidebarChat: noop, setNativeSidebarChat: noop },
+    "@/utils/api/ai_chat/aiChatHelpers": { AI_Chat_API: {} },
+    "next/navigation": { useSearchParams: () => new URLSearchParams() },
+    "@tanstack/react-query": { useQueryClient: noop },
+    "./MessageList": { MessageList: noop },
+    "./WelcomeScreen": { WelcomeScreen: noop },
+    "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ showWelcomeScreen: true }) },
+    "@/lib/contexts/mobileContext": { MobileViewContext: Mobile },
+    "./ChatHeader": { ChatHeader: noop },
+    "./AI_Tiptap_Container": { AI_Tiptap_Container: noop },
+    "./AiChatSidebarResizeHandle": { AiChatSidebarResizeHandle: Handle },
+    "@/lib/configs/style.config": config,
+    "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.flat().filter(Boolean).join(" ") },
+  })("src/components/AI_CHAT/AI_Chat_Sidebar.tsx").AI_Chat_Sidebar : null;
   function App({ show = true }) {
     store = useStore();
-    return show ? React.createElement(Handle) : null;
+    return show ? React.createElement(Sidebar ?? Handle, Sidebar ? { inOffcanvas: true } : {}) : null;
   }
   const render = async (show = true) => React.act(async () => {
     root.render(React.createElement(state.StateRoot, null, React.createElement(App, { show })));
@@ -167,4 +190,26 @@ test("an untouched default keeps existing viewport clamping", async (t) => {
   assert.equal(app.width(), 340);
   await app.resize(1440);
   assert.equal(app.width(), 420, "a deliberate drag to the default width is remembered");
+});
+
+for (const enabled of [false, true]) {
+  test(`phone chat preserves the legacy 340px search reservation after returning to desktop (remember width: ${enabled})`, async (t) => {
+    const app = await fixture(t, enabled, true);
+    assert.equal(app.store.get(atoms.aiChatSidebarWidthPxAtom), 340);
+    assert.equal(document.querySelector('[data-ai-chat-panel]').style.width, "", "phone chat stays full width");
+    const separator = document.querySelector('[role="separator"]');
+    assert.ok(separator.classList.contains("hidden"), "the desktop handle stays hidden on phones");
+    await app.resize(1440);
+    assert.equal(app.store.get(atoms.aiChatSidebarWidthPxAtom), 340, "an untouched width must not grow back to 420px");
+    assert.equal(app.store.get(atoms.aiChatSidebarPreferredWidthsAtom), null, "viewport changes never save a drag preference");
+  });
+}
+
+test("phone chat clamps only the displayed width, not the user's saved AI chat width", async (t) => {
+  const app = await fixture(t, true, true);
+  await React.act(async () => app.store.set(atoms.aiChatSidebarPreferredWidthsAtom, { 985: 820 }));
+  assert.equal(app.store.get(atoms.aiChatSidebarWidthPxAtom), 340);
+  assert.deepEqual(app.store.get(atoms.aiChatSidebarPreferredWidthsAtom), { 985: 820 });
+  await app.resize(1440);
+  assert.equal(app.store.get(atoms.aiChatSidebarWidthPxAtom), 820);
 });
