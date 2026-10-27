@@ -309,6 +309,42 @@ async function seedSessionFixtures(flags) {
     flag: "wx",
     mode: 0o600,
   });
+  const pages = {};
+  for (const lane of ["Desktop", "Mobile"]) {
+    const pagesUser = await prisma.user.create({ data: {
+      uid: `pages-${lane}-${runKey}`, email: `pages-${lane}-${runKey}@example.invalid`,
+      displayName: `Pages ${lane}`,
+      UserSetting: { create: { notification: false, onboardingTourStatus: true, onboardingTutorialStatus: true } },
+    }, include: { UserSetting: true } });
+    const pagesAccount = await prisma.googleAccount.create({ data: { userId: pagesUser.id, stripe_customer_id: `pages-${lane}-${runKey}` } });
+    const pagesTeam = await prisma.team.create({ data: { title: `Pages ${lane}`, totalSeats: 1, googleAccountId: pagesAccount.id } });
+    await prisma.team_Activity.create({ data: { teamId: pagesTeam.id, lastActiviyAt: new Date() } });
+    await prisma.user.update({ where: { id: pagesUser.id }, data: { UserSettingId: pagesUser.UserSetting.id, accountId: pagesAccount.id } });
+    await prisma.user_Activity.create({ data: { userId: pagesUser.id, totalTeamsOwned: 1, lastActiveAt: new Date() } });
+    await prisma.member_Team.create({ data: {
+      userId: pagesUser.id, teamId: pagesTeam.id, googleAccountId: pagesAccount.id, status: "Accepted", acceptedAt: new Date(),
+    } });
+    const pageBoard = await createBoard({
+      ownerId: pagesUser.id,
+      teamId: pagesTeam.id,
+      googleAccountId: pagesAccount.id,
+      title: `Browser smoke Pages ${lane}`,
+      suffix: `pages${lane.toLowerCase()}`,
+    });
+    pages[lane] = {
+      projectId: pageBoard.id,
+      taskId: pageBoard.task.id,
+      detailPath: `/detail/project-${pageBoard.id}/${pageBoard.task.uniqueIndex}`,
+    };
+    await writeFile(path.join(path.dirname(stateFile), `pages-${lane}-state.json`), JSON.stringify({
+      ...state,
+      cookies: state.cookies.map(cookie => ({ ...cookie,
+        value: cookie.name === "ht_session" ? signSession({ id: pagesUser.id, email: pagesUser.email })
+          : cookie.name === "nookies_user" ? encodeURIComponent(JSON.stringify({ ...pagesUser, accountId: pagesAccount.id, UserSettingId: pagesUser.UserSetting.id }))
+          : cookie.name === "previousBoard" ? `project-${pageBoard.id}|&|` : cookie.value,
+      })),
+    }), { flag: "wx", mode: 0o600 });
+  }
   let scopeAccount, scopeTeam;
   const scopeBoards = [];
   for (const lane of ["Desktop", "Mobile"]) {
@@ -470,6 +506,7 @@ async function seedSessionFixtures(flags) {
     title: board.task.title,
     description: "This seeded ticket must open from its board card.",
     detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
+    pages,
     longThreadDetailPath: `/detail/project-${threadBoard.id}/${threadBoard.task.uniqueIndex}`,
     agentDescriptionDetailPath: `/detail/project-${agentDescriptionBoard.id}/${agentDescriptionBoard.task.uniqueIndex}`,
     flags,

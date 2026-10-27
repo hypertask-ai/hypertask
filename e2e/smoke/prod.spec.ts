@@ -530,14 +530,22 @@ for (const view of VIEWS) {
   })
 }
 
+test.describe('Pages fixtures', () => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  test.use({ storageState: async ({}, applyState, info) => {
+    const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
+    await applyState(path.join(path.dirname(stateFile), `pages-${info.project.name}-state.json`))
+  } })
+
 test('Pages list creates a document, links a ticket, persists, unlinks and separates archived pages', async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'Writes only to disposable PR fixtures')
   const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
   const fixture = JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'card-fixture.json'), 'utf8'))
   test.skip(!fixture.flags['htpr-7298-standalone-pages'] || !fixture.flags['htpr-7309-pages-screens'], 'Pages screens are off in this flag mode')
-  const boardId = Number(fixture.detailPath.match(/project-(\d+)/)[1])
+  const pageFixture = fixture.pages[testInfo.project.name]
+  const boardId = pageFixture.projectId
   const title = `Pages smoke ${testInfo.project.name} ${Date.now()}`
-  await page.goto(withRealtime(process.env.SMOKE_DEMO_BOARD_PATH!))
+  await page.goto(withRealtime(`/project?id=${boardId}&surface=board`))
   await page.goto(withRealtime(`/pages?project_id=${boardId}`))
   await expect(page.getByRole('main', { name: 'Pages', exact: true })).toBeVisible()
   await page.keyboard.press('Control+k')
@@ -557,7 +565,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toHaveValue(title)
     await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
     console.log('[pages] title saved and reloaded')
-    const linked = await page.request.post(`/api/pages/${publicId}/links`, { data: { task_id: fixture.taskId } })
+    const linked = await page.request.post(`/api/pages/${publicId}/links`, { data: { task_id: pageFixture.taskId } })
     expect(linked.ok()).toBe(true)
     await page.reload()
     await expect(page.getByText('Linked tickets (1)', { exact: true })).toBeVisible()
@@ -565,7 +573,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     console.log('[pages] ticket linked')
     await page.getByRole('textbox', { name: 'Page title', exact: true }).fill(`${title} pending`)
     await page.getByRole('region', { name: 'Linked tickets', exact: true }).getByRole('link').click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe(fixture.detailPath)
+    await expect.poll(() => new URL(page.url()).pathname).toBe(pageFixture.detailPath)
     await page.goto(`/page/${publicId}`)
     await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toHaveValue(`${title} pending`)
     await page.getByRole('textbox', { name: 'Page title', exact: true }).fill(title)
@@ -574,7 +582,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await expect(page.getByText('Linked tickets (0)', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
     console.log('[pages] pending save persisted and ticket unlinked')
-    await page.goto(fixture.detailPath)
+    await page.goto(pageFixture.detailPath)
     await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
     const linkPageCommand = page.getByRole('dialog').getByText('Link page', { exact: true })
     await page.keyboard.press('Control+k')
@@ -584,7 +592,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await page.locator('#option-picker input').fill(title)
     await page.locator('#option-picker').getByText(title, { exact: true }).click()
     await expect(page.locator(`a[href="/page/${publicId}"]`)).toBeVisible()
-    const unlinked = await page.request.delete(`/api/pages/${publicId}/links`, { data: { task_id: fixture.taskId } })
+    const unlinked = await page.request.delete(`/api/pages/${publicId}/links`, { data: { task_id: pageFixture.taskId } })
     expect(unlinked.ok()).toBe(true)
     await page.goto(`/page/${publicId}`)
     await page.getByRole('button', { name: 'Back to Pages', exact: true }).click()
@@ -605,4 +613,6 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
   } finally {
     await page.request.post(`/api/pages/${publicId}/archive`, { timeout: 5000 }).catch(() => {})
   }
+})
+
 })
