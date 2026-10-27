@@ -4,7 +4,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 let entry = 0;
 
-async function inbox({ flagOn = true, kind = "qa", assigned = true, muted = false, status = "Normal", section = "In Progress", laterUpdate = false, stale = false, splitMuted = false } = {}) {
+async function inbox({ flagOn = true, kind = "qa", assigned = true, muted = false, status = "Normal", section = "In Progress", laterUpdate = false, laterChatter = false, laterHuman = false, stale = false, splitMuted = false } = {}) {
   const now = new Date();
   const activityAt = stale ? new Date(now.getTime() - 30 * 86400000) : now;
   const comment = { id: 321948, text: "<p>Human update</p>", kind };
@@ -18,13 +18,14 @@ async function inbox({ flagOn = true, kind = "qa", assigned = true, muted = fals
   const row = {
     id: 344971, taskId: task.id, projectId: 4060, type: laterUpdate ? "TaskMoved" : "Comment",
     userId: 6, agentId: null, fromAgentId: actor.id, fromUserId: 6,
-    comment: laterUpdate ? null : comment, commentId: laterUpdate ? null : comment.id,
-    createdAt: now, task, project: { id: 4060, title: "Fleet Infra" }, directReply: false,
+    comment: laterUpdate ? null : laterChatter || laterHuman ? { id: 321949, text: "Newer comment", kind: null } : comment, commentId: laterUpdate ? null : laterChatter || laterHuman ? 321949 : comment.id,
+    createdAt: now, fromAgent: actor, ...(laterHuman ? { fromAgentId: null, fromAgent: null } : {}), task, project: { id: 4060, title: "Fleet Infra" }, directReply: false,
   };
   const calls = [];
   const prisma = {
     $queryRaw: async (query) => query.sql.includes("AS selected") ? [{ id: row.id }] : [
       { taskId: task.id, type: "Comment", fromAgentId: actor.id, fromUserId: 6, createdAt: now },
+      ...(laterHuman ? [{ taskId: task.id, type: "Comment", fromAgentId: null, fromUserId: 7, createdAt: now }] : []),
       ...(laterUpdate ? [{ taskId: task.id, type: "TaskMoved", fromAgentId: actor.id, fromUserId: 6, createdAt: now }] : []),
     ],
     notification: {
@@ -37,7 +38,7 @@ async function inbox({ flagOn = true, kind = "qa", assigned = true, muted = fals
           assert.equal(args.where.type, "Comment");
           assert.deepEqual(args.where.task.assignees.some, { userId: 6, agentId: null });
           assert.deepEqual(args.where.comment.kind.in, ["question", "qa", "done"]);
-          return assigned && args.where.comment.kind.in.includes(kind) ? [{ taskId: task.id, fromAgentId: actor.id }] : [];
+          return assigned && args.where.comment.kind.in.includes(kind) ? [{ ...row, type: "Comment", fromAgentId: actor.id, comment, commentId: comment.id }] : [];
         }
         if (args.where.type?.in) return [{ ...row, type: "Comment", comment, commentId: comment.id }];
         return [];
@@ -83,6 +84,19 @@ test("a later agent move cannot hide the typed comment's Important slot", async 
   assert.deepEqual(result.rows, [0]);
   assert.equal(result.notifications[0].type, "Comment");
   assert.equal(result.notifications[0].commentId, 321948);
+});
+
+test("later untyped chatter cannot replace the qualifying reply preview", async () => {
+  const result = await inbox({ laterChatter: true });
+  assert.deepEqual(result.rows, [0]);
+  assert.equal(result.notifications[0].commentId, 321948);
+  assert.equal(result.notifications[0].comment.text, "<p>Human update</p>");
+});
+
+test("a later human comment keeps its preview", async () => {
+  const result = await inbox({ laterHuman: true });
+  assert.deepEqual(result.rows, [0]);
+  assert.equal(result.notifications[0].commentId, 321949);
 });
 
 for (const [name, options] of [

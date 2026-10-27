@@ -304,7 +304,12 @@ const notificationGetAll = async (
             task: { assignees: { some: { userId: parsedUserId, agentId: null } } },
             comment: { kind: { in: ["question", "qa", "done"] } },
           },
-          select: { taskId: true, fromAgentId: true },
+          include: {
+            comment: { select: { id: true, text: true } },
+            fromUser: { select: { displayName: true, photoURL: true } },
+            fromAgent: { select: { displayName: true, photoURL: true } },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           distinct: ["taskId", "fromAgentId"],
         })
       : [];
@@ -379,11 +384,13 @@ const notificationGetAll = async (
         const usersById = new Map(
           actorAndWaitingUsers.map((user) => [user.id, user])
         );
-        const humanFacingCommentTaskIds = new Set(
-          humanFacingCommentRows
-            .filter((row) => row.fromAgentId && !mutedAgentIds.has(row.fromAgentId))
-            .map((row) => row.taskId),
-        );
+        const humanFacingCommentsByTask = new Map<number, (typeof humanFacingCommentRows)[number]>();
+        for (const row of humanFacingCommentRows) {
+          if (row.taskId != null && row.fromAgentId && !mutedAgentIds.has(row.fromAgentId) &&
+            !humanFacingCommentsByTask.has(row.taskId)) {
+            humanFacingCommentsByTask.set(row.taskId, row);
+          }
+        }
         const waitingOnSetByUserMap = usersById;
         const agentsById = new Map(pageAgents.map((agent) => [agent.id, agent]));
 
@@ -420,7 +427,7 @@ const notificationGetAll = async (
             (type) =>
               agentAuthoredTypes.has(`${taskId}:${type}`) &&
               !humanAuthoredTypes.has(`${taskId}:${type}`) &&
-              !(type === "Comment" && humanFacingCommentTaskIds.has(Number(taskId)))
+              !(type === "Comment" && humanFacingCommentsByTask.has(Number(taskId)))
           );
           mutedTypesByTaskId[Number(taskId)] = types.filter(
             (type) =>
@@ -531,6 +538,7 @@ const notificationGetAll = async (
         return {
           notificationsWithActors,
           earnerRows,
+          humanFacingCommentsByTask,
           swapWanted,
           mutedAgentIds,
           mutedTypesByTaskId,
@@ -617,6 +625,7 @@ const notificationGetAll = async (
     ]);
     const {
       earnerRows,
+      humanFacingCommentsByTask,
       swapWanted,
       mutedAgentIds,
       mutedTypesByTaskId,
@@ -645,12 +654,15 @@ const notificationGetAll = async (
     }
     const displayedNotifications = enrichedNotifications.map((notification) => {
       if (notification.taskId == null) return notification;
-      const wantedType = swapWanted.get(notification.taskId);
-      if (!wantedType || wantedType === notification.type) return notification;
-      const earner = earnersByTaskAndType.get(
-        `${notification.taskId}:${wantedType}`
-      );
-      if (!earner) return notification;
+      const wantedType = swapWanted.get(notification.taskId) ?? notification.type;
+      const defaultEarner = wantedType !== notification.type
+        ? earnersByTaskAndType.get(`${notification.taskId}:${wantedType}`)
+        : notification;
+      const humanFacingComment = wantedType === "Comment" && defaultEarner?.fromAgentId
+        ? humanFacingCommentsByTask.get(notification.taskId)
+        : undefined;
+      const earner = humanFacingComment ?? defaultEarner;
+      if (!earner || earner === notification) return notification;
       const earnerActor = earner.fromAgent
         ? { displayName: earner.fromAgent.displayName ?? "", photoURL: earner.fromAgent.photoURL ?? null }
         : earner.fromUser
