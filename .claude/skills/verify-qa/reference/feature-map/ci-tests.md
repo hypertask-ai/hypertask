@@ -52,7 +52,9 @@ Keep sanitized job records outside the worktree.
 Inspect its summary for each changed test: base fails, head passes.
 A missing test or a base pass must be flagged by name.
 The `no-regression-test` label requires a visible written reason.
-Base loader failures and differing Prisma schemas remain unproven.
+Base setup failures and differing schemas or dependencies remain unproven.
+Verify a production advance does not enter the replay diff.
+Historical replay must use the original merge's first parent.
 Keep report-only setup failures separate from successful reproduction.
 Run `node --test tests/bugfix-regression-check.test.cjs` for isolated controls.
 For historical replay, pass exact `--head` and `--base` SHAs to

@@ -143,8 +143,8 @@ function resolveHead(repo, head) {
 }
 
 function resolveBase(repo, base, head) {
-  if (base) return requireSha(base, "base");
-  const result = git(repo, ["merge-base", head, "origin/production"], "utf8");
+  const target = base ? requireSha(base, "base") : "origin/production";
+  const result = git(repo, ["merge-base", head, target], "utf8");
   if (result.status !== 0) throw new Error((result.stderr || "merge-base failed").toString().trim());
   return requireSha(result.stdout.trim(), "base");
 }
@@ -224,7 +224,7 @@ function runTestFile(dir, file) {
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}\n${result.error?.message ?? ""}`;
   return {
     passed: result.status === 0 && !result.signal && !result.error,
-    setupFailed: Boolean(result.error || result.signal || /MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|SyntaxError:|Cannot find (?:module|package)/.test(output)),
+    setupFailed: Boolean(result.error || result.signal || !/ERR_ASSERTION|AssertionError/.test(output) || /MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|SyntaxError:|Cannot find (?:module|package)/.test(output)),
     output,
   };
 }
@@ -277,6 +277,13 @@ export function runCheck({ repo, title, body = "", labels = [], base, head, modu
     linkModules(moduleRoot, baseDir);
     linkModules(moduleRoot, headDir);
     overlayFiles(repo, resolvedHead, baseDir, overlayPaths(rows));
+    for (const file of ["package.json", "package-lock.json"]) {
+      const before = path.join(baseDir, file);
+      const after = path.join(headDir, file);
+      if (existsSync(before) !== existsSync(after) || (existsSync(before) && !readFileSync(before).equals(readFileSync(after)))) {
+        return { status: "error", lines: ["bugfix-regression error Dependencies differ; reproduction requires separate dependency installs"], details: [], base: resolvedBase, head: resolvedHead };
+      }
+    }
     generateFlags(baseDir);
     generateFlags(headDir);
     if (!schemaBytes(baseDir).equals(schemaBytes(headDir))) {
@@ -398,15 +405,18 @@ export function backtest({ repo, limit, modules }) {
     process.stderr.write(`bugfix-regression checking ${pull.number}\n`);
     const view = ghJson([
       "pr", "view", String(pull.number), "--repo", "hypertask-ai/hypertask",
-      "--json", "title,body,labels,headRefOid",
+      "--json", "title,body,labels,headRefOid,mergeCommit",
     ]);
     gitOk(repo, ["fetch", "--no-tags", "origin", `pull/${pull.number}/head`]);
     const head = gitOk(repo, ["rev-parse", "FETCH_HEAD"]).trim();
     let result;
     try {
+      const merge = requireSha(view.mergeCommit?.oid, "historical merge");
+      const base = gitOk(repo, ["rev-parse", `${merge}^1`]).trim();
       result = runCheck({
         repo,
         modules,
+        base,
         title: view.title,
         body: view.body ?? "",
         labels: (view.labels ?? []).map((label) => label.name),

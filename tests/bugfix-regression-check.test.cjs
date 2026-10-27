@@ -326,3 +326,68 @@ test("schema replay never changes the shared generated Prisma client", async (t)
   assert.equal(require("node:fs").existsSync(sentinel), false);
   assert.equal(git(repo, ["worktree", "list", "--porcelain"]).split("\n").filter((line) => line.startsWith("worktree ")).length, 1);
 });
+
+test("a production tip advance cannot enter the pre-fix replay", async (t) => {
+  const { runCheck } = await load();
+  const { repo, base, head } = repoWithFix(2);
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  git(repo, ["checkout", "-b", "production", base]);
+  const advanced = commit(repo, { "tests/unrelated.test.cjs": 'throw new Error("not part of this fix");\n' }, "unrelated production change");
+  const result = runCheck({ repo, title: "HTPR-10 [BUGFIX] Answer", base: advanced, head });
+  assert.equal(result.base, base);
+  assert.equal(result.status, "pass", JSON.stringify(result));
+  assert.deepEqual(result.lines, ["bugfix-regression pass tests/answer.test.cjs"]);
+});
+
+test("dependency changes remain unproven instead of sharing the fixed dependency", async (t) => {
+  const { runCheck } = await load();
+  const repo = initRepo();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const base = commit(repo, { "package.json": '{"version":"1.0.0"}\n', "lib.js": "module.exports = 1;\n" }, "base");
+  const head = commit(repo, {
+    "package.json": '{"version":"2.0.0"}\n',
+    "lib.js": "module.exports = 2;\n",
+    "tests/answer.test.cjs": answerTest(2),
+  }, "dependencies");
+  const result = runCheck({ repo, title: "HTPR-11 [BUGFIX] Dependency", base, head });
+  assert.equal(result.status, "error");
+  assert.match(result.lines[0], /Dependencies differ/);
+});
+
+test("file-read failures without assertion evidence cannot count as reproduction", async (t) => {
+  const { runCheck } = await load();
+  const repo = initRepo();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const base = commit(repo, { "lib.js": 'module.exports = require("node:fs").readFileSync("missing-fixture");\n' }, "base");
+  const head = commit(repo, { "lib.js": "module.exports = 2;\n", "tests/answer.test.cjs": answerTest(2) }, "fix");
+  const result = runCheck({ repo, title: "HTPR-12 [BUGFIX] Fixture", base, head });
+  assert.equal(result.status, "flag");
+  assert.match(result.lines[0], /base setup failed/);
+});
+
+test("backtests use the historical merge parent even when head is in production", async (t) => {
+  const { backtest } = await load();
+  const { chmodSync } = require("node:fs");
+  const { repo, base, head } = repoWithFix(2);
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const tree = git(repo, ["rev-parse", `${head}^{tree}`]).trim();
+  const merge = git(repo, ["commit-tree", tree, "-p", base, "-p", head, "-m", "Merge PR"]).trim();
+  git(repo, ["branch", "production", merge]);
+  git(repo, ["update-ref", "refs/pull/1/head", head]);
+  git(repo, ["remote", "add", "origin", repo]);
+  const bin = path.join(repo, "bin");
+  mkdirSync(bin);
+  const title = "HTPR-13 [BUGFIX] Historical answer";
+  const gh = path.join(bin, "gh");
+  writeFileSync(gh, `#!${process.execPath}\nconst result = process.argv.includes("list") ? ${JSON.stringify([{ number: 1, title, mergedAt: "2026-10-27T00:00:00Z" }])} : ${JSON.stringify({ title, labels: [], body: "", mergeCommit: { oid: merge }, headRefOid: head })};\nconsole.log(JSON.stringify(result));\n`);
+  chmodSync(gh, 0o755);
+  const previous = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${previous}`;
+  try {
+    const results = backtest({ repo, limit: 1 });
+    assert.equal(results.length, 1);
+    assert.equal(results[0].status, "pass", JSON.stringify(results));
+  } finally {
+    process.env.PATH = previous;
+  }
+});

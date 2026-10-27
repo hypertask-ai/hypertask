@@ -253,8 +253,9 @@ The job is report-only. It is not in the required-check ruleset, and a flag,
 skip, or script error exits 0. It does not block a merge.
 
 Regression replay never regenerates a client inside linked dependencies. Schema
-changes report unproven until separate installs are supported. Missing modules,
-syntax errors and timeouts on base cannot count as a reproduced bug. The job uses
+and dependency changes report unproven until separate installs are supported.
+A successful reproduction needs assertion-failure evidence on base. Missing
+modules, syntax errors and timeouts cannot count as a reproduced bug. The job uses
 `continue-on-error: true`, including setup failures, and remains informational.
 
 
