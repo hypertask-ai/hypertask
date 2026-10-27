@@ -127,10 +127,8 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
               ariaLabel="AI Chat"
               defaultLibraryHeader={false}
               zIndex={MOBILE_OVERLAY_SHEET_Z}
-              panelClassName={cn(
-                mobileOverlayAppSheetPanelClass,
-                amoledChatBorder && "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:-outline-offset-1 [.amoled_&]:outline-[var(--border-light-gray-thin)] [.amoled_&]:!rounded-[5px]",
-              )}
+              id={amoledChatBorder ? "ai-chat-floating-sheet" : undefined}
+              panelClassName={cn(mobileOverlayAppSheetPanelClass)}
               bodyClassName={cn(mobileOverlayAppSheetBodyClass, aiChatMobileComposerPad)}
               headerClassName={mobileOverlayAppSheetHandleHeaderClass}
               handleRowClassName={mobileOverlayAppSheetHandleRowClass}

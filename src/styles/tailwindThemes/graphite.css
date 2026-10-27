@@ -6,6 +6,7 @@
 
 /* Graphite Theme Background Colors */
 .graphite {
+  --elevation-floating-border: #363b44;
   --primary: 225 10% 49%;
 
   --bg-pageBackground: #0e0e0e;

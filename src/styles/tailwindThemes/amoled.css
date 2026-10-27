@@ -1,5 +1,6 @@
 /* AMOLED Theme Background Colors */
 .amoled {
+  --elevation-floating-border: #333;
   --primary: 222 9% 46%;
 
   --bg-pageBackground: #000000;
@@ -254,4 +255,18 @@ html.amoled {
 
 .amoled .search-input {
   background-color: var(--bg-pageBackground);
+}
+
+.amoled .chatwindow[data-amoled-chat-border],
+.amoled #ai-chat-floating-sheet .react-modal-sheet-container {
+  outline: 1px solid var(--elevation-floating-border);
+  outline-offset: -1px;
+}
+
+.amoled .chatwindow[data-amoled-chat-border] {
+  --bs-border-radius: 5px;
+}
+
+.amoled #ai-chat-floating-sheet .react-modal-sheet-container {
+  border-radius: 5px !important;
 }

@@ -23,7 +23,11 @@
   --inbox-text-left-offset: 20px;
   // Pinned comment marker, the same in every theme (was a raw left-edge colour).
   --border-pinned: #ffb980;
-  --shadow-floating: 12px 12px 80px 0px rgb(0, 0, 0);
+}
+
+:where(:root) {
+  --elevation-floating-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --elevation-floating-border: transparent;
 }
 
 @media (min-width: 768px) {
@@ -263,8 +267,16 @@ body {
   -ms-overflow-style: none;
 }
 
-#htc.paletteModalSizing {
+#htc[data-floating-elevation] {
   box-shadow: none;
+
+  .modal-content {
+    border: 1px solid var(--elevation-floating-border);
+  }
+}
+
+.chatwindow[data-floating-elevation="false"] {
+  box-shadow: 0 0px 75px 45px rgb(0 0 0 / 0.5), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 }
 
 .linksModal {

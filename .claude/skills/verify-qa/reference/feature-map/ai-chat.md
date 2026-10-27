@@ -201,8 +201,11 @@ On desktop, open AI chat, open its header menu, then select **Toggle Floating
 View**. Press Ctrl+J with that window still open. Compare the computed
 `box-shadow` of `.chatwindow` and `#htc .modal-content`: they must match.
 The palette's outer `#htc` dialog must have no additional shadow.
-Changing `--shadow-floating` on the document must change both panels together.
-Restore the token, close Ctrl+J, then resize to 390x844: the chat sheet must
+With `htpr-8055-floating-elevation` enabled, compare both panels’ computed
+`border-color` too. Changing `--elevation-floating-shadow` on the document must change both panels together.
+Changing `--elevation-floating-border` must also affect both desktop panels.
+With the flag off, the original shadows and AMOLED outlines remain.
+Restore the tokens, close Ctrl+J, then resize to 390x844: the chat sheet must
 retain no shadow. Check all themes, including Rounded's light and dark modes;
 legacy Dark and Light resolve to Graphite and Porcelain. Capture before/after
 geometry and screenshots without creating a ticket or sending a chat message.

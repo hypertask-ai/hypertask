@@ -29,9 +29,7 @@ for (const enabled of [false, true]) {
     try {
       const panel = view.container.querySelector(".chatwindow");
       assert.ok(panel);
-      assert.equal(panel.classList.contains("[.amoled_&]:outline-1"), enabled);
-      assert.equal(panel.classList.contains("[.amoled_&]:outline-[var(--border-light-gray-thin)]"), enabled);
-      assert.equal(panel.classList.contains("[.amoled_&]:[--bs-border-radius:5px]"), enabled);
+      assert.equal(panel.hasAttribute("data-amoled-chat-border"), enabled);
       assert.ok(panel.classList.contains("h-[70svh]"));
       assert.ok(panel.classList.contains("w-[30vw]"));
       assert.equal(view.container.querySelector("header").textContent, "Saved conversation");
@@ -46,7 +44,7 @@ test("phone content keeps its sizing; the surrounding sheet owns its outline", (
     const panel = view.container.querySelector(".chatwindow");
     assert.ok(panel.classList.contains("rounded-none"));
     assert.ok(panel.classList.contains("h-full"));
-    assert.equal(panel.classList.contains("[.amoled_&]:outline-1"), false);
+    assert.equal(panel.hasAttribute("data-amoled-chat-border"), false);
   } finally { view.close(); }
 });
 

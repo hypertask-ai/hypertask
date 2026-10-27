@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import { CommandMode } from "@/models/enums";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
@@ -100,6 +101,7 @@ type Props = {
 const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
 
 const Commands = (props: Props) => {
+  const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const {
     handleAction,
     isOpen,
@@ -850,6 +852,7 @@ const Commands = (props: Props) => {
       <ModalContainerCustom
         fade={isDemo ? true : false}
         id="htc"
+        data-floating-elevation={floatingElevation || undefined}
         isOpen={modal}
         onOpened={() => { setfirst(true); }}
         toggle={toggle}
@@ -858,7 +861,7 @@ const Commands = (props: Props) => {
         keyboard={false}
         className={`paletteModalSizing sm:top-[24%] sm:min-w-[560px] sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
-        contentClassName={cn("shadow-floating", composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden")}
+        contentClassName={cn(floatingElevation && "shadow-floating border border-floating", composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden")}
       >
         {isInteractive && (
           <TutorialTooltip

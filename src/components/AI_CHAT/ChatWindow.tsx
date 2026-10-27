@@ -9,8 +9,10 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { Sparkles, X } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
+import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 
 export const ChatWindow = () => {
+  const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const isMbl = useContext(MobileViewContext);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover } =
@@ -43,12 +45,14 @@ export const ChatWindow = () => {
 
   return (
     <div
+      data-floating-elevation={isMbl ? undefined : floatingElevation}
+      data-amoled-chat-border={(amoledChatBorder && !isMbl && !floatingElevation) || undefined}
       className={cn(
         "bg-ai-chat text-meta flex flex-col overflow-hidden chatwindow",
-        amoledChatBorder && !isMbl && "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:-outline-offset-1 [.amoled_&]:outline-[var(--border-light-gray-thin)] [.amoled_&]:[--bs-border-radius:5px]",
         isMbl
           ? "h-full min-h-0 w-full flex-1 rounded-none"
-          : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded shadow-floating"
+          : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded",
+        !isMbl && floatingElevation && "shadow-floating border border-floating"
       )}
     >
       <ChatHeader />

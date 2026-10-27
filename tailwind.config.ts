@@ -87,6 +87,7 @@ const config: Config = {
         "thin":"1px",
       },
       borderColor:{
+        floating: "var(--elevation-floating-border)",
         "borderGray":"hsl(var(--color-border));",
         "border-labelComponent":"#6f6f6f",
         "border-self-comment":"rgb(var(--border-self-comment))",
@@ -178,7 +179,7 @@ const config: Config = {
         "display":"32px",
       },
       boxShadow:{
-        floating: "var(--shadow-floating)",
+        floating: "var(--elevation-floating-shadow)",
         "customshadow-4":"12px 12px 80px 0px rgb(0, 0, 0);",
         "customshadow-2":"2px 2px 20px 0px rgb(0, 0, 0, 0.35);",
         "customshadow-1":"2px 2px 20px 0px rgb(0, 0, 0, 0.15);",
