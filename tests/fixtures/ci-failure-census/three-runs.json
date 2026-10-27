@@ -1,0 +1,27 @@
+{
+  "workflow": "jobs:\n  test:\n    name: ci-tests\n  browser:\n    name: browser-smoke\n  contract:\n    name: mcp-cli-api-contract\n    needs: [browser]\n",
+  "runs": [
+    { "id": 101, "event": "pull_request", "head_branch": "fix/tests", "head_sha": "abc", "path": ".github/workflows/ci-tests.yml", "run_attempt": 2, "conclusion": "failure" },
+    { "id": 102, "event": "push", "head_branch": "production", "head_sha": "abc", "path": ".github/workflows/ci-tests.yml", "run_attempt": 1, "conclusion": "failure" },
+    { "id": 103, "event": "pull_request", "head_branch": "fix/browser", "head_sha": "def", "path": ".github/workflows/ci-tests.yml", "run_attempt": 1, "conclusion": "failure" }
+  ],
+  "jobs": {
+    "101": [
+      { "id": 11, "name": "ci-tests", "conclusion": "failure", "steps": [{ "name": "Test", "conclusion": "failure", "started_at": "2026-10-24T10:00:00Z", "completed_at": "2026-10-24T10:00:05Z" }] },
+      { "id": 12, "name": "browser-smoke", "conclusion": "success", "steps": [] }
+    ],
+    "102": [
+      { "id": 21, "name": "ci-tests", "conclusion": "failure", "steps": [{ "name": "Test", "conclusion": "failure", "started_at": "2026-10-24T10:00:00Z", "completed_at": "2026-10-24T10:00:05Z" }] }
+    ],
+    "103": [
+      { "id": 31, "name": "browser-smoke", "conclusion": "failure", "steps": [{ "name": "Browser test", "conclusion": "failure", "started_at": "2026-10-24T10:00:00Z", "completed_at": "2026-10-24T10:00:05Z" }] },
+      { "id": 32, "name": "mcp-cli-api-contract", "conclusion": "failure", "steps": [{ "name": "Publish result", "conclusion": "failure", "started_at": "2026-10-24T10:00:00Z", "completed_at": "2026-10-24T10:00:05Z" }] }
+    ]
+  },
+  "logs": {
+    "11": "2026-10-24T09:59:59Z Error: earlier step\n2026-10-24T10:00:00.100Z ##[group]Run npm test\n2026-10-24T10:00:00.200Z echo 'Error: command echo is not a failure'\n2026-10-24T10:00:00.300Z ##[endgroup]\n2026-10-24T10:00:01Z not ok 3 - expected comment\n2026-10-24T10:00:05Z ##[error]Process completed with exit code 1.",
+    "21": "2026-10-24T10:00:01Z AssertionError: expected 2, got 1\n2026-10-24T10:00:05Z ##[error]Process completed with exit code 1.",
+    "31": "2026-10-24T10:00:02Z Error: layout shifted\n2026-10-24T10:00:05Z ##[error]Process completed with exit code 1.",
+    "32": "2026-10-24T10:00:01Z ##[error]browser-smoke did not pass"
+  }
+}
