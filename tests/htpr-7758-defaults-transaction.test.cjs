@@ -2,8 +2,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { load } = require("./task-route-loader.cjs");
 
-for (const enabled of [false, true]) {
-  test(`provisional defaults exist before creation commits only with the server flag: ${enabled}`, async () => {
+for (const scenario of [
+  { enabled: false, initializeWriterDefaults: true, priority: undefined, writes: 0, priorityIndex: undefined, estimateIndex: undefined },
+  { enabled: true, initializeWriterDefaults: true, priority: undefined, writes: 2, priorityIndex: 0, estimateIndex: 0 },
+  { enabled: false, initializeWriterDefaults: false, priority: { priority_index: 1, Priority_Value: "Urgent" }, writes: 1, priorityIndex: 1, estimateIndex: undefined },
+  { enabled: true, initializeWriterDefaults: false, priority: { priority_index: 1, Priority_Value: "Urgent" }, writes: 1, priorityIndex: 1, estimateIndex: undefined },
+]) {
+  const { enabled, initializeWriterDefaults, priority } = scenario;
+  test(`creation preserves supplied priority outside provisional writing: ${JSON.stringify(scenario)}`, async () => {
     const writes = [];
     let committed = false;
     const db = {
@@ -33,7 +39,7 @@ for (const enabled of [false, true]) {
       "@/utils/generateRank": {},
       "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: async (_db, _actor, create) => {
         const value = await create(tx);
-        assert.equal(writes.length, enabled ? 2 : 0);
+        assert.equal(writes.length, scenario.writes);
         committed = true;
         return { result: value.result, boardWebhookDeliveryIds: [] };
       } },
@@ -44,19 +50,15 @@ for (const enabled of [false, true]) {
       "./route": { taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request) },
     });
     const response = await POST({ headers: new Headers(), json: async () => ({
-      projectId: 7049, title: "Initial brief", description: "", ranking: "a", initializeWriterDefaults: true,
+      projectId: 7049, title: "Initial brief", description: "", ranking: "a", initializeWriterDefaults, priority,
     }) }, { userId: 985 });
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.equal(result.newTask.id, 1);
     assert.equal(committed, true);
-    if (enabled) {
-      assert.equal(result.newTask.priority.priority_index, 0);
-      assert.equal(result.newTask.estimate.estimate_index, 0);
-      assert.deepEqual(writes.map(([kind, data]) => [kind, data.taskId]), [["priority", 1], ["estimate", 1]]);
-    } else {
-      assert.equal(result.newTask.priority, undefined);
-      assert.equal(result.newTask.estimate, undefined);
-    }
+    assert.equal(result.newTask.priority?.priority_index, scenario.priorityIndex);
+    assert.equal(result.newTask.estimate?.estimate_index, scenario.estimateIndex);
+    assert.deepEqual(writes.map(([kind, data]) => [kind, data.taskId]),
+      scenario.writes === 2 ? [["priority", 1], ["estimate", 1]] : scenario.writes === 1 ? [["priority", 1]] : []);
   });
 }
