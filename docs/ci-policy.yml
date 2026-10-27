@@ -1,5 +1,5 @@
-version: 9
-last_updated: 2026-10-24
+version: 10
+last_updated: 2026-10-27
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -35,9 +35,9 @@ topology:
 pr_job_budget:
   parallel_job_limit: 20
   normal_synchronize_before: 17
-  normal_synchronize_after: 15
+  normal_synchronize_after: 16
   opened_before: 18
-  opened_after: 15
+  opened_after: 16
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
@@ -368,6 +368,14 @@ ci_tests:
   metadata_restarts: false
   app_smoke_request_types: [opened, synchronize, reopened, ready_for_review]
   label_activation: none
+  static_checks:
+    job: ci-checks
+    needs: ci-prepare
+    parallel_with: ci-test
+    checks: [agent-board-scope, typescript, lint]
+    required_summary: ci-tests
+    summary_needs: [ci-prepare, ci-checks, ci-test]
+    docs_only: explicit_skipped_producers
   test_lanes:
     shards: 2
     shard_constant: CI_TEST_SHARDS
