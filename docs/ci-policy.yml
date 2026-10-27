@@ -396,7 +396,7 @@ ci_tests:
     job: ci-checks
     needs: ci-prepare
     parallel_with: ci-test
-    checks: [agent-board-scope, typescript, lint]
+    checks: [agent-board-scope, typescript, lint, changed-style-tokens]
     required_summary: ci-tests
     summary_needs: [ci-prepare, ci-checks, ci-test]
     docs_only: explicit_skipped_producers
@@ -497,3 +497,12 @@ task_writer_quality_eval:
   timeout_minutes: 20
   artifacts: [scores, pending_fixture_ids]
   excluded_artifacts: [cookies, authentication_traffic, raw_drafts]
+
+changed_style_tokens:
+  ticket: https://app.hypertask.ai/detail/project-4060/714
+  job: ci-checks
+  command: npm run lint:styles -- <base-sha> <head-sha>
+  scope: pull_request_added_lines
+  parsers: [eslint, postcss-scss]
+  baseline: unchanged_lines_only
+  additional_jobs: false
