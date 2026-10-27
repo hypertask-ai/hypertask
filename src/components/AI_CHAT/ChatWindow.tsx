@@ -45,7 +45,7 @@ export const ChatWindow = () => {
     <div
       className={cn(
         "bg-ai-chat text-meta flex flex-col overflow-hidden chatwindow",
-        amoledChatBorder && !isMbl && "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:-outline-offset-1 [.amoled_&]:outline-[var(--border-light-gray-thin)] [.amoled_&]:[--bs-border-radius:5px]",
+        amoledChatBorder && !isMbl && "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:-outline-offset-1 [.amoled_&]:outline-[var(--border-light-gray-thin)] [.amoled_&]:rounded-[5px]",
         isMbl
           ? "h-full min-h-0 w-full flex-1 rounded-none"
           : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded"
