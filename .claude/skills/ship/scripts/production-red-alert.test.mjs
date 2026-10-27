@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
 const { requiredChecks, snapshot, plan, live, propose, tick, units } = require('./production-red-alert');
-const { PREFIX, owner, allowed, guard, logs } = require('./release-incidents.cjs');
+const { PREFIX, owner, decide, allowed, guard, logs } = require('./release-incidents.cjs');
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/yper4-842/2026-10-26.json', import.meta.url)));
 const now = Date.parse('2026-10-26T17:55:00Z');
 const sha = '7b167459c5127324cf8ed43efb9dc1c6f39f2edd';
@@ -229,4 +229,27 @@ test('paginated activity read reaches a claim beyond 100 rows without looping or
   assert.equal(rows.length, 101);
   assert.equal(owner(rows, now).id, 'runner8');
   assert.equal(calls.filter(args => args[1]?.includes('cursor=older')).length, 1);
+});
+
+test('reclaim expiry uses the surviving claim, not an older released mention', () => {
+  const rows = [claim('ours', 'Runner 8', '2026-10-25T10:00:00Z', 'Claimed. codex resume ours'),
+    claim('ours', 'Runner 8', '2026-10-25T11:00:00Z', 'Released. codex resume ours'),
+    claim('rival', 'Runner 12', '2026-10-26T01:00:00Z', 'Claimed. codex resume rival'),
+    claim('ours', 'Runner 8', '2026-10-26T17:50:00Z', 'Claimed. codex resume ours')];
+  assert.equal(decide('ours', { comments: rows }, ['rival'], []), 'WIN');
+  assert.match(decide('ours', { comments: rows }, [], []), /^LOSE\tRunner 12/);
+});
+
+test('pending or cancelled rerun cannot recover an incident using an older green parent', async t => {
+  const dir = tmp(t); await runTick(dir, fake());
+  for (const state of ['PENDING', 'CANCELLED']) {
+    const commits = recorded(); commits[0].contexts = [{ name: 'browser-smoke', state, at: '2026-10-26T17:54:01Z' }];
+    const api = fake(commits);
+    assert.equal((await runTick(dir, api)).action, 'pending');
+    assert.equal(api.writes.filter(args => args[0] === 'activity').length, 0);
+    assert.notEqual(Object.values(JSON.parse(fs.readFileSync(path.join(dir, 'state.json'))).incidents)[0].closed, true);
+  }
+  const commits = recorded(); commits[0].contexts = [{ name: 'browser-smoke', state: 'SUCCESS', at: '2026-10-26T18:00:00Z' }];
+  const api = fake(commits); await runTick(dir, api, { now: now + 600000 });
+  assert.equal(api.writes.filter(args => args[0] === 'activity').length, 1);
 });

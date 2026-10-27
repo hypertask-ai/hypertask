@@ -32,10 +32,11 @@ function decide(resumeId, value, idle, assigned) {
   const rows = [...value.comments, ...(value.activities || [])];
   const ours = rows.filter(row => text(row).includes(resumeId));
   const mine = Math.min(...ours.map(row => Date.parse(row.createdAt)));
-  const claims = liveClaims(rows, { reference: mine, mine, idle, assigned });
+  const claims = liveClaims(rows, { reference: mine, mine, idle: [], assigned });
   const me = claims.find(row => text(row).includes(resumeId));
   if (!me) return 'NOOURS';
-  const other = claims.find(row => !text(row).includes(resumeId) && order(row, me) < 0);
+  const other = claims.find(row => !text(row).includes(resumeId) && order(row, me) < 0 &&
+    (Date.parse(me.createdAt) - Date.parse(row.createdAt) <= 21600000 || !idle.includes(author(row).id)));
   if (!other) return 'WIN';
   return ['LOSE', author(other).displayName || author(other).id, author(other).id,
     Number(Date.parse(me.createdAt) - Date.parse(other.createdAt) > 21600000), Number(author(other).id === author(me).id)].join('\t');

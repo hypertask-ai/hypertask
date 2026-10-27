@@ -62,8 +62,12 @@ function snapshot(data) {
 }
 function plan(commits, required, now = Date.now()) {
   if (!commits.length || commits.some(commit => !SHA.test(commit.sha))) throw new Error('Invalid production snapshot');
-  const failures = [], recovered = [];
+  const failures = [], recovered = [], pending = [];
   for (const name of required) {
+    const latest = commits.flatMap(commit => commit.contexts.filter(row => row.name === name && Date.parse(row.at) <= now))[0];
+    if (latest && !['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(latest.state)) {
+      pending.push(name); continue;
+    }
     const observations = commits.flatMap(commit => {
       const check = commit.contexts.find(row => row.name === name && Date.parse(row.at) <= now);
       return check && ['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(check.state)
@@ -80,7 +84,7 @@ function plan(commits, required, now = Date.now()) {
   }
   const head = commits[0];
   const mergedAt = Math.max(Date.parse(head.at), ...head.prs.map(pr => Date.parse(pr.mergedAt)));
-  return { head: head.sha, failures, recovered, stalled: now - mergedAt >= 7200000, mergedAt };
+  return { head: head.sha, failures, recovered, pending, stalled: now - mergedAt >= 7200000, mergedAt };
 }
 function load(dir) {
   try { return json(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')); }
@@ -269,7 +273,7 @@ async function tick({ dir = STATE, api = live(), now = Date.now(), required = re
       }
     }
     state.fails = 0; state.until = 0; persist();
-    return { action: p.failures.length ? 'incident' : 'green', incidents: p.failures.map(row => row.key), stalled: p.stalled };
+    return { action: p.failures.length ? 'incident' : p.pending.length ? 'pending' : 'green', incidents: p.failures.map(row => row.key), stalled: p.stalled };
   } catch (error) {
     state.fails = Math.min((state.fails || 0) + 1, 10);
     state.until = now + Math.min(300000 * 2 ** state.fails, 3600000);
