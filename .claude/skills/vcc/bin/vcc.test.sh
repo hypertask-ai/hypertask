@@ -16,7 +16,17 @@ printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
 if [ "${1:-} ${2:-}" = 'comments list' ]; then
   exec /bin/cat "${VCC_TEST_COMMENTS:-/missing-comments-fixture}"
 fi
-printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
+if [[ " $* " == *' --json '* ]] && [[ "${1:-} ${2:-}" == 'comment add' || "${1:-} ${2:-}" == 'comments add' ]]; then
+  if [ -n "${VCC_TEST_RECEIPT:-}" ]; then
+    printf '%s\n' "$VCC_TEST_RECEIPT"
+  else
+    printf '%s\n' '{"success":true,"url":"/detail/project-4060/858","comment":{"id":321001}}'
+  fi
+elif [ "${1:-} ${2:-}" = 'tasks get' ] && [[ " $* " == *' --json '* ]]; then
+  printf '%s\n' '{"tasks":[{"id":76000}]}'
+else
+  printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
+fi
 STUB
 cat > "$T/bin/cat" <<'STUB'
 #!/usr/bin/env bash
@@ -25,8 +35,20 @@ exec /bin/cat "$@"
 STUB
 cat > "$T/bin/curl" <<'STUB'
 #!/usr/bin/env bash
-printf 'unexpected network request\n' >&2
-exit 92
+[ "${VCC_TEST_NETWORK:-}" = 1 ] || { printf 'unexpected network request\n' >&2; exit 92; }
+cat >/dev/null
+output=''; data=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in --output) output=$2; shift ;; --data) data=$2; shift ;; esac
+  shift
+done
+printf '%s\n' "$data" >> "$VCC_TEST_HTTP_TRACE"
+if [ -n "${VCC_TEST_MARKER:-}" ]; then
+  printf '%s\n' "$VCC_TEST_MARKER" > "$output"
+else
+  printf '%s\n' '{"success":true,"task":{"id":76000,"waitingOnUserId":6,"blockerCommentId":321001}}' > "$output"
+fi
+printf '%s' "${VCC_TEST_STATUS:-200}"
 STUB
 mkdir -p "$HOME/.agents/skills/ship/scripts"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'STUB'
@@ -52,9 +74,9 @@ refused() {
 }
 allowed() {
   run "$@"
-  [ "$status" = 0 ] || fail "expected stub success, got $status: $*"
+  [ "$status" = 0 ] || fail "expected stub success, got $status: $*: $(< "$T/err")"
   [ ! -s "$T/err" ] || fail "allowed command produced stderr: $*"
-  [[ $(< "$T/out") == stub:* ]] || fail "command did not reach CLI: $*"
+  [[ $(< "$T/out") == stub:* ]] || jq -e '.success == true and .comment.id > 0' "$T/out" >/dev/null || fail "command did not reach CLI: $*"
   [[ $(< "$VCC_TEST_TRACE") == *hypertask* ]] || fail "CLI trace missing: $*"
 }
 
@@ -216,9 +238,12 @@ question_refused() {
 }
 plain='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
 inline_why='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
+export VCC_TEST_NETWORK=1 VCC_TEST_HTTP_TRACE="$T/http-trace"
 for text in "$plain" "$inline_why" "$question"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
-  [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
+  if [ "$text" != "$question" ]; then
+    [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
+  fi
   fixture "$text"
   allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 done
@@ -321,4 +346,30 @@ allowed bash "$vcc" comment add X-1 --kind question --text "$rewrite_7508_303933
 fixture "$rewrite_7508_303933"
 allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 printf 'ok verbatim old Question refuses and real rewrite passes comment add and newest review\n'
+: > "$VCC_TEST_HTTP_TRACE"
+for id in 321001 321002 321003 321004 321005; do
+  export VCC_TEST_RECEIPT="$(jq -nc --argjson id "$id" '{success:true,url:"/detail/project-4060/858",comment:{id:$id}}')"
+  export VCC_TEST_MARKER="$(jq -nc --argjson id "$id" '{success:true,task:{id:76000,waitingOnUserId:6,blockerCommentId:$id}}')"
+  allowed bash "$vcc" comment add YPER4-858 --kind question --text "$question"
+done
+jq -se 'length == 5 and [.[].blockerCommentId] == [321001,321002,321003,321004,321005] and all(.[]; .taskId == 76000 and .userId == 6)' "$VCC_TEST_HTTP_TRACE" >/dev/null || fail 'five questions did not mark their own blockers'
+printf 'ok five consecutive questions set combined person/comment blockers\n'
+
+for response in '{"success":false}' '{"success":true,"task":{"id":76000,"waitingOnUserId":6,"blockerCommentId":1}}'; do
+  run env VCC_TEST_MARKER="$response" bash "$vcc" comment add YPER4-858 --kind question --text "$question"
+  [ "$status" = 5 ] || fail 'refused or mismatched blocker reported success'
+  [ ! -s "$T/out" ] || fail 'blocker failure printed successful receipt'
+  [[ $(< "$T/err") == *'do not repost'* ]] || fail 'blocker failure lost repair guidance'
+done
+run env VCC_TEST_STATUS=403 bash "$vcc" comment add YPER4-858 --kind question --text "$question"
+[ "$status" = 5 ] || fail 'HTTP refusal reported success'
+: > "$VCC_TEST_HTTP_TRACE"
+run env VCC_TEST_RECEIPT='{"success":true,"comment":{"id":321001}}' bash "$vcc" comment add YPER4-858 --kind question --text "$question"
+[ "$status" = 5 ] && [ ! -s "$VCC_TEST_HTTP_TRACE" ] || fail 'malformed receipt reached blocker write'
+for kind in qa done; do
+  allowed bash "$vcc" comment add YPER4-858 --kind "$kind" --text "$question"
+done
+allowed bash "$vcc" comment add YPER4-858 --kind question --text "$plain"
+[ ! -s "$VCC_TEST_HTTP_TRACE" ] || fail 'ordinary comments gained blockers'
+printf 'ok blocker failures fail closed; ordinary comments stay unchanged\n'
 printf 'vcc helper guard tests passed\n'

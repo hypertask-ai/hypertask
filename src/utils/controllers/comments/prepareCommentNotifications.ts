@@ -54,11 +54,12 @@ export async function prepareCommentNotifications(context: CommentFanoutContext)
   }
   if (clearsWaitingOn) {
     const cleared = await prisma.task.updateMany({
-      where: { id: taskId, waitingOnUserId: creatorIdNum },
+      where: { id: taskId, waitingOnUserId: creatorIdNum, waitingOnSetAt: task.waitingOnSetAt, blockerCommentId: task.blockerCommentId },
       data: {
         waitingOnUserId: null,
         waitingOnSetById: null,
         waitingOnSetAt: null,
+        blockerCommentId: null,
       },
     });
     if (cleared.count > 0) {
