@@ -37,6 +37,8 @@ async function invoke(surface, { error, enabled = true } = {}) {
     description_: { content: "A ticket with enough context" }, assignees: [], comments: [],
   };
   const stubs = {
+    "node:crypto": require("node:crypto"),
+    "@/app/api/ai/_lib/allowanceError": allowanceError,
     "@/lib/net/downloadWithoutBrotli": {},
     "@/lib/ai/taskWriterSkills": { taskWriterSkillsSchema: require("zod").z.array(require("zod").z.any()), MAX_SKILL_INPUT_LENGTH: 12000 },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
@@ -48,7 +50,7 @@ async function invoke(surface, { error, enabled = true } = {}) {
     "@/lib/ai/prompts/registry": { renderPrompt: () => "instructions" },
     "@/lib/flags": {
       isFeatureEnabled: async (key, userId) => {
-        assert.equal(userId, 7);
+        if (key === flag) assert.equal(userId, 7);
         return key === flag && enabled;
       },
     },

@@ -6,6 +6,7 @@ export default {
   key: HTPR_7716_ALLOWANCE_FALLBACKS_FLAG,
   kind: "bugfix",
   defaultMode: "EVERYONE",
+  shippedOn: "2026-10-27",
   description: "Task questions and comment summaries treat a used-up AI allowance as an expected fallback instead of a server failure.",
   releaseRisk: {
     risk: "small",
