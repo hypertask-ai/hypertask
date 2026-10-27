@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# ci-wait: wait for a PR's checks without polling GitHub (YPER4-881).
+# GitHub's repo webhook reaches runner-webhook (POST /github/notify), which rewrites
+# $GH_NOTIFY_DIR/<owner>__<repo>/<branch>.json whenever a workflow finishes or the PR closes.
+# ci-wait blocks on that file's mtime (a local stat every few seconds, no network) and reads the checks
+# with one gh call only after a change, at most once per CI_WAIT_GAP seconds, plus a slow fallback read
+# every CI_WAIT_FALLBACK seconds (never under 600) in case an event is lost.
+# Usage: ci-wait <pr-number> [--repo OWNER/REPO] [--timeout SECONDS]
+# Exit: 0 all checks passed or the PR merged, 1 a check failed or the PR closed unmerged, 2 timed out, 3 usage or gh error.
+set -uo pipefail
+usage() { echo "usage: ci-wait <pr-number> [--repo OWNER/REPO] [--timeout SECONDS]" >&2; exit 3; }
+pr=${1:-}; [[ $pr =~ ^[0-9]+$ ]] || usage; shift
+repo="" timeout=5400
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --repo) repo=${2:-}; shift 2 || usage ;;
+    --timeout) timeout=${2:-}; shift 2 || usage ;;
+    *) usage ;;
+  esac
+done
+[[ $timeout =~ ^[0-9]+$ ]] || usage
+if [ -z "$repo" ]; then
+  url=$(git remote get-url origin 2>/dev/null || true)
+  repo=$(sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' <<<"$url")
+fi
+[[ $repo =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || repo=hypertask-ai/hypertask
+GH=${CI_WAIT_GH:-gh}
+DIR=${GH_NOTIFY_DIR:-$HOME/.local/state/gh-notify}
+TICK=${CI_WAIT_TICK:-5}
+GAP=${CI_WAIT_GAP:-60}
+FALLBACK=${CI_WAIT_FALLBACK:-600}
+[ "$FALLBACK" -ge 600 ] 2>/dev/null || FALLBACK=600
+
+branch=$("$GH" pr view "$pr" --repo "$repo" --json headRefName -q .headRefName 2>/dev/null) || { echo "ci-wait: cannot read PR $pr in $repo" >&2; exit 3; }
+[ -n "$branch" ] || { echo "ci-wait: PR $pr has no head branch" >&2; exit 3; }
+key() { LC_ALL=C sed -E 's/[^A-Za-z0-9._-]/_/g' <<<"$1" | cut -c1-200; }
+state="$DIR/$(key "${repo/\//__}")/$(key "$branch").json"
+mkdir -p "$DIR/waiters"
+printf '%s %s\n' "$repo" "$branch" > "$DIR/waiters/$$"
+trap 'rm -f "$DIR/waiters/$$"' EXIT
+trap 'exit 2' INT TERM
+
+mtime() { stat -c %Y "$state" 2>/dev/null || echo 0; }
+# One gh call. Prints a verdict: pass, fail <names>, pending, merged, closed.
+check() {
+  local out
+  out=$("$GH" pr view "$pr" --repo "$repo" --json state,statusCheckRollup -q '
+    if .state == "MERGED" then "merged" elif .state == "CLOSED" then "closed" else
+      [.statusCheckRollup[] | {n: (.name // .context), s: ((.conclusion // .state // "") | ascii_upcase), st: ((.status // "COMPLETED") | ascii_upcase)}] as $c
+      | ([$c[] | select(.s == "FAILURE" or .s == "ERROR" or .s == "TIMED_OUT" or .s == "STARTUP_FAILURE" or .s == "ACTION_REQUIRED") | .n]) as $f
+      | if ($f | length) > 0 then "fail " + ($f | join(", "))
+        elif ($c | length) == 0 or any($c[]; .st != "COMPLETED" or .s == "PENDING" or .s == "EXPECTED" or .s == "") then "pending"
+        else "pass" end
+    end' 2>/dev/null) || return 1
+  printf '%s\n' "$out"
+}
+
+start=$(date +%s) last_check=0 seen=$(mtime) calls=0
+while :; do
+  now=$(date +%s)
+  cur=$(mtime)
+  if [ "$last_check" = 0 ] || { [ "$cur" != "$seen" ] && [ $((now - last_check)) -ge "$GAP" ]; } || [ $((now - last_check)) -ge "$FALLBACK" ]; then
+    seen=$cur last_check=$now calls=$((calls + 1))
+    if verdict=$(check); then
+      case "$verdict" in
+        pass) echo "ci-wait: PR $pr ($repo) all checks passed after $(( (now - start) / 60 )) min, $calls gh reads"; exit 0 ;;
+        merged) echo "ci-wait: PR $pr ($repo) is merged"; exit 0 ;;
+        closed) echo "ci-wait: PR $pr ($repo) was closed without merging"; exit 1 ;;
+        fail*) echo "ci-wait: PR $pr ($repo) failed: ${verdict#fail }"; exit 1 ;;
+      esac
+    else
+      echo "ci-wait: gh read failed; next try on the next notify or in $FALLBACK s" >&2
+    fi
+  fi
+  [ $((now - start)) -lt "$timeout" ] || { echo "ci-wait: PR $pr ($repo) still pending after $timeout s"; exit 2; }
+  sleep "$TICK"
+done

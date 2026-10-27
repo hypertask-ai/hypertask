@@ -54,7 +54,7 @@ install_timer() {
 
 run() {
   local scripts source changed=0 webhook_changed=0 enabled n dirty i
-  local shell_files=(runner-pickup runner-deliver runner-chat-reply ship-identity runner-selfupdate user-unit-check)
+  local shell_files=(runner-pickup ci-wait runner-deliver runner-chat-reply ship-identity runner-selfupdate user-unit-check)
   local unit_files=(runner-pickup@.service runner-pickup@.timer runner-webhook.service runner-selfupdate.service runner-selfupdate.timer)
   local sources=() targets=()
   mkdir -p "$STATE"
