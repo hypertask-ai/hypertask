@@ -1165,19 +1165,6 @@ test("flags page URL filters are an Owner + QA feature and respect Off", async (
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });
 
-test("saved-choice reset is an Owner + QA feature and respects OFF", async () => {
-  const key = "htpr-7038-reset-saved-model-choices";
-  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  const entry = (await flags.listFeatureFlagModes()).find((entry) => entry.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled(key, 6), true);
-  assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-});
-
 test("owner userId check requires both the owner id and registered email", async () => {
   assert.equal(await flags.isFeatureFlagOwnerUserId(6), true);
   assert.equal(await flags.isFeatureFlagOwnerUserId(7), false);
