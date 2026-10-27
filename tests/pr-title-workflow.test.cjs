@@ -32,7 +32,12 @@ async function runTitleCheck(title) {
     {
       rest: {
         pulls: {
-          get: async () => ({ data: { title, head: { sha: "a".repeat(40) }, user: { login: "owner" } } }),
+          get: async () => ({ data: {
+            title,
+            head: { sha: "a".repeat(40), repo: { full_name: "fixture/title-rule" } },
+            base: { ref: "production", repo: { full_name: "hypertask-ai/hypertask" } },
+            user: { login: "owner" },
+          } }),
         },
       },
     },

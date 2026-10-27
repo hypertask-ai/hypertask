@@ -122,6 +122,15 @@ compare observed request counts over equal windows before claiming a fleet-wide
 reduction. The installation allowance used by `github.token` in Actions is a
 different quota from the runner app; moving runner watches does not replenish it.
 
+## Ticket links from PR titles
+
+The trusted `pr-title` guard links same-repository production PRs to the ticket
+in their current GitHub title through the existing MCP task-update API. It uses
+`HYPERTASK_MCP_TOKEN`, not a runner-local binding file. The app checks permission,
+verifies the GitHub PR and returns the saved link. Missing credentials, rejected
+updates or an unconfirmed link fail the guard. Forks, bot titles and generated
+revert titles retain their existing handling. Delayed runs can link merged PRs.
+
 ## Premerge evidence
 
 `premerge-evidence` passes every open `production` PR with the exact description `test click removed (Valentin 2026-10-21)`. No screen-path, flag-removal, live-mode, browser-click, `premerge.md` or recording evaluation remains. Valentin removed the test click on 2026-10-21 because it was not helping.

@@ -21,6 +21,7 @@ each ticket only needs the one or two areas it touches.
 | Visual Regression check | [visual-regression.md](visual-regression.md) | dispatch on production one run at a time, 3 green on one commit, per-screen capture times, no app writes |
 | Production build and deploy | [production-build.md](production-build.md) | Vercel build log of the merge sha, no app writes |
 | Premerge evidence status | [premerge-evidence.md](premerge-evidence.md) | read-only status sweep of open PRs, no app writes |
+| PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
 | Runner dispatch | [runner-dispatch.md](runner-dispatch.md) | read-only plan from the live copy, no --go, no app writes |
 | Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
 | Webhooks | [webhooks.md](webhooks.md) | no smoke id; QA 985 team-wide endpoint on team 9bca4a7c via /api/settings/webhooks, test delivery to a 2xx receiver, hint vs one-time key; delete fixtures |
