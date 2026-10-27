@@ -287,27 +287,26 @@ for (const enabled of [false, true]) {
   });
 }
 
-test("flag-off detail query options and fetch behavior match production after helper reuse", async t => {
+test("flag-off detail query keeps legacy options, fetch results and default cache behavior", async t => {
   const h = harness(t, false), captured = [];
   h.mocks["@tanstack/react-query"].useQuery = options => { captured.push(options); return { data: options.initialData }; };
   h.embedded();
-  const production = require("node:child_process").execFileSync("git", ["show", "origin/production:src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx"], { cwd: root, encoding: "utf8" });
-  h.embedded(production);
-  const { queryFn: actualFn, ...actualOptions } = captured[0];
-  const { queryFn: expectedFn, ...expectedOptions } = captured[2];
-  assert.deepEqual(actualOptions, expectedOptions);
-  const signal = new AbortController().signal, requests = [];
-  for (const response of [
-    { ok: true, status: 200, json: async () => h.task() },
-    { ok: false, status: 500 },
-    { ok: false, status: 403 },
-    { ok: true, status: 200, json: async () => null },
+  const { queryFn, ...options } = captured[0];
+  assert.deepEqual(options, {
+    queryKey: ["cached-task-detail", 985, 42], initialData: h.task(), retry: false, refetchOnMount: "always",
+  });
+  const signal = new AbortController().signal;
+  for (const [response, expectedError] of [
+    [{ ok: true, status: 200, json: async () => h.task() }, null],
+    [{ ok: false, status: 500 }, { name: "Error", message: "Unable to load task" }],
+    [{ ok: false, status: 403 }, { name: "Error", message: "" }],
+    [{ ok: true, status: 200, json: async () => null }, { name: "Error", message: "" }],
   ]) {
+    const requests = [];
     global.fetch = async (...args) => { requests.push(args); return response; };
-    const result = async fn => { try { return await fn({ signal }); } catch (error) { return { name: error.name, message: error.message }; } };
-    assert.deepEqual(await result(actualFn), await result(expectedFn));
-    assert.deepEqual(requests.at(-2), requests.at(-1));
-    assert.deepEqual(requests.at(-1)[1], { signal }, "legacy requests retain production's default cache behavior");
+    if (expectedError) await assert.rejects(queryFn({ signal }), expectedError);
+    else assert.deepEqual(await queryFn({ signal }), h.task());
+    assert.deepEqual(requests, [["/api/tasks/getTask?project=project-15&uniqueIndex=42", { signal }]]);
   }
 });
 
@@ -515,7 +514,7 @@ for (const entry of ["direct", "stale", "invalidated", "off"]) {
   });
 }
 
-test("resolved flag-off metadata options and fetch results match origin/production exactly", async () => {
+test("resolved flag-off metadata keeps legacy query options and fetch results", async () => {
   const mocks = {
     "@tanstack/react-query": { useQuery: options => options, useQueryClient: () => ({}) },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
@@ -525,20 +524,17 @@ test("resolved flag-off metadata options and fetch results match origin/producti
     "@/utils/api/Task Detail": { getAllFollowers: async () => ["follower"] },
   };
   mocks["@/lib/useTaskDetailMetaField"] = load("src/lib/useTaskDetailMetaField.ts", mocks);
-  for (const [file, hook, args] of [
-    ["src/hooks/MultiPages/useGetPriorityForTask.ts", "useGetPriorityForTask", [["priority", 42], 42]],
-    ["src/hooks/MultiPages/useGetEstimateForTask.ts", "useGetEstimateForTask", [["estimate", 42], 42]],
-    ["src/hooks/MultiPages/useGetAllTaskLabels.ts", "useGetAllTaskLabels", [42]],
-    ["src/hooks/Task Detail/useGetFollowers.ts", "useGetAllFollowers", [["followersFor:", 42], 42]],
+  for (const [file, hook, args, queryKey, fallback, result] of [
+    ["src/hooks/MultiPages/useGetPriorityForTask.ts", "useGetPriorityForTask", [["priority", 42], 42], ["priority", 42], null, "priority"],
+    ["src/hooks/MultiPages/useGetEstimateForTask.ts", "useGetEstimateForTask", [["estimate", 42], 42], ["estimate", 42], [], "estimate"],
+    ["src/hooks/MultiPages/useGetAllTaskLabels.ts", "useGetAllTaskLabels", [42], ["taskLabels", 42], [], ["label"]],
+    ["src/hooks/Task Detail/useGetFollowers.ts", "useGetAllFollowers", [["followersFor:", 42], 42], ["followersFor:", 42], [], ["follower"]],
   ]) {
-    const production = require("node:child_process").execFileSync("git", ["show", `origin/production:${file}`], { cwd: root, encoding: "utf8" });
     for (const initial of [undefined, null, { value: "seed" }]) {
       const actual = load(file, mocks)[hook](...args, initial);
-      const expected = load(file, mocks, production)[hook](...args, initial);
       const { queryFn: actualFn, ...actualOptions } = actual;
-      const { queryFn: expectedFn, ...expectedOptions } = expected;
-      assert.deepEqual(actualOptions, expectedOptions, `${hook} preserves all production options`);
-      assert.deepEqual(await actualFn(), await expectedFn());
+      assert.deepEqual(actualOptions, { queryKey, initialData: initial ?? fallback }, `${hook} preserves legacy options`);
+      assert.deepEqual(await actualFn(), result);
     }
   }
 });
