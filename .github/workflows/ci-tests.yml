@@ -471,6 +471,14 @@ jobs:
           fi
           npm test -- "${FILES[@]}" 2>&1 | tee "$RUNNER_TEMP/ci-shard-upload/shard-${SHARD}.log"
 
+      - name: Collect test durations
+        if: always() && github.event_name == 'push' && steps.push-test.outcome != 'skipped'
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-shard-upload"
+          if [ -f test-durations.json ]; then
+            cp test-durations.json "$RUNNER_TEMP/ci-shard-upload/test-durations.json"
+          fi
+
       - name: Upload shard result
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -526,6 +534,15 @@ jobs:
           find ci-shard-results -name 'shard-*.log' -print | sort | while read -r log; do
             cat "$log" >> "$RUNNER_TEMP/push-test.log"
           done
+
+      - name: Upload test durations
+        if: always() && github.event_name == 'push' && needs.ci-prepare.outputs.run_tests == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-durations
+          path: ci-shard-results/**/test-durations.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Record push test outcome
         id: test-outcome
