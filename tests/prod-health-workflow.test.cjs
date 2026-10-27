@@ -591,6 +591,8 @@ function git(cwd, args, extraEnv = {}) {
     encoding: "utf8",
     env: {
       ...process.env,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
       GIT_AUTHOR_NAME: "drift-test",
       GIT_AUTHOR_EMAIL: "drift-test@example.com",
       GIT_COMMITTER_NAME: "drift-test",
@@ -630,6 +632,7 @@ test("temp-repo commits work when the runner has no git author identity", async 
 
 async function runDriftCheck({
   docsOnly = false,
+  ignoredFile = "README.md",
   freshTip = false,
   liveIsTip = false,
   healthGate = "success",
@@ -655,14 +658,18 @@ async function runDriftCheck({
     : { GIT_AUTHOR_DATE: staleDate, GIT_COMMITTER_DATE: staleDate };
 
   git(repo, ["init"]);
+  await mkdir(join(repo, "scripts"));
+  await writeFile(join(repo, "scripts/vercel-ignore-build.cjs"),
+    await readFile("scripts/vercel-ignore-build.cjs", "utf8"));
   await writeFile(join(repo, "app.js"), "v1\n");
   git(repo, ["add", "app.js"]);
   git(repo, ["commit", "-m", "old"], dateEnv);
   const liveSha = git(repo, ["rev-parse", "HEAD"]);
 
   if (docsOnly) {
-    await writeFile(join(repo, "README.md"), "docs only\n");
-    git(repo, ["add", "README.md"]);
+    await mkdir(join(repo, ignoredFile, ".."), { recursive: true });
+    await writeFile(join(repo, ignoredFile), "docs only\n");
+    git(repo, ["add", ignoredFile]);
   } else {
     await writeFile(join(repo, "app.js"), "v2\n");
     git(repo, ["add", "app.js"]);
@@ -995,5 +1002,14 @@ for (const [name, statusBody, componentsBody, exitStatus, message] of [
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+}
+
+for (const ignoredFile of ["tests/new.test.cjs", "e2e/smoke/new.spec.ts", "skills/a/SKILL.md"]) {
+  test(`drift accepts a skipped deployment containing only ${ignoredFile}`, async () => {
+    const { result, promoted } = await runDriftCheck({ docsOnly: true, ignoredFile });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /behind only by non-building commits/);
+    assert.equal(promoted, null);
   });
 }

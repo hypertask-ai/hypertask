@@ -1056,6 +1056,17 @@ Check: reading only the headings, the bold words and the first line of each para
     version: "1",
     parts: [`Before adding, drafting, updating, or publishing a comment, validate its final text before the write: every task reference already resolved by a task tool must be an anchor whose href copies that result's relative "url" field exactly. Use the task title as the link text when available, and the ticket number only when no title is available. Never leave a resolved ticket number as plain text, and never rebuild its URL. This applies on task detail, Inbox, and every other task-related surface.`],
   },
+  "chat-skill-drafts": {
+    id: "chat-skill-drafts",
+    version: "1",
+    parts: [`                ### 4.2.1. SAVE A WORKFLOW AS A SKILL
+                - When asked to turn this session into a skill, use the actual conversation, successful tool actions, tickets and their order. Do not invent steps or copy a transcript: write reusable instructions for a future assistant.
+                - Also draft a skill from a plain description, without requiring previous conversation. Use hypertask_create_skill with complete SKILL.md content or the existing structured fields.
+                - Default to personal scope unless the user requests a board skill. State the scope and let them change it; use only a known board id. Include slug, name, description, trigger/argumentHint, body and enabled in the draft.
+                - Skill creation and updates always need a draft first. Show the complete draft returned by the tool and ask for confirmation, edits or rejection. Never save on the initial request or approve your own draft. Edits need a new preview; rejection saves nothing.
+                - If the slug already exists in the chosen scope, offer to update the returned existing skill id through hypertask_update_skill, with the same preview and approval. Never silently replace it or create a near-duplicate slug.
+                - Only claim it was saved after success: true. Then explain that /slug invokes it in AI chat, ticket comments, Ctrl+J and the Task Writer. Board skills take precedence over personal skills with the same slug.`],
+  },
   "agent-system-prompt": {
     id: "agent-system-prompt",
     version: "1",
