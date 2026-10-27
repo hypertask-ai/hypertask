@@ -1,4 +1,4 @@
-import { asSchema, tool, type ToolSet } from "ai";
+import { asSchema, tool, type PrepareStepFunction, type ToolSet } from "ai";
 import { z } from "zod";
 import { searchToolCatalog } from "@/lib/mcp-server/deferred-tools";
 
@@ -28,10 +28,12 @@ export const CORE_CHAT_TOOL_NAMES = [
   "search_help_docs",
 ] as const;
 
-export function deferredChatTools(tools: ToolSet) {
+export function deferredChatTools(tools: ToolSet): { tools: ToolSet; prepareStep: PrepareStepFunction<ToolSet> } {
   const catalog = Object.entries(tools).map(([name, definition]) => ({
     name,
-    description: definition.description ?? "",
+    description: typeof definition.description === "function"
+      ? definition.description({ context: undefined })
+      : definition.description ?? "",
   }));
   const active = new Set<string>([
     ...CORE_CHAT_TOOL_NAMES.filter((name) => Object.hasOwn(tools, name)),
@@ -59,7 +61,7 @@ export function deferredChatTools(tools: ToolSet) {
           if (!definition) return { error: `Unknown tool: ${name}` };
           const inputSchema = await asSchema(definition.inputSchema).jsonSchema;
           active.add(name);
-          return { name, description: definition.description, inputSchema };
+          return { name, description: catalog.find((entry) => entry.name === name)?.description, inputSchema };
         },
       }),
     },

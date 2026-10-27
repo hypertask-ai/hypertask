@@ -163,3 +163,18 @@ test("catalog search, unknown names and per-turn isolation keep the stable prefi
   assert.equal(first.tools.hypertask_list_views, tools.hypertask_list_views);
   assert.deepEqual(discovery.deferredChatTools(tools).prepareStep(), baseline);
 });
+
+test("catalog resolves SDK description functions before searching or describing", async () => {
+  const { tools } = fixture();
+  tools.fixture_export = ai.tool({
+    description: ({ context }) => context === undefined ? "Export a fixture." : "Other context.",
+    inputSchema: z.object({}).strict(),
+    execute: async () => ({ success: true }),
+  });
+  const catalog = discovery.deferredChatTools(tools);
+  assert.deepEqual(await catalog.tools.hypertask_search_tools.execute({ query: "Export a fixture" }), {
+    tools: [{ name: "fixture_export", description: "Export a fixture." }],
+  });
+  const described = await catalog.tools.hypertask_describe_tool.execute({ name: "fixture_export" });
+  assert.equal(described.description, "Export a fixture.");
+});
