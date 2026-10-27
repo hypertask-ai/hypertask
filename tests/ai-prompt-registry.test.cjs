@@ -68,9 +68,12 @@ test('prompt identification records only id and version, including composed chat
 });
 
 test('chat prompt sends product questions to the docs and forbids undocumented claims', () => {
-  const text = PROMPTS['agent-system-prompt'].parts.join('');
+  const { AGENT_SYSTEM_PROMPT: text } = load(path.join(root, 'src/lib/ai/chatStream/prompt.ts'));
   assert.match(text, /Call search_help_docs before answering any question about what Hypertask can or cannot do/);
   assert.match(text, /Never answer these from memory/);
   assert.match(text, /only when the returned articles state it/);
   assert.match(text, /not documented and offer to file a ticket/);
+  assert.match(text, /failed docs search is not evidence that a feature does not exist/);
+  assert.match(text, /https:\/\/docs\.hypertask\.ai\/features\/ai-chat-capabilities\//);
+  assert.match(text, /questions about the user's own tasks,[\s\S]*?RAG\/list_tasks\/search_tasks/);
 });

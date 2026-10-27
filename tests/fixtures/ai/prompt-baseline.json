@@ -297,7 +297,7 @@
     "file": "src/lib/ai/chatStream/prompt.ts",
     "id": "agent-system-prompt",
     "version": "2",
-    "partsHash": "af6a16a6e3e9bea2a43d071b3f122816fb79948181f8ffe4f6f665692eba4ecb",
+    "partsHash": "0477da0e69c4591b4503889ae60f7d26f7d123b38c8d0382efe2b62883f4cf22",
     "expressionsHash": "f25482aca279220b626a7e98b3b496b4113853b09f608a5c80187135a0023824"
   },
   {
