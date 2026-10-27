@@ -1,3 +1,4 @@
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
@@ -39,6 +40,7 @@ export function usePageLoadReservations({
   commentComposerOpen: boolean;
   agentChatHidesMobileShell: boolean;
 }) {
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   let legacyChatReservationReady = false;
@@ -49,10 +51,10 @@ export function usePageLoadReservations({
   const isAiChatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   const reserveAiSidebar = !mbl && isAiChatSidebarMode && (
-    showAiChatInterface || (aiChatSwitchReserve ?? (legacyChatReservationReady && !keepAiChatClosed && (reserveBoardChat || (
+    showAiChatInterface || (!manualChat && (aiChatSwitchReserve ?? (legacyChatReservationReady && !keepAiChatClosed && (reserveBoardChat || (
       isTaskDetailPage && authenticatedUserId !== null &&
       (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
-    ))))
+    )))))
   );
   const sidebarWidthPx = reserveAiSidebar
     ? Math.max(aiChatSidebarWidthPx, AI_CHAT_SIDEBAR_MIN_PX)

@@ -1237,8 +1237,8 @@ test('chat orchestration passes the live ticket flag into resolution and send gu
 test('flag-off session setup identity is exactly the production key without a paging suffix', () => {
   const fs = require('node:fs');
   const filename = 'src/hooks/MultiPages/AIChat/useAiChatState.ts';
-  const changed = fs.readFileSync(filename, 'utf8').match(/const sessionContextKey = (\[[\s\S]*?\]\.join\(":"\))/)[1];
-  const context = { surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, ticketScopeSelected: false, sessionPagingEnabled: false };
+  const changed = fs.readFileSync(filename, 'utf8').match(/const sessionContextKey = ([\s\S]*?\.join\(":"\))/)[1];
+  const context = { manualChat: false, modelTeamId: 'team-A', surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, ticketScopeSelected: false, sessionPagingEnabled: false };
   const evaluate = (expression, values) => new Function(...Object.keys(values), `return ${expression}`)(...Object.values(values));
   for (const taskId of [undefined, 91]) {
     context.taskId = taskId;

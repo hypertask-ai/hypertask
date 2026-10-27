@@ -1,5 +1,6 @@
 "use client";
 
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { useAiChatOpenPreferences } from "@/hooks/General/useAiChatOpenPreferences";
 import UserPreferenceSidebar from "@/components/sidebars/RightSidebar/UserPreference";
 import { useRecoilState } from "@/lib/state";
@@ -12,6 +13,7 @@ import SettingsSectionShell from "./SettingsSectionShell";
 import SettingsToggle from "./SettingsToggle";
 
 const TaskPageSection = () => {
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const { values, setPreference } = useAiChatOpenPreferences();
   const [openAiChatByDefault, setOpenAiChatByDefault] = useRecoilState(
@@ -25,7 +27,7 @@ const TaskPageSection = () => {
     <SettingsSectionShell title="Task page">
       <SettingsCard title="Task Page">
         <UserPreferenceSidebar ToggleComponent={SettingsToggle} />
-        {aiChatOpenSwitchesEnabled ? (
+        {!manualChat && (aiChatOpenSwitchesEnabled ? (
           <>
             <SettingsToggle
               label="Open AI chat on newly created tickets"
@@ -68,7 +70,7 @@ const TaskPageSection = () => {
               />
             )}
           </>
-        )}
+        ))}
         <SettingsScrollPicker />
       </SettingsCard>
     </SettingsSectionShell>

@@ -1,7 +1,9 @@
-
 "use client";
+
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
+
 import { useAiChatAutoOpen } from "@/hooks/General/useAiChatAutoOpen";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
 import {
   lazy,
   ReactNode,
@@ -402,12 +404,7 @@ export default function GlobalProvider({
   const { reserve: aiChatSwitchReserve } = useAiChatAutoOpen(mbl);
   let aiChatOpenSwitchesEnabled = !useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   if (useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG)) aiChatOpenSwitchesEnabled = true;
-  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
-  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
-  let keepAiChatClosed = false;
-  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const [reserveBoardChat, setReserveBoardChat] = useState(() =>
     firstScreen?.scope.route === "/project" && pathname?.startsWith("/project") === true &&
     firstScreen.flags.values[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] === true &&

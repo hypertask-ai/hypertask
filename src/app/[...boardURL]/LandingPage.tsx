@@ -1,10 +1,11 @@
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 'use client'
 import Unauthorized from "../unauthorized/page";
 import { HTPR_7799_PROJECT_ENTRY_FLAG, HTPR_7885_INVITE_LINK_DIALOG_FLAG } from "@/lib/flags/keys";
 import { HTPR_7775_SAVED_URL_VIEW_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
-import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
 import { resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
@@ -27,7 +28,7 @@ import { IProject, IProjectsAll, IUser } from "@/models/model";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { CommandMode } from "@/models/enums";
-import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
+import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -1040,12 +1041,7 @@ const  LandingPage= ({
   const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   let legacyAutoOpenReady = false;
   if (!aiChatOpenSwitchesEnabled) legacyAutoOpenReady = aiChatOpenSwitchesReady;
-  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
-  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
-  let keepAiChatClosed = false;
-  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
 
 useEffect(() => {
   if (

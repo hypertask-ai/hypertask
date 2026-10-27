@@ -43,6 +43,23 @@ body completion, with sample counts and errors. Keep Task Writer inputs,
 models, prompts and output unchanged; prepare context before publishing so
 the new ticket cannot become its own duplicate-search result.
 
+## Manual sidebar ownership
+
+With `htpr-8088-manual-chat` on, only the existing chat toggle, Ctrl+Q,
+or an explicit chat action opens or closes the sidebar. Auto-open settings
+are hidden; their saved values remain available when the flag is off.
+
+1. Close chat, then open another ticket and another board. Chat stays closed.
+2. Open chat and send a message. Navigate between tickets and boards in the
+   same team: session id, transcript and unsent draft stay unchanged.
+3. Create a ticket normally and with Ctrl+J. An open chat follows that ticket;
+   a closed chat stays closed. Repeat on a phone at 390x844.
+4. Move to a board in another team. The sidebar keeps its visibility but
+   selects a fresh conversation using that team's board context.
+5. Verify manual close and reopen, including opening the mobile menu.
+6. With the flag off in an isolated test, saved auto-open switches and
+   task-specific history work as before. Do not flip production flags for QA.
+
 ## Floating chat outline
 
 Open chat from a task, use the overflow menu's **Toggle Floating View**, then

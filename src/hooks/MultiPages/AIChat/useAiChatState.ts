@@ -1,3 +1,4 @@
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { createSessionStreams } from "@/lib/aiChat/sessionStreams";
 import { useAiChatDraft } from "./useAiChatDraft";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,7 +14,7 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
@@ -48,6 +49,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const pathname = usePathname();
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG) && !isFullScreenChat && !pathname?.startsWith("/demo");
+  const manualChatReady = useFlagReady(HTPR_8088_MANUAL_CHAT_FLAG);
   const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const ticketScopeSelected =
     ticketScopeEnabled && !isFullScreenChat && isDetailPage &&
@@ -212,7 +215,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage, parallelChatsEnabled);
+  } = useSessionAndChatHistory(manualChat ? undefined : taskId, shouldLoadChatHistory && manualChatReady, !manualChat && isDetailPage, manualChat || parallelChatsEnabled, manualChat ? modelTeamId : undefined);
   useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {
@@ -232,7 +235,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     session: IChatSession;
   } | null>(null);
   const sessionIntentGenerationRef = useRef(0);
-  const sessionContextKey = [
+  const sessionContextKey = manualChat ? `docked:${currentUser?.id}:${modelTeamId}` : [
     surface,
     isFullScreenChat ? "full-screen" : "docked",
     boardScopeIsExplicit ? "explicit" : "implicit",

@@ -1,8 +1,9 @@
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
 import { useEffect, useRef } from "react";
 import { useRecoilValue } from "@/lib/state";
-import { aiChatAutoOpenSuppressedAtom, keepAiChatClosedAtom } from "@/store";
+import { aiChatAutoOpenSuppressedAtom } from "@/store";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { focusAiChatEditorForRequest, isEditableElement } from "@/utils/aiChat/focusRequestWindow";
 import { IChatMessage } from "@/models/model";
@@ -20,12 +21,7 @@ export function useAiChatPresentation(context: Context) {
   const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   let legacyAutoOpenReady = false;
   if (!aiChatOpenSwitchesEnabled) legacyAutoOpenReady = aiChatOpenSwitchesReady;
-  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
-  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
-  let keepAiChatClosed = false;
-  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const {
   setAiOption, contextList, setContextList, editor, handleCancelStream,

@@ -15,14 +15,14 @@ const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSumma
 };
 const staleTime = 1000 * 60 * 3;
 
-export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>) {
+export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, navigationTeamId?: string | null) {
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
   const queryClient = useQueryClient();
   const summaryKey = ["chat-session-summaries", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, "history"];
   const transcriptPrefix = ["aiChatTranscript", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG];
   const transcriptKey = (id: string | null) => [...transcriptPrefix, id];
-  const identity = `${user?.uid}:${user?.id}:${taskId}:${enabled}`;
+  const identity = `${user?.uid}:${user?.id}:${navigationTeamId === undefined ? taskId : `team:${navigationTeamId}`}:${enabled}`;
   const identityRef = useRef(identity);
   identityRef.current = identity;
   const [selection, setSelection] = useState<{ identity: string; id: string | null }>({ identity, id: null });
@@ -40,7 +40,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   }, [identity]);
   const [unavailableIdentity, setUnavailableIdentity] = useState<string | null>(null);
   const pagingUnavailable = unavailableIdentity === identity;
-  const ready = enabled && !pagingUnavailable && historyEnabled && !!user?.uid;
+  const ready = navigationTeamId !== null && enabled && !pagingUnavailable && historyEnabled && !!user?.uid;
   const setActiveSession = useCallback((id: string | null) => {
     activeRef.current = id;
     setSelection({ identity, id });
@@ -233,6 +233,10 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     let cancelled = false;
     setInitializationError(false);
     const initialize = async () => {
+      if (navigationTeamId !== undefined) {
+        await startNewSession();
+        return;
+      }
       if (taskId === undefined) {
         setActiveSession(historySessions[0]?.id ?? null);
         return;

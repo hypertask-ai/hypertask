@@ -1,3 +1,4 @@
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -123,6 +124,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const setIntro = useSetRecoilState(composeTaskChatIntroAtom);
   const setQuestionsTaskId = useSetRecoilState(composeTaskQuestionsTaskIdAtom);
   const setNewTicketPath = useSetRecoilState(aiChatNewTicketPathAtom);
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const setShowChat = useSetRecoilState(showAIChatInterfaceAtom);
   const setSidebar = useSetRecoilState(isAiChatSidebarModeAtom);
   const setSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
@@ -364,7 +366,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       } else setIntro({ taskId: task.id, content });
       updateActiveItemAndItemInView(task);
       setScope(projectId);
-      if (chatAutoOpenAllowed.current) {
+      if (!manualChat && chatAutoOpenAllowed.current) {
         setSidebar(true);
         setSuppressed(false);
         setExplicitOpen(Date.now());

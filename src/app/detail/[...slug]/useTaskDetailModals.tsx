@@ -1,6 +1,7 @@
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
-import { aiChatEmbeddedTicketPathAtom, activeItemAtom, idToDeleteCommentAtom, showCommandsAtom, showShortcutsAtom, inViewObjectAtom, showMentionListAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, showCreateTaskModalAtom, appShellRailAtom, tasksPlayListAtom } from "@/store";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
+import { aiChatEmbeddedTicketPathAtom, activeItemAtom, idToDeleteCommentAtom, showCommandsAtom, showShortcutsAtom, inViewObjectAtom, showMentionListAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, showCreateTaskModalAtom, appShellRailAtom, tasksPlayListAtom } from "@/store";
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 
@@ -91,12 +92,7 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
     setEmbeddedTicketPath(path);
     return () => setEmbeddedTicketPath((previous) => previous === path ? null : previous);
   }, [aiChatOpenSwitchesEnabled, embedded, _parsedTask.projectId, _parsedTask.uniqueIndex, setEmbeddedTicketPath]);
-  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
-  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
-  let keepAiChatClosed = false;
-  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);

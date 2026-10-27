@@ -1,3 +1,4 @@
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import type { SessionStreams } from "@/lib/aiChat/sessionStreams";
 import { getNativeSidebarChat } from "@/lib/agents/chatViewerState";
 import { useCallback, useEffect, useRef } from "react";
@@ -15,6 +16,7 @@ import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sess
 type Context = { parallelStreams?: SessionStreams; agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
 
 export function useAiChatSessions(context: Context) {
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG) && !context.isFullScreenChat && !context.pathname?.startsWith("/demo");
   const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const {
   parallelStreams, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
@@ -172,6 +174,7 @@ export function useAiChatSessions(context: Context) {
     : globalConstants.sendAiChatMessageRoute;
 
   const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000) => {
+    if (manualChat) return getDisplayedSession();
     const projectId = currentProject?.id;
     const userId = currentUser?.id;
     const sidebarNative = context.agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
@@ -352,6 +355,7 @@ export function useAiChatSessions(context: Context) {
     else void promise.finally(clearSetup);
     return promise;
   }, [
+    manualChat,
     aiChatBoardSessionMap,
     context.agentSidebarChatsEnabled,
     createSession,

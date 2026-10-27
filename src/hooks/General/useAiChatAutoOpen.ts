@@ -1,5 +1,8 @@
 "use client";
 
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -13,6 +16,8 @@ function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | 
 }
 
 export function useAiChatAutoOpen(mobile: boolean) {
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
+  const manualChatReady = useFlagReady(HTPR_8088_MANUAL_CHAT_FLAG);
   useSyncAiChatOpenPreferences();
   const { enabled, ready, flagReady, values } = useAiChatOpenPreferences();
   const user = useRecoilValue(currentUserAtom);
@@ -35,7 +40,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const allowed = page !== null && (values[page] || (pinned && !mobile));
 
   useEffect(() => {
-    if (!enabled || !ready || !pathname || !user?.id) {
+    if (manualChat || !manualChatReady || !enabled || !ready || !pathname || !user?.id) {
       previousPage.current = null;
       return;
     }
@@ -58,10 +63,10 @@ export function useAiChatAutoOpen(mobile: boolean) {
     autoOpenedPage.current = pageKey;
     setExplicitOpenAt(null);
     setOpen(true);
-  }, [enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
+  }, [manualChat, manualChatReady, enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
 
   const active = enabled || !flagReady;
   const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey);
-  const reserve = active && !mobile && allowed && !(suppressed && !pageChanged);
+  const reserve = !manualChat && manualChatReady && active && !mobile && allowed && !(suppressed && !pageChanged);
   return { reserve };
 }

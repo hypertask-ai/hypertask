@@ -75,6 +75,8 @@ function pageHarness(values = defaults, options = {}) {
   let pathname = "/detail/project-15/1", query = "", mobile = false, enabled = options.enabled ?? true;
   const { useAiChatAutoOpen } = load("src/hooks/General/useAiChatAutoOpen.ts", {
     react: h.react, "@/lib/state": s.state, "@/store": atoms,
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/lib/flags/definitions/htpr-8088-manual-chat": { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" },
     "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(query) },
     "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, ready: true, flagReady: true, values }), useSyncAiChatOpenPreferences() {} },
   });
@@ -341,10 +343,11 @@ function toggles(enabled, keepClosedFlag = true) {
   const Toggle = () => null, inert = { default: () => null };
   const changes = [];
   const { default: Section } = load("src/components/Modals/Settings/TaskPageSection.tsx", {
+    "@/lib/flags/definitions/htpr-8088-manual-chat": { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" },
     "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, values: defaults, setPreference: (key, value) => changes.push([key, value]) }) },
     "@/components/sidebars/RightSidebar/UserPreference": inert,
     "@/lib/state": { useRecoilState: () => [false, () => {}] }, "@/store": {},
-    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : keepClosedFlag },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8088-manual-chat" ? false : key === flag ? enabled : keepClosedFlag },
     "@/lib/flags/keys": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
     "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert, "./SettingsToggle": { __esModule: true, default: Toggle },
   });

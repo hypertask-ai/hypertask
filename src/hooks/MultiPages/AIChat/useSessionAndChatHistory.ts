@@ -33,7 +33,8 @@ export const useSessionAndChatHistory = (
   taskId?: number,
   historyEnabled = true,
   isTaskScoped = false,
-  preserveSessionSelection = false
+  preserveSessionSelection = false,
+  navigationTeamId?: string | null
 ) => {
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
@@ -61,8 +62,12 @@ export const useSessionAndChatHistory = (
     if (dockedScope === null || dockedScope === "ticket") scopedBoardId = currentProject?.id;
     else scopedBoardId = dockedScope === "all" ? undefined : dockedScope;
   }
-  if (chatNames) nameBoardRef.current = scopedBoardId;
+  if (chatNames || navigationTeamId !== undefined) nameBoardRef.current = scopedBoardId;
   else nameBoardRef.current = undefined;
+  const initializingTeamRef = useRef<string | null>(null);
+  const navigationTeamRef = useRef(navigationTeamId);
+  navigationTeamRef.current = navigationTeamId;
+  const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined);
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);
@@ -72,7 +77,7 @@ export const useSessionAndChatHistory = (
   currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
-  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, isTaskScoped, nameBoardRef);
+  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, isTaskScoped, nameBoardRef, navigationTeamId);
   const paged = pagingRequested && !isDemo && !pagedHistory.pagingUnavailable;
 
   const {
@@ -496,6 +501,16 @@ export const useSessionAndChatHistory = (
       try {
         if (paged) return;
         if (!isSuccessSessions) return;
+        if (navigationTeamId !== undefined) {
+          if (!navigationTeamId || selectedTeamId === navigationTeamId || initializingTeamRef.current === navigationTeamId) return;
+          const requestedTeam = navigationTeamId;
+          initializingTeamRef.current = requestedTeam;
+          setActiveSession(null);
+          const created = await startNewSession(() => navigationTeamRef.current === requestedTeam);
+          if (created && navigationTeamRef.current === requestedTeam) setSelectedTeamId(requestedTeam);
+          if (initializingTeamRef.current === requestedTeam) initializingTeamRef.current = null;
+          return;
+        }
 
         const sessions = sessionsData?.data?.sessions ?? [];
 
@@ -540,13 +555,14 @@ export const useSessionAndChatHistory = (
     isTaskScoped,
     sessionsData,
     taskId,
-    startNewSession, paged, preserveSessionSelection,
+    startNewSession, paged, preserveSessionSelection, navigationTeamId, selectedTeamId,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
-  const currentSession = paged ? pagedHistory.currentSession : activeSession
+  let currentSession = paged ? pagedHistory.currentSession : activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
+  if (!paged && navigationTeamId !== undefined && selectedTeamId !== navigationTeamId) currentSession = undefined;
   useEffect(() => {
     if (!waitingForSkillFollowup && composeEnabled && composeIntro && isTaskScoped &&
         taskId === composeIntro.taskId && currentSession?.taskId === composeIntro.taskId) {
