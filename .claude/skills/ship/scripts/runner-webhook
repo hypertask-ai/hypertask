@@ -292,14 +292,20 @@ def handle(n, p, delivery_id):
 
 
 # GitHub notify (YPER4-881): GitHub tells the fleet when CI finishes or a PR closes, so runners stop polling with gh --watch.
-# Repo webhooks POST /github/notify with no secret, so an event is only a hint: it updates a state file that ci-wait blocks on,
-# and ci-wait re-reads the checks with one gh call before trusting it. The worst a forged event can do is wake a waiter early.
-# Only hook ids listed one per line in $GH_NOTIFY_HOOKS are accepted; anything else gets 404.
+# Repo webhooks POST /github/notify with no secret (no new secret exists for this), so the payload is never trusted on its own:
+# - Only "<hook id> <owner/repo>" pairs listed in $GH_NOTIFY_HOOKS are accepted (else 404), and the payload repo must match.
+# - The state file only makes ci-wait re-read the checks with gh (at most once a minute), so a forged event costs one read.
+# - Before any runner gets a message, the event is read back from GitHub with one gh call and must match; messages are built
+#   only from validated fields (repo, branch, PR number, a cleaned workflow name) and a URL we construct.
 GH_NOTIFY_PATH = "/github/notify"
 GH_NOTIFY_DIR = os.environ.get("GH_NOTIFY_DIR", f"{HOME}/.local/state/gh-notify")
 GH_NOTIFY_HOOKS = os.environ.get("GH_NOTIFY_HOOKS", f"{HOME}/.config/hypertask-agents/github-notify-hooks")
 GH_NOTIFY_CLAIMS = os.environ.get("GH_NOTIFY_CLAIMS", f"{HOME}/.local/state/runner-queue/claims")
 SESSION_SAY = os.environ.get("GH_NOTIFY_SESSION_SAY", f"{HOME}/.local/bin/session-say")
+GH_BIN = os.environ.get("GH_NOTIFY_GH", f"{HOME}/.local/bin/gh")
+GH_VERIFY_CAP = 120  # GitHub read-backs per hour
+GH_VERIFIES = []
+GH_INFLIGHT = set()
 GH_EVENTS = {"workflow_run", "pull_request"}
 GH_PASS_WAKE = {"CI Tests"}  # a pass of these wakes an idle owner; any failure wakes it once per commit
 GH_FAIL = {"failure", "timed_out", "startup_failure"}
@@ -313,11 +319,17 @@ def gh_key(text):
 
 
 def gh_hooks():
+    """{hook id: repo} from lines "<id> <owner/repo>"."""
+    hooks = {}
     try:
         with open(GH_NOTIFY_HOOKS) as fh:
-            return {x.strip() for x in fh if x.strip().isdigit()}
+            for line in fh:
+                parts = line.split()
+                if len(parts) == 2 and parts[0].isdigit():
+                    hooks[parts[0]] = parts[1].lower()
     except OSError:
-        return set()
+        pass
+    return hooks
 
 
 def gh_event(kind, p):
@@ -328,15 +340,63 @@ def gh_event(kind, p):
     if kind == "workflow_run" and p.get("action") == "completed":
         run = p.get("workflow_run") or {}
         prs = run.get("pull_requests") or []
-        return {"repo": repo, "branch": str(run.get("head_branch") or ""), "kind": "ci", "workflow": str(run.get("name") or "")[:100],
-                "conclusion": str(run.get("conclusion") or ""), "sha": str(run.get("head_sha") or "")[:40],
-                "pr": prs[0].get("number") if prs and isinstance(prs[0], dict) else None, "url": str(run.get("html_url") or "")}
+        pr = prs[0].get("number") if prs and isinstance(prs[0], dict) else None
+        return {"repo": repo, "branch": str(run.get("head_branch") or ""), "kind": "ci", "workflow": gh_clean(run.get("name")),
+                "conclusion": gh_clean(run.get("conclusion")), "sha": gh_clean(run.get("head_sha"))[:40],
+                "pr": pr if isinstance(pr, int) else None, "run": run.get("id") if isinstance(run.get("id"), int) else None}
     if kind == "pull_request" and p.get("action") == "closed":
         pr = p.get("pull_request") or {}
+        num = pr.get("number")
         return {"repo": repo, "branch": str((pr.get("head") or {}).get("ref") or ""), "kind": "merged" if pr.get("merged") else "closed",
-                "workflow": "", "conclusion": "", "sha": str(pr.get("merge_commit_sha") or "")[:40], "pr": pr.get("number"),
-                "url": str(pr.get("html_url") or "")}
+                "workflow": "", "conclusion": "", "sha": gh_clean(pr.get("merge_commit_sha"))[:40],
+                "pr": num if isinstance(num, int) else None, "run": None}
     return None
+
+
+def gh_clean(text):
+    return re.sub(r"[^A-Za-z0-9 ._/()-]", "", str(text or ""))[:80].strip()
+
+
+def gh_branch_ok(branch):
+    return bool(re.fullmatch(r"[A-Za-z0-9._/-]{1,200}", branch)) and ".." not in branch
+
+
+def gh_url(ev):
+    if ev.get("run"):
+        return f"https://github.com/{ev['repo']}/actions/runs/{ev['run']}"
+    return f"https://github.com/{ev['repo']}/pull/{ev['pr']}" if ev.get("pr") else ""
+
+
+def gh_verify(ev):
+    """Read the event back from GitHub with one gh call; True only when GitHub agrees with the payload."""
+    with GH_LOCK:
+        now = time.time()
+        GH_VERIFIES[:] = [t for t in GH_VERIFIES if now - t < 3600]
+        if len(GH_VERIFIES) >= GH_VERIFY_CAP:
+            log("github notify: hourly read-back cap reached")
+            return False
+        GH_VERIFIES.append(now)
+    if ev["kind"] == "ci":
+        if not ev.get("run"):
+            return False
+        path, jq = f"repos/{ev['repo']}/actions/runs/{ev['run']}", "[.head_branch, .conclusion, .name] | @json"
+        want = [ev["branch"], ev["conclusion"], ev["workflow"]]
+    else:
+        if not ev.get("pr"):
+            return False
+        path, jq = f"repos/{ev['repo']}/pulls/{ev['pr']}", "[.head.ref, .state, .merged] | @json"
+        want = [ev["branch"], "closed", ev["kind"] == "merged"]
+    try:
+        out = subprocess.run([GH_BIN, "api", path, "--jq", jq], capture_output=True, text=True, timeout=30)
+        got = json.loads(out.stdout) if out.returncode == 0 else None
+    except Exception:
+        got = None
+    if isinstance(got, list) and len(got) == 3 and ev["kind"] == "ci":
+        got[2] = gh_clean(got[2])
+    if got != want:
+        log(f"github notify: read-back did not match for {ev['repo']}")
+        return False
+    return True
 
 
 def gh_write(ev):
@@ -346,7 +406,7 @@ def gh_write(ev):
     path = os.path.join(d, gh_key(ev["branch"]) + ".json")
     tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
     with open(tmp, "w") as fh:
-        json.dump(dict(ev, at=int(time.time())), fh)
+        json.dump(dict(ev, at=time.time_ns()), fh)
     os.replace(tmp, path)
     log_path = os.path.join(GH_NOTIFY_DIR, "events.log")
     with open(log_path, "a") as fh:
@@ -409,7 +469,7 @@ def gh_message(ev):
     if ev["kind"] == "closed":
         return f"GitHub: {pr} was closed without merging ({where}). Check why before you go on."
     if ev["conclusion"] in GH_FAIL:
-        return f"GitHub: {ev['workflow']} failed on {pr} ({where}) {ev['url']}. Read it with one gh call; wait with ci-wait, never --watch."
+        return f"GitHub: {ev['workflow']} failed on {pr} ({where}) {gh_url(ev)}. Read it with one gh call; wait with ci-wait, never --watch."
     if ev["conclusion"] == "success" and ev["workflow"] in GH_PASS_WAKE:
         return f"GitHub: {ev['workflow']} passed on {pr} ({where}). Confirm with ci-wait {ev.get('pr') or ''} --repo {ev['repo']}, then go on."
     return None
@@ -424,15 +484,28 @@ def gh_wake(ev, delivery):
         return
     key = "gh|" + "|".join(str(ev.get(k) or "") for k in ("repo", "branch", "kind", "sha")) + ("|fail" if ev["conclusion"] in GH_FAIL else "|" + ev["workflow"])
     with GH_LOCK:
+        if key in GH_INFLIGHT:
+            return
+        with Seen("gh-notify-seen") as seen:
+            if seen.has(key):
+                return
+        GH_INFLIGHT.add(key)
+    try:
+        gh_send(ev, owner, msg, key, delivery)
+    finally:
+        with GH_LOCK:
+            GH_INFLIGHT.discard(key)
+
+
+def gh_send(ev, owner, msg, key, delivery):
+    if not gh_verify(ev):
+        return
+    with GH_LOCK:
         now = time.time()
         GH_WAKES[:] = [t for t in GH_WAKES if now - t < 3600]
         if len(GH_WAKES) >= GH_WAKE_CAP:
             log("github notify: hourly wake cap reached")
             return
-        with Seen("gh-notify-seen") as seen:
-            if seen.has(key):
-                return
-            seen.add(key)
         GH_WAKES.append(now)
     try:
         if owner[0] == "runner":
@@ -440,6 +513,9 @@ def gh_wake(ev, delivery):
         else:
             ok = subprocess.run([SESSION_SAY, owner[1], msg, "--from", "github"], stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL, timeout=DELIVER_TIMEOUT).returncode == 0
+        if ok:  # mark seen only after it went out, so a failed delivery is retried by the next event for the commit
+            with Seen("gh-notify-seen") as seen:
+                seen.add(key)
         log(f"github notify: {ev['kind']} {ev['repo']} -> {owner[0]} {owner[1]} {'sent' if ok else 'failed'}")
     except Exception as exc:  # waking must never crash the receiver
         log(f"github notify: wake failed: {type(exc).__name__}")
@@ -497,7 +573,8 @@ class Handler(BaseHTTPRequestHandler):
     do_GET = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = do_POST = _dispatch
 
     def _github_post(self):
-        if self.headers.get("X-GitHub-Hook-ID", "") not in gh_hooks():
+        hook_repo = gh_hooks().get(self.headers.get("X-GitHub-Hook-ID", ""))
+        if not hook_repo:
             return self._reply(404)
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -515,8 +592,10 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return self._reply(400)
         ev = gh_event(kind, payload)
-        if not ev or not ev["branch"]:
+        if not ev or not gh_branch_ok(ev["branch"]):
             return self._reply(202, b"ignored")
+        if ev["repo"].lower() != hook_repo:
+            return self._reply(403, b"repo does not match hook")
         try:
             gh_write(ev)
         except OSError as exc:
