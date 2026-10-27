@@ -62,7 +62,7 @@ export function useArchiveColumn({ enabled, active, projectId, userId, onClose }
   };
 
   const confirm = async () => {
-    if (!enabled || state.kind !== "confirm" || busy.current || state.snapshot.tasks.length === 0) return;
+    if (!enabled || !active || state.kind !== "confirm" || state.snapshot.projectId !== projectId || busy.current || state.snapshot.tasks.length === 0) return;
     const { snapshot } = state;
     busy.current = true;
     setState({ kind: "archiving", snapshot });

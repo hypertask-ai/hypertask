@@ -641,6 +641,7 @@ const Commands = (props: Props) => {
   }, []);
     
     function updateCommandFrequency(command: ICommandList) {
+      if (!columnArchiveEnabled && command.commandMode === CommandMode.ArchiveColumn) return;
       if (writing) return;
       if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()

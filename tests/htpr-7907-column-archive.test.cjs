@@ -13,7 +13,7 @@ function fixture(t, { enabled = true, refused = [], readFails = false, pauseArch
     { id: 5, projectId: 16, sectionId: 11, title: "Other board", status: "Normal" },
   ];
   const requests = [], undos = [], errors = [], refreshes = [];
-  let closes = 0, hook;
+  let closes = 0, hook, projectId = 15;
   const load = loader({
     axios: { default: { post: async (path, body) => {
       requests.push([path, body]);
@@ -34,11 +34,11 @@ function fixture(t, { enabled = true, refused = [], readFails = false, pauseArch
   });
   const { useArchiveColumn } = load("src/hooks/Kanban/useArchiveColumn.ts");
   function Harness() {
-    hook = useArchiveColumn({ enabled, active: true, projectId: 15, userId: 985, onClose: () => closes++ });
+    hook = useArchiveColumn({ enabled, active: true, projectId, userId: 985, onClose: () => closes++ });
     return null;
   }
   ui.render(React.createElement(Harness));
-  return { tasks, requests, undos, errors, refreshes, get hook() { return hook; }, get closes() { return closes; } };
+  return { tasks, requests, undos, errors, refreshes, get hook() { return hook; }, get closes() { return closes; }, switchBoard() { projectId = 16; ui.render(React.createElement(Harness)); } };
 }
 
 const column = { id: 11, section_title: "Features" };
@@ -132,4 +132,14 @@ test("column archive flag is a reversible Everyone feature", () => {
   assert.equal(flag.kind, "feature");
   assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.releaseRisk.risk, "small");
+});
+
+
+test("a board switch cannot confirm a previous board's snapshot", async (t) => {
+  const f = fixture(t);
+  await React.act(() => f.hook.prepare(column));
+  f.switchBoard();
+  await React.act(() => f.hook.confirm());
+  assert.equal(f.requests.length, 1);
+  assert.deepEqual(f.undos, []);
 });
