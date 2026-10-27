@@ -208,7 +208,7 @@ for (const mobile of [true, false]) {
     t.after(() => { compactMobileUndo = false; });
     const f = await fixture(t, { mobile });
     await React.act(async () => hotToast.toast.success("Ordinary notification", { duration: Infinity }));
-    const defaultContainer = document.querySelector('[data-rht-toaster="default"]');
+    const defaultContainer = document.querySelector('[data-rht-toaster=""]');
     const ordinaryStyle = defaultContainer.getAttribute("style");
     const undone = [];
     const id = await f.show("Undo remove notification", { id: 7 }, async (data, toastId) => undone.push([data, toastId]));
