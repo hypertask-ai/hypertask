@@ -36,6 +36,7 @@ function fixture({ error, enabled = true, failAt = "generate", flagError = false
     },
   };
   const summary = load("src/app/api/ai/_lib/commentSummaries.ts", {
+    "node:crypto": require("node:crypto"),
     "@/lib/net/downloadWithoutBrotli": {},
     "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), configureAiModelUsage() {}, providerOptionsForAiModel: () => ({}) },
     "@/app/api/ai/_lib/byokKeys": { getAiDefaultModelContext: async () => ({ haiku55Enabled: false }),
@@ -100,7 +101,7 @@ test("successful queue jobs still store and acknowledge the generated summary", 
   for (const enabled of [false, true]) {
     const f = fixture({ enabled });
     assert.deepEqual(await f.run(), { status: 200, body: { ok: true } });
-    assert.deepEqual(f.writes, [{ where: { id: 44, text: f.stored.text }, data: { summary: "- First point\n- Second point" } }]);
+    assert.deepEqual(f.writes, [{ where: { id: 44, text: f.stored.text }, data: { summary: "- First point\n- Second point", summaryTextHash: require("node:crypto").createHash("sha256").update(f.stored.text).digest("hex") } }]);
     assert.deepEqual(f.errors, []);
   }
 });
