@@ -287,6 +287,7 @@ policies:
     repository_creation_setting: enabled
   concurrency:
     cancel_superseded_pull_request_runs: true
+    trusted_guard_event_isolation: github.run_id
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch

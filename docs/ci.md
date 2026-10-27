@@ -505,6 +505,10 @@ operation. Ordinary authorization errors remain failures. The retry wait is
 bounded to one hour; an unavailable required result never becomes green.
 No required ruleset context changes.
 
+Trusted guard concurrency includes the workflow run ID.
+Older event reruns cannot cancel newer evaluations.
+Reruns still share their original event's group.
+
 `node tests/guard-quota.test.cjs` executes the saved production scripts and
 candidate workflow entry points with isolated GitHub responses. For a small,
 same-repository PR without an existing size comment, the two guard workflows
