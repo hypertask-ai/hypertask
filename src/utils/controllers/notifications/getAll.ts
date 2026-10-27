@@ -1,5 +1,6 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8090-assignee-inbox";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -292,6 +293,21 @@ const notificationGetAll = async (
         select: { notificationMatrix: true },
       }),
     ]);
+    const humanFacingCommentRows = actorActivityRows.some((row) => row.type === "Comment" && row.fromAgentId) &&
+      await isFeatureEnabled(HTPR_8090_ASSIGNEE_INBOX_FLAG, parsedUserId)
+      ? await prisma.notification.findMany({
+          where: {
+            ...inboxWhere,
+            type: "Comment",
+            taskId: { in: notifications.flatMap((row) => row.taskId == null ? [] : [row.taskId]) },
+            fromAgentId: { not: null },
+            task: { assignees: { some: { userId: parsedUserId, agentId: null } } },
+            comment: { kind: { in: ["question", "qa", "done"] } },
+          },
+          select: { taskId: true, fromAgentId: true },
+          distinct: ["taskId", "fromAgentId"],
+        })
+      : [];
     const activeNotificationTypeRows = normalizeInboxActorActivityRows(
       actorActivityRows,
     );
@@ -363,6 +379,11 @@ const notificationGetAll = async (
         const usersById = new Map(
           actorAndWaitingUsers.map((user) => [user.id, user])
         );
+        const humanFacingCommentTaskIds = new Set(
+          humanFacingCommentRows
+            .filter((row) => row.fromAgentId && !mutedAgentIds.has(row.fromAgentId))
+            .map((row) => row.taskId),
+        );
         const waitingOnSetByUserMap = usersById;
         const agentsById = new Map(pageAgents.map((agent) => [agent.id, agent]));
 
@@ -398,7 +419,8 @@ const notificationGetAll = async (
           agentOnlyTypesByTaskId[Number(taskId)] = types.filter(
             (type) =>
               agentAuthoredTypes.has(`${taskId}:${type}`) &&
-              !humanAuthoredTypes.has(`${taskId}:${type}`)
+              !humanAuthoredTypes.has(`${taskId}:${type}`) &&
+              !(type === "Comment" && humanFacingCommentTaskIds.has(Number(taskId)))
           );
           mutedTypesByTaskId[Number(taskId)] = types.filter(
             (type) =>
