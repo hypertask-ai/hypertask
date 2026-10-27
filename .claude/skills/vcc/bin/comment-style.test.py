@@ -34,6 +34,7 @@ class CommentStyleTest(unittest.TestCase):
                               capture_output=True, text=True)
 
     def assert_refused(self, text, reason, kind="qa", *options):
+        self.trace.unlink(missing_ok=True)
         result = self.invoke(text, kind, *options)
         self.assertEqual(result.returncode, 5, result.stderr)
         self.assertIn(reason, result.stderr)
