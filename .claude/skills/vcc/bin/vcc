@@ -97,6 +97,41 @@ question_comment() {
 }
 question_comment "$@"
 
+completion_move() {
+  local section='' project='' destination='' target_section='' out arg checker="$HOME/.agents/skills/ship/scripts/ship-check"
+  local -a positional=()
+  while [ "$#" -gt 0 ]; do
+    arg=$1
+    [[ $arg != -?* || $arg == --* ]] || arg="-$arg"
+    case "$arg" in
+      --section|--project|--to|--to-section)
+        [ "$#" -ge 2 ] || return 0
+        case "$arg" in
+          --section) section=$2 ;;
+          --project) project=$2 ;;
+          --to) destination=$2 ;;
+          --to-section) target_section=$2 ;;
+        esac
+        shift ;;
+      --section=*) section=${arg#*=} ;;
+      --to-section=*) target_section=${arg#*=} ;;
+      --project=*) project=${arg#*=} ;;
+      --to=*) destination=${arg#*=} ;;
+      --) shift; positional+=("$@"); break ;;
+      --*=*|--help|--h|--version|--V|--json|--human|--force|--all|--all-boards|--enabled|--disabled|--confirm|--clear|--restore|--stdin|--off|--has-due-date|--summary|--markdown|--clear-due|--clear-parent|--comment|--html|--canvas|--dry-run|--apply|--clear-description|--running|--default|--clear-labels|--clear-assignees|--add|--self) ;;
+      -*) [ "$#" -lt 2 ] || shift ;;
+      *) positional+=("$arg") ;;
+    esac
+    shift
+  done
+  case "${positional[0]:-} ${positional[1]:-}" in 'task move'|'tasks move'|'task update'|'tasks update') ;; *) return 0 ;; esac
+  if [ -z "$section" ] && [ "${positional[1]}" = move ]; then section=${target_section:-$destination}; fi
+  [ -n "$target_section" ] || destination=''
+  [ -n "$section" ] || return 0
+  [ -x "$checker" ] || { printf '%s\n' 'vcc: completion checker unavailable; refusing section change' >&2; exit 2; }
+  out=$("$checker" move "${positional[2]:-}" "$section" "$project" "$destination") || { printf '%s\n' "$out" >&2; exit 2; }
+}
+
 # Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
 TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 IDENTITY="Valentins Claude Code"
@@ -105,6 +140,7 @@ if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
 fi
 HT_TOKEN="$(cat "$TOKEN_FILE")"
 export HT_TOKEN
+completion_move "$@"
 review_refuse() {
   printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", "Yes:", "No:", "My recommendation:" and "Why:" paragraphs. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5

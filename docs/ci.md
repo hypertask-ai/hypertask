@@ -104,8 +104,30 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.
-- Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live.
+- Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live. Non-app-only merges use the ignored build step below.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
+
+## Vercel ignored builds
+
+`vercel.json` runs `node scripts/vercel-ignore-build.cjs` before dependency installation.
+Exit 0 cancels the build; exit 1 continues it. The comparison uses
+`VERCEL_GIT_PREVIOUS_SHA`, the last successful deployment for this project and branch,
+and `VERCEL_GIT_COMMIT_SHA`. It never substitutes `HEAD^`, so app changes earlier in
+a batch still deploy. Vercel's [turbo-ignore implementation](https://github.com/vercel/turborepo/blob/main/packages/turbo-ignore/src/get-comparison.ts)
+uses the same previous-deployment variable.
+
+Only documentation, skills, CI and tests can skip: `docs/`, `.claude/`,
+`.agents/skills/`, `skills/`, `.github/`, `tests/`, `e2e/`, and root Markdown files.
+Everything else builds, including source Markdown, assets, Prisma, package files,
+`vercel.json`, build scripts, packages, types and build configuration. Unknown,
+missing, shallow, divergent or empty deployment comparisons build rather than skip.
+Renames include the removed path, preventing a source-to-docs move from hiding app changes.
+
+Production health and drift checks use the same command with `--between <live> <tip>`.
+This mode accepts identical trees: a live build needs no replacement after an empty
+commit. Canceled deployments retain the existing push-health behavior; scheduled
+core-action, drift and Pusher checks keep running. The cron definitions are unchanged.
+No workflow, preview or required-check gate is disabled.
 
 ## Live required-check settings
 
@@ -255,8 +277,12 @@ unit tests still run. Its legacy docs-only exclusions remain `docs/`, `.claude/`
 `.github/workflows/ci-tests.yml` and `.github/scripts/` always exercise CI. Live
 settings, review and approval guards remain mandatory. No detector job is added.
 
-The detector fetches exact base/head SHAs and uses NUL-delimited
-`git diff --no-renames --name-only`; moving source into docs cannot hide a
+The detector fetches the base/head SHAs, deepens the shallow fetch (50, 200,
+1000) until `git merge-base` is visible, and diffs merge base to head with
+NUL-delimited `git diff --no-renames --name-only`. Diffing the moving
+production tip instead counted every later production commit as changed and
+sent skill-only PRs down the full lane (YPER4 fast lane). No merge base found
+means run everything; moving source into docs cannot hide a
 removed source file. Its self-check covers both outputs and fail-closed cases:
 `node .github/scripts/ci-change-scope.cjs --self-check` (run in CI, not here).
 
@@ -267,6 +293,17 @@ It builds base then head on one GitHub-hosted runner, each with a fresh disposab
 The job summary reports five phase timings and one matching log line: base build, base seed+capture, head build, head seed+capture and compare. Build rows measure only `next build`; seed+capture includes setup, readiness and teardown. Head capture and comparison share one Playwright command, charged to compare. Partial failures retain elapsed timings and mark unreached phases explicitly.
 Chromium 1.64.0 captures board, task detail, the scrolled comment-box scene, Ctrl+J and inbox in Porcelain at 1440×900 and 390×844.
 On failure, download `visual-regression-diffs` (7-day retention) and compare each screen's expected, actual and diff PNGs; the step summary lists failed screens or setup failures.
+Production pushes capture the ten base PNGs once and save them with `actions/cache`.
+PRs and manual comparisons restore only the exact key: base SHA, OS/architecture,
+runner image version, and the head visual harness, seed, search stub, paired runner
+and workflow hashes. There are no fallback keys; changed harnesses miss the cache.
+Only successful production pushes save; PR-created caches cannot supply production
+baselines. A hit validates all ten PNG signatures and viewport dimensions, skips
+the base lifecycle, and still seeds, builds and compares the head. A miss retains
+the existing paired lifecycle. Missing or malformed cached screenshots fail closed.
+Phase timings mark skipped base work as `not reached`; summaries name cache reuse.
+Only PNGs are cached, never databases, auth state or browser traces.
+
 An intended visual change is approved by a human in the PR description with `Visual change approved: <ticket URL>`; the job still shows the diff and does not auto-approve it.
 This v1 signal is not required by a ruleset and does not replace existing browser-smoke, layout locks or premerge evidence. No committed PNG baselines or storage-state artifacts are used.
 
@@ -444,3 +481,17 @@ The offline replay binds the complete corpus hash and recomputes every score.
 `ship-scripts-tests` runs the collector's supported offline runner and claim
 checks: four Vercel reports join the original MCP report with five activities.
 Different roots/routes stay separate. All board commands are private fakes.
+
+## Provider-neutral Done enforcement
+
+`vcc` checks section changes through the installed `ship-check move` entry point.
+Completed columns require the same merged PR, deployment, documentation and
+app QA evidence as the Claude hook. Numeric references, section IDs and renamed
+completed columns use board reads. Failed reads or a missing checker refuse writes.
+The checker comes from the installed production skill, never the caller's worktree.
+Protected wrapper and guard changes require an independent lead merge.
+This is workflow enforcement, not an OS sandbox against same-user file edits.
+
+`ship-scripts-tests` runs the offline wrapper fixtures. They cover refusal before
+the board write and successful forwarding with completed proof, without real
+credentials or live board mutations. No new required check is added.
