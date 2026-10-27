@@ -132,20 +132,6 @@ jobs:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
 
-      - name: Restore ESLint cache
-        id: restore-eslint-cache
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .cache/eslint
-          key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-${{ github.sha }}
-          restore-keys: |
-            eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-
-
-      - name: Relocate ESLint cache
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: node .github/scripts/relocate-eslint-cache.mjs .cache/eslint/.eslintcache "$GITHUB_WORKSPACE"
-
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
@@ -156,39 +142,6 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: node .github/scripts/agent-scope/baseline-approval.mjs
 
-      - name: Restore agent scope pip cache
-        id: agent-scope-pip-cache
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/agent-scope-pip-cache
-          key: agent-scope-pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/agent-scope/requirements.txt') }}
-
-      - name: Guard agent board scope
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        env:
-          PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
-          PIP_DISABLE_PIP_VERSION_CHECK: "1"
-          SEMGREP_SEND_METRICS: "off"
-          SEMGREP_ENABLE_VERSION_CHECK: "0"
-        run: |
-          set -euo pipefail
-          PY312=$(ls -d "$RUNNER_TOOL_CACHE"/Python/3.12.*/x64/bin/python3 2>/dev/null | sort -V | tail -1 || true)
-          PY312=${PY312:-python3}
-          "$PY312" -c 'import sys; assert sys.version_info[:2] == (3, 12), "requirements.txt is locked for Python 3.12, got " + sys.version'
-          "$PY312" -m venv "$RUNNER_TEMP/agent-scope-venv"
-          export PATH="$RUNNER_TEMP/agent-scope-venv/bin:$PATH"
-          python -m pip install --require-hashes -r .github/scripts/agent-scope/requirements.txt
-          python .github/scripts/agent-scope/run.py --self-test
-          python .github/scripts/agent-scope/run.py
-
-      - name: Save agent scope pip cache
-        if: github.event_name == 'push' && steps.agent-scope-pip-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/agent-scope-pip-cache
-          key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
-
       - name: Save node_modules cache
         # PRs restore the trusted production cache, but only production pushes save.
         if: github.event_name == 'push' && steps.restore-node-modules.outputs.cache-hit != 'true'
@@ -196,69 +149,6 @@ jobs:
         with:
           path: node_modules
           key: ${{ steps.restore-node-modules.outputs.cache-primary-key }}
-
-      - name: Generate Prisma client
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: npx prisma generate
-
-      - name: Board filter and sort contracts
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: node --test tests/board-filters/*.test.cjs
-
-      - name: Restore TypeScript cache
-        id: restore-tsc-cache
-        # A stale tsbuildinfo is safe: tsc validates it against file hashes and
-        # falls back to a full check when they differ.
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .cache/tsc
-          key: tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-${{ github.sha }}
-          restore-keys: |
-            tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-
-
-      - name: Typecheck
-        # Next.js generates route-handler signature checks outside ordinary tsc.
-        # Generate them first so CI catches the same errors as the Vercel build.
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: npx next typegen && npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
-
-      - name: Save TypeScript cache
-        # PRs may restore the trusted production cache, but only production pushes save.
-        if: github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .cache/tsc
-          key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
-
-      - name: Lint
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
-
-      - name: Save ESLint cache
-        # PRs may restore the trusted base-branch cache, but only production pushes
-        # may refresh it. This prevents untrusted PR cache data from becoming a
-        # production input while still accelerating every subsequent PR.
-        # cache-hit is true only for an exact primary-key match. Restoring the
-        # previous production SHA through restore-keys returns false, so every new
-        # production commit saves a refreshed cache; only same-SHA reruns skip it.
-        if: github.event_name == 'push' && steps.restore-eslint-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .cache/eslint
-          key: ${{ steps.restore-eslint-cache.outputs.cache-primary-key }}
-
-      # Directory discovery in this check is broader than the PR selector's
-      # exact-path heuristic, so run it even when another suite owns the diff.
-      - name: Settings Ctrl+K coverage
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: node --test tests/settings-cmdk-coverage.test.cjs
-
-      # A PR that adds the offending test is exactly the PR the selector never
-      # routes here, so this gate reads the whole tests/ tree on every PR.
-      - name: Source-text regex gate
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: node --test tests/source-text-regex-lint.test.cjs
 
       # Every PR body claims "npm test N passed" and nothing checked it, so a
       # broken suite sat green on production for days (HTPR-5161).
@@ -338,6 +228,140 @@ jobs:
           name: ci-test-shards
           path: ${{ runner.temp }}/ci-shards
           retention-days: 7
+
+  ci-checks:
+    name: ci-checks
+    needs: ci-prepare
+    if: needs.ci-prepare.outputs.run_tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Restore ESLint cache
+        id: restore-eslint-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/eslint
+          key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-
+
+      - name: Relocate ESLint cache
+        run: node .github/scripts/relocate-eslint-cache.mjs .cache/eslint/.eslintcache "$GITHUB_WORKSPACE"
+
+      - name: Restore agent scope pip cache
+        id: agent-scope-pip-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/agent-scope-pip-cache
+          key: agent-scope-pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/agent-scope/requirements.txt') }}
+
+      - name: Guard agent board scope
+        env:
+          PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          SEMGREP_SEND_METRICS: "off"
+          SEMGREP_ENABLE_VERSION_CHECK: "0"
+        run: |
+          set -euo pipefail
+          PY312=$(ls -d "$RUNNER_TOOL_CACHE"/Python/3.12.*/x64/bin/python3 2>/dev/null | sort -V | tail -1 || true)
+          PY312=${PY312:-python3}
+          "$PY312" -c 'import sys; assert sys.version_info[:2] == (3, 12), "requirements.txt is locked for Python 3.12, got " + sys.version'
+          "$PY312" -m venv "$RUNNER_TEMP/agent-scope-venv"
+          export PATH="$RUNNER_TEMP/agent-scope-venv/bin:$PATH"
+          python -m pip install --require-hashes -r .github/scripts/agent-scope/requirements.txt
+          python .github/scripts/agent-scope/run.py --self-test
+          python .github/scripts/agent-scope/run.py
+
+      - name: Save agent scope pip cache
+        if: github.event_name == 'push' && steps.agent-scope-pip-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/agent-scope-pip-cache
+          key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Board filter and sort contracts
+        run: node --test tests/board-filters/*.test.cjs
+
+      - name: Restore TypeScript cache
+        id: restore-tsc-cache
+        # A stale tsbuildinfo is safe: tsc validates it against file hashes and
+        # falls back to a full check when they differ.
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/tsc
+          key: tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-${{ github.sha }}
+          restore-keys: |
+            tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-
+
+      - name: Typecheck
+        # Next.js generates route-handler signature checks outside ordinary tsc.
+        # Generate them first so CI catches the same errors as the Vercel build.
+        run: npx next typegen && npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
+
+      - name: Save TypeScript cache
+        if: github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/tsc
+          key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
+
+      - name: Lint
+        run: npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
+
+      - name: Save ESLint cache
+        # PRs may restore the trusted base-branch cache, but only production pushes
+        # may refresh it. This prevents untrusted PR cache data from becoming a
+        # production input while still accelerating every subsequent PR.
+        # cache-hit is true only for an exact primary-key match. Restoring the
+        # previous production SHA through restore-keys returns false, so every new
+        # production commit saves a refreshed cache; only same-SHA reruns skip it.
+        if: github.event_name == 'push' && steps.restore-eslint-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/eslint
+          key: ${{ steps.restore-eslint-cache.outputs.cache-primary-key }}
+
+      # Directory discovery in this check is broader than the PR selector's
+      # exact-path heuristic, so run it even when another suite owns the diff.
+      - name: Settings Ctrl+K coverage
+        run: node --test tests/settings-cmdk-coverage.test.cjs
+
+      # A PR that adds the offending test is exactly the PR the selector never
+      # routes here, so this gate reads the whole tests/ tree on every PR.
+      - name: Source-text regex gate
+        run: node --test tests/source-text-regex-lint.test.cjs
 
   ci-test:
     name: test-shard
@@ -458,7 +482,7 @@ jobs:
 
   ci-tests:
     name: ci-tests
-    needs: [ci-prepare, ci-test]
+    needs: [ci-prepare, ci-checks, ci-test]
     if: always() && (github.event_name == 'push' || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -523,9 +547,11 @@ jobs:
           set -euo pipefail
           test "${{ needs.ci-prepare.result }}" = "success"
           if [ "${{ needs.ci-prepare.outputs.run_tests }}" = "true" ]; then
+            test "${{ needs.ci-checks.result }}" = "success"
             test "${{ needs.ci-test.result }}" = "success"
             test "${{ steps.prove.outcome }}" = "success"
           else
+            test "${{ needs.ci-checks.result }}" = "skipped"
             test "${{ needs.ci-test.result }}" = "skipped"
           fi
 

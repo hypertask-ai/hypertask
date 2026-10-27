@@ -287,9 +287,9 @@ test('CI policy budgets the reduced folding and keeps UX out of required context
   const policy = yaml.load(read('docs/ci-policy.yml'));
   const budget = policy.pr_job_budget;
   assert.equal(budget.normal_synchronize_before, 17);
-  assert.equal(budget.normal_synchronize_after, 15);
+  assert.equal(budget.normal_synchronize_after, 16);
   assert.equal(budget.opened_before, 18);
-  assert.equal(budget.opened_after, 15);
+  assert.equal(budget.opened_after, 16);
   assert.deepEqual(budget.pull_request_guards.published_statuses, ['secret-scan', 'next-public-secrets']);
   assert.deepEqual(budget.trusted_pull_request_guards.published_statuses, ['outside-pr-guard', 'pr-size', 'pr-title']);
   for (const guard of [budget.pull_request_guards, budget.trusted_pull_request_guards, ...budget.serialized_reconciliation_guards]) {
