@@ -2,6 +2,7 @@
 # Offline helper guard tests with fake credentials and CLI.
 set -euo pipefail
 vcc=$(cd "$(dirname "$0")" && pwd)/vcc
+ship_check=$(cd "$(dirname "$vcc")/../../ship/scripts" && pwd)/ship-check
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/home/.config/hypertask-agents/credentials" "$T/proc"
@@ -36,6 +37,12 @@ printf 'Fixture\t%s\n' "$HOME/.config/hypertask-agents/credentials/valentins-cla
 STUB
 chmod +x "$T/bin/"* "$HOME/.agents/skills/ship/scripts/ship-identity"
 printf '%s\n' 'vcc: helpers never write to the board; report to your runner' > "$T/refusal"
+cat > "$HOME/.agents/skills/ship/scripts/ship-check" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$HOME/.agents/skills/ship/scripts/ship-check"
+
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 run() {
@@ -52,7 +59,7 @@ refused() {
 }
 allowed() {
   run "$@"
-  [ "$status" = 0 ] || fail "expected stub success, got $status: $*"
+  [ "$status" = 0 ] || fail "expected stub success, got $status: $*: $(cat "$T/out" "$T/err" "$VCC_TEST_TRACE")"
   [ ! -s "$T/err" ] || fail "allowed command produced stderr: $*"
   [[ $(< "$T/out") == stub:* ]] || fail "command did not reach CLI: $*"
   [[ $(< "$VCC_TEST_TRACE") == *hypertask* ]] || fail "CLI trace missing: $*"
@@ -321,4 +328,86 @@ allowed bash "$vcc" comment add X-1 --kind question --text "$rewrite_7508_303933
 fixture "$rewrite_7508_303933"
 allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 printf 'ok verbatim old Question refuses and real rewrite passes comment add and newest review\n'
+cat > "$HOME/.agents/skills/ship/scripts/ship-check" <<'STUB'
+#!/usr/bin/env bash
+printf 'completion %s\n' "$*" >> "$VCC_TEST_TRACE"
+[ "${VCC_TEST_COMPLETE:-missing}" = passed ] || exit 2
+STUB
+chmod +x "$HOME/.agents/skills/ship/scripts/ship-check"
+for provider in codex anthropic grok; do
+  run env HAX_PROVIDER="$provider" bash "$vcc" task move YPER4-864 --section Done
+  [ "$status" = 2 ] || fail "incomplete $provider move not refused: $status"
+  [[ $(< "$VCC_TEST_TRACE") != *'hypertask task move'* ]] || fail 'incomplete Done reached CLI'
+  allowed env HAX_PROVIDER="$provider" VCC_TEST_COMPLETE=passed bash "$vcc" task move YPER4-864 --section Done
+  [[ $(< "$VCC_TEST_TRACE") == *'completion move YPER4-864 Done'* ]] || fail 'completion check skipped'
+done
+for args in \
+  'tasks update YPER4-864 --section=10413' \
+  'task move --section Done YPER4-864' \
+  '--json task move YPER4-864 --section Done' \
+  'task move YPER4-864 --to Done' \
+  'task move YPER4-864 --to-section 10413' \
+  '--human task move YPER4-864 --section Done' \
+  'task move YPER4-864 -section=Done'; do
+  run bash "$vcc" $args
+  [ "$status" = 2 ] || fail "alternate move bypassed completion: $args"
+  [[ $(< "$VCC_TEST_TRACE") != *'hypertask task move'* && $(< "$VCC_TEST_TRACE") != *'hypertask tasks update'* ]] || fail 'alternate Done reached CLI'
+done
+rm "$HOME/.agents/skills/ship/scripts/ship-check"
+run bash "$vcc" task move YPER4-864 --section Done
+[ "$status" = 2 ] || fail 'missing checker must fail closed'
+[[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'missing checker reached CLI'
+printf 'ok completion enforced for every provider before board write\n'
+ln -s "$ship_check" "$HOME/.agents/skills/ship/scripts/ship-check"
+export VCC_EVIDENCE_DIR="$T/evidence"
+cat > "$T/bin/hypertask" <<'STUB'
+#!/usr/bin/env bash
+printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
+case "$1 $2" in
+  'tasks get') printf '{"tasks":[{"ticketNumber":"%s","boardId":4060}]}\n' "${VCC_TEST_TICKET:-YPER4-864}" ;;
+  'section list')
+    sections='{"sections":[{"id":10413,"section_title":"Shipped","isDone":true},{"id":10411,"section_title":"In Progress","isDone":false}]}'
+    printf '%s\n' "${VCC_TEST_SECTIONS:-$sections}" ;;
+  *) printf 'stub:'; printf ' <%s>' "$@"; printf '\n' ;;
+esac
+STUB
+cat > "$T/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+printf 'gh %s\n' "$*" >> "$VCC_TEST_TRACE"
+case "$*" in
+  *'--json title --jq .title') printf '%s [INFRA] Fixture\n' "${VCC_TEST_TICKET:-YPER4-864}" ;;
+  *'--json number,title,state,mergeCommit,baseRefName')
+    printf '{"number":1,"title":"%s [INFRA] Fixture","state":"%s","mergeCommit":{"oid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"baseRefName":"production"}\n' "${VCC_TEST_TICKET:-YPER4-864}" "${VCC_TEST_PR_STATE:-MERGED}" ;;
+  'api '*'/commits/'*'/status '*) printf '\n' ;;
+  'api '*'/deployments?sha='*) printf '1\n' ;;
+  'api '*'/deployments/1/statuses '*) printf '%s\n' "${VCC_TEST_DEPLOY:-success}" ;;
+  *) exit 91 ;;
+esac
+STUB
+chmod +x "$T/bin/gh"
+completion_refused() {
+  run "$@"
+  [ "$status" = 2 ] || fail "real completion guard allowed missing proof: $* ($status) $(cat "$T/err")"
+  [[ $(< "$VCC_TEST_TRACE") != *'hypertask task move'* && $(< "$VCC_TEST_TRACE") != *'hypertask tasks update'* ]] || fail 'refused move reached CLI'
+}
+completion_refused bash "$vcc" task move YPER4-864 --section Done
+mkdir -p "$VCC_EVIDENCE_DIR/YPER4-864"
+printf '1\n' > "$VCC_EVIDENCE_DIR/YPER4-864/pr"
+completion_refused env VCC_TEST_PR_STATE=OPEN bash "$vcc" task move YPER4-864 --section Done
+completion_refused env VCC_TEST_DEPLOY=pending bash "$vcc" task move YPER4-864 --section Done
+allowed bash "$vcc" task move YPER4-864 --section Done
+allowed bash "$vcc" tasks update YPER4-864 --section=10413
+allowed bash "$vcc" task move --section Shipped YPER4-864
+allowed bash "$vcc" task move 80196 --section Done
+[[ $(< "$T/out") == 'stub: <task> <move> <80196> <--section> <Done>' ]] || fail 'numeric ref arguments changed'
+allowed bash "$vcc" task update YPER4-864 --title 'Done --section Done'
+allowed bash "$vcc" task move YPER4-864 --section Done --section 'In Progress'
+allowed bash "$vcc" --json task move YPER4-864 --section Done
+allowed bash "$vcc" task move YPER4-864 --section 'In Progress'
+completion_refused env VCC_TEST_SECTIONS=broken bash "$vcc" task move YPER4-864 --section=10413
+completion_refused env VCC_TEST_SECTIONS='{"sections":[{"id":10413,"section_title":"Shipped"}]}' bash "$vcc" task move YPER4-864 --section=10413
+mkdir -p "$VCC_EVIDENCE_DIR/HTPR-999"
+printf '1\n' > "$VCC_EVIDENCE_DIR/HTPR-999/pr"
+completion_refused env VCC_TEST_TICKET=HTPR-999 bash "$vcc" task move HTPR-999 --section Done
+printf 'ok real checker requires merged PR, successful deploy, and app QA proof\n'
 printf 'vcc helper guard tests passed\n'
