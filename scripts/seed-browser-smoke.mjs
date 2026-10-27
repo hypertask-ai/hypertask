@@ -241,6 +241,22 @@ async function seedSessionFixtures(flags) {
     ].join("\n\n"),
   });
 
+  const pages = {};
+  for (const lane of ["Desktop", "Mobile"]) {
+    const pageBoard = await createBoard({
+      ownerId: user.id,
+      teamId: team.id,
+      googleAccountId: googleAccount.id,
+      title: `Browser smoke Pages ${lane}`,
+      suffix: `pages${lane.toLowerCase()}`,
+    });
+    pages[lane] = {
+      projectId: pageBoard.id,
+      taskId: pageBoard.task.id,
+      detailPath: `/detail/project-${pageBoard.id}/${pageBoard.task.uniqueIndex}`,
+    };
+  }
+
   if (process.argv.includes("--qa-journeys")) {
     await createBoard({
       ownerId: user.id,
@@ -470,6 +486,7 @@ async function seedSessionFixtures(flags) {
     title: board.task.title,
     description: "This seeded ticket must open from its board card.",
     detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
+    pages,
     longThreadDetailPath: `/detail/project-${threadBoard.id}/${threadBoard.task.uniqueIndex}`,
     agentDescriptionDetailPath: `/detail/project-${agentDescriptionBoard.id}/${agentDescriptionBoard.task.uniqueIndex}`,
     flags,

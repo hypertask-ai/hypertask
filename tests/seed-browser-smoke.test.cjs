@@ -112,6 +112,17 @@ await seedSessionFixtures({});`,
     return id;
   });
   assert.equal(new Set(scopeUsers).size, 2);
+  const card = files["/fixtures/card-fixture.json"];
+  assert.deepEqual(Object.keys(card.pages), ["Desktop", "Mobile"]);
+  const pagesBoards = Object.values(card.pages).map(fixture => fixture.projectId);
+  assert.equal(new Set(pagesBoards).size, 2, "parallel Pages tests need separate boards");
+  for (const [lane, fixture] of Object.entries(card.pages)) {
+    const board = boards.find(board => board.id === fixture.projectId);
+    assert.equal(board.title, `Browser smoke Pages ${lane}`);
+    assert.equal(fixture.taskId, board.task.id);
+    assert.equal(fixture.detailPath, `/detail/project-${board.id}/${board.task.uniqueIndex}`);
+    assert.notEqual(fixture.taskId, card.taskId, "Pages links must not push down the layout fixture's comments");
+  }
   const contract = files["/fixtures/contract-fixture.json"];
   const owner = contract.callers.owner;
   assert.notEqual(owner.id, smoke.id, "contract owner must not be the smoke user");
