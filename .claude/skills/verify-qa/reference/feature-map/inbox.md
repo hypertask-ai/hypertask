@@ -64,3 +64,15 @@ their displayed date order differs. Include a draft at a boundary when present.
 Neither shortcut may reorder rows or scroll a hidden split. J/K and Enter must
 continue from the newly focused row. With `htpr-8083-inbox-boundaries` off,
 the previous raw-notification boundary behavior remains.
+
+## Typed comments from your own agent
+
+With `htpr-8090-assignee-inbox` on, assign a sandbox ticket to the QA
+account as a person. Post a `kind: qa`, `done` or `question` comment using
+that account's own agent, without mentioning the person. The comment must
+create one human inbox item even with quiet-owner mode on. An agent-only
+assignment is not a human assignment. With the flag off, quiet-owner mode
+keeps its previous behavior. Untyped agent chatter and the person's own
+human comments stay quiet. Check the Agents split when the default split
+hides agent updates. Archive the item, reload, and confirm it stays gone.
+Email recipients must not change: this restoration is inbox-only.
