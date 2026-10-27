@@ -30,7 +30,6 @@ import {
   AGENT_CHAT_STOPPED_MESSAGE,
   AGENT_CHAT_TIMEOUT_MESSAGE,
   AGENT_RUN_ACTIVITY_FEATURE_FLAG,
-  AGENT_RUN_FEATURE_FLAG,
   AGENT_RUN_STALE_AFTER_MS,
   AgentRunActivityConflictError,
   AgentRunActivityInputError,
@@ -129,17 +128,10 @@ async function accessibleRunWhere(principal: AgentRunPrincipal, id: string, db: 
   };
 }
 
-export async function agentRunsEnabledFor(
-  principal: AgentRunPrincipal,
-): Promise<boolean> {
-  return isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId);
-}
-
 export async function agentRunActivitiesEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
   return (
-    (await agentRunsEnabledFor(principal)) &&
     (await isFeatureEnabled(AGENT_RUN_ACTIVITY_FEATURE_FLAG, principal.userId))
   );
 }
@@ -148,7 +140,6 @@ export async function runtimeAgentRunsEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
   return (
-    (await agentRunsEnabledFor(principal)) &&
     (await isFeatureEnabled(
       HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
       principal.userId,

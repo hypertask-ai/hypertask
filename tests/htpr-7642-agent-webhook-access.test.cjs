@@ -102,7 +102,6 @@ function harness({ projectId = 101, taskId = 1001, subscriptionProjectId = 101 }
     "@/lib/prisma": { default: db },
     "@prisma/client": { Status: { Deleted: "Deleted" } },
     "@/lib/flags": { isFeatureEnabled: async () => true },
-    "@/lib/agentRuns/model": { AGENT_RUN_FEATURE_FLAG: "fixture-agent-runs" },
     "@/lib/webhooks/signingKeyStore": { openWebhookSigningKey: (value) => value },
     "@/lib/flags/definitions/htpr-7905-agent-webhook-auth-header": { AGENT_WEBHOOK_AUTH_HEADER_FLAG: "fixture-auth-header" },
     "@/lib/mcp/webhooks/delivery": {
