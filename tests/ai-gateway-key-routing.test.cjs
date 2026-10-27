@@ -23,6 +23,7 @@ const stubbedModulePaths = [
   "src/app/api/ai/_lib/planGate.ts",
   "src/app/api/ai/_lib/planAllowancePolicy.ts",
   "src/app/api/ai/_lib/providerGate.ts",
+  "src/lib/ai/chatStream/models.ts",
   "src/lib/crypto/byokCipher.ts",
   "src/lib/flags.ts",
   "src/lib/net/fetchWithoutBrotli.ts",
