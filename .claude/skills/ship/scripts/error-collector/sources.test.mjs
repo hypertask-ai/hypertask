@@ -596,6 +596,9 @@ test('run boundaries include GitHub recovery and systemd completion, without mul
   const events = journal.parseJournal(lines.map(row => JSON.stringify(row)).join('\n'));
   assert.deepEqual(events.map(row => [row.unit, row.outcome, row.userFacing]), [['backup.service', 'failure', false], ['backup.service', 'success', false], ['nginx.service', undefined, true]]);
   assert.equal(events[0].runId, 'run-a');
+  const [observer] = journal.parseJournal(JSON.stringify({ ...lines[0], USER_UNIT: 'igsh976-observe-180200.service', MESSAGE: 'Failed to start igsh976-observe-180200.service - gate observer' }));
+  assert.equal(isNoise(observer), true);
+  assert.equal(isNoise(events[0]), false);
   const root = join(home, 'run-boundary-state');
   fakeCommand('ht', `console.log(JSON.stringify({ success: true, tasks: [], total: 0 }));`);
   fakeCommand('vcc', 'throw new Error("WRITE FORBIDDEN");');

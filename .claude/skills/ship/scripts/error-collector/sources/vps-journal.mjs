@@ -7,10 +7,11 @@ export function parseJournal(text, { since, until } = {}) {
   const groups = new Map();
   for (const line of text.split('\n').filter(Boolean)) {
     const row = JSON.parse(line);
-    const unit = row.USER_UNIT ?? row.UNIT ?? row._SYSTEMD_USER_UNIT ?? row._SYSTEMD_UNIT ?? row.SYSLOG_IDENTIFIER ?? 'unknown-unit';
+    const origin = row._SYSTEMD_USER_UNIT ?? row._SYSTEMD_UNIT ?? row.SYSLOG_IDENTIFIER ?? 'unknown-unit';
+    const unit = row.USER_UNIT ?? row.UNIT ?? origin;
     if (unit === 'error-collector.service' || row._SYSTEMD_UNIT === 'error-collector.service') continue;
     const outcome = row.JOB_RESULT === 'done' ? 'success' : row.JOB_RESULT === 'failed' ? 'failure' : undefined;
-    const message = `${unit}: ${Array.isArray(row.MESSAGE) ? Buffer.from(row.MESSAGE).toString('utf8') : row.MESSAGE}`;
+    const message = `${origin}: ${Array.isArray(row.MESSAGE) ? Buffer.from(row.MESSAGE).toString('utf8') : row.MESSAGE}`;
     const ts = new Date(Number(row.__REALTIME_TIMESTAMP) / 1000).toISOString();
     if ((since && ts <= since) || (until && ts > until)) continue;
     // Keep raw status codes for noise rules and separate noise from real errors sharing a normalized key.
