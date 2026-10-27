@@ -238,3 +238,16 @@ for (const enabled of [false, true]) {
     assert.equal(app.store.get(atoms.aiChatSidebarWidthPxAtom), 340);
   });
 }
+
+for (const enabled of [false, true]) {
+  test(`resize keeps the latest untouched width while a render is pending (remember width: ${enabled})`, async (t) => {
+    const app = await fixture(t, enabled);
+    assert.equal(app.width(), 420);
+    await React.act(async () => {
+      app.store.set(atoms.aiChatSidebarWidthPxAtom, 340);
+      window.dispatchEvent(new window.Event("resize"));
+    });
+    assert.equal(app.width(), 340, "a stale render must not restore the old 420px default");
+    assert.equal(app.store.get(atoms.aiChatSidebarPreferredWidthsAtom), null);
+  });
+}
