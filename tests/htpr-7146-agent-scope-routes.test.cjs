@@ -308,7 +308,7 @@ test('task-backed run activity GET/POST check current grants, boardless personal
     '@/lib/agentStatus/boardRefresh': { refreshBoardForAgentRun: async () => {} },
     '@/lib/agents/chatBroadcast': { broadcastChatSession: async () => {} },
     '@/utils/helperFunctions/toStoredHtml': { toStoredHtml: text => text },
-    './persistence': { persistAgentRunActivity: async (_tx, input) => { f.writes.push('activity'); return { ...input, selectedAt: null, selectedValue: null }; } },
+    './persistence': { persistAgentRunActivity: async (_tx, input) => { f.writes.push('activity'); return { ...input, selectedAt: null, selectedValue: null, commentAgentWebhookDeliveryIds: [] }; } },
     '@/lib/realtime/server': { userChannel: () => 'user', broadcast: async () => {}, broadcastTaskComment: async () => {} },
   });
   for (const id of ['run-15', 'run-4060', 'run-2128', 'personal-chat']) {
