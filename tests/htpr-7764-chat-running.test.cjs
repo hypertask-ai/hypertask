@@ -16,7 +16,7 @@ function fixture({ enabled = true, mobile = false, parallel = true, sidebar = tr
   const mocks = {
     "next/navigation": { usePathname: () => "/project", useSearchParams: () => parameters, useRouter: () => ({ push: noop }) },
     "@/hooks/useFlag": { useFlag: key => key === FLAG ? enabled : key === "htpr-7765-parallel-chats" ? parallel : ["htpr-7688-past-chats-first", "htpr-7773-chat-header-name", "htpr-7708-chat-list-rows"].includes(key) },
-    "@/lib/flags/keys": { HTPR_7765_PARALLEL_CHATS_FLAG: "htpr-7765-parallel-chats" },
+    "@/lib/flags/keys": { HTPR_7764_CHAT_RUNNING_FLAG: FLAG, HTPR_7765_PARALLEL_CHATS_FLAG: "htpr-7765-parallel-chats" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => React.useContext(Chat) },
     "@/lib/contexts/mobileContext": { MobileViewContext: Mobile },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
