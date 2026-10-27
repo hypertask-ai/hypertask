@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -20,7 +22,12 @@ import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>((body) => !!((body as any)?.taskId && (body as any)?.status)),
   validationMessage: "Missing required field",
-  operation: async ({ taskId, status, agentId }, session, request) => {
+  operation: async ({ taskId, status, agentId, column }, session, request) => {
+    const target = z.object({ projectId: z.number().int().positive(), sectionId: z.number().int().positive() }).optional().safeParse(column);
+    if (!target.success) return NextResponse.json({ message: "Invalid column" }, { status: 400 });
+    if (target.data && (status !== "Archive" || !await isFeatureEnabled(HTPR_7907_COLUMN_ARCHIVE_FLAG, session.userId))) {
+      return NextResponse.json({ message: "Column archive is unavailable" }, { status: 403 });
+    }
     const actingUserId = session.userId;
     const signedSession = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
 
@@ -74,7 +81,10 @@ const route = taskWriteRoute({
     const { status: writeStatus, json: updatedTask }: any = await updateTaskSingle(
       newTask,
       user as IUser,
-      agent?.id ?? null, { teamScope: session.teamScope }
+      agent?.id ?? null, {
+        teamScope: session.teamScope,
+        ...(target.data ? { expectedProjectId: target.data.projectId, expectedSectionId: target.data.sectionId, expectedStatus: "Normal" } : {}),
+      }
     );
 
     if (writeStatus !== 200) {
