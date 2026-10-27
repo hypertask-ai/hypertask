@@ -16,7 +16,7 @@ import {
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
-import { AGENT_CHAT_BRIEF_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 import {
   AGENT_CHAT_ADHD_REPLY_GUIDANCE,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
@@ -137,9 +137,7 @@ export async function POST(
 
     let agentBrief: AgentWebhookChatBrief | null = null;
     try {
-      if (await isFeatureEnabled(AGENT_CHAT_BRIEF_FLAG, userId)) {
-        agentBrief = await buildAgentChatBrief({ userId, agentId });
-      }
+      agentBrief = await buildAgentChatBrief({ userId, agentId });
     } catch (error) {
       console.error("Failed to enrich Agent Chat with work context", error);
     }

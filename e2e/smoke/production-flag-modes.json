@@ -12,7 +12,6 @@
     "htpr-6006-chat-confirm-ticket": "EVERYONE",
     "htpr-6094-agent-activity-rows": "EVERYONE",
     "htpr-6122-agent-run-activities": "EVERYONE",
-    "htpr-6155-chat-agent-brief": "EVERYONE",
     "htpr-6177-auto-task-descriptions": "OFF",
     "htpr-6238-posthog-error-alert": "EVERYONE",
     "htpr-6243-manager-loop-activity": "EVERYONE",
