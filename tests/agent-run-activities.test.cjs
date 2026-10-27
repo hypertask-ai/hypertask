@@ -599,29 +599,6 @@ test("a run with no prompt binding is still ended", async () => {
   assert.equal(pressed.db.messages.filter((message) => message.replyToMessageId === "human-1").length, 1);
 });
 
-test("activity behavior still requires its independent feature flag", async () => {
-  const activityFlagDisabled = loadService({
-    featureEnabled: (key) => key !== model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
-  });
-
-  assert.equal(
-    await activityFlagDisabled.service.agentRunActivitiesEnabledFor(agentPrincipal),
-    false,
-  );
-  assert.deepEqual(activityFlagDisabled.flagChecks, [
-    model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
-  ]);
-
-  const typescriptSdk = loadService();
-  assert.equal(
-    await typescriptSdk.service.agentRunActivitiesEnabledFor({ ...agentPrincipal, sdk: "typescript" }),
-    true,
-  );
-  assert.deepEqual(typescriptSdk.flagChecks, [
-    model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
-  ]);
-});
-
 test("only the owner browser and matching agent can list run activities", async () => {
   const run = runRow();
   const activity = activityRow();
@@ -706,14 +683,14 @@ test("task activity feed returns all agent runs on an authorized task", async ()
     activities.slice(0, 2).map(model.serializeAgentRunActivity),
   );
 
-  const disabled = loadService({
+  const allFlagsDisabled = loadService({
     runs: [ownedRun],
     activities: [activities[0]],
-    featureEnabled: (key) => key !== model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
+    featureEnabled: () => false,
   });
   assert.deepEqual(
-    await disabled.service.listTaskAgentRunActivities(6, 42),
-    [],
+    await allFlagsDisabled.service.listTaskAgentRunActivities(6, 42),
+    [model.serializeAgentRunActivity(activities[0])],
   );
 });
 
@@ -2205,7 +2182,6 @@ test("activity routes expose notification lease contention as retryable", async 
   const message = "Run activity comment notifications are still processing";
   stub("src/lib/mcp/auth.ts", { checkMcpRateLimit: async () => null });
   stub("src/lib/agentRuns/service.ts", {
-    agentRunActivitiesEnabledFor: async () => true,
     authenticateAgentRunRequest: async (request) => ({
       userId: 6,
       agentId: request.url.endsWith("/select") ? null : "agent-1",
