@@ -33,6 +33,27 @@ test('runner boundary accepts isolated hosted execution and refuses VPS, remote 
   assert.match(result.stderr, /never the VPS/)
 })
 
+test('named dispatcher selects inbox without a diff and rejects unknown names before driving', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-qa-named-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  for (const [journey, failure, selected] of [
+    ['inbox-cycle', /refuses non-loopback base app\.hypertask\.ai/, ['inbox-cycle']],
+    ['unknown', /Unknown named verify-qa journey/, null],
+  ]) {
+    const out = path.join(dir, journey)
+    const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/verify-qa-premerge.mjs')], {
+      encoding: 'utf8', env: { ...process.env, VERIFY_QA_OUT: out,
+        VERIFY_QA_CHANGED_FILES: '', VERIFY_QA_NAMED_JOURNEY: journey,
+        VERIFY_QA_BASE: 'https://app.hypertask.ai', VERIFY_QA_REPORT_ONLY: '0', GITHUB_STEP_SUMMARY: '' },
+    })
+    assert.equal(result.status, 1)
+    const evidence = JSON.parse(fs.readFileSync(path.join(out, 'result.json'), 'utf8'))
+    assert.equal(evidence.verdict, 'FAIL')
+    assert.deepEqual(evidence.journey, selected)
+    assert.match(evidence.failure, failure)
+  }
+})
+
 test('doctor requires a matching authenticated disposable account, not just an HTTP 200', async () => {
   const { doctorIdentity } = await load()
   const state = id => ({ cookies: [{ name: 'nookies_user', value: encodeURIComponent(JSON.stringify({ id })) }] })

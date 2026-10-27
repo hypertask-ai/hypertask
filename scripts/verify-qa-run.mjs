@@ -123,7 +123,7 @@ async function main() {
     }
     const child = spawnSync(process.execPath, ['.github/scripts/verify-qa-premerge.mjs'], {
       stdio: 'inherit', timeout: 180_000,
-      env: { ...process.env, VERIFY_QA_FIXTURE: fixture, VERIFY_QA_OUT: out, VERIFY_QA_REPORT_ONLY: '0', VERIFY_QA_CHANGED_FILES: '', GITHUB_STEP_SUMMARY: '' },
+      env: { ...process.env, VERIFY_QA_FIXTURE: fixture, VERIFY_QA_OUT: out, VERIFY_QA_REPORT_ONLY: '0', VERIFY_QA_CHANGED_FILES: '', VERIFY_QA_NAMED_JOURNEY: 'inbox-cycle', GITHUB_STEP_SUMMARY: '' },
     })
     if (child.error || child.status !== 0) throw new Error(child.error?.message || 'Named journey failed; inspect result.json and screenshots')
     const result = JSON.parse(await readFile(path.join(out, 'result.json'), 'utf8'))

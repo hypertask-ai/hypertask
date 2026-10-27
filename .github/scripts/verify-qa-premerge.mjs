@@ -414,7 +414,10 @@ export async function runTaggedJourneys({ base, journey, outDir }, execute = spa
 
 async function main() {
   const outDir = path.resolve(process.env.VERIFY_QA_OUT || 'verify-qa-premerge')
-  const choice = selectJourney(await readChangedFiles(process.env.VERIFY_QA_CHANGED_FILES))
+  const namedJourney = process.env.VERIFY_QA_NAMED_JOURNEY
+  const choice = namedJourney === 'inbox-cycle'
+    ? { journey: ['inbox-cycle'], featureMap: `${FEATURE_MAP_DIR}/inbox.md`, matchedPage: 'inbox.md', reason: 'explicit named journey', counts: {} }
+    : selectJourney(await readChangedFiles(process.env.VERIFY_QA_CHANGED_FILES))
   const baseRaw = process.env.VERIFY_QA_BASE || process.env.BASE_URL || ''
   const result = {
     ticket: 'https://app.hypertask.ai/detail/project-4060/695',
@@ -432,6 +435,7 @@ async function main() {
   }
   try {
     await mkdir(outDir, { recursive: true })
+    if (namedJourney && namedJourney !== 'inbox-cycle') throw new Error('Unknown named verify-qa journey')
     if (!choice.journey) {
       result.verdict = 'UNREACHABLE'
       result.failure = `no driver: ${choice.reason}`
