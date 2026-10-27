@@ -52,7 +52,7 @@ export const ChatWindow = () => {
         isMbl
           ? "h-full min-h-0 w-full flex-1 rounded-none"
           : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded",
-        !isMbl && floatingElevation && "shadow-floating border border-floating"
+        !isMbl && floatingElevation && "shadow-floating border-thin border-floating"
       )}
     >
       <ChatHeader />

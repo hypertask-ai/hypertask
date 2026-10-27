@@ -615,20 +615,75 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
   }
 })
 
+<<<<<<< HEAD
 
 test('floating chat shares the command palette shadow without changing the phone sheet', async ({ page }, testInfo) => {
+=======
+test('floating chat elevation supports shared styling and rollback without changing the phone sheet', async ({ page }, testInfo) => {
+>>>>>>> bafa13da4 (HTPR-8055 Avoid Bootstrap border override and test flag rollback)
   test.skip(testInfo.project.name !== 'Desktop', 'covers desktop and phone in one session')
   test.setTimeout(90_000)
-  await page.setViewportSize({ width: 1440, height: 900 })
-  await page.goto('/my-tasks')
-  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
-  const chat = page.locator('.chatwindow')
-  const opener = page.getByRole('button', { name: 'Open AI chat', exact: true })
-  if (await opener.isVisible()) await opener.click()
-  if (!(await chat.isVisible())) {
-    await page.getByTestId('ai-sidebar').locator('button[aria-haspopup="menu"]').click()
-    await page.getByRole('menuitem', { name: 'Toggle Floating View', exact: true }).click()
+  const flag = 'htpr-8055-floating-elevation'
+  const isolated = Boolean(process.env.BROWSER_SMOKE_PR)
+  let forced = false
+  if (isolated) {
+    await page.route('**/api/flags', async route => {
+      const response = await route.fetch()
+      const body = await response.json()
+      await route.fulfill({ response, json: { ...body, flags: { ...body.flags, [flag]: forced } } })
+    })
   }
+  for (const enabled of isolated ? [false, true] : [undefined]) {
+    forced = enabled === true
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const flagsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/flags' && response.ok())
+    await page.goto('/my-tasks')
+    const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
+    await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
+    const chat = page.locator('.chatwindow')
+    const opener = page.getByRole('button', { name: 'Open AI chat', exact: true })
+    if (await opener.isVisible()) await opener.click()
+    if (!(await chat.isVisible())) {
+      await page.getByTestId('ai-sidebar').locator('button[aria-haspopup="menu"]').click()
+      await page.getByRole('menuitem', { name: 'Toggle Floating View', exact: true }).click()
+    }
+    await expect(chat).toBeVisible()
+    await expect(chat).toHaveAttribute('data-floating-elevation', String(flags[flag] === true))
+    const desktopBounds = await chat.boundingBox()
+    await page.keyboard.press('Control+j')
+    const palette = page.locator('#htc .modal-content')
+    await expect(palette).toBeVisible()
+    const shadow = await chat.evaluate(element => getComputedStyle(element).boxShadow)
+    if (flags[flag]) {
+      expect(shadow).toContain('rgba(0, 0, 0, 0.45) 0px 8px 30px 0px')
+      await expect(palette).toHaveCSS('box-shadow', shadow)
+      await expect(page.locator('#htc')).toHaveCSS('box-shadow', 'none')
+      const border = await chat.evaluate(element => getComputedStyle(element).borderTopColor)
+      await expect(palette).toHaveCSS('border-top-color', border)
+      await page.evaluate(() => document.documentElement.style.setProperty('--elevation-floating-border', 'rgb(4, 5, 6)'))
+      await expect(chat).toHaveCSS('border-top-color', 'rgb(4, 5, 6)')
+      await expect(palette).toHaveCSS('border-top-color', 'rgb(4, 5, 6)')
+      await page.evaluate(() => document.documentElement.style.removeProperty('--elevation-floating-border'))
+      await page.evaluate(() => document.documentElement.style.setProperty('--elevation-floating-shadow', 'rgb(1, 2, 3) 1px 2px 3px 4px'))
+      const changedShadow = await chat.evaluate(element => getComputedStyle(element).boxShadow)
+      expect(changedShadow).not.toBe(shadow)
+      expect(changedShadow).toContain('rgb(1, 2, 3) 1px 2px 3px 4px')
+      await expect(palette).toHaveCSS('box-shadow', changedShadow)
+      await page.evaluate(() => document.documentElement.style.removeProperty('--elevation-floating-shadow'))
+      await expect(chat).toHaveCSS('box-shadow', shadow)
+    } else {
+      expect(shadow).toContain('rgba(0, 0, 0, 0.5) 0px 0px 75px 45px')
+      await expect(palette).toHaveCSS('box-shadow', 'none')
+      await expect(page.locator('#htc')).toHaveCSS('box-shadow', 'rgb(0, 0, 0) 12px 12px 80px 0px')
+    }
+    expect(await chat.boundingBox()).toEqual(desktopBounds)
+    await page.keyboard.press('Escape')
+    await expect(palette).toBeHidden()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.locator('[data-ai-chat-mobile-header]')).toBeVisible()
+    await expect(chat).toHaveCSS('box-shadow', 'none')
+  }
+<<<<<<< HEAD
   await expect(chat).toBeVisible()
   const desktopBounds = await chat.boundingBox()
   await page.keyboard.press('Control+j')
@@ -658,4 +713,6 @@ test('floating chat shares the command palette shadow without changing the phone
   await expect(page.locator('[data-ai-chat-mobile-header]')).toBeVisible()
   await expect(chat).toHaveCSS('box-shadow', 'none')
 
+=======
+>>>>>>> bafa13da4 (HTPR-8055 Avoid Bootstrap border override and test flag rollback)
 })
