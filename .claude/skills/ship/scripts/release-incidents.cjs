@@ -98,7 +98,7 @@ function guard(ticket, run = command, resume = process.env.SHIP_CLAIM_RESUME || 
   console.error(`ship-claim: STEP BACK; shared-check incident open: ${open.map(task => `https://app.hypertask.ai/detail/project-4060/${task.uniqueIndex}`).join(' ')}; only its live claimant may pick new tickets`);
   return false;
 }
-module.exports = { PREFIX, owner, session, decide, incidents, allowed, command, pages, logs, guard };
+module.exports = { PREFIX, liveClaims, text, owner, session, decide, incidents, allowed, command, pages, logs, guard };
 if (require.main === module) {
   try {
     if (process.argv[2] === 'guard') process.exitCode = guard(process.argv[3], command, process.argv[4]) ? 0 : 3;

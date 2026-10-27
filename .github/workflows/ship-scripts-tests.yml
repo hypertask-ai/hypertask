@@ -65,6 +65,7 @@ jobs:
           bash .claude/skills/ship/scripts/board-check.test.sh
           bash .claude/skills/ship/scripts/user-unit-check.test.sh
           python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
+          node --test .claude/skills/ship/scripts/runner-pick.test.cjs
           python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
           node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs

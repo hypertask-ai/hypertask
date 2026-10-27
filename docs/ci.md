@@ -470,3 +470,29 @@ agent-activity API adds an opaque `cursor`/`nextCursor` pair, ordered by creatio
 time and activity id. Task permissions, team scope and optional agent filters
 remain unchanged on every page. Old servers without full-page pagination fail
 closed; deploy the API before installing the monitor.
+
+
+### Bounded Codex runner cycle
+
+The keeper starts runners only when `~/.local/bin/ht-hax-runner` is a symlink
+into its installed library and that copy matches the repository launcher.
+A hand-edited or outdated copy is refused with a `launcher drift` log entry;
+reinstall from production instead of editing the installed file.
+
+The outer loop calls `ship-claim next` before launching hax. Selection uses the
+board's actual priority value: Urgent Infra first, then product, then remaining
+Infra. Only ready columns (Bugs, Todo, Improvements, Backlog) are eligible.
+Assigned agents, Abdul, unreleased claims (including stale claims), and pending
+questions are skipped. Candidate state is read again before claiming. The normal
+claim race and shared-incident guard still decide ownership; a lost race tries
+the next candidate. Stale claims remain held for the board-check decision.
+
+Each claimed ticket gets one fresh non-interactive Codex process, not an
+interactive prompt that needs Ctrl-D. Its hard deadline defaults to four hours
+(`HT_HAX_TICKET_TIMEOUT`, seconds). Exit without the expected ticket's final line
+records `DONE-UNKNOWN`; a deadline records `TIMEOUT`. Neither means the ticket
+is Done. Both allow the next cycle after thirty seconds. A blocked agent ends
+its one-ticket run; only the outer loop may pick again. The launcher tests
+exercise unknown completion, process deadlines, retry, and launcher drift;
+`runner-pick.test.cjs` exercises the real `ship-claim next` entry with offline
+board and write fixtures. No live board changes occur in those tests.

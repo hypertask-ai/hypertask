@@ -32,6 +32,10 @@ if [ "${1:-}" = decide ]; then
   exit 0
 fi
 
+if [ "${1:-}" = next ]; then
+  exec node "$(dirname "$(readlink -f "$0")")/runner-pick.cjs" "${2:-${SHIP_CLAIM_RESUME:-}}"
+fi
+
 T=${1:-}
 [[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4-NNNN> [\"<resume command>\"]" >&2; exit 2; }
 VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}; HT_API=${SHIP_CLAIM_HT:-ht}

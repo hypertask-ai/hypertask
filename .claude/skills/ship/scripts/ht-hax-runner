@@ -29,6 +29,12 @@ green() {
 }
 
 admit() {
+  local launcher=$HOME/.local/bin/ht-hax-runner installed=$HOME/.local/lib/hypertask/ht-hax-runner/ht-hax-runner
+  if [ ! -L "$launcher" ] || [ "$(readlink -f "$launcher")" != "$installed" ] ||
+      ! cmp -s "$installed" "$REPO/.claude/skills/ship/scripts/ht-hax-runner"; then
+    log "launch refused: launcher drift; reinstall ht-hax-runner from the repo"
+    return 1
+  fi
   "$GUARD" --project "$REPO" -- "${LAUNCH[@]}" || { log "launch refused by session policy"; return 1; }
 }
 
@@ -96,76 +102,36 @@ case "${1:-}" in
     runlog="$STATE/runner-$n.latest.log"
     unset HAX_SUBAGENT_DEPTH
     export SHIP_SESSION_NAME="RUNNER $n" SHIP_CLAIM_RESUME="tmux attach -t ht-hax-runner-$n (hax RUNNER $n)"
-    brief="Token ladder mode: CODEX. You are RUNNER $n, a standing Hypertask runner on Codex (hax). Codex only: never call Claude or any other provider, never start Claude helpers. No fast mode. Your board identity is RUNNER $n: SHIP_SESSION_NAME is set, so vcc writes as you; check with ~/.agents/skills/ship/scripts/ship-identity before any write. Read ~/projects/hypertask/.claude/skills/ship/SKILL.md fully and follow it end to end from Before anything else, with no ticket given: run its board check, respect claims and stale-ticket rules, pick the top free ticket: urgent board 4060 tickets first, then board 15 (product), then the rest of board 4060 (never from Later (parked), Valentin Review or Agent Blocked), claim it FIRST with ship-claim (resume command: \"$SHIP_CLAIM_RESUME\"), work in your own worktree, one small PR per ticket, QA, merge, deploy, live proof, Done, clean-up. Exactly one ticket this run. Use the unlazy skill (~/.agents/skills/unlazy/SKILL.md): write GATES.md first and prove every gate before your final answer. Run targeted tests only; CI runs the full suite. Never message Valentin directly. Work autonomously and talk only on tickets: never session-say, SendMessage or ping HT Product Lead, any manager or any session. Status goes in ticket comments. Stuck after two tries: mark the ticket blocked on HT Product Lead, write why in a ticket comment, take the next ticket. A decision, money or keys question: Valentin Review plus a Question for Valentin. Final line: the word RUNNER, then either DONE <ticket> <state>, or IDLE <reason> when nothing can be picked."
+    seconds=${HT_HAX_TICKET_TIMEOUT:-14400}
+    [[ "$seconds" =~ ^[1-9][0-9]*$ ]] || { log "invalid ticket timeout"; exit 2; }
+    trap 'exit 0' TERM INT
+    brief="Token ladder mode: CODEX. You are RUNNER $n, a standing Hypertask runner on Codex (hax). Codex only. No fast mode. Your board identity is RUNNER $n. SHIP_SESSION_NAME is set; verify with ~/.agents/skills/ship/scripts/ship-identity before any write. Follow ~/projects/hypertask/.claude/skills/ship/SKILL.md end to end for the given ticket, already claimed by the outer loop. Resume command: $SHIP_CLAIM_RESUME. Work in your own worktree. Exactly one ticket this run. Use the unlazy skill (~/.agents/skills/unlazy/SKILL.md): write GATES.md first and prove every gate before your final answer. Run targeted tests only; CI runs the full suite. Never message Valentin or any session. Talk only on tickets. Stuck after two tries: mark this ticket blocked on HT Product Lead, record why, then end this run. Decision, money or keys: Valentin Review plus a Question. Never pick another ticket. Final line: RUNNER DONE <ticket> <state>."
     while :; do
       if [ -f "$STATE/PAUSED" ] || [ -f "$STATE/stop-$n" ]; then sleep 300; continue; fi
       if grep -q '^hold' "$HOME/.local/state/vps-load/status" 2>/dev/null; then
         echo "$(date -u +%FT%TZ) gate: vps load hold" >> "$rlog"; sleep 300; continue
       fi
       admit || exit 1
-      echo "$(date -u +%FT%TZ) start" >> "$rlog"
-      clear; tmux clear-history -t "$TMUX_PANE"
-      tmux select-pane -t "$TMUX_PANE" -T "RUNNER $n hax"
+      identity=$("$REPO/.claude/skills/ship/scripts/ship-identity") || exit 1
+      [ "${identity%%$'\t'*}" = "$SHIP_SESSION_NAME" ] || { log "launch refused: runner identity mismatch"; exit 1; }
+      ticket=$(cd "$REPO" && .claude/skills/ship/scripts/ship-claim next "$SHIP_CLAIM_RESUME")
+      picked=$?
+      if [ "$picked" != 0 ]; then
+        echo "$(date -u +%FT%TZ) pick=$picked" >> "$rlog"
+        sleep 300; continue
+      fi
+      [[ "$ticket" =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || { log "invalid picked ticket"; exit 2; }
+      echo "$(date -u +%FT%TZ) start $ticket" >> "$rlog"
       : > "$runlog"
-      : > "$STATE/runner-$n.result"
-      (
-        sleep 15
-        tmux send-keys -t "$TMUX_PANE" -l "$brief"
-        sleep 1
-        tmux send-keys -t "$TMUX_PANE" C-m
-        result=TIMEOUT
-        for _ in $(seq 1 480); do
-          sleep 30
-          if completed=$(python3 - "$$" "$REPO" <<'PYTHON'
-import json
-import os
-from pathlib import Path
-import re
-import sys
-
-proc = Path(os.environ.get('HT_HAX_PROC_ROOT', '/proc'))
-try:
-    children = (proc / sys.argv[1] / 'task' / sys.argv[1] / 'children').read_text().split()
-    for child in children:
-        for fd in (proc / child / 'fd').iterdir():
-            path = fd.resolve()
-            if path.suffix != '.jsonl':
-                continue
-            with path.open() as stream:
-                header = json.loads(next(stream))
-                if header.get('type') != 'session' or header.get('version') != 1 or header.get('cwd') != sys.argv[2]:
-                    continue
-                last = tail = None
-                for line in stream:
-                    try:
-                        item = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    tail = item
-                    if item.get('kind') not in ('turn_usage', 'reasoning'):
-                        last = item
-                if tail and tail.get('kind') == 'turn_usage' and last and last.get('kind') == 'assistant' and not last.get('origin'):
-                    final = last.get('text', '').strip().splitlines()
-                    if final and re.fullmatch(r'(?:[•*-] )?RUNNER (?:DONE (?:(?:HTPR|YPER4|HYFA)-[0-9]+|https://\S+) .+|IDLE .+)', final[-1]):
-                        print('IDLE' if 'RUNNER IDLE ' in final[-1] else 'DONE')
-                        sys.exit(0)
-except (OSError, ValueError, StopIteration):
-    pass
-sys.exit(1)
-PYTHON
-          ); then
-            result=$completed
-            break
-          fi
-        done
-        printf '%s\n' "$result" > "$STATE/runner-$n.result"
-        tmux capture-pane -p -t "$TMUX_PANE" -S - | tee -a "$rlog" > "$runlog"
-        tmux send-keys -t "$TMUX_PANE" C-d
-      ) </dev/null >/dev/null 2>&1 &
-      watcher=$!
-      "${LAUNCH[@]}"
-      kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null
-      echo "$(date -u +%FT%TZ) end" >> "$rlog"
-      if grep -qx IDLE "$STATE/runner-$n.result"; then sleep 900; else sleep 30; fi
+      timeout --kill-after=30s "${seconds}s" "${LAUNCH[@]}" -p "$brief Ticket: $ticket" 2>&1 | tee "$runlog"
+      status=${PIPESTATUS[0]}
+      result=DONE-UNKNOWN
+      if [ "$status" = 124 ] || [ "$status" = 137 ]; then result=TIMEOUT
+      elif [ "$status" != 0 ]; then result=EXIT-$status
+      elif tail -n 1 "$runlog" | grep -Eq "^(・ |[•*-] )?RUNNER DONE $ticket .+"; then result=DONE; fi
+      printf '%s\n' "$result" > "$STATE/runner-$n.result"
+      cat "$runlog" >> "$rlog"
+      echo "$(date -u +%FT%TZ) end $ticket result=$result" >> "$rlog"
+      sleep 30
     done ;;
 esac
