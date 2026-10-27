@@ -19,7 +19,7 @@ import { ToolExecution } from "@/lib/ai/chatStream/types";
 import { MAX_TOOL_STEPS } from "@/lib/ai/tools/constants";
 import { deferredChatTools } from "@/lib/ai/tools/deferredTools";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7857_HEARTBEAT_STEP_CAP_FLAG, HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG } from "@/lib/flags/keys";
 
 import { selectModel } from "@/lib/ai/chatStream/models";
 
@@ -31,6 +31,10 @@ import type { StreamState } from "./streamState";
 export async function generateModelReply(state: StreamState, inputs: { instructions: string; messages: ModelMessage[]; tools: ToolSet; toolExecutions: ToolExecution[]; onContent?: (content: string) => void }) {
   const { dbUser, heartbeatExecutionId, contextTaskId, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent } = state;
   const { instructions, messages, tools, toolExecutions } = inputs;
+  const heartbeatStepCapEnabled = Boolean(heartbeatExecutionId) &&
+    await isFeatureEnabled(HTPR_7857_HEARTBEAT_STEP_CAP_FLAG, dbUser.id);
+  const maxToolSteps = heartbeatStepCapEnabled ? 4 : MAX_TOOL_STEPS;
+  let completedHeartbeatSteps = 0;
   const deferredToolsEnabled = await isFeatureEnabled(HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG, dbUser.id);
   const toolDiscovery = deferredToolsEnabled ? deferredChatTools(tools) : { tools };
   const modelInstructions = deferredToolsEnabled
@@ -63,12 +67,13 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       instructions: modelInstructions,
       messages,
       ...toolDiscovery,
-      stopWhen: stepCountIs(MAX_TOOL_STEPS),
+      stopWhen: stepCountIs(maxToolSteps - completedHeartbeatSteps),
+      onStepFinish: () => { if (heartbeatStepCapEnabled) completedHeartbeatSteps++; },
       maxRetries: 2,
       abortSignal: state.providerAbort.signal,
       onFinish: async ({ usage, finishReason, toolCalls, steps }) => {
         ranTools = toolCalls.length > 0;
-        reachedStepLimit = steps.length >= MAX_TOOL_STEPS;
+        reachedStepLimit = steps.length >= maxToolSteps || completedHeartbeatSteps >= maxToolSteps;
         state.turnUsage = {
           inputTokens: usage.inputTokens ?? undefined,
           outputTokens: usage.outputTokens ?? undefined,
@@ -156,7 +161,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         sameModelRetry,
       )
       : null;
-    if (!previous) break;
+    if (!previous || completedHeartbeatSteps >= maxToolSteps) break;
     console.warn(
       `[ai-model-fallback] ${state.selected.resolvedModelId} -> ${previous.model}: ${previous.status}`,
     );
@@ -192,7 +197,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   let emptyCompletionError: unknown;
   let emptyCompletionRetryFailed = false;
   if (!hasVisibleCompletion(chunks)) {
-    if (!ranTools && !state.cancelled && !state.providerAbort.signal.aborted) {
+    if (!ranTools && !state.cancelled && !state.providerAbort.signal.aborted && completedHeartbeatSteps < maxToolSteps) {
       try {
         const retry = await generateText({
           model: state.selected.model,
@@ -200,14 +205,15 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           instructions: modelInstructions,
           messages,
           ...toolDiscovery,
-          stopWhen: stepCountIs(MAX_TOOL_STEPS),
+          stopWhen: stepCountIs(maxToolSteps - completedHeartbeatSteps),
+          onStepFinish: () => { if (heartbeatStepCapEnabled) completedHeartbeatSteps++; },
           maxRetries: 1,
           abortSignal: state.providerAbort.signal,
           providerOptions: withHigherEffort(state.selected.providerOptions),
           ...state.selected.settings,
         });
         reachedStepLimit =
-          reachedStepLimit || retry.steps.length >= MAX_TOOL_STEPS;
+          reachedStepLimit || retry.steps.length >= maxToolSteps || completedHeartbeatSteps >= maxToolSteps;
         state.turnUsage = {
           inputTokens:
             (state.turnUsage?.inputTokens ?? 0) + (retry.usage.inputTokens ?? 0),
@@ -242,7 +248,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       toolExecutions,
       writeToolNames,
       reachedStepLimit,
-      maxToolSteps: MAX_TOOL_STEPS,
+      maxToolSteps,
       currentUserId: dbUser.id,
     });
     inputs.onContent?.(fallback);

@@ -176,3 +176,21 @@ expand it again: the original dragged width must return. Temporary viewport
 clamping must not replace the preference. A second account starts at 420px and
 keeps its own drags. Phone chat remains full-width. The flag-off path retains
 the previous shared width and viewport clamping behavior.
+
+## Automatic heartbeat step budget
+
+Native agent heartbeat turns enter through `/api/cron/native-agent-heartbeat`,
+which reserves an execution and calls `/api/ai/chat/stream` with authenticated
+heartbeat headers. With `htpr-7857-heartbeat-step-cap` enabled, the shared
+model-reply dispatch permits four completed AI steps in total, including an
+empty-response retry. User-requested agent chats and flag-off heartbeat turns
+retain 32 steps. Tools and permissions are unchanged.
+
+Run the real-SDK dispatch cases in `tests/ai-chat-deferred-tools.test.cjs`:
+four heartbeat steps, 32 user-requested steps, 32 flag-off steps, and one empty
+stream step plus three retry steps. Preserve the heartbeat durability tests.
+After deploy, check the flag mode and exercise a normal QA chat. Never invoke
+the global cron merely for testing: it wakes other owners' agents. If no
+isolated heartbeat trigger and execution-step telemetry are available through
+approved product surfaces, record the live four-step case as UNREACHABLE;
+do not substitute mocked SDK results for a live heartbeat.

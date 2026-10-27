@@ -11,6 +11,7 @@ const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") 
 const discovery = load(path.join(root, "src/lib/ai/tools/deferredTools.ts"));
 const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7862-chat-deferred-tools.ts"));
 let enabled = true;
+let heartbeatStepCapEnabled = true;
 const dependencies = {
   ai,
   "@/lib/net/downloadWithoutBrotli": {},
@@ -21,19 +22,20 @@ const dependencies = {
   "@/lib/aiProviders": {},
   "@/app/api/ai/_lib/heartbeatExecution": {},
   "@/app/api/ai/chat/stream/modelFallback": {},
-  "@/app/api/ai/chat/stream/bulkTools": { hasVisibleCompletion: (chunks) => chunks.length > 0 },
-  "@/lib/ai/chatStream/errors": {},
-  "@/lib/ai/tools/constants": { MAX_TOOL_STEPS: 8 },
+  "@/app/api/ai/chat/stream/bulkTools": load(path.join(root, "src/app/api/ai/chat/stream/bulkTools.ts")),
+  "@/lib/ai/chatStream/errors": { reportEmptyCompletion: async () => {} },
+  "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
   "@/lib/ai/tools/deferredTools": discovery,
   "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
-    assert.equal(key, "htpr-7862-chat-deferred-tools");
     assert.equal(userId, 985);
+    if (key === "htpr-7857-heartbeat-step-cap") return heartbeatStepCapEnabled;
+    assert.equal(key, "htpr-7862-chat-deferred-tools");
     return enabled;
   } },
-  "@/lib/flags/keys": definition,
+  "@/lib/flags/keys": { ...definition, HTPR_7857_HEARTBEAT_STEP_CAP_FLAG: "htpr-7857-heartbeat-step-cap" },
   "@/lib/ai/chatStream/models": {},
   "@/lib/ai/chatStream/content": { withHigherEffort: (options) => options },
-  "@/lib/ai/tools/metadata": {},
+  "@/lib/ai/tools/metadata": { writeToolNames: new Set() },
 };
 const compiled = ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/ai/chatStream/modelReply.ts"), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -177,4 +179,61 @@ test("catalog resolves SDK description functions before searching or describing"
   });
   const described = await catalog.tools.hypertask_describe_tool.execute({ name: "fixture_export" });
   assert.equal(described.description, "Export a fixture.");
+});
+
+for (const [name, heartbeat, capped, expectedSteps] of [
+  ["heartbeat", true, true, 4],
+  ["ordinary agent chat", false, true, 32],
+  ["heartbeat with cap off", true, false, 32],
+]) {
+  test(`${name} stops at ${expectedSteps} completed steps`, async () => {
+    enabled = false;
+    heartbeatStepCapEnabled = capped;
+    let executed = 0;
+    const tools = { fixture_read: ai.tool({
+      inputSchema: z.object({}).strict(),
+      execute: async () => { executed++; return { success: true }; },
+    }) };
+    const model = new MockLanguageModelV4({ doStream: () => streamResult([
+      { type: "text-start", id: "text" },
+      { type: "text-delta", id: "text", delta: "Reading." },
+      { type: "text-end", id: "text" },
+      toolCall("fixture_read", {}),
+    ]) });
+    const state = { ...stateFor(model), actingAgent: { id: "fixture-agent" },
+      heartbeatExecutionId: heartbeat ? "fixture-heartbeat" : undefined };
+    const reply = await generateModelReply(state, {
+      instructions: "Read until stopped.", messages: [{ role: "user", content: "Read." }],
+      tools, toolExecutions: [],
+    });
+    assert.equal(model.doStreamCalls.length, expectedSteps);
+    assert.equal(executed, expectedSteps);
+    assert.equal(reply.chunks.join(""), "Reading.".repeat(expectedSteps));
+    assert.equal(model.doGenerateCalls.length, 0);
+  });
+}
+
+test("heartbeat empty-stream retry uses only its three remaining steps", async () => {
+  enabled = false;
+  heartbeatStepCapEnabled = true;
+  let executed = 0;
+  const tools = { fixture_read: ai.tool({
+    inputSchema: z.object({}).strict(),
+    execute: async () => { executed++; return { success: true }; },
+  }) };
+  const model = new MockLanguageModelV4({
+    doStream: streamResult([]),
+    doGenerate: () => ({ content: [toolCall("fixture_read", {})], usage,
+      finishReason: { unified: "tool-calls" }, warnings: [] }),
+  });
+  const state = { ...stateFor(model), heartbeatExecutionId: "fixture-heartbeat",
+    recordTurnOutcome(outcome) { assert.equal(outcome, "failed"); } };
+  const reply = await generateModelReply(state, {
+    instructions: "Read until stopped.", messages: [{ role: "user", content: "Read." }],
+    tools, toolExecutions: [],
+  });
+  assert.equal(model.doStreamCalls.length, 1);
+  assert.equal(model.doGenerateCalls.length, 3);
+  assert.equal(executed, 3);
+  assert.match(reply.chunks.join(""), /4/);
 });
