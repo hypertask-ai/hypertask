@@ -122,7 +122,8 @@ for (const extraFailure of [false, true]) {
     writeFileSync(path.join(directory, "config/quarantined-tests.json"), JSON.stringify({ tests: [{ test: "known flaky #1" }] }));
     const { status, report, stderr } = run(directory);
     assert.equal(status, extraFailure ? 1 : 0, stderr);
-    assert.match(stderr, /Quarantine: 1 failing test/);
+    assert.match(stderr, /- known flaky #1 \(unowned \)/);
+    assert.doesNotMatch(stderr, /- ordinary case/);
     assert.equal(report.recordedFiles, 2);
     assert.equal(report.exitCode, extraFailure ? 1 : 0);
   });
