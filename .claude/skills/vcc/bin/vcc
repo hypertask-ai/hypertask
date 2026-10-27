@@ -131,7 +131,6 @@ completion_move() {
   [ -x "$checker" ] || { printf '%s\n' 'vcc: completion checker unavailable; refusing section change' >&2; exit 2; }
   out=$("$checker" move "${positional[2]:-}" "$section" "$project" "$destination") || { printf '%s\n' "$out" >&2; exit 2; }
 }
-completion_move "$@"
 
 # Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
 TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
@@ -141,6 +140,7 @@ if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
 fi
 HT_TOKEN="$(cat "$TOKEN_FILE")"
 export HT_TOKEN
+completion_move "$@"
 review_refuse() {
   printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", "Yes:", "No:", "My recommendation:" and "Why:" paragraphs. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5

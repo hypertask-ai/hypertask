@@ -363,6 +363,7 @@ export VCC_EVIDENCE_DIR="$T/evidence"
 cat > "$T/bin/hypertask" <<'STUB'
 #!/usr/bin/env bash
 printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
+[ "${HT_TOKEN:-}" = fixture-token ] || exit 91
 case "$1 $2" in
   'tasks get') printf '{"tasks":[{"ticketNumber":"%s","boardId":4060}]}\n' "${VCC_TEST_TICKET:-YPER4-864}" ;;
   'section list')
