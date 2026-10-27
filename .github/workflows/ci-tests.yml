@@ -337,6 +337,15 @@ jobs:
           path: .cache/tsc
           key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
 
+      - name: Changed style tokens
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" "$HEAD_SHA"
+          npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"
+
       - name: Lint
         run: npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
 
