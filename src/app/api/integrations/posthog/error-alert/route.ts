@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, randomUUID } from "node:crypto";
 import { Webhook } from "svix";
 
-import {
-  FEATURE_FLAG_OWNER_USER_ID,
-  isFeatureEnabled,
-  POSTHOG_ERROR_ALERT_FLAG,
-} from "@/lib/flags";
 import { getRedis } from "@/lib/redis";
 import {
   claimPostHogAlert,
@@ -140,15 +135,6 @@ async function dispatchWorkflow(
 }
 
 export async function POST(request: NextRequest) {
-  if (
-    !(await isFeatureEnabled(
-      POSTHOG_ERROR_ALERT_FLAG,
-      FEATURE_FLAG_OWNER_USER_ID,
-    ))
-  ) {
-    return new NextResponse(null, { status: 404 });
-  }
-
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "Payload too large" }, { status: 413 });

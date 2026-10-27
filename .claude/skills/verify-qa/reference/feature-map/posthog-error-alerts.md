@@ -2,11 +2,11 @@
 
 ## How a customer reaches it
 
-Not directly. A production error reaches PostHog, PostHog calls the signed webhook `POST /api/integrations/posthog/error-alert` (behind `htpr-6238-posthog-error-alert`), the route starts the GitHub workflow `posthog-error-alert.yml`, and that workflow files one board 15 Bugs ticket per new issue. Infrastructure only, no app UI.
+Not directly. A production error reaches PostHog, PostHog calls the signed webhook `POST /api/integrations/posthog/error-alert`, the route starts the GitHub workflow `posthog-error-alert.yml`, and that workflow files one board 15 Bugs ticket per new issue. Infrastructure only, no app UI.
 
 ## How to drive it
 
-- Refusal: an unsigned `curl -X POST https://app.hypertask.ai/api/integrations/posthog/error-alert --data '{}'` must return 401 (404 means the flag is off).
+- Refusal: an unsigned `curl -X POST https://app.hypertask.ai/api/integrations/posthog/error-alert --data '{}'` must return 401.
 - End to end: run `gh workflow run posthog-error-nightly.yml --ref production`. It raises a marked canary error on production, waits up to 15 minutes for the matching board 15 ticket, then resolves the PostHog issue and closes the ticket. The run log must say "Nightly PostHog canary passed", and `gh run list --workflow posthog-error-alert.yml` must show new `workflow_dispatch` runs after the deploy time.
 - GitHub retry and failure paths cannot be forced live: cover them with `tests/posthog-error-dispatch.test.cjs`.
 - PostHog query 502/503/504 responses retry only the read, twice with bounded waits. Persistent errors still fail the workflow. Replay these paths with `node --test tests/posthog-query-retry.test.cjs`; never force a provider outage live.
