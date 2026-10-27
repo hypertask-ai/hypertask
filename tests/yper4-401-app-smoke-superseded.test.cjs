@@ -128,10 +128,11 @@ function smokeRun({ id = 500, runNumber = id, requestNumber = 100, repository = 
   return { id, run_number: runNumber, status, display_title: `App Smoke request ${requestNumber} for ${repository}:${branch}` };
 }
 
-async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId, pulls = [pr()], runs = [], cancelError, limitedRead = false } = {}) {
+async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId, pulls = [pr()], runs = [], cancelError, cancelMessage, limitedRead = false } = {}) {
   const calls = [];
   const cancelled = [];
   const waits = [];
+  const warnings = [];
   const outputs = {};
   const previous = { PR: process.env.PR, HEAD_SHA: process.env.HEAD_SHA };
   process.env.PR = "1517";
@@ -159,7 +160,7 @@ async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId
             cancelWorkflowRun: async ({ run_id }) => {
               calls.push(`cancel:${run_id}`);
               cancelled.push(run_id);
-              if (cancelError) throw Object.assign(new Error("cancellation failed"), { status: cancelError });
+              if (cancelError) throw Object.assign(new Error(cancelMessage || "cancellation failed"), { status: cancelError });
             },
           },
         },
@@ -175,8 +176,8 @@ async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId
         repo: { owner: "hypertask-ai", repo: "hypertask" }, runId, runNumber,
         payload: { workflow_run: { run_number: requestNumber, head_repository: { full_name: REPOSITORY }, head_branch: BRANCH } },
       },
-      { setOutput: (name, value) => { outputs[name] = value; }, info() {}, warning() {} },
-      request => retryGithubRequest(request, { sleep: async ms => { waits.push(ms); }, log() {} }),
+      { setOutput: (name, value) => { outputs[name] = value; }, info() {}, warning: message => warnings.push(message) },
+      request => retryGithubRequest(request, { sleep: async ms => { waits.push(ms); }, log() {}, ...(cancelMessage ? { budget: { reserve: () => { throw Object.assign(new Error(cancelMessage), { rateLimited: true }); } } } : {}) }),
     );
   } finally {
     for (const [key, value] of Object.entries(previous)) {
@@ -184,7 +185,7 @@ async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId
       else process.env[key] = value;
     }
   }
-  return { calls, cancelled, outputs, waits };
+  return { calls, cancelled, outputs, waits, warnings };
 }
 
 test("the post-scope request recheck runs before any order-aware cancellation", () => {
@@ -265,6 +266,18 @@ test("completed cancellation races are harmless but real cancellation errors fai
   assert.deepEqual(finished.cancelled, [500]);
   assert.equal(finished.outputs.superseded, undefined);
   await assert.rejects(cancelOlder({ runs: [smokeRun()], cancelError: 403 }), /cancellation failed/);
+});
+
+test("a GitHub rate limit while cancelling older runs warns and continues", async () => {
+  const result = await cancelOlder({
+    runs: [smokeRun(), smokeRun({ id: 501 })],
+    cancelError: 403,
+    cancelMessage: "API rate limit exceeded for installation",
+  });
+  assert.deepEqual(result.cancelled, [500]);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /Could not cancel older app-smoke runs; continuing the build/);
+  assert.match(result.warnings[0], /rate limit exceeded for installation/);
 });
 
 test("same-request duplicates use workflow sequence numbers rather than run IDs", async () => {

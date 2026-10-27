@@ -140,7 +140,7 @@ function runWorkflow(t, {
   const parser = path.join(scripts, "feature-flag-parser");
   fs.mkdirSync(parser, { recursive: true });
   fs.writeFileSync(path.join(scripts, "feature-flag-gate.mjs"), gateScript);
-  for (const file of ["github-api-retry.sh", "github-rate-limit.mjs"]) {
+  for (const file of ["github-api-retry.sh", "github-rate-limit.mjs", "feature-flag-status-batch.mjs"]) {
     fs.copyFileSync(path.join(__dirname, "../.github/scripts", file), path.join(scripts, file));
   }
   for (const file of ["package.json", "package-lock.json"]) {
@@ -188,7 +188,8 @@ const assert = require("node:assert/strict");
 const args = process.argv.slice(2);
 const pull = JSON.parse(fs.readFileSync(process.env.FIXTURE_PR, "utf8"));
 const repo = "repos/" + process.env.REPO;
-const endpoint = args.find((arg) => arg.startsWith("repos/"));
+let endpoint = args.find((arg) => arg.startsWith("repos/"));
+if (args[1] === "graphql") endpoint = "graphql";
 assert.equal(args[0], "api");
 const failure = JSON.parse(process.env.FIXTURE_API_FAILURE);
 const previous = fs.readFileSync(process.env.FIXTURE_API_CALLS, "utf8").trim().split("\\n").filter(Boolean).map(JSON.parse);
@@ -231,6 +232,23 @@ if (args.includes("POST")) {
 } else if (commitSha) {
   const statuses = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATUSES, "utf8"));
   console.log(JSON.stringify(statuses[commitSha[1]] || []));
+} else if (endpoint === "graphql") {
+  const statuses = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATUSES, "utf8"));
+  const rows = [pull];
+  if (process.env.FIXTURE_EXTRA_PULLS) rows.push(...JSON.parse(fs.readFileSync(process.env.FIXTURE_EXTRA_PULLS, "utf8")));
+  if (process.env.FIXTURE_SHARED_HEAD === "true") rows.push({ ...pull, number: 43 });
+  const nodes = rows.map((item) => {
+    const sha = item.head.sha;
+    const contexts = (statuses[sha] || []).map((status) => ({
+      context: status.context,
+      state: String(status.state || "").toUpperCase(),
+      description: status.description ?? null,
+      targetUrl: status.target_url ?? null,
+      createdAt: status.updated_at ?? null,
+    }));
+    return { headRefOid: sha, commits: { nodes: [{ commit: { oid: sha, status: { contexts } } }] } };
+  });
+  console.log(JSON.stringify({ data: { repository: { pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } }));
 } else {
   throw new Error("Unexpected gh arguments: " + JSON.stringify(args));
 }
@@ -263,8 +281,8 @@ exit 1
 }
 
 for (const state of ["success", "failure"]) {
-  test(`reconcile: unchanged ${state} fingerprint now skips with exactly one per-PR read and no POST`, (t) => {
-    const { result, output, posts, calls, pull } = runWorkflow(t, {
+  test(`reconcile: unchanged ${state} fingerprint now skips with one batched status read and no POST`, (t) => {
+    const { result, output, posts, calls } = runWorkflow(t, {
       statuses: (pull) => ({ [pull.head.sha]: [
         { context: "another-gate", state: "pending" },
         featureFlagStatus(pull, { state }),
@@ -277,7 +295,7 @@ for (const state of ["success", "failure"]) {
     assert.deepEqual(posts, []);
     assert.deepEqual(calls.map((call) => call.endpoint), [
       "repos/fixture/repository/pulls?state=open&base=production&per_page=100",
-      `repos/fixture/repository/commits/${pull.head.sha}/statuses?per_page=100`,
+      "graphql",
     ]);
   });
 }
@@ -321,7 +339,8 @@ for (const change of ["base", "title", "head", "error", "pending", "missing fing
     assert.equal(posts[0].state, "success");
     assert.equal(posts[0].description, "ok");
     assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
-    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 1);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 0);
+    assert.equal(calls.filter((call) => call.endpoint === "graphql").length, 1);
     assert.equal(calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).length, 0);
     assert.equal(calls.filter((call) => call.endpoint.includes("/pulls?")).length, 2);
   });
@@ -348,7 +367,8 @@ for (const state of ["success", "failure"]) {
     assert.match(output, /evaluated 2, skipped 0/);
     assert.equal(posts.length, 2);
     assert.ok(posts.every((post) => post.state === "failure" && /shared by multiple/.test(post.description)));
-    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 2);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 0);
+    assert.equal(calls.filter((call) => call.endpoint === "graphql").length, 1);
   });
 }
 
@@ -499,7 +519,7 @@ for (const job of [reconciliation, singlePullRequest]) {
   }
 }
 
-for (const endpoint of ['/commits/', '/pulls?', '/statuses/']) {
+for (const endpoint of ['graphql', '/pulls?', '/statuses/']) {
   test(`reconcile: rate limit at ${endpoint} exits the parent shell without publishing an error`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
       apiFailure: { endpoint, after: endpoint === '/pulls?' ? 1 : 0, status: 403, rate: true, reset: 3600 },
@@ -560,11 +580,13 @@ test("reconcile: 32 skipped and 33 evaluated pull requests list open pulls twice
     list: calls.filter((call) => call.endpoint.includes("/pulls?")).length,
     perPull: calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).length,
     statuses: calls.filter((call) => call.endpoint.includes("/commits/")).length,
+    graphql: calls.filter((call) => call.endpoint === "graphql").length,
     posts: calls.filter((call) => call.args.includes("POST")).length,
   };
   assert.equal(result.status, 2, output);
   assert.match(output, /evaluated 33, skipped 32/);
-  assert.equal(counts.statuses, 65, JSON.stringify(counts));
+  assert.equal(counts.statuses, 0, JSON.stringify(counts));
+  assert.equal(counts.graphql, 1, JSON.stringify(counts));
   assert.equal(counts.list, 2, JSON.stringify(counts));
   assert.equal(counts.perPull, 0, JSON.stringify(counts));
   assert.equal(counts.posts, 33, JSON.stringify(counts));
