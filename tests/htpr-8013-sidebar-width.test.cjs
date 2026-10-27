@@ -36,7 +36,7 @@ function handle(enabled) {
   return exports.AiChatSidebarResizeHandle;
 }
 
-async function fixture(t, enabled = true, mobileSidebar = false) {
+async function fixture(t, enabled = true, mobileSidebar = false, pendingPanel = false) {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai" });
   const previous = { window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
@@ -70,9 +70,23 @@ async function fixture(t, enabled = true, mobileSidebar = false) {
     "@/lib/configs/style.config": config,
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.flat().filter(Boolean).join(" ") },
   })("src/components/AI_CHAT/AI_Chat_Sidebar.tsx").AI_Chat_Sidebar : null;
+  const Panels = pendingPanel ? loader({
+    "@/lib/state": state,
+    "@/store": atoms,
+    "@/lib/configs/style.config": config,
+    "@/hooks/useFlag": { useFlag: () => enabled },
+    "@/lib/contexts/mobileContext": { MobileViewContext: Mobile },
+    "@/lib/contexts/Multipages/AI_Agent/chatContext": { useOptionalAiChatContext: () => ({ isSidebarMode: true, showAiChatInterface: true, togglePopover: noop }) },
+    "@/components/ProviderGlobal/useGlobalUIState": { useGlobalUIState: () => ({}) },
+    "@/components/Common/Tooltip": { default: noop },
+    "@/components/Modals/Sheets/mobileOverlayAppSheetStyles": {},
+    "@/components/Modals/Sheets/AppSheet": { AppSheet: noop },
+    "./AI_Chat_Sidebar": { AI_Chat_Sidebar: noop },
+    "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+  })("src/components/AI_CHAT/AI_Chat_Layout.tsx").default : null;
   function App({ show = true }) {
     store = useStore();
-    return show ? React.createElement(Sidebar ?? Handle, Sidebar ? { inOffcanvas: true } : {}) : null;
+    return show ? React.createElement(Panels ?? Sidebar ?? Handle, Sidebar && !Panels ? { inOffcanvas: true } : {}) : null;
   }
   const render = async (show = true) => React.act(async () => {
     root.render(React.createElement(state.StateRoot, null, React.createElement(App, { show })));
@@ -213,3 +227,14 @@ test("phone chat clamps only the displayed width, not the user's saved AI chat w
   await app.resize(1440);
   assert.equal(app.store.get(atoms.aiChatSidebarWidthPxAtom), 820);
 });
+
+for (const enabled of [false, true]) {
+  test(`opening phone chat clamps width before its lazy sheet mounts (remember width: ${enabled})`, async (t) => {
+    const app = await fixture(t, enabled, true, true);
+    assert.equal(document.querySelector('[role="separator"]'), null, "the lazy panel has not mounted its handle");
+    assert.equal(app.store.get(atoms.aiChatSidebarWidthPxAtom), 340);
+    assert.equal(app.store.get(atoms.aiChatSidebarPreferredWidthsAtom), null);
+    await app.resize(1440);
+    assert.equal(app.store.get(atoms.aiChatSidebarWidthPxAtom), 340);
+  });
+}
