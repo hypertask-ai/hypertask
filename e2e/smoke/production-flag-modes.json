@@ -69,7 +69,6 @@
     "htpr-7031-invite-email": "EVERYONE",
     "htpr-7032-email-expiry-copy": "EVERYONE",
     "htpr-7033-cli-install-command": "EVERYONE",
-    "htpr-7034-activation-analytics": "EVERYONE",
     "htpr-7035-demo-login-own-board": "EVERYONE",
     "htpr-7036-ctrlk-column-delete-keeps-cards": "EVERYONE",
     "htpr-7037-shared-email-layout": "OWNER_AND_QA",

@@ -30,6 +30,7 @@ each ticket only needs the one or two areas it touches.
 | PostHog error alerts | [posthog-error-alerts.md](posthog-error-alerts.md) | nightly canary workflow, closes its own ticket |
 | Automatic AI feedback tickets | [ai-feedback-reports.md](ai-feedback-reports.md) | live MCP call with an invented field, board count before and after, no ticket |
 | Signup check (hypertask.app) | [signup-check.md](signup-check.md) | Access service identity, read-only, daily counts snapshot |
+| Activation analytics | [activation-analytics.md](activation-analytics.md) | read-only flags, core inbox; synthetic accounts excluded |
 | Login | [login.md](login.md) | `login` (write journey) |
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
