@@ -132,3 +132,37 @@ window; durable markers recover interrupted writes. Ordinary errors retain their
 six-hour activity policy. Tagged product alerts get the same related-incident
 check before `ship-claim` writes. The sanitized historical replay lives in
 `fixtures/project-validation.json`; hosted tests prove writes with fake CLIs.
+
+## Weekly infrastructure failures (YPER4-861)
+
+`vps-journal` and `github-actions` failures update one low-priority Fleet Infra digest
+per UTC Monday-start week. Each unit has one line: first redacted error, count and
+last seen. Description replacement is idempotent; failed writes stay dirty, and an
+uncertain create reconciles its exact marker before retrying. Product errors and
+escalations use the hourly creation allowance before the digest does.
+
+Three consecutive failed runs of the same unit escalate to a separate issue.
+Journal `JOB_RESULT` records identify runs; successful completions reset the
+streak. GitHub reads completed runs, including recoveries; cancelled/skipped runs
+break a failure streak. Repeated log lines without run outcomes do not count as
+separate failed runs. Existing pending infrastructure groups migrate into the
+digest, not individual tickets. Other sources keep their original routing.
+
+Customer-facing units escalate immediately: nginx, caddy, hypertask/hypertasks,
+ht-slack, soketi and pusher services, plus production-health GitHub workflows.
+`ERROR_COLLECTOR_USER_FACING_UNITS` can list additional exact unit names, separated
+by commas. Unknown infrastructure remains visible in the digest. The system
+journal's errors and successful completions are read together; unreadable system
+coverage is reported explicitly. Completed digest state retains five weeks;
+run streaks expire after ninety days without an observed outcome.
+
+The installer disables existing timers and stops services for the explicitly
+retired brand-bot-youtube-weekly, growth-experiments-monday, hypertask-video-x,
+hypertask-video-daily, support-bot-scorecard and multiprompt-revert-board families.
+Absent units need no action. It leaves every other unit untouched.
+
+Before updating a running collector, stop `error-collector.service`, install the
+merged revision, then start the service and check its real result. Do not run a
+candidate collector against production with writes enabled. A synthetic replay
+proves routing; it does not prove seven days of live operation or repair wanted
+services that were folded into this ticket. Record those separately on the ticket.

@@ -117,7 +117,7 @@ console.log(JSON.stringify(args[1] === 'list' ? (args[args.indexOf('--repo') + 1
     assert.ok(calls.some(args => args.includes(repo) && args.includes('schedule')));
   }
   assert.ok(calls.some(args => args.includes('schedule')));
-  assert.ok(calls.some(args => args.includes('timed_out')));
+  assert.ok(calls.some(args => args.includes('completed')));
   data.runs = Array.from({ length: 21 }, (_, i) => ({ ...data.runs[0], databaseId: i }));
   writeFileSync(join(home, 'github.json'), JSON.stringify(data));
   assert.equal((await github.fetch(context)).length, 23);
@@ -579,4 +579,30 @@ test('YPER4-360: failed server-to-Pusher authentication and aborted publishes ar
     assert.equal(isNoise({ service: 'vercel', message, route: '/api/tasks/single' }), true);
   }
   assert.equal(isNoise({ service: 'realtime', message: '[realtime] broadcast failed [ht-forced-test]', route: '' }), true);
+});
+
+
+test('run boundaries include GitHub recovery and systemd completion, without multiplying failure runs', async () => {
+  const githubSuccess = github.parseRun({ ...fixtures.github.runs[0], databaseId: 100, conclusion: 'success' }, []);
+  assert.equal(githubSuccess.outcome, 'success');
+  assert.equal(githubSuccess.unit, 'hypertask-ai/hypertask/Deploy');
+  assert.equal(githubSuccess.runId, '100');
+  assert.equal(github.parseRun({ ...fixtures.github.runs[0], workflowName: 'Prod Health Check + Auto-Rollback' }, []).userFacing, true);
+  const lines = [
+    { USER_UNIT: 'backup.service', _SYSTEMD_USER_UNIT: 'init.scope', MESSAGE: 'Failed to start backup.service', JOB_RESULT: 'failed', __CURSOR: 'run-a', __REALTIME_TIMESTAMP: '1791966000000000' },
+    { USER_UNIT: 'backup.service', _SYSTEMD_USER_UNIT: 'init.scope', MESSAGE: 'Finished backup.service', JOB_RESULT: 'done', __CURSOR: 'run-b', __REALTIME_TIMESTAMP: '1791966001000000' },
+    { _SYSTEMD_USER_UNIT: 'nginx.service', MESSAGE: 'Listen failed', __REALTIME_TIMESTAMP: '1791966002000000' },
+  ];
+  const events = journal.parseJournal(lines.map(row => JSON.stringify(row)).join('\n'));
+  assert.deepEqual(events.map(row => [row.unit, row.outcome, row.userFacing]), [['backup.service', 'failure', false], ['backup.service', 'success', false], ['nginx.service', undefined, true]]);
+  assert.equal(events[0].runId, 'run-a');
+  const root = join(home, 'run-boundary-state');
+  fakeCommand('ht', `console.log(JSON.stringify({ success: true, tasks: [], total: 0 }));`);
+  fakeCommand('vcc', 'throw new Error("WRITE FORBIDDEN");');
+  const failures = [1, 2, 3].map(n => ({ ...events[0], runId: String(n), ts: new Date(Date.parse(until) - (4 - n) * 1000).toISOString() }));
+  await collect({ env: { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0' }, now: Date.parse(until), sources: [{ name: 'runs', fetch: async () => failures }] });
+  const state = JSON.parse(readFileSync(join(root, 'state.json')));
+  assert.equal(Object.keys(state.pending).length, 1);
+  assert.equal(Object.values(state.pending)[0].escalation, true);
+  assert.equal(Object.values(state.weekly['2026-10-12'].units)[0].count, 3);
 });

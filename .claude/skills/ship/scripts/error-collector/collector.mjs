@@ -125,7 +125,26 @@ export async function loadSources(names) {
 
 function validate(event) {
   if (!event || (event.ticket != null && typeof event.ticket !== 'boolean') || ![15, 4060].includes(event.board) || typeof event.service !== 'string' || !/^[A-Za-z][A-Za-z0-9 ._-]{0,79}$/.test(event.service) || ['__proto__', 'constructor', 'prototype'].includes(event.service) || typeof event.message !== 'string' || (event.route != null && typeof event.route !== 'string') || (event.stack != null && typeof event.stack !== 'string') || !Number.isFinite(Date.parse(event.ts)) || !Number.isSafeInteger(event.count ?? 1) || (event.count ?? 1) < 1) throw new Error('invalid event');
+  if ((event.unit != null && typeof event.unit !== 'string') || (event.userFacing != null && typeof event.userFacing !== 'boolean')) throw new Error('invalid failure unit');
+  if (event.outcome != null && (!['success', 'failure'].includes(event.outcome) || typeof event.unit !== 'string' || !event.unit || typeof event.runId !== 'string' || !event.runId)) throw new Error('invalid run outcome');
   return { ...event, ts: iso(Date.parse(event.ts)), count: event.count ?? 1, route: event.route ?? '', stack: event.stack ?? '' };
+}
+
+function failureUnit(event) {
+  if (event.service === 'github-actions') return event.unit ?? event.message.split(' failed')[0];
+  return event.unit ?? event.message.match(/Failed to start ([A-Za-z0-9@_.:-]+\.service)\b/)?.[1] ?? event.route ?? 'unknown-unit';
+}
+
+function weekOf(ts) {
+  const date = new Date(ts);
+  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+  return date.toISOString().slice(0, 10);
+}
+
+function weeklyDescription(digest, fp) {
+  const lines = Object.values(digest.units).sort((a, b) => a.unit.localeCompare(b.unit)).map(row =>
+    `<li>${html(row.service)} / ${html(row.unit)}: ${html(row.message)}; count ${row.count}; last seen ${html(row.lastSeen)}</li>`);
+  return `<p><strong>Failures, week of ${digest.week}.</strong></p><p>Single failures stay here. Three failed runs escalate. Customer service failures escalate straight away.</p><ul>${lines.join('')}</ul><p>error-fingerprint:${fp}</p>`;
 }
 
 function merge(group, event) {
@@ -232,6 +251,20 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   const staleWindow = (Number.isFinite(staleHours) && staleHours > 0 ? staleHours : 2) * HOUR;
   state.noiseWindows ??= {};
   state.occurrences ??= {};
+  state.weekly ??= {};
+  state.unitRuns ??= {};
+  const digestFailure = (event, count = event.count) => {
+    const week = weekOf(event.ts);
+    const digest = state.weekly[week] ??= { week, units: {}, dirty: false };
+    const unit = redact(failureUnit(event)).slice(0, 200);
+    const key = createHash('sha256').update(`${event.service}|${unit}`).digest('hex');
+    const row = digest.units[key] ??= { service: event.service, unit, message: redact(event.message).split('\n')[0].slice(0, 300), count: 0, firstSeen: event.ts, lastSeen: event.ts };
+    row.count += count;
+    if (event.ts < row.firstSeen) { row.firstSeen = event.ts; row.message = redact(event.message).split('\n')[0].slice(0, 300); }
+    if (event.ts > row.lastSeen) row.lastSeen = event.ts;
+    digest.dirty = true;
+  };
+  const isWeekly = event => ['vps-journal', 'github-actions'].includes(event.service);
   const stats = (date, service) => {
     state.days[date] ??= {};
     return state.days[date][service] ??= { errors: 0, noise: 0, newGroups: 0, complete: false };
@@ -299,14 +332,29 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         if (board == null) boards.set(fp, event.board);
         else event.board = board;
       }
+      for (const event of events.filter(event => isWeekly(event) && event.outcome).sort((a, b) => a.ts.localeCompare(b.ts) || (a.runId < b.runId ? -1 : a.runId > b.runId ? 1 : 0))) {
+        const key = createHash('sha256').update(`${event.service}|${event.unit}`).digest('hex');
+        const previousRun = state.unitRuns[key];
+        if (!previousRun || (event.runId !== previousRun.id && (event.ts > previousRun.ts || (event.ts === previousRun.ts && event.runId > previousRun.id)))) {
+          state.unitRuns[key] = { id: event.runId, ts: event.ts, failures: event.outcome === 'failure' ? (previousRun?.failures ?? 0) + 1 : 0 };
+        }
+        event.escalate = state.unitRuns[key].failures >= 3;
+      }
       for (const event of events) {
+        if (isWeekly(event) && event.outcome === 'success') continue;
         const counts = stats(day(event.ts), event.service);
         const rule = noiseRule(event);
         if (rule) counts.noise += event.count;
         else counts.errors += event.count;
         if (rule?.id === 'forced-test') diagnostic(`skipped forced test error from ${event.service} (${event.count})`);
         if (event.ticket === false) continue;
-        const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : event.incident?.key ?? fingerprint(event.service, event.message, event.route);
+        if (isWeekly(event) && !rule) {
+          digestFailure(event);
+          if (!event.escalate && event.userFacing !== true && !(env.ERROR_COLLECTOR_USER_FACING_UNITS ?? '').split(',').includes(failureUnit(event))) continue;
+        }
+        const fp = isWeekly(event) && !rule
+          ? createHash('sha256').update(`escalation|${event.service}|${failureUnit(event)}`).digest('hex').slice(0, 16)
+          : rule?.alert ? noiseFingerprint(event.service, rule.id) : event.incident?.key ?? fingerprint(event.service, event.message, event.route);
         const stale = state.stale[fp] ?? revived.get(fp);
         if (stale) {
           if (event.ts <= stale.lastSeen) continue;
@@ -320,7 +368,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           }
           continue;
         }
-        if (!groups.has(fp)) groups.set(fp, { rules: FINGERPRINT_RULES, board: event.board, service: event.service,normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts, ...(event.incident ? { incident: event.incident, aliases: [], occurrences: {} } : {}) });
+        if (!groups.has(fp)) groups.set(fp, { rules: FINGERPRINT_RULES, board: event.board, service: event.service,normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts, ...(isWeekly(event) ? { escalation: true } : {}), ...(event.incident ? { incident: event.incident, aliases: [], occurrences: {} } : {}) });
         const group = groups.get(fp);
         if (event.incident) {
           const alias = fingerprint(event.service, event.message);
@@ -384,6 +432,8 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     if (!state.noiseWindows[fp].length) delete state.noiseWindows[fp];
   }
   state.created = state.created.filter(time => Date.parse(time) > now - HOUR);
+  for (const [week, digest] of Object.entries(state.weekly)) if (!digest.dirty && week < day(now - 35 * DAY)) delete state.weekly[week];
+  for (const [key, run] of Object.entries(state.unitRuns)) if (Date.parse(run.ts) < now - 90 * DAY) delete state.unitRuns[key];
   for (const date of Object.keys(state.days)) if (date < day(now - 13 * DAY)) delete state.days[date];
   for (const date of Object.keys(state.summaries)) if (date < day(now - 13 * DAY)) delete state.summaries[date];
   for (const [fp, record] of Object.entries(state.stale)) if (day(record.lastSeen) < day(now - 13 * DAY)) delete state.stale[fp];
@@ -404,6 +454,11 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     if (current === fp) continue;
     delete state.pending[fp];
     absorb(current, { ...group, aliases: [...new Set([...(group.aliases ?? []), fp])], normalized: redact(normalize(group.message)) }, false);
+  }
+  for (const [fp, group] of Object.entries(state.pending)) {
+    if (!isWeekly(group) || group.escalation || group.noiseRule) continue;
+    digestFailure({ ...group, route: group.routes[0], ts: group.lastSeen });
+    delete state.pending[fp];
   }
   // Persist fetched data before external writes so interrupted runs retry pending groups.
   await checkpoint();
@@ -472,6 +527,34 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       delete state.pending[fp];
       await checkpoint();
     } catch { diagnostic(`group ${fp} reporting failed; kept pending`); }
+  }
+  for (const digest of Object.values(state.weekly)) {
+    if (signal.aborted) break;
+    if (!digest.dirty) continue;
+    const fp = createHash('sha256').update(`weekly-failures|${digest.week}`).digest('hex').slice(0, 16);
+    let temp;
+    try {
+      const found = digest.ticket ? { ticket: digest.ticket } : search(fp, 4060, env);
+      if (found?.deleted) { digest.dirty = false; await checkpoint(); continue; }
+      const text = weeklyDescription(digest, fp);
+      const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);
+      if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
+      if (found) {
+        write('vcc', ['task', 'update', found.ticket, '--description-file', path]);
+        digest.ticket = found.ticket;
+      } else {
+        if (state.created.length >= cap) { held++; continue; }
+        section ??= intake(env);
+        state.created.push(iso(now));
+        await checkpoint();
+        const output = write('vcc', ['--json', 'task', 'create', '--project', '4060', '--section', section, '--labels', 'prod-error', '--priority', 'low', '--title', `Weekly failures: ${digest.week}`, '--description-file', path]);
+        digest.ticket = dryRun ? `DRYRUN-${state.created.length}` : ticketRef(payload(output).task);
+      }
+      if (dryRun) console.log(`DRY-RUN description ${JSON.stringify(text)}`);
+      digest.dirty = false;
+      await checkpoint();
+    } catch { diagnostic(`weekly digest ${digest.week} reporting failed; kept pending`); }
+    finally { if (temp) await fs.rm(temp, { force: true }); }
   }
   for (const [id, occurrence] of Object.entries(state.occurrences)) {
     if (signal.aborted) break;
@@ -572,6 +655,13 @@ async function install(env) {
     await fs.copyFile(join(target, name), join(units, name));
   }
   command(env.USER_UNIT_CHECK || join(target, 'user-unit-check'), [join(units, 'error-collector.service'), join(units, 'error-collector.timer')], env);
+  const retired = new Set(['brand-bot-youtube-weekly', 'growth-experiments-monday', 'hypertask-video-x', 'hypertask-video-daily', 'support-bot-scorecard', 'multiprompt-revert-board']);
+  const installed = command('systemctl', ['--user', 'list-unit-files', '--no-legend', '--no-pager'], env).split('\n').map(line => line.trim().split(/\s+/)[0]);
+  for (const unit of installed) {
+    const match = unit.match(/^(.*)\.(timer|service)$/);
+    if (!match || !retired.has(match[1])) continue;
+    command('systemctl', ['--user', ...(match[2] === 'timer' ? ['disable', '--now'] : ['stop']), unit], env);
+  }
   command('systemctl', ['--user', 'daemon-reload'], env);
   command('systemctl', ['--user', 'enable', '--now', 'error-collector.timer'], env);
   console.log('Installed error-collector user timer');

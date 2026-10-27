@@ -39,7 +39,7 @@ appendFileSync(calls, JSON.stringify(row) + '\\n');
 if (cfg.stall === name) { process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); await new Promise(() => {}); }
 const exit = () => { console.error('fake credential-bearing failure suppressed'); process.exit(1); };
 const remote = read('remote.json', []);
-if (name === 'systemctl') { if (cfg.installFail) exit(); process.exit(0); }
+if (name === 'systemctl') { if (cfg.installFail) exit(); if (args.includes('list-unit-files')) console.log((cfg.units ?? []).join('\\n')); process.exit(0); }
 if (name === 'runner-deliver') { if (cfg.deliverFail) exit(); process.exit(0); }
 if (name === 'ht') {
   if (args[0] !== 'GET') throw new Error('WRITE FORBIDDEN');
@@ -70,6 +70,13 @@ if (name === 'ht') {
     writeFileSync(join(home, 'remote.json'), JSON.stringify(remote));
     if (cfg.ambiguousCreate) exit();
     console.log(JSON.stringify({ success: true, task: cfg.badReceipt ? { ticketNumber: 'invalid receipt' } : task }));
+  } else if (plain[0] === 'task' && plain[1] === 'update') {
+    if (cfg.updateFail) exit();
+    const task = remote.find(task => task.ticketNumber === plain[2]);
+    if (!task) throw new Error('missing digest');
+    task.description = row.description;
+    writeFileSync(join(home, 'remote.json'), JSON.stringify(remote));
+    console.log(JSON.stringify({ success: true, task }));
   } else if (plain[0] === 'activity' && plain[1] === 'add') {
     if (cfg.activityFail) exit();
     const saved = read('activities.json', []);
@@ -139,7 +146,8 @@ check('sources', 'PowerShell genuine pipe failures count as one new kind across 
   h.events(messages.map(message => event({ service: 'vps-journal', board: 4060, message })));
   assert.equal(await h.run(), 0);
   assert.equal(creates(h).length, 1);
-  assert.equal(h.state().days['2026-10-14']['vps-journal'].newGroups, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].newGroups, 0);
+  assert.ok(creates(h)[0].args.includes('Weekly failures: 2026-10-12'));
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, messages.length);
 }));
 
@@ -714,7 +722,7 @@ check('reporting', 'an SSH client hanging up is noise, other sshd failures are e
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 1);
 }));
 
-check('reporting', 'SSH client resets under session scopes are noise, real failures still file (YPER4-450)', () => withHarness(async h => {
+check('reporting', 'SSH client resets under session scopes are noise, real failures reach the digest (YPER4-450)', () => withHarness(async h => {
   const vps = { service: 'vps-journal', board: 4060, stack: '' };
   h.events([
     event({ ...vps, route: 'session-924033.scope', message: 'session-924033.scope: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
@@ -725,13 +733,13 @@ check('reporting', 'SSH client resets under session scopes are noise, real failu
     event({ service: 'vercel', message: 'session-924033.scope: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
   ]);
   await h.run();
-  assert.equal(creates(h).length, 3);
+  assert.equal(creates(h).length, 2);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 2);
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
 }));
 
-check('reporting', 'a one-shot gate observer exiting 1 on purpose is noise, other failed units still file (YPER4-833)', () => withHarness(async h => {
+check('reporting', 'a one-shot gate observer exiting 1 on purpose is noise, other failed units reach the digest (YPER4-833)', () => withHarness(async h => {
   const vps = { service: 'vps-journal', board: 4060, route: 'init.scope', stack: '' };
   const failed = unit => `init.scope: Failed to start ${unit} - /usr/bin/bash /home/valentin/projects/ceo/runs/IGSH-976/observe-once.sh.`;
   h.events([
@@ -742,7 +750,7 @@ check('reporting', 'a one-shot gate observer exiting 1 on purpose is noise, othe
     event({ service: 'vercel', message: failed('igsh976-observe-180200.service') }),
   ]);
   await h.run();
-  assert.equal(creates(h).length, 3);
+  assert.equal(creates(h).length, 2);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 2);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 2);
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
@@ -760,15 +768,15 @@ check('reporting', 'SSH daemon identifier fallback ignores client resets but ret
   ].join('\n'));
   h.events(events);
   await h.run();
-  assert.equal(creates(h).length, 3);
+  assert.equal(creates(h).length, 1);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 3);
   assert.ok(creates(h).some(call => call.description.includes('Address already in use')));
-  assert.ok(creates(h).some(call => call.description.includes('Permission denied')));
+  assert.match(creates(h)[0].description, /sshd: error: bind.*count 2/);
   assert.ok(creates(h).some(call => call.description.includes('database: fatal: ssh_packet_send_debug')));
 }));
 
-check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures still file', () => withHarness(async h => {
+check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures reach the digest', () => withHarness(async h => {
   const message = 'run-u2003644.scope: (7.6.7:C:80) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: 1990196 in AppDomain: None.  Error Message: Operation canceled.';
   const vps = { service: 'vps-journal', board: 4060, route: 'run-u2003644.scope', stack: '' };
   h.events([
@@ -784,7 +792,7 @@ check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe fail
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 2);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 4);
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
-  assert.equal(creates(h).length, 5);
+  assert.equal(creates(h).length, 2);
   assert.ok(creates(h).some(call => call.description.includes('Access denied.')));
 }));
 
@@ -982,7 +990,7 @@ check('install', 'units mirror precedent, installer copies modules/noise and fak
   for (const name of ['collector.mjs', 'noise.json', 'sources/fixture.mjs']) assert.deepEqual(readFileSync(join(target, name)), readFileSync(join(HERE, name)));
   assert.equal(statSync(join(target, 'collector.mjs')).mode & 0o777, 0o755);
   for (const suffix of ['service', 'timer']) assert.deepEqual(readFileSync(join(h.home, `.config/systemd/user/error-collector.${suffix}`)), readFileSync(join(HERE, `../error-collector.${suffix}`)));
-  assert.deepEqual(h.calls().filter(c => c.name === 'systemctl').map(c => c.args), [['--user', 'daemon-reload'], ['--user', 'enable', '--now', 'error-collector.timer']]);
+  assert.deepEqual(h.calls().filter(c => c.name === 'systemctl').map(c => c.args), [['--user', 'list-unit-files', '--no-legend', '--no-pager'], ['--user', 'daemon-reload'], ['--user', 'enable', '--now', 'error-collector.timer']]);
   assert.equal(h.cli('--install', '--dry-run').status, 1);
   const installed = spawnSync(process.execPath, [join(target, 'collector.mjs'), '--install'], { env: h.env, encoding: 'utf8' }); assert.equal(installed.status, 0, installed.stderr);
   h.config({ installFail: true }); assert.equal(h.cli('--install').status, 1);
@@ -1093,8 +1101,8 @@ check('followups', 'journal classifies raw status codes before normalized groupi
   const counts = h.state().days['2026-10-14']['vps-journal'];
   assert.equal(counts.noise, 4);
   assert.equal(counts.errors, 4);
-  assert.equal(creates(h).length, 2);
-  assert.equal(Object.values(h.state().fingerprints).find(item => item.total === 2)?.board, 4060);
+  assert.equal(creates(h).length, 1);
+  assert.equal(Object.values(h.state().weekly['2026-10-12'].units).reduce((sum, row) => sum + row.count, 0), 4);
 }));
 
 check('followups', 'deadline default is twelve minutes and below the service limit', () => withHarness(async h => {
@@ -1654,4 +1662,100 @@ check('incidents', 'wrapper-only windows never renew actual root timestamps', as
   }
   assert.equal(creates(h).length, 2);
   assert.equal(Object.values(h.state().fingerprints).find(record => record.incident)?.incident.ts, root);
+}));
+
+
+const timerFailure = (ts, runId, extra = {}) => event({ service: 'vps-journal', board: 4060, message: 'Failed to start backup.service - Backup reports', route: 'backup.service', unit: 'backup.service', ts, runId, outcome: 'failure', ...extra });
+
+check('weekly', 'one weekly line survives retries, multiple errors and a new week; product errors still get tickets', () => withHarness(async h => {
+  h.events([timerFailure(new Date(NOW - 1000).toISOString(), 'a'), event({ message: 'Product save failed' })]);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 2);
+  const digest = creates(h).find(call => call.args.includes('Weekly failures: 2026-10-12'));
+  assert.match(digest.description, /backup.service.*count 1.*last seen/);
+  assert.equal(creates(h).filter(call => call.args.includes('15')).length, 1);
+  h.events([timerFailure(new Date(NOW + 1000).toISOString(), 'b', { message: 'Second error' })]);
+  h.config({ updateFail: true });
+  assert.equal(await h.run({ now: NOW + 2000 }), 0);
+  assert.equal(h.state().weekly['2026-10-12'].dirty, true);
+  h.config({});
+  h.events([]);
+  assert.equal(await h.run({ now: NOW + 3000 }), 0);
+  assert.equal(h.state().weekly['2026-10-12'].dirty, false);
+  assert.equal(creates(h).length, 2);
+  const saved = JSON.parse(readFileSync(join(h.home, 'remote.json'))).find(task => task.ticketNumber === h.state().weekly['2026-10-12'].ticket);
+  assert.match(saved.description, /Backup reports; count 2/);
+  assert.equal((saved.description.match(/<li>/g) ?? []).length, 1);
+  h.events([timerFailure(new Date(NOW + 7 * DAY - 1000).toISOString(), 'c', { outcome: 'success' }), timerFailure(new Date(NOW + 7 * DAY).toISOString(), 'd')]);
+  assert.equal(await h.run({ now: NOW + 7 * DAY }), 0);
+  assert.equal(creates(h).length, 3);
+  assert.ok(creates(h).at(-1).args.includes('Weekly failures: 2026-10-19'));
+}));
+
+check('weekly', 'three failed runs escalate once; many errors in one run do not; success resets the streak', () => withHarness(async h => {
+  h.events([timerFailure(new Date(NOW - 3000).toISOString(), 'a'), timerFailure(new Date(NOW - 2000).toISOString(), 'a', { outcome: undefined }), timerFailure(new Date(NOW - 1000).toISOString(), 'b')]);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  h.events([timerFailure(new Date(NOW + 1000).toISOString(), 'c', { outcome: 'success' }), timerFailure(new Date(NOW + 2000).toISOString(), 'd'), timerFailure(new Date(NOW + 3000).toISOString(), 'e')]);
+  assert.equal(await h.run({ now: NOW + 4000 }), 0);
+  assert.equal(creates(h).length, 1);
+  h.events([timerFailure(new Date(NOW + 5000).toISOString(), 'f')]);
+  assert.equal(await h.run({ now: NOW + 6000 }), 0);
+  assert.equal(creates(h).length, 2);
+  assert.ok(!creates(h).at(-1).args.some(arg => arg.startsWith('Weekly failures:')));
+  h.events([timerFailure(new Date(NOW + 7000).toISOString(), 'g')]);
+  assert.equal(await h.run({ now: NOW + 8000 }), 0);
+  assert.equal(creates(h).length, 2);
+}));
+
+check('weekly', 'user-facing failures escalate immediately; an uncertain digest create is recovered without duplication', () => withHarness(async h => {
+  h.events([timerFailure(new Date(NOW - 1000).toISOString(), 'a', { userFacing: true })]);
+  h.config({ ambiguousCreate: true });
+  assert.equal(await h.run(), 0);
+  assert.equal(h.state().weekly['2026-10-12'].dirty, true);
+  h.config({});
+  h.events([]);
+  assert.equal(await h.run({ now: NOW + 1000 }), 0);
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().weekly['2026-10-12'].dirty, false);
+  assert.deepEqual(h.state().pending, {});
+}));
+
+check('weekly', 'read failures and dry runs never lose digest rows or persist writes', () => withHarness(async h => {
+  h.events([timerFailure(new Date(NOW - 1000).toISOString(), 'a')]);
+  h.config({ searchFail: true });
+  assert.equal(await h.run(), 0);
+  assert.equal(h.state().weekly['2026-10-12'].dirty, true);
+  const before = readFileSync(h.statePath, 'utf8');
+  h.config({});
+  assert.equal(await h.run({ dryRun: true, now: NOW + 1000 }), 0);
+  assert.equal(readFileSync(h.statePath, 'utf8'), before);
+  assert.equal(creates(h).length, 0);
+  assert.equal(await h.run({ now: NOW + 1000 }), 0);
+  assert.equal(creates(h).length, 1);
+}));
+
+
+check('install', 'retirement stops only the six named old services and disables their timers', () => withHarness(async h => {
+  h.env.USER_UNIT_CHECK = '/usr/bin/true';
+  h.config({ units: ['brand-bot-youtube-weekly.timer enabled', 'brand-bot-youtube-weekly.service static', 'hypertask-video-daily.timer enabled', 'docs-refs.timer enabled', 'runner-dispatch.service static'] });
+  assert.equal(h.cli('--install').status, 0);
+  const calls = h.calls().filter(call => call.name === 'systemctl').map(call => call.args);
+  assert.ok(calls.some(args => args.join(' ') === '--user disable --now brand-bot-youtube-weekly.timer'));
+  assert.ok(calls.some(args => args.join(' ') === '--user stop brand-bot-youtube-weekly.service'));
+  assert.ok(calls.some(args => args.join(' ') === '--user disable --now hypertask-video-daily.timer'));
+  assert.ok(!calls.some(args => args.includes('docs-refs.timer') || args.includes('runner-dispatch.service')));
+}));
+
+check('weekly', 'a low-priority digest cannot consume the last product alert slot', () => withHarness(async h => {
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
+  h.events([timerFailure(new Date(NOW - 1000).toISOString(), 'a'), event({ message: 'Customer save failed' })]);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  assert.ok(creates(h)[0].args.includes('15'));
+  assert.equal(h.state().weekly['2026-10-12'].dirty, true);
+  h.events([]);
+  assert.equal(await h.run({ now: NOW + HOUR + 1000 }), 0);
+  assert.equal(creates(h).length, 2);
+  assert.ok(creates(h)[1].args.includes('Weekly failures: 2026-10-12'));
 }));
