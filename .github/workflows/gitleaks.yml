@@ -20,6 +20,7 @@ jobs:
   secret-scan:
     name: secret-scan
     runs-on: ubuntu-latest
+    timeout-minutes: 1
     # Deleting a branch adds no commits, so there is nothing to scan.
     if: github.event_name != 'push' || !github.event.deleted
     steps:
