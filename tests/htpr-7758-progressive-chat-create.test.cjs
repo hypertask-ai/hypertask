@@ -15,7 +15,7 @@ function harness(options = {}) {
     "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
     "@/lib/prisma": { default: {
       agent: { findFirst: async () => ({ id: "agent" }) },
-      $transaction: async (writes) => Promise.all(writes),
+      $transaction: async (writes) => { if (options.initializeError) throw new Error("Defaults unavailable"); return Promise.all(writes); },
       priority: { createMany: async () => ({ count: 1 }) },
       estimate: { createMany: async () => ({ count: 1 }) },
     } },
@@ -254,3 +254,14 @@ for (const choice of ["untouched", "changed", "cleared"]) {
     }
   });
 }
+
+
+test("a saved ticket keeps its link even if property initialization fails", async () => {
+  const h = harness({ initializeError: true });
+  const result = await h.execute();
+  assert.equal(result.success, true);
+  assert.equal(h.saved.length, 1);
+  assert.equal(h.writerCalls.length, 0);
+  assert.match(h.events[0].data.content, /detail\/project-7049\/1/);
+  assert.match(h.events.at(-1).data.content, /description unfinished/);
+});

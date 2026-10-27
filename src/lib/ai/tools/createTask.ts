@@ -185,6 +185,8 @@ export function createCreateTaskTool(context: ToolContext) {
           }
 
           let earlyTask: Awaited<ReturnType<typeof createTask>> | undefined;
+          let earlyTaskPublished = false;
+          const savedLink = (task: Awaited<ReturnType<typeof createTask>>) => `<p><a href="${escapeHtml(buildMcpTaskUrl(task.projectId, task.uniqueIndex))}">${escapeHtml(task.ticketNumber || task.title)}</a></p>`;
           const savedResult = (task: Awaited<ReturnType<typeof createTask>>, warning?: string) => sanitizeForJson({
             success: true,
             task: mapTaskToDetail(task, user.id),
@@ -237,9 +239,8 @@ export function createCreateTaskTool(context: ToolContext) {
                   prisma.priority.createMany({ data: { ...propertyDefaults, priority_index: 0, Priority_Value: "No Priority" }, skipDuplicates: true }),
                   prisma.estimate.createMany({ data: { ...propertyDefaults, estimate_index: 0, estimate_value: "No size" }, skipDuplicates: true }),
                 ]);
-                send("task_created", {
-                  content: `<p><a href="${escapeHtml(buildMcpTaskUrl(earlyTask.projectId, earlyTask.uniqueIndex))}">${escapeHtml(earlyTask.ticketNumber || initialTitle)}</a></p>`,
-                });
+                send("task_created", { content: savedLink(earlyTask) });
+                earlyTaskPublished = true;
                 send("status", { content: "Ticket created. Writing its description…" });
               };
               const draft = await generateTaskWriterDraft(taskWriterRequestSchema.parse({
@@ -304,6 +305,7 @@ export function createCreateTaskTool(context: ToolContext) {
             return updatedResult ?? savedResult(task);
           } catch (error) {
             if (earlyTask) {
+              if (!earlyTaskPublished) send("task_created", { content: savedLink(earlyTask) });
               const warning = "Ticket created; description unfinished. Any saved edits remain. Open this ticket to finish it. Do not create another.";
               send("task_created", { content: `<p>${warning}</p>` });
               return savedResult(earlyTask, warning);
