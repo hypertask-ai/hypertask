@@ -8,9 +8,13 @@ the ticket's existing pull request property. No runner-local file is needed.
 
 ## How to drive it
 
-After merging, rerun this ticket's PR Guards Trusted run. Checkout must use
-production. The title step must log the ticket key and canonical PR URL.
-Delayed runs may bind merged PRs. Read the ticket through the Hypertask CLI;
+After merging, dispatch PR Guards Trusted on production with input `pr_number`
+set to this ticket's PR. The manual job and automatic title guard execute
+`.github/scripts/pr-title.cjs` from trusted production. A non-production manual
+ref must not execute. Old runs retain their original workflow definition;
+do not use a pre-merge rerun as evidence. The title step must log the ticket
+key and canonical PR URL. Ticketed runner bots must bind; unticketed dependency
+bots stay exempt. Delayed runs may bind merged PRs. Read the ticket through the Hypertask CLI;
 its `pullRequests` must contain that URL. Do not manually create the link.
 Repeat the run and confirm the link remains unique.
 

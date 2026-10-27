@@ -56,7 +56,7 @@ async function publish(name, outcomes, completedRun = false, { current = {}, eva
 test('PR guards fold evaluation runners, retain every verdict and never persist checkout credentials', () => {
   for (const name of ['pr-guards', 'pr-guards-trusted']) {
     const w = workflow(name);
-    assert.deepEqual(Object.keys(w.jobs), name.endsWith('trusted') ? [name, 'scan-completion'] : [name]);
+    assert.deepEqual(Object.keys(w.jobs), name.endsWith('trusted') ? [name, 'bind-ticket', 'scan-completion'] : [name]);
     assert.equal(w.permissions.statuses, 'write');
     assert.equal(w.concurrency['cancel-in-progress'], true);
     assert.match(w.concurrency.group, /pull_request.number/);
@@ -73,7 +73,7 @@ test('PR guards fold evaluation runners, retain every verdict and never persist 
   assert.deepEqual(Object.keys(workflow('pr-guards').on), ['pull_request']);
   assert.equal(workflow('pr-guards').on.pull_request, null);
   const trusted = workflow('pr-guards-trusted');
-  assert.deepEqual(Object.keys(trusted.on), ['pull_request_target', 'workflow_run']);
+  assert.deepEqual(Object.keys(trusted.on), ['pull_request_target', 'workflow_dispatch', 'workflow_run']);
   assert.deepEqual(trusted.on.workflow_run, { workflows: ['PR Guards'], types: ['completed'] });
   assert.notEqual(trusted.name, workflow('pr-guards').name);
   assert.match(trusted.jobs['pr-guards-trusted'].if, /github.event_name == 'pull_request_target'/);
