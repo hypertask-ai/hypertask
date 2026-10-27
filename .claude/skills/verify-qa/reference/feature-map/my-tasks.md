@@ -14,7 +14,7 @@ bulk selection, snooze), so check with the QA flag identity
 (`storageState-qa.json`) and with the plain account
 (`storageState-qa-normal.json`). Pick a board tab, reload, and confirm the
 `board` URL parameter and selected list remain. On desktop, Tab and Shift+Tab
-cycle board tabs; C opens task creation and Escape cancels it. The list uses
+cycle board tabs; C opens task creation and Back cancels it. The list uses
 the available page width beside the app rail.
 
 ## What usually breaks
