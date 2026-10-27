@@ -143,3 +143,18 @@ One AI model per class: a new model version replaces the old one in the same cha
 - A valid `[REFACTOR]` title may skip the mechanical flag requirement only when the diff has at most 150 risky new UI lines (JSX or strings, excluding Pick-key union members) after matching normalized additions against removed lines in any file; moved code does not count toward that budget, and owner merge is still required. Valentin decided this on 2026-10-02 in https://app.hypertask.ai/detail/project-15/6506; the title alone is not proof of pure cleanup, and new behavior still needs a flag.
 - After a bugfix flag has stayed on **Everyone** for 7 days, or any other flag for 14 days (money, access and data-deletion stay at 14 even when the flag is a bugfix), the daily cron at `/api/cron/feature-flag-removals` files up to 10 removal tickets, oldest Everyone streak first, and leaves the rest for the next run. A rerun does not file a second ticket for the same flag, and the cron does not switch the flag.
 - The moment a flagged feature is live on production, post a ticket comment that @mentions Valentin (`<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`) with the flag key, one line on what it does, and the flag's own link https://app.hypertask.ai/admin/flags/<flag-key>, which is also the first line of every flagged ticket's description (Valentin, 2026-10-10, https://app.hypertask.ai/detail/project-15/7087). Without the mention he never learns the flag exists (Valentin, 2026-09-04, https://app.hypertask.ai/detail/project-15/6131).
+
+## pstack in hax and Codex sessions
+
+pstack is Lauren Tan's skill pack. One copy serves every harness: `~/.claude/plugins/marketplaces/cursor-plugins/pstack` (0.15.32). When a task matches a pstack skill, read `<pstack>/skills/<name>/SKILL.md` and follow it, mapping Cursor names with `<pstack>/docs/harness/claude-code.md` (a `Task` subagent is a `hax -p` child here).
+
+Every pstack subagent is a child run with an explicit model, never inherited and never fast mode. Subscription auth only, no API keys:
+`hax -p --no-session --provider=codex --model=<model> --effort=high "<brief>"`
+
+| pstack role | Codex model |
+| --- | --- |
+| feature, refactoring, bug-fix, perf-issue, hillclimb, swarm workers, arena runners | gpt-6.1-sol |
+| judgment and prose, hardest tasks, how explainer, why synthesizer, reflect judgment and synthesizer, interrogate reviewers, architect runners, arena cross-judge | gpt-6-astra |
+| how explorer, why investigators, reflect tooling (search and lookups) | gpt-6-luna |
+
+Claude Code sessions take their role models from `.claude/rules/pstack-models.md`, not from this table.
