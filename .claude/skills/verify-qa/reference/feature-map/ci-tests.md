@@ -41,6 +41,20 @@ Separate avoided serial work from overall CI wall time.
 `tests/shard-tests.test.cjs` exercises shard partition and execution proof.
 These isolated checks do not prove hosted scheduling.
 
+## Flaky-test collector
+
+Run `node --test tests/detect-flaky-tests.test.cjs` for the collector's real CLI
+boundary with isolated GitHub responses. It covers old jobs, both failed shards,
+mixed infrastructure/test failures, same-code comparisons and log-cache isolation.
+
+For live history, use `scripts/detect-flaky-tests.mjs` with the runner App token.
+Save the selected run IDs, their creation window, job attempts and generated report.
+For a fixed-size follow-up sample, select the first 50 PR runs after the merge from
+the complete paginated history; keep that selection beside the collector cache.
+Compare rerun-to-green counts against the original 29/53 baseline, keeping workflow
+retries separate from named test flakes. Different sample sizes or windows do not
+prove a causal improvement. Never count missing logs as successful verification.
+
 ## Cleanup
 
 No app fixtures, feature flags or production settings change.
