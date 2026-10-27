@@ -4,21 +4,46 @@ const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const errors = load('src/lib/mcp-server/utils/errors.ts', {});
 const { logger } = load('src/lib/mcp-server/utils/logger.ts', {});
-const { createView } = load('src/lib/mcp/views/services.ts', {
-  '@/lib/prisma': { __esModule: true, default: { view: { findFirst: async () => ({ id: 'existing-view' }) } } },
-  '@/utils/controllers/projects/getAllIncludes': {},
-  '@/utils/controllers/projects/views/viewsHelperAPIfunctions': {},
-  '@/lib/mcp/tasks/services': {},
-  '@/lib/realtime/server': {},
-  '@/utils/helperFunctions/Views/BoardFilterSanitizer': {},
-  '@/models/Views/model': {},
-  '@/utils/helperFunctions/Views/ViewsHelperFunctions': {},
-  '@/utils/controllers/projects/views/boardFilterWriteLock': {},
-  './nativeBoardSettings': {},
-  '@/lib/mcp-server/utils/errors': errors,
-});
+function service({ duplicate = true, labels = [] } = {}) {
+  const saved = [];
+  const prisma = {
+    label: { findMany: async () => labels },
+    project_View: { upsert: async () => ({ id: 'project-view' }) },
+    view: {
+      findFirst: async () => duplicate ? { id: 'existing-view' } : null,
+      create: async ({ data }) => {
+        const view = { id: 'new-view', ...data };
+        saved.push(view);
+        return view;
+      },
+    },
+    $transaction: async run => run(prisma),
+  };
+  const { createView } = load('src/lib/mcp/views/services.ts', {
+    '@/lib/prisma': { __esModule: true, default: prisma },
+    '@/utils/controllers/projects/getAllIncludes': {},
+    '@/utils/controllers/projects/views/viewsHelperAPIfunctions': { getUniqueSlug: async () => null },
+    '@/lib/mcp/tasks/services': {
+      matchLabelIds: (available, names) => ({
+        ids: available.filter(label => names.includes(label.value)).map(label => label.id),
+        unresolved: names.filter(name => !available.some(label => label.value === name)),
+      }),
+    },
+    '@/lib/realtime/server': { broadcastBoardChange: () => undefined },
+    '@/utils/helperFunctions/Views/BoardFilterSanitizer': { sanitizeBoardFilters: value => value },
+    '@/models/Views/model': {},
+    '@/utils/helperFunctions/Views/ViewsHelperFunctions': { sanitizeSortingStack: () => [] },
+    '@/utils/controllers/projects/views/boardFilterWriteLock': {
+      acquireBoardFilterWriteLock: async () => undefined,
+      validateBoardFilterLabelReferences: async () => undefined,
+    },
+    './nativeBoardSettings': {},
+    '@/lib/mcp-server/utils/errors': errors,
+  });
+  return { createView, saved };
+}
 
-function pipeline(create) {
+function pipeline(create, filters) {
   const { POST } = load('src/lib/mcp/operations/view/operation.ts', {
     '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },
     '@/lib/mcp/operationCrashReport': {},
@@ -26,7 +51,7 @@ function pipeline(create) {
       wrapMcpRoute: handler => handler,
       checkMcpRouteRateLimit: async () => null,
       validateMcpRouteAuth: async () => ({ user: { id: 985 } }),
-      readMcpRouteJsonBody: async () => ({ ok: true, body: { project_id: 15, title: 'Onboarding' } }),
+      readMcpRouteJsonBody: async () => ({ ok: true, body: { project_id: 15, title: 'Onboarding', filters } }),
     },
     '@/lib/prisma': {},
     '@/utils/controllers/projects/getAllIncludes': {},
@@ -65,7 +90,7 @@ const input = { project_id: 15, title: 'Onboarding' };
 
 test('duplicate title stays a caller refusal, with warnings across both create layers', async () => {
   const calls = await capture(async () => {
-    await assert.rejects(pipeline(createView).createView(input), error => {
+    await assert.rejects(pipeline(service().createView).createView(input), error => {
       assert.equal(error.code, -32602);
       assert.equal(error.message, 'A view titled "Onboarding" already exists on this board');
       return true;
@@ -87,6 +112,36 @@ test('successful create still returns the saved view', async () => {
   const view = { id: 'new-view', title: 'Onboarding' };
   const calls = await capture(async () => {
     assert.deepEqual(await pipeline(async () => view).createView(input), { success: true, view });
+  });
+  assert.deepEqual(calls.map(call => call.level), ['info']);
+});
+
+test('missing view label is a readable refusal, with warnings across both create layers', async () => {
+  const { createView, saved } = service({ duplicate: false });
+  const calls = await capture(async () => {
+    await assert.rejects(pipeline(createView, { label_names: ['Management'] }).createView(input), error => {
+      assert.equal(error.code, -32602);
+      assert.equal(error.message, 'Label(s) not found in project: Management');
+      return true;
+    });
+  });
+  assert.deepEqual(calls.map(call => call.level), ['warn', 'warn']);
+  assert.deepEqual(saved, []);
+});
+
+test('valid label still saves its filter through both create layers', async () => {
+  const { createView, saved } = service({ duplicate: false, labels: [{ id: 'label-management', value: 'Management' }] });
+  const calls = await capture(async () => {
+    const response = await pipeline(createView, { label_names: ['Management'] }).createView(input);
+    assert.equal(response.success, true);
+    assert.equal(response.view.id, 'new-view');
+    assert.deepEqual(response.view.filters, {
+      matchFilters: 'ANY', addedFilters: [{ type: 'Labels', searchPayload: [{ id: 'label-management' }] }],
+    });
+  });
+  assert.equal(saved.length, 1);
+  assert.deepEqual(saved[0].board_filters, {
+    matchFilters: 'ANY', addedFilters: [{ type: 'Labels', searchPayload: [{ id: 'label-management' }] }],
   });
   assert.deepEqual(calls.map(call => call.level), ['info']);
 });

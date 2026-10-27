@@ -144,3 +144,14 @@ Capture desktop and phone in all themes. With `htpr-7804-blocked-by-me`
 Off, the view disappears and any active selection returns to the saved
 view; resetting view order must not bring it back. Delete only the fixtures
 created for this check.
+
+## MCP missing view labels
+
+For https://app.hypertask.ai/detail/project-15/8094, submit a unique view
+name with an absent `filters.label_names` value through
+`POST /api/mcp/view` and `hypertask_views` action `create` on `/mcp`.
+Both must return the readable missing-label refusal. List views before and
+after: no view or board-default change is allowed. Existing labels still
+save their filter. Expected label refusals log warnings; unexpected storage
+failures must still log errors. Local behavior coverage:
+`node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
