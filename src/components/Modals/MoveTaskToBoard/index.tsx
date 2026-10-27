@@ -2,18 +2,18 @@ import { ModalContainerCustom, ModalHeaderComp, ModalInput } from '@/components/
 import { useGetAllProjectsMinimal } from '@/hooks/MultiPages/useGetAllProjectsMinimal';
 import useHandleMouseGlobal from '@/hooks/General/useHandleMouse';
 import { IProject } from '@/models/model';
-import { inViewObjectAtom } from '@/store';
+import { inViewObjectAtom, lastUsedBoardsAtom } from '@/store';
 import { returnActiveOrDefaultColumnSections } from '@/utils/helperFunctions/multiPages';
 import axios from 'axios';
 import { useFormik } from 'formik';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { EyeOff } from "lucide-react";
 import { ModalBody } from 'reactstrap';
-import { useRecoilState } from '@/lib/state';
+import { useRecoilState, useRecoilValue } from '@/lib/state';
 import { moveTaskToDifferentBoardAPI } from '@/lib/constants/APIRouteConstants';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from '@/lib/flags/keys';
+import { HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_8014_COMPOSE_BOARD_ORDER_FLAG } from '@/lib/flags/keys';
 
 interface ICreateTask {
     projectId: number;
@@ -37,7 +37,16 @@ const MoveTaskGlobal = (props: IProps) => {
     const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
     const composeBoardPicker = boardChipEnabled && Boolean(props.onSelectBoard);
     const projects = useGetAllProjectsMinimal(["projectsAllMinimal"], undefined, { enabled: !composeBoardPicker });
-    const data = composeBoardPicker ? props.boards : projects.data;
+    const usageOrderEnabled = useFlag(HTPR_8014_COMPOSE_BOARD_ORDER_FLAG);
+    const lastUsedBoards = useRecoilValue(lastUsedBoardsAtom);
+    const orderedBoards = useMemo(() => {
+        if (!composeBoardPicker || !usageOrderEnabled) return props.boards;
+        return props.boards?.slice().sort((a, b) =>
+            (lastUsedBoards[b.id] ?? 0) - (lastUsedBoards[a.id] ?? 0)
+            || (a.title ?? a.name ?? "").localeCompare(b.title ?? b.name ?? "")
+        );
+    }, [composeBoardPicker, usageOrderEnabled, props.boards, lastUsedBoards]);
+    const data = composeBoardPicker ? orderedBoards : projects.data;
     const isLoading = composeBoardPicker ? !props.boards : projects.isLoading;
     const [inViewObject, __] = useRecoilState(inViewObjectAtom);
 
