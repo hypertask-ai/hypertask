@@ -22,7 +22,6 @@ jobs:
     timeout-minutes: 25
     env:
       PROOF_CASE: ${{ contains(github.event.head_commit.message, '[missing-row]') && 'missing-row' || 'green' }}
-      PROOF_NETWORK_DIR: ${{ runner.temp }}/proof-network
     outputs:
       contract: ${{ steps.smoke.outputs.contract }}
       docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
@@ -79,6 +78,8 @@ jobs:
         with:
           persist-credentials: false
       # Keep both required jobs running: only their heavy steps may be skipped.
+      - name: Prepare proof evidence path
+        run: echo "PROOF_NETWORK_DIR=$RUNNER_TEMP/proof-network" >> "$GITHUB_ENV"
       - name: Determine change scope
         id: scope
         env:
