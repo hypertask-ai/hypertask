@@ -1680,6 +1680,14 @@ test(`editor models retry unavailable ${currentModel} once before output, but no
     }),
   });
   const { selectTaskWriterModel, selectTiptapModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
+  const { selectModel } = loadTs("src/lib/ai/chatStream/models.ts");
+  const { previousModelForFailedStream } = loadTs("src/app/api/ai/chat/stream/modelFallback.ts");
+  const previous = previousModelForFailedStream(currentModel, retryError, false, false);
+  const chatFallback = selectModel("openai", previous.model, "vck_test");
+  assert.equal(chatFallback.resolvedModelId, previousModel);
+  assert.equal((await chatFallback.model.doGenerate({ prompt: [] })).content[0].text, "OK");
+  assert.deepEqual(calls, [previousModel]);
+  calls.length = 0;
   const options = {
     modelOptionId: currentModel,
     projectId: 1,
