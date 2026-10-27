@@ -71,7 +71,7 @@ function harness(options = {}) {
       if (options.preparationError) throw options.preparationError;
       return { model, modelId: "writer-model", teamId: "team", usageProvider: "fixture", settings: {}, tools: undefined };
     },
-    retrieveTaskWriterContext: async (args) => { retrieval.push(plain(args)); return ""; },
+    retrieveTaskWriterContext: async (args) => { retrieval.push(plain(args)); options.onRetrieve?.(); return ""; },
     createDocumentAttachmentSummary: () => "",
     createTaskWriterUserContent: (input) => input,
     extractImgSrcs: () => new Set(),
@@ -181,7 +181,7 @@ function harness(options = {}) {
   });
   return { tool, saved, calls, usage, selections, confirmations, retrieval, reports, run,
     get maxActive() { return maxActive; },
-    write: (input, onPrepared) => draft.generateTaskWriterDraft(run.taskWriterRequestSchema.parse(input), 985, null, undefined, undefined, onPrepared),
+    write: (input, onPrepared) => draft.generateTaskWriterDraft(run.taskWriterRequestSchema.parse(input), 985, null, signal, undefined, onPrepared),
     execute: (input) => tool.execute(tool.inputSchema.parse(input)),
     post: (input) => route.POST({ json: async () => input }),
   };
@@ -405,5 +405,15 @@ test("a refused early save never starts the writer model", async () => {
   await assert.rejects(h.write({ projectId: 15, PROMPT: "Original brief", aiMode: "AiTaskWriter", requestKind: "manual" }, async () => {
     throw new Error("Save refused");
   }), /Save refused/);
+  assert.equal(h.calls.length, 0);
+});
+
+
+test("stopping during context preparation cannot publish a ticket", async () => {
+  const controller = new AbortController();
+  const h = harness({ controller, onRetrieve: () => controller.abort() });
+  let published = false;
+  await assert.rejects(h.write({ projectId: 15, PROMPT: "Original brief", aiMode: "AiTaskWriter", requestKind: "manual" }, async () => { published = true; }), /abort/i);
+  assert.equal(published, false);
   assert.equal(h.calls.length, 0);
 });

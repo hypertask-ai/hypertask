@@ -1,3 +1,4 @@
+import { HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG } from "@/lib/flags/definitions/htpr-7758-progressive-chat-create";
 
 export { type AiChatProcessedAttachment } from "./aiChatShared";
 
@@ -27,6 +28,7 @@ export function useAiChat() {
   const [editTaskId, setEditTaskId] = useRecoilState(aiChatEditTaskIdAtom);
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
+  const progressiveChatCreateEnabled = useFlag(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG);
   const reloadTaskAfterChat = useFlag(HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG);
   const connectionRetry = useFlag(HTPR_7099_CHAT_CONNECTION_LOST_FLAG);
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
@@ -104,7 +106,7 @@ export function useAiChat() {
     pathname, currentUser, billing, isDemo, streamingSessionRef,
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
-    appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry, chipSendSignal,
+    appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, progressiveChatCreateEnabled, connectionRetry, chipSendSignal,
     navigateToTask: chatOpensTask ? navigateToTask : undefined,
   }, askAiFullscreenEnabled ? {
     preserveComposer: true,

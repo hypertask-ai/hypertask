@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { load } = require("./task-route-loader.cjs");
 const link = '<p><a href="https://app.hypertask.ai/detail/project-7049/1">QA-1</a></p>';
 
-async function consume(events) {
+async function consume(events, enabled = true) {
   const messages = [], changes = [], navigations = [];
   const { consumeAiChatStream } = load("src/hooks/MultiPages/AIChat/aiChatStream.ts", {
     "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
@@ -18,7 +18,7 @@ async function consume(events) {
   try {
     await consumeAiChatStream({
       response: new Response(events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("")),
-      session: { id: "session" }, assistantMessageId: "assistant",
+      session: { id: "session" }, assistantMessageId: "assistant", progressiveChatCreateEnabled: enabled,
       setAgentStatus() {}, updateSessionTitle() {}, setIsTyping() {},
       queryClient: { refetchQueries: async () => {} },
       addMessageToSessionQuery: (_, message) => messages.push(message),
@@ -61,4 +61,11 @@ test("ordinary replies remain unchanged and malformed refresh events cannot touc
   assert.equal(result.messages.at(-1).content, "Hello");
   assert.deepEqual(result.changes, []);
   assert.deepEqual(result.navigations, []);
+});
+
+
+test("flag off ignores progressive events and keeps the ordinary reply", async () => {
+  const result = await consume([["task_created", { content: link }], ["task_updated", { taskId: 123 }], ["content", { content: "Ordinary reply" }], ["done", { status: "complete" }]], false);
+  assert.equal(result.messages.at(-1).content, "Ordinary reply");
+  assert.deepEqual(result.changes, []);
 });

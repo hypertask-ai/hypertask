@@ -223,6 +223,7 @@ export function createCreateTaskTool(context: ToolContext) {
               abortSignal?.throwIfAborted();
               const createBeforeWriting = await isFeatureEnabled(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, user.id);
               const publishTicket = async () => {
+                abortSignal?.throwIfAborted();
                 const initialTitle = taskTitleFromBrief(input.brief);
                 if (!initialTitle) throw new Error("Provide a task brief with a usable title.");
                 earlyTask = await save(initialTitle, undefined, true);

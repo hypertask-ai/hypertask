@@ -5,7 +5,7 @@ import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
-type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "navigateToTask"> & {
+type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "progressiveChatCreateEnabled" | "navigateToTask"> & {
   isCurrentStream?: () => boolean;
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
@@ -16,7 +16,7 @@ type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQu
 export async function consumeAiChatStream(context: Context) {
   const {
   isCurrentStream, response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
-  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, navigateToTask,
+  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, progressiveChatCreateEnabled = false, navigateToTask,
   } = context;
 
 
@@ -107,6 +107,7 @@ export async function consumeAiChatStream(context: Context) {
                     break;
                   }
                   case "task_updated":
+                    if (!progressiveChatCreateEnabled) break;
                     if (Number.isSafeInteger(parsed.taskId) && parsed.taskId > 0) {
                       window.dispatchEvent(new CustomEvent(TASK_EVENT, { detail: { taskId: parsed.taskId } }));
                     }
@@ -114,7 +115,10 @@ export async function consumeAiChatStream(context: Context) {
                   case "task_created":
                   case "content":
                     if (navigationFailed || typeof parsed.content !== "string") break;
-                    if (currentEventType === "task_created") savedTaskContent += parsed.content;
+                    if (currentEventType === "task_created") {
+                      if (!progressiveChatCreateEnabled) break;
+                      savedTaskContent += parsed.content;
+                    }
                     if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     aiContent += parsed.content;
 

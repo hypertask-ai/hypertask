@@ -39,6 +39,7 @@ export async function generateTaskWriterDraft(
     feature: "task-writer",
     reasoningFeature: "task-writer",
   });
+  abortSignal?.throwIfAborted();
   await onPrepared?.();
   abortSignal?.throwIfAborted();
   const generationStartedAt = Date.now();
