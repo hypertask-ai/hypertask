@@ -1,139 +1,34 @@
 ---
 name: verify-qa
-description: After the production deploy, the session that built the change verifies it on app.hypertask.ai and fixes anything that fails
+description: After deployment, verify real production behavior and record proof before closing the ticket.
 ---
 
-# verify-qa
+# Verify production
 
-Load this at the `/ship` step **after deploy**. The session that built the change verifies it on production. A merged pull request is not proof. If a case fails, you fix it and ship again, then run this skill again.
+## Goal and proof bar
 
-Proof bar follows Lauren Tan's verification skills: [create-verification-skill](https://github.com/cursor/plugins/tree/main/pstack/skills/create-verification-skill), [maintain-verification-skill](https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-verification-skill), and [poteto/verification-skill-example](https://github.com/poteto/verification-skill-example). Doctor first. Drive the real app. Prove side effects. Mocks never count.
+Verify your change on `https://app.hypertask.ai` after deployment. Drive real entry points and prove saved results survive reload. Mocks, previews, passing tests and merged PRs are not live proof. Follow [Lauren Tan's verification pattern](https://github.com/poteto/verification-skill-example).
 
-## Released flags: before merge and after a failure
-
-When something looks wrong behind a flag, a flag-owner write/admin agent switches it Off immediately with `ht-flag set KEY off --failure "reason or evidence URL"`, then repairs. This works for every flag, including high-risk, bugfix and unclassified flags, without approval. The reason must be nonblank and at most 300 characters; no-op Off is refused and every switch is audited. Other modes retain their existing approval rules. Only Valentin's login can open /admin/flags. A revert PR is the second step, not the first; reverting code does not re-enable flags. (Valentin, 2026-10-25, https://app.hypertask.ai/detail/project-4060/734)
-
-Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
-
-### Disposable local PR build
-
-Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
-
-`scripts/premerge-local.sh` remains optional for manual use outside the VPS. Do not run it on the VPS (Valentin, 2026-10-21: no tests).
-
-The command refuses worktrees containing `.env` files and ignores inherited service credentials. It copies the current source (including local edits, excluding dependencies, builds and env files) into `mktemp -d /tmp/ht-premerge-build.XXXXXX`, installs dependencies there with `npm ci`, and builds there. EXIT, INT and TERM remove that scratch tree after stopping the app; `down` still targets the original checkout. Do not put app copies, `.next`, `node_modules`, `build-*`, browser caches or Node toolchains in evidence. Only small sanitized logs, numbers, screenshots and reports belong there. It reads `/api/flags` with the plain QA storage state at `~/.config/hypertask-videos/storageState-qa-normal.json`, preserving Everyone flags and setting every other registry flag to Owner + QA in the disposable database. The seeded account has the QA identity only in that database. Repeat `--flag key=MODE` to override local modes; never count an overridden released mode as live-state proof. `Flags:` prints the resulting modes. The real app board route is `/project?id=N`; ship-check also accepts older `/projects/project-N` records.
-
-MinIO uses a random loopback port, throwaway local credentials, a tmpfs `premerge-attachments` bucket and browser CORS for the build origin. All five `R2_*` settings point uploads, public previews and downloads at it before build/start; `down` removes its container and any anonymous volumes.
-
-The launcher enables `HT_PREMERGE_AI_STUB=1` and `HT_PREMERGE_QUEUE_STUB=1`:
-- AI: shared text calls for Ctrl+J task writer, Write with AI and chat return a fixed draft or simple JSON fixture. `due YYYY-MM-DD` adds a due date. Requested English, French, German, Spanish, Dutch, Japanese and Chinese headings are supported. Image and audio providers are not stubbed. `[premerge-ai]` logs the model ID and system prompt SHA-256, never credentials.
-- Queue: publish, schedule and cancel save job IDs and `notBefore` under `premerge:qstash:*` in local Redis. Jobs are not delivered.
-
-Both switches require `PREMERGE_LOCAL=1` and the launcher's loopback `browser_smoke` database `hypertask_smoke`. Vercel, other databases and non-local queue Redis are refused even when the local build uses `NODE_ENV=production`. Local clicks prove UI and saves, not model quality or reminder delivery. Check real model quality and scheduling in live QA after deploy.
-
-Local search uses a loopback, fixture-only keyword service with the two seeded boards. This can verify the real search request, results and tab UI, but not production Turbopuffer ranking, embeddings or indexing. It rejects writes and unsupported queries. This local seeded board does not replace verification after deploy. `up` stays running for the QA session. `down` from another command stops that run, both app and fixture-search processes, containers and private state; EXIT, INT and TERM also clean up. Local lint, tests, typecheck and this webpack build queue automatically through a shared heavy-job cap of `max(2, nproc/6)` slots. Set `HT_HEAVY_SLOTS` consistently for the machine to override it; CI bypasses the cap.
-
-One cleaner owns leftovers (YPER4-280): the process watchdog `scripts/proc-watchdog.py` stops test, build and premerge processes older than 2 hours or over 6 GB (including /tmp copies left by tests) and removes `ht-premerge-*` containers older than 12 hours. `scripts/premerge-local.sh sweep` runs it once; its 5 minute user timer is installed with `scripts/premerge-local.sh --install` after merge, never during PR work, and retires the old premerge-local-sweep timer. Premerge state folders live in the worktree and go with it. There is no crontab.
-
-## Logins
-
-Pass the state file with `--state`. Never print the file. Pick the account for the permission, plan or flag path being checked; the flag QA account is not an admin.
-
-| Type | User id | State file | Use for | Refresh expired login |
-|---|---|---|---|---|
-| Owner + QA flags | 985 | `~/.config/hypertask-videos/storageState-qa.json` | Flagged path and doctor shot, not admin pages | `/qa/login` with configured QA credentials, then save state to this path. Never use ordinary email login for this shared address. |
-| Plain customer | 2343 | `~/.config/hypertask-videos/storageState-qa-normal.json` | Flag-off path | Email-code login below: `valentin+qa-normal@hypertask.ai` |
-| Free | 3411 | `~/.config/ht-qa/state-free.json` | Free limits and upgrade prompts; keep on Free | Runner `scripts/login.mjs --tier free` |
-
-Never test revoke-all (Connections "revoke all", the revoke-token tool with `revoke_all`, or `/api/mcp/token` revoke) on QA account 2343: it runs the 5-minute MCP watcher (YPER4-352). Use 985 for that test.
-| BYOK | 3412 | `~/.config/ht-qa/state-byok.json` | BYOK settings and AI with a saved, enabled `gateway` key | Runner `scripts/login.mjs --tier byok` |
-| Pro | 3413 | `~/.config/ht-qa/state-pro.json` | Pro AI and paid-plan access | Runner `scripts/login.mjs --tier pro` |
-| Team owner | 4036 | `~/.config/ht-qa/state-owner.json` | Owns **QA Team Board**, board 7283 | Email-code login below: `valentin+qa-owner@hypertask.ai` |
-| Team member | 4037 | `~/.config/ht-qa/state-member.json` | Invited member of **QA Team Board**, board 7283; not its owner | Email-code login below: `valentin+qa-member@hypertask.ai` |
-| Guest | None | None, use a fresh context | Logged-out demo and signup paths | No login |
-| Admin | 6 | None permitted | **Not testable by agents: Valentin checks admin pages himself** | Never use or create an admin login |
-
-Before a plan check run `.claude/skills/verify-qa/scripts/qa-teams` (read-only health line per test team; see `reference/feature-map/billing-and-plans.md`, "Test teams for every plan").
-
-BYOK team `977c0c91-c14f-47b0-b8bc-933cc751f19d` and Pro team `2ce0d9f8-4179-489d-bbce-2b0e197f8067` are comped on their respective plans until 2027-10-03. Select that team when checking its plan. The shared owner/member fixture is in team `da1f255e-7686-4585-afa3-e1da3e6507a8`, at `https://app.hypertask.ai/projects/project-7283`.
-
-**Refresh:** use `~/projects/hypertask-qa-runner/scripts/login.mjs`. For a tier, run `node scripts/login.mjs --tier <tier>` there to request a code, then repeat with `--code <code>`. For plain/owner/member, set `HT_QA_ACCOUNT_EMAIL` to the table's address and `HT_QA_ACCOUNT_STATE_PATH` to its expanded state path for both calls, omitting `--tier`. Read only that QA address's new login email via the runner's `lib/gmail-code.mjs` (`gws` over `ssh hetzner`, documented in its README); pass the code privately, never print it or read other mail. Save all states with mode `0600`. The daily runner refresh covers only free/byok/pro, not the other accounts.
-
-After refresh, require HTTP 200 from authenticated `POST /api/app-shell/bootstrap` and verify `slices.user.data.id` matches the table before using the state. Check plans with `.claude/skills/verify-qa/scripts/qa-teams` (it uses `POST /api/teams/getAllMinimal`, which returns less than `getAllSidebar`); check BYOK's saved key with `GET /api/teams/byokKeys?teamId=977c0c91-c14f-47b0-b8bc-933cc751f19d` (`gateway`, `enabled: true`, `hasSecret: true`). For member tests, require the shared board in that user's sidebar, not their personal board.
-
-Never use Valentin's account, password, or cookies. If the shot is a login page, first run `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id from the table>` (YPER4-607, https://app.hypertask.ai/detail/project-4060/607). `identity ok` means the tool did not load the state: fix the tool call with `phone-shot.sh` or Playwright `storageState`; do not refresh or tell other runners the login expired. Only `identity expired` means refresh that one identity through the documented flow. For `identity mismatch` or `identity unreadable`, record a failed doctor and stop to resolve the identity or read failure, not refresh. If its credentials are unavailable, record it as unreachable. Do not invent a login.
+Never use Valentin's login or browser. Use headless Playwright. Never print credentials. Never build or install app packages on the VPS.
 
 ## Steps
 
-- Before diagnosing missing or red PR checks, read the PR merge state; resolve conflicts and rebase first, then inspect checks on the new head.
-- For a tool or route, name its parse or dispatch layer on the ticket, test through that entry point, and name the tested layer in the proof; helper-only tests do not count.
-0. **Pick the feature-map page** for the area the ticket touches, from `reference/feature-map/INDEX.md`. Read only that page. It says how a customer reaches the area, how to drive it, what usually breaks, what proof to collect, and the cleanup. If the area has no page, or this change altered the UI, add or update the page in the same pull request before you call the run done (maintain-verification-skill: the map stays honest with the app).
-1. **Doctor first.** On a login landing, run `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id from the table>` first: `identity ok` means fix state loading, not refresh; only `identity expired` means refresh that identity (YPER4-607, https://app.hypertask.ai/detail/project-4060/607). Do not judge the change until both are true:
-   - The GitHub Production deployment for the merge sha is `success`.
-   - The QA login is signed in on `https://app.hypertask.ai/my-tasks`. Shoot that page with `phone-shot.sh` and `--state ~/.config/hypertask-videos/storageState-qa.json`; it uses the repo's Playwright to load the state before navigation and refuses login landings before writing a PNG. A login page is a failed doctor, not a failed feature.
-   - **Core inbox cycle, every app deploy** (Valentin, 2026-10-23, YPER4-629: "please make this a core test upon releasing stuff ... The inbox cycle is incredibly important."): run `node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <run folder>/inbox-cycle` as QA 985. It must print `inbox-cycle ok`: open by click and by Enter keep `?inboxFlow=true`, sending a comment archives and opens the next message, J opens the next, E archives. Add it as a `## Cases` line. A FAIL here is a FAIL of the release, whatever the ticket was; a flagged cause gets its flag switched Off first (HT Product Lead).
-2. **Read the ticket's acceptance criteria** and note the pull request and the merge sha.
-3. **Exercise every entry point the feature-map page lists.** On these pages that means every route and action under "How a customer reaches it" and "How to drive it", plus every success, cancel, error, empty, and persistence-after-reload path this change can affect. Drive `https://app.hypertask.ai` with `agent-browser` or `phone-shot.sh`. Prove side effects: the data is saved, and a reload keeps it. A screenshot of pixels alone is not proof. Mocks, a unit test, and a preview do not count.
-4. **Name each unreachable path** with the concrete reason (auth, plan, flag, missing data) and cover the closest real path you can reach. Record that path as `UNREACHABLE`, not as a skip you forget.
-5. **For any ticket touching UI**, take a real 390x844 screenshot on production:
-   ```
-   .claude/skills/verify-on-phone/scripts/phone-shot.sh https://app.hypertask.ai/<path> ~/.local/state/vcc-evidence/HTPR-NNNN/<name>.png --state ~/.config/hypertask-videos/storageState-qa.json
-   ```
-   For the flag-off path, pass `storageState-qa-normal.json` instead. Desktop shots use `--viewport 1440x900` (desktop user agent). When the UI changed, shoot **all four themes** (Valentin, 2026-10-03: "a QA routine that every agent knows to check all of the themes"; the new search looked right on Graphite and Dia but wrong on AMOLED): pass `--theme porcelain`, `--theme graphite`, `--theme amoled` and `--theme dia` in turn to set the `theme` cookie before loading the page, and screenshot the changed screen in each, desktop and phone. Compare them side by side: text contrast, backgrounds, borders, hover and selected states, icons. A screen that only looks right in some themes is a FAIL. An HTTP 200, an unchanged URL, or a fixed sleep is not a pass.
-6. **For a new flagged feature, check the flag mode** at `https://app.hypertask.ai/admin/flags` (or `GET /api/admin/flags`, `listFeatureFlagModes` in `src/lib/flags.ts`) before judging the change. FAIL a flagged feature if a logged-in normal account (user 2343) sees it with the flag off, or if the mode is anything other than `OWNER_AND_QA` without Valentin having widened it himself. `OWNER_ONLY` is a FAIL: the QA login cannot see the feature, so nothing was verified. Say so and ask for `OWNER_AND_QA`. `EVERYONE` is never a pass for a flagged feature; name the flag key and its mode. For a bug fix, check that its ticket-named `kind: "bugfix"` flag defaults to `EVERYONE`, that the normal account sees the live fix, and that switching it Off restores the old path in an approved isolated test. Saved-data, security and crash fixes have no flag. Bugfix flags use the same cleanup countdown, 7 days on Everyone and 14 for money, access and data-deletion, filed by the daily cron at `/api/cron/feature-flag-removals`; verify that the production release was recorded. A `[BUGFIX]` title is not proof: if the diff adds new visible behaviour and has no flag, FAIL it.
-7. **Write the evidence** in `~/.local/state/vcc-evidence/HTPR-NNNN/proof.md`. Screenshots (`*.png`) live in that same folder. The file contains:
-   - a line starting `Feature map: .claude/skills/verify-qa/reference/feature-map/<file>.md`
-   - a line `Run: <YYYY-MM-DD>-qa-run-<n>` naming this run's folder next to proof.md; every PASS evidence file is a path inside that folder
-   - a line starting `Doctor:` with at least the first 9 characters of the latest merge sha and the word `success` (deployment state, and whether `https://app.hypertask.ai/my-tasks` was signed in)
-   - a `## Cases` section with one bullet per case, in this shape: `- PASS|FAIL|UNREACHABLE: <case> -> <evidence file name or reason>`
+1. Read the ticket's acceptance criteria. Pick its [feature-map page](reference/feature-map/INDEX.md). Update missing or changed recipes in the PR. Write a checklist before testing. For tools, test the parse or dispatch entry point, not only helpers.
+2. Select the account with `.claude/skills/verify-qa/scripts/qa-login`: `flags` (default), `plain` (flag-off), `free`, `byok`, `pro`, `owner`, `member` or `guest`. It prints the user ID, state path and refresh route, never credentials. Use `.claude/skills/verify-qa/scripts/qa-login flags --state` for the path alone. Follow [login checks and refresh](reference/logins.md). Admin pages are not agent-testable.
+3. Run the doctor. Require Production deployment `success` for the latest merge SHA. Capture signed-in `/my-tasks` using [phone-shot.sh](../verify-on-phone/scripts/phone-shot.sh), passing `--state` explicitly. On login landings, run `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>`: `identity ok` means fix state loading; only `identity expired` means refresh. Do not judge the feature before doctor passes.
+4. Every app deploy: run `node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <run-folder>/inbox-cycle`. Require `inbox-cycle ok`; include its evidence in Cases.
+5. Exercise affected success, cancel, error, empty and reload paths. Check declared flag mode and flag-off behavior; use [flag policy](../../reference/flags.md). For changed UI, capture 1440x900 and 390x844 in Porcelain, Graphite, AMOLED and Dia, plus a short main-path video. Compare before/after. Record inaccessible paths as `UNREACHABLE`, with reason and closest real check. Clean up only your fixtures through product surfaces.
+6. Save evidence under `~/.local/state/vcc-evidence/<TICKET>/<YYYY-MM-DD>-qa-run-<n>/`. Follow [storage rules](reference/evidence-storage.md). Write `<TICKET>/proof.md`:
 
-   Example:
-
-   ```
-   Feature map: .claude/skills/verify-qa/reference/feature-map/my-tasks.md
-   Doctor: sha abc123def deployment success; https://app.hypertask.ai/my-tasks signed in as user 985
-   Run: 2026-10-01-qa-run-1
+   ```text
+   Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md
+   Doctor: sha <latest-merge-sha> deployment success; /my-tasks signed in as user <id>
+   Run: <YYYY-MM-DD>-qa-run-<n>
 
    ## Cases
-   - PASS: open My Tasks shows the signed-in list -> my-tasks.png
-   - PASS: reload keeps the same list -> my-tasks-reload.png
-   - UNREACHABLE: flag-off empty board -> user 2343 has no board in this project; covered the empty filter on the same list -> empty-filter.png
+   - PASS: <case> -> <nonempty-file-in-run-folder>
+   - UNREACHABLE: <case> -> <reason; closest real check>
    ```
 
-   A PASS verdict requires no `FAIL` bullets. `UNREACHABLE` is allowed when the reason and the closest real path are both in that bullet.
-8. **Report on the ticket with `vcc`, then move it with `vcc`.** One comment. Never assign anyone. Never assign userId 6 (Valentin) for any reason, including escalation. Only Valentin assigns himself. If he assigned himself or moved the ticket by hand, leave assignees and column as he left them.
-   - **PASS** (no FAIL bullets): attach `proof.md` and the key screenshots, say what changed in plain language, then move to Done.
-     ```
-     vcc comment add HTPR-NNNN --kind qa --attach ~/.local/state/vcc-evidence/HTPR-NNNN/proof.md --attach ~/.local/state/vcc-evidence/HTPR-NNNN/<shot>.png --text "<p><strong>PASS: verified on production.</strong></p><p>What you checked, in plain language, and what the user will notice.</p>"
-     vcc task move HTPR-NNNN --section "Done"
-     ```
-   - **FAIL:** name the failing case, attach the evidence, move back to In Progress, fix, and ship again. Then run this skill from step 1.
-     ```
-     vcc comment add HTPR-NNNN --kind qa --attach ~/.local/state/vcc-evidence/HTPR-NNNN/proof.md --text "<p><strong>FAIL: <exact case>.</strong></p><p>What you expected, what you saw, and where.</p>"
-     vcc task move HTPR-NNNN --section "In Progress"
-     ```
-   Read the ticket back with `hypertask tasks get HTPR-NNNN` and confirm the column and the comment author.
-9. **If the same failure is still there after two repairs,** stop looping. Post one comment that says what you tried, and ask Valentin one question if you are blocked. Do not invent a pass.
-10. **If Valentin @mentioned you, reply with an @mention back**, using `<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`.
-11. **Say which skill you used** in the comment (`verify-qa`).
-12. **A correction goes into this file**, not into chat memory. When a check is corrected, edit this SKILL.md and say on the ticket which file changed.
-
-## Evidence storage and daily cleanup
-
-Follow [evidence-storage.md](reference/evidence-storage.md): keep proof, checklists,
-Markdown, JSON, PNG and HTML reports outside build directories. The daily pruner
-is dry-run by default; its user timer applies only the allowlisted age rules.
-The runner installs it after merge and verifies the first real service run.
-
-## Weekly map upkeep
-
-For source-only weekly feature-map upkeep and ticket-owned live recipes, use [maintain-verification-skill](../maintain-verification-skill/SKILL.md).
-
-## Notes
-
-- Never print cookies, tokens, or the auth-state file into a comment, a log, or the terminal. Reference the path only.
-- Compare against a baseline when a blank page might be the correct empty state.
-- Archive or delete only fixtures you created, through the product UI, never SQL. On the private board named by the board-title constant in `e2e/smoke/lib/boardSetup.ts`, remove tasks that use that file's `QA_TASK_PREFIX` when you created them.
-- A deployment wait or a stale login is not a product FAIL. Record it and stop until doctor passes.
-- The nightly suite in `reference/e2b-fleet.md` is extra context. It does not replace this proof.
-- When a live check needs a privilege this login is denied, verify everything you can reach, record the rest as `UNREACHABLE` with the exact refusal, and do not block the ticket to ask for a new credential (2026-09-15, https://app.hypertask.ai/detail/project-15/6472).
+7. Run `.claude/skills/ship/scripts/ship-check proof <TICKET>`. Require `proof ok`; it checks merge SHA, format, run files and screenshots. A FAIL case cannot pass. This validates records, not behavior.
+8. Publish the self-contained HTML QA report as a ticket page through `vcc pages create`. Post one `--kind qa` verdict using `verify-qa`, report link, proof and key attachments. Read back. PASS: explain what changed, then Done. FAIL: keep In Progress, switch flagged failure Off through [ship](../ship/SKILL.md), repair and repeat. After two failed repairs, record the blocker and hand off. Never invent a pass.
