@@ -35,7 +35,17 @@ name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 f = json.loads(pathlib.Path(os.environ['FIXTURE']).read_text())
 with open(os.environ['CALLS'], 'a') as out: out.write(json.dumps([name]+args+([os.environ.get('VCC_ACTIVITY_AGENT_ID','')] if name=='vcc' else []))+'\n')
-if name == 'date':
+if name == 'ship-identity':
+    if f.get('identity_error'): sys.exit(1)
+    print('RUNNER 12\t'+os.environ['RUNNER_TOKEN_FILE'])
+elif name == 'ht':
+    assert os.environ.get('HT_TOKEN') == 'runner-fixture-token'
+    assert args[:1] == ['GET'] and args[1].startswith('/mcp/tasks?ticket_number=')
+    tickets = args[1].split('ticket_number=')[1].split('&')[0].split(',')
+    rows = [t for t in f['tasks'] if t['ticketNumber'] in tickets]
+    if f.get('batch_missing'): rows = rows[:-1]
+    print(json.dumps(dict(success=True,tasks=rows)))
+elif name == 'date':
     if args == ['-u', '+%s']: print('1790856000')
     else: sys.exit(subprocess.call(['/usr/bin/date']+args))
 elif name == 'gh':
@@ -44,6 +54,7 @@ elif name == 'gh':
     for i, page in enumerate(pages if '--paginate' in args else pages[:1]):
         print(json.dumps(dict(data=dict(repository=dict(pullRequests=dict(nodes=page,pageInfo=dict(hasNextPage=f.get('pr_more', i<len(pages)-1))))))))
 elif name == 'hypertask':
+    assert os.environ.get('HYPERTASKS_JWT_TOKEN') == 'runner-fixture-token'
     if args[:2] == ['sections','list']:
         print(json.dumps(dict(success=True,sections=[dict(section_title=s) for s in f.get('sections',['AI Review','QA','In Progress'])])))
     elif args[:2] == ['tasks','list']:
@@ -73,10 +84,12 @@ def run(f):
     with tempfile.TemporaryDirectory() as tmp:
         p = pathlib.Path(tmp)
         (p/'mock').write_text(mock); (p/'mock').chmod(0o755)
-        for name in ['gh','hypertask','vcc','date']: (p/name).symlink_to('mock')
+        for name in ['gh','hypertask','vcc','date','ship-identity','ht']: (p/name).symlink_to('mock')
         (p/'fixture').write_text(json.dumps(f))
-        env = dict(os.environ, PATH=tmp+':'+os.environ['PATH'], FIXTURE=str(p/'fixture'), CALLS=str(p/'calls'))
-        result = subprocess.run(['bash',script],env=env,text=True,capture_output=True)
+        (p/'runner-token').write_text('' if f.get('empty_token') else 'runner-fixture-token')
+        (p/'board-check').write_text(pathlib.Path(script).read_text())
+        env = dict(os.environ, PATH=tmp+':'+os.environ['PATH'], FIXTURE=str(p/'fixture'), CALLS=str(p/'calls'), RUNNER_TOKEN_FILE=str(p/'runner-token'), HYPERTASKS_JWT_TOKEN='shared-human-fixture', HT_TOKEN='shared-human-fixture')
+        result = subprocess.run(['bash',str(p/'board-check')],env=env,text=True,capture_output=True)
         calls = [json.loads(s) for s in (p/'calls').read_text().splitlines()]
         return result, calls
 
@@ -180,5 +193,32 @@ f = dict(tasks=[task(1)],comments={'HTPR-1':[comment(agent=None)]*100},activitie
 r, _ = run(f)
 assert r.returncode != 0 and 'outside the bounded comment read' in r.stderr
 print('ok potentially hidden older claims fail closed')
+f = dict(tasks=[task(1, 'Backlog'), task(2, 'Backlog')],
+         comments={f'HTPR-{n}':[comment()] for n in [1,2]}, activities={},
+         prs=[pr(n,f'HTPR-{n}',8) for n in [1,2]])
+r, calls = run(f)
+assert r.returncode == 0, r.stderr
+assert sum(c[0] == 'ht' for c in calls) == 1, calls
+assert not any(c[:3] == ['hypertask','tasks','get'] for c in calls), calls
+assert len(r.stdout.splitlines()) == 2, r.stdout
+f = dict(tasks=[task(n, 'Backlog') for n in range(1,102)],
+         comments={f'HTPR-{n}':[comment()] for n in range(1,102)}, activities={},
+         prs=[pr(n,f'HTPR-{n}',8) for n in range(1,102)])
+r, calls = run(f)
+assert r.returncode == 0, r.stderr
+assert sum(c[0] == 'ht' for c in calls) == 2, calls
+assert len(r.stdout.splitlines()) == 101, r.stdout
+f['batch_missing'] = True
+r, _ = run(f)
+assert r.returncode != 0 and 'batch' in r.stderr and not r.stdout, r.stderr
+f['batch_missing'] = False; f['identity_error'] = True
+r, calls = run(f)
+assert r.returncode != 0 and 'identity' in r.stderr, r.stderr
+assert not any(c[0] in ['gh','hypertask','ht','vcc'] for c in calls), calls
+f['identity_error'] = False; f['empty_token'] = True
+r, calls = run(f)
+assert r.returncode != 0 and 'credential is empty' in r.stderr, r.stderr
+assert not any(c[0] in ['gh','hypertask','ht','vcc'] for c in calls), calls
+print('ok runner-token isolation, one batched task read, incomplete batch and identity failures refuse shared-login fallback')
 print('BOARD CHECK VERIFIED')
 PY
