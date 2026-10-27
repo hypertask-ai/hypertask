@@ -45,6 +45,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       previousPage.current = null;
       return;
     }
+    const returningFromFullScreen = previousPage.current?.startsWith(`${user.id}:/chat`);
     const changed = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);
     if (lastPage !== pageKey) setLastPage(pageKey);
     previousPage.current = pageKey;
@@ -53,7 +54,8 @@ export function useAiChatAutoOpen(mobile: boolean) {
       visitedNewTicket.current = false;
       setNewTicketPath(null);
     }
-    if (!page || manualOpen) return;
+    if (returningFromFullScreen) autoOpenedPage.current = null;
+    if (!page || manualOpen || returningFromFullScreen) return;
     if (changed) setSuppressed(false);
     if ((suppressed && !changed) || !allowed) {
       const savedOffAfterAutoOpen = !allowed && autoOpenedPage.current !== null && !pageChangedSinceLastVisit(autoOpenedPage.current, null, pageKey, stableDefaultView);

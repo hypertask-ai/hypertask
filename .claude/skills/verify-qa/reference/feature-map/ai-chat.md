@@ -264,6 +264,16 @@ Opening again must not close a chat already requested open. The existing
 **Close AI chat** button must still close it. Capture the first opening
 and use the unchanged `[data-ai-chat-scope]:visible > button` scope control.
 
+## Fullscreen return with automatic opening disabled
+
+With automatic chat opening disabled, open the existing sidebar or floating
+window using its button and Ctrl+Q. Close and reopen each surface, then open
+`/chat?return_to=%2Fmy-tasks` and select **Exit full-screen AI chat**.
+The selected docked surface and composer must remain visible after returning
+to My Tasks. Repeat at 1440x900 and 390x844, for both sidebar and floating mode.
+Closing afterward must still work; ordinary navigation must still respect
+saved automatic-opening choices. No chat message needs sending.
+
 ## Remembered sidebar width
 
 With `htpr-8013-sidebar-width` enabled, use QA 985's existing sidebar resize

@@ -279,6 +279,63 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
 })
 })
 
+for (const mode of ['sidebar', 'floating'] as const) {
+test(`AI chat ${mode} opens by button, shortcut and fullscreen exit`, { tag: [`@id:chat-${mode}-surfaces`] }, async ({ page }, testInfo) => {
+  const mobile = testInfo.project.name === 'Mobile'
+  await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 })
+  const boardPath = process.env.SMOKE_BOARD_PATH || '/my-tasks'
+  const autoOpenOff = { aiChatOpenNewTickets: false, aiChatOpenTickets: false, aiChatOpenBoards: false }
+  await page.route('**/api/app-shell/bootstrap', async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    if (body.slices?.preferences?.data) Object.assign(body.slices.preferences.data, autoOpenOff)
+    await route.fulfill({ response, json: body })
+  })
+  await page.route('**/api/users/preferences', async route => {
+    if (route.request().method() !== 'GET') return route.continue()
+    const response = await route.fetch()
+    const body = await response.json()
+    if (body.settings) Object.assign(body.settings, autoOpenOff)
+    await route.fulfill({ response, json: body })
+  })
+  await page.addInitScript(sidebar => {
+    const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
+    localStorage.setItem('recoil-persist', JSON.stringify({ ...saved, isAiChatSidebarMode: sidebar, aiChatPinned: false, aiChatAutoOpenSuppressed: true, aiChatAutoOpenPreferences: {} }))
+  }, mode === 'sidebar')
+  const panel = mode === 'sidebar' ? page.getByTestId('ai-sidebar') : page.locator('.chatwindow')
+  const composer = panel.locator('[contenteditable="true"]')
+  const closeChat = async () => {
+    if (!mobile && mode === 'sidebar') {
+      await panel.locator('button:has(svg.lucide-chevron-right)').click()
+      return
+    }
+    if (!mobile) await panel.locator('button:has(svg.lucide-minus)').click()
+    await page.getByRole('button', { name: 'Close AI chat', exact: true }).last().click()
+  }
+  await page.goto(boardPath, { waitUntil: 'load' })
+  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
+  if (await panel.isVisible()) await closeChat()
+  await page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true }).click()
+  await expect(panel).toBeVisible()
+  await expect(composer).toBeVisible()
+  await closeChat()
+  await expect(panel).toBeHidden()
+  await page.keyboard.press('Control+q')
+  await expect(panel).toBeVisible()
+  await expect(composer).toBeVisible()
+  await page.goto(`/chat?return_to=${encodeURIComponent(boardPath)}`, { waitUntil: 'load' })
+  const exit = page.getByRole('button', { name: 'Exit full-screen AI chat', exact: true })
+  await expect(exit).toBeVisible()
+  await expect(page.locator('main [contenteditable="true"]')).toBeVisible()
+  await exit.click()
+  await expect(page).toHaveURL(url => `${url.pathname}${url.search}` === boardPath)
+  await expect(panel).toBeVisible()
+  await expect(composer).toBeVisible()
+  await closeChat()
+  await expect(panel).toBeHidden()
+})
+}
+
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
   const fixture = JSON.parse(readFileSync(path.join(__dirname, '.state', 'card-fixture.json'), 'utf8')) as {

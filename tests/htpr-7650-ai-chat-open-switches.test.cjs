@@ -190,6 +190,34 @@ test("changing boards or choosing another view still follows the existing off sw
   }
 });
 
+test("exiting fullscreen keeps the requested docked chat open with auto-open off", () => {
+  for (const phone of [false, true]) {
+    for (const target of ["/project?id=15", "/detail/project-15/2", "/my-tasks"]) {
+      for (const source of ["/chat", "/chat/6279a850-6b3e-4fb5-8fa8-404c9a156620"]) {
+        const h = pageHarness(allOff);
+        h.navigate(source, phone);
+        h.manualOpen();
+        h.navigate(target, phone);
+        assert.equal(h.values.showAIChatInterfaceAtom, true, `${source} to ${target}, phone=${phone}`);
+        h.close();
+        assert.equal(h.values.showAIChatInterfaceAtom, false);
+        h.navigate("/project?id=16", phone);
+        assert.equal(h.values.showAIChatInterfaceAtom, false);
+      }
+    }
+  }
+});
+test("fullscreen return replaces the old automatic opening with an explicit opening", () => {
+  let values = { ...allOff, aiChatOpenBoards: true };
+  const h = pageHarness(new Proxy({}, { get: (_target, key) => values[key] }));
+  h.navigate("/project?id=15");
+  h.navigate("/chat");
+  values = allOff;
+  h.render();
+  h.manualOpen();
+  h.navigate("/project?id=15");
+  assert.equal(h.values.showAIChatInterfaceAtom, true);
+});
 test("board switch also covers demo, My Tasks, inbox and calendar; unrelated pages do not auto-open", () => {
   for (const url of ["/demo", "/my-tasks", "/inbox", "/calendar", "/settings"]) {
     const h = pageHarness({ ...allOff, aiChatOpenBoards: true });
