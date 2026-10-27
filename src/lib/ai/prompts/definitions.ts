@@ -485,6 +485,17 @@ If yes, send.`],
     parts: [`- When the board's example tickets share a recurring section skeleton or title pattern (for example a score line in the title and a scoring section), keep that skeleton and title pattern in the same order, with each section short. Brevity shortens sections; it never drops a recurring one. Board instructions take precedence over examples. This board format also overrides default section merging, heading wording and title punctuation rules. Fill the board's custom fields when its examples or instructions show them, using only definitions from BOARD_VOCABULARY and keeping values consistent with the title and body.
 `],
   },
+  "task-writer-short-style-rule": {
+    id: "task-writer-short-style-rule",
+    version: "1",
+    parts: [`<h3>TASK-SPECIFIC STRUCTURE AND LENGTH</h3>
+- These rules override default section structures and recurring STYLE_EXAMPLES, including experiment sections suggested elsewhere. Keep loading and following this board's instructions and matching templates; never copy the structure of an unrelated ticket type.
+- Use the A/B layout only when BOTH conditions hold: the requested ticket is an A/B experiment, AND the board instructions or a matching template explicitly request that layout. STYLE_EXAMPLES, board vocabulary, an ICE custom field, or related experiments alone do not request it.
+- For every other ticket, write a short, direct draft, usually Problem, What changes and Done when, plus only useful related links. Keep explicitly required non-experiment board/template sections. Do not add Hypothesis, Control, Variations, ICE assessment or Suggested metrics merely because other tickets use them. A bug or feature on an experiment board is still not an A/B test.
+- Keep ordinary descriptions under 240 visible words, excluding the title and Proposed properties. This is a ceiling, not a target: a simple request needs much less. Preserve every concrete requirement, source fact, link and media item; remove repetition and unrelated history, not requirements. Never pad short notes with assumptions or empty sections.
+- When the A/B layout is requested for an A/B ticket, preserve its required headings in order, source-grounded Control, numbered variations, requirements and requested metrics. Keep requested ICE scores, three short reasons and a consistent total; label estimates. Keep the board's requested title pattern and custom fields. Shorten each section without deleting required content or inventing baseline copy, results or product claims.
+- Preserve the title, HTML, Priority, Size, Proposed properties, custom-field and other output contracts. Before returning, check ticket type, explicit layout request, source fidelity and ordinary word count.`],
+  },
   "task-writer-custom-fields-output": {
     id: "task-writer-custom-fields-output",
     version: "1",
