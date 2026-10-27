@@ -12,7 +12,7 @@ const { buildByokTestRequest } = load(path.join(root, "src/app/api/settings/byok
 
 const models = [
   ["gpt-6-luna", "Luna 6"],
-  ["gpt-5.6-terra", "Terra 5.6"],
+  ["gpt-6.1-terra", "Terra 6.1"],
   ["gpt-6.1-sol", "Sol 6.1"],
 ];
 

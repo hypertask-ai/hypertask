@@ -802,17 +802,17 @@ test("task writer option ids map to provider options and legacy model strings fa
     reasoningEffort: "medium",
   });
 
-  for (const modelId of ["gpt-5.6-terra"]) {
-    const gpt56 = await selectTaskWriterModel({
+  for (const modelId of ["gpt-5.6-terra", "gpt-6.1-terra"]) {
+    const terra = await selectTaskWriterModel({
       sourceSelected: "openai",
       modelSelected: modelId,
       byokProviderFlags: [],
       projectId,
       teamContext,
     });
-    assert.equal(gpt56.provider, "openai");
-    assert.equal(gpt56.modelId, modelId);
-    assert.deepEqual(gpt56.providerOptions?.openai, {
+    assert.equal(terra.provider, "openai");
+    assert.equal(terra.modelId, "gpt-6.1-terra");
+    assert.deepEqual(terra.providerOptions?.openai, {
       reasoningEffort: "medium",
     });
   }
@@ -975,6 +975,7 @@ test("retired model options keep their saved variant and price tier", () => {
   const { getAiModelOptionById, getAiModelDefinition } = loadTs("src/lib/aiModelOptions.ts");
   for (const [oldBase, newBase, suffixes] of [
     ["gpt-5.6-luna", "gpt-6-luna", ["", "-light", "-high"]],
+    ["gpt-5.6-terra", "gpt-6.1-terra", ["", "-light", "-high"]],
     ["gpt-5.6-sol", "gpt-6.1-sol", ["", "-light", "-high"]],
     ["gpt-6-sol", "gpt-6.1-sol", ["", "-light", "-high"]],
     ["claude-opus-5", "claude-opus-5-5", ["-instant", "-thinking"]],
@@ -991,6 +992,7 @@ test("retired model options keep their saved variant and price tier", () => {
   assert.equal(getAiModelOptionById("gpt-5.5-thinking")?.id, "gpt-6.1-sol-high");
   assert.equal(getAiModelOptionById("kimi-k2.6")?.id, "kimi-k3");
   assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 2);
+  assert.equal(getAiModelDefinition("gpt-6.1-terra").priceTier, 2);
   assert.equal(getAiModelDefinition("gpt-6.1-sol").priceTier, 3);
   assert.equal(getAiModelDefinition("claude-opus-5-5").priceTier, 3);
 });
@@ -1031,9 +1033,9 @@ test("model and effort dimensions resolve every supported provider configuration
     ["gpt-6-luna", "light", openAiReasoning("low")],
     ["gpt-6-luna", "standard", openAiReasoning("medium")],
     ["gpt-6-luna", "high", openAiReasoning("high")],
-    ["gpt-5.6-terra", "light", openAiReasoning("low")],
-    ["gpt-5.6-terra", "standard", openAiReasoning("medium")],
-    ["gpt-5.6-terra", "high", openAiReasoning("high")],
+    ["gpt-6.1-terra", "light", openAiReasoning("low")],
+    ["gpt-6.1-terra", "standard", openAiReasoning("medium")],
+    ["gpt-6.1-terra", "high", openAiReasoning("high")],
     ["gpt-6.1-sol", "light", openAiReasoning("low")],
     ["gpt-6.1-sol", "standard", openAiReasoning("medium")],
     ["gpt-6.1-sol", "high", openAiReasoning("high")],
@@ -1066,7 +1068,8 @@ test("model and effort dimensions resolve every supported provider configuration
     "gpt-5.5-instant": ["gpt-6.1-sol", "light"],
     "gpt-5.5-thinking": ["gpt-6.1-sol", "high"],
     "gpt-6-luna": ["gpt-6-luna", "standard"],
-    "gpt-5.6-terra": ["gpt-5.6-terra", "standard"],
+    "gpt-5.6-terra": ["gpt-6.1-terra", "standard"],
+    "gpt-6.1-terra": ["gpt-6.1-terra", "standard"],
     "gpt-6-sol": ["gpt-6.1-sol", "standard"],
     "gpt-6.1-sol": ["gpt-6.1-sol", "standard"],
     "gpt-6-luna": ["gpt-6-luna", "standard"],
@@ -1498,8 +1501,8 @@ test("task writer key lookup ignores caller teamId when project lookup resolves 
 
   const selected = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelSelected: "gpt-5.6-terra",
-    modelOptionId: "gpt-5.6-terra",
+    modelSelected: "gpt-6.1-terra",
+    modelOptionId: "gpt-6.1-terra",
     byokProviderFlags: [],
     teamId: callerTeamId,
     projectId,
