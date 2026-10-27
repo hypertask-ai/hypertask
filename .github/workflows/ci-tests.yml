@@ -157,13 +157,13 @@ jobs:
         run: |
           set -euo pipefail
           test -f "$RUNNER_TEMP/changed-files.txt"
-          if ! grep -Eq '^tests/(htpr-7305-board-from-text|htpr-7652-ctrlj-enter-queue|compose-task-palette)\.test\.cjs$' "$RUNNER_TEMP/changed-files.txt"; then
+          if ! grep -Eq '^tests/(htpr-7305-board-from-text|htpr-7652-ctrlj-enter-queue|compose-task-palette|search-board-loading)\.test\.cjs$' "$RUNNER_TEMP/changed-files.txt"; then
             echo "Cold-board fixtures unchanged; no stress run needed."
             exit 0
           fi
           for iteration in {1..50}; do
             echo "Cold-board fixture stress $iteration/50"
-            node --test --test-concurrency=1 tests/htpr-7305-board-from-text.test.cjs tests/htpr-7652-ctrlj-enter-queue.test.cjs
+            node --test --test-concurrency=1 tests/htpr-7305-board-from-text.test.cjs tests/htpr-7652-ctrlj-enter-queue.test.cjs tests/search-board-loading.test.cjs
           done
           echo "Cold-board fixture stress: 50/50 passed"
 
