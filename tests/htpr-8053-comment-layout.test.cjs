@@ -17,10 +17,12 @@ const fixture = {
 
 function pagesSmoke() {
   let run;
+  let suite;
+  let storageState;
   const register = (name, ...args) => {
     if (name.startsWith("Pages list creates")) run = args.at(-1);
   };
-  Object.assign(register, { describe(_name, callback) { callback(); }, use() {}, afterEach() {}, skip(condition) { assert.equal(condition, false); } });
+  Object.assign(register, { describe(name, callback) { suite = name; callback(); suite = undefined; }, use(options) { if (suite === "Pages fixtures") storageState = options.storageState; }, afterEach() {}, skip(condition) { assert.equal(condition, false); } });
   const expect = value => ({
     toBe: expected => assert.equal(value, expected),
     async toBeVisible() {},
@@ -45,7 +47,7 @@ function pagesSmoke() {
     assert.fail(`Unexpected dependency ${name}`);
   }, loaded, path.join(root, "e2e/smoke"), { log() {}, error() {} });
   assert.equal(typeof run, "function");
-  return run;
+  return { run, storageState };
 }
 
 for (const lane of ["Desktop", "Mobile"]) {
@@ -101,7 +103,11 @@ for (const lane of ["Desktop", "Mobile"]) {
         },
       },
     };
-    await pagesSmoke()({ page }, { project: { name: lane } });
+    const registered = pagesSmoke();
+    await registered.storageState({}, async statePath => {
+      assert.equal(path.basename(statePath), `pages-${lane}-state.json`);
+    }, { project: { name: lane } });
+    await registered.run({ page }, { project: { name: lane } });
     assert.equal(boardId, fixture.pages[lane].projectId, "Pages writes must not change the layout board");
     assert.deepEqual(ticketVisits, [fixture.pages[lane].detailPath], "task-context page linking must not open the layout ticket");
     assert.deepEqual(links, [fixture.pages[lane].taskId, fixture.pages[lane].taskId], "link and unlink must use the lane's own ticket, never the layout ticket");

@@ -119,6 +119,18 @@ await seedSessionFixtures({});`,
   for (const [lane, fixture] of Object.entries(card.pages)) {
     const board = boards.find(board => board.id === fixture.projectId);
     assert.equal(board.title, `Browser smoke Pages ${lane}`);
+    assert.notEqual(board.ownerId, smoke.id);
+    assert.notEqual(board.teamId, boards[0].teamId);
+    const state = files[`/fixtures/pages-${lane}-state.json`];
+    const id = JSON.parse(state.cookies.find(cookie => cookie.name === "ht_session").value).id;
+    assert.equal(id, board.ownerId);
+    const sessionUser = JSON.parse(decodeURIComponent(state.cookies.find(cookie => cookie.name === "nookies_user").value));
+    assert.equal(sessionUser.accountId, board.googleAccountId);
+    assert.equal(sessionUser.UserSettingId, sessionUser.UserSetting.id);
+    assert.equal(state.cookies.find(cookie => cookie.name === "previousBoard").value, `project-${board.id}|&|`);
+    assert.ok(records.user_Activity.some(row => row.userId === id));
+    assert.ok(records.member_Team.some(row => row.userId === id && row.teamId === board.teamId));
+    assert.ok(!records.member_Team.some(row => row.userId === smoke.id && row.teamId === board.teamId));
     assert.equal(fixture.taskId, board.task.id);
     assert.equal(fixture.detailPath, `/detail/project-${board.id}/${board.task.uniqueIndex}`);
     assert.notEqual(fixture.taskId, card.taskId, "Pages links must not push down the layout fixture's comments");

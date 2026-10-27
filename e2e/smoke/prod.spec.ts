@@ -530,6 +530,13 @@ for (const view of VIEWS) {
   })
 }
 
+test.describe('Pages fixtures', () => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  test.use({ storageState: async ({}, applyState, info) => {
+    const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
+    await applyState(path.join(path.dirname(stateFile), `pages-${info.project.name}-state.json`))
+  } })
+
 test('Pages list creates a document, links a ticket, persists, unlinks and separates archived pages', async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'Writes only to disposable PR fixtures')
   const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
@@ -538,7 +545,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
   const pageFixture = fixture.pages[testInfo.project.name]
   const boardId = pageFixture.projectId
   const title = `Pages smoke ${testInfo.project.name} ${Date.now()}`
-  await page.goto(withRealtime(process.env.SMOKE_DEMO_BOARD_PATH!))
+  await page.goto(withRealtime(`/project?id=${boardId}&surface=board`))
   await page.goto(withRealtime(`/pages?project_id=${boardId}`))
   await expect(page.getByRole('main', { name: 'Pages', exact: true })).toBeVisible()
   await page.keyboard.press('Control+k')
@@ -606,4 +613,6 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
   } finally {
     await page.request.post(`/api/pages/${publicId}/archive`, { timeout: 5000 }).catch(() => {})
   }
+})
+
 })
