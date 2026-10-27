@@ -96,7 +96,7 @@ question_comment() {
     reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
     [ -z "$reason" ] || question_refuse "$reason"
   fi
-  printf '%s' "$text" | python3 "$(dirname "${BASH_SOURCE[0]}")/comment-style.py" "$markdown" || return 5
+  printf '%s' "$text" | python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/comment-style.py" "$markdown" || return 5
 }
 question_comment "$@"
 

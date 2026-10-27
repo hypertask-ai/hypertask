@@ -93,6 +93,18 @@ class CommentStyleTest(unittest.TestCase):
         self.assert_allowed("<p><strong>Ready.</strong></p><p>Pick yes/no and/or keep both.</p>"
                             "<p>https://example.test/src/app.tsx?branch=runner13/test#123</p>")
 
+    def test_installed_symlink_finds_the_parser(self):
+        installed = self.bin / "vcc"
+        installed.symlink_to(self.wrapper)
+        self.wrapper = installed
+        self.assert_allowed("<p><strong>Ready.</strong></p>")
+
+    def test_flag_question_with_mention_passes(self):
+        self.assert_allowed('<p><span data-type="mention">Valentin Yeo</span> '
+                            'Question: <strong>Switch <code>htpr-654-clear-comments</code> to Everyone?</strong></p>'
+                            '<p>Yes: switch it.</p><p>No: keep it.</p>'
+                            '<p>My recommendation: yes.</p><p>Why: checks passed.</p>', "question")
+
     def test_exact_word_limit_passes(self):
         self.assert_allowed("<p><strong>" + "word " * 25 + ".</strong></p>")
 
