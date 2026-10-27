@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { z } from 'zod'
 import { errorPageHeading } from './lib/errorPage'
 import { withRealtime } from './lib/realtime'
 import { tieredId } from './lib/tier'
@@ -213,16 +214,21 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
 })
 }
 
-test('docked AI chat follows the viewed board and keeps hand picks board-local', { tag: ['@id:chat-follows-board'] }, async ({ page }, testInfo) => {
+test.describe('docked board scope', () => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  test.use({ storageState: async ({}, applyState, info) => {
+    const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
+    await applyState(path.join(path.dirname(stateFile), `board-scope-${info.project.name}-state.json`))
+  } })
+
+test('docked AI chat follows the viewed board and keeps hand picks board-local', { tag: ['@id:chat-follows-board'] }, async ({ page }, testInfo) => {
   const mobile = testInfo.project.name === 'Mobile'
   await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 })
-  const boards = [process.env.SMOKE_BOARD_PATH!, process.env.SMOKE_DEMO_BOARD_PATH!].map((boardPath, index) => ({
-    path: boardPath,
-    id: Number(new URL(boardPath, 'http://localhost').searchParams.get('id')),
-    title: index === 0 ? 'Browser smoke board' : 'Browser smoke demo board',
-  }))
+  const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
+  const boards = z.array(z.object({ path: z.string(), id: z.number().int().positive(), title: z.string() })).length(2)
+    .parse(JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'board-scope-fixture.json'), 'utf8')))
   const [a, b] = boards
+  for (const board of boards) expect(Number(new URL(board.path, 'http://localhost').searchParams.get('id'))).toBe(board.id)
   expect(a.id).toBeGreaterThan(0)
   expect(b.id).toBeGreaterThan(0)
   expect(a.id).not.toBe(b.id)
@@ -273,6 +279,7 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   await switchBoard(b)
   await assertScope(b.title)
   expect(documentRequests, 'board switches must preserve client state rather than reload it').toBe(0)
+})
 })
 
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {

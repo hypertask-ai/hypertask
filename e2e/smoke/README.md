@@ -50,7 +50,9 @@ checks its actual title and description, and keeps checking the detail URL and
 visible content for three seconds without a document reload. The optional pages
 request is deliberately left pending to prove it cannot hold back the ticket.
 It never opens `/demo`: that route creates a guest.
-At both sizes, the docked AI chat check seeds a stale saved board, switches between two owned fixture boards without reloading, and verifies the scope chip follows the viewed board instead of carrying a hand pick across boards.
+At both sizes, the docked AI chat check seeds a stale saved board, switches between two fixture boards without reloading, and verifies the scope chip follows the viewed board instead of carrying a hand pick across boards.
+Board-scope checks use separate desktop and phone accounts.
+Both cache and save explicit board-opening preferences.
 
 Every run starts an empty PostgreSQL service and a dedicated local Soketi
 realtime service. `scripts/seed-browser-smoke.mjs` creates a plain local user,
