@@ -78,6 +78,8 @@ jobs:
         with:
           persist-credentials: false
       # Keep both required jobs running: only their heavy steps may be skipped.
+      - name: Fetch exact original repair for source comparison
+        run: git fetch --depth=1 origin 5429c3dce63a454385da371a9d898fb2d5ca06b4
       - name: Prepare proof evidence path
         run: echo "PROOF_NETWORK_DIR=$RUNNER_TEMP/proof-network" >> "$GITHUB_ENV"
       - name: Determine change scope
