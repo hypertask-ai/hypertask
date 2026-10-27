@@ -71,6 +71,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   configureAiModelUsage(state.selected.model, {
     initiatingUserId: dbUser.id,
     trustedChatSessionId: state.trustedChatSessionId,
+    feature: "chat",
   });
   const promptCachingEnabled = await aiPromptCachingEnabled(state.selected.model);
   const messages: ModelMessage[] = [
