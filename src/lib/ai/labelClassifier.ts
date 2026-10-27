@@ -1,3 +1,6 @@
+import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8099_SMART_LABEL_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-8099-smart-label-refusal";
 import { teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -66,6 +69,9 @@ export async function classifyTaskAgainstLabels(
   try {
     gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: tags.teamId });
   } catch (error) {
+    if (findSharedAiAllowanceError(error) && await isFeatureEnabled(HTPR_8099_SMART_LABEL_REFUSAL_FLAG, tags.userId ?? 0).catch(() => false)) {
+      return null;
+    }
     console.error(
       `[labelClassifier] Skipping inference: team gateway key lookup failed for ${tags.teamId}`,
       error,
@@ -97,19 +103,27 @@ export async function classifyTaskAgainstLabels(
     feature: "smart-label",
     reasoningFeature: "labels",
   });
-  const result = await generateText({
-    experimental_download: downloadWithoutBrotli,
-    model,
-    instructions: LABEL_CLASSIFIER_INSTRUCTIONS,
-    prompt: labelClassifierPrompt(task, definitions),
-    maxRetries: 2,
-    maxOutputTokens: LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
-    providerOptions: gatewayProviderOptionsForModel(
+  let result;
+  try {
+    result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
-      "smart-label",
-      tags
-    ),
-  });
+      instructions: LABEL_CLASSIFIER_INSTRUCTIONS,
+      prompt: labelClassifierPrompt(task, definitions),
+      maxRetries: 2,
+      maxOutputTokens: LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
+      providerOptions: gatewayProviderOptionsForModel(
+        model,
+        "smart-label",
+        tags
+      ),
+    });
+  } catch (error) {
+    if (findSharedAiAllowanceError(error) && await isFeatureEnabled(HTPR_8099_SMART_LABEL_REFUSAL_FLAG, tags.userId ?? 0).catch(() => false)) {
+      return null;
+    }
+    throw error;
+  }
 
   const matchingLabelIds = parseMatchingLabelIds(
     result.text.trim(),
