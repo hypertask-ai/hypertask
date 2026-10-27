@@ -242,8 +242,6 @@ const TaskStalenessLine = ({
         ? "warn"
         : "none";
 
-  if (!showFresh && level === "none") return null;
-
   const ageLine = formatKanbanStalenessLine({
     daysOnBoard: boardDays,
     daysInColumn: columnDays,
@@ -254,7 +252,7 @@ const TaskStalenessLine = ({
 
   if (!ageLine) return null;
 
-  return (
+  return showFresh || level !== "none" ? (
     <p
       className={`basis-full text-micro leading-none ${
         level === "hot"
@@ -266,7 +264,7 @@ const TaskStalenessLine = ({
     >
       {ageLine}
     </p>
-  );
+  ) : null;
 };
 
 export const TaskTitle = ({ title }: { title: string }) => {
