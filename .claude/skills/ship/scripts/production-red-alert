@@ -15,7 +15,7 @@ const QUERY = `query { repository(owner:"hypertask-ai",name:"hypertask") {
     oid committedDate messageHeadline parents(first:2) { nodes { oid } }
     associatedPullRequests(first:10) { nodes { number title mergedAt baseRefName mergeCommit { oid } } }
     statusCheckRollup { contexts(first:100) { pageInfo { hasNextPage } nodes {
-      ... on CheckRun { name status conclusion completedAt startedAt createdAt detailsUrl databaseId }
+      ... on CheckRun { name status conclusion completedAt startedAt detailsUrl databaseId }
       ... on StatusContext { context state createdAt targetUrl }
     } } }
   } } } } }
@@ -47,7 +47,7 @@ function snapshot(data) {
     const contexts = (commit.statusCheckRollup?.contexts?.nodes || []).map(row => ({
       name: row.name || row.context,
       state: row.status && row.status !== 'COMPLETED' ? 'PENDING' : row.conclusion || row.state,
-      at: row.completedAt || row.startedAt || row.createdAt,
+      at: row.completedAt || row.startedAt || row.createdAt || commit.committedDate,
       url: row.detailsUrl || row.targetUrl, id: row.databaseId
     })).sort((a, b) => a.id && b.id ? b.id - a.id : Date.parse(b.at) - Date.parse(a.at));
     return { sha: commit.oid, parents: commit.parents.nodes.map(parent => parent.oid),

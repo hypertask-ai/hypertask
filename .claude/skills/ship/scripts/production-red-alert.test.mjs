@@ -276,3 +276,15 @@ test('same-commit pending reruns retain completed failure evidence instead of an
   commits[0].contexts[0] = { name: 'browser-smoke', state: 'SUCCESS', at: '2026-10-26T17:54:40Z' };
   assert.deepEqual(plan(commits, ['browser-smoke'], now).recovered, ['browser-smoke']);
 });
+
+test('queued check without startedAt remains unresolved instead of recovering from its completed predecessor', () => {
+  const commit = { oid: sha, committedDate: '2026-10-26T17:42:39Z', messageHeadline: '', parents: { nodes: [] }, associatedPullRequests: { nodes: [] },
+    statusCheckRollup: { contexts: { pageInfo: { hasNextPage: false }, nodes: [
+      { name: 'browser-smoke', status: 'COMPLETED', conclusion: 'SUCCESS', completedAt: '2026-10-26T17:54:01Z', databaseId: 1 },
+      { name: 'browser-smoke', status: 'QUEUED', conclusion: null, startedAt: null, databaseId: 2 }
+    ] } } };
+  const data = { data: { repository: { ref: { target: { history: { nodes: [commit] } } } } } };
+  const p = plan(snapshot(data), ['browser-smoke'], now);
+  assert.deepEqual(p.pending, ['browser-smoke']);
+  assert.deepEqual(p.recovered, []);
+});
