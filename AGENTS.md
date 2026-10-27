@@ -2,6 +2,8 @@
 
 Start with `/ship`, [CLAUDE.md](CLAUDE.md), and the skill map at [.claude/skills/INDEX.md](.claude/skills/INDEX.md).
 
+[HT Product Lead](.claude/agents/control-role.md) and [Poteto Advisor](.claude/agents/control-role.md) share one harness-neutral control role.
+
 Valentin's own Claude Code and Codex sessions follow the same workflow:
 
 - Board writes go only through `vcc`, as the identity `ship-identity` picks: a session Valentin named after an identity in `~/.config/hypertask-agents/credentials/sessions/` writes as it, everyone else as "Valentins Claude Code" (Valentin, 2026-10-02). The plain `hypertask` CLI is for reads only. Never write in Valentin's name or copy another identity's token or credentials. Agents are human companions (Valentin, 2026-10-02): a ticket usually has a human assignee and an agent together, and agent-only is fine. Add only your own agent (`vcc task assign <TICKET> --self`); never remove or change a human assignee, and never add Valentin (userId 6) yourself.
