@@ -462,6 +462,7 @@ test("native switching snapshots the latest draft and attachments after open, tr
   };
   const mocks = {
     react: { ...react, default: react },
+    "react-hot-toast": { default: { error: assert.fail } },
     "@/hooks/useFlag": { useFlag: key => key !== "htpr-8048-agent-sessions" && key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },

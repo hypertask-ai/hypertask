@@ -271,21 +271,23 @@ test("external composer serializes real agent names and ticket references, not g
   } finally { editor?.destroy(); view.close(); }
 });
 for (const runtimeType of ["NATIVE", "EXTERNAL"]) {
-  test(`${runtimeType} mention routing keeps edits made during opening, transcript and invalidation`, async () => {
+  for (const failOpening of [false, true]) test(`${runtimeType} mention routing preserves late edits${failOpening ? " after a visible opening error and retry" : ""}`, async () => {
     const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
-    const opening = Promise.withResolvers(), transcript = Promise.withResolvers(), invalidation = Promise.withResolvers();
+    let opening = Promise.withResolvers();
+    const transcript = Promise.withResolvers(), invalidation = Promise.withResolvers();
     const transcriptStarted = Promise.withResolvers(), invalidationStarted = Promise.withResolvers();
     const originalFetch = global.fetch;
     const noop = () => {};
     const agent = { id: "agent", displayName: "Runner", runtimeType, sessionId: "default" };
     const project = { id: 15 }, currentUser = { id: 6 };
-    const writes = [], selections = [];
+    const writes = [], selections = [], errors = [];
     let html = "<p>Before opening</p>", text = "Before opening", header, embedded;
     const editor = { getHTML: () => html, getText: () => text, commands: { setContent: value => { html = value; } } };
     const chat = { currentSession: { id: "general", agentId: null }, fileItems: [], editor,
       resetFiles: noop, selectSession: id => selections.push(id), startNewSession: assert.fail };
     const queryClient = { invalidateQueries: () => { invalidationStarted.resolve(); return invalidation.promise; } };
     const source = loader({
+      "react-hot-toast": { default: { error: message => errors.push(message) } },
       "@/hooks/useFlag": { useFlag: key => [FLAG, "htpr-7518-agent-sidebar-chats"].includes(key) },
       "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
       "@/app/agents/chat/AgentChatClient": { default: props => { embedded = props.embedded; return null; } },
@@ -316,6 +318,18 @@ for (const runtimeType of ["NATIVE", "EXTERNAL"]) {
       React.act(() => window.dispatchEvent(new window.CustomEvent("ht-sidebar-agent-selected", {
         detail: { agentId: agent.id, getDraft: () => ({ html: editor.getHTML(), text: editor.getText() }) },
       })));
+      if (failOpening) {
+        await React.act(async () => {
+          opening.resolve({ ok: false, json: async () => ({ error: "Runtime unavailable" }) });
+        });
+        assert.deepEqual(errors, ["Runtime unavailable"]);
+        assert.equal(header.target.kind, "ai");
+        assert.equal(html, "<p>Before opening</p>");
+        opening = Promise.withResolvers();
+        React.act(() => window.dispatchEvent(new window.CustomEvent("ht-sidebar-agent-selected", {
+          detail: { agentId: agent.id, getDraft: () => ({ html: editor.getHTML(), text: editor.getText() }) },
+        })));
+      }
       edit("Typed while opening");
       await React.act(async () => {
         opening.resolve({ ok: true, json: async () => ({ success: true, session: { id: "opened" } }) });
@@ -327,6 +341,7 @@ for (const runtimeType of ["NATIVE", "EXTERNAL"]) {
       }
       edit("Typed while invalidating");
       await React.act(async () => { invalidation.resolve(); });
+      assert.equal(header.error, null);
       assert.equal(header.target.agent.sessionId, "opened");
       if (runtimeType === "NATIVE") {
         assert.deepEqual(selections, ["opened"]);

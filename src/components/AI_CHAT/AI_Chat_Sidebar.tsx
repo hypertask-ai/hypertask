@@ -15,6 +15,7 @@ import { AI_Chat_API } from "@/utils/api/ai_chat/aiChatHelpers";
 import { currentProjectAtom, currentUserAtom } from "@/store";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
@@ -148,7 +149,9 @@ export const AI_Chat_Sidebar = ({
         if (options?.newSession) void loadRoster();
       } catch (error) {
         if (intent !== intentRef.current) return;
-        setRosterError(error instanceof Error ? error.message : "Could not open chat");
+        const message = error instanceof Error ? error.message : "Could not open chat";
+        setRosterError(message);
+        if (agentSessionsEnabled) toast.error(message);
         return;
       }
     } else if (target.kind === "native-agent" && !aiSessionRef.current && !aiSessionId) {
