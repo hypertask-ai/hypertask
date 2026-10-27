@@ -44,7 +44,7 @@ For any Accepted row a lint rule, script, hook, test or `ship-check` would enfor
 ### 5. Own the follow-up, preserve protected review
 
 - Record the full Accepted / Rejected / Backlog list in the current ticket agent activity. Judge the findings yourself; do not send a session message or wait for a lead response. Accepted findings become their own tickets and normal reviewed PRs, never unreviewed edits to the live skills.
-- Keep protected safety changes protected under `/ship`: request their review through an explicit ticket agent @mention. Decisions only Valentin can make use a ticket Question addressed to him. Do not fold follow-up implementation into a one-ticket run.
+- Keep protected safety changes protected under `/ship`: mark their ticket blocked on HT Product Lead for review. Decisions only Valentin can make use a ticket Question addressed to him. Do not fold follow-up implementation into a one-ticket run.
 - Edit only skills in this repo under `.claude/skills/` (and `.claude/agents/`). Never global files (`~/.claude`, `~/.agents`, another repo); name those as Backlog instead.
 - Accepted rows ship like any other change: one YPER4 ticket on board 4060 via `vcc`, then /ship from Claim to Clean up, one PR. Do not reflect again on that ticket.
 - A new skill or a skill description change follows the same PR, with its row in `.claude/skills/INDEX.md`.

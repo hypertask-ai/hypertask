@@ -74,6 +74,22 @@ class DispatchTests(unittest.TestCase):
         self.metrics_reader = m.session_metrics
         self.metrics = patch.object(m, "session_metrics", return_value=None).start()
 
+    def test_blocked_markers_are_not_free_even_in_pickable_columns(self):
+        for field, value in (("blockerCommentId", 123), ("waitingOnUserId", 6), ("waitingOnAgentId", "lead-agent")):
+            with self.subTest(field=field):
+                task = self.boards[15][0]
+                task[field] = value
+                self.assertNotIn(task["ticketNumber"], m.free_tickets(self.boards, self.comments, self.claim_dir))
+                task[field] = None
+                self.assertIn(task["ticketNumber"], m.free_tickets(self.boards, self.comments, self.claim_dir))
+
+    def test_blocked_columns_are_not_pickable(self):
+        for section in ("Agent Blocked (Infra)", "Blocked", "Valentin Review"):
+            with self.subTest(section=section):
+                task = self.boards[15][0]
+                task["section"] = section
+                self.assertNotIn(task["ticketNumber"], m.free_tickets(self.boards, self.comments, self.claim_dir))
+
     def dispatch(self, rows=None, load=1, go=False):
         return m.dispatch(self.rows if rows is None else rows, self.boards, self.comments,
                           load, self.now, go=go, claim_dir=self.claim_dir, loop=self.loop, state=self.state)

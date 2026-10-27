@@ -41,7 +41,6 @@ each ticket only needs the one or two areas it touches.
 | Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and table New task verify by hand |
 | Figma connect | [figma-connect.md](figma-connect.md) | none; verify by hand on Settings > Accounts |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
-| Hidden agent log mentions | [agent-log-mentions.md](agent-log-mentions.md) | scoped mention receipt, retry and quiet-progress proof; no human-thread post |
 | Command palette | [command-palette.md](command-palette.md) | no smoke id; read-only shots of the palette rows, the help list and a Share Task tooltip |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
 | Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | production workflow dispatch, QA-only fixtures and score artifacts |
