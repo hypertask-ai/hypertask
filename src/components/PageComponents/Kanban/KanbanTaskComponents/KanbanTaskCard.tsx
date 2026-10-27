@@ -242,6 +242,8 @@ const TaskStalenessLine = ({
         ? "warn"
         : "none";
 
+  if (!showFresh && level === "none") return null;
+
   const ageLine = formatKanbanStalenessLine({
     daysOnBoard: boardDays,
     daysInColumn: columnDays,
