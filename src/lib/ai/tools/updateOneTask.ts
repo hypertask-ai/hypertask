@@ -21,7 +21,7 @@ import { buildActivityUser, applyPriorityUpdate, applyEstimateUpdate, sanitizeFo
 import type { ToolContext } from "./context";
 import { updateTaskSchema } from "./updateTaskSchema";
 
-export function createTaskUpdater(context: ToolContext, input: z.infer<typeof updateTaskSchema>) {
+export function createTaskUpdater(context: ToolContext, input: z.infer<typeof updateTaskSchema>, expected?: Pick<NonNullable<Parameters<typeof updateTaskSingle>[3]>, "expectedTitle" | "expectedDescription" | "expectedProjectId" | "expectedStatus">) {
   const { user, actingAgentId, body } = context;
   return async (
     identifier: ToolTaskIdentifierInput,
@@ -132,8 +132,9 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
         patch,
         activityUser,
         actingAgentId,
-        sectionTarget
-          ? {
+        {
+          ...expected,
+          ...(sectionTarget ? {
             taskMovedActivity: {
               sendNotification: () =>
                 sendNotificationForTask(
@@ -144,8 +145,8 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
                   actingAgentId ?? undefined,
                 ),
             },
-          }
-          : {},
+          } : {}),
+        },
       );
       if (result.status !== 200) {
         return {
@@ -209,7 +210,8 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
         task.id,
         input.priority,
         user.id,
-        activityUser
+        activityUser,
+        { onlyIfUnchangedDefault: expected !== undefined },
       );
       if (priorityResult.error) {
         return { success: false, error: priorityResult.error };
@@ -221,7 +223,8 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
         task.id,
         input.estimate,
         user.id,
-        activityUser
+        activityUser,
+        { onlyIfUnchangedDefault: expected !== undefined },
       );
       if (estimateResult.error) {
         return { success: false, error: estimateResult.error };
@@ -241,7 +244,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
       await mutateTaskLabels(
         task.id,
         task.projectId,
-        { add: input.add_labels, remove: input.remove_labels },
+        { add: input.add_labels, remove: input.remove_labels, ...(expected ? { onlyIfUnedited: true } : {}) },
         labelActor
       );
     }

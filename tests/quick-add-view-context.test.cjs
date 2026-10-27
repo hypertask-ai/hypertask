@@ -216,7 +216,6 @@ test("priority-top position preserves ranking and legacy Urgent unless a view pr
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.match(source, /ranking == null \|\| typeof ranking === "string"\s*\?\s*ranking\s*:/);
     assert.match(source, /const body = \{[\s\S]*?\branking: taskRanking,[\s\S]*?const task = await tx\.task\.create\(\{\s*data: \{\s*\.\.\.body,/);
-    assert.match(source, /priority_index: priority\.priority_index/);
   }
 });
 

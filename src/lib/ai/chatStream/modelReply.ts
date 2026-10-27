@@ -28,7 +28,7 @@ import { writeToolNames } from "@/lib/ai/tools/metadata";
 
 import type { StreamState } from "./streamState";
 
-export async function generateModelReply(state: StreamState, inputs: { instructions: string; messages: ModelMessage[]; tools: ToolSet; toolExecutions: ToolExecution[] }) {
+export async function generateModelReply(state: StreamState, inputs: { instructions: string; messages: ModelMessage[]; tools: ToolSet; toolExecutions: ToolExecution[]; onContent?: (content: string) => void }) {
   const { dbUser, heartbeatExecutionId, contextTaskId, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent } = state;
   const { instructions, messages, tools, toolExecutions } = inputs;
   const deferredToolsEnabled = await isFeatureEnabled(HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG, dbUser.id);
@@ -139,6 +139,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         if (state.errorSent || state.cancelled) break;
         if (!chunk) continue;
         chunks.push(chunk);
+        inputs.onContent?.(chunk);
         state.send("content", { content: chunk });
       }
     } catch (error) {
@@ -218,6 +219,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         if (retryText) {
           state.generationFinishedWithError = retry.finishReason === "error";
           chunks.push(retryText);
+          inputs.onContent?.(retryText);
           state.send("content", { content: retryText });
         }
       } catch (retryError) {
@@ -243,6 +245,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       maxToolSteps: MAX_TOOL_STEPS,
       currentUserId: dbUser.id,
     });
+    inputs.onContent?.(fallback);
     state.send("content", { content: fallback });
     chunks.push(fallback);
     state.recordTurnOutcome(
