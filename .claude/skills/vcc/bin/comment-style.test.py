@@ -124,6 +124,12 @@ class CommentStyleTest(unittest.TestCase):
         self.assert_refused("<p><strong>Ready.</strong></p><p>" + "word " * 15
                             + "\n" + "word " * 15 + ".</p>", "25 words")
 
+    def test_markdown_lists_keep_separate_items(self):
+        self.assert_allowed("**Ready.**\n\n- " + "word " * 15
+                            + "\n- " + "word " * 15, "qa", "--markdown")
+        self.assert_refused("**Ready.**\n\n- " + "word " * 15
+                            + "\n  " + "word " * 15, "25 words", "qa", "--markdown")
+
     def test_file_and_equals_forms_are_checked(self):
         source = self.home / "comment.md"
         source.write_text("<p><strong>Sure, fixed.</strong></p>")

@@ -58,6 +58,7 @@ class CommentText(HTMLParser):
 
 def findings(text, markdown=False):
     if markdown:
+        text = "<p>" + re.sub(r"\n[ \t]*\n|(?m:^[ \t]*(?:[-+*]|\d+[.)])[ \t]+)", "</p><p>", text) + "</p>"
         text = re.sub(r"\[([^\]]+)\]\(https://[^\s)]+\)", "<a href='https://link'>link</a>", text)
         text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     parsed = CommentText()
