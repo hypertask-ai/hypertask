@@ -33,6 +33,8 @@ jobs:
           ref: production
           fetch-depth: 1
           persist-credentials: false
+      - name: Install the trusted workflow parser
+        run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
       - name: Mark original guard contexts pending
         if: ${{ !cancelled() }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
@@ -155,6 +157,20 @@ jobs:
         with:
           script: |
             await require('./.github/scripts/pr-title.cjs')({ github, context, core });
+      - name: Check workflow runner policy
+        id: runner-policy
+        if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo, pull_number: context.payload.pull_request.number,
+            });
+            core.setOutput('sha', pr.head.sha);
+            await require('./.github/scripts/ci-runner-policy.cjs').checkPullRequest({ pr, core });
       - name: Publish original guard contexts
         if: ${{ !cancelled() }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
@@ -179,7 +195,9 @@ jobs:
                 core.info(`Skipping stale ${name} verdict; a newer run owns it.`);
                 continue;
               }
-              const passed = result?.outcome === 'success' && Boolean(result.outputs?.sha);
+              const runner = results['runner-policy'];
+              const passed = result?.outcome === 'success' && Boolean(result.outputs?.sha) &&
+                (id !== 'title' || (runner?.outcome === 'success' && runner.outputs?.sha === sha));
               failed ||= !passed;
               await github.rest.repos.createCommitStatus({
                 ...context.repo, sha,
