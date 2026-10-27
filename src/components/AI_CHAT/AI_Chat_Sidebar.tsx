@@ -159,6 +159,7 @@ export const AI_Chat_Sidebar = ({
       await chat.startNewSession();
     }
     if (intent !== intentRef.current) return;
+    if (agentSessionsEnabled) setRosterError(null);
     const mentionDraft = options?.getMentionDraft?.();
     const latest = chatRef.current;
     const leaving = targetRef.current;
