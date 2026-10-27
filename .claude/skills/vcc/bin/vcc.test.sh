@@ -286,7 +286,9 @@ printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n
 
 for kind in qa done ''; do
   for subcommand in comment comments; do
-    args=("$subcommand" add X-1 --text 'src/app/page.tsx /api/ CI OAuth PR #123')
+    text='<p><strong>Ready.</strong></p>'
+    [ -n "$kind" ] || text='src/app/page.tsx /api/ CI OAuth PR #123'
+    args=("$subcommand" add X-1 --text "$text")
     [ -z "$kind" ] || args+=(--kind "$kind")
     allowed bash "$vcc" "${args[@]}"
     expected='stub:'
@@ -295,8 +297,8 @@ for kind in qa done ''; do
     [[ $(< "$T/out") == "$expected" ]] || fail 'non-question arguments changed'
   done
 done
-allowed bash "$vcc" comment add X-1 --kind=qa --file "$T/missing.html"
-printf 'ok qa, done, and untyped comments forward code words unchanged\n'
+question_refused 'cannot read --file' comment add X-1 --kind=qa --file "$T/missing.html"
+printf 'ok human comments validate; untyped agent notes stay unchanged\n'
 
 old_question_7508_295851=$(cat <<'FIXTURE'
 <p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Should HT Product Lead check and approve the agent-access exceptions, with you deciding only the changes that hide data from people?</strong></p><p>Why: some of the 81 agent board reads here are already protected by a check just above them; marking them reviewed changes nothing in the app.</p><p>Yes: HT Product Lead reviews those code checks; changes that hide a board, ticket or comment from a person still come to you, one question per batch.</p><p>No: each batch of them comes to you too.</p><p>Next: claude --resume ce05d8aa-af47-49c9-8593-c7d186e29d77</p>
@@ -317,8 +319,11 @@ FIXTURE
 question_refused 'My recommendation:' comment add X-1 --kind question --text "$old_question_7508_295851"
 fixture "$old_question_7508_295851"
 review_refused 'My recommendation:' task move X-1 --section 'Valentin Review'
-allowed bash "$vcc" comment add X-1 --kind question --text "$rewrite_7508_303933"
+question_refused '25 words' comment add X-1 --kind question --text "$rewrite_7508_303933"
 fixture "$rewrite_7508_303933"
 allowed bash "$vcc" task move X-1 --section 'Valentin Review'
-printf 'ok verbatim old Question refuses and real rewrite passes comment add and newest review\n'
+printf 'ok historical Questions remain readable; new long comments refuse\n'
 printf 'vcc helper guard tests passed\n'
+
+python3 "$(dirname "$0")/comment-style.test.py"
+printf 'comment style boundary ok\n'

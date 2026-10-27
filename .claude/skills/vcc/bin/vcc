@@ -88,12 +88,15 @@ question_comment() {
     esac
     shift
   done
-  [ "$kind" = question ] || return 0
+  case "$kind" in question|qa|done) ;; *) return 0 ;; esac
   if [ -n "$file" ]; then
     text=$(cat -- "$file" 2>/dev/null) || question_refuse 'cannot read --file'
   fi
-  reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
-  [ -z "$reason" ] || question_refuse "$reason"
+  if [ "$kind" = question ]; then
+    reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
+    [ -z "$reason" ] || question_refuse "$reason"
+  fi
+  printf '%s' "$text" | python3 "$(dirname "${BASH_SOURCE[0]}")/comment-style.py" "$markdown" || return 5
 }
 question_comment "$@"
 
