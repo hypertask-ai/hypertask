@@ -73,6 +73,11 @@ that account's own agent, without mentioning the person. The comment must
 create one human inbox item even with quiet-owner mode on. An agent-only
 assignment is not a human assignment. With the flag off, quiet-owner mode
 keeps its previous behavior. Untyped agent chatter and the person's own
-human comments stay quiet. Check the Agents split when the default split
-hides agent updates. Archive the item, reload, and confirm it stays gone.
+human comments stay quiet. Check the Important split, not only All or Agents: typed comments for an
+explicit human assignee must earn the ordinary Important slot. A newer agent
+move must not hide that comment. Keep agent identity, Important permission,
+project split mutes, and stale/done routing intact. For an owner-specific report,
+read that owner's actual inbox through the approved CLI; a QA fixture alone
+does not prove the reported ticket works. Archive the QA item, reload, and
+confirm it stays gone.
 Email recipients must not change: this restoration is inbox-only.
