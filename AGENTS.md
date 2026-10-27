@@ -2,7 +2,7 @@
 
 Start with `/ship`, [CLAUDE.md](CLAUDE.md), and the skill map at [.claude/skills/INDEX.md](.claude/skills/INDEX.md).
 
-[HT Product Lead](.claude/agents/control-role.md) and [Poteto Advisor](.claude/agents/control-role.md) share one harness-neutral control role.
+[HT Product Lead](.claude/agents/product-lead.md) and [Poteto Advisor](.claude/agents/poteto-advisor.md) have separate role references. Shared house rules remain authoritative.
 
 Valentin's own Claude Code and Codex sessions follow the same workflow:
 
