@@ -671,14 +671,17 @@ export async function createAgentRunActivity(
   logCommentHtml?: string,
 ) {
   if (!principal.agentId) return null;
+  const activityIdempotencyKey = idempotencyKey !== null && logCommentHtml !== undefined
+    ? crypto.createHash("sha256").update(JSON.stringify([idempotencyKey, logCommentHtml])).digest("hex")
+    : idempotencyKey;
   const run = await findActivityRun(principal, id);
   if (!run) return null;
   if (run.task) recordAgentBoardScopeMiss(run.task.projectId, "write");
   const exactChatReply = input.type === "RESPONSE" && Boolean(run.chatSession);
   if (exactChatReply && !input.replyToMessageId) throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
 
-  if (idempotencyKey !== null) {
-    const existing = await findIdempotentActivity(run.id, idempotencyKey);
+  if (activityIdempotencyKey !== null) {
+    const existing = await findIdempotentActivity(run.id, activityIdempotencyKey);
     if (existing) return replayCreatedActivity(run, principal, existing, input);
   }
   if (!NONTERMINAL_AGENT_RUN_STATUSES.includes(run.status)) {
@@ -692,7 +695,7 @@ export async function createAgentRunActivity(
     runId: run.id,
     agentId: run.agentId,
     context: activityRunContext(run),
-    idempotencyKey,
+    idempotencyKey: activityIdempotencyKey,
     createdAt: now,
   };
   let activity: AgentRunActivity | null = null;
@@ -777,8 +780,8 @@ export async function createAgentRunActivity(
       });
     }
   } catch (error) {
-    if (idempotencyKey !== null && isUniqueConstraintError(error)) {
-      const existing = await findIdempotentActivity(run.id, idempotencyKey);
+    if (activityIdempotencyKey !== null && isUniqueConstraintError(error)) {
+      const existing = await findIdempotentActivity(run.id, activityIdempotencyKey);
       if (existing) return replayCreatedActivity(run, principal, existing, input);
     }
     if (exactChatReply && run.chatSession && isUniqueConstraintError(error)) {

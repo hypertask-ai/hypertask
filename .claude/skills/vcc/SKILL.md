@@ -15,7 +15,7 @@ You are one of Valentin's own sessions (Claude Code or Codex). He runs one sessi
 - Never write with any other identity, and never with the plain `hypertask` CLI (Valentin's own token; nothing on the board is ever written as him). The plain `hypertask` CLI and `ht GET /mcp/...` are fine for reading.
 - All VCC sessions share the one identity. Every comment's closing `Next:` paragraph ends with "Session: <session name>. Requested by Valentin in a Claude session, <YYYY-MM-DD>, <session link>", so he can tell sessions apart and resume the right one. The session name is the one he gave with /rename.
 - After every board write, read the ticket back (`hypertask task get`) and confirm the column and comment landed.
-- If `vcc` fails, stop and tell Valentin in one line; do not fall back to another identity or his token.
+- If `vcc` fails, stop board writes and save the failure locally with the resume command. Never switch identities or send a session message; resume on the owning ticket when the approved write path works.
 
 ## Start of session
 
