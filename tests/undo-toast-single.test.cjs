@@ -207,6 +207,9 @@ for (const mobile of [true, false]) {
     compactMobileUndo = true;
     t.after(() => { compactMobileUndo = false; });
     const f = await fixture(t, { mobile });
+    await React.act(async () => hotToast.toast.success("Ordinary notification", { duration: Infinity }));
+    const defaultContainer = document.querySelector('[data-rht-toaster="default"]');
+    const ordinaryStyle = defaultContainer.getAttribute("style");
     const undone = [];
     const id = await f.show("Undo remove notification", { id: 7 }, async (data, toastId) => undone.push([data, toastId]));
     const card = f.card();
@@ -216,6 +219,8 @@ for (const mobile of [true, false]) {
     assert.equal(card.parentElement.style[mobile ? "top" : "bottom"], "0px");
     assert.equal(card.classList.contains("max-w-[110px]"), mobile);
     assert.equal(card.classList.contains("flex-col"), mobile);
+    assert.equal(defaultContainer.getAttribute("style"), ordinaryStyle);
+    assert.ok(defaultContainer.textContent.includes("Ordinary notification"));
     assert.equal(container.style.left, mobile ? "16px" : "calc(var(--app-shell-rail-w, 48px) + 8px)");
     for (const button of card.querySelectorAll("button")) {
       if (mobile) assert.ok(button.classList.contains("min-h-[44px]"));
