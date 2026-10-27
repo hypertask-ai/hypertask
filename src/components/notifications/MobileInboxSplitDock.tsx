@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Circle } from "lucide-react";
 import type { InboxTabMeta } from "@/utils/helperFunctions/helperFunctions";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -22,12 +22,14 @@ interface MobileInboxSplitDockProps {
   tabs: MobileInboxSplitDockTab[];
   activeIndex: number;
   onSelect: (index: number) => void;
+  trailingAction?: ReactNode;
 }
 
 const MobileInboxSplitDock = ({
   tabs,
   activeIndex,
   onSelect,
+  trailingAction,
 }: MobileInboxSplitDockProps) => {
   const dockRef = useRef<HTMLElement>(null);
   const dockOwner = useRef({});
@@ -89,11 +91,12 @@ const MobileInboxSplitDock = ({
       aria-label="Inbox splits"
       className="fixed inset-x-0 bottom-0 z-[300] border-t border-border-light-gray-thin bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
     >
+      <div className="flex items-center">
       <div
         ref={scrollerRef}
         role="tablist"
         aria-label="Choose inbox split"
-        className="flex h-16 items-stretch overflow-x-auto overscroll-x-contain px-2 scrollbar-none"
+        className="flex h-16 min-w-0 flex-1 items-stretch overflow-x-auto overscroll-x-contain px-2 scrollbar-none"
       >
         {tabs.map((tab, index) => {
           const active = resolvedActiveIndex === index;
@@ -148,6 +151,8 @@ const MobileInboxSplitDock = ({
             </button>
           );
         })}
+      </div>
+      {trailingAction}
       </div>
     </nav>
   );

@@ -25,6 +25,7 @@ export type InboxZeroRules = {
   threshold: InboxZeroThresholdDays;
   categories: InboxZeroCategories;
   keep: InboxZeroKeep;
+  safeUpdates?: { taskIds: number[]; agentOnly: boolean };
 };
 
 export type InboxZeroCounts = Record<keyof InboxZeroCategories, number>;

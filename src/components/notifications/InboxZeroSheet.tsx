@@ -79,8 +79,11 @@ export const InboxZeroSheetContent = ({
   const [previewRequest, setPreviewRequest] = useState(0);
   const [executing, setExecuting] = useState(false);
   const rules = useMemo<InboxZeroRules>(
-    () => ({ threshold, categories, keep }),
-    [categories, keep, threshold]
+    () => ({
+      threshold, categories, keep,
+      ...(initialRules.safeUpdates ? { safeUpdates: initialRules.safeUpdates } : {}),
+    }),
+    [categories, keep, threshold, initialRules.safeUpdates]
   );
   const thresholdLabel =
     INBOX_ZERO_THRESHOLD_OPTIONS.find((option) => option.days === threshold)
@@ -176,68 +179,75 @@ export const InboxZeroSheetContent = ({
     >
       <div className="bg-modalBackground text-white-black">
         <div className="border-b border-light-black-border-1 px-5 py-4">
-          <h2 className="text-emphasis font-semibold">Get to Inbox Zero</h2>
+          <h2 className="text-emphasis font-semibold">{rules.safeUpdates ? "Archive safe" : "Get to Inbox Zero"}</h2>
           <p className="mt-1 text-dense text-text-light-gray">
-            Archive visible Inbox items that no longer need you. Undoable.
+            {rules.safeUpdates
+              ? "Only moves and edits. Mentions, questions, assignments and comments stay. Undoable."
+              : "Archive visible Inbox items that no longer need you. Undoable."}
           </p>
         </div>
 
         <div className="max-h-[62vh] overflow-y-auto px-5 py-3 text-dense no-scrollbar">
-          <div className="flex items-center justify-between gap-4 border-b border-light-black-border-1 py-3">
-            <span className="font-medium">Archive read notifications older than</span>
-            <select
-              aria-label="Read notification age"
-              className="cursor-pointer rounded-[4px] border-0 bg-active-modal-element px-2 py-1 font-semibold text-white-black outline-none"
-              onChange={(event) =>
-                setThreshold(Number(event.target.value) as InboxZeroThresholdDays)
-              }
-              value={threshold}
-            >
-              {INBOX_ZERO_THRESHOLD_OPTIONS.map((option) => (
-                <option key={option.days} value={option.days}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="py-2">
-            <RuleRow
-              checked={categories.read}
-              count={preview.categoryCounts.read}
-              label={`Read & older than ${thresholdLabel}`}
-              onToggle={() => toggleCategory("read")}
-            />
-            {categoryRows.map((row) => (
-              <RuleRow
-                checked={categories[row.key]}
-                count={preview.categoryCounts[row.key]}
-                key={row.key}
-                label={row.label}
-                onToggle={() => toggleCategory(row.key)}
-              />
-            ))}
-          </div>
-
-          <div className="border-t border-light-black-border-1 py-2">
-            {keepRows.map((row) => (
-              <div
-                className="flex min-h-[36px] items-center justify-between gap-4 px-2"
-                key={row.key}
-              >
-                <span className="font-medium">{row.label}</span>
-                <div className="[&>div]:min-h-0 [&>div]:p-0">
-                  <SettingsToggle
-                    checked={keep[row.key]}
-                    hideLabel
-                    inputId={`inbox-zero-keep-${row.key}`}
-                    label={row.label}
-                    onChange={() => toggleKeep(row.key)}
-                  />
-                </div>
+          {!rules.safeUpdates && (
+            <>
+              <div className="flex items-center justify-between gap-4 border-b border-light-black-border-1 py-3">
+                <span className="font-medium">Archive read notifications older than</span>
+                <select
+                  aria-label="Read notification age"
+                  className="cursor-pointer rounded-[4px] border-0 bg-active-modal-element px-2 py-1 font-semibold text-white-black outline-none"
+                  onChange={(event) =>
+                    setThreshold(Number(event.target.value) as InboxZeroThresholdDays)
+                  }
+                  value={threshold}
+                >
+                  {INBOX_ZERO_THRESHOLD_OPTIONS.map((option) => (
+                    <option key={option.days} value={option.days}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ))}
-          </div>
+
+              <div className="py-2">
+                <RuleRow
+                  checked={categories.read}
+                  count={preview.categoryCounts.read}
+                  label={`Read & older than ${thresholdLabel}`}
+                  onToggle={() => toggleCategory("read")}
+                />
+                {categoryRows.map((row) => (
+                  <RuleRow
+                    checked={categories[row.key]}
+                    count={preview.categoryCounts[row.key]}
+                    key={row.key}
+                    label={row.label}
+                    onToggle={() => toggleCategory(row.key)}
+                  />
+                ))}
+              </div>
+
+              <div className="border-t border-light-black-border-1 py-2">
+                {keepRows.map((row) => (
+                  <div
+                    className="flex min-h-[36px] items-center justify-between gap-4 px-2"
+                    key={row.key}
+                  >
+                    <span className="font-medium">{row.label}</span>
+                    <div className="[&>div]:min-h-0 [&>div]:p-0">
+                      <SettingsToggle
+                        checked={keep[row.key]}
+                        hideLabel
+                        inputId={`inbox-zero-keep-${row.key}`}
+                        label={row.label}
+                        onChange={() => toggleKeep(row.key)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+            </>
+          )}
 
           <p
             aria-live="polite"

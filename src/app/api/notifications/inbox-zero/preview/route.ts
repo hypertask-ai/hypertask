@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8046_ARCHIVE_SAFE_FLAG } from "@/lib/flags/definitions/htpr-8046-archive-safe";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_8047_INBOX_ZERO_AGENT_ACTIONS_FLAG } from "@/lib/flags/definitions/htpr-8047-inbox-zero-agent-actions";
 import {
   evaluateInboxZero,
@@ -30,8 +31,11 @@ export async function POST(request: Request) {
   if (!rules) {
     return NextResponse.json({ message: "Invalid Inbox Zero rules" }, { status: 400 });
   }
+  if (rules.safeUpdates && !(await isFeatureEnabled(HTPR_8046_ARCHIVE_SAFE_FLAG, session.userId))) {
+    return NextResponse.json({ message: "Archive safe is unavailable" }, { status: 404 });
+  }
 
-  const notifications = await loadActiveInboxZeroNotifications(session.userId);
+  const notifications = await loadActiveInboxZeroNotifications(session.userId, undefined, undefined, Boolean(rules.safeUpdates));
   const doneTitlesByProject = await loadInboxZeroDoneTitlesByProject(notifications);
   const { notificationIds: _notificationIds, ...preview } = evaluateInboxZero(
     notifications,
