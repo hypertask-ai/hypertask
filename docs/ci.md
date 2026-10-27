@@ -34,12 +34,12 @@ without printing them and performs no GitHub writes.
 ## PR job budget (YPER4-663)
 
 The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jobs.
-Small guards share runners, not verdicts:
+Small guards share scanner work and trusted metadata:
 
 - `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
 - `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code.
-- Dependabot/fork scans use a trusted completion pass to publish statuses because their PR tokens are read-only. It reads GitHub step conclusions only; it never checks out candidate code. Ordinary same-repo PRs need no extra runner.
-- Each folded guard context is still published through commit statuses. Independent steps continue after a failure; the original context and aggregate job both fail. Trusted publishers skip cancellation, re-read the current head before each status, and also compare the evaluated title for `pr-title`.
+- Scanner checks are native job conclusions for all PRs, including Dependabot and forks. Their read-only tokens need no trusted status-publication pass.
+- The trusted guard publishes one existing required `pr-title` context for outside and title results. Size stays advisory. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - Feature-flag evaluation and all-open reconciliation stay in the original two-job `feature-flag-gate.yml`, globally serialized by `feature-flag-gate-production` with cancellation off. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group. Their original semantic statuses and flag fingerprints are unchanged.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
@@ -473,3 +473,8 @@ whole-fleet savings. Checkout, Actions internals, ticket binding, other
 workflows and exceptional comment writes are excluded. The immutable fixture
 records its production source SHA. Ten simulated pushes recover both a read
 and publication 403 each; a real ten-push burst still requires separate logs.
+
+App-smoke discovery uses the same reset-aware callback retry. Each replay
+starts by rechecking the live head before cancelling older runs. This covers
+the observed discovery-step refusal; the workflow's separate initial shell
+lookups and final report remain separate API consumers.
