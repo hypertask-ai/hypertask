@@ -194,3 +194,17 @@ the global cron merely for testing: it wakes other owners' agents. If no
 isolated heartbeat trigger and execution-step telemetry are available through
 approved product surfaces, record the live four-step case as UNREACHABLE;
 do not substitute mocked SDK results for a live heartbeat.
+
+## Compact automatic ticket context
+
+With `htpr-7856-summary-context`, Current ticket chat and `/api/ai/hyper-mentioned`
+use the stored ticket summary plus the newest 20 comments, in chronological
+order. Missing summaries fall back to description text. Ask a read-only question
+about a recent comment and an older decision retained in the summary; compare
+the answer with the ticket. Full-ticket tools remain available for detail and
+edits. Task Writer retains its full description HTML and 200-comment context.
+The flag-off path retains previous automatic chat context. Use
+`tests/htpr-7856-summary-context.test.cjs` for exact provider-message assertions
+with 200-comment fixtures, both entry points and rollback. A live answer alone
+does not prove the token reduction; compare recorded input usage on equivalent
+workloads before claiming savings.
