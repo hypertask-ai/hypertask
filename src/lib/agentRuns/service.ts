@@ -131,20 +131,13 @@ async function accessibleRunWhere(principal: AgentRunPrincipal, id: string, db: 
 export async function agentRunActivitiesEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
-  return (
-    (await isFeatureEnabled(AGENT_RUN_ACTIVITY_FEATURE_FLAG, principal.userId))
-  );
+  return isFeatureEnabled(AGENT_RUN_ACTIVITY_FEATURE_FLAG, principal.userId);
 }
 
 export async function runtimeAgentRunsEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
-  return (
-    (await isFeatureEnabled(
-      HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
-      principal.userId,
-    ))
-  );
+  return isFeatureEnabled(HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, principal.userId);
 }
 
 export async function createRuntimeAgentRun(
