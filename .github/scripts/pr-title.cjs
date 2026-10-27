@@ -6,7 +6,7 @@ module.exports = async ({ github, context, core, fetchImpl = fetch }) => {
   ];
   const shape = new RegExp(
     '^(?:' + PREFIXES.join('|') + ')-\\d+ \\[(' +
-    TAGS.map(t => t.replace(/[/]/g, '\\/')).join('|') +
+    TAGS.join('|') +
     ')\\] \\S'
   );
 
