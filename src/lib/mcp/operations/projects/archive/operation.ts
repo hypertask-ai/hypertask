@@ -8,10 +8,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits'
 import { updateProjectStatus } from '@/utils/controllers/projects/boardQuota'
-import {
-  HTPR_6470_PROJECT_DELETE_FLAG,
-  isFeatureEnabled,
-} from '@/lib/flags'
 import deleteProject from '@/utils/controllers/projects/delete'
 
 export async function POST(request: NextRequest) {
@@ -65,9 +61,6 @@ export async function POST(request: NextRequest) {
 
     if (ctx.agentId) recordAgentBoardScopeMiss(projectId, "write");
     if (status === 'Deleted') {
-      if (!(await isFeatureEnabled(HTPR_6470_PROJECT_DELETE_FLAG, ctx.user.id))) {
-        return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
-      }
       const response = await deleteProject(projectId, ctx.user.id)
       return NextResponse.json(response.json, { status: response.status })
     }
