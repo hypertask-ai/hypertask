@@ -371,6 +371,7 @@ async function provisionGeneratedBoard(
         data: {
           displayName: "Hyper AI",
           userId: owner.userId,
+          boardHomeTeamId: owner.teamId,
         },
         select: { id: true },
       });

@@ -166,6 +166,10 @@ function matchAgent(agent, where) {
         return scalar(agent.revokedAt, value, key);
       case "OR":
         return value.some((branch) => matchAgent(agent, branch));
+      case "AND":
+        return value.every((branch) => matchAgent(agent, branch));
+      case "crossTeamHomeTeamId":
+        return scalar(agent.crossTeamHomeTeamId ?? null, value, key);
       case "members":
         return agent.projects.some((project) =>
           matchAgentMembership(project, someWhere(value, "agent member")),
@@ -211,6 +215,8 @@ function matchSession(session, where) {
       }
       case "OR":
         return value.some((branch) => matchSession(session, branch));
+      case "AND":
+        return value.every((branch) => matchSession(session, branch));
       case "agent": {
         // The same agent rule, applied to the thread's agent: a thread whose
         // agent this caller may no longer see must not come back.

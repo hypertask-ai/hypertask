@@ -62,6 +62,9 @@ function loadCreateModule({
     if (request === "@/lib/mcp/managementKeyTeamScope") {
       return { agentWithinTeamWhere };
     }
+    if (request === "@/lib/agents/crossTeam") {
+      return { crossTeamAgentsEnabled: async () => false };
+    }
     if (request === "@/lib/prisma") {
       // esModuleInterop's __importDefault wraps a plain object as
       // { default: mod } itself, so the mock must NOT pre-wrap it.
@@ -178,6 +181,10 @@ test("a team-scoped key cannot create an agent on another team's board", async (
         duplicateWhere = where;
         return null;
       },
+    },
+    $transaction: async (run, options) => {
+      assert.deepEqual(options, { isolationLevel: "Serializable" });
+      return run(prisma);
     },
   };
   const { createAgentForUser } = loadCreateModule({

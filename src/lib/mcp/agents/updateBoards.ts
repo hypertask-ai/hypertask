@@ -2,6 +2,8 @@ import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentS
 import type { Prisma } from '@prisma/client'
 import { getAgentBoardScope } from '@/lib/mcp/agents/delegatedAccess'
 
+import { crossTeamAgentsEnabled, ownerTeamWhere } from '@/lib/agents/crossTeam'
+
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 
 const MAX_PROJECT_UPDATES = 100
@@ -31,7 +33,14 @@ type AgentRead = {
     select: {
       id: true
       userId: true
+      revokedAt: true
+      archivedAt: true
+      credentialTeamId: true
+      credentialTeamAccessBinding: true
+      boardHomeTeamId: true
+      crossTeamHomeTeamId: true
       members: {
+        orderBy: { id: 'asc' }
         select: {
           projectId: true
           project: { select: { teamId: true } }
@@ -41,6 +50,12 @@ type AgentRead = {
   }): Promise<{
     id: string
     userId: number
+    revokedAt: Date | null
+    archivedAt: Date | null
+    credentialTeamId: string | null
+    credentialTeamAccessBinding: string | null
+    boardHomeTeamId: string | null
+    crossTeamHomeTeamId: string | null
     members: Membership[]
   } | null>
 }
@@ -59,7 +74,7 @@ type MemberWrite = {
 }
 
 type AgentBoardUpdateTransaction = {
-  agent: AgentRead
+  agent: AgentRead & Pick<Prisma.TransactionClient["agent"], "update">
   member: MemberWrite
   project: Pick<Prisma.TransactionClient["project"], "findFirst">
 }
@@ -145,13 +160,21 @@ export async function updateOwnedAgentBoards(
     try {
       return await database.$transaction(
         async (tx) => {
+          const enabled = await crossTeamAgentsEnabled(userId)
           const { agent: agentStore, member } = tx
           const agent = await agentStore.findFirst({
             where: { ...scopeWhere, id: input.agentId, userId },
             select: {
               id: true,
               userId: true,
+              revokedAt: true,
+              archivedAt: true,
+              credentialTeamId: true,
+              credentialTeamAccessBinding: true,
+              boardHomeTeamId: true,
+              crossTeamHomeTeamId: true,
               members: {
+                orderBy: { id: 'asc' },
                 select: { projectId: true, project: { select: { teamId: true } } },
               },
             },
@@ -187,7 +210,6 @@ export async function updateOwnedAgentBoards(
           const existing = new Map(
             agent.members.map((membership) => [membership.projectId, membership])
           )
-          const removeSet = new Set(input.removeProjectIds)
           const toRemove = input.removeProjectIds.filter((id) => existing.has(id))
           const toAdd = input.addProjectIds.filter((id) => !existing.has(id))
           const additions = await Promise.all(
@@ -207,31 +229,69 @@ export async function updateOwnedAgentBoards(
                   'add_project_ids'
                 )
               }
-              if (teamId && project.teamId !== teamId) {
+              if (
+                (teamId && project.teamId !== teamId) ||
+                (agent.credentialTeamId && project.teamId !== agent.credentialTeamId) ||
+                (agent.credentialTeamAccessBinding && !agent.credentialTeamId)
+              ) {
                 throw new AgentBoardUpdateError(
                   `You do not have access to project ${id}`,
                   403,
                   'add_project_ids'
                 )
               }
+              if (enabled || agent.crossTeamHomeTeamId) {
+                const ownerTeamBoard = await tx.project.findFirst({
+                  where: { id, status: 'Normal', team: ownerTeamWhere(userId) },
+                  select: { id: true },
+                })
+                if (!ownerTeamBoard || agent.revokedAt || agent.archivedAt) {
+                  throw new AgentBoardUpdateError(
+                    `You do not have access to project ${id}`,
+                    403,
+                    'add_project_ids'
+                  )
+                }
+              }
               return project
             })
           )
 
-          if (additions.length) {
+          const homeTeamId = agent.crossTeamHomeTeamId ?? agent.boardHomeTeamId ??
+            agent.members.find((membership) => membership.project.teamId)?.project.teamId ??
+            additions[0]?.teamId
+          const expandsTeams = additions.some((project) =>
+            homeTeamId != null && project.teamId !== homeTeamId
+          ) || new Set([
+            ...agent.members.map((membership) => membership.project.teamId),
+            ...additions.map((project) => project.teamId),
+          ].filter((teamId) => teamId != null)).size > 1
+          if (additions.length && !enabled) {
             const finalTeams = [
-              ...agent.members
-                .filter((membership) => !removeSet.has(membership.projectId))
+              ...agent.members.filter((membership) => !input.removeProjectIds.includes(membership.projectId))
                 .map((membership) => membership.project.teamId),
               ...additions.map((project) => project.teamId),
             ]
-            if (finalTeams.includes(null) || new Set(finalTeams).size > 1) {
+            const invalidTeam = agent.crossTeamHomeTeamId
+              ? additions.some((project) => project.teamId !== agent.crossTeamHomeTeamId)
+              : finalTeams.includes(null) || new Set(finalTeams).size > 1
+            if (invalidTeam) {
               throw new AgentBoardUpdateError(
                 'Agents can only belong to boards in one team',
                 400,
                 'add_project_ids'
               )
             }
+          }
+          const markExpanded = additions.length > 0 && expandsTeams && !agent.crossTeamHomeTeamId
+          if (homeTeamId && ((!agent.boardHomeTeamId && (toAdd.length || toRemove.length)) || markExpanded)) {
+            await agentStore.update({
+              where: { id: agent.id },
+              data: {
+                ...(!agent.boardHomeTeamId ? { boardHomeTeamId: homeTeamId } : {}),
+                ...(markExpanded ? { crossTeamHomeTeamId: homeTeamId } : {}),
+              },
+            })
           }
 
           const removedSet = new Set(toRemove)

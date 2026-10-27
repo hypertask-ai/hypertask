@@ -112,7 +112,7 @@ const routes = {
 function reset() {
   viewer = { userId: 6, source: "legacy" }; enabled = true; shared = true; writes = []; messages = []; participants = {}; activityReads = 0;
   board = { id: 15, ownerId: 6, teamId: "team-a", status: "Normal", members: [{ userId: 7, agentId: null, status: "Accepted" }] };
-  agent = { id: "agent-1", userId: 6, displayName: "Runner", photoURL: null, visibility: "TEAM", runtimeType: "EXTERNAL", revokedAt: null, archivedAt: null,
+  agent = { id: "agent-1", userId: 6, displayName: "Runner", photoURL: null, visibility: "TEAM", runtimeType: "EXTERNAL", revokedAt: null, archivedAt: null, crossTeamHomeTeamId: null,
     heartbeatAt: new Date(), agentWebhookSubscription: null, members: [{ projectId: 15, status: "Accepted", project: board }] };
   session = { id: "session-1", userId: 6, agentId: agent.id, agent, teamId: "team-a" };
 }

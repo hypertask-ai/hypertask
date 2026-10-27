@@ -6,6 +6,8 @@ import {
 } from "@/utils/controllers/agents/boardMembers";
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import prisma from "@/lib/prisma";
+import { crossTeamAgentsEnabled } from "@/lib/agents/crossTeam";
 
 
 export async function GET(request: NextRequest) {
@@ -36,11 +38,23 @@ export async function GET(request: NextRequest) {
   }
 
   const boardAgentRows = await getBoardAgentMembers(projectIdNumber, userId);
-  const teamIdByAgentId = await getAgentTeamIds(
+  const crossTeamEnabled = await crossTeamAgentsEnabled(userId);
+  const teamIdByAgentId = crossTeamEnabled ? null : await getAgentTeamIds(
     boardAgentRows.map((row) => row.agent.id)
   );
+  const provenance = !crossTeamEnabled && boardAgentRows.length > 0
+    ? await prisma.agent.findMany({
+        where: { id: { in: boardAgentRows.map((row) => row.agent.id) } },
+        select: { id: true, crossTeamHomeTeamId: true },
+      })
+    : [];
+  for (const agent of provenance) {
+    if (agent.crossTeamHomeTeamId) teamIdByAgentId?.set(agent.id, agent.crossTeamHomeTeamId);
+  }
   const agents = boardAgentRows
-    .filter((row) => teamIdByAgentId.get(row.agent.id) === project.teamId)
+    .filter((row) => crossTeamEnabled
+      ? row.status === "Accepted"
+      : teamIdByAgentId?.get(row.agent.id) === project.teamId)
     .map((row) => {
       return {
         ...row.agent,

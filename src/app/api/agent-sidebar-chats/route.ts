@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       ...(agentId ? { id: agentId } : {}),
       ...accessibleAgentWhere(viewer.userId),
       members: { some: { projectId, status: "Accepted" } },
+      AND: [{ OR: [{ crossTeamHomeTeamId: null }, { userId: viewer.userId }] }],
     },
     orderBy: [{ displayName: "asc" }, { id: "asc" }],
     select: {

@@ -29,14 +29,17 @@ function controllerHarness({ owner = false, member = true, ownsAgent = true, rev
       },
     },
     agent: {
+      update: async ({ data }) => Object.assign(agent, data),
       findFirst: async ({ where }) => {
         assert.deepEqual(where, { id: agent.id, userId: 42, revokedAt: null });
         return ownsAgent && !revoked ? agent : null;
       },
     },
   };
+  prisma.$transaction = async (run) => run(prisma);
   const controller = load("src/utils/controllers/agents/boardMembers.ts", {
     "@/lib/prisma": { default: prisma },
+    "@/lib/agents/crossTeam": { crossTeamAgentsEnabled: async () => false },
     "@/lib/mcp/agents/delegatedAccess": {
       assertAgentBoardInviteScope: () => assert.fail("Human sessions do not need delegated access"),
     },
@@ -271,6 +274,7 @@ async function withPicker({ agents, addError } = {}, run) {
       Object.defineProperty(global, name, { configurable: true, writable: true, value });
     }
     stub("src/lib/state.tsx", { useRecoilValue: () => ({ id: 42 }) });
+    stub("src/hooks/useFlag.ts", { useFlag: () => false });
     stub("src/store/index.ts", { currentUserAtom: {} });
     stub("src/hooks/MultiPages/useAgents.ts", {
       boardAgentsQueryKey: (id) => ["boardAgents", id],
@@ -362,7 +366,7 @@ test("picker: arrow keys wrap over enabled agents only and Enter opens confirmat
 
 test("picker: confirmed Add calls the existing mutation, refreshes the board, toasts and closes", async () => {
   await withPicker({ agents: [agent("Docs Bot")] }, async ({ key, calls, invalidations, successes, closes, queries }) => {
-    assert.deepEqual(queries[0].queryKey, ["htpr-7577-owned-agents", 42]);
+    assert.deepEqual(queries[0].queryKey, ["htpr-7577-owned-agents", 42, "team-a", false]);
     await key(13);
     await key(13);
     assert.deepEqual(calls, [{ projectId: 15, agentId: "Docs Bot" }]);

@@ -1,3 +1,4 @@
+import { crossTeamRequestFence } from "@/lib/auth/crossTeamContext"
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from '@/lib/auth/agentScope'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import { requireRole } from '@/lib/mcp/agents/scopes'
@@ -25,7 +26,7 @@ export async function checkAgentBoardDelegation(
 
 type AgentBoardScopeMember = {
   findMany(args: {
-    where: { agentId: string; projectId: { in: number[] }; status?: 'Accepted'; agent?: { userId: number; revokedAt: null } }
+    where: { agentId: string; projectId: { in: number[] }; status?: 'Accepted'; agent?: { userId: number; revokedAt: null }; project?: import("@prisma/client").Prisma.ProjectWhereInput }
     select: { projectId: true }
   }): Promise<Array<{ projectId: number }>>
 }
@@ -38,6 +39,7 @@ export async function getAgentBoardScope(
 ): Promise<Set<number>> {
   const rows = await member.findMany({
     where: {
+      ...(crossTeamRequestFence() ? { project: crossTeamRequestFence()! } : {}),
       agentId: actingAgentId,
       projectId: { in: projectIds },
       ...(agentScopeEnforced() ? { status: 'Accepted' as const, agent: { userId, revokedAt: null } } : {}),

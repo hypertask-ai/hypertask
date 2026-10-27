@@ -8,9 +8,10 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
   for (const actor of ['bound', 'unbound']) {
     test(`${mode} ${actor}: run reads, stops, activities and replay refuse B while A and projectless own runs work`, async () => {
       const f = teamFixture(mode, actor);
+      f.agent.crossTeamHomeTeamId = null;
       const now = new Date();
       const activities = [150, 250].map(id => ({ id: `activity-${id}`, runId: `run-${id}`, type: 'THOUGHT', text: `${id === 150 ? 'A' : 'B'}-activity`, link: null, options: null, createdAt: now, idempotencyKey: 'fixture', selectedAt: null }));
-      const sessions = [{ id: 'own', agentId: f.agent.id, userId: f.user.id, taskId: null, projectId: null, teamId: null }, { id: 'linked-b', agentId: f.agent.id, userId: f.user.id, taskId: 250, projectId: null, teamId: null }];
+      const sessions = [{ id: 'own', agentId: f.agent.id, userId: f.user.id, agent: f.agent, taskId: null, projectId: null, teamId: null }, { id: 'linked-b', agentId: f.agent.id, userId: f.user.id, agent: f.agent, taskId: 250, projectId: null, teamId: null }];
       const runs = [f.tasks[0], f.tasks[3]].map(task => ({ id: `run-${task.id}`, agentId: f.agent.id, agent: { ...f.agent, user: f.user }, taskId: task.id, task, chatSessionId: null, chatSession: null, status: 'ACTIVE', trigger: 'RUNTIME', createdAt: now, lastActivityAt: now, stoppedById: null, activities: activities.filter(a => a.runId === `run-${task.id}`) }));
       runs.push(...sessions.map(session => ({ ...runs[0], id: `run-${session.id}`, taskId: null, task: null, chatSessionId: session.id, chatSession: session })));
       f.prisma.chatSession = f.model(sessions, 'session');
@@ -47,12 +48,13 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
 
     test(`${mode} ${actor}: own chat and AI session list/messages/rename/delete check actual task links, not nullable projectId`, async () => {
       const f = teamFixture(mode, actor);
+      f.agent.crossTeamHomeTeamId = null;
       const sessions = [
         { id: 'a', projectId: 15, taskId: 150, teamId: 'team-a', agentId: f.agent.id, userId: f.user.id },
         { id: 'b', projectId: 25, taskId: 250, teamId: 'team-b', agentId: f.agent.id, userId: f.user.id },
         { id: 'linked-b', projectId: null, taskId: 250, teamId: null, agentId: f.agent.id, userId: f.user.id },
         { id: 'own', projectId: null, taskId: null, teamId: null, agentId: f.agent.id, userId: f.user.id },
-      ].map(s => ({ ...s, title: `${s.id}-title`, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'), messages: [] }));
+      ].map(s => ({ ...s, agent: f.agent, title: `${s.id}-title`, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'), messages: [] }));
       const messages = sessions.map(session => ({ id: `message-${session.id}`, sessionId: session.id, session, content: `${session.id}-body`, role: 'human', createdAt: new Date('2026-01-01'), attachments: [] }));
       f.prisma.$queryRaw = async () => [];
       f.prisma.chatSession = f.model(sessions, 'session');

@@ -2653,6 +2653,8 @@ model Agent {
   mcpTokenHash              String?   @db.VarChar(64)
   mcpTokenJti               String?
   mcpTokenExpiresAt         DateTime?
+  boardHomeTeamId             String?
+  crossTeamHomeTeamId         String?
   credentialTeamId            String?
   credentialTeamAccessBinding String?
   // Monotonic credential/runtime generation. Heartbeats from a destroyed or

@@ -1,5 +1,7 @@
+import type { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { crossTeamAgentsEnabled, ownerTeamWhere } from "@/lib/agents/crossTeam";
 import { maskAgentProviderKey } from "@/lib/agents/maskAgentProviderKey";
 import {
   agentTokenCredentialFields,
@@ -56,10 +58,30 @@ export async function GET(request: NextRequest) {
     HTPR_7574_OWNED_UNATTACHED_AGENTS_FLAG,
     currentUserId,
   );
-  const teamMember = { members: { some: { project: { teamId } } } };
+  const crossTeamEnabled = await crossTeamAgentsEnabled(currentUserId);
+  const canListOwnedAcrossTeams = crossTeamEnabled && Boolean(
+    await prisma.team.findFirst({
+      where: { id: teamId, ...ownerTeamWhere(currentUserId) },
+      select: { id: true },
+    }),
+  );
+  const teamMember: Prisma.AgentWhereInput = {
+    members: {
+      some: {
+        ...(crossTeamEnabled ? { status: "Accepted" } : {}),
+        project: { teamId },
+      },
+    },
+  };
   const ownedUnattached = {
     userId: currentUserId,
     members: { none: {} },
+    revokedAt: null,
+    archivedAt: null,
+  };
+
+  const ownedEligible = {
+    userId: currentUserId,
     revokedAt: null,
     archivedAt: null,
   };
@@ -68,7 +90,13 @@ export async function GET(request: NextRequest) {
     where: {
       AND: [
         boardAgentVisibilityWhere(currentUserId),
-        includeOwnedUnattached ? { OR: [teamMember, ownedUnattached] } : teamMember,
+        ...(crossTeamEnabled ? [{ OR: [
+          { credentialTeamId: teamId },
+          { credentialTeamId: null, credentialTeamAccessBinding: null },
+        ] }] : []),
+        canListOwnedAcrossTeams
+          ? { OR: [teamMember, ownedEligible] }
+          : includeOwnedUnattached ? { OR: [teamMember, ownedUnattached] } : teamMember,
       ],
     },
     orderBy: { createdAt: "desc" },
@@ -79,6 +107,7 @@ export async function GET(request: NextRequest) {
       photoURL: true,
       createdAt: true,
       revokedAt: true,
+      crossTeamHomeTeamId: true,
       userId: true,
       mcpTokenJti: true,
       mcpTokenExpiresAt: true,
@@ -93,6 +122,7 @@ export async function GET(request: NextRequest) {
         select: { provider: true, ciphertext: true },
       },
       members: {
+        ...(crossTeamEnabled ? { where: { status: "Accepted", project: { teamId } } } : {}),
         orderBy: { id: "asc" },
         select: {
           project: {
@@ -105,10 +135,13 @@ export async function GET(request: NextRequest) {
 
   const scopedAgents = agents.filter(
     (agent) =>
-      (includeOwnedUnattached && agent.userId === currentUserId && agent.members.length === 0) ||
-      getAgentTeamId(
-        agent.members.map(({ project: memberProject }) => memberProject.teamId),
-      ) === teamId,
+      crossTeamEnabled ||
+      (agent.crossTeamHomeTeamId
+        ? agent.crossTeamHomeTeamId === teamId
+        : (includeOwnedUnattached && agent.userId === currentUserId && agent.members.length === 0) ||
+          getAgentTeamId(
+            agent.members.map(({ project: memberProject }) => memberProject.teamId),
+          ) === teamId),
   );
 
   const agentIds = scopedAgents.map((a) => a.id);
@@ -121,7 +154,7 @@ export async function GET(request: NextRequest) {
   if (agentIds.length > 0) {
     const lastPosts = await prisma.comment.groupBy({
       by: ["agentId"],
-      where: { agentId: { in: agentIds } },
+      where: { agentId: { in: agentIds }, task: { project: { teamId } } },
       _max: { createdAt: true },
     });
 
@@ -157,7 +190,7 @@ export async function GET(request: NextRequest) {
     currentUserId,
   );
   const agentsWithOAuth = scopedAgents.map(
-    ({ members, permissions, mcpTokenJti, mcpTokenExpiresAt, byokApiKeys, ...a }) => ({
+    ({ members, permissions, mcpTokenJti, mcpTokenExpiresAt, byokApiKeys, crossTeamHomeTeamId: _crossTeamHomeTeamId, ...a }) => ({
       ...a,
       ...(agentRolesEnabled
         ? { role: (permissions as AgentScopes | null)?.role ?? "write" }
@@ -291,6 +324,7 @@ export async function POST(request: NextRequest) {
       data: {
         displayName,
         userId: currentUserId,
+        boardHomeTeamId: teamId,
         runtimeType,
         ...(photoURL ? { photoURL } : {}),
         ...(prompt ? { prompt } : {}),

@@ -23,10 +23,12 @@ export async function openAgentChat({ userId, agentId, sidebarProjectId, actingA
       id: agentId,
       revokedAt: null,
       ...accessibleAgentWhere(userId),
+      AND: [{ OR: [{ crossTeamHomeTeamId: null }, { userId }] }],
     },
-    select: { id: true, displayName: true, userId: true },
+    select: { id: true, displayName: true, userId: true, crossTeamHomeTeamId: true },
   });
-  if (!agent) {
+  if (!agent || agent.crossTeamHomeTeamId != null &&
+      (agent.userId !== userId || actingAgentId && actingAgentId !== agent.id)) {
     return denied;
   }
 
@@ -41,7 +43,7 @@ export async function openAgentChat({ userId, agentId, sidebarProjectId, actingA
       : [];
   const mayOpen =
     agent.userId === userId ||
-    (sharedConversationEnabled &&
+    (agent.crossTeamHomeTeamId == null && sharedConversationEnabled &&
       teamId !== null &&
       teamIds.includes(teamId));
   if (!mayOpen) {

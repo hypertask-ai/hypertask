@@ -17,10 +17,16 @@ function fakeDatabase(leases, serializationFailures = 0) {
   let deletes = 0;
   let attempts = 0;
   let leaseWhere;
+  const homeUpdates = [];
+  const agent = {
+    userId: 6, boardHomeTeamId: null, crossTeamHomeTeamId: null,
+    members: [{ project: { teamId: "team-a" } }],
+  };
   const tx = {
     project: { findFirst: async () => ({ id: 15, ownerId: 6 }) },
+    agent: { update: async ({ data }) => { homeUpdates.push(data); Object.assign(agent, data); } },
     member: {
-      findFirst: async () => ({ id: 44, agent: { userId: 6 } }),
+      findFirst: async () => ({ id: 44, agent }),
       delete: async () => {
         deletes += 1;
       },
@@ -45,6 +51,7 @@ function fakeDatabase(leases, serializationFailures = 0) {
     return run(tx);
   };
   return {
+    homeUpdates,
     deletes: () => deletes,
     attempts: () => attempts,
     leaseWhere: () => leaseWhere,
@@ -69,6 +76,7 @@ test("board removal stops for a live lease on that board", async () => {
   assert.deepEqual(state.leaseWhere().task, { projectId: 15 });
   assert.ok(state.leaseWhere().expiresAt.gt instanceof Date);
   assert.equal(state.deletes(), 0);
+  assert.deepEqual(state.homeUpdates, []);
 });
 
 test("expired and other-board leases do not block removal", async () => {
@@ -79,6 +87,7 @@ test("expired and other-board leases do not block removal", async () => {
     const state = fakeDatabase([unrelated]);
     assert.deepEqual(await removeAgentFromBoard(15, "agent-1", 6), { ok: true });
     assert.equal(state.deletes(), 1);
+    assert.deepEqual(state.homeUpdates, [{ boardHomeTeamId: "team-a" }]);
   }
 });
 
@@ -94,4 +103,5 @@ test("a serialization conflict retries and observes the new lease", async () => 
   assert.equal(result.ok, false);
   assert.equal(result.status, 409);
   assert.equal(state.deletes(), 0);
+  assert.deepEqual(state.homeUpdates, []);
 });

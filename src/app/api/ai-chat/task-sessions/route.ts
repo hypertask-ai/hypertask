@@ -1,3 +1,4 @@
+import { chatAudienceWhere } from "@/lib/agents/chatContentScope";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import prisma from "@/lib/prisma";
@@ -43,6 +44,7 @@ export async function GET(request: NextRequest) {
     const sessions = await prisma.chatSession.findMany({
       where: {
         userId: user.id,
+        ...chatAudienceWhere({ userId: user.id, agentId: currentUser?.agentId }),
         taskId: parsedTaskId.data,
         messages: { some: {} },
       },

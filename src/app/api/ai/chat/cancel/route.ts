@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "A valid session_id is required" }, { status: 400 });
   }
 
-  const sidebarAccess = await loadSidebarChatRequest(request, parsed.data.session_id);
+  const sidebarAccess = await loadSidebarChatRequest(request, parsed.data.session_id, { userId: user.id });
   if (!sidebarAccess.ok) return NextResponse.json({ success: false, error: sidebarAccess.error }, { status: sidebarAccess.status });
 
   try {

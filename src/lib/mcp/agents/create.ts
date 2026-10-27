@@ -12,6 +12,7 @@ import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 import prisma from '@/lib/prisma'
+import { crossTeamAgentsEnabled, ownerTeamWhere } from '@/lib/agents/crossTeam'
 import { getAccessibleAgentBoard } from '@/utils/controllers/agents/boardMembers'
 import { lockTeamAgentSeed } from '@/utils/controllers/agents/ensureDefaultTeamAgent'
 import {
@@ -190,51 +191,64 @@ export async function createAgentForUser(
     )
   }
 
-  const projects = []
-  for (const projectId of projectIds) {
-    const project = await getAccessibleAgentBoard(projectId, user.id)
-    if (!project) {
+  const create = () => prisma.$transaction(async (tx) => {
+    const enabled = await crossTeamAgentsEnabled(user.id)
+    const projects = []
+    for (const projectId of projectIds) {
+      const project = await getAccessibleAgentBoard(projectId, user.id, undefined, undefined, tx)
+      if (!project) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `You do not have access to project ${projectId}`,
+          },
+          { status: 403 }
+        )
+      }
+      if (enabled) {
+        const ownerTeamBoard = await tx.project.findFirst({
+          where: { id: projectId, status: 'Normal', team: ownerTeamWhere(user.id) },
+          select: { id: true },
+        })
+        if (!ownerTeamBoard) {
+          return NextResponse.json(
+            { success: false, error: `You do not have access to project ${projectId}` },
+            { status: 403 }
+          )
+        }
+      }
+      projects.push(project)
+    }
+    if (teamId && projects.some((project) => project.teamId !== teamId)) {
       return NextResponse.json(
         {
           success: false,
-          error: `You do not have access to project ${projectId}`,
+          error: 'A team-scoped key can create agents only in its own team',
         },
         { status: 403 }
       )
     }
-    projects.push(project)
-  }
-  if (teamId && projects.some((project) => project.teamId !== teamId)) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'A team-scoped key can create agents only in its own team',
-      },
-      { status: 403 }
-    )
-  }
 
-  const memberTeamIds = projects.map((project) => project.teamId)
-  if (memberTeamIds.some((teamId) => teamId === null)) {
-    return fieldError(
-      'invalid_field',
-      'project_ids',
-      'Agents require a team board'
-    )
-  }
-  const targetTeamId = getAgentTeamId(memberTeamIds)
-  if (
-    targetTeamId &&
-    !canAttachAgentToTeam(memberTeamIds, targetTeamId)
-  ) {
-    return fieldError(
-      'invalid_field',
-      'project_ids',
-      'Agents can only belong to boards in one team'
-    )
-  }
+    const memberTeamIds = projects.map((project) => project.teamId)
+    if (memberTeamIds.some((teamId) => teamId === null)) {
+      return fieldError(
+        'invalid_field',
+        'project_ids',
+        'Agents require a team board'
+      )
+    }
+    const targetTeamId = getAgentTeamId(memberTeamIds)
+    if (
+      !enabled && targetTeamId &&
+      !canAttachAgentToTeam(memberTeamIds, targetTeamId)
+    ) {
+      return fieldError(
+        'invalid_field',
+        'project_ids',
+        'Agents can only belong to boards in one team'
+      )
+    }
 
-  const result = await prisma.$transaction(async (tx) => {
     if (targetTeamId) {
       await lockTeamAgentSeed(tx, user.id, targetTeamId)
     }
@@ -243,6 +257,10 @@ export async function createAgentForUser(
         displayName,
         userId: user.id,
         permissions: { role },
+        boardHomeTeamId: targetTeamId,
+        ...(new Set(memberTeamIds).size > 1
+          ? { crossTeamHomeTeamId: targetTeamId }
+          : {}),
       },
       select: {
         id: true,
@@ -280,7 +298,20 @@ export async function createAgentForUser(
     }
 
     return { agent: createdAgent, token }
-  })
+  }, { isolationLevel: 'Serializable' })
+
+  let result: Awaited<ReturnType<typeof create>>
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      result = await create()
+      break
+    } catch (error) {
+      const serializationConflict = typeof error === 'object' && error !== null &&
+        'code' in error && error.code === 'P2034'
+      if (attempt >= 2 || !serializationConflict) throw error
+    }
+  }
+  if (result instanceof NextResponse) return result
 
   return NextResponse.json(
     {

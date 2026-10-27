@@ -171,7 +171,7 @@ for (const mode of ['WATCH', 'ENFORCE']) {
             const expected = kind === 'human' || valid && (mode === 'WATCH' || kind === 'granted' && board === 15);
             assert.equal(allowed, expected);
             if (allowed && kind !== 'human') f.scope.recordAgentBoardScopeMiss(board);
-            assert.equal(f.state.grantReads, mode === 'WATCH' && kind !== 'human' ? 1 : 0);
+            assert.equal(f.state.grantReads, mode === 'WATCH' && valid && kind !== 'human' ? 1 : 0);
             assert.equal(f.state.events.length, mode === 'WATCH' && valid && kind !== 'human' && (board === 2128 || kind !== 'granted') ? 1 : 0);
           });
         });

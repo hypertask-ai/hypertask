@@ -15,6 +15,7 @@ export function addExistingAgentGroups(
   projectId: number,
   boardTeamId: string | null,
   keyword: string,
+  crossTeamEnabled = false,
 ) {
   const onThisTeam: OwnedAgentForBoard[] = [];
   const notOnAnyBoard: OwnedAgentForBoard[] = [];
@@ -37,8 +38,10 @@ export function addExistingAgentGroups(
     } else if (agent.boards.length === 0) {
       notOnAnyBoard.push(agent);
     } else if (
-      canAttachAgentToTeam(agent.boards.map((board) => board.teamId), boardTeamId) &&
-      agent.boards.some((board) => board.teamId === boardTeamId)
+      crossTeamEnabled || (
+        canAttachAgentToTeam(agent.boards.map((board) => board.teamId), boardTeamId) &&
+        agent.boards.some((board) => board.teamId === boardTeamId)
+      )
     ) {
       onThisTeam.push(agent);
     } else {

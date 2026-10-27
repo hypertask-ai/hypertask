@@ -1,3 +1,4 @@
+import { crossTeamRequestFence } from "@/lib/auth/crossTeamContext";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { Prisma, Status, ViewVisibility } from "@prisma/client";
@@ -51,6 +52,8 @@ export const intersectProjectTeamScope = (
   existing: Prisma.ProjectWhereInput,
   teamScope?: AgentTokenTeamScope | null,
 ): Prisma.ProjectWhereInput => {
+  const fence = crossTeamRequestFence();
+  if (fence) existing = { AND: [existing, fence] };
   if (teamScope == null) return existing;
   if (typeof teamScope.teamId !== "string" || !teamScope.teamId.trim() ||
       typeof teamScope.accessBinding !== "string" || !teamScope.accessBinding.trim()) return { id: { in: [] } };

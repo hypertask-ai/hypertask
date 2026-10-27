@@ -46,7 +46,7 @@ function hydrate(row, args = {}) {
 }
 function fixture() {
   const user = { id: 6, email: 'scope@example.invalid', displayName: 'Owner', photoURL: null, mcpTokensRevokedAt: null };
-  const agent = { id: 'scope-agent', userId: user.id, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null, mcpTokenJti: null, runtimeGeneration: 1, permissions: { role: 'write' } };
+  const agent = { crossTeamHomeTeamId: null, archivedAt: null, id: 'scope-agent', userId: user.id, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null, mcpTokenJti: null, runtimeGeneration: 1, permissions: { role: 'write' } };
   const projects = [15, 4060, 2128].map(id => ({ id, ownerId: user.id, owner: user, createdAt: new Date(), section: [], labels: [], _count: { members: 1, tasks: 1 }, teamId: 'team', status: 'Normal', title: `Board ${id}`, name: `Board ${id}`, members: id === 2128 ? [] : [{ userId: user.id, agentId: agent.id, status: 'Accepted', agent }] }));
   const tasks = projects.map(project => ({ id: project.id * 10, projectId: project.id, project, userId: user.id, user, status: 'Normal', title: `Task ${project.id}`, description: 'scope fixture', description_: { content: 'scope fixture' }, section: 'Todo', sectionId: project.id, uniqueIndex: 1, ticketNumber: `HTPR-${project.id}`, parentTaskId: null, parentTask: null, subTasks: [], Reminders: [], assignees: [], followers: [], taskLabels: [], attachments: [], pullRequests: [], customFieldValues: [], savedContent: [], agent: null, priority: null, estimate: null, _count: { comments: 0 }, createdAt: new Date(), updatedAt: new Date(), sectionChangedAt: new Date() }));
   const notifications = tasks.map(task => ({ id: task.id, userId: user.id, agentId: null, taskId: task.id, projectId: task.projectId, task, project: task.project, status: 'Normal', type: 'Mentioned', seen: false, archivedAt: null, fromUserId: 7, fromAgentId: null, createdAt: new Date(), fromUser: { displayName: 'Sender' }, fromAgent: null }));
@@ -85,14 +85,17 @@ function fixture() {
     state.grantReads++;
     return projects.flatMap(project => project.members.map(member => ({ ...member, projectId: project.id }))).filter(row => matches(row, args.where)).map(row => hydrate(row, args));
   } };
+  const crossTeamContext = load('src/lib/auth/crossTeamContext.ts', {});
   const scope = load('src/lib/auth/agentScope.ts', {
+    '@/lib/auth/crossTeamContext': crossTeamContext,
     '@/lib/prisma': { default: prisma },
     '@/lib/flags': { isFeatureEnabled: async () => { state.flagReads++; if (state.flagError) throw state.flagError; return state.enforce; } },
     '@/lib/telemetry/signupAnalytics': { recordServerCapture: capture => state.events.push(capture) },
   });
-  const scopedAccess = load('src/utils/controllers/projects/getAllIncludes.ts', { '@/lib/auth/agentScope': scope });
+  const scopedAccess = load('src/utils/controllers/projects/getAllIncludes.ts', { '@/lib/auth/agentScope': scope, '@/lib/auth/crossTeamContext': crossTeamContext });
   const mocks = {
     '@/lib/auth/agentScope': scope,
+    '@/lib/auth/crossTeamContext': crossTeamContext,
     '@/lib/prisma': { default: prisma },
     '@/utils/controllers/projects/getAllIncludes': scopedAccess,
     '@/lib/flags': { isFeatureEnabled: async () => false },
