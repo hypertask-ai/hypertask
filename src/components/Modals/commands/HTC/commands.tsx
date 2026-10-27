@@ -1,3 +1,4 @@
+import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
 import {
   useCallback,
   useContext,
@@ -110,6 +111,7 @@ const Commands = (props: Props) => {
     scope,
     focusProxy,
   } = props;
+  const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   let selectedTasksFirst = false;
   if (kanbanSelectAllEnabled && contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
@@ -254,6 +256,14 @@ const Commands = (props: Props) => {
       };
     }
     if (scopeCommand) boardCommands.unshift(scopeCommand);
+    if (columnArchiveEnabled && currentProject && (contextOptions?.context === "Kanban" || contextOptions?.context === "Task")) {
+      boardCommands.push({
+        key: "archiveColumn",
+        name: "Archive all tickets in a column",
+        commandMode: CommandMode.ArchiveColumn,
+        keywords: "archive every all tickets tasks column section bulk clear",
+      });
+    }
     const myTasksPickerCommands: ICommandList[] = [];
     if (onMyTasks) {
       if (myTasksScopesEnabled) myTasksPickerCommands.push({
@@ -426,6 +436,7 @@ const Commands = (props: Props) => {
       ? pinCommentGroupFirst(rankedGroups)
       : rankedGroups;
   }, [
+    columnArchiveEnabled,
     appShellRailOn,
     kanbanSelectAllEnabled,
     selectedTasksFirst,
@@ -809,7 +820,9 @@ const Commands = (props: Props) => {
       handleMouseLeave={handleMouseLeave}
       handleMouseEnter={handleMouseEnter}
       commandRef={commandRef}
-      onClickHandler={updateCommandFrequency}
+      onClickHandler={columnArchiveEnabled ? updateCommandFrequency : (command: ICommandList) => {
+        if (command.commandMode !== CommandMode.ArchiveColumn) updateCommandFrequency(command);
+      }}
       isMobile={isMobile}
     />
   );

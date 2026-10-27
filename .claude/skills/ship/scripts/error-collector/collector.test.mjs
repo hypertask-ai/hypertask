@@ -731,6 +731,43 @@ check('reporting', 'SSH client resets under session scopes are noise, real failu
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
 }));
 
+check('reporting', 'a one-shot gate observer exiting 1 on purpose is noise, other failed units still file (YPER4-833)', () => withHarness(async h => {
+  const vps = { service: 'vps-journal', board: 4060, route: 'init.scope', stack: '' };
+  const failed = unit => `init.scope: Failed to start ${unit} - /usr/bin/bash /home/valentin/projects/ceo/runs/IGSH-976/observe-once.sh.`;
+  h.events([
+    event({ ...vps, message: failed('igsh976-observe-180200.service') }),
+    event({ ...vps, message: failed('igsh976-observe-181819.service') }),
+    event({ ...vps, message: failed('igsh976-collect-180200.service') }),
+    event({ ...vps, message: failed('error-collector.service') }),
+    event({ service: 'vercel', message: failed('igsh976-observe-180200.service') }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 2);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 2);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+}));
+
+check('reporting', 'SSH daemon identifier fallback ignores client resets but retains genuine failures (YPER4-541)', () => withHarness(async h => {
+  const row = (message, overrides = {}) => JSON.stringify({ SYSLOG_IDENTIFIER: 'sshd', MESSAGE: message, __REALTIME_TIMESTAMP: String((NOW - 1000) * 1000), ...overrides });
+  const events = journal.parseJournal([
+    row('fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer'),
+    row('fatal: ssh_packet_send_debug: send DEBUG: Broken pipe'),
+    row('error: bind [127.0.0.1]:7979: Address already in use'),
+    row('fatal: ssh_packet_send_debug: send DEBUG: Permission denied'),
+    row('fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer', { SYSLOG_IDENTIFIER: 'database' }),
+    row('fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer', { _SYSTEMD_UNIT: 'sshd.service' }),
+  ].join('\n'));
+  h.events(events);
+  await h.run();
+  assert.equal(creates(h).length, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 3);
+  assert.ok(creates(h).some(call => call.description.includes('Address already in use')));
+  assert.ok(creates(h).some(call => call.description.includes('Permission denied')));
+  assert.ok(creates(h).some(call => call.description.includes('database: fatal: ssh_packet_send_debug')));
+}));
+
 check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures still file', () => withHarness(async h => {
   const message = 'run-u2003644.scope: (7.6.7:C:80) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: 1990196 in AppDomain: None.  Error Message: Operation canceled.';
   const vps = { service: 'vps-journal', board: 4060, route: 'run-u2003644.scope', stack: '' };

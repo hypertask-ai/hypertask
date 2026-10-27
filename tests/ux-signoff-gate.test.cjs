@@ -2217,3 +2217,130 @@ test('YPER4-627: reused UI with no new component file passes without a wireframe
   assert.equal((await decision({ files: [modified, added], comments: [wireframe(), yes()] })).state, 'success', 'still allowed: the named component after his yes');
   assert.equal((await decision({ title: 'No ticket here', files: [modified] })).state, 'failure', 'still refused: a title with no ticket');
 });
+
+for (const approval of ['ticket', 'parent']) for (const cause of ['rate limit', 'network', 'HTTP 503']) for (const revoke of [false, true]) {
+  test(`YPER4-630: ${approval}: ${cause}: ${revoke ? 'withdrawn approval is refused' : 'unchanged approval stays allowed'} after a GitHub wait between same-ticket PRs`, async () => {
+    const { run } = await gate;
+    const fixture = apiFixture({
+      prs: [pr(1, { title: 'HTPR-1 [FEATURE] First UI' }), pr(2, { title: 'HTPR-1 [FEATURE] Second UI' })],
+      files: [modified, added],
+    });
+    let waited = false;
+    let limited = false;
+    let commentReads = 0;
+    let parentReads = 0;
+    const waits = [];
+    const output = [];
+    const fetchImpl = async (url, options) => {
+      const parsed = new URL(String(url));
+      if (parsed.hostname === 'api.github.com') {
+        const endpoint = parsed.pathname.slice(1) + parsed.search;
+        if (endpoint.endsWith('/pulls/2/files?per_page=100&page=1') && !limited) {
+          limited = true;
+          waited = true;
+          if (cause === 'network') throw new Error('fixture connection reset');
+          return cause === 'HTTP 503' ? response({}, 503) : response({ message: 'rate limit' }, 429, { 'retry-after': '1' });
+        }
+        if (options.method === 'POST') {
+          return response(await fixture.github(endpoint, { method: 'POST', body: JSON.parse(options.body) }));
+        }
+        return response(await fixture.github(endpoint));
+      }
+      assert.equal(options.headers.Authorization, 'Bearer hypertask-fixture');
+      if (parsed.pathname === '/api/mcp/tasks') {
+        parentReads++;
+        return ticketResponse(url, approval === 'parent' ? 'HTPR-2' : null);
+      }
+      const approvedTicket = approval === 'parent' ? 'HTPR-2' : 'HTPR-1';
+      if (parsed.searchParams.get('ticket_number') !== approvedTicket) return response({ success: true, comments: [], nextCursor: null });
+      commentReads++;
+      return response({ success: true, comments: [wireframe(), yes({ text: waited && revoke ? 'no, stop' : 'yes go' })], nextCursor: null });
+    };
+    assert.equal(await run(['--reconcile'], {
+      env, fetchImpl, sleep: async (ms) => { waits.push(ms); waited = true; },
+      log: (line) => output.push(JSON.parse(line)),
+    }), 0);
+    assert.equal(commentReads, 2);
+    if (approval === 'parent') assert.equal(parentReads, 2);
+    assert.deepEqual(waits, [1000]);
+    assert.deepEqual(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.body.state),
+      ['success', revoke ? 'failure' : 'success']);
+    assert.deepEqual(output.map((item) => item.state), ['success', revoke ? 'failure' : 'success']);
+  });
+}
+
+for (const cause of ['network', 'HTTP 503']) {
+  test(`YPER4-630: noWait never retries ${cause} after evaluating approval`, async () => {
+    const { run } = await gate;
+    const fixture = apiFixture({ prs: [pr(1, { title: 'HTPR-1 [FEATURE] UI' })], files: [modified, added] });
+    let prReads = 0;
+    const waits = [];
+    const fetchImpl = async (url, options) => {
+      const parsed = new URL(String(url));
+      if (parsed.hostname !== 'api.github.com') return parsed.pathname === '/api/mcp/tasks'
+        ? ticketResponse(url) : response({ success: true, comments: [wireframe(), yes()], nextCursor: null });
+      const endpoint = parsed.pathname.slice(1) + parsed.search;
+      if (endpoint.endsWith('/pulls/1') && ++prReads === 2) {
+        if (cause === 'network') throw new Error('fixture connection reset');
+        return response({}, 503);
+      }
+      return response(await fixture.github(endpoint, options));
+    };
+    assert.equal(await run(['--reconcile'], { env, fetchImpl, sleep: async (ms) => waits.push(ms), log: () => {} }), 2);
+    assert.equal(prReads, 2);
+    assert.deepEqual(waits, []);
+    assert.deepEqual(fixture.calls.filter((call) => call.method === 'POST'), []);
+  });
+}
+
+test('YPER4-630: gh fallback discards cached approval across a rate-limit wait', async () => {
+  const { run } = await gate;
+  const directory = mkdtempSync(path.join(tmpdir(), 'ux-gh-wait-'));
+  const originalPath = process.env.PATH;
+  try {
+    const prs = [pr(1, { title: 'HTPR-1 [FEATURE] First' }), pr(2, { title: 'HTPR-1 [FEATURE] Second' })];
+    const state = path.join(directory, 'state.json');
+    writeFileSync(state, JSON.stringify({ prs, files: [modified, added], limited: false, posts: [] }));
+    writeFileSync(path.join(directory, 'gh'), `#!${process.execPath}
+const fs = require('node:fs');
+const state = ${JSON.stringify(state)};
+const fixture = JSON.parse(fs.readFileSync(state));
+const args = process.argv.slice(2);
+const endpoint = args[args.indexOf('--method') + 2];
+let data;
+if (args.includes('POST')) {
+  fixture.posts.push(JSON.parse(fs.readFileSync(0, 'utf8')));
+  data = {};
+} else if (endpoint.includes('/pulls?')) data = fixture.prs;
+else if (endpoint.includes('/statuses?')) data = [];
+else if (endpoint.includes('/pulls/2/files?') && !fixture.limited) {
+  fixture.limited = true;
+  fs.writeFileSync(state, JSON.stringify(fixture));
+  process.stdout.write('HTTP/2.0 429 Too Many Requests\\r\\nRetry-After: 1\\r\\n\\r\\n{}');
+  process.exit(1);
+} else if (endpoint.includes('/files?')) data = fixture.files;
+else data = fixture.prs.find((pr) => pr.number === Number(endpoint.split('/').at(-1)));
+fs.writeFileSync(state, JSON.stringify(fixture));
+process.stdout.write('HTTP/2.0 200 OK\\r\\n\\r\\n' + JSON.stringify(data));
+`, { mode: 0o700 });
+    process.env.PATH = directory + path.delimiter + originalPath;
+    let waited = false;
+    let commentReads = 0;
+    const waits = [];
+    assert.equal(await run(['--reconcile'], {
+      env: { ...env, GH_TOKEN: '' },
+      fetchImpl: async (url) => {
+        if (new URL(String(url)).pathname === '/api/mcp/tasks') return ticketResponse(url);
+        commentReads++;
+        return response({ success: true, comments: [wireframe(), yes({ text: waited ? 'no, stop' : 'yes' })], nextCursor: null });
+      },
+      sleep: async (ms) => { waits.push(ms); waited = true; }, log: () => {},
+    }), 0);
+    assert.equal(commentReads, 2);
+    assert.deepEqual(waits, [1000]);
+    assert.deepEqual(JSON.parse(readFileSync(state)).posts.map((post) => post.state), ['success', 'failure']);
+  } finally {
+    process.env.PATH = originalPath;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

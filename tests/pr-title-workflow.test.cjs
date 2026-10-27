@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
 const yaml = require("js-yaml");
 
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const checkTitle = require("../.github/scripts/pr-title.cjs");
 const TAGS = [
   "BUGFIX",
   "FEATURE",
@@ -24,30 +24,35 @@ async function runTitleCheck(title) {
   const workflow = yaml.load(
     await readFile(".github/workflows/pr-guards-trusted.yml", "utf8"),
   );
-  const script = workflow.jobs["pr-guards-trusted"].steps.find(step => step.id === "title").with.script;
+  assert.match(workflow.jobs["pr-guards-trusted"].steps.find(step => step.id === "title").with.script, /pr-title\.cjs/);
   const failures = [];
   const outputs = {};
 
-  await new AsyncFunction("github", "context", "core", script)(
-    {
+  await checkTitle({
+    github: {
       rest: {
         pulls: {
-          get: async () => ({ data: { title, head: { sha: "a".repeat(40) }, user: { login: "owner" } } }),
+          get: async () => ({ data: {
+            title,
+            head: { sha: "a".repeat(40), repo: { full_name: "fixture/title-rule" } },
+            base: { ref: "production", repo: { full_name: "hypertask-ai/hypertask" } },
+            user: { login: "owner" },
+          } }),
         },
       },
     },
-    {
+    context: {
       payload: { pull_request: { number: 43 } },
       repo: { owner: "hypertask-ai", repo: "hypertask" },
     },
-    {
+    core: {
       info() {},
       setOutput(name, value) { outputs[name] = value; },
       setFailed(message) {
         failures.push(message);
       },
     },
-  );
+  });
 
   assert.deepEqual(outputs, { sha: "a".repeat(40), title });
   return failures;

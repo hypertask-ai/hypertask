@@ -190,7 +190,7 @@ const TableView = ({
     columnWidths, setColumnWidths, titleHeaderRef, enableMyTasksBulkSelection,
   });
   const {
-  crossBoardPrioritySortEnabled, isPrioritySort, savedViewPrioritySort, rows, buildCommandContext,
+  isPrioritySort, savedViewPrioritySort, rows, buildCommandContext,
   focusRowElement, focusTo, expandSection,
   } = useTableRows({
     sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
@@ -361,8 +361,7 @@ const TableView = ({
           {(shouldFlattenSortedRows(
             Boolean(_currentProject),
             sortState.length > 0,
-            isPrioritySort,
-            crossBoardPrioritySortEnabled
+            isPrioritySort
           ) || savedViewPrioritySort) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">

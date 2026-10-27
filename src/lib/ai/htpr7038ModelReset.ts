@@ -1,16 +1,11 @@
 import { cache } from "react";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG } from "@/lib/flags/keys";
 import { getRedis } from "@/lib/redis";
 
-export type Htpr7038ModelResetResult = "disabled" | "done" | "reset" | "failed";
+export type Htpr7038ModelResetResult = "done" | "reset" | "failed";
 
 export const ensureHtpr7038ModelReset = cache(async (userId: number): Promise<Htpr7038ModelResetResult> => {
   try {
-    if (!(await isFeatureEnabled(HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG, userId))) {
-      return "disabled";
-    }
     const done = await prisma.htpr7038ModelChoiceResetDone.findUnique({
       where: { userId },
       select: { userId: true },
