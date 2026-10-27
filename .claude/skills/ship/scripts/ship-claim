@@ -2,7 +2,9 @@
 # ship-claim: the whole claim step, with a race check (YPER4-264).
 #   ship-claim <TICKET> ["<resume command>"]            claim, re-read the comments, step back if another runner claimed first
 #   ship-claim decide <RESUME_ID> <comments.json> [idle-ids-file]   pure decision from a saved comments read (tests use this)
-# Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error.
+#   ship-claim hold <TICKET>                            read-only: would the open-PR hold refuse this claim?
+# Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error,
+#   4 HOLD (this RUNNER n still has an open PR on its own branch: finish that PR, claim nothing new).
 # Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id, then log ids.
 # Ownership is the session resume id in the comment text, not the agent name. Assignment is never
 # consulted (a claimer may have posted but not assigned yet). A competing claim older than 6 h
@@ -56,6 +58,31 @@ decide() {
       end' "$2"
 }
 
+# Open-PR hold (Valentin, 2026-10-27: "stay on the PR until they are unblocked to actually ship it and not pick up new stuff").
+# Only for SHIP_SESSION_NAME "RUNNER n". Its PRs are open hypertask PRs whose branch names it (runner<n> or runner-<n>
+# as a whole word). Claiming the ticket of one of those PRs is allowed; anything else is refused. A failed read refuses.
+hold_check() {
+  local t=$1 rn open
+  [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
+  rn=${BASH_REMATCH[1]}
+  open=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title) \
+    || { echo "ship-claim: HOLD. Cannot read open PRs, so no new claim for RUNNER $rn. Retry later." >&2; return 4; }
+  HELD=$(jq -r --arg n "$rn" --arg t "$t" '
+    [.[] | select(.headRefName | test("(^|[/_-])runner-?" + $n + "($|[/_-])"; "i"))] as $m
+    | if any($m[]; (.title | ascii_upcase | startswith($t + " ")) or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])")))
+      then "" else ($m | map("https://github.com/hypertask-ai/hypertask/pull/\(.number)") | join(" ")) end' <<<"$open") \
+    || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
+  [ -z "$HELD" ] && return 0
+  echo "ship-claim: HOLD. RUNNER $rn still has open PRs: $HELD"
+  echo "ship-claim: do NOT claim $t or any other ticket. Drive one of these PRs to merged, live and Done first."
+  return 4
+}
+
+if [ "${1:-}" = hold ]; then
+  [[ ${2:-} =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim hold <TICKET>" >&2; exit 2; }
+  hold_check "$2"; rc=$?; [ "$rc" = 0 ] && echo "ship-claim: no hold for ${SHIP_SESSION_NAME:-this session} on $2"; exit "$rc"
+fi
+
 if [ "${1:-}" = decide ]; then
   [ $# -ge 3 ] || { echo "usage: ship-claim decide <resume-id> <comments.json> [idle-ids-file]" >&2; exit 2; }
   jq -e '.comments | type == "array"' "$3" >/dev/null 2>&1 || { echo "ship-claim: $3 is not readable comments JSON" >&2; exit 2; }
@@ -73,6 +100,8 @@ CSID=${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}
 [ -n "$RESUME" ] || { [ -n "$CSID" ] && RESUME="codex resume $CSID"; }
 [ -n "$RESUME" ] || { echo "ship-claim: no session id found; pass the resume command: ship-claim $T \"<resume command>\"" >&2; exit 2; }
 RID=${RESUME##* }
+
+hold_check "$T" || exit $?
 
 if [[ $T == HTPR-* ]]; then
   task=$("$HT" tasks get "$T" --json) || { echo "ship-claim: cannot read alert before claiming" >&2; exit 2; }
