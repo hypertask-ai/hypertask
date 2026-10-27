@@ -1,6 +1,4 @@
 import prisma from "@/lib/prisma";
-import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6354_AI_CHAT_ALERTS_FLAG } from "@/lib/flags/keys";
 import { reportError } from "@/lib/errors/reportError";
 import { deliverManagerAlert } from "./manager";
 import { claimDelivery, evaluateAlerts, finishDelivery, type AlertSample } from "./store";
@@ -47,26 +45,16 @@ export async function recordAiChatAlertSample(turn: {
 }) {
   const environment = process.env.VERCEL_ENV;
   if (environment !== "production" && environment !== "preview") return;
-  try {
-    if (!(await isFeatureEnabled(HTPR_6354_AI_CHAT_ALERTS_FLAG, turn.userId))) return;
-    if (!Number.isFinite(turn.latencyMs) || turn.latencyMs < 0) return;
-    await runAlertCycle(environment, {
-      latencyMs: Math.min(2_147_483_647, Math.round(turn.latencyMs)),
-      statusCode: turn.outcome === "failed" ? 500 : turn.outcome === "cancelled" ? 0 : 200,
-    });
-  } catch {
-    await reportAlertFailure(environment, "flag-check");
-  }
+  if (!Number.isFinite(turn.latencyMs) || turn.latencyMs < 0) return;
+  await runAlertCycle(environment, {
+    latencyMs: Math.min(2_147_483_647, Math.round(turn.latencyMs)),
+    statusCode: turn.outcome === "failed" ? 500 : turn.outcome === "cancelled" ? 0 : 200,
+  });
 }
 
 export async function sweepAiChatAlerts() {
   if (process.env.VERCEL_ENV !== "production") return;
-  try {
-    if (!(await isFeatureEnabled(HTPR_6354_AI_CHAT_ALERTS_FLAG, FEATURE_FLAG_OWNER_USER_ID))) return;
-    for (const environment of ["production", "preview"] as const) {
-      await runAlertCycle(environment);
-    }
-  } catch {
-    await reportAlertFailure("production", "flag-check");
+  for (const environment of ["production", "preview"] as const) {
+    await runAlertCycle(environment);
   }
 }
