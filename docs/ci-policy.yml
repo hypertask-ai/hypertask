@@ -1,4 +1,4 @@
-version: 10
+version: 11
 last_updated: 2026-10-27
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
@@ -322,6 +322,19 @@ policies:
     producer_hold_requires_independent_release_session: true
   deploys:
     merge_to_production_deploys_via_vercel: true
+    ignored_build_step:
+      ticket: https://app.hypertask.ai/detail/project-4060/871
+      command: node scripts/vercel-ignore-build.cjs
+      baseline: VERCEL_GIT_PREVIOUS_SHA
+      candidate: VERCEL_GIT_COMMIT_SHA
+      skip_exit_code: 0
+      build_exit_code: 1
+      skip_paths: ["docs/**", ".claude/**", ".agents/skills/**", "skills/**", ".github/**", "tests/**", "e2e/**", "root Markdown"]
+      unknown_or_empty_comparison: build
+      rename_detection: disabled
+      health_comparison: same_script_between_live_and_tip
+      health_empty_tree_comparison: skip
+      scheduled_health_checks: unchanged
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
     automatic_rollback:
