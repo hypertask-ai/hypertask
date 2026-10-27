@@ -97,7 +97,7 @@ function chatStreamSource() {
         return;
       }
       if (ts.isCallExpression(node) && node.expression.getText(parsed) === "createTaskUpdater") {
-        edits.push([node.getStart(parsed), node.end, updater]);
+        edits.push([node.getStart(parsed), node.end, `((expected = ${node.arguments[2]?.getText(parsed) ?? "undefined"}) => ${updater})()`]);
         return;
       }
       ts.forEachChild(node, visit);
