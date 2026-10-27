@@ -232,7 +232,6 @@
     "tests/smart-splits.test.cjs",
     "tests/starred-global-view-layout.test.cjs",
     "tests/stripe-checkout-authorization.test.cjs",
-    "tests/style-guide-lint-pipeline.test.cjs",
     "tests/subtask-default-setting.test.cjs",
     "tests/switch-account-modal-styling.test.cjs",
     "tests/table-ctrl-e-archive.test.cjs",
@@ -277,5 +276,5 @@
     "tests/yper4-600-node-runtime-log.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 276
+  "count": 275
 }
