@@ -37,7 +37,7 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   ),
 ])
 
-export type ErrorHints = { ticketNumberShape?: boolean; renamedField?: boolean; fields?: readonly string[] }
+export type ErrorHints = { ticketNumberShape?: boolean; renamedField?: boolean; nearestField?: boolean; fields?: readonly string[] }
 
 export function actionableToolError(error: unknown, hints: ErrorHints = {}): string {
   if (error instanceof z.ZodError) {
@@ -59,7 +59,8 @@ export function actionableToolError(error: unknown, hints: ErrorHints = {}): str
               .filter(({ key, snake }) => snake !== key && hints.fields?.includes(snake))
               .map(({ key, snake }) => ` Use ${snake} instead of ${key}.`)
           : []
-        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}${renamed.join('')}`
+        const fieldHint = hints.nearestField && 'fieldHint' in issue ? issue.fieldHint : undefined
+        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}${renamed.join('')}${typeof fieldHint === 'string' && fieldHint.trim() ? ` ${fieldHint}` : ''}`
       }
       if (field === 'input.user_id.user_ids.agent_id.assign_self') {
         return issue.message.replace(/\.$/, '')
