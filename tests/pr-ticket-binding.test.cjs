@@ -5,11 +5,11 @@ const yaml = require('js-yaml');
 
 const workflow = yaml.load(readFileSync('.github/workflows/pr-guards-trusted.yml', 'utf8'));
 const step = workflow.jobs['pr-guards-trusted'].steps.find(step => step.id === 'title');
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const checkTitle = require('../.github/scripts/pr-title.cjs');
 const repo = 'hypertask-ai/hypertask';
 
 async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base = repo,
-  login = 'runner', state = 'open', token = 'fixture-token', status = 200, result, fetchError } = {}) {
+  login = 'runner', dispatch = false, prNumber = 123, state = 'open', token = 'fixture-token', status = 200, result, fetchError } = {}) {
   const writes = [];
   const failures = [];
   const outputs = {};
@@ -18,22 +18,22 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
   const previous = process.env.HYPERTASK_MCP_TOKEN;
   process.env.HYPERTASK_MCP_TOKEN = token;
   try {
-    await new AsyncFunction('github', 'context', 'core', 'fetch', step.with.script)(
-      { rest: { pulls: { get: async () => ({ data: {
+    await checkTitle({
+      github: { rest: { pulls: { get: async () => ({ data: {
         number: 123, title, state, user: { login },
         head: { sha: 'a'.repeat(40), repo: { full_name: head } },
         base: { ref: 'production', repo: { full_name: base } },
       } }) } } },
-      { repo: { owner: 'hypertask-ai', repo: 'hypertask' }, payload: { pull_request: { number: 123, title: 'stale payload' } } },
-      { info() {}, setOutput: (key, value) => { outputs[key] = value; }, setFailed: message => failures.push(message) },
-      async (endpoint, options) => {
+      context: { repo: { owner: 'hypertask-ai', repo: 'hypertask' }, payload: dispatch ? { inputs: { pr_number: String(prNumber) } } : { pull_request: { number: prNumber, title: 'stale payload' } } },
+      core: { info() {}, setOutput: (key, value) => { outputs[key] = value; }, setFailed: message => failures.push(message) },
+      fetchImpl: async (endpoint, options) => {
         writes.push({ endpoint, options });
         if (fetchError) throw fetchError;
         return { ok: status === 200, status, json: async () => result ?? {
           success: true, tasks: [{ ticketNumber: ticket, pullRequests: [{ url }] }],
         } };
       },
-    );
+    });
     return { writes, failures, outputs };
   } finally {
     if (previous === undefined) delete process.env.HYPERTASK_MCP_TOKEN;
@@ -97,4 +97,21 @@ test('ticketed runner bots bind while unticketed dependency bots stay exempt', a
   const dependency = await run({ login: 'dependabot[bot]', title: 'Bump a dependency' });
   assert.deepEqual(dependency.writes, []);
   assert.deepEqual(dependency.failures, []);
+});
+
+test('production manual CI uses the same binding entry and refuses malformed PR numbers', async () => {
+  const job = workflow.jobs['bind-ticket'];
+  assert.equal(job.if, "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'");
+  const admitted = new Function('github', `return (${job.if});`);
+  assert.equal(admitted({ event_name: 'workflow_dispatch', ref: 'refs/heads/production' }), true);
+  assert.equal(admitted({ event_name: 'workflow_dispatch', ref: 'refs/heads/untrusted' }), false);
+  assert.equal(admitted({ event_name: 'pull_request', ref: 'refs/heads/production' }), false);
+  assert.equal(job.steps[0].with.ref, 'production');
+  assert.equal(job.steps[0].with['persist-credentials'], false);
+  assert.equal(job.steps[1].with.script, step.with.script);
+  const manual = await run({ dispatch: true, login: 'hypertask-runners[bot]' });
+  assert.deepEqual(JSON.parse(manual.writes[0].options.body), {
+    ticket_number: 'YPER4-731', pull_request_url: 'https://github.com/hypertask-ai/hypertask/pull/123',
+  });
+  await assert.rejects(run({ dispatch: true, prNumber: 'invalid' }), /Invalid PR number/);
 });

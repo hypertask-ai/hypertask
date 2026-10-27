@@ -3,6 +3,12 @@ name: PR Guards Trusted
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Same-repository PR to link to its title ticket
+        required: true
+        type: string
   workflow_run:
     workflows: [PR Guards]
     types: [completed]
@@ -148,95 +154,7 @@ jobs:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
         with:
           script: |
-            // YPER4 = Hypertask Infra board (project 4060): plumbing work
-            // (agent farm, CI, deploy safety) lives there, not on board 15,
-            // so its ticket ids need the same shape rule as HTPR/HYFA
-            // (Valentin, 2026-09-27 infra-board rule; supervisor decision,
-            // 2026-09-29, on YPER4-17).
-            const PREFIXES = ['HTPR', 'HYFA', 'YPER4'];
-            const TAGS = [
-              'BUGFIX', 'FEATURE', 'IMPROVE', 'CLI/MCP/AI', 'SPEED', 'FEEDBACK',
-              'DASH', 'QA', 'BOARD', 'COST', 'PLAN', 'INFRA', 'REFACTOR',
-            ];
-            const shape = new RegExp(
-              '^(?:' + PREFIXES.join('|') + ')-\\d+ \\[(' +
-              TAGS.map(t => t.replace(/[/]/g, '\\/')).join('|') +
-              ')\\] \\S'
-            );
-
-            const prNumber = context.payload.pull_request?.number;
-            if (!prNumber) {
-              core.info('No pull_request payload; skipping title check.');
-              return;
-            }
-
-            // Read from the API, not the webhook payload: an edited title
-            // arrives stale on a re-run and would fail a PR that is now correct.
-            const { data: pr } = await github.rest.pulls.get({
-              ...context.repo,
-              pull_number: prNumber,
-            });
-
-            core.setOutput('sha', pr.head.sha);
-            core.setOutput('title', pr.title);
-
-            if (pr.user.login.endsWith('[bot]') && !shape.test(pr.title)) {
-              core.info(`Skipping ${pr.user.login}: bots do not follow the agent title rule.`);
-              return;
-            }
-
-            // Auto-revert PRs carry GitHub's generated title. A rollback is
-            // time-critical and must not stall on the agent title rule.
-            if (/^Revert "/.test(pr.title)) {
-              core.info(`Skipping revert PR title: ${pr.title}`);
-              return;
-            }
-
-            if (shape.test(pr.title)) {
-              const repository = `${context.repo.owner}/${context.repo.repo}`;
-              if (pr.base.ref !== 'production' ||
-                  pr.base.repo?.full_name !== repository || pr.head.repo?.full_name !== repository) {
-                core.info('Skipping ticket binding outside a same-repository production PR.');
-                return;
-              }
-              const token = process.env.HYPERTASK_MCP_TOKEN;
-              if (!token) throw new Error('HYPERTASK_MCP_TOKEN is missing; ticket binding cannot run.');
-              const ticket = pr.title.split(' ')[0];
-              const url = `https://github.com/${repository}/pull/${pr.number}`;
-              const response = await fetch('https://app.hypertask.ai/api/mcp/tasks/update', {
-                method: 'POST',
-                redirect: 'error',
-                signal: AbortSignal.timeout(30_000),
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticket_number: ticket, pull_request_url: url }),
-              });
-              if (!response.ok) throw new Error(`Ticket binding returned HTTP ${response.status}`);
-              const result = await response.json();
-              if (result.success !== true || result.tasks?.length !== 1 ||
-                  result.tasks[0].ticketNumber !== ticket ||
-                  !result.tasks[0].pullRequests?.some(link => link.url === url)) {
-                throw new Error('Ticket binding was not confirmed by the app.');
-              }
-              core.info(`Title OK: ${pr.title}; linked ${ticket} to ${url}`);
-              return;
-            }
-
-            core.setFailed(
-              [
-                `Pull request title does not match the required shape.`,
-                ``,
-                `  got:      ${pr.title}`,
-                `  expected: (HTPR|HYFA|YPER4)-<n> [TAG] <summary>`,
-                ``,
-                `Valid tags: ${TAGS.join(', ')}`,
-                ``,
-                `Example: HTPR-5626 [INFRA] Move every job off GitHub-hosted runners`,
-                `         HYFA-43 [INFRA] Add Factory acceptance routes`,
-                `         YPER4-17 [INFRA] Step 4: rules enforced in code`,
-                ``,
-                `Edit the title and this check re-runs on its own.`,
-              ].join('\n')
-            );
+            await require('./.github/scripts/pr-title.cjs')({ github, context, core });
       - name: Publish original guard contexts
         if: ${{ !cancelled() }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
@@ -271,6 +189,22 @@ jobs:
               });
             }
             if (failed) core.setFailed('One or more guards failed.');
+
+  bind-ticket:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+        with:
+          script: |
+            await require('./.github/scripts/pr-title.cjs')({ github, context, core });
 
   scan-completion:
     if: >-
