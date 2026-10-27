@@ -1,5 +1,5 @@
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7856_SUMMARY_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7856-summary-context";
+import { HTPR_7856_SUMMARY_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";

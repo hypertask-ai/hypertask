@@ -1,8 +1,7 @@
 
 
-import { HTPR_7856_SUMMARY_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7856-summary-context";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/keys";
+import { HTPR_7856_SUMMARY_CONTEXT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7756_CHAT_OPENS_TASK_FLAG, HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
@@ -69,7 +68,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     undefined,
     {
       projectId: body.default_context?.project_id,
-      compact: await isFeatureEnabled(HTPR_7856_SUMMARY_CONTEXT_FLAG, dbUser.id),
+      compact: Boolean(contextTaskId) && await isFeatureEnabled(HTPR_7856_SUMMARY_CONTEXT_FLAG, dbUser.id),
     },
   );
   configureAiModelUsage(state.selected.model, {
