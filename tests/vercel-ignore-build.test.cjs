@@ -57,8 +57,10 @@ for (const file of ['src/app/page.tsx', 'src/app/wiki/help.md', 'public/icon.svg
   'new-runtime-input', 'src/a\nREADME.md']) {
   test(`configured ignored-build step builds ${JSON.stringify(file)}`, t => {
     const f = fixture(t);
-    f.change(file, file === 'scripts/vercel-ignore-build.cjs'
-      ? readFileSync(join(root, file), 'utf8') + '\n' : 'changed\n');
+    let content = 'changed\n';
+    if (file === 'package.json') content = '{"version":"1.0.1"}\n';
+    if (file === 'scripts/vercel-ignore-build.cjs') content = readFileSync(join(root, file), 'utf8') + '\n';
+    f.change(file, content);
     const result = f.run();
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /Build required/);
