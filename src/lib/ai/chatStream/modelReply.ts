@@ -17,6 +17,9 @@ import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacin
 
 import { ToolExecution } from "@/lib/ai/chatStream/types";
 import { MAX_TOOL_STEPS } from "@/lib/ai/tools/constants";
+import { deferredChatTools } from "@/lib/ai/tools/deferredTools";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG } from "@/lib/flags/keys";
 
 import { selectModel } from "@/lib/ai/chatStream/models";
 
@@ -28,6 +31,11 @@ import type { StreamState } from "./streamState";
 export async function generateModelReply(state: StreamState, inputs: { instructions: string; messages: ModelMessage[]; tools: ToolSet; toolExecutions: ToolExecution[] }) {
   const { dbUser, heartbeatExecutionId, contextTaskId, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent } = state;
   const { instructions, messages, tools, toolExecutions } = inputs;
+  const deferredToolsEnabled = await isFeatureEnabled(HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG, dbUser.id);
+  const toolDiscovery = deferredToolsEnabled ? deferredChatTools(tools) : { tools };
+  const modelInstructions = deferredToolsEnabled
+    ? `${instructions}\n\nOnly the listed tools are immediately available. For other actions, find the tool with hypertask_search_tools, then call hypertask_describe_tool with its exact name before calling it. Describing a tool does not execute the requested action.`
+    : instructions;
 
   const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
   const sameModelRetry = await backgroundClaudeModelEnabled?.(dbUser.id) ?? false;
@@ -52,9 +60,9 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     const result = streamText({
       model: state.selected.model,
       experimental_download: downloadWithoutBrotli,
-      instructions,
+      instructions: modelInstructions,
       messages,
-      tools,
+      ...toolDiscovery,
       stopWhen: stepCountIs(MAX_TOOL_STEPS),
       maxRetries: 2,
       abortSignal: state.providerAbort.signal,
@@ -188,9 +196,9 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         const retry = await generateText({
           model: state.selected.model,
           experimental_download: downloadWithoutBrotli,
-          instructions,
+          instructions: modelInstructions,
           messages,
-          tools,
+          ...toolDiscovery,
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
           maxRetries: 1,
           abortSignal: state.providerAbort.signal,
