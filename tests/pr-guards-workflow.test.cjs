@@ -266,7 +266,11 @@ test('pending title status also skips same-head edits and all pending statuses s
 test('global reconciliation keeps original events, serialization and isolated workflows', () => {
   const trusted = workflow('pr-guards-trusted').jobs['pr-guards-trusted'];
   assert.deepEqual(trusted.steps.filter(step => step.id).map(step => step.id), ['outside', 'size', 'title']);
-  assert.doesNotMatch(JSON.stringify(trusted), /feature-flag|ux-signoff|MCP_TOKEN/);
+  assert.doesNotMatch(JSON.stringify(trusted), /feature-flag|ux-signoff/);
+  assert.doesNotMatch(JSON.stringify(trusted.steps.filter(step => step.id !== 'title')), /MCP_TOKEN/);
+  assert.deepEqual(trusted.steps.find(step => step.id === 'title').env, {
+    HYPERTASK_MCP_TOKEN: '${{ secrets.HYPERTASK_MCP_TOKEN }}',
+  });
   const flags = workflow('feature-flag-gate');
   assert.deepEqual(Object.keys(flags.on).sort(), ['pull_request_target', 'push']);
   assert.equal(Object.keys(flags.jobs).length, 2);
