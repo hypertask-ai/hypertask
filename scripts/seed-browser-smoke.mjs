@@ -340,7 +340,7 @@ async function seedSessionFixtures(flags) {
       ...state,
       cookies: state.cookies.map(cookie => ({ ...cookie,
         value: cookie.name === "ht_session" ? signSession({ id: pagesUser.id, email: pagesUser.email })
-          : cookie.name === "nookies_user" ? encodeURIComponent(JSON.stringify(pagesUser))
+          : cookie.name === "nookies_user" ? encodeURIComponent(JSON.stringify({ ...pagesUser, accountId: pagesAccount.id, UserSettingId: pagesUser.UserSetting.id }))
           : cookie.name === "previousBoard" ? `project-${pageBoard.id}|&|` : cookie.value,
       })),
     }), { flag: "wx", mode: 0o600 });

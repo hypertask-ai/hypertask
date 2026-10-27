@@ -59,7 +59,10 @@ test("browser smoke users and contract callers stay isolated", async () => {
         return row;
       },
       createMany: async ({ data }) => { records[model].push(...data); },
-      update: async ({ where, data }) => Object.assign(records[model].find(row => Object.entries(where).every(([key, value]) => row[key] === value)), data),
+      update: async ({ where, data }) => {
+        const index = records[model].findIndex(row => Object.entries(where).every(([key, value]) => row[key] === value));
+        return records[model][index] = { ...records[model][index], ...data };
+      },
       findUnique: async ({ where }) => records[model].find(row => row.id === where.id),
       count: async ({ where }) => records[model].filter(row => where.userId.in.includes(row.userId)).length,
     }];
