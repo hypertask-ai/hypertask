@@ -52,9 +52,10 @@ const PlansSection = () => {
     raisedFileLimit: useFlag(HTPR_7924_FREE_FILE_25MB_FLAG),
   };
   const { planLimits, unlimitedTickets, raisedFileLimit } = freePlanLimits;
-  const displayedFreePlanLimits = unlimitedBoards
-    ? { ...freePlanLimits, unlimitedBoards: true }
-    : freePlanLimits;
+  const freePlanCopy = visibleFreePlanCopy(
+    showFreePlanCopy,
+    unlimitedBoards ? { ...freePlanLimits, unlimitedBoards: true } : freePlanLimits,
+  );
   const freePlanDescription = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : null}</>;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -74,7 +75,7 @@ const PlansSection = () => {
 
   const plans = useMemo(
     () =>
-      [...subscriptionPlansFor(displayedFreePlanLimits)].sort(
+      [...subscriptionPlansFor({ ...freePlanLimits, unlimitedBoards })].sort(
         (left, right) => STORE_PLAN_RANK[left.id] - STORE_PLAN_RANK[right.id],
       ),
     [planLimits, unlimitedBoards, unlimitedTickets, raisedFileLimit],
@@ -216,7 +217,7 @@ const PlansSection = () => {
                     {selectedType.price} {plan.id === "Free"
                       ? !planFlagReady || startPlanEnabled ? freePlanDescription : selectedType.description
                       : selectedType.description}
-                    {plan.id === "Free" && visibleFreePlanCopy(showFreePlanCopy, displayedFreePlanLimits).map((line) => (
+                    {plan.id === "Free" && freePlanCopy.map((line) => (
                       <span key={line} className="block text-dense font-medium text-text-light-gray">
                         {line}
                       </span>
