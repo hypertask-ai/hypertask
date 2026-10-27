@@ -17,16 +17,16 @@ function loadModule(relativePath, stubs, logs) {
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const module = { exports: {} };
+  const loaded = { exports: {} };
   vm.runInNewContext(code, {
-    module, exports: module.exports, Error,
+    module: loaded, exports: loaded.exports, Error,
     require: (name) => {
       assert.ok(Object.hasOwn(stubs, name), `Missing stub for ${name}`);
       return stubs[name];
     },
     console: { error: (...args) => logs.push(["error", ...args]), warn: (...args) => console.warn(...args) },
   }, { filename });
-  return module.exports;
+  return loaded.exports;
 }
 
 async function invoke(surface, { error, enabled = true } = {}) {
