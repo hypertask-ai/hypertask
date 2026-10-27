@@ -38,3 +38,23 @@ inline typography must use named tokens. CSS/SCSS declarations use the same
 policy, with raw custom-property definitions allowed in the theme token files.
 Unchanged debt and deletions pass; replacing one raw style with another fails.
 The local default compares the merge base with the tracked working tree.
+
+## Design-token ratchet
+
+The existing `local` plugin also checks raw shadows, layers, corners, pixel text
+sizes, colours, and theme selectors across `src/`. Theme definition files in
+`src/styles/tailwindThemes/` own raw values; components use named utilities or
+whole CSS-variable references, including `shadow-[var(--elevation-card)]`.
+
+`design-tokens-baseline.json` records existing counts per file and family. New
+files have zero allowance. Normal lint rejects both increased debt and stale
+allowances after a removal. After replacing raw styles with tokens, run:
+
+```sh
+node scripts/design-token-baseline.mjs --prune
+```
+
+Commit the smaller baseline alongside the migration. This command inventories
+source through the real rules and refuses any increased or moved allowance.
+Normal lint never writes files. ESLint's cache fingerprint includes the rules
+and baseline, so shrinking an allowance invalidates earlier green results.
