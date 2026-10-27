@@ -40,19 +40,25 @@ printf '%s %s\n' "$repo" "$branch" > "$DIR/waiters/$$"
 trap 'rm -f "$DIR/waiters/$$"' EXIT
 trap 'exit 2' INT TERM
 
-mtime() { stat -c %Y "$state" 2>/dev/null || echo 0; }
-# One gh call. Prints a verdict: pass, fail <names>, pending, merged, closed.
-check() {
-  local out
-  out=$("$GH" pr view "$pr" --repo "$repo" --json state,statusCheckRollup -q '
+# inode + nanosecond mtime: runner-webhook replaces the file atomically, so every event gives a new inode.
+mtime() { stat -c '%i %y' "$state" 2>/dev/null || echo 0; }
+# Verdict from `gh pr view --json state,statusCheckRollup` on stdin: pass, fail <names>, pending, merged, closed.
+# Only SUCCESS, NEUTRAL and SKIPPED count as passing; CANCELLED, STALE and any other finished result is a failure.
+verdict() {
+  jq -r '
     if .state == "MERGED" then "merged" elif .state == "CLOSED" then "closed" else
-      [.statusCheckRollup[] | {n: (.name // .context), s: ((.conclusion // .state // "") | ascii_upcase), st: ((.status // "COMPLETED") | ascii_upcase)}] as $c
-      | ([$c[] | select(.s == "FAILURE" or .s == "ERROR" or .s == "TIMED_OUT" or .s == "STARTUP_FAILURE" or .s == "ACTION_REQUIRED") | .n]) as $f
+      [.statusCheckRollup[]? | {n: (.name // .context // "?"), s: ((.conclusion // .state // "") | ascii_upcase), st: ((.status // "COMPLETED") | ascii_upcase)}] as $c
+      | ([$c[] | select(.st == "COMPLETED" and (.s | IN("SUCCESS", "NEUTRAL", "SKIPPED", "PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "") | not)) | "\(.n) (\(.s | ascii_downcase))"]) as $f
       | if ($f | length) > 0 then "fail " + ($f | join(", "))
-        elif ($c | length) == 0 or any($c[]; .st != "COMPLETED" or .s == "PENDING" or .s == "EXPECTED" or .s == "") then "pending"
+        elif ($c | length) == 0 or any($c[]; .st != "COMPLETED" or (.s | IN("SUCCESS", "NEUTRAL", "SKIPPED") | not)) then "pending"
         else "pass" end
-    end' 2>/dev/null) || return 1
-  printf '%s\n' "$out"
+    end'
+}
+# One gh call.
+check() {
+  local json
+  json=$("$GH" pr view "$pr" --repo "$repo" --json state,statusCheckRollup 2>/dev/null) || return 1
+  verdict <<<"$json"
 }
 
 start=$(date +%s) last_check=0 seen=$(mtime) calls=0
