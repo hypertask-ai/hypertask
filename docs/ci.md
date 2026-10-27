@@ -46,7 +46,7 @@ Small guards share runners, not verdicts:
 
 Static normal non-draft app PR budget: **16 jobs** per synchronize and opening event
 (YPER4-555 adds one parallel static-check job to the previous 15-job budget). Path-specific evals,
-visual checks, preview deployments and external review are extra. Docs-only PRs start 14 jobs; Dependabot/fork app PRs add one trusted scan-publication job (17 total). Snapshot actual
+visual checks, preview deployments, the informational bugfix replay job and external review are extra. Docs-only PRs start 14 jobs; Dependabot/fork app PRs add one trusted scan-publication job (17 total). Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
 runs stay attached to their old commit; record both snapshots for comparison.
@@ -229,6 +229,34 @@ ships documentation repairs through `/ship` and executes only the listed live
 recipes with `verify-qa`. See the
 [maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
 installation, state, load holds, limits and offline tests.
+
+## Bugfix regression report (YPER4-670)
+
+The non-required `bugfix-regression` job in
+[bugfix-regression.yml](../.github/workflows/bugfix-regression.yml) runs on pull
+requests to `production`. A bug fix is a pull request whose title matches the
+existing `pr-title` shape with the `[BUGFIX]` tag (`HTPR`, `HYFA`, or `YPER4`).
+That is the kind-of-work signal `pr-title` already enforces. `kind: "bugfix"`
+on a feature flag classifies that flag, and saved-data, security, and crash
+fixes ship with no flag, so the job follows the pull request title.
+
+For those pull requests the job runs each added or changed `tests/**/*.test.cjs`
+or `tests/**/*.test.ts` file, the same files `scripts/run-tests.mjs` runs. The
+new test must fail on the merge base and pass on the pull request head. A test
+that passes on the base is reported by file name because it does not reproduce
+the bug. A bug fix that changes no such test is reported too. The
+`no-regression-test` label exempts a pull request only when the body also gives
+a reason, using `No new automated test applies because:` or
+`no-regression-test:`.
+
+The job is report-only. It is not in the required-check ruleset, and a flag,
+skip, or script error exits 0. It does not block a merge.
+
+Regression replay never regenerates a client inside linked dependencies. Schema
+changes report unproven until separate installs are supported. Missing modules,
+syntax errors and timeouts on base cannot count as a reproduced bug. The job uses
+`continue-on-error: true`, including setup failures, and remains informational.
+
 
 ## Docs-only CI lane (YPER4-548 / YPER4-663)
 

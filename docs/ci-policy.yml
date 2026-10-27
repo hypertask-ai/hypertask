@@ -432,6 +432,18 @@ schema_drift_monitor:
   failure_action: failed_workflow_with_named_schema_differences
   repair_automatically: false
 
+bugfix_regression:
+  context: bugfix-regression
+  workflow: .github/workflows/bugfix-regression.yml
+  runs_on: ubuntu-latest
+  required: false
+  blocks_merge: false
+  report_only: true
+  pull_request_base: production
+  bugfix_signal: "pr-title shape with the [BUGFIX] tag"
+  escape_hatch: "label no-regression-test plus a written reason in the pull request body"
+  command: node .github/scripts/bugfix-regression-check.mjs
+
 agent_rules:
   - "Read docs/ci.md before changing workflows, runner labels, rulesets, or deployment checks."
   - "App CI runs on GitHub-hosted ubuntu-latest runners; do not re-register self-hosted app runners or add a VPN runner or extra host without a recorded decision."
