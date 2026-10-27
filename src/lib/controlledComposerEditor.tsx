@@ -56,8 +56,9 @@ export function ControlledComposerEditor({
         renderText: ({ node }) => `@${node.attrs.text || node.attrs.id}`,
         suggestion: createMentionData((item: { type: string; id: string | number }) => {
           if (item.type === "agent" && activeEditor.current) {
+            const sourceEditor = activeEditor.current;
             window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: {
-              agentId: item.id, html: activeEditor.current.getHTML(), text: activeEditor.current.getText(),
+              agentId: item.id, getDraft: () => ({ html: sourceEditor.getHTML(), text: sourceEditor.getText() }),
             } }));
           }
         }, () => projectIdRef.current),

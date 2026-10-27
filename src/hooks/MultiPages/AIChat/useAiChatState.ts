@@ -182,8 +182,9 @@ export function useAiChatState(parallelChatsEnabled = false) {
   function agentContextCallback(mentionData: MentionItem) {
     if (mentionData.type === "agent" && currentProject?.id && currentUser && editor?.view.dom.closest('[data-testid="ai-sidebar"]')) {
       window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: {
-        agentId: mentionData.id, html: editor.getHTML(),
-        text: editor.getText({ textSerializers: { mention: ({ node }) => `@${node.attrs.text || node.attrs.id}` } }),
+        agentId: mentionData.id, getDraft: () => ({ html: editor.getHTML(),
+          text: editor.getText({ textSerializers: { mention: ({ node }) => `@${node.attrs.text || node.attrs.id}` } }),
+        }),
       } }));
       return;
     }

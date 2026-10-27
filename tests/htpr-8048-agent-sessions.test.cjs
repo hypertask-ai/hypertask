@@ -270,3 +270,71 @@ test("external composer serializes real agent names and ticket references, not g
     assert.equal(editor.getText(), "Ask @Runner about @HTPR-12 Work");
   } finally { editor?.destroy(); view.close(); }
 });
+for (const runtimeType of ["NATIVE", "EXTERNAL"]) {
+  test(`${runtimeType} mention routing keeps edits made during opening, transcript and invalidation`, async () => {
+    const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+    const opening = Promise.withResolvers(), transcript = Promise.withResolvers(), invalidation = Promise.withResolvers();
+    const transcriptStarted = Promise.withResolvers(), invalidationStarted = Promise.withResolvers();
+    const originalFetch = global.fetch;
+    const noop = () => {};
+    const agent = { id: "agent", displayName: "Runner", runtimeType, sessionId: "default" };
+    const project = { id: 15 }, currentUser = { id: 6 };
+    const writes = [], selections = [];
+    let html = "<p>Before opening</p>", text = "Before opening", header, embedded;
+    const editor = { getHTML: () => html, getText: () => text, commands: { setContent: value => { html = value; } } };
+    const chat = { currentSession: { id: "general", agentId: null }, fileItems: [], editor,
+      resetFiles: noop, selectSession: id => selections.push(id), startNewSession: assert.fail };
+    const queryClient = { invalidateQueries: () => { invalidationStarted.resolve(); return invalidation.promise; } };
+    const source = loader({
+      "@/hooks/useFlag": { useFlag: key => [FLAG, "htpr-7518-agent-sidebar-chats"].includes(key) },
+      "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
+      "@/app/agents/chat/AgentChatClient": { default: props => { embedded = props.embedded; return null; } },
+      "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: (...args) => writes.push(args) },
+      "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null, setNativeSidebarChat: noop },
+      "@/utils/api/ai_chat/aiChatHelpers": { AI_Chat_API: { getSessionTranscript: () => { transcriptStarted.resolve(); return transcript.promise; } } },
+      "@/store": { currentProjectAtom: "project", currentUserAtom: "user", aiChatSidebarWidthPxAtom: "width" },
+      "next/navigation": { useSearchParams: () => new URLSearchParams() },
+      "@tanstack/react-query": { useQueryClient: () => queryClient },
+      "@/lib/state": { useRecoilValue: atom => atom === "project" ? project : currentUser, useRecoilState: () => [320] },
+      "./MessageList": { MessageList: () => null }, "./WelcomeScreen": { WelcomeScreen: () => null },
+      "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => chat },
+      "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
+      "./ChatHeader": { ChatHeader: props => { header = props.sidebarChats; return null; } },
+      "./AI_Tiptap_Container": { AI_Tiptap_Container: () => null },
+      "./AiChatSidebarResizeHandle": { AiChatSidebarResizeHandle: () => null },
+      "@/lib/configs/style.config": { AI_CHAT_SIDEBAR_MIN_PX: 280 },
+      "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
+    });
+    const Sidebar = source("src/components/AI_CHAT/AI_Chat_Sidebar.tsx").AI_Chat_Sidebar;
+    const view = mount();
+    global.fetch = (_url, options) => options?.method === "POST" ? opening.promise
+      : Promise.resolve({ ok: true, json: async () => ({ success: true, agents: [agent] }) });
+    const edit = value => { text = value; html = `<p>${value}</p>`; };
+    try {
+      await React.act(async () => { view.render(React.createElement(Sidebar)); });
+      assert.equal(header.agents.length, 1);
+      React.act(() => window.dispatchEvent(new window.CustomEvent("ht-sidebar-agent-selected", {
+        detail: { agentId: agent.id, getDraft: () => ({ html: editor.getHTML(), text: editor.getText() }) },
+      })));
+      edit("Typed while opening");
+      await React.act(async () => {
+        opening.resolve({ ok: true, json: async () => ({ success: true, session: { id: "opened" } }) });
+        await (runtimeType === "NATIVE" ? transcriptStarted.promise : invalidationStarted.promise);
+      });
+      if (runtimeType === "NATIVE") {
+        edit("Typed while reading transcript");
+        await React.act(async () => { transcript.resolve(); await invalidationStarted.promise; });
+      }
+      edit("Typed while invalidating");
+      await React.act(async () => { invalidation.resolve(); });
+      assert.equal(header.target.agent.sessionId, "opened");
+      if (runtimeType === "NATIVE") {
+        assert.deepEqual(selections, ["opened"]);
+        assert.equal(html, "<p>Typed while invalidating</p>");
+      } else {
+        assert.equal(embedded.routedDraft.text, "Typed while invalidating");
+        assert.deepEqual(writes.at(-1), [6, "agent", "Typed while invalidating"]);
+      }
+    } finally { view.close(); global.fetch = originalFetch; }
+  });
+}

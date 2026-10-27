@@ -126,10 +126,9 @@ export const AI_Chat_Sidebar = ({
     } finally { loadingAgentPages.current.delete(agent.id); }
   };
 
-  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, options?: { sessionId?: string; newSession?: boolean; mentionHtml?: string; mentionText?: string }) => {
+  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, options?: { sessionId?: string; newSession?: boolean; getMentionDraft?: () => { html: string; text: string } }) => {
     const intent = ++intentRef.current;
     if (next.kind !== "ai" && !sidebarEnabled) return;
-    const mentionText = options?.mentionText ?? (options?.mentionHtml ? chatRef.current.editor?.getText() ?? "" : undefined);
     let nativeSessionId: string | null = null;
     if (next.kind === "native-agent" || (agentSessionsEnabled && next.kind === "external-agent")) {
       const agentId = next.agent.id;
@@ -157,6 +156,7 @@ export const AI_Chat_Sidebar = ({
       await chat.startNewSession();
     }
     if (intent !== intentRef.current) return;
+    const mentionDraft = options?.getMentionDraft?.();
     const latest = chatRef.current;
     const leaving = targetRef.current;
     if (leaving.kind !== "external-agent") {
@@ -187,7 +187,7 @@ export const AI_Chat_Sidebar = ({
         else sessionStorage.setItem(storageKey, JSON.stringify({ agentId: next.agent.id, sessionId: next.agent.sessionId }));
       } catch {}
     }
-    setRoutedDraft(next.kind === "external-agent" && next.agent.sessionId && mentionText !== undefined ? { sessionId: next.agent.sessionId, text: mentionText, requestId: intent } : null);
+    setRoutedDraft(next.kind === "external-agent" && next.agent.sessionId && mentionDraft ? { sessionId: next.agent.sessionId, text: mentionDraft.text, requestId: intent } : null);
     if (next.kind === "external-agent") {
       if (leaving.kind === "native-agent") {
         const stored = drafts.current.get("ai");
@@ -196,11 +196,11 @@ export const AI_Chat_Sidebar = ({
       }
       const selectedAgent = next.agent;
       setVisited((previous) => previous.some((agent) => agent.id === selectedAgent.id && agent.sessionId === selectedAgent.sessionId) ? previous : [...previous, selectedAgent]);
-      if (mentionText !== undefined) writeDraft(currentUser.id, selectedAgent.draftKey ?? selectedAgent.id, mentionText);
+      if (mentionDraft) writeDraft(currentUser.id, selectedAgent.draftKey ?? selectedAgent.id, mentionDraft.text);
     } else {
       const stored = drafts.current.get(next.kind === "native-agent" ? (next.agent.draftKey ?? next.agent.id) : "ai") ??
         (next.kind === "native-agent" ? { html: readDraft(currentUser.id, next.agent.draftKey ?? next.agent.id), files: [] } : undefined);
-      latest.editor?.commands.setContent(options?.mentionHtml ?? stored?.html ?? "", { emitUpdate: false });
+      latest.editor?.commands.setContent(mentionDraft?.html ?? stored?.html ?? "", { emitUpdate: false });
       latest.resetFiles(stored?.files ?? []);
     }
   };
@@ -220,10 +220,10 @@ export const AI_Chat_Sidebar = ({
   useEffect(() => {
     if (!agentSessionsEnabled || !sidebarEnabled) return;
     const choose = (event: Event) => {
-      const detail = (event as CustomEvent<{ agentId: string | null; html?: string; text?: string }>).detail;
+      const detail = (event as CustomEvent<{ agentId: string | null; getDraft?: () => { html: string; text: string } }>).detail;
       if (detail.agentId === null) { void selectTargetRef.current({ kind: "ai" }); return; }
       const agent = agents.find((item) => item.id === detail.agentId);
-      if (agent) void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId: lastAgentSessions.current.get(agent.id), mentionHtml: detail.html, mentionText: detail.text });
+      if (agent) void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId: lastAgentSessions.current.get(agent.id), getMentionDraft: detail.getDraft });
     };
     window.addEventListener("ht-sidebar-agent-selected", choose);
     return () => window.removeEventListener("ht-sidebar-agent-selected", choose);
