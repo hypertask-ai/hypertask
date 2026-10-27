@@ -37,26 +37,35 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   ),
 ])
 
-export function actionableToolError(error: unknown, hints: { ticketNumberShape?: boolean; nearestField?: boolean } = {}): string {
+export type ErrorHints = { ticketNumberShape?: boolean; renamedField?: boolean; nearestField?: boolean; fields?: readonly string[] }
+
+export function actionableToolError(error: unknown, hints: ErrorHints = {}): string {
   if (error instanceof z.ZodError) {
     return error.issues.slice(0, 4).map((issue) => {
       const field = issue.path.join('.') || 'input'
       if (/project_id (?:is required|must be provided).*unique_index|unique_index.*(?:requires|must).*project_id/.test(issue.message)) {
         return 'project_id is required when unique_index is given; pass the project id or use ticket_number.'
       }
-      if (hints.ticketNumberShape && issue.code === 'invalid_type' && /(?:^|\.)(?:source_|target_)?ticket_number(?:\.\d+)?$/.test(field)) {
-        return `Pass ${field.replace(/\.\d+$/, '')} as a string like "HTPR-7914"; for a numeric id use task_id, or unique_index together with project_id.`
-      }
+      const ticketNumberHint = hints.ticketNumberShape && /(?:^|\.)(?:source_|target_)?ticket_number(?:\.\d+)?$/.test(field)
+        ? ` Pass ${field.replace(/\.\d+$/, '')} as a string like "HTPR-7914"; for a numeric id use task_id, or unique_index together with project_id.`
+        : ''
       if (issue.code === 'unrecognized_keys') {
         const boardHint = issue.keys.some((key) => ['board_id', 'boardId', 'board'].includes(key))
           ? ' This tool calls the board field project_id.'
           : ''
-        const fieldHint = hints.nearestField ? (issue as typeof issue & { fieldHint?: unknown }).fieldHint : undefined
-        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}${typeof fieldHint === 'string' && fieldHint.trim() ? ` ${fieldHint}` : ''}`
+        const renamed = hints.renamedField && (issue.path.length === 0 || (issue.path.length === 1 && issue.path[0] === 'input'))
+          ? issue.keys
+              .map((key) => ({ key, snake: key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase() }))
+              .filter(({ key, snake }) => snake !== key && hints.fields?.includes(snake))
+              .map(({ key, snake }) => ` Use ${snake} instead of ${key}.`)
+          : []
+        const fieldHint = hints.nearestField && 'fieldHint' in issue ? issue.fieldHint : undefined
+        return `Remove unsupported fields ${issue.keys.join(', ')} from ${field}; use only fields documented for this action.${boardHint}${renamed.join('')}${typeof fieldHint === 'string' && fieldHint.trim() ? ` ${fieldHint}` : ''}`
       }
       if (field === 'input.user_id.user_ids.agent_id.assign_self') {
         return issue.message.replace(/\.$/, '')
       }
+      if (ticketNumberHint) return `Change ${field}: ${issue.message.replace(/[.!]$/, '')}.${ticketNumberHint}`
       return `Change ${field}: ${issue.message.replace(/[.!]$/, '')}. Pass a value matching this action's input schema.`
     }).join(' ')
   }
@@ -97,7 +106,7 @@ function redactModelFacingMessage(raw: string): string {
   return message.replace(/(?:Bearer\s+\S+|\b(?:htmk_|htk_)[\w-]+|\beyJ[\w.-]+)/gi, '[redacted]').slice(0, 600)
 }
 
-export function toolErrorResult(error: unknown, hints: { ticketNumberShape?: boolean; nearestField?: boolean } = {}): CallToolResult {
+export function toolErrorResult(error: unknown, hints: ErrorHints = {}): CallToolResult {
   return { content: [{ type: 'text', text: actionableToolError(error, hints) }], isError: true }
 }
 
@@ -135,7 +144,8 @@ export async function executeToolResult(
       ...(tool.outputSchema && structured ? { structuredContent: structured } : {}),
     }
   } catch (error) {
-    return toolErrorResult(error, tool.errorHints)
+    const documentedFields = (error as { documentedFields?: string[] } | null)?.documentedFields
+    return toolErrorResult(error, { ...tool.errorHints, fields: documentedFields ?? tool.documentedFields ?? Object.keys(tool.parameters.shape) })
   }
 }
 

@@ -1,3 +1,5 @@
+import { createSessionStreams } from "@/lib/aiChat/sessionStreams";
+import { useAiChatDraft } from "./useAiChatDraft";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { TAiModal } from "@/models/AI_Task_writer_model";
@@ -17,7 +19,7 @@ import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
 
-export function useAiChatState() {
+export function useAiChatState(parallelChatsEnabled = false) {
 
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
@@ -93,6 +95,9 @@ export function useAiChatState() {
   const [isTyping, setIsTyping] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<QueuedAiChatMessage[]>([]);
   const messageQueueRef = useRef<QueuedAiChatMessage[]>([]);
+  const [, refreshStreams] = useState(0);
+  const sessionStreams = useMemo(() => createSessionStreams(() => refreshStreams((version) => version + 1)), [currentUser?.id]);
+  const parallelStreams = parallelChatsEnabled ? sessionStreams : undefined;
   const persistentQueueEnabled = useFlag(HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG);
   const [, refreshQueue] = useState(0);
   const sessionQueue = useMemo(() => {
@@ -103,7 +108,7 @@ export function useAiChatState() {
     }
     return createSessionMessageQueue(currentUser?.id ?? 0, storage, () => refreshQueue((version) => version + 1));
   }, [currentUser?.id]);
-  const persistentQueue = persistentQueueEnabled ? sessionQueue : undefined;
+  const persistentQueue = persistentQueueEnabled || parallelChatsEnabled ? sessionQueue : undefined;
   const [showScrollUpIndicator, setShowScrollUpIndicator] =
     useState<boolean>(false);
   const { currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption } =
@@ -207,7 +212,8 @@ export function useAiChatState() {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
+  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage, parallelChatsEnabled);
+  useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {
     sessionQueue.sessionId = currentSession?.id;
@@ -259,7 +265,9 @@ export function useAiChatState() {
   if (persistentQueue) {
     visibleQueuedMessages = currentSession ? persistentQueue.get(currentSession.id) : [];
   }
+  const selectedStream = currentSession && parallelStreams?.get(currentSession.id);
   return {
+  parallelStreams,
   lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
   aiChatBoardSessionMap, setAiChatBoardSessionMap, setRecentChatBoardIds, setAiChatPinned, isSidebarMode,
@@ -278,5 +286,15 @@ export function useAiChatState() {
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
+  ...(selectedStream ? {
+    isTyping: selectedStream.isTyping, setIsTyping: selectedStream.setIsTyping,
+    agentStatus: selectedStream.agentStatus, setAgentStatus: selectedStream.setAgentStatus,
+    sendInFlightRef: selectedStream.sendInFlightRef, settleSendRef: selectedStream.settleSendRef,
+    streamingSessionRef: selectedStream.streamingSessionRef,
+    streamingAssistantMessageRef: selectedStream.streamingAssistantMessageRef,
+    streamingRequestRef: selectedStream.streamingRequestRef,
+    currentStreamingSession: selectedStream.streamingSessionRef.current,
+    setCurrentStreamingSession: selectedStream.setCurrentStreamingSession,
+  } : {}),
   };
 }

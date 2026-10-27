@@ -393,11 +393,11 @@ for (const kind of ["invite", "join", "paid", "seats", "canceled"]) {
       if (kind === "seats") await stripe.captureStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
       if (kind === "canceled") await stripe.captureStripeSubscriptionEvent(event("customer.subscription.deleted"), subscription({ ended_at: 1769990000 }));
     };
-    h.setEnabled(false);
+    h.users.get(123).uid = "guest_local";
     await record(); await h.drain();
     assert.equal(h.captures.length, 0);
     assert.equal(h.logs.length, 0);
-    h.setEnabled(true); h.setFailure("capture");
+    h.users.get(123).uid = "real_member"; h.setFailure("capture");
     if (["paid", "seats", "canceled"].includes(kind)) await assert.rejects(record(), /mock capture unavailable/);
     else await record();
     await h.drain();

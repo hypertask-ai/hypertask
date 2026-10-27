@@ -47,6 +47,7 @@ import {
   normalizeCustomEndpointConfig,
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
+import type { ReasoningEffort } from "@/app/api/ai/_lib/reasoningEffort";
 
 export class AiGatewayKeyRequiredError extends Error {
   constructor(message: string) {
@@ -314,9 +315,21 @@ type ModelUsageContext = Partial<Pick<AiUsageRecord,
   initiatingUserId?: number | null;
   trustedChatSessionId?: string | null;
   promptCachingEnabled?: Promise<boolean>;
+  reasoningFeature?: string | null;
+  reasoningEffort?: ReasoningEffort | null;
 };
 
 const modelUsageContexts = new WeakMap<object, ModelUsageContext>();
+
+function reasoningApi(): typeof import("@/app/api/ai/_lib/reasoningEffort") | null {
+  try {
+    const loaded = require("@/app/api/ai/_lib/reasoningEffort") as Partial<typeof import("@/app/api/ai/_lib/reasoningEffort")> | null;
+    if (!loaded || typeof loaded.aiThinkingOptInEnabled !== "function" || typeof loaded.applyReasoningToParams !== "function") return null;
+    return loaded as typeof import("@/app/api/ai/_lib/reasoningEffort");
+  } catch {
+    return null;
+  }
+}
 
 export function configureAiModelUsage(model: LanguageModel, context: ModelUsageContext): void {
   if (typeof model === "string") return;
@@ -477,12 +490,17 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
   return {
     specificationVersion: "v4",
     transformParams: async ({ params }) => {
-      if (!isHaiku55Model(modelId)) return params;
+      const reasoning = reasoningApi();
+      const optIn = reasoning ? await reasoning.aiThinkingOptInEnabled(context.userId) : false;
+      if (!isHaiku55Model(modelId)) {
+        return optIn && reasoning ? reasoning.applyReasoningToParams(params, context, modelId) : params;
+      }
       const enabled = await import("@/app/api/ai/_lib/planGate")
         .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
         .catch(() => false);
       if (!enabled) throw new Error("This AI model is unavailable.");
       const { temperature: _temperature, topP: _topP, topK: _topK, ...supportedParams } = params;
+      if (optIn && reasoning) return reasoning.applyReasoningToParams(supportedParams, context, modelId);
       const directOutput = params.responseFormat?.type === "json" ||
         (params.maxOutputTokens != null && params.maxOutputTokens <= 1200);
       return {

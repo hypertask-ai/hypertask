@@ -1,8 +1,9 @@
 
 import { z } from 'zod';
 import type { BoardColumnRole } from '@/lib/mcp/boards/columnRole';
-import { paginationSchema, sortBySchema, sortOrderSchema } from './common/pagination';
-import { withListQuerySchema } from './common/listQuery';
+import { paginationSchema, sortOrderSchema } from './common/pagination';
+import { listFilterSchema, withListQuerySchema } from './common/listQuery';
+import { parseSort } from '@/lib/mcp/listQuery';
 import { estimateIndexOptionalSchema, statusFilterSchema } from './common/filters';
 
 export const SECTION_ROLE_VALUES: [BoardColumnRole, ...BoardColumnRole[]] = [
@@ -28,8 +29,14 @@ export function getListProjectsInputSchema() {
       .merge(paginationSchema),
   )
     .extend({
-      sort_by: sortBySchema,
+      sort_by: z.enum(['createdAt', 'title']).optional(),
       sort_order: sortOrderSchema,
+      sort: z.string().min(1).refine(value => {
+        const { sortBy } = parseSort(value);
+        return sortBy === 'title' || sortBy === 'createdAt';
+      }, 'sort must be title or createdAt').optional()
+        .describe('Sort by title or createdAt, optionally with :asc or :desc. Boards do not track update times.'),
+      filter: listFilterSchema.unwrap().omit({ updated_since: true }).optional(),
     })
     .strict();
 }
@@ -69,6 +76,7 @@ export function getBoardConfigBaseSchema() {
   return z
     .object({
       action: z.enum([
+        'get_hygiene',
         'get_playbook',
         'set_playbook',
         'get_instructions',

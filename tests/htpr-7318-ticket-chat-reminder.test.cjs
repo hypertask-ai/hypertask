@@ -36,12 +36,11 @@ function load(file, mocks = {}) {
   return mod.exports;
 }
 
-function route({ viewer = 985, restCompat = false, sessions = fixture } = {}) {
+function route({ viewer = 985, sessions = fixture } = {}) {
   const queries = [];
   const { GET } = load("src/app/api/ai-chat/task-sessions/route.ts", {
     "@/lib/api/rateLimit": { checkRestRateLimit: async () => null },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => viewer === null ? null : ({ userId: viewer, user: { id: viewer } }) },
-    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "rest-compat", isFeatureEnabled: async () => restCompat },
     "@/utils/edgeHelpers": { isValidUser: () => ({ isValid: viewer !== null, user: viewer === null ? null : { id: viewer } }) },
     "next/headers": { cookies: async () => ({ get: () => ({ value: "authenticated-cookie" }) }) },
     "next/server": { NextResponse: { json: Response.json } },
@@ -57,29 +56,27 @@ function route({ viewer = 985, restCompat = false, sessions = fixture } = {}) {
   return { queries, get: (query = "taskId=43") => GET({ headers: new Headers(), nextUrl: new URL(`https://app.hypertask.ai/api/ai-chat/task-sessions?${query}`) }) };
 }
 
-for (const restCompat of [false, true]) {
-  test(`server still allows the viewer's three newest nonempty ticket chats, including older chats (REST compatibility ${restCompat})`, async () => {
-    const api = route({ restCompat });
-    const response = await api.get();
-    assert.equal(response.status, 200);
-    const { sessions } = await response.json();
-    assert.deepEqual(sessions.map(session => session.id), ["newest", "second", "old"]);
-    assert.deepEqual(api.queries[0], {
-      where: { userId: 985, taskId: 43, messages: { some: {} } },
-      select: { id: true, title: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 3,
-    });
-    assert.deepEqual(Object.keys(sessions[0]).sort(), ["id", "title", "updatedAt"]);
+test("server still allows the viewer's three newest nonempty ticket chats, including older chats", async () => {
+  const api = route();
+  const response = await api.get();
+  assert.equal(response.status, 200);
+  const { sessions } = await response.json();
+  assert.deepEqual(sessions.map(session => session.id), ["newest", "second", "old"]);
+  assert.deepEqual(api.queries[0], {
+    where: { userId: 985, taskId: 43, messages: { some: {} } },
+    select: { id: true, title: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 3,
   });
+  assert.deepEqual(Object.keys(sessions[0]).sort(), ["id", "title", "updatedAt"]);
+});
 
-  test(`server still refuses other users' sessions, even with a spoofed userId (REST compatibility ${restCompat})`, async () => {
-    const api = route({ viewer: 986, restCompat });
-    const response = await api.get("taskId=43&userId=985");
-    assert.deepEqual((await response.json()).sessions.map(session => session.id), ["foreign"]);
-    assert.equal(api.queries[0].where.userId, 986);
-    const emptyViewer = route({ viewer: 987, restCompat });
-    assert.deepEqual((await (await emptyViewer.get()).json()).sessions, []);
-  });
-}
+test("server still refuses other users' sessions, even with a spoofed userId", async () => {
+  const api = route({ viewer: 986 });
+  const response = await api.get("taskId=43&userId=985");
+  assert.deepEqual((await response.json()).sessions.map(session => session.id), ["foreign"]);
+  assert.equal(api.queries[0].where.userId, 986);
+  const emptyViewer = route({ viewer: 987 });
+  assert.deepEqual((await (await emptyViewer.get()).json()).sessions, []);
+});
 
 test("server rejects anonymous and invalid ticket requests before reading sessions", async () => {
   const anonymous = route({ viewer: null });
@@ -113,6 +110,7 @@ async function withReminder(options, check) {
   if (chat) chat = runtime();
   const mocks = {
     "@/hooks/useFlag": { useFlag: key => key === skillFlag ? skillEnabled : key === flag ? enabled : true },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: flag },
     "@/lib/contexts/Multipages/AI_Agent/chatContext": { useOptionalAiChatContext: () => chat },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => chat },

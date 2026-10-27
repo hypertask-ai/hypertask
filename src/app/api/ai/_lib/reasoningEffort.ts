@@ -1,0 +1,233 @@
+import { HTPR_7854_AI_THINKING_OPT_IN_FLAG } from "@/lib/flags/definitions/htpr-7854-ai-thinking-opt-in";
+
+export { HTPR_7854_AI_THINKING_OPT_IN_FLAG };
+
+export const CHAT_TITLE_MAX_OUTPUT_TOKENS = 64;
+
+export const DEEPSEEK_NONE_UNCHANGED_NOTE =
+  "DeepSeek keeps the selected model id and sends no thinking option.";
+
+export const DEEPSEEK_MEDIUM_NOTE =
+  "DeepSeek reasoningEffort accepts low, high, or max; medium is sent as high.";
+
+export type ReasoningEffort = "none" | "low" | "medium" | "high";
+
+export type ReasoningProvider =
+  | "anthropic"
+  | "openai"
+  | "google"
+  | "deepseek"
+  | "openrouter"
+  | "gateway"
+  | "xai"
+  | "moonshot"
+  | "alibaba"
+  | "zhipu"
+  | "baseten"
+  | "custom";
+
+export const FEATURE_REASONING_EFFORT = {
+  "chat-title": "none",
+  labels: "none",
+  summaries: "none",
+  tldr: "none",
+  heartbeat: "none",
+  "suggested-questions": "none",
+  "slash-rewrite": "none",
+  chat: "low",
+  "hyper-mentioned": "low",
+  "task-writer": "low",
+} as const satisfies Record<string, ReasoningEffort>;
+
+const USAGE_FEATURE_TO_REASONING: Record<string, keyof typeof FEATURE_REASONING_EFFORT> = {
+  "chat-title": "chat-title",
+  labels: "labels",
+  "smart-label": "labels",
+  summaries: "summaries",
+  summary: "summaries",
+  tldr: "tldr",
+  heartbeat: "heartbeat",
+  "suggested-questions": "suggested-questions",
+  "task-questions": "suggested-questions",
+  "slash-rewrite": "slash-rewrite",
+  editor: "slash-rewrite",
+  chat: "chat",
+  "hyper-mentioned": "hyper-mentioned",
+  "task-writer": "task-writer",
+};
+
+const PROVIDERS_WITHOUT_KNOB = new Set<ReasoningProvider>([
+  "gateway",
+  "xai",
+  "moonshot",
+  "alibaba",
+  "zhipu",
+  "baseten",
+  "custom",
+]);
+
+export type ReasoningTranslation = {
+  level: ReasoningEffort;
+  providerOptions?: Record<string, Record<string, unknown>>;
+  modelId?: string;
+  note?: string;
+  clearThinking?: boolean;
+};
+
+export async function aiThinkingOptInEnabled(userId: number | null | undefined): Promise<boolean> {
+  if (typeof userId !== "number" || !Number.isInteger(userId) || userId <= 0) return false;
+  try {
+    const { isFeatureEnabled } = require("@/lib/flags") as typeof import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_7854_AI_THINKING_OPT_IN_FLAG, userId);
+  } catch {
+    return false;
+  }
+}
+
+export function effortForFeature(feature: string | null | undefined, explicit?: ReasoningEffort | null): ReasoningEffort {
+  if (explicit === "none" || explicit === "low" || explicit === "medium" || explicit === "high") return explicit;
+  const key = feature ? USAGE_FEATURE_TO_REASONING[feature] : undefined;
+  if (key) return FEATURE_REASONING_EFFORT[key];
+  return "none";
+}
+
+export function translateReasoning(args: {
+  feature?: string | null;
+  provider: ReasoningProvider;
+  modelId?: string;
+  explicit?: ReasoningEffort | null;
+}): ReasoningTranslation {
+  const level = args.explicit === "none" || args.explicit === "low" || args.explicit === "medium" || args.explicit === "high"
+    ? args.explicit
+    : effortForFeature(args.feature, null);
+  if (PROVIDERS_WITHOUT_KNOB.has(args.provider)) return { level };
+  if (args.provider === "anthropic") {
+    if (level === "none") {
+      return { level, providerOptions: { anthropic: { thinking: { type: "disabled" } } } };
+    }
+    return {
+      level,
+      providerOptions: { anthropic: { thinking: { type: "adaptive" }, effort: level } },
+    };
+  }
+  if (args.provider === "openai") {
+    return { level, providerOptions: { openai: { reasoningEffort: level } } };
+  }
+  if (args.provider === "google") {
+    if (level === "none") {
+      return { level, providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } } };
+    }
+    return { level, providerOptions: { google: { thinkingConfig: { thinkingLevel: level } } } };
+  }
+  if (args.provider === "openrouter") {
+    return { level, providerOptions: { openrouter: { reasoning: { effort: level } } } };
+  }
+  return deepseekTranslation(level, args.modelId);
+}
+
+function deepseekModelId(modelId?: string): string | undefined {
+  if (!modelId || modelId.includes("-fast")) return undefined;
+  return modelId;
+}
+
+function deepseekTranslation(level: ReasoningEffort, modelId?: string): ReasoningTranslation {
+  const kept = deepseekModelId(modelId);
+  if (level === "none") {
+    return { level, modelId: kept, note: DEEPSEEK_NONE_UNCHANGED_NOTE, clearThinking: true };
+  }
+  if (level === "medium") {
+    return {
+      level,
+      modelId: kept,
+      note: DEEPSEEK_MEDIUM_NOTE,
+      providerOptions: { deepseek: { thinking: { type: "enabled" }, reasoningEffort: "high" } },
+    };
+  }
+  return {
+    level,
+    modelId: kept,
+    providerOptions: { deepseek: { thinking: { type: "enabled" }, reasoningEffort: level } },
+  };
+}
+
+const HIGH_EFFORT = new Set(["high", "xhigh", "max"]);
+
+export function vendorsForModel(modelId: string, provider?: string | null): ReasoningProvider[] {
+  const id = modelId.toLowerCase();
+  const name = (provider ?? "").toLowerCase();
+  const vendors: ReasoningProvider[] = [];
+  if (name.includes("openrouter")) vendors.push("openrouter");
+  if (name === "claude" || name === "anthropic" || id.includes("claude") || id.includes("anthropic")) vendors.push("anthropic");
+  if (name === "openai" || id.includes("openai/") || /(^|\/)gpt-/.test(id)) vendors.push("openai");
+  if (name === "google" || id.includes("gemini") || id.includes("google/")) vendors.push("google");
+  if (name === "deepseek" || id.includes("deepseek")) vendors.push("deepseek");
+  if (vendors.length > 0) return vendors;
+  if (
+    name === "gateway" || name === "xai" || name === "moonshot" || name === "alibaba" ||
+    name === "zhipu" || name === "baseten" || name === "custom"
+  ) return [name];
+  return [];
+}
+
+type ReasoningParams = {
+  providerOptions?: Record<string, Record<string, unknown>>;
+  [key: string]: unknown;
+};
+
+export function applyReasoningToParams<T extends ReasoningParams>(
+  params: T,
+  input: {
+    feature?: string | null;
+    reasoningFeature?: string | null;
+    reasoningEffort?: ReasoningEffort | null;
+    provider?: string | null;
+  },
+  modelId: string,
+): T {
+  const feature = input.reasoningFeature ?? input.feature ?? "";
+  const explicit = input.reasoningEffort ?? null;
+  let next = params;
+  for (const provider of vendorsForModel(modelId, input.provider)) {
+    if (!explicit && providerKeepsStrongerEffort(params.providerOptions, provider)) continue;
+    const translated = translateReasoning({ feature, provider, modelId, explicit });
+    const providerOptions = { ...(next.providerOptions ?? {}) };
+    if (translated.clearThinking && provider === "deepseek") {
+      const current = providerOptions.deepseek;
+      if (current) {
+        const { thinking: _thinking, reasoningEffort: _reasoningEffort, ...rest } = current;
+        if (Object.keys(rest).length === 0) delete providerOptions.deepseek;
+        else providerOptions.deepseek = rest;
+      }
+      next = { ...next, providerOptions };
+      continue;
+    }
+    if (!translated.providerOptions) continue;
+    for (const [key, value] of Object.entries(translated.providerOptions)) {
+      const current = { ...(providerOptions[key] ?? {}) };
+      const merged = { ...current, ...value };
+      if (key === "anthropic" && translated.level === "none") delete merged.effort;
+      providerOptions[key] = merged;
+    }
+    next = { ...next, providerOptions };
+  }
+  return next;
+}
+
+function providerKeepsStrongerEffort(
+  providerOptions: ReasoningParams["providerOptions"],
+  provider: ReasoningProvider,
+): boolean {
+  if (!providerOptions) return false;
+  if (provider === "anthropic") return typeof providerOptions.anthropic?.effort === "string" && HIGH_EFFORT.has(providerOptions.anthropic.effort);
+  if (provider === "openai") return typeof providerOptions.openai?.reasoningEffort === "string" && HIGH_EFFORT.has(providerOptions.openai.reasoningEffort);
+  if (provider === "google") {
+    const level = (providerOptions.google?.thinkingConfig as { thinkingLevel?: unknown } | undefined)?.thinkingLevel;
+    return level === "high";
+  }
+  if (provider === "deepseek") return typeof providerOptions.deepseek?.reasoningEffort === "string" && HIGH_EFFORT.has(providerOptions.deepseek.reasoningEffort);
+  if (provider === "openrouter") {
+    const effort = (providerOptions.openrouter?.reasoning as { effort?: unknown } | undefined)?.effort;
+    return typeof effort === "string" && HIGH_EFFORT.has(effort);
+  }
+  return false;
+}

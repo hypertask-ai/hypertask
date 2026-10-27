@@ -143,10 +143,11 @@ test("PostHog failure retains signup identify for a successful cron retry", asyn
   assert.equal(h.captures.length, 1);
 });
 
-test("identify delivery uses only signup flags, not payment or activation flags", async () => {
+test("identify delivery uses only signup flags, not payment flags", async () => {
   const h = harness();
-  h.setFlagEnabled("htpr-7034-activation-analytics", false);
+  h.setFlagEnabled("htpr-7272-payment-login-agent-events", false);
   assert.equal(await h.outbox.isAnalyticsOutboxEnabled(123), false);
+  h.flagChecks.length = 0;
   assert.equal(await h.outbox.isSignupIdentifyOutboxEnabled(123), true);
   assert.equal((await h.link()).link, true);
   await h.drain();

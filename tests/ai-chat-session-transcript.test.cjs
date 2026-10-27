@@ -28,12 +28,10 @@ for (const query of ['sessionId=invalid', 'sessionId=', ...['limit=1', 'cursor=x
     assert.equal(f.calls.length + f.writes.length, 0);
   });
 }
-test('detail parameter is ignored on OFF and ON without opt-in', async () => {
-  for (const on of [false, true]) {
-    const f = fixture({ on });
-    const body = await (await f.get((on ? '' : 'compat=htpr-6924&') + 'sessionId=' + id(1))).json();
-    assert.equal(body.sessions.length, 8);
-    assert.equal(body.session, undefined);
-    assert.ok(body.sessions[0].messages[0].attachments);
-  }
+test('detail parameter is ignored without opt-in', async () => {
+  const f = fixture();
+  const body = await (await f.get('sessionId=' + id(1))).json();
+  assert.equal(body.sessions.length, 8);
+  assert.equal(body.session, undefined);
+  assert.ok(body.sessions[0].messages[0].attachments);
 });

@@ -1,6 +1,6 @@
 # CI contract
 
-_Last updated: 2026-10-24._
+_Last updated: 2026-10-27._
 
 **Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), uses a provider-neutral AI review gate, and deploys production directly from the `production` branch.** The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
 
@@ -17,9 +17,9 @@ Small guards share runners, not verdicts:
 - Feature-flag evaluation and all-open reconciliation stay in the original two-job `feature-flag-gate.yml`, globally serialized by `feature-flag-gate-production` with cancellation off. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group. Their original semantic statuses and flag fingerprints are unchanged.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
-Static normal non-draft app PR budget: **17 → 15 jobs** per synchronize event
-(18 → 15 on opening, when the old outside guard also ran). Path-specific evals,
-visual checks, preview deployments and external review are extra. Docs-only PRs start 14 jobs; Dependabot/fork app PRs add one trusted scan-publication job (16 total). Snapshot actual
+Static normal non-draft app PR budget: **16 jobs** per synchronize and opening event
+(YPER4-555 adds one parallel static-check job to the previous 15-job budget). Path-specific evals,
+visual checks, preview deployments and external review are extra. Docs-only PRs start 14 jobs; Dependabot/fork app PRs add one trusted scan-publication job (17 total). Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
 runs stay attached to their old commit; record both snapshots for comparison.
@@ -65,11 +65,11 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 
 - App CI (CI Tests, App Smoke, Secret Guard, Gitleaks, Revert Guard, PR checks, Auto-merge, Production Health) runs on GitHub-hosted `ubuntu-latest` runners; review discovery is a local 30-second systemd timer and occupies no Actions runner. AI review runs from the private reviewer repository on that repo's own `[self-hosted, ai-review]` runner.
 - CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. ESLint still covers the full repository, but unchanged file results are restored through its content-validated cache; a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
-- TypeScript and the selected PR tests (full suite on production pushes) remain correctness checks on every non-docs CI Tests run. The Test step is `CI_TEST_SHARDS` jobs (2) that split that same file list by count. One aggregate job is still named `ci-tests`, and it is green only after every shard succeeds and the uploaded file lists union to the full set with no duplicate. Install, typecheck and lint stay in `ci-prepare`. Shards restore the dependency cache instead of repeating that setup. The shard count is the workflow env `CI_TEST_SHARDS`.
+- TypeScript and the selected PR tests (full suite on production pushes) remain correctness checks on every non-docs CI Tests run. The Test step is `CI_TEST_SHARDS` jobs (2) that split that same file list by count. One aggregate job is still named `ci-tests`, and it is green only after every shard succeeds and the uploaded file lists union to the full set with no duplicate. Dependency installation and test selection stay in `ci-prepare`. `ci-checks` restores dependencies and runs the board-scope guard, typecheck and lint beside the two test shards, not before them. The required `ci-tests` aggregate waits for successful preparation, static checks, both shards and the exact-file execution proof. Docs-only runs require both heavy jobs to be skipped explicitly. Only production pushes save caches; each job uses its own workspace. The shard count is the workflow env `CI_TEST_SHARDS`.
 - PR and production-push CI Tests runs do not collect or publish V8 coverage. The separate non-required [`Coverage Nightly`](../.github/workflows/coverage-nightly.yml) workflow runs the full suite with coverage at **02:17 UTC daily**, or via `workflow_dispatch` on `production` only. It checks out the event's exact production SHA and reports as `coverage-nightly`, never `ci-tests`, so diagnostics cannot supersede a required correctness result. Its 60-minute timeout gives the covered suite more room than the unchanged 40-minute CI Tests gate.
 - Coverage remains report-only (`continue-on-error` on reporting). The nightly job keeps `npm run coverage:report`, the job summary, `automated-test-coverage-<commit>`, the report/critical-domain paths, and 30-day retention. Download coverage from **Coverage Nightly**, not CI Tests. No required check or runtime script consumes the uploaded coverage; `scripts/coverage-summary.mjs` reads the nightly `coverage/report/coverage-summary.json` within that job. See [testing](testing.md#coverage-baseline).
 - Dependabot still applies informational `full-ci` and lane labels; neither starts nor changes CI Tests or test selection. The `major-upgrade` label still starts its separate ticket workflow. No job-level label skip is added: normal PR events continue reporting both `ci-tests` and `browser-smoke`, including the existing docs-only scope path. Adding approval text after a failed agent-scope approval guard now requires a new commit to produce a fresh PR event; editing the body alone does not rerun that guard, and rerunning the old event retains its old body.
-- CI Tests runs the runner dispatcher Python fixtures (`runner-dispatch.test.py` and `runner-dispatch.cache.test.py`) and `runner-selfupdate.test.sh` from `.claude/skills/ship/scripts/` on GitHub-hosted runners, even for `.claude/`-only PRs. These offline fixtures need no installed runner scripts or credentials.
+- CI Tests runs the launch-admission fixtures (`session-policy-guard.test.py`), runner dispatcher Python fixtures (`runner-dispatch.test.py`, `runner-dispatch.cache.test.py` and `runner-snapshot.test.py`) and `runner-selfupdate.test.sh` from `.claude/skills/ship/scripts/` on GitHub-hosted runners, even for `.claude/`-only PRs. These offline fixtures need no installed runner scripts or credentials.
 - `contabo-1` is registered only to the private reviewer repository, carries `ai-review`, and runs as `htreviewrunner`. Application PR workflows cannot schedule it, and its subscription wrappers are unreachable from hosted runner jobs.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
 - The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. Both jobs run on every non-draft PR without a label gate. CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request uses the same four events. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
@@ -81,23 +81,21 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 
 ## Live required-check settings
 
-`Verify live required-check settings` runs the dependency-free
-[verifier](../.github/scripts/verify-required-check-settings.mjs) on free
-GitHub-hosted runners. Every `production` push verifies the default branch,
-exactly one active `production-required-checks` ruleset, its branch target and
-production include/exclude conditions, and the exact required-context set
-(including both review contexts, without aliasing).
+The hourly [Required Check Settings workflow](../.github/workflows/required-check-settings.yml)
+runs the dependency-free [verifier](../.github/scripts/verify-required-check-settings.mjs)
+on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
+checkout always uses `production`. It verifies the default branch, exactly one
+active `production-required-checks` ruleset, its branch target and production
+include/exclude conditions, and the exact required-context set (including both
+review contexts, without aliasing). Drift and unreadable settings still fail
+the monitor; this is not a required PR context. Detection can lag until the next
+hourly run, plus GitHub scheduling and any rate-limit wait.
 
-On pull requests, it reads settings only when the merge-base diff changes
-`.github/**`, `docs/ci-policy.yml`, or `docs/ci.md`. Checkout includes full history;
-the NUL-delimited diff disables rename detection so moving a CI file out of
-`.github/` cannot hide its deletion. An unreadable event, invalid SHA, failed diff,
-or empty/unknown diff verifies instead of skipping. Other PRs log an explicit
-skip and make **zero settings API calls**. No changed-files API is used.
-
-Before this change, every run made three settings API calls. Scoped PRs and
-production pushes still make three on a successful first attempt: repository
-metadata, ruleset list, and one full ruleset read. GitHub REST's
+CI Tests no longer reads repository settings on PRs or production pushes.
+Previously every production push and CI-policy PR made three settings API calls.
+The hourly monitor makes three on a successful first attempt: repository
+metadata, ruleset list, and one full ruleset read. Retries add calls.
+GitHub REST's
 [repository ruleset list](https://docs.github.com/en/rest/repos/rules#get-all-repository-rulesets)
 returns summaries, not rules or ref conditions; `includes_parents` includes parent
 rulesets, not full details. The
@@ -108,11 +106,32 @@ to preserve these assertions. Neither can replace the full ruleset read safely.
 Reads use `gh api --include`. A rate-limited 403 or 429 waits for
 `x-ratelimit-reset` / `retry-after` (the later time when both apply), logging
 `rate limited, waiting Ns until reset`, then retries only that failed read.
-Cumulative sleeps are capped at **300 seconds**, with a six-minute overall
-budget and a seven-minute step timeout inside the 40-minute job. Missing usable
+Cumulative sleeps are capped at **3900 seconds**, longer than one full
+installation window, with a 4,000-second overall budget and a 70-minute step
+timeout inside the 80-minute job. A cap failure names the GitHub API rate limit in the
+error and the step summary, so it is not mistaken for a test failure. Missing usable
 rate-limit timing, an exceeded budget, other API errors, malformed settings, or a
 settings mismatch fail the check; nothing passes without reading the settings
 when verification is required. No paid runner, service, or dependency is added.
+
+Runner CI watches use the existing `gh-app-token` helper, never the saved user
+login: `token=$(gh-app-token) && test -n "$token" && GH_TOKEN="$token" gh pr checks <PR> --repo hypertask-ai/hypertask --watch --interval 120`.
+Stop if minting fails; do not fall back. Refresh the token before
+restarting a watch. The 120-second interval replaces gh's 10-second default;
+compare observed request counts over equal windows before claiming a fleet-wide
+reduction. The installation allowance used by `github.token` in Actions is a
+different quota from the runner app; moving runner watches does not replenish it.
+
+## Ticket links from PR titles
+
+The trusted `pr-title` guard links same-repository production PRs to the ticket
+in their current GitHub title through the existing MCP task-update API. It uses
+`HYPERTASK_MCP_TOKEN`, not a runner-local binding file. The app checks permission,
+verifies the GitHub PR and returns the saved link. Missing credentials, rejected
+updates or an unconfirmed link fail the guard. Forks, bot titles and generated
+revert titles retain their existing handling. Ticketed runner bots also bind.
+The production-only manual `pr_number` input executes the same trusted title
+entry for live QA and recovery. Delayed runs can link merged PRs.
 
 ## Premerge evidence
 
@@ -151,7 +170,8 @@ The saved discovery fixture is synthetic, not current upstream/pricing proof.
 
 The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing the script/unit paths in `docs/ci-policy.yml`, including `.claude/skills/ship/scripts/**`, `.claude/skills/verify-qa/scripts/**`, `scripts/premerge-local.sh` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.
 
-- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only`, `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`, `python3 .claude/skills/ship/scripts/ci-why.test.py`, `bash .claude/skills/ship/scripts/user-unit-check.test.sh`, `python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py` and `node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs`. The full shell suite also contains live authenticated checks and is deliberately excluded.
+- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only`, `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`, `python3 .claude/skills/ship/scripts/ci-why.test.py`, `bash .claude/skills/ship/scripts/board-check.test.sh`, `bash .claude/skills/ship/scripts/user-unit-check.test.sh`, `python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py` and `node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs`. The full shell suite also contains live authenticated checks and is deliberately excluded.
+- Runs `python3 .claude/skills/ship/scripts/ht-hax-runner.test.py` against isolated home folders and fake process/load tools. It checks load-only launches, pauses, active sessions, target bounds, setup failure and validation before enabling the keeper timer. Interactive lifecycle fixtures check brief delivery, final-line detection, saved output, idle cooldown, failed-start watcher cleanup and bounded timeout recovery; they start no real runners.
 - Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, and Git for repository-scope detection. Sets up Node 24 for the dependency-free QA identity tests, which use only temporary storage-state fixtures and a loopback HTTP server (YPER4-607). No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
 - Uses a temporary HOME and the harnesses' temporary state and local Git/GitHub/Hypertask fixtures. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
 
@@ -236,7 +256,9 @@ GitHub-only verification for [YPER4-562](https://app.hypertask.ai/detail/project
 
 ## Premerge verify-qa (YPER4-673)
 
-`browser-smoke` keeps its one `next build`. After the live-like inbox cycle, it reseeds with `scripts/seed-browser-smoke.mjs --inbox-cycle` and runs `.github/scripts/verify-qa-premerge.mjs` against `http://127.0.0.1:3100`. The script maps the PR diff onto `.claude/skills/verify-qa/reference/feature-map/` and drives that page's journey. The only premerge driver in this unit is the inbox cycle (open by click and by Enter, send a comment, J, E, then reload). Anything else, including a tie or a page with no driver yet, falls back to that inbox cycle. The script refuses every base that is not loopback HTTP, so it cannot touch `app.hypertask.ai`.
+`browser-smoke` reuses its existing disposable PR build at `http://127.0.0.1:3100`. After the live-like inbox cycle, `.github/scripts/verify-qa-premerge.mjs` selects the feature-map page with the most changed files (longest prefix per file). Inbox changes run the seeded inbox cycle; supported login, board, task, comment, creation, AI-chat and billing changes run that page's tagged IDs from `e2e/smoke/journeys.spec.ts`, with `HT_QA_JOURNEYS=1`, one worker and no retries. The initial `--qa-journeys` seed provides a private QA runner board, so setup does not need to create another board after the Free account reaches its board limit. Writes stay on the disposable database, never a production preview. Ties, unsupported pages and unmatched diffs record `UNREACHABLE: no driver`; they never substitute inbox. Skipped or missing selected tests cannot count as PASS.
+
+Changes to the dispatcher or its tests also run an explicitly synthetic login matched-control against the same PR build, saved under `verify-qa-premerge/matched-control/`. The top-level result always reports the real diff, including an unmatched infra-only diff. This control proves dispatch and opt-in without adding an unrelated app change.
 
 Screenshots, `result.json` and `summary.md` upload as `verify-qa-premerge` for 7 days. The job summary names the journey, the feature-map page and the artifact URL. The step is report-only: `VERIFY_QA_REPORT_ONLY=1` and a non-zero exit become a warning, not a failed `browser-smoke`. It is not a ruleset context and does not block merges. A later unit can make it required after a clean week.
 
@@ -254,6 +276,33 @@ The manifest at [`.github/actions/action-archive-cache-manifest.txt`](../.github
 - **Restart behavior:** cache content changes are visible immediately and need no service restart. Restart is required only when adding or changing the `ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE` drop-in. Verify with `systemctl is-active` and a worker log containing `Found action archive ... in cache directory` for every action used by the representative job.
 
 The private reviewer workflow is commit-pinned separately in `valentinyeo/hypertask-reviewer`; its checkout and setup-node SHAs must remain present in this shared manifest.
+
+## Reviewer engine deployment proof
+
+For `hypertask-ai/reviewer` on `main`, with `SHIP_DEPLOY=none`, `ship-check deployed`
+requires a recorded `live-proof` in the ticket's evidence folder:
+
+```text
+sha: <full merged engine commit>
+source: <absolute reviewer checkout containing that commit>
+check: reviewer-workflow
+ci: https://github.com/hypertask-ai/reviewer/actions/runs/<CI run ID>
+review: https://github.com/hypertask-ai/reviewer/actions/runs/<live review run ID>
+target: https://github.com/hypertask-ai/hypertask/pull/<reviewed PR number>
+head: <full reviewed PR commit>
+```
+
+Both runs must complete successfully on that exact engine commit and `main`.
+CI must use `ci.yml`, a push or manual dispatch, and a successful `test` job.
+The live run must use `review.yml`, a repository dispatch naming the recorded
+PR and head, and a successful review step. Both published review statuses on
+that head must point to the recorded live run and succeed. Missing, mismatched,
+failed, skipped or unreadable evidence refuses deployment proof.
+
+Other target reviews can return CONCERNS on the same engine commit. They are
+not deployment tests for this recorded release. This narrow proof does not
+change target PR approval, release containment, systemd verification, or the
+no-release checks for other repositories.
 
 ## Performance baseline
 
@@ -287,7 +336,7 @@ local app. Missing output, failed, skipped or cancelled browser smoke fails the 
 The sole no-contract exception is a successful docs-only browser job with an explicit
 `docs_only=true` scope output; it does not claim the contract executed.
 Activate the new production ruleset context in coordination with this policy update:
-CI Tests' `Verify live required-check settings` step compares the live ruleset's exact
+The hourly `Required Check Settings` monitor compares the live ruleset's exact
 context set against the workflow expectation. This change does not modify that ruleset.
 
 ## Agent board scope guard (HTPR-7496)
@@ -310,3 +359,59 @@ full `approvedIn` ticket URL and the matching PR body line, respectively
 First creation and removals are free. See [the guard README](../.github/scripts/agent-scope/README.md).
 This adds no job, required check or ruleset change. Today's 81 debt entries are
 tracked in https://app.hypertask.ai/detail/project-15/7508.
+
+## Production revert proposals
+
+`production-revert-pr.yml` handles failed production CI runs. It opens a revert PR, never merges or pushes production. Existing live-health rollback stays unchanged.
+
+The read-only job replays named failing Node tests twice inside network-disabled containers. A locally built scratch image mounts system binaries, dependencies, and Git objects read-only. Runner control files, credentials, and the Docker socket stay outside. The last green production commit must pass. Git history identifies the first failing commit, whose parent must pass. The same checks must pass twice after reverting only that commit on current production. Later merges remain intact. Rate-limit, network, timeout, inconsistent, unsupported setup, dependency-lock changes, and already-fixed failures produce no proposal. The history search stops at 50 commits.
+
+The separate publisher executes no candidate code. It rechecks production, pushes one deterministic branch per culprit, and leaves auto-merge off. The existing `AUTOMERGE_TOKEN` lets the proposal trigger normal required checks. No new credential or runner is needed.
+
+Relevant PRs also replay the recorded incident without publishing. Manual dispatch accepts a failed CI run ID. It replays that historical head without opening a PR. For the 25 October source-regex incident, use run `40201291546`: the expected culprit is `73cc4b70870fb411935a3a169779a8fb8b49f168` (PR #2129). Hosted fixtures also prove publication against a disposable local Git remote, not production.
+
+## Task writer and chip quality baseline
+
+The existing [AI evals workflow](../.github/workflows/ai-evals.yml) also replays
+`tests/fixtures/task-writer-eval/recorded.json` through
+`scripts/task-writer-eval.cjs --verify-baseline` on relevant PRs. This is recorded
+behavior, not a live-model claim. The corpus has twenty historical first-version /
+current-description pairs from our own board, plus two explicitly synthetic A/B
+cases. First saved versions follow the [approved source decision](https://app.hypertask.ai/detail/project-15/7976#comment-314535);
+they are not guaranteed raw keystrokes or proof of model authorship. The target
+remains forty real pairs. No inne or IGSH text is included.
+
+The separate [live workflow](../.github/workflows/task-writer-eval.yml) runs only
+on production, scheduled at 04:17 UTC daily or manually. Its `task-writer-live` job
+renews the existing QA 985 login using `QA_LOGIN_EMAIL` and `QA_LOGIN_PASSWORD`.
+It calls the production task-writer route using current configured models, saves
+each resulting draft as a temporary QA Sandbox ticket, and invokes the same
+new-ticket chip route the UI uses. It never changes product prompts, model
+settings, flags, customer tickets or other teams' chats. Each created fixture is
+soft-deleted and read back before the next case; cleanup failures fail closed and
+retain pending IDs. There are at most 22 writer and 22 chip calls per run, one
+case at a time, with a twelve-minute start budget and twenty-minute job limit.
+
+Writer scores measure word limits, required/forbidden headings and placeholders.
+Chip scores detect requests for existing sections, exact normalized copies of the
+current prompt's examples and edits to required writer text. Empty chip responses
+are recorded as unproven, not successful generation. These deterministic checks do
+not judge factual accuracy or semantic paraphrases. Known initial debt remains
+visible in the committed baseline. Each live report includes separate writer and
+chip deltas. Quality deltas are report-only: one stochastic trial is not evidence
+of a stable regression. Transport failures and incomplete runs cannot become a baseline.
+Only score reports and cleanup IDs upload as artifacts; cookies, auth traffic and
+raw generated drafts do not. This is informational CI, not a new required check.
+
+To refresh a baseline, run the live script with a QA storage-state file in
+`QA_STATE` (or the existing renewal credentials) and `WRITER_EVAL_OUTPUT` pointing
+outside the committed fixture folder. Review the full output, promote it to
+`recorded.json`, then run `node scripts/task-writer-eval.cjs --save-baseline`.
+The offline replay binds the complete corpus hash and recomputes every score.
+
+
+## Incident correlation replay
+
+`ship-scripts-tests` runs the collector's supported offline runner and claim
+checks: four Vercel reports join the original MCP report with five activities.
+Different roots/routes stay separate. All board commands are private fakes.

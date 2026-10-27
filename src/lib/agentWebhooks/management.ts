@@ -3,21 +3,19 @@ import { SEALED_WEBHOOK_KEYS_FLAG } from "@/lib/flags/definitions/htpr-7624-seal
 import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
 import { agentWithinTeamWhere } from "@/lib/mcp/managementKeyTeamScope";
 import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
+import { AuthHeaderInputError, authHeaderColumns, parseAuthHeaderChange } from "./authHeader";
 import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import {
-  AGENT_RUN_FEATURE_FLAG,
-} from "@/lib/agentRuns/model";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AGENT_RUN_WEBHOOK_EVENTS,
   AGENT_WEBHOOK_DELIVERY_CONTRACT,
-  availableAgentWebhookEventDefinitions,
-  availableAgentWebhookEvents,
+  AGENT_WEBHOOK_EVENT_DEFINITIONS,
+  AGENT_WEBHOOK_EVENTS,
   parseAgentWebhookEvents,
 } from "./events";
 import {
@@ -43,6 +41,8 @@ export function serializeAgentWebhookSubscription(sub: {
   projectId: number | null;
   url: string;
   secret: string;
+  authHeaderName?: string | null;
+  authHeaderValue?: string | null;
   events: string[];
   active: boolean;
   createdAt: Date;
@@ -58,6 +58,8 @@ export function serializeAgentWebhookSubscription(sub: {
     events: sub.events,
     active: sub.active,
     secretHint: webhookSigningKeyHint(sub.secret),
+    authHeaderName: sub.authHeaderName ?? null,
+    authHeaderSet: Boolean(sub.authHeaderName && sub.authHeaderValue),
     createdAt: sub.createdAt.toISOString(),
     updatedAt: sub.updatedAt.toISOString(),
     lastDeliveryAt: sub.lastDeliveryAt?.toISOString() ?? null,
@@ -133,12 +135,8 @@ export async function upsertAgentWebhook(input: {
   body: Record<string, unknown>;
 }) {
   await assertAgentWebhookOwner(input.userId, input.agentId, input.principal);
-  const runsEnabled = await isFeatureEnabled(
-    AGENT_RUN_FEATURE_FLAG,
-    input.userId,
-  );
-  const availableEvents = availableAgentWebhookEvents(runsEnabled);
-  const eventDefinitions = availableAgentWebhookEventDefinitions(runsEnabled);
+  const availableEvents = AGENT_WEBHOOK_EVENTS;
+  const eventDefinitions = AGENT_WEBHOOK_EVENT_DEFINITIONS;
 
   const rawUrl = input.body.url;
   const requestedUrl = typeof rawUrl === "string" ? rawUrl.trim() : undefined;
@@ -187,6 +185,13 @@ export async function upsertAgentWebhook(input: {
   if (input.body.active !== undefined && typeof input.body.active !== "boolean") {
     throw new AgentWebhookInputError("active must be a boolean", "active");
   }
+
+  const authHeaderChange = await parseAuthHeaderChange(input.body, input.userId).catch((error) => {
+    if (error instanceof AuthHeaderInputError) {
+      throw new AgentWebhookInputError(error.message, error.field);
+    }
+    throw error;
+  });
 
   const transactionLockId = crypto
     .createHash("sha256")
@@ -237,8 +242,10 @@ export async function upsertAgentWebhook(input: {
           events: parsedEvents.events,
           active,
           secret: storedSecret,
+          ...authHeaderColumns(authHeaderChange),
         },
         update: {
+          ...authHeaderColumns(authHeaderChange),
           projectId,
           url,
           events: parsedEvents.events,
@@ -283,6 +290,10 @@ export async function manageAgentWebhook(input: {
   events?: unknown;
   active?: unknown;
   deliveryId?: unknown;
+  authHeaderName?: unknown;
+  authHeaderValue?: unknown;
+  bearerSecret?: unknown;
+  clearAuthHeader?: unknown;
 }) {
   await assertAgentWebhookOwner(input.userId, input.agentId, input.principal);
 
@@ -300,6 +311,10 @@ export async function manageAgentWebhook(input: {
           events: input.events,
           active: input.active,
           rotateSecret: input.action === "rotate",
+          authHeaderName: input.authHeaderName,
+          authHeaderValue: input.authHeaderValue,
+          bearerSecret: input.bearerSecret,
+          clearAuthHeader: input.clearAuthHeader,
         },
       })),
     };
@@ -319,12 +334,8 @@ export async function manageAgentWebhook(input: {
   }
 
   if (input.action === "get") {
-    const runsEnabled = await isFeatureEnabled(
-      AGENT_RUN_FEATURE_FLAG,
-      input.userId,
-    );
-    const availableEvents = availableAgentWebhookEvents(runsEnabled);
-    const eventDefinitions = availableAgentWebhookEventDefinitions(runsEnabled);
+    const availableEvents = AGENT_WEBHOOK_EVENTS;
+    const eventDefinitions = AGENT_WEBHOOK_EVENT_DEFINITIONS;
     return {
       success: true,
       scope: "agent" as const,

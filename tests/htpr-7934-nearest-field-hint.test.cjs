@@ -16,7 +16,7 @@ function tool(hint) {
     description: 'add',
     parameters: comments.getAddCommentCrudBaseSchema(),
     execute: async (args) => JSON.stringify({ success: true, args }),
-  }], true, {}, true, false, false, false, false, false, false, false, hint)[0]
+  }], true, {}, false, false, false, false, false, false, false, false, false, hint)[0]
 }
 
 async function refusal(hint, input) {
@@ -70,6 +70,7 @@ test('nearestFieldName normalizes keys and recognizes real fields before aliases
 })
 
 test('nearestFieldName refuses ties, absent alias targets and weak fuzzy matches', () => {
+  assert.equal(nearestFieldName('titel', ['title']), 'title')
   assert.equal(nearestFieldName('tast', ['test', 'tost']), undefined)
   assert.equal(nearestFieldName('content', ['title']), undefined)
   assert.equal(nearestFieldName('contnet', ['title']), undefined)
@@ -125,4 +126,12 @@ test('a correctly shaped comment add call is untouched by the hint', async () =>
   assert.equal(JSON.parse(result.content[0].text).data.success, true)
   assert.equal(JSON.parse(result.content[0].text).data.args.text, 'Comment')
   assert.deepEqual(result, await executeToolResult(tool(false), args, 'fixture'))
+})
+
+
+test('nearest and renamed field hints coexist without replacing board guidance', () => {
+  const error = comments.getAddCommentCrudBaseSchema().safeParse({ taskId: 42 }).error
+  const issue = error.issues.find((issue) => issue.code === 'unrecognized_keys')
+  issue.fieldHint = 'Did you mean task_id?'
+  assert.equal(actionableToolError(error, { nearestField: true, renamedField: true, fields: ['task_id'] }), 'Remove unsupported fields taskId from input; use only fields documented for this action. Use task_id instead of taskId. Did you mean task_id?')
 })

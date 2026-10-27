@@ -56,7 +56,7 @@ async function publish(name, outcomes, completedRun = false, { current = {}, eva
 test('PR guards fold evaluation runners, retain every verdict and never persist checkout credentials', () => {
   for (const name of ['pr-guards', 'pr-guards-trusted']) {
     const w = workflow(name);
-    assert.deepEqual(Object.keys(w.jobs), name.endsWith('trusted') ? [name, 'scan-completion'] : [name]);
+    assert.deepEqual(Object.keys(w.jobs), name.endsWith('trusted') ? [name, 'bind-ticket', 'scan-completion'] : [name]);
     assert.equal(w.permissions.statuses, 'write');
     assert.equal(w.concurrency['cancel-in-progress'], true);
     assert.match(w.concurrency.group, /pull_request.number/);
@@ -73,7 +73,7 @@ test('PR guards fold evaluation runners, retain every verdict and never persist 
   assert.deepEqual(Object.keys(workflow('pr-guards').on), ['pull_request']);
   assert.equal(workflow('pr-guards').on.pull_request, null);
   const trusted = workflow('pr-guards-trusted');
-  assert.deepEqual(Object.keys(trusted.on), ['pull_request_target', 'workflow_run']);
+  assert.deepEqual(Object.keys(trusted.on), ['pull_request_target', 'workflow_dispatch', 'workflow_run']);
   assert.deepEqual(trusted.on.workflow_run, { workflows: ['PR Guards'], types: ['completed'] });
   assert.notEqual(trusted.name, workflow('pr-guards').name);
   assert.match(trusted.jobs['pr-guards-trusted'].if, /github.event_name == 'pull_request_target'/);
@@ -266,7 +266,11 @@ test('pending title status also skips same-head edits and all pending statuses s
 test('global reconciliation keeps original events, serialization and isolated workflows', () => {
   const trusted = workflow('pr-guards-trusted').jobs['pr-guards-trusted'];
   assert.deepEqual(trusted.steps.filter(step => step.id).map(step => step.id), ['outside', 'size', 'title']);
-  assert.doesNotMatch(JSON.stringify(trusted), /feature-flag|ux-signoff|MCP_TOKEN/);
+  assert.doesNotMatch(JSON.stringify(trusted), /feature-flag|ux-signoff/);
+  assert.doesNotMatch(JSON.stringify(trusted.steps.filter(step => step.id !== 'title')), /MCP_TOKEN/);
+  assert.deepEqual(trusted.steps.find(step => step.id === 'title').env, {
+    HYPERTASK_MCP_TOKEN: '${{ secrets.HYPERTASK_MCP_TOKEN }}',
+  });
   const flags = workflow('feature-flag-gate');
   assert.deepEqual(Object.keys(flags.on).sort(), ['pull_request_target', 'push']);
   assert.equal(Object.keys(flags.jobs).length, 2);
@@ -283,9 +287,9 @@ test('CI policy budgets the reduced folding and keeps UX out of required context
   const policy = yaml.load(read('docs/ci-policy.yml'));
   const budget = policy.pr_job_budget;
   assert.equal(budget.normal_synchronize_before, 17);
-  assert.equal(budget.normal_synchronize_after, 15);
+  assert.equal(budget.normal_synchronize_after, 16);
   assert.equal(budget.opened_before, 18);
-  assert.equal(budget.opened_after, 15);
+  assert.equal(budget.opened_after, 16);
   assert.deepEqual(budget.pull_request_guards.published_statuses, ['secret-scan', 'next-public-secrets']);
   assert.deepEqual(budget.trusted_pull_request_guards.published_statuses, ['outside-pr-guard', 'pr-size', 'pr-title']);
   for (const guard of [budget.pull_request_guards, budget.trusted_pull_request_guards, ...budget.serialized_reconciliation_guards]) {

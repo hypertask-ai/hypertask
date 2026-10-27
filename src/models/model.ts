@@ -58,6 +58,7 @@ export interface IChatMessage {
   attachments?: IAttachment[];
   statusSteps?: string[];
   authorAgent?: { displayName: string } | null;
+  precedesMessageId?: string;
 }
 
 export type RedirectMode =
@@ -752,7 +753,7 @@ export interface FCMDeviceInfo {
 
 export interface CreateCheckoutParams {
   trialDays?: number;
-  checkoutIntent?: "signup-straight-to-board";
+  checkoutIntent?: "signup-straight-to-board" | "start-plan";
   googleAccountId: string;
   returnUrl: string;
   priceId: string;

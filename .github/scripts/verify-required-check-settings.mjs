@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 
-const maxWaitSeconds = 300;
-const deadline = Date.now() + 360_000;
+const maxWaitSeconds = 3900;
+const deadline = Date.now() + 4_000_000;
 let waitedSeconds = 0;
 
 function needsVerification() {
@@ -30,7 +30,7 @@ function needsVerification() {
 
 function readSettings(endpoint) {
   for (;;) {
-    if (Date.now() + 30_000 > deadline) throw new Error("Settings verification exceeded its six-minute time budget.");
+    if (Date.now() + 30_000 > deadline) throw new Error("Settings verification exceeded its time budget.");
     const response = spawnSync("gh", ["api", "--include", endpoint], {
       encoding: "utf8", timeout: 30_000, maxBuffer: 8 * 1024 * 1024,
     });
@@ -62,7 +62,9 @@ function readSettings(endpoint) {
     if (!waits.length) throw new Error("GitHub rate limited settings read without a usable reset/retry-after header; refusing to pass.");
     const seconds = Math.max(1, ...waits);
     if (waitedSeconds + seconds > maxWaitSeconds || now + seconds * 1000 + 30_000 > deadline) {
-      throw new Error(`GitHub rate limit wait cap exceeded (300s total; ${waitedSeconds}s already waited, ${seconds}s requested); settings were not verified.`);
+      const error = new Error(`GitHub API rate limit, not a test failure: wait cap exceeded (${maxWaitSeconds}s total; ${waitedSeconds}s already waited, ${seconds}s requested); settings were not verified.`);
+      error.rateLimited = true;
+      throw error;
     }
     console.log(`Required-check settings: rate limited, waiting ${seconds}s until reset`);
     const sleep = spawnSync("sleep", [String(seconds)], { timeout: (seconds + 5) * 1000 });
@@ -105,5 +107,8 @@ try {
   }
 } catch (error) {
   console.error(`::error::${error.message}`);
+  if (error.rateLimited && process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### GitHub API rate limit, not a test failure\n\n${error.message}\n\nRe-run this job after the limit resets.\n`);
+  }
   process.exitCode = 1;
 }

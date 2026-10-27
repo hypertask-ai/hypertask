@@ -301,7 +301,6 @@ for (const viewsEnabled of [false, true]) {
     global.document = dom.window.document;
     global.IS_REACT_ACT_ENVIRONMENT = true;
     flagValues["htpr-6312-my-tasks-priority-filter"] = false;
-    flagValues["htpr-6421-my-tasks-shortcuts-width"] = true;
     flagValues["htpr-6422-my-tasks-views"] = viewsEnabled;
     const boardSections = [10, 20, 30, 40].map((projectId) => ({
       id: projectId, projectId, section_title: `Board ${projectId}`,
@@ -317,6 +316,9 @@ for (const viewsEnabled of [false, true]) {
         currentUser: { id: 6 }, viewsEnabled,
       })));
       assert.deepEqual(lastViewItems(), [10]);
+      const panel = document.querySelector('[data-testid="my-tasks-panel"]');
+      assert.equal(panel.classList.contains("w-full"), true);
+      assert.equal(panel.classList.contains("global-view-width"), false);
       // Hold React commits until the burst finishes to expose render-captured state.
       for (const [shiftKey, expectedBoards, expectedItems] of [
         [false, [20, 30, 40], [40]],
@@ -334,7 +336,6 @@ for (const viewsEnabled of [false, true]) {
       }
     } finally {
       act(() => reactRoot.unmount());
-      flagValues["htpr-6421-my-tasks-shortcuts-width"] = false;
       flagValues["htpr-6422-my-tasks-views"] = false;
       dom.window.close();
       delete global.window;

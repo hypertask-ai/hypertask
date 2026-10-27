@@ -1,3 +1,4 @@
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
@@ -16,7 +17,7 @@ import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
-import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
+import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, isGrokGemini4ModelKey, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
@@ -25,7 +26,7 @@ import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
 import prisma from "@/lib/prisma";
-import { HTPR_7038_TASK_WRITER_SONNET_FLAG, HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
+import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
 export const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -75,13 +76,13 @@ const CLAUDE_MODELS = new Set([
   "claude-opus-5.5",
   "claude-opus-5-5",
   "claude-opus-5",
-  "claude-haiku-4.5",
   "claude-haiku-5.5",
   "claude-haiku-5-5",
 ]);
 const OPENAI_MODELS = new Set([
   "gpt-6-luna",
   "gpt-5.6-luna",
+  "gpt-6.1-terra",
   "gpt-5.6-terra",
   "gpt-6.1-sol",
   "gpt-6-sol",
@@ -412,6 +413,7 @@ export async function selectTiptapModel(args?: {
     agentId: args?.agentId,
     provider: selected.usageProvider,
     feature: "editor",
+    reasoningFeature: "slash-rewrite",
   });
   return selected;
 }
@@ -427,7 +429,8 @@ export function selectEditorModel(
     modelOption?: TAiModelOption;
   }
 ): SelectedModel {
-  const requestedModel = modelId?.trim() || undefined;
+  const trimmedModel = modelId?.trim();
+  const requestedModel = trimmedModel ? resolveHaikuModelId(trimmedModel) : undefined;
   const feature = options?.feature ?? "task-writer";
   const usageProvider = aiUsageProviderForCredential(
     provider,
@@ -618,14 +621,7 @@ export async function selectTaskWriterModel(args: {
   taskWriterAgentId?: string | null;
   teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
 }) {
-  let taskWriterSonnet = false;
-  if (args.aiFeature === "taskWriter" && args.userId) {
-    try {
-      const { isFeatureEnabled } = await import("@/lib/flags");
-      taskWriterSonnet = await isFeatureEnabled(HTPR_7038_TASK_WRITER_SONNET_FLAG, args.userId);
-    } catch {
-    }
-  }
+  const taskWriterSonnet = args.aiFeature === "taskWriter" && Boolean(args.userId);
   const agentId = args.agentId ?? (args.teamScope != null || taskWriterSonnet ? args.taskWriterAgentId : null);
   const teamContext =
     args.teamContext ??
@@ -664,6 +660,9 @@ export async function selectTaskWriterModel(args: {
   }
   const deepseekFlashFastEnabled = await import("@/lib/flags")
     .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, args.userId ?? 0))
+    .catch(() => false);
+  const grokGemini4Enabled = await import("@/lib/flags")
+    .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7939_GROK_GEMINI4_MODELS_FLAG, args.userId ?? 0))
     .catch(() => false);
   const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
   const defaultContext = haiku55Enabled
@@ -705,7 +704,12 @@ export async function selectTaskWriterModel(args: {
       );
   if (selection.modelOption) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(selection.modelOption, teamContext.settings, haiku55Enabled)
+      filterModelOptionForTeam(selection.modelOption, teamContext.settings, haiku55Enabled, grokGemini4Enabled)
+    );
+  }
+  if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
+    selection = selectionFromModelOption(
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled, grokGemini4Enabled),
     );
   }
   if (
@@ -716,7 +720,7 @@ export async function selectTaskWriterModel(args: {
     )
   ) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled),
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled, grokGemini4Enabled),
     );
   }
 
@@ -783,6 +787,13 @@ export async function selectTaskWriterModel(args: {
         () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
       );
     }
+  }
+
+  if (!grokGemini4Enabled && isGrokGemini4ModelKey(selection.modelOption?.modelKey)) {
+    selection = selectionFromModelOption(
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled, grokGemini4Enabled),
+    );
+    byokApiKey = await getSelectionApiKey(selection);
   }
 
   if (selection.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok?.provider === "openrouter") {

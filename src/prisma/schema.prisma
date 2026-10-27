@@ -2296,6 +2296,8 @@ model AgentWebhookSubscription {
   project        Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   url            String
   secret         String
+  authHeaderName  String?
+  authHeaderValue String?
   events         String[]
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())

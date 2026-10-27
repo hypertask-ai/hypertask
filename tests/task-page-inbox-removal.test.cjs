@@ -55,7 +55,7 @@ const hydratedTask = {
   notifications: [notification],
 };
 
-function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new Set(), extraRows = [] } = {}) {
+function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new Set(), extraRows = [], inboxFlow = "true" } = {}) {
   const client = new QueryClient();
   const key = ["inbox", 6];
   const currentUser = { id: 6 };
@@ -96,7 +96,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
     useSetRecoilState: () => () => {},
   };
   const query = { useQueryClient: () => client };
-  const searchParams = new URLSearchParams("inboxFlow=true");
+  const searchParams = new URLSearchParams(inboxFlow === null ? "" : `inboxFlow=${inboxFlow}`);
   const nextNavigation = {
     usePathname: () => "/detail/project-15/6894",
     useSearchParams: () => searchParams,
@@ -135,9 +135,11 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
   global.window = { dispatchEvent: () => {} };
   global.document = { querySelector: () => null, getElementById: () => null };
   global.fetch = async (url, options) => {
-    requests.push(url);
+    assert.equal(options.method, "POST");
+    const body = JSON.parse(options.body);
+    requests.push(`${url}?${new URLSearchParams(Object.entries(body).map(([name, value]) => [name, String(value)]))}`);
     const res = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json() { return this; } };
-    await route({ method: options.method, headers: {}, query: Object.fromEntries(new URL(url, "https://app.hypertask.ai").searchParams) }, res);
+    await route({ method: options.method, headers: {}, query: {}, body }, res);
     return { ok: res.statusCode === 200 };
   };
   client.invalidateQueries = async (options) => {
@@ -151,9 +153,16 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
     client.clear();
   });
   const focus = loadSource("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
-    "@/lib/api/typedClient": {},
+    "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox": load("src/lib/flags/definitions/htpr-7970-bulk-blocked-inbox.ts", {}),
+    "@/lib/api/typedClient": {
+      toggleNotificationArchive: (body, headers) => global.fetch("/api/notifications/markAsDone", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      archiveNotifications: async () => {},
+    },
     "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/keys": { HTPR_6979_TYPED_WRITES_FLAG: "htpr-6979-typed-writes-sections-notifications" },
     "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive": {
       HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG: "htpr-7840-blocked-inbox-archive",
     },
@@ -175,7 +184,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new 
   }).default();
   const useArchive = loadSource("src/hooks/Task Detail/useArchiveAndNavigate.ts", {
     "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
-    "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: "htpr-7311-decision-comment-link", HTPR_7659_ARCHIVE_EVERY_SEND_FLAG: "htpr-7659-archive-every-send" },
+    "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: "htpr-7311-decision-comment-link", HTPR_7659_ARCHIVE_EVERY_SEND_FLAG: "htpr-7659-archive-every-send", HTPR_7792_REPLY_INBOX_FLAG: "htpr-7792-reply-inbox" },
     "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive": {
       HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG: "htpr-7840-blocked-inbox-archive",
     },
@@ -296,10 +305,20 @@ test("HTPR-7659: the comment writer treats a message still in the inbox list as 
   const definition = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7659-archive-every-send.ts"), "utf8");
   assert.match(definition, /kind: "bugfix"/);
   assert.match(definition, /defaultMode: "EVERYONE"/);
-  const editorState = fs.readFileSync(path.join(root, "src/components/RTE/useTaskDetailEditorState.tsx"), "utf8");
-  assert.match(editorState, /archiveEverySend &&\s*isInboxFlow &&\s*!!inboxMessageForTask\(/);
   const [, { row, sent }] = sendsInARow();
   assert.equal(navigation.inboxMessageForTask([row], sent, 6), row);
   assert.equal(navigation.inboxMessageForTask([{ ...row, status: "Archive" }], sent, 6), undefined);
   assert.equal(navigation.inboxMessageForTask([row], sent, 7), undefined);
+});
+
+for (const enabled of [false, true]) test(`HTPR-7792: a board-opened ticket uses current inbox membership, flag ${enabled ? "on" : "off"}`, async (t) => {
+  const stale = { ...task, _count: { notifications: 0 }, notifications: [] };
+  const flags = new Set(enabled ? ["htpr-7792-reply-inbox"] : []);
+  const flow = makeFlow(t, stale, stale, [task], { flags, inboxFlow: null });
+  assert.equal(flow.useArchive().navigateToNextTask(true, false), "stayed");
+  await Promise.all(flow.pending);
+  assert.equal(flow.requests.length, enabled ? 1 : 0);
+  assert.equal(flow.rows.filter(row => row.userId === 6 && row.status === "Normal").length, enabled ? 0 : 2);
+  assert.equal(flow.rows.filter(row => row.userId === 7 && row.status === "Normal").length, 1);
+  assert.equal(flow.navigations.filter(([kind]) => kind !== "Refresh").length, 0);
 });

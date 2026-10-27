@@ -2,7 +2,6 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { load } = require('./task-route-loader.cjs');
 
-const key = 'htpr-6924-rest-compat';
 const operations = {
   create: ['create', 'POST', { task_id: 50, parent_page_id: 61, title: 'New', content: '<p>new</p>' }],
   list: ['list', 'GET'],
@@ -18,9 +17,10 @@ const page = {
   version: 3, taskId: 50, subPages: [], parentPageId: null, updatedAt: '2026-10-01T00:00:00.000Z',
 };
 const headers = [['content-type', 'application/json']];
-const modes = ['ON', 'OFF', 'FLAG_FAILURE', 'USER_FAILURE', 'NO_SESSION'];
+const modes = ['ON', 'OFF', 'USER_FAILURE', 'NO_SESSION'];
 
-async function run(operation, mode = 'OFF', options = {}) {
+async function run(operation, requestedMode = 'OFF', options = {}) {
+  const mode = requestedMode === 'OFF' ? 'NO_SESSION' : requestedMode;
   const calls = [];
   const probes = [];
   const lookups = [];
@@ -63,11 +63,6 @@ async function run(operation, mode = 'OFF', options = {}) {
       return mode === 'NO_SESSION' ? null : { userId };
     } },
     '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
-    '@/lib/flags': { HTPR_6924_REST_COMPAT_FLAG: key, isFeatureEnabled: async (...args) => {
-      probes.push(['flag', ...args]);
-      if (mode === 'FLAG_FAILURE') throw new Error('flag lookup failed');
-      return mode === 'ON';
-    } },
     '@/lib/prisma': { default: {
       task: { findFirst: async (args) => { record('task', args); return options.missing ? null : { id: 50 }; } },
       project: { findMany: async (args) => { record('projects', args); return [{ id: 15 }]; } },
@@ -87,7 +82,7 @@ async function run(operation, mode = 'OFF', options = {}) {
     else url.searchParams.set(name, value);
   }
   const request = {
-    headers: new Headers({ cookie: 'fixture', 'x-user-id': '6', 'x-feature-flag': key }),
+    headers: new Headers({ cookie: 'fixture', 'x-user-id': '6' }),
     nextUrl: url,
     json: async () => {
       record('json', null);
@@ -446,34 +441,30 @@ const baseline = {
 
 if (require.main === module) {
   for (const operation of Object.keys(operations)) {
-    test(`${operation}: ON/OFF/failure success bytes, scoped inputs, actor and ordering match production`, async () => {
+    test(`${operation}: session and legacy success bytes, scoped inputs, actor and ordering match production`, async () => {
       for (const mode of modes) {
         const result = await run(operation, mode);
         assert.deepEqual(contract(result), baseline[operation]);
         assert.equal(result.probes.filter(([kind]) => kind === 'user').length, 1);
-        const expectedFlag = ['ON', 'OFF', 'FLAG_FAILURE'].includes(mode);
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), expectedFlag ? [['flag', key, 985]] : []);
         assert.equal(result.probes[0][1], result.requestHeaders);
       }
     });
-    // HTPR-7073: the signed session alone identifies the user when the REST compat flag is on.
-    test(`${operation}: flag OFF keeps 401 for missing/invalid profiles before parsing and side effects`, async () => {
+    test(`${operation}: no session keeps 401 for missing/invalid profiles before parsing and side effects`, async () => {
       for (const options of [{ noProfile: true }, { invalidProfile: true }]) {
         const result = await run(operation, 'OFF', { ...options, raw: '{' });
         error(result, 401, 'Unauthorized');
         assert.deepEqual(result.calls, []);
         assert.deepEqual(result.lookups, []);
-        assert.equal(result.probes.filter(([kind]) => kind === 'flag').length, 1);
       }
     });
-    test(`${operation}: flag ON loads the profile of the signed session user when the profile is missing, invalid or mismatched`, async () => {
+    test(`${operation}: a signed session loads the profile of the signed session user when the profile is missing, invalid or mismatched`, async () => {
       for (const options of [{ noProfile: true }, { invalidProfile: true }, { profileId: 7 }]) {
         const result = await run(operation, 'ON', options);
         assert.deepEqual(contract(result), baseline[operation]);
         assert.deepEqual(result.lookups, [{ where: { id: 985 }, include: { UserSetting: true, userPicture: true } }]);
       }
     });
-    test(`${operation}: no session or no user row keeps 401; mismatched profiles stay legacy without the flag`, async () => {
+    test(`${operation}: no session or no user row keeps 401; mismatched profiles stay legacy without a session`, async () => {
       for (const options of [{ noProfile: true }, { invalidProfile: true }]) {
         const noSession = await run(operation, 'NO_SESSION', { ...options, raw: '{' });
         error(noSession, 401, 'Unauthorized');
@@ -510,4 +501,4 @@ if (require.main === module) {
     }
   });
 }
-module.exports = { run, contract, error, operations, modes, key, baseline };
+module.exports = { run, contract, error, operations, modes, baseline };

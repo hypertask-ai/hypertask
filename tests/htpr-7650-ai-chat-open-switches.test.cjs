@@ -272,7 +272,7 @@ function preferencesApi(enabled, body, stored = { aiChatOpenNewTickets: null, ai
   const api = load("src/app/api/users/preferences/route.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "done" },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => ({ userId: 7 }) },
-    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "rest", isFeatureEnabled: async (key, id) => { assert.equal(id, 7); flagReads.push(key); return key === "rest" || enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(id, 7); flagReads.push(key); return enabled; } },
     "@/lib/mcp/readJsonBody": { readJsonBody: async () => ({ ok: true, body }) },
     "next/server": { NextResponse: { json: (data, options) => ({ data, status: options?.status ?? 200 }) } },
     "next/headers": empty,

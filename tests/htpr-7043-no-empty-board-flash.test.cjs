@@ -28,7 +28,7 @@ const refusal = Object.assign(new Error("Refused"), {
   response: { status: 400, data: { code: "LAST_COLUMN_HAS_CARDS", message } },
 });
 
-function fixture(t, { enabled = true, typed = false, project, queued = false } = {}) {
+function fixture(t, { enabled = true, project, queued = false } = {}) {
   const column = { id: 91, section_title: "Todo", deleted: false, items: [] };
   const card = { id: 42, sectionId: 91, section: "Todo", status: "Normal" };
   project ??= { id: 15, section: [column], sections: [column], filteredSections: [column], tasks: [card] };
@@ -59,7 +59,7 @@ function fixture(t, { enabled = true, typed = false, project, queued = false } =
     noEmptyBoardFlash: enabled, lastColumnDeleteMessage: false,
     sections: project.sections, currentProject: project, editSection, currentUser: { id: 985 },
     updating: false, queryClient, globalConstants: { GetAllManageColumnsPrefixKey: "manageColumns" },
-    typedWrite: typed ? post : undefined,
+    writeSection: post,
     axios: { isAxiosError: axios.isAxiosError, post: (url, body) => {
       assert.equal(url, "/api/section/update"); return post(body);
     } },
@@ -84,58 +84,56 @@ function untouched(f) {
   assert.deepEqual(f.state.refetches, []);
 }
 
-for (const typed of [false, true]) {
-  test(`populated last column is refused before any mutation or ${typed ? "typed" : "legacy"} request`, async (t) => {
-    const f = fixture(t, { typed });
-    await f.confirmDelete();
-    assert.deepEqual(f.state.requests, []);
-    assert.deepEqual(f.state.toasts, [message]);
-    untouched(f);
-    assert.deepEqual(f.state.frames, []);
-  });
+test(`populated last column is refused before any mutation or typed request`, async (t) => {
+  const f = fixture(t);
+  await f.confirmDelete();
+  assert.deepEqual(f.state.requests, []);
+  assert.deepEqual(f.state.toasts, [message]);
+  untouched(f);
+  assert.deepEqual(f.state.frames, []);
+});
 
-  test(`OFF preserves the existing ${typed ? "typed" : "legacy"} refusal behavior`, async (t) => {
-    const f = fixture(t, { enabled: false, typed });
-    const done = f.confirmDelete();
-    await new Promise(setImmediate);
-    assert.equal(f.state.requests.length, 1);
-    assert.equal(f.state.project.sections.length, 0);
-    assert.ok(f.state.frames.some((frame) => frame.includes(0)), "positive control reproduces the empty frame");
-    f.reject(refusal);
-    await done;
-    assert.deepEqual(f.state.toasts, ["Column could not be deleted"]);
-    assert.equal(f.state.project.sections.length, 1);
-  });
+test(`OFF preserves the existing typed refusal behavior`, async (t) => {
+  const f = fixture(t, { enabled: false });
+  const done = f.confirmDelete();
+  await new Promise(setImmediate);
+  assert.equal(f.state.requests.length, 1);
+  assert.equal(f.state.project.sections.length, 0);
+  assert.ok(f.state.frames.some((frame) => frame.includes(0)), "positive control reproduces the empty frame");
+  f.reject(refusal);
+  await done;
+  assert.deepEqual(f.state.toasts, ["Column could not be deleted"]);
+  assert.equal(f.state.project.sections.length, 1);
+});
 
-  test(`unseen cards keep the last column in every frame until the ${typed ? "typed" : "legacy"} server refusal`, async (t) => {
-    const column = { id: 91, section_title: "Todo", items: [] };
-    const project = { id: 15, section: [column], sections: [column], filteredSections: [column], tasks: [] };
-    const f = fixture(t, { typed, project });
-    const done = f.confirmDelete();
-    await new Promise(setImmediate);
-    assert.equal(f.state.requests.length, 1);
-    untouched(f);
-    f.reject(refusal);
-    await done;
-    assert.deepEqual(f.state.toasts, [message]);
-    untouched(f);
-    neverEmpty(f);
-  });
+test(`unseen cards keep the last column in every frame until the typed server refusal`, async (t) => {
+  const column = { id: 91, section_title: "Todo", items: [] };
+  const project = { id: 15, section: [column], sections: [column], filteredSections: [column], tasks: [] };
+  const f = fixture(t, { project });
+  const done = f.confirmDelete();
+  await new Promise(setImmediate);
+  assert.equal(f.state.requests.length, 1);
+  untouched(f);
+  f.reject(refusal);
+  await done;
+  assert.deepEqual(f.state.toasts, [message]);
+  untouched(f);
+  neverEmpty(f);
+});
 
-  test(`an actually empty last column waits for ${typed ? "typed" : "legacy"} success before removal`, async (t) => {
-    const column = { id: 91, section_title: "Todo", items: [] };
-    const f = fixture(t, { typed, project: { id: 15, section: [column], sections: [column], filteredSections: [column], tasks: [] } });
-    const done = f.confirmDelete();
-    await new Promise(setImmediate);
-    untouched(f);
-    neverEmpty(f);
-    f.resolve({ status: 204 });
-    await done;
-    assert.deepEqual(f.queryClient.getQueryData(f.keys[3]), []);
-    assert.deepEqual(f.state.refetches, [[{ queryKey: ["projectsAll"] }]]);
-    assert.deepEqual(f.state.toasts, []);
-  });
-}
+test(`an actually empty last column waits for typed success before removal`, async (t) => {
+  const column = { id: 91, section_title: "Todo", items: [] };
+  const f = fixture(t, { project: { id: 15, section: [column], sections: [column], filteredSections: [column], tasks: [] } });
+  const done = f.confirmDelete();
+  await new Promise(setImmediate);
+  untouched(f);
+  neverEmpty(f);
+  f.resolve({ status: 204 });
+  await done;
+  assert.deepEqual(f.queryClient.getQueryData(f.keys[3]), []);
+  assert.deepEqual(f.state.refetches, [[{ queryKey: ["projectsAll"] }]]);
+  assert.deepEqual(f.state.toasts, []);
+});
 
 for (const cards of ["items", "legacy-title", "deleted-other-column", "sectionId-alias"]) {
   test(`guard handles ${cards} without relying on visible task counts`, async (t) => {

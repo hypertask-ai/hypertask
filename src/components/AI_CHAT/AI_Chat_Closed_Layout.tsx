@@ -30,6 +30,8 @@ export default function AIChatClosedLayout({
   chatOpen = false,
   sidebarWidthPx = 0,
 }: AIChatClosedLayoutProps) {
+  const [interactive, setInteractive] = useState(false);
+  useLayoutEffect(() => setInteractive(true), []);
   const pathname = usePathname();
   const isMobile = useContext(MobileViewContext);
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
@@ -74,7 +76,7 @@ export default function AIChatClosedLayout({
   const phoneDetailWithoutChat = isDetailPage && isMobile && !chatOpen;
 
   return (
-    <div key={viewportKey} className={cn(phoneDetailWithoutChat ? "contents" : "flex", !isDetailPage && "h-screen")}>
+    <div key={viewportKey} data-ai-chat-ready={interactive} className={cn(phoneDetailWithoutChat ? "contents" : "flex", !isDetailPage && "h-screen")}>
       <div
         data-ai-workspace
         tabIndex={-1}

@@ -27,7 +27,7 @@ for (const Validator of [Ajv, Ajv2020]) {
   test(`${Validator.name}: every advertised consolidated schema is flat, valid and retains all action variants`, () => {
     const ajv = new Validator({ strict: false })
     require('ajv-formats')(ajv)
-    const tools = visible(selectMcpTools(legacy, true, {}, true, true, true))
+    const tools = visible(selectMcpTools(legacy, true, {}, true, true))
     assert.equal(tools.length, definitions.length)
     for (const tool of tools) {
       const schema = tool.inputSchema
@@ -51,15 +51,15 @@ for (const Validator of [Ajv, Ajv2020]) {
 
 test('flag Off preserves the old schema exactly, including each action input schema', () => {
   const previous = loader({ './config/consolidated-descriptions': { CONSOLIDATED_TOOL_DESCRIPTIONS: definitions } }, true)('src/lib/mcp-server/consolidated-tools.ts')
-  const before = visible(previous.selectMcpTools(legacy, true, {}, true))
-  const off = visible(selectMcpTools(legacy, true, {}, true, false))
-  const on = visible(selectMcpTools(legacy, true, {}, true, true))
+  const before = visible(previous.selectMcpTools(legacy, true, {}))
+  const off = visible(selectMcpTools(legacy, true, {}, false))
+  const on = visible(selectMcpTools(legacy, true, {}, true))
   const withoutFeedback = (tools) => tools.filter((tool) => tool.name !== 'hypertask_report_feedback').map((tool) => tool.inputSchema)
   assert.deepEqual(withoutFeedback(off), withoutFeedback(before))
   const feedback = off.find((tool) => tool.name === 'hypertask_report_feedback').inputSchema
   assert.equal(feedback.properties.action.default, 'report')
   assert.equal(feedback.required, undefined)
-  assert.deepEqual(visible(selectMcpTools(legacy, true, {}, true)).map((tool) => tool.inputSchema), off.map((tool) => tool.inputSchema))
+  assert.deepEqual(visible(selectMcpTools(legacy, true, {})).map((tool) => tool.inputSchema), off.map((tool) => tool.inputSchema))
   for (const [index, tool] of off.entries()) {
     assert.ok(tool.inputSchema.oneOf.length)
     assert.equal(tool.inputSchema.properties.input.anyOf, undefined)
@@ -68,7 +68,7 @@ test('flag Off preserves the old schema exactly, including each action input sch
 })
 
 test('read agents advertise only allowed actions in both the enum and nested variants', () => {
-  const tools = visible(selectMcpTools(legacy, true, { agent: true, agentRole: 'read' }, true, true))
+  const tools = visible(selectMcpTools(legacy, true, { agent: true, agentRole: 'read' }, true))
   assert.ok(tools.length > 0)
   for (const tool of tools) {
     const definition = definitions.find((item) => item.name === tool.name)
@@ -111,11 +111,10 @@ test('authenticated HTTP requests evaluate the flag for the user and advertise t
     const isolated = loader({
       './tools': { MCP_TOOLS: legacy },
       '@/lib/mcp/auth': { extractBearerToken: () => 'fixture', validateMcpAuth: async () => ({ user: { id: 7 } }) },
-      '@/lib/mcp/mcpV2': { isMcpV2Enabled: async () => true },
       '@/lib/aiFeedback/enabled': { aiFeedbackEnabled: async () => true },
       '@/lib/aiFeedback/automatic': { observeFeedbackTools: (tools) => tools, queueAiFeedback: () => {} },
       '@/lib/telemetry/mcpSseAnalytics': { recordLegacyMcpRequest: () => {} },
-      '@/lib/flags': { HTPR_6804_MCP_TOOLS_FLAG: 'catalog', HTPR_7203_MCP_FLAT_SCHEMA_FLAG: key, isFeatureEnabled: async (flag, userId) => {
+      '@/lib/flags': { HTPR_7203_MCP_FLAT_SCHEMA_FLAG: key, isFeatureEnabled: async (flag, userId) => {
         calls.push({ flag, userId })
         return flag === key ? enabled : true
       } },
@@ -132,7 +131,7 @@ test('flat advertising leaves action-specific execution validation and allowed c
   const tools = selectMcpTools(legacy.map((tool) => ({ ...tool, execute: async (args) => {
     calls.push({ name: tool.name, args })
     return JSON.stringify({ success: true })
-  } })), true, {}, true, true)
+  } })), true, {}, true)
   const tasks = tools.find((tool) => tool.name === 'hypertask_tasks')
   await assert.rejects(tasks.execute({ action: 'create', input: {} }, 'fixture'), /project_id|title/)
   await assert.rejects(tasks.execute({ action: 'not_an_action', input: {} }, 'fixture'))

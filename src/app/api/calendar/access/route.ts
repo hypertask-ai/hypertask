@@ -1,5 +1,4 @@
 import { loadCurrentUser } from "@/lib/auth/currentUser";
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -14,14 +13,7 @@ const noStoreHeaders = { "Cache-Control": "private, no-store" };
 export async function GET(request: Request) {
   const cookieStore = await cookies();
   const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
-  let restCompat = false;
-  if (currentUser) {
-    try {
-      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
-    } catch {
-    }
-  }
-  const { isValid, user } = restCompat && currentUser
+  const { isValid, user } = currentUser
     ? { isValid: true, user: currentUser.user }
     : isValidUser(
     cookieStore.get("nookies_user")?.value,

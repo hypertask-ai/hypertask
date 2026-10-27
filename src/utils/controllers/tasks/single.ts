@@ -76,6 +76,7 @@ type UpdateTaskSingleOptions = {
   expectedDescription?: string;
   expectedTitle?: string;
   expectedProjectId?: number;
+  expectedSectionId?: number;
   expectedStatus?: Status;
   taskMovedActivity?: Pick<
     TaskMovedActivityProps,
@@ -86,6 +87,7 @@ type UpdateTaskSingleOptions = {
 class TaskDescriptionChangedError extends Error {}
 class TaskTitleChangedError extends Error {}
 class TaskTargetChangedError extends Error {}
+class FlagColumnMismatchError extends Error {}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -260,6 +262,7 @@ export async function updateTaskSingle(
         if (!currentState) throw new Error("Task not found");
         if (
           (options.expectedProjectId !== undefined && currentState.projectId !== options.expectedProjectId) ||
+          (options.expectedSectionId !== undefined && currentState.sectionId !== options.expectedSectionId) ||
           (options.expectedStatus !== undefined && currentState.status !== options.expectedStatus)
         ) {
           throw new TaskTargetChangedError();
@@ -385,6 +388,19 @@ export async function updateTaskSingle(
             updateData.section = targetSection.section_title;
           }
         }
+        if (sectionChanged && targetProject === 15 && updateData.section === "Flag: Everyone") {
+          const { listFeatureFlagModes } = await import("@/lib/flags");
+          const { unreleasedTicketFlags } = await import("@/lib/flags/taskColumn");
+          const blocked = unreleasedTicketFlags({
+            uniqueIndex: updateData.uniqueIndex,
+            description: typeof requestedMutation.description === "string"
+              ? requestedMutation.description
+              : currentState.description_?.content ?? currentState.description,
+          }, await listFeatureFlagModes());
+          if (blocked.length) {
+            throw new FlagColumnMismatchError(`Cannot move to Flag: Everyone. Not released: ${blocked.map(({ key, mode }) => `${key} (${mode})`).join(", ")}.`);
+          }
+        }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
         updateData.updatedAt = new Date();
 
@@ -431,7 +447,14 @@ export async function updateTaskSingle(
         }
 
         let updatedTask = await tx.task.update({
-          where: { id: newTask.id },
+          where: {
+            id: newTask.id,
+            ...(options.expectedSectionId !== undefined ? {
+              projectId: options.expectedProjectId,
+              sectionId: options.expectedSectionId,
+              status: options.expectedStatus,
+            } : {}),
+          },
           data: updateData,
           include: taskInclude,
         });
@@ -740,6 +763,9 @@ export async function updateTaskSingle(
       const refusal = planLimitResponse(error);
       return { status: refusal.status, json: refusal.body };
     }
+    if (error instanceof FlagColumnMismatchError) {
+      return { status: 409, json: { message: error.message, code: "FLAG_COLUMN_MISMATCH" } };
+    }
     if (error instanceof TaskTeamScopeError) return { status: 404, json: { message: error.message } };
     if (error instanceof ParentTaskNotFoundError) {
       return {
@@ -747,7 +773,9 @@ export async function updateTaskSingle(
         json: { message: "Parent task not found" },
       };
     }
-    if (error instanceof TaskTargetChangedError) {
+    if (error instanceof TaskTargetChangedError || (
+      options.expectedSectionId !== undefined && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
+    )) {
       return {
         status: 409,
         json: { message: "This task moved or changed status. Your note is still here." },

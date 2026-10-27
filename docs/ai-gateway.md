@@ -128,6 +128,15 @@ repurpose a team key for tooling:
   there is no shared-key fallback. The standalone public generation route was
   removed because it bypassed the guest-flow limits.
 
+- **Model canary** — set server-only `MODEL_CANARY_AI_GATEWAY_API_KEY` to
+  an approved internal tooling key. The production `/api/cron/ai-model-canary`
+  probe never falls back to `AI_GATEWAY_API_KEY`. Missing, malformed or
+  trials-key-identical configuration disables the entire run without inference
+  or status writes. After configuration, existing enabled direct-provider QA
+  keys continue to be probed separately.
+  Check the `model-canary` gateway tag and key identity after a run;
+  org-wide `/v1/credits` totals do not prove isolation.
+
 Also note: "All Trials Key" is the intentional included-allowance key for Free
 and BYOK-plan (and BYOK-comped) teams. It is not a fallback for Premium,
 legacy AI, or Pro-comped teams. Per-team allowance enforcement is tracked in HTPR-5205; until that ships,
@@ -243,6 +252,6 @@ Eco Inno / Northwind (board 318, external), plus ~1,000 dormant signup teams.
 Five customer teams are all titled "MyTeam" (the default) — never identify a
 team by title, only by teamId or owner email.
 
-**Business model context:** there is NO free tier. Users get a 7-day trial,
+**Business model context:** there is NO free tier. Users get a 14-day trial,
 then must be Premium or BYOK. Trial expiry is currently enforced only by a
 root-route redirect; server-side AI entitlement is HTPR-4130.
