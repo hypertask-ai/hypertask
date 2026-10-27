@@ -50,7 +50,7 @@ test('existing debt passes, additional debt and new files fail, reduced debt req
   const raw = 'const x = "shadow-[0_1px_2px_black]";';
   assert.deepEqual(await lint(raw, baseline), []);
   assert.equal((await lint(raw + 'const y = "shadow-[0_0_2px_black]";', baseline)).length, 1);
-  assert.equal((await lint(raw, baseline, 'src/components/New.tsx')).length, 1);
+  assert.equal((await lint(raw, baseline, 'src/components/New.tsx')).filter(m => m.messageId === 'raw').length, 1);
   const reduced = await lint('const x = "shadow-card";', baseline);
   assert.equal(reduced.length, 1);
   assert.equal(reduced[0].messageId, 'stale');
@@ -91,10 +91,12 @@ test('inventory counts real files and ignores inline disable directives', async 
   try {
     mkdirSync(resolve(cwd, 'src'));
     writeFileSync(resolve(cwd, 'src/Test.tsx'), '/* eslint-disable local/no-raw-design-shadows */\nconst x = <div className="shadow-[0_0_2px_black] rounded-[5px]" />;');
+    writeFileSync(resolve(cwd, 'src/tokens.generated.ts'), 'const x = { color: "#fff" };');
     const counts = await countDesignTokens(cwd);
     assert.equal(counts.shadows['src/Test.tsx'], 1);
     assert.equal(counts.corners['src/Test.tsx'], 1);
     assert.deepEqual(counts.layers, {});
+    assert.deepEqual(counts.colours, {});
     writeFileSync(resolve(cwd, 'src/Test.tsx'), 'const = ;');
     await assert.rejects(countDesignTokens(cwd), /Parsing error/);
   } finally {
@@ -103,7 +105,7 @@ test('inventory counts real files and ignores inline disable directives', async 
 });
 
 test('CLI cache cannot preserve a pass after the baseline shrinks', () => {
-  const { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, rmSync } = require('node:fs');
+  const { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, rmSync, unlinkSync } = require('node:fs');
   const { spawnSync } = require('node:child_process');
   const root = resolve(__dirname, '..');
   const cwd = mkdtempSync(resolve(root, '.design-token-test-'));
@@ -117,10 +119,17 @@ test('CLI cache cannot preserve a pass after the baseline shrinks', () => {
     writeFileSync(baselinePath, JSON.stringify({ shadows: { 'src/Test.tsx': 1 } }));
     writeFileSync(resolve(cwd, 'eslint.config.mjs'), 'import config from "./eslint-local-rules/no-comments.mjs"; export default [config];');
     writeFileSync(resolve(cwd, 'src/Test.tsx'), 'const x = "shadow-[0_0_2px_black]";');
-    const run = () => spawnSync(process.execPath, [resolve(root, 'node_modules/eslint/bin/eslint.js'), '--cache', '--cache-strategy', 'content', 'src/Test.tsx'], { cwd, encoding: 'utf8' });
+    const run = () => spawnSync(process.execPath, [resolve(root, 'node_modules/eslint/bin/eslint.js'), '--cache', '--cache-strategy', 'content', 'src'], { cwd, encoding: 'utf8' });
     assert.equal(run().status, 0);
     assert.equal(run().status, 0);
+    writeFileSync(resolve(cwd, 'src/Keep.tsx'), 'const keep = "shadow-card";');
+    unlinkSync(resolve(cwd, 'src/Test.tsx'));
+    const deleted = run();
+    assert.equal(deleted.status, 1, deleted.stdout + deleted.stderr);
+    assert.match(deleted.stdout, /Deleted files retain design-token debt/);
     writeFileSync(baselinePath, '{}');
+    assert.equal(run().status, 0);
+    writeFileSync(resolve(cwd, 'src/Test.tsx'), 'const x = "shadow-[0_0_2px_black]";');
     const raw = run();
     assert.equal(raw.status, 1, raw.stdout + raw.stderr);
     assert.match(raw.stdout, /local\/no-raw-design-shadows/);

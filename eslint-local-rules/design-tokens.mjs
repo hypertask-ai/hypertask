@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { dirname, relative } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const baselineText = readFileSync(new URL("./design-tokens-baseline.json", import.meta.url), "utf8");
 const baseline = JSON.parse(baselineText);
+const missingBaselineFiles = Object.values(baseline).flatMap((files) => Object.keys(files)).filter((file) => !existsSync(join(root, file)));
 const tokenValue = /^(?:[a-z-]+:)?(?:var\(--[\w-]+\)|--[\w-]+)$/;
 const utilities = {
   shadows: /(?:^|:)!?(?:shadow|drop-shadow|inset-shadow)-\[([^\]]+)\]/g,
@@ -31,10 +32,13 @@ function tokenStyleValue(node) {
 export const designTokenVersion = createHash("sha256")
   .update(readFileSync(new URL(import.meta.url)))
   .update(baselineText)
+  .update(JSON.stringify(missingBaselineFiles))
   .digest("hex");
 
 export function designTokenRules(allowances = baseline) {
-  return Object.fromEntries(Object.entries(utilities).map(([family, utility]) => [
+  return Object.fromEntries(Object.entries(utilities).map(([family, utility]) => {
+    const missing = Object.keys(allowances[family] ?? {}).filter((file) => !existsSync(join(root, file)));
+    return [
     `no-raw-design-${family}`,
     {
       meta: {
@@ -42,6 +46,7 @@ export function designTokenRules(allowances = baseline) {
         schema: [],
         messages: {
           raw: `Use a shared theme token for ${family}, not '{{value}}'. Existing per-file debt cannot increase.`,
+          missing: "Deleted files retain design-token debt: {{files}}. Run node scripts/design-token-baseline.mjs --prune and commit the smaller baseline.",
           stale: "Design-token debt decreased. Run node scripts/design-token-baseline.mjs --prune and commit the smaller baseline.",
         },
       },
@@ -78,6 +83,8 @@ export function designTokenRules(allowances = baseline) {
             }
           },
           "Program:exit"(node) {
+            const deleted = missing.filter((path) => path !== file);
+            if (deleted.length) context.report({ node, messageId: "missing", data: { files: deleted.join(", ") } });
             const allowed = allowances[family]?.[file] ?? 0;
             for (const match of matches.slice(allowed)) {
               context.report({ node: match.node, messageId: "raw", data: { value: match.value } });
@@ -87,5 +94,6 @@ export function designTokenRules(allowances = baseline) {
         };
       },
     },
-  ]));
+    ];
+  }));
 }

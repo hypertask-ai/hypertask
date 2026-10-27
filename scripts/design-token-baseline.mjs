@@ -24,6 +24,7 @@ export async function countDesignTokens(cwd = process.cwd()) {
     allowInlineConfig: false,
     overrideConfig: [{
       files: ["src/**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+      ignores: ["**/*.generated.ts"],
       languageOptions: { parser, parserOptions: { ecmaFeatures: { jsx: true } } },
       plugins: { local: { rules } },
       rules: Object.fromEntries(Object.keys(rules).map((rule) => [`local/${rule}`, "error"])),

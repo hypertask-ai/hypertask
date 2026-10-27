@@ -48,7 +48,9 @@ whole CSS-variable references, including `shadow-[var(--elevation-card)]`.
 
 `design-tokens-baseline.json` records existing counts per file and family. New
 files have zero allowance. Normal lint rejects both increased debt and stale
-allowances after a removal. After replacing raw styles with tokens, run:
+allowances after a removal, including deleted files. Generated TypeScript
+files use the same exclusions in lint and inventory. After replacing raw
+styles with tokens, run:
 
 ```sh
 node scripts/design-token-baseline.mjs --prune
