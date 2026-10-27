@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
+const yaml = require("js-yaml");
 
 const workflow = fs.readFileSync(path.join(__dirname, "../.github/workflows/feature-flag-gate.yml"), "utf8");
 const reconciliation = workflow.split("  reconcile-open-pull-requests:")[1];
@@ -513,7 +514,7 @@ for (const endpoint of ['/commits/', '/pulls?', '/statuses/']) {
 test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
   assert.doesNotMatch(workflow, /\bgh api\b|\$\(gh_api\b/);
   assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
-  assert.match(workflow, /group: feature-flag-gate-production\s*cancel-in-progress: false/);
+  assert.equal(yaml.load(workflow).concurrency["cancel-in-progress"], false);
   assert.doesNotMatch(singlePullRequest, /cancel-in-progress: true/);
 });
 
@@ -573,4 +574,44 @@ test('a genuine evaluation error is not hidden by rate limiting its error-status
   assert.equal(result.status, 2, output);
   assert.match(output, /::warning::skipped: GitHub rate limited/);
   assert.deepEqual(posts, []);
+});
+
+test("PR events evaluate only their own head; fleet reconciliation runs every fifteen minutes", (t) => {
+  const config = yaml.load(workflow);
+  const selected = (event_name, action = "synchronize", number = 42) => {
+    const github = { event_name, event: { action, pull_request: { number, base: { ref: "production" } } } };
+    return Object.entries(config.jobs)
+      .filter(([, job]) => new Function("github", `return (${job.if})`)(github))
+      .map(([name]) => name);
+  };
+  for (const action of config.on.pull_request_target.types.filter((action) => action !== "closed")) {
+    assert.deepEqual(selected("pull_request_target", action), ["feature-flag-gate"]);
+  }
+  assert.deepEqual(selected("pull_request_target", "closed"), []);
+  assert.deepEqual(selected("push"), []);
+  assert.deepEqual(selected("schedule"), ["reconcile-open-pull-requests"]);
+  assert.deepEqual(Object.keys(config.on).sort(), ["pull_request_target", "schedule"]);
+  assert.deepEqual(config.on.schedule, [{ cron: "*/15 * * * *" }]);
+  const groupExpression = config.concurrency.group.split("${{")[1].split("}}")[0];
+  const group = (number) => new Function("github", `return (${groupExpression})`)({ event: { pull_request: { number } } });
+  assert.notEqual(group(42), group(43), "another PR must not replace this PR's pending run");
+  assert.equal(config.concurrency["cancel-in-progress"], false);
+
+  const { result, output, posts, calls, pull } = runWorkflow(t, {
+    job: singlePullRequest,
+    extraPulls: (pull) => Array.from({ length: 98 }, (_, index) => ({
+      ...pull, number: 3000 + index,
+      head: { ...pull.head, sha: index.toString(16).padStart(40, "b") },
+    })),
+  });
+  assert.equal(result.status, 0, output);
+  assert.deepEqual(posts.map((post) => post.state), ["pending", "success"]);
+  assert.deepEqual(calls.filter((call) => call.args.includes("POST")).map((call) => call.endpoint), [
+    `repos/fixture/repository/statuses/${pull.head.sha}`, `repos/fixture/repository/statuses/${pull.head.sha}`,
+  ]);
+  assert.equal(calls.length, 6, JSON.stringify(calls));
+  assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 0);
+  assert.deepEqual(calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).map((call) => call.endpoint), [
+    "repos/fixture/repository/pulls/42", "repos/fixture/repository/pulls/42",
+  ]);
 });
