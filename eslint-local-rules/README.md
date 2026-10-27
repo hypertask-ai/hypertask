@@ -32,8 +32,8 @@ npm run lint -- \
 ## Added-line token check
 
 `npm run lint:styles -- <base-sha> <head-sha>` checks added lines independently
-of the count baseline. The existing `ci-checks` job runs it against exact PR
-commits. Raw palette classes, literal colors, arbitrary text/leading values and
+of the count baseline. The existing `ci-checks` job runs it against the PR
+merge base and exact head, excluding production-only changes. Raw palette classes, literal colors, arbitrary text/leading values and
 inline typography must use named tokens. CSS/SCSS declarations use the same
 policy, with raw custom-property definitions allowed in the theme token files.
 Unchanged debt and deletions pass; replacing one raw style with another fails.

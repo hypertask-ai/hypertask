@@ -5,12 +5,39 @@ import { pathToFileURL } from "node:url";
 import { Linter } from "eslint";
 import parser from "@typescript-eslint/parser";
 import scss from "postcss-scss";
+import valueParser from "postcss-value-parser";
 
 const number = /(?:^|[\s,(])[-+]?(?:\d*\.)?\d+/g;
-const color = /#[\da-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(\s*[-.\d]/gi;
 const palette = /(?:^|:)!?(?:text|bg|border(?:-[trblxyse])?|divide|outline|ring(?:-offset)?|fill|stroke|from|via|to|decoration|placeholder|accent|caret|shadow)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|[1-9]00|950)(?:\/[^\s]+)?!?$/;
 const typography = /(?:^|:)!?(?:text|leading)-\[(?:length:)?-?[\d.]+(?:px|rem|em|%)?\]/;
 const advice = "Use text-micro/text-content and text-text-light-gray/bg-modalBackground from tailwind.config.ts; CSS uses var(--...) tokens defined in src/styles/globals.scss.";
+
+function styleOffsets(value, sizing = false) {
+  const offsets = [];
+  valueParser(value).walk((node) => {
+    if (["string", "comment"].includes(node.type) || (node.type === "function" && node.value.toLowerCase() === "url")) return false;
+    if (node.type === "word" && (/^#[\da-f]{3,8}(?:!important)?$/i.test(node.value) || (sizing && /^[-+]?(?:\d*\.)?\d/.test(node.value)))) offsets.push(node.sourceIndex);
+    if (node.type === "function" && /^(?:rgb|rgba|hsl|hsla)$/i.test(node.value)) {
+      const first = node.nodes.find((child) => child.type !== "space" && child.type !== "comment");
+      if (first?.type === "word" && /^[-+]?(?:\d*\.)?\d/.test(first.value)) {
+        offsets.push(node.sourceIndex, ...node.nodes.filter((child) => child.type === "word" && /^[-+]?(?:\d*\.)?\d/.test(child.value)).map((child) => child.sourceIndex));
+      }
+    }
+  });
+  return [...new Set(offsets)];
+}
+
+function utilityOffsets(value) {
+  const offsets = [];
+  for (const match of value.matchAll(/\S+/g)) {
+    const token = match[0];
+    if (palette.test(token) || typography.test(token)) offsets.push(match.index);
+    const start = token.indexOf("[");
+    const end = token.lastIndexOf("]");
+    if (start >= 0 && end > start) offsets.push(...styleOffsets(token.slice(start + 1, end)).map((offset) => match.index + start + 1 + offset));
+  }
+  return [...new Set(offsets)];
+}
 
 export function lintStyles(source, filename) {
   if (/\.(css|scss)$/.test(filename)) {
@@ -19,20 +46,20 @@ export function lintStyles(source, filename) {
     tree.walkDecls((decl) => {
       const tokenOwner = /^(?:src\/styles\/globals\.scss|src\/app\/globals\.css|src\/styles\/tailwindThemes\/[^/]+)$/.test(filename);
       if (tokenOwner && decl.prop.startsWith("--")) return;
-      const raw = source.slice(decl.source.start.offset, decl.source.end.offset + 1);
+      const raw = source.slice(decl.source.start.offset, decl.source.end.offset);
       const valueOffset = raw.indexOf(":") + 1;
-      const value = raw.slice(valueOffset).replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
-      const matches = [...value.matchAll(new RegExp(color))];
-      if (/^(?:font-size|line-height)$/.test(decl.prop)) matches.push(...value.matchAll(new RegExp(number)));
-      for (const match of matches) {
-        const offset = decl.source.start.offset + valueOffset + match.index + match[0].search(/\S/);
+      const value = raw.slice(valueOffset).replace(/;$/, "");
+      for (const match of styleOffsets(value, /^(?:font-size|line-height)$/.test(decl.prop))) {
+        const offset = decl.source.start.offset + valueOffset + match;
         findings.push({ line: source.slice(0, offset).split("\n").length, message: advice });
       }
     });
     tree.walkAtRules("apply", (rule) => {
-      color.lastIndex = 0;
-      if (color.test(rule.params) || rule.params.split(/\s+/).some((token) => palette.test(token) || typography.test(token))) {
-        findings.push({ line: rule.source.start.line, endLine: rule.source.end.line, message: advice });
+      const raw = source.slice(rule.source.start.offset, rule.source.end.offset);
+      const start = raw.indexOf("apply") + 5;
+      const params = raw.slice(start).replace(/;$/, "").replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
+      for (const offset of utilityOffsets(params)) {
+        findings.push({ line: source.slice(0, rule.source.start.offset + start + offset).split("\n").length, message: advice });
       }
     });
     return findings;
@@ -63,35 +90,34 @@ export function lintStyles(source, filename) {
         }
         return node;
       }
-      function inspect(node, style = false, visited = new WeakSet()) {
+      function report(loc, usage) {
+        context.report({ loc, message: advice });
+        if (usage && usage.loc.start.line !== (loc.start?.line ?? loc.line)) context.report({ loc: usage.loc, message: advice });
+      }
+      function inspect(node, style = false, visited = new WeakSet(), usage) {
         if (!node || typeof node !== "object" || visited.has(node)) return;
         visited.add(node);
         if (["Identifier", "MemberExpression"].includes(node.type)) {
-          inspect(constantValue(node), style, visited);
+          inspect(constantValue(node), style, visited, usage ?? node);
           return;
         }
         if ((node.type === "Literal" && typeof node.value === "string") || node.type === "TemplateElement") {
-          const raw = sourceCode.getText(node);
-          const matches = [...raw.matchAll(new RegExp(color))];
-          if (!style) {
-            for (const match of raw.matchAll(/[^\s"'`]+/g)) {
-              if (palette.test(match[0]) || typography.test(match[0])) matches.push(match);
-            }
-          }
-          for (const match of matches) {
-            context.report({ loc: sourceCode.getLocFromIndex(node.range[0] + match.index), message: advice });
+          const value = node.type === "Literal" ? node.value : node.value.raw;
+          for (const offset of style ? styleOffsets(value) : utilityOffsets(value)) {
+            report(sourceCode.getLocFromIndex(node.range[0] + 1 + offset), usage);
           }
           return;
         }
         if (style && node.type === "Property" && ["fontSize", "lineHeight"].includes(node.key.name ?? node.key.value)) {
           if (node.value.type === "Literal" && (typeof node.value.value === "number" || new RegExp(number).test(node.value.value))) {
-            context.report({ node: node.value, message: advice });
+            report(node.value.loc, usage);
           }
         }
+        if (!style && node.type === "Property" && (node.computed || node.key.type === "Literal")) inspect(node.key, false, visited, usage);
         for (const [key, child] of Object.entries(node)) {
           if (["parent", "loc", "range", "tokens", "comments", "key"].includes(key)) continue;
-          if (Array.isArray(child)) child.forEach((item) => inspect(item, style, visited));
-          else if (child && typeof child === "object") inspect(child, style, visited);
+          if (Array.isArray(child)) child.forEach((item) => inspect(item, style, visited, usage));
+          else if (child && typeof child === "object") inspect(child, style, visited, usage);
         }
       }
       return {
@@ -117,7 +143,8 @@ function git(args) {
 }
 
 export function checkChangedStyles(base, head) {
-  const revisions = head ? [base, head] : [base];
+  const fork = git(["merge-base", base, head || "HEAD"]).trim();
+  const revisions = head ? [fork, head] : [fork];
   const files = git(["diff", "--name-only", "--no-renames", "--diff-filter=ACM", "-z", ...revisions, "--", "src"])
     .split("\0").filter((file) => /\.(?:[jt]sx?|s?css)$/.test(file));
   let failures = 0;

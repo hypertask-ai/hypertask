@@ -127,6 +127,7 @@ test("required CI invokes the real command on exact PR commits, without a new jo
   const workflow = yaml.load(readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8"));
   const step = workflow.jobs["ci-checks"].steps.find((entry) => entry.name === "Changed style tokens");
   assert.equal(step.if, "github.event_name == 'pull_request'");
+  assert.equal(workflow.jobs["ci-checks"].steps.find((entry) => entry.uses?.startsWith("actions/checkout@")).with["fetch-depth"], 0);
   assert.equal(step.env.BASE_SHA, "${{ github.event.pull_request.base.sha }}");
   assert.equal(step.env.HEAD_SHA, "${{ github.event.pull_request.head.sha }}");
   assert.ok(step.run.includes('npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"'));
@@ -163,4 +164,45 @@ test("member access checks only the selected static property", async () => {
     assert.deepEqual(lintStyles(asserted, "src/Probe.tsx"), []);
     assert.equal(lintStyles(asserted.replace("styles.label", "styles.raw"), "src/Probe.tsx").length, 1);
   }
+});
+
+
+test("merge-base comparison ignores production-only tokenization", (t) => {
+  const f = fixture(t);
+  f.write("src/Probe.tsx", '<div className="bg-red-500" />;\n');
+  const fork = f.commit();
+  f.write("src/Probe.tsx", '<div className="bg-modalBackground" />;\n');
+  const base = f.commit();
+  f.git("switch", "-qc", "feature", fork);
+  f.write("README.md", "unrelated feature change\n");
+  assert.equal(f.check(base, f.commit()).status, 0);
+  f.write("src/Probe.tsx", '<div className="bg-blue-500" />;\n');
+  assert.equal(f.check(base, f.commit()).status, 1);
+});
+
+test("CSS strings and URL fragments are not colors; real literal colors still fail", async () => {
+  const { lintStyles } = await implementation;
+  assert.deepEqual(lintStyles('.probe {content: "#123"; background-image: url("/icons.svg#face");}', "src/probe.scss"), []);
+  assert.deepEqual(lintStyles('<div style={{backgroundImage: `url("/icons.svg#face")`}} />', "src/Probe.tsx"), []);
+  assert.deepEqual(lintStyles('<div className="bg-[url(/icons.svg#face)]" />', "src/Probe.tsx"), []);
+  assert.equal(lintStyles('.probe {color: #fff!important;}', "src/probe.scss").length, 1);
+  assert.deepEqual(lintStyles('.probe {@apply /* text-[11px] */ text-micro;}', "src/probe.scss"), []);
+});
+
+test("new consumption of an unchanged raw constant is refused", (t) => {
+  const f = fixture(t);
+  const source = 'const raw = "text-[11px]";\nconst valid = "text-micro";\n<div className={valid} />;\n';
+  f.write("src/Probe.tsx", source);
+  const base = f.commit();
+  f.write("src/Probe.tsx", source.replace("className={valid}", "className={raw}"));
+  assert.equal(f.check(base).status, 1);
+  f.write("src/Probe.tsx", source);
+  assert.equal(f.check(base).status, 0);
+});
+
+test("class-map keys are inspected without treating CSS property names as classes", async () => {
+  const { lintStyles } = await implementation;
+  assert.ok(lintStyles('<div className={clsx({"text-[11px]": active})} />', "src/Probe.tsx").length > 0);
+  assert.deepEqual(lintStyles('<div className={clsx({"text-micro": active})} />', "src/Probe.tsx"), []);
+  assert.deepEqual(lintStyles('<div style={{color: "var(--text)"}} />', "src/Probe.tsx"), []);
 });
