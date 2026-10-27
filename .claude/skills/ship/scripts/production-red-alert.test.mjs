@@ -71,11 +71,11 @@ test('missing last green, gaps and multi-parent commits never guess a revert', (
 test('first live claim wins despite conflicting assignments and a manager reassignment comment', () => {
   const rows = [claim(), claim('runner12', 'Runner 12', '2026-10-26T17:52:00Z'),
     claim('lead', 'HT Product Lead', '2026-10-26T17:53:00Z', 'Runner 12 owns this now. Runner 8 stops.')];
-  assert.deepEqual(owner(rows, now), { id: 'runner8', name: 'Runner 8' });
+  assert.deepEqual(owner(rows, now), { id: 'runner8', name: 'Runner 8', session: 'tmux:runner8' });
   assert.equal(allowed([incident], { 'YPER4-999': rows }, 'RUNNER 12', 'HTPR-1', now), false);
-  assert.equal(allowed([incident], { 'YPER4-999': rows }, 'RUNNER 8', 'HTPR-1', now), true);
+  assert.equal(allowed([incident], { 'YPER4-999': rows }, 'RUNNER 8', 'HTPR-1', now, 'tmux attach -t runner8'), true);
   rows.push(claim('runner8', 'Runner 8', '2026-10-26T17:54:00Z', 'Handing over to Runner 12.'));
-  assert.deepEqual(owner(rows, now), { id: 'runner12', name: 'Runner 12' });
+  assert.deepEqual(owner(rows, now), { id: 'runner12', name: 'Runner 12', session: 'tmux:runner8' });
 });
 test('stale, released and absent claims never grant the assigned agent an owner exception', () => {
   assert.equal(owner([claim('runner8', 'Runner 8', '2026-10-25T17:00:00Z')], now), null);
@@ -98,7 +98,7 @@ test('guard reads real CLI boundaries and refuses before any write, owner and ex
     };
     assert.equal(guard('HTPR-1', run), false);
     assert.ok(calls.every(([bin]) => bin !== 'vcc'));
-    process.env.SHIP_SESSION_NAME = 'RUNNER 8'; assert.equal(guard('HTPR-1', run), true);
+    process.env.SHIP_SESSION_NAME = 'RUNNER 8'; assert.equal(guard('HTPR-1', run, 'tmux attach -t runner8'), true);
     assert.equal(guard('YPER4-999', run), true);
     assert.throws(() => guard('HTPR-1', () => '{"success":false}'), /Unreadable tasks/);
   } finally { if (old === undefined) delete process.env.SHIP_SESSION_NAME; else process.env.SHIP_SESSION_NAME = old; }
@@ -172,7 +172,9 @@ test('bounded-history rollover retains the open incident; a red rerun after gree
   const green = recorded(); green[0].contexts = [{ name: 'browser-smoke', state: 'SUCCESS', at: '2026-10-26T18:00:00Z' }];
   await runTick(dir, fake(green), { now: now + 600000 });
   const rerun = recorded(); rerun[1].contexts.find(row => row.name === 'browser-smoke').at = '2026-10-26T18:10:00Z';
-  const next = fake(rerun); await runTick(dir, next, { now: now + 1200000 });
+  for (const commit of rerun) commit.contexts.push({ ...commit.contexts.find(row => row.name === 'browser-smoke'), name: 'secret-scan' });
+  rerun[1].contexts.find(row => row.name === 'secret-scan').at = '2026-10-26T18:11:00Z';
+  const next = fake(rerun); await runTick(dir, next, { now: now + 1200000, required: ['browser-smoke', 'secret-scan'] });
   assert.equal(next.writes.filter(args => args[1] === 'create').length, 1);
   assert.equal(next.proposals.length, 1);
 });
@@ -187,18 +189,44 @@ test('real Git publication reverts only culprit, preserves later commits, dedupl
   fs.writeFileSync(path.join(checkout, 'shared.txt'), 'bad\n'); git('commit', '-am', 'regression'); const culprit = git('rev-parse', 'HEAD');
   fs.writeFileSync(path.join(checkout, 'later.txt'), 'keep\n'); git('add', '.'); git('commit', '-m', 'later independent change'); const head = git('rev-parse', 'HEAD');
   git('push', 'origin', 'production');
-  const posts = []; let published;
+  const branch = `shared-check-revert/${culprit}`;
+  const posts = []; let published, proposalState = 'open';
   const gh = args => {
-    if (!args.includes('POST')) return published ? [{ html_url: published }] : [];
+    if (!args.includes('POST')) return published ? [{ html_url: published, state: proposalState, base: { ref: 'production' }, head: { ref: branch, sha: run('git', ['--git-dir', remote, 'rev-parse', branch]).trim() } }] : [];
     posts.push(args); published = 'https://github.com/example/revert/1'; return { html_url: published };
   };
   const failure = { culprit, name: 'browser-smoke', first: { check: { url: 'https://example/red' } } };
   assert.equal(propose(failure, head, 'YPER4-999', { run, gh, checkout, remote }), published);
-  const branch = `shared-check-revert/${culprit}`;
   assert.equal(run('git', ['--git-dir', remote, 'show', `${branch}:shared.txt`]), 'good\n');
   assert.equal(run('git', ['--git-dir', remote, 'show', `${branch}:later.txt`]), 'keep\n');
   assert.equal(run('git', ['--git-dir', remote, 'rev-parse', 'production']).trim(), head);
   assert.equal(propose(failure, head, 'YPER4-999', { run, gh, checkout, remote }), published);
   assert.equal(posts.length, 1);
+  proposalState = 'closed';
+  assert.throws(() => propose(failure, head, 'YPER4-999', { run, gh, checkout, remote }), /closed or conflicting/);
   assert.throws(() => propose({ ...failure, culprit: null }, head, 'YPER4-999', { run, gh, checkout, remote }), /No unique/);
+});
+
+test('same-agent sessions keep distinct ownership and a losing session cannot release the winner', () => {
+  const first = claim('same-agent', 'Runner 8', '2026-10-26T17:50:00Z', 'Claimed. codex resume winner');
+  const second = claim('same-agent', 'Runner 8', '2026-10-26T17:52:00Z', 'Claimed. codex resume loser');
+  const released = claim('same-agent', 'Runner 8', '2026-10-26T17:54:00Z', 'Stepping back. codex resume loser');
+  const rows = [first, second, released];
+  assert.equal(owner(rows, now).session, 'resume:winner');
+  assert.equal(allowed([incident], { 'YPER4-999': rows }, 'Runner 8', 'HTPR-1', now, 'codex resume loser'), false);
+  assert.equal(allowed([incident], { 'YPER4-999': rows }, 'Runner 8', 'HTPR-1', now, 'codex resume winner'), true);
+});
+
+test('paginated activity read reaches a claim beyond 100 rows without looping or mixing pages', () => {
+  const calls = [], first = Array.from({ length: 100 }, (_, n) => ({ id: String(n), text: 'Progress' }));
+  const rows = logs('YPER4-999', (bin, args) => {
+    calls.push(args);
+    if (bin === 'hypertask') return JSON.stringify({ success: true, comments: [] });
+    return JSON.stringify(args[1].includes('cursor=older')
+      ? { success: true, activities: [claim()], nextCursor: null }
+      : { success: true, activities: first, nextCursor: 'older' });
+  });
+  assert.equal(rows.length, 101);
+  assert.equal(owner(rows, now).id, 'runner8');
+  assert.equal(calls.filter(args => args[1]?.includes('cursor=older')).length, 1);
 });

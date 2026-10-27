@@ -579,17 +579,9 @@ def incident_owners(boards, comments, now):
     script = SCRIPTS / "release-incidents.cjs"
     if not script.is_file():
         script = Path.home() / "projects/ht-skills-live/.claude/skills/ship/scripts/release-incidents.cjs"
-    logs = dict(comments)
-    for task in incidents:
-        ticket = task["ticketNumber"]
-        data = json.loads(command("ht", "GET", f"/mcp/tasks/{ticket}/agent-activity?limit=100"))
-        if (data.get("success") is not True or not isinstance(data.get("activities"), list)
-                or len(data["activities"]) >= 100):
-            raise ValueError("Incomplete incident claim history")
-        logs[ticket] = comments.get(ticket, []) + data["activities"]
-    payload = {"tasks": incidents, "logs": logs, "now": now * 1000}
-    result = subprocess.run(["node", str(script), "owners"], input=json.dumps(payload),
-                            capture_output=True, text=True, timeout=25, check=True)
+    result = subprocess.run(["node", str(script), "owners"],
+                            input=json.dumps({"tasks": incidents, "now": now * 1000}),
+                            capture_output=True, text=True, timeout=60, check=True)
     return json.loads(result.stdout)
 
 
@@ -615,8 +607,10 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
             result["action"] = "cleared"
             continue
         blocking = holding if row["state"] != "done" else []
+        metrics = session_metrics(row) if freeze else None
+        current_session = row.get("session") or (metrics or {}).get("session")
         if any(not entry["owner"] or entry["owner"]["name"].casefold() != runner.casefold()
-               for entry in freeze):
+               or entry["owner"]["session"] != f"resume:{current_session}" for entry in freeze):
             result["action"] = "incident-freeze"
             continue
         if runner == SPEED:

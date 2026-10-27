@@ -1,11 +1,14 @@
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import prisma from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
+
+const cursorSchema = z.tuple([z.string().datetime(), z.string().uuid()])
 
 const noStore = (body: Record<string, unknown>, status = 200) =>
   NextResponse.json(body, {
@@ -30,6 +33,16 @@ export async function GET(
     if (!/^\d+$/.test(rawLimit) || !Number.isSafeInteger(limit) || limit < 1) {
       return noStore({ success: false, error: 'limit must be a positive integer' }, 400)
     }
+    const rawCursor = request.nextUrl.searchParams.get('cursor')
+    let cursor: z.infer<typeof cursorSchema> | null = null
+    if (rawCursor !== null) {
+      try {
+        if (rawCursor.length > 512) throw new Error('Cursor too long')
+        cursor = cursorSchema.parse(JSON.parse(Buffer.from(rawCursor, 'base64url').toString('utf8')))
+      } catch {
+        return noStore({ success: false, error: 'Invalid activity cursor' }, 400)
+      }
+    }
     const numericId = Number(identifier)
     const ticketNumber = /^[A-Za-z][A-Za-z0-9_-]*-\d+$/.test(identifier)
     if (!ticketNumber && (!/^\d+$/.test(identifier) || !Number.isSafeInteger(numericId) || numericId < 1)) {
@@ -46,10 +59,12 @@ export async function GET(
     if (agentId !== null && !agentId.trim()) {
       return noStore({ success: false, error: 'agent_id must not be empty' }, 400)
     }
+    const pageSize = Math.min(limit, 100)
     const rows = await prisma.agentRunActivity.findMany({
-      where: { run: { taskId: task.id, ...(ctx.teamScope != null ? { task: { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } } : {}), ...(agentId ? { agentId } : {}) } },
+      where: { ...(cursor ? { OR: [{ createdAt: { lt: new Date(cursor[0]) } },
+        { createdAt: new Date(cursor[0]), id: { lt: cursor[1] } }] } : {}), run: { taskId: task.id, ...(ctx.teamScope != null ? { task: { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } } : {}), ...(agentId ? { agentId } : {}) } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: Math.min(limit, 100),
+      take: pageSize + 1,
       select: {
         id: true,
         runId: true,
@@ -59,9 +74,14 @@ export async function GET(
         run: { select: { agentId: true, agent: { select: { displayName: true } } } },
       },
     })
+    const page = rows.slice(0, pageSize)
+    const last = page.at(-1)
     return noStore({
       success: true,
-      activities: rows.map((row) => ({
+      nextCursor: rows.length > pageSize && last
+        ? Buffer.from(JSON.stringify([last.createdAt.toISOString(), last.id])).toString('base64url')
+        : null,
+      activities: page.map((row) => ({
         id: row.id,
         agentId: row.run.agentId,
         agentName: row.run.agent.displayName,

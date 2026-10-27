@@ -26,7 +26,9 @@ stub('src/lib/prisma.ts', {
     findMany: async (query) => {
       calls.push(query)
       if (dbError) throw dbError
-      return rows.slice(0, query.take)
+      const before = query.where.OR
+      return rows.filter(row => !before || row.createdAt < before[0].createdAt.lt ||
+        (+row.createdAt === +before[1].createdAt && row.id < before[1].id.lt)).slice(0, query.take)
     },
   },
 })
@@ -74,7 +76,7 @@ test('agent read uses task permission helper, not caller run ownership; returns 
   assert.equal(response.headers.get('Cache-Control'), 'private, no-store')
   assert.deepEqual(calls[0], [ctx.user, { task_id: 42 }, 'caller-agent', undefined, null])
   assert.deepEqual(calls[1], {
-    where: { run: { taskId: 42 } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 20,
+    where: { run: { taskId: 42 } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 21,
     select: {
       id: true, runId: true, type: true, text: true, createdAt: true,
       run: { select: { agentId: true, agent: { select: { displayName: true } } } },
@@ -88,7 +90,7 @@ test('agent read uses task permission helper, not caller run ownership; returns 
 
 test('user tokens use the same task permission helper and empty history succeeds', async () => {
   reset(); ctx.agentId = null
-  assert.deepEqual(await (await read()).json(), { success: true, activities: [] })
+  assert.deepEqual(await (await read()).json(), { success: true, nextCursor: null, activities: [] })
   assert.deepEqual(calls[0], [ctx.user, { task_id: 42 }, null, undefined, null])
 })
 
@@ -128,4 +130,32 @@ test('storage failures return no private data', async () => {
     assert.equal(response.status, 500)
     assert.deepEqual(await response.json(), { success: false, error: 'Failed to read task agent activity' })
   } finally { console.error = original }
+})
+
+test('cursor pages preserve task and agent scope and reach claims older than a full page', async () => {
+  reset()
+  rows = Array.from({ length: 103 }, (_, n) => ({ ...row(n),
+    id: `00000000-0000-4000-8000-${String(103 - n).padStart(12, '0')}`,
+    text: n === 102 ? 'Claimed. codex resume oldest-owner' : `Progress ${n}`,
+  }))
+  const first = await (await read('42', '?limit=100&agent_id=claimant')).json()
+  assert.equal(first.activities.length, 100)
+  assert.equal(first.activities.some(row => row.text.startsWith('Claimed.')), false)
+  assert.equal(typeof first.nextCursor, 'string')
+  const second = await (await read('42', `?limit=100&agent_id=claimant&cursor=${first.nextCursor}`)).json()
+  assert.equal(second.activities.length, 3)
+  assert.equal(second.activities[2].text, 'Claimed. codex resume oldest-owner')
+  assert.equal(second.nextCursor, null)
+  assert.deepEqual(calls.at(-1).where.run, { taskId: 42, agentId: 'claimant' })
+  reset(); task = null
+  assert.equal((await read('42', `?cursor=${first.nextCursor}`)).status, 404)
+  assert.equal(calls.length, 1)
+})
+
+test('invalid cursors are refused before any task or activity lookup', async () => {
+  for (const cursor of ['', 'not-json', Buffer.from(JSON.stringify(['bad-date', 'bad-id'])).toString('base64url'), 'x'.repeat(513)]) {
+    reset()
+    assert.equal((await read('42', `?cursor=${cursor}`)).status, 400)
+    assert.equal(calls.length, 0)
+  }
 })

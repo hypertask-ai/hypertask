@@ -158,7 +158,7 @@ with tempfile.TemporaryDirectory() as temporary:
     identity.write_text(f'#!/bin/sh\nprintf "INFRA MANAGER\\t%s\\n" "{token}"\n')
     identity.chmod(0o755)
     env = dict(os.environ, HOME=str(home), PATH=str(binary) + ':' + os.environ['PATH'],
-               USER_UNIT_CHECK=str(checker), INSTALL_TEST_CALLS=str(calls),
+               USER_UNIT_CHECK=str(checker), INSTALL_TEST_CALLS=str(calls), SHIP_SESSION_NAME='INFRA MANAGER',
                RUNNER_PICKUP_SETTINGS=str(home / 'settings.json'),
                RUNNER_PICKUP_UNIT_DIR=str(home / '.config/systemd/user'),
                RUNNER_SELFUPDATE_LIB=str(home / '.local/lib/hypertask/runner-pickup'),

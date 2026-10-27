@@ -138,7 +138,9 @@ function propose(failure, head, ticket, { run = command, gh, env, checkout = CHE
   if (![failure.culprit, head].every(value => SHA.test(value || ''))) throw new Error('No unique adjacent culprit; manual investigation required');
   const branch = `shared-check-revert/${failure.culprit}`;
   const existing = gh(['api', `repos/${REPO}/pulls?state=all&head=hypertask-ai:${branch}`]);
-  if (existing.length) return existing[0].html_url;
+  if (existing.length > 1 || existing.some(pr => pr.state !== 'open' || pr.base?.ref !== 'production' || pr.head?.ref !== branch)) {
+    throw new Error('Existing revert proposal is closed or conflicting; owner must reconcile');
+  }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shared-check-revert-'));
   const git = (...args) => run('git', ['-C', dir, ...args], { env, timeout: 60000 }).trim();
   try {
@@ -155,11 +157,16 @@ function propose(failure, head, ticket, { run = command, gh, env, checkout = CHE
       git('-c', 'credential.helper=!gh auth git-credential', 'fetch', 'origin', branch);
       if (git('rev-parse', `${prior}^`) !== head || git('rev-parse', `${prior}^{tree}`) !== tree) throw new Error('Existing revert branch differs; owner must reconcile');
     } else {
+      if (existing.length) throw new Error('Existing proposal branch is missing; owner must reconcile');
       git('-c', 'user.name=hypertask-agents[bot]', '-c', 'user.email=hypertask-agents[bot]@users.noreply.github.com',
         'commit', '-m', `${ticket} [INFRA] Revert shared-check regression`, '-m', `This reverts commit ${failure.culprit}.`);
       const production = git('-c', 'credential.helper=!gh auth git-credential', 'ls-remote', 'origin', 'refs/heads/production').split(/\s/)[0];
       if (production !== head) throw new Error('Production moved; no branch pushed');
       git('-c', 'credential.helper=!gh auth git-credential', 'push', 'origin', `HEAD:refs/heads/${branch}`);
+    }
+    if (existing.length) {
+      if (existing[0].head.sha !== prior) throw new Error('Existing proposal head differs; owner must reconcile');
+      return existing[0].html_url;
     }
     const body = `Summary for non-engineers\n\nPropose undoing the first red production commit.\n\nWhat went wrong\n${failure.name} first failed after ${failure.culprit}; its immediate parent passed.\n\nWhat changes\nOnly that commit is reverted on ${head}. Later changes remain.\n\nWhat you will see\nNo production change until required checks pass and the owner merges.\n\nWatch out for\nRun history identifies a candidate, not proof of causation. This proposal still needs CI and review. Auto-merge remains off.\n\nEvidence: ${failure.first.check.url}\nTicket: https://app.hypertask.ai/detail/project-4060/${ticket.split('-')[1]}\nNo user-visible change: incident tooling only.\n`;
     return gh(['api', '--method', 'POST', `repos/${REPO}/pulls`, '-f', `head=${branch}`, '-f', 'base=production',
@@ -178,13 +185,16 @@ async function tick({ dir = STATE, api = live(), now = Date.now(), required = re
     const open = api.open();
     for (const failure of p.failures) {
       let key = failure.key;
-      if (state.incidents[key]?.closed) key += `:${failure.first.check.at}`;
+      if (state.incidents[key]?.closed) {
+        const recurring = Object.entries(state.incidents).filter(([, value]) => value.boundary === failure.key);
+        key = recurring.find(([, value]) => !value.closed)?.[0] || `${failure.key}:recurrence-${recurring.length}`;
+      }
       let entry = state.incidents[key];
       if (!entry && !failure.green) {
         entry = Object.values(state.incidents).find(value => !value.closed && value.checks.includes(failure.name));
       }
       if (!entry) {
-        entry = state.incidents[key] = { marker: marker(key), checks: [failure.name], head: p.head };
+        entry = state.incidents[key] = { marker: marker(key), boundary: failure.key, checks: [failure.name], head: p.head };
         const matched = open.find(task => task.description?.includes(entry.marker));
         if (matched) entry.ticket = matched.ticketNumber;
         persist();
@@ -197,15 +207,23 @@ async function tick({ dir = STATE, api = live(), now = Date.now(), required = re
           persist();
         }
       } else if (!entry.ticket) { entry.ticket = api.recover(entry.marker); persist(); }
-      entry.checks = [...new Set([...entry.checks, failure.name])]; persist();
+      entry.checks = [...new Set([...entry.checks, failure.name])];
+      entry.evidence = { ...entry.evidence, [failure.name]: failure.first.check.url }; persist();
+      const published = Object.entries(entry.evidence).sort().map(([name, url]) => `${name}: ${url}`).join('\n');
+      if (entry.published !== published) {
+        api.write(['task', 'update', entry.ticket, '--description',
+          `Blocked on the live incident claimant. No new tickets until recovery.\nCandidate: ${failure.culprit || 'unknown; investigation required'}\nFailing required checks:\n${published}\n${entry.marker}`]);
+        entry.published = published; persist();
+      }
       const claimed = owner(api.logs(entry.ticket), now);
-      if (!entry.blockedOn || entry.blockedOn !== (claimed?.id || 'HT Product Lead')) {
+      const claimKey = claimed ? `${claimed.id}:${claimed.session}` : 'HT Product Lead';
+      if (!entry.blockedOn || entry.blockedOn !== claimKey) {
         if (entry.blocking) throw new Error('Blocker comment outcome unknown; reconcile intent');
         entry.blocking = true; persist();
         api.write(['comment', 'add', entry.ticket, '--text', claimed
           ? `<p>Blocked on <span data-type="mention" class="mention" data-id="${html(claimed.name)}" data-label="agent-${html(claimed.id)}">${html(claimed.name)}</span>. Live claim owns this incident. Revert first; keep every check.</p>`
           : '<p>Blocked on <span data-type="mention" class="mention" data-id="HT Product Lead" data-label="agent-9b0f3a93-5e88-4093-b558-cad1c229bc51">HT Product Lead</span>. No live claimant. Assignments and manager comments cannot override claims. Claim this incident before taking new work.</p>']);
-        entry.blockedOn = claimed?.id || 'HT Product Lead'; entry.blocking = false; persist();
+        entry.blockedOn = claimKey; entry.blocking = false; persist();
       }
       if (!entry.proposal && !entry.proposalError) {
         try { entry.proposal = api.propose(failure, p.head, entry.ticket); }
@@ -280,7 +298,7 @@ function install() {
   const u = units(lib);
   fs.writeFileSync(path.join(unitDir, 'production-red-alert.service'), u.service);
   fs.writeFileSync(path.join(unitDir, 'production-red-alert.timer'), u.timer);
-  command(path.join(lib, 'user-unit-check'), [path.join(unitDir, 'production-red-alert.service'), path.join(unitDir, 'production-red-alert.timer')]);
+  command(process.env.USER_UNIT_CHECK || path.join(lib, 'user-unit-check'), [path.join(unitDir, 'production-red-alert.service'), path.join(unitDir, 'production-red-alert.timer')]);
   command('systemctl', ['--user', 'daemon-reload']);
   command('systemctl', ['--user', 'enable', '--now', 'production-red-alert.timer']);
 }

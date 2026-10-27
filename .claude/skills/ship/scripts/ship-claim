@@ -22,38 +22,7 @@ set -uo pipefail
 # idle-ids-file: agent ids (one per line) with no recent activity; their claims older than 6 h are ignored.
 # assigned-ids-file: agent ids (one per line) now assigned; empty or missing = unknown, rule (a) is skipped.
 decide() {
-  local idle=${3:-/dev/null} asg=${4:-/dev/null}
-  jq -r --arg rid "$1" --rawfile idle "$idle" --rawfile asg "$asg" '
-    def txt: ((.text // .commentText // "") | gsub("<[^>]*>"; " "));
-    def key: (.agent.id // .agent_id // .agent.displayName // .agent_display_name // "");
-    def name: (.agent.displayName // .agent_display_name // key | tostring);
-    def at: [(.createdAt // ""), ((.id // 0) | (tonumber? // .) | if type == "number" then [0, .] else [1, tostring] end)];
-    def secs: (.createdAt | sub("\\.[0-9]+"; "") | fromdateiso8601);
-    def sess: (txt | capture("resume[[:space:]]+(?<s>[^[:space:]]+)").s? // "");
-    def handover: (txt | sub("^[[:space:]]+"; "") | test("^(Handing over|Handed over|Stepping back|Released|Unclaimed)"; "i"));
-    ($idle | split("\n") | map(select(. != ""))) as $idle
-    | ($asg | split("\n") | map(select(. != ""))) as $asg
-    | [(.comments[], (.activities[]? | {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}})) | select(key != "")] as $c
-    | [$c[] | select(txt | test("Stepping back"))] as $back
-    | [$c[] | select(handover)] as $gone
-    | ([$c[] | select(txt | contains($rid)) | secs] | min // 0) as $mine
-    | [$c[] | select(txt | contains("Claimed."))
-        | . as $k | select(([$back[] | select(sess == ($k | sess) and at > ($k | at))] | length) == 0)
-        | select(([$gone[] | select(key == ($k | key) and (sess == "" or sess == ($k | sess)) and at > ($k | at))] | length) == 0)
-        | select(($asg | length) == 0 or ($asg | index($k | key)) or (($k | secs) > $mine - 300))] as $claims
-    | [$claims[] | select(txt | contains($rid))] as $ours
-    | if ($ours | length) == 0 then "NOOURS"
-      else ($ours | sort_by(at) | first) as $me
-        | ([$claims[] | select((txt | contains($rid) | not)
-              and at < ($me | at)
-              and ((($me | secs) - secs) <= 21600 or (key as $k | $idle | index($k) | not)))]
-            | sort_by(at) | first // null) as $other
-        | if $other == null then "WIN"
-          else "LOSE\t" + ($other | name) + "\t" + ($other | key) + "\t"
-            + (if (($me | secs) - ($other | secs)) > 21600 then "1" else "0" end) + "\t"
-            + (if ($other | key) == ($me | key) then "1" else "0" end)
-          end
-      end' "$2"
+  node "$(dirname "$(readlink -f "$0")")/release-incidents.cjs" decide "$1" "$2" "${3:-}" "${4:-}"
 }
 
 if [ "${1:-}" = decide ]; then
@@ -74,7 +43,7 @@ CSID=${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}
 [ -n "$RESUME" ] || { echo "ship-claim: no session id found; pass the resume command: ship-claim $T \"<resume command>\"" >&2; exit 2; }
 RID=${RESUME##* }
 
-node "$(dirname "$(readlink -f "$0")")/release-incidents.cjs" guard "$T"
+node "$(dirname "$(readlink -f "$0")")/release-incidents.cjs" guard "$T" "$RESUME"
 rc=$?
 [ "$rc" = 0 ] || exit "$rc"
 

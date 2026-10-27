@@ -1144,15 +1144,29 @@ class DispatchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.pages(("hypertask", "comment", "list", "HTPR-4"), "comments")
 
+    def incident_cli(self):
+        comments = self.state / "incident-comments.json"
+        comments.write_text(json.dumps(self.comments))
+        activity = self.state / "incident-activity.json"
+        activity.write_text(json.dumps({"success": True, "activities": []}))
+        ht = self.state / "ht"
+        ht.write_text(f"#!/usr/bin/env python3\nprint(open({str(activity)!r}).read())\n")
+        cli = self.state / "hypertask"
+        cli.write_text(f"#!/usr/bin/env python3\nimport json,sys\nprint(json.dumps({{'success':True,'comments':json.load(open({str(comments)!r})).get(sys.argv[3],[])}}))\n")
+        ht.chmod(0o755)
+        cli.chmod(0o755)
+        patch.dict(os.environ, SHIP_CLAIM_HT=str(ht), SHIP_CLAIM_HYPERTASK=str(cli)).start()
+        return activity
+
     def test_shared_incident_freezes_new_work_except_live_claimant(self):
         at = m.datetime.fromtimestamp(self.now - 10, m.timezone.utc).isoformat()
         self.boards[4060].append({"ticketNumber": "YPER4-999", "title": "[INCIDENT] Shared required checks: browser-smoke",
                                   "section": "In Progress", "assignees": [{"agent": {"displayName": "RUNNER 2"}}]})
-        self.comments["YPER4-999"] = [dict(claim("RUNNER 1", at), agent={"id": "a1", "displayName": "RUNNER 1"}),
+        self.comments["YPER4-999"] = [dict(claim("RUNNER 1", at, "Claimed. codex resume winner"), agent={"id": "a1", "displayName": "RUNNER 1"}),
                                        dict(claim("HT Product Lead", at, "RUNNER 2 owns this now."),
                                             agent={"id": "lead", "displayName": "HT Product Lead"})]
-        self.commands.side_effect = None
-        self.commands.return_value = json.dumps({"success": True, "activities": []})
+        self.incident_cli()
+        self.rows[0]["session"] = "winner"
         result = self.dispatch()
         first = next(row for row in result if row["runner"] == "RUNNER 1")
         second = next(row for row in result if row["runner"] == "RUNNER 2")
@@ -1165,11 +1179,10 @@ class DispatchTests(unittest.TestCase):
         self.boards[4060].append({"ticketNumber": "YPER4-999", "title": "[INCIDENT] Shared required checks: ci-tests",
                                   "section": "In Progress", "assignees": []})
         self.comments["YPER4-999"] = []
-        self.commands.side_effect = None
-        self.commands.return_value = json.dumps({"success": True, "activities": []})
+        activity = self.incident_cli()
         self.assertTrue(all(row["ticket"] is None for row in self.dispatch()))
-        self.commands.return_value = json.dumps({"success": False})
-        with self.assertRaises(ValueError):
+        activity.write_text(json.dumps({"success": False}))
+        with self.assertRaises(subprocess.CalledProcessError):
             self.dispatch()
 
     def test_paginated_reads_and_comment_scope_cache(self):

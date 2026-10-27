@@ -437,7 +437,8 @@ branch instead of overwriting it.
 ticket exists, except for its live claimant. Existing claimed work may resume.
 The dispatcher applies the same claim-only owner rule to new assignments.
 Assignments and manager comments cannot transfer a claim; the claimant must
-release it. Nobody receives an owner exception when there is no live claim.
+release it. Claims and releases are session-specific, even when two sessions
+share an agent. The canonical resolver also powers `ship-claim decide`. Nobody receives an owner exception when there is no live claim.
 The incident itself remains claimable. Closing the incident after recovery and
 live verification lifts the freeze; a successful check alone does not.
 
@@ -463,3 +464,9 @@ browser-smoke failure was **17:54:01 UTC**, before the approximate 18:00 time in
 the incident report. Replay detects it at 17:55 UTC and identifies commit
 `7b167459c5127324cf8ed43efb9dc1c6f39f2edd`; the workflow finished at 18:02:41.
 This is historical replay evidence, not a claim that the old revert passed.
+
+Incident ownership reads the complete comment and activity history. The existing
+agent-activity API adds an opaque `cursor`/`nextCursor` pair, ordered by creation
+time and activity id. Task permissions, team scope and optional agent filters
+remain unchanged on every page. Old servers without full-page pagination fail
+closed; deploy the API before installing the monitor.
