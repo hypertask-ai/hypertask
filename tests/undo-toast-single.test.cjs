@@ -25,10 +25,12 @@ function load(relativePath, stubs = {}, source = read(relativePath)) {
   );
   return loaded.exports;
 }
+let compactMobileUndo = false;
 const undo = load("src/components/undoToast/index.tsx", {
   "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
   "@/lib/configs/general.config": { MOBILE_TARGET: mobileTarget },
-  "@/hooks/useFlag": { useFlag: () => false },
+  "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8097-mobile-undo-toast" && compactMobileUndo },
+  "@/lib/flags/definitions/htpr-8097-mobile-undo-toast": { HTPR_8097_MOBILE_UNDO_TOAST_FLAG: "htpr-8097-mobile-undo-toast" },
   "@/lib/flags/keys": { HTPR_7657_ONE_TOAST_FLAG: "htpr-7657-one-toast" },
   "@/lib/toastIdsToDismiss": { toastIdsToDismiss: () => [] },
   "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "calc(var(--app-shell-rail-w, 48px) + 8px)" },
@@ -199,3 +201,30 @@ test("the global provider always mounts the named undo toaster and mobile auto-d
   assert.match(globalSource, /useMobileToastAutoDismiss\(SINGLE_UNDO_TOASTER_ID\)/);
   assert.match(toasterMarkup, /<SingleUndoToaster mobile=\{mbl\} appShellRailOn=\{appShellRailOn\} \/>/);
 });
+
+for (const mobile of [true, false]) {
+  test(`compact mobile undo flag preserves actions and desktop placement (${mobile ? "phone" : "desktop"})`, async (t) => {
+    compactMobileUndo = true;
+    t.after(() => { compactMobileUndo = false; });
+    const f = await fixture(t, { mobile });
+    const undone = [];
+    const id = await f.show("Undo remove notification", { id: 7 }, async (data, toastId) => undone.push([data, toastId]));
+    const card = f.card();
+    const container = card.parentElement.parentElement;
+    assert.equal(container.style.top, mobile ? "52%" : "16px");
+    assert.equal(container.style.bottom, "16px");
+    assert.equal(card.parentElement.style[mobile ? "top" : "bottom"], "0px");
+    assert.equal(card.classList.contains("max-w-[110px]"), mobile);
+    assert.equal(card.classList.contains("flex-col"), mobile);
+    assert.equal(container.style.left, mobile ? "16px" : "calc(var(--app-shell-rail-w, 48px) + 8px)");
+    for (const button of card.querySelectorAll("button")) {
+      if (mobile) assert.ok(button.classList.contains("min-h-[44px]"));
+    }
+    await f.event(card.querySelector('[aria-label="Undo"]'), "click");
+    assert.deepEqual(undone, [[{ id: 7 }, id]]);
+    await f.event(card.querySelector('[aria-label="Dismiss"]'), "click");
+    assert.equal(f.namedToasts().find((toast) => toast.id === id).visible, false);
+    await f.tick(200);
+    assert.equal(f.card(), null);
+  });
+}

@@ -2,6 +2,7 @@ import { useContext, useEffect } from "react";
 import { X } from "lucide-react";
 import { toast, Toaster, useToasterStore } from "react-hot-toast";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8097_MOBILE_UNDO_TOAST_FLAG } from "@/lib/flags/definitions/htpr-8097-mobile-undo-toast";
 import { HTPR_7657_ONE_TOAST_FLAG } from "@/lib/flags/keys";
 import { toastIdsToDismiss } from "@/lib/toastIdsToDismiss";
 import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
@@ -18,15 +19,17 @@ export const SingleUndoToaster = ({
   mobile: boolean;
   appShellRailOn: boolean;
 }) => {
+  const compactMobileUndo = useFlag(HTPR_8097_MOBILE_UNDO_TOAST_FLAG) && mobile;
   const oneToastAtATime = useFlag(HTPR_7657_ONE_TOAST_FLAG);
   return (
     <>
       <Toaster
         toasterId={SINGLE_UNDO_TOASTER_ID}
-        position="bottom-left"
+        position={compactMobileUndo ? "top-left" : "bottom-left"}
         containerStyle={{
           left: appShellRailOn ? APP_SHELL_RAIL_OFFSET : 16,
-          bottom: mobile ? "calc(72px + env(safe-area-inset-bottom))" : 16,
+          top: compactMobileUndo ? "52%" : 16,
+          bottom: mobile && !compactMobileUndo ? "calc(72px + env(safe-area-inset-bottom))" : 16,
         }}
       />
       {oneToastAtATime && <KeepOneToastVisible />}
@@ -59,6 +62,36 @@ export const UndoToastContent = ({
   onUndo: (toastId: string) => void;
 }) => {
   const isMbl = useContext(MobileViewContext);
+  const compactMobileUndo = useFlag(HTPR_8097_MOBILE_UNDO_TOAST_FLAG) && isMbl;
+
+  if (compactMobileUndo) {
+    return (
+      <div
+        className="flex max-w-[110px] flex-col items-start gap-1 rounded-[5px] bg-modalBackground px-2 py-1 text-meta text-white-black shadow-md"
+        style={{ opacity: t.visible ? 1 : 0, transition: "opacity 200ms ease-in-out" }}
+      >
+        <span className="min-w-0 break-words leading-tight">{toastText}</span>
+        <div className="flex items-center">
+          <button
+            type="button"
+            aria-label="Undo"
+            className={`${MOBILE_TARGET} cursor-pointer text-hypertasks-header-blue`}
+            onClick={() => onUndo(t.id)}
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            className={`${MOBILE_TARGET} flex cursor-pointer items-center justify-center text-text-light-gray`}
+            onClick={() => toast.dismiss(t.id, SINGLE_UNDO_TOASTER_ID)}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -110,7 +143,6 @@ export const UndoToaster = (
       toasterId: SINGLE_UNDO_TOASTER_ID,
       duration: 5000,
       removeDelay: 200,
-      position: "bottom-left",
     },
   );
   previousUndoToastId = toastHandler;
