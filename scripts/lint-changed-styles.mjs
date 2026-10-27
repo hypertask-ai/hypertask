@@ -41,18 +41,33 @@ export function lintStyles(source, filename) {
     meta: { schema: [] },
     create(context) {
       const { sourceCode } = context;
-      function inspect(node, style = false, visited = new WeakSet()) {
-        if (!node || typeof node !== "object" || visited.has(node)) return;
-        visited.add(node);
+      function constantValue(node, seen = new WeakSet()) {
+        if (!node || seen.has(node)) return undefined;
+        seen.add(node);
         if (node.type === "Identifier") {
           for (let scope = sourceCode.getScope(node); scope; scope = scope.upper) {
             const variable = scope.set.get(node.name);
             if (!variable) continue;
-            for (const definition of variable.defs) {
-              if (definition.parent?.kind === "const") inspect(definition.node.init, style, visited);
-            }
-            return;
+            const definition = variable.defs.find((entry) => entry.parent?.kind === "const");
+            return constantValue(definition?.node.init, seen);
           }
+          return undefined;
+        }
+        if (node.type === "MemberExpression") {
+          const object = constantValue(node.object, seen);
+          const key = node.computed ? node.property.value : node.property.name;
+          if (object?.type !== "ObjectExpression" || object.properties.some((entry) => entry.type === "SpreadElement")) return undefined;
+          const property = object.properties.findLast((entry) => !entry.computed && (entry.key.name ?? entry.key.value) === key);
+          return constantValue(property?.value, seen);
+        }
+        return node;
+      }
+      function inspect(node, style = false, visited = new WeakSet()) {
+        if (!node || typeof node !== "object" || visited.has(node)) return;
+        visited.add(node);
+        if (["Identifier", "MemberExpression"].includes(node.type)) {
+          inspect(constantValue(node), style, visited);
+          return;
         }
         if ((node.type === "Literal" && typeof node.value === "string") || node.type === "TemplateElement") {
           const raw = sourceCode.getText(node);
