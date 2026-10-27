@@ -15,3 +15,8 @@ roles:
   manager_review: Supervisor Review
   human_review: Valentin Review
   done: Done
+columns:
+  - board_id: 15
+    title: Agent Blocked (Infra)
+  - board_id: 4060
+    title: Agent Blocked

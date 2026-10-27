@@ -46,5 +46,5 @@ test('document checks reject removed routing requirements and incorrect board co
   assert.throws(() => checkRunnerRoutes(ship.replace('--section "Agent Blocked"', '--section "In Progress"'), qa, reflect));
   assert.throws(() => checkRunnerRoutes(ship, qa.replace('--section "Agent Blocked (Infra)"', '--section "In Progress"'), reflect));
   assert.throws(() => checkRunnerRoutes(ship.replace('on board 4060', 'on board 15'), qa, reflect));
-  assert.throws(() => checkRunnerRoutes(ship, qa, reflect.replace('on board 15', 'on board 4060')));
+  assert.throws(() => checkRunnerRoutes(ship, qa, reflect.replace('Accepted findings become their own tickets and normal reviewed PRs', 'apply findings without review')));
 });

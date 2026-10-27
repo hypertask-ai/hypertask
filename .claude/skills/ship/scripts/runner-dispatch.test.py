@@ -155,6 +155,31 @@ class DispatchTests(unittest.TestCase):
         self.dispatch([row], go=True)
         self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, HTPR-2"])
 
+    def test_blocked_holdings_require_checkpoints_and_appear_in_resume(self):
+        row = self.safe_runner()
+        self.boards[15][0]["section"] = "Agent Blocked (Infra)"
+        self.boards[15][1]["section"] = "Done"
+        self.boards[15][2]["section"] = "Done"
+        self.boards[4060][0]["section"] = "Agent Blocked"
+        self.comments["YPER4-1"] = list(self.comments["HTPR-1"])
+        for ticket in ("HTPR-1", "YPER4-1"):
+            with self.subTest(ticket=ticket):
+                checkpoint = self.comments[ticket].pop()
+                self.dispatch([row], go=True)
+                self.assertEqual(self.sent_texts(), [])
+                self.comments[ticket].append(checkpoint)
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, YPER4-1"])
+
+    def test_blocked_comments_are_read_for_checkpoint_protection(self):
+        self.boards[15][0]["section"] = "Agent Blocked (Infra)"
+        self.boards[4060][0]["section"] = "Agent Blocked"
+        with patch.object(m, "pages", return_value=[]) as pages:
+            comments = m.read_comments(self.boards)
+        for ticket in ("HTPR-1", "YPER4-1"):
+            self.assertIn(ticket, comments)
+            self.assertTrue(any(ticket in call.args[0] for call in pages.call_args_list))
+
     def test_active_and_waiting_holdings_all_appear_in_resume(self):
         row = self.safe_runner()
         self.boards[15][1]["section"] = "Valentin Review"
