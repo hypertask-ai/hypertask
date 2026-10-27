@@ -138,8 +138,9 @@ export const PlansTable = ()=>{
     const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
     const showCorrectedCopy = useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG);
     const percentageAllowance = useFlag(HTPR_7919_ALLOWANCE_PERCENT_FLAG);
-    const plans = subscriptionPlansFor({ planLimits: false, unlimitedTickets: false }, percentageAllowance);
-    const columns = trialComparisonColumns(showCorrectedCopy, plans);
+    const columns = trialComparisonColumns(showCorrectedCopy, percentageAllowance
+        ? subscriptionPlansFor({ planLimits: false, unlimitedTickets: false }, true)
+        : undefined);
     return(
         <>
         <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Start a Hypertask plan" : "Try the Pro plan for free for 14 days"}</h2>

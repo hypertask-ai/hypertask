@@ -72,6 +72,7 @@ async function withButton(fn, backend) {
       trialComparisonColumns: () => ({ sharedTitles: [], starter: [], proWithAi: [] }),
     },
     "@/lib/flags/definitions/htpr-7686-free-plan-copy": { HTPR_7686_FREE_PLAN_COPY_FLAG: "htpr-7686-free-plan-copy" },
+    "@/lib/flags/definitions/htpr-7919-allowance-percent": { HTPR_7919_ALLOWANCE_PERCENT_FLAG: "htpr-7919-allowance-percent" },
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
     "@/lib/flags/keys": flag,
