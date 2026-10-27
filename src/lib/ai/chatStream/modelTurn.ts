@@ -77,10 +77,14 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     },
   ];
   const toolExecutions: ToolExecution[] = [];
+  const taskProgress: string[] = [];
   const tools = buildTools(
     dbUser,
     resolvedBody,
-    state.send,
+    (event, data) => {
+      if (event === "task_created" && typeof data.content === "string") taskProgress.push(data.content);
+      return state.send(event, data);
+    },
     (execution) => {
       toolExecutions.push(execution);
     },
@@ -134,7 +138,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   state.generationStartedAt = Date.now();
   const reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions });
   if (!reply) return;
-  const { chunks } = reply;
+  const chunks = [...taskProgress, ...reply.chunks];
 
   state.turnDeadline?.clear();
 

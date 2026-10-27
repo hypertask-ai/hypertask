@@ -9,6 +9,11 @@ import { buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
 import { requireCrossMessageConfirmation } from "@/lib/ai/bulkConfirmation";
 import { validateProjectAccess, getSectionForTask, validateParentTask, createTask } from "@/lib/mcp/tasks/services";
 import prisma from "@/lib/prisma";
+import { HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG } from "@/lib/flags/definitions/htpr-7758-progressive-chat-create";
+import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
+import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
+import { createTaskUpdater } from "./updateOneTask";
+import { updateTaskSchema } from "./updateTaskSchema";
 import { PriorityConstants } from "@/lib/constants/constants";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
@@ -26,7 +31,7 @@ import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import type { ToolContext } from "./context";
 
 export function createCreateTaskTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, body } = context;
+  const { sendStatus, send, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, body } = context;
   const { chatTaskWriterEnabled = false, abortSignal } = context;
   const createTaskItemSchema = getCreateTaskItemSchema(context.inlineAgentImagesEnabled);
   const writerItemSchema = createTaskItemSchema.omit({ title: true, description: true, priority: true }).extend({
@@ -180,6 +185,31 @@ export function createCreateTaskTool(context: ToolContext) {
             }
           }
 
+          let earlyTask: Awaited<ReturnType<typeof createTask>> | undefined;
+          const savedResult = (task: Awaited<ReturnType<typeof createTask>>, warning?: string) => sanitizeForJson({
+            success: true,
+            task: mapTaskToDetail(task, user.id),
+            url: buildMcpTaskUrl(task.projectId, task.uniqueIndex),
+            ...(warning ? { warning } : {}),
+          });
+          const save = async (taskTitle: string, taskDescription?: string, titleOnly = false) => createTask({
+            creationChannel: "agent",
+            projectId: input.project_id,
+            title: taskTitle,
+            description: titleOnly ? "" : await inlineAgentImagesForUser(taskDescription ? toStoredHtml(taskDescription) : "", user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || taskDescription?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }),
+            sectionId: sectionCheck.section.id,
+            sectionTitle: sectionCheck.section.section_title,
+            userId: user.id,
+            priorityIndex,
+            estimateIndex,
+            dueDate: input.due_date ? new Date(input.due_date) : undefined,
+            projectUniqueIdentifier: projectCheck.project.uniqueIdentifier,
+            teamId: projectCheck.project.teamId,
+            labels,
+            assigneeIds: input.assignee_ids,
+            parentTaskId: input.parent_task_id ?? undefined,
+            agentId: actingAgentId,
+          });
           try {
             if (chatTaskWriterEnabled && "brief" in input) {
               if (actingAgentId) {
@@ -192,15 +222,25 @@ export function createCreateTaskTool(context: ToolContext) {
                 }
               }
               abortSignal?.throwIfAborted();
+              const createBeforeWriting = await isFeatureEnabled(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, user.id);
+              const publishTicket = async () => {
+                const initialTitle = taskTitleFromBrief(input.brief);
+                if (!initialTitle) throw new Error("Provide a task brief with a usable title.");
+                earlyTask = await save(initialTitle, undefined, true);
+                send("task_created", {
+                  content: `<p><a href="${escapeHtml(buildMcpTaskUrl(earlyTask.projectId, earlyTask.uniqueIndex))}">${escapeHtml(earlyTask.ticketNumber || initialTitle)}</a></p>`,
+                });
+                send("status", { content: "Ticket created. Writing its description…" });
+              };
               const draft = await generateTaskWriterDraft(taskWriterRequestSchema.parse({
                 projectId: input.project_id,
                 aiMode: "AiTaskWriter",
                 requestKind: "manual",
                 PROMPT: input.brief,
                 userRetrievalTexts: [input.brief],
-              }), user.id, actingAgentId, abortSignal);
-              if (!draft.success) return { success: false, error: draft.error };
-              if (!draft.title?.trim()) return { success: false, error: "Task Writer returned an empty title. Try again." };
+              }), user.id, actingAgentId, abortSignal, undefined, createBeforeWriting ? publishTicket : undefined);
+              if (!draft.success) throw new Error(draft.error);
+              if (!draft.title?.trim()) throw new Error("Task Writer returned an empty title. Try again.");
               if (!labels.length && draft.labelIds?.length &&
                   await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, user.id)) {
                 labels = draft.labelIds;
@@ -213,29 +253,36 @@ export function createCreateTaskTool(context: ToolContext) {
               abortSignal?.throwIfAborted();
             }
             const saveStartedAt = Date.now();
-            const task = await createTask({
-              creationChannel: "agent",
-              projectId: input.project_id,
-              title,
-              description: await inlineAgentImagesForUser(description ? toStoredHtml(description) : "", user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || description?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }),
-              sectionId: sectionCheck.section.id,
-              sectionTitle: sectionCheck.section.section_title,
-              userId: user.id,
-              priorityIndex,
-              estimateIndex,
-              dueDate: input.due_date ? new Date(input.due_date) : undefined,
-              projectUniqueIdentifier: projectCheck.project.uniqueIdentifier,
-              teamId: projectCheck.project.teamId,
-              labels,
-              assigneeIds: input.assignee_ids,
-              parentTaskId: input.parent_task_id ?? undefined,
-              agentId: actingAgentId,
-            });
+            let task;
+            let updatedResult;
+            if (earlyTask) {
+              const update = await createTaskUpdater(context, updateTaskSchema.parse({
+                title,
+                description,
+                priority: PriorityConstants.find((p) => p.priority_index === priorityIndex)?.Priority_Value,
+                estimate: estimateIndex,
+                ...(labels.length ? { add_labels: labels } : {}),
+                image_urls: input.image_urls,
+                inline_images: input.inline_images,
+              }), {
+                expectedTitle: earlyTask.title,
+                expectedDescription: "",
+                expectedProjectId: earlyTask.projectId,
+                expectedStatus: "Normal",
+              })({ task_id: earlyTask.id, project_id: earlyTask.projectId });
+              if (!update.success) throw new Error("error" in update ? update.error : "Failed to finish the description");
+              task = earlyTask;
+              updatedResult = update;
+            } else {
+              task = await save(title, description);
+            }
 
             if (customFields?.length) {
               const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
               await saveWriterCustomFieldValues(task.id, customFields);
             }
+
+            if (earlyTask) send("task_updated", { taskId: task.id });
 
             console.info(`[ai/chat-task-create] stages ${JSON.stringify({
               projectId: input.project_id,
@@ -244,12 +291,13 @@ export function createCreateTaskTool(context: ToolContext) {
               toolMs: Date.now() - creationStartedAt,
             })}`);
 
-            return sanitizeForJson({
-              success: true,
-              task: mapTaskToDetail(task, user.id),
-              url: buildMcpTaskUrl(task.projectId, task.uniqueIndex),
-            });
+            return updatedResult ?? savedResult(task);
           } catch (error) {
+            if (earlyTask) {
+              const warning = "Ticket created; description unfinished. Any saved edits remain. Open this ticket to finish it. Do not create another.";
+              send("task_created", { content: `<p>${warning}</p>` });
+              return savedResult(earlyTask, warning);
+            }
             if (isPlanLimitReachedError(error)) return planLimitResponse(error).body;
             return { success: false, error: errorMessage(error) };
           }

@@ -24,6 +24,7 @@ export async function consumeAiChatStream(context: Context) {
       const decoder = new TextDecoder("utf-8");
       let done = false;
       let aiContent = "";
+      let savedTaskContent = "";
       let buffer = "";
       let currentEventType = "";
       let replyAuthorAgent: { id: string; name: string } | null = null;
@@ -105,8 +106,15 @@ export async function consumeAiChatStream(context: Context) {
                     }
                     break;
                   }
+                  case "task_updated":
+                    if (Number.isSafeInteger(parsed.taskId) && parsed.taskId > 0) {
+                      window.dispatchEvent(new CustomEvent(TASK_EVENT, { detail: { taskId: parsed.taskId } }));
+                    }
+                    break;
+                  case "task_created":
                   case "content":
-                    if (navigationFailed) break;
+                    if (navigationFailed || typeof parsed.content !== "string") break;
+                    if (currentEventType === "task_created") savedTaskContent += parsed.content;
                     if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     aiContent += parsed.content;
 
@@ -147,7 +155,7 @@ export async function consumeAiChatStream(context: Context) {
                     console.log("🔥 Received error event:", rawError);
                     const errorAssistantMessage: IChatMessage = {
                       id: assistantMessageId,
-                      content: errorText,
+                      content: savedTaskContent + errorText,
                       role: "assistant",
                       createdAt: new Date(),
                       sessionId: session.id,
@@ -201,7 +209,7 @@ export async function consumeAiChatStream(context: Context) {
                           : "Sorry, an error occurred while processing your request.";
                         const errorMessage: IChatMessage = {
                           id: assistantMessageId,
-                          content: errorText,
+                          content: savedTaskContent + errorText,
                           role: "assistant",
                           createdAt: new Date(),
                           isDelivered: true,
