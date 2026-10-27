@@ -273,7 +273,7 @@ for (const enabled of [false, true]) {
       const writes = [];
       const task = { id: 91, projectId: 15, userId: 985, uniqueIndex: 91, title: "Evidence", sectionId: 7 };
       const comment = { id: 44, creatorId: 985, taskId: 91, task: { id: 91, projectId: 15, project: {} } };
-      const context = { inlineAgentImagesEnabled: enabled, user: { id: 985 }, actingAgentId: null, sendStatus() {}, body: { message: optOut ? "Add these screenshots, attachment only." : `Create two tasks using ${image} and https://files.hypertask.app/other.png.`, images64: [png, { url: "https://files.hypertask.app/other.png", mimeType: "image/png" }] } };
+      const context = { inlineAgentImagesEnabled: enabled, bulkPreviewsIssued: new Set(), user: { id: 985 }, actingAgentId: null, sendStatus() {}, body: { message: optOut ? "Add these screenshots, attachment only." : `Create two tasks using ${image} and https://files.hypertask.app/other.png.`, images64: [png, { url: "https://files.hypertask.app/other.png", mimeType: "image/png" }] } };
       const stubs = {
         "@/lib/errors/reportError": { reportError: async () => {} },
         ai: { tool: (definition) => definition },
