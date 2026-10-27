@@ -1,5 +1,3 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { moveTask as moveTaskRequest, readMoveTaskResponse } from "@/lib/api/typedClient";
 import { IComment, IProjectsAll, ISection, ITask } from "@/models/model";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -42,9 +40,6 @@ type Props = {
 const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandler, projectId, task, callback, taskCacheCallback, title = "Move task to column", bulkTaskIds, onBulkMove }) => {
 
   const [___, setActiveItem] = useRecoilState(activeItemAtom);
-  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
-  let typedWrite: typeof moveTaskRequest | undefined;
-  if (typedClient) typedWrite = moveTaskRequest;
   const queryClient = useQueryClient();
   const taskIdentity = useRef(task).current;
   const taskProjectId = taskIdentity?.projectId ?? projectId;
@@ -119,20 +114,9 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
   const { mutate: moveTask } = useMutation({
     mutationFn: async ({ section, ranking }: { section: ISection; ranking?: string }) => {
       if (!taskIdentity) throw new Error("Unable to find task");
-      const response = typedWrite ? await typedWrite({ projectId: taskIdentity.projectId, taskId: taskIdentity.taskId, section_title: section.section_title, sectionId: section.id!, section: section.section_title, ranking }) : await fetch(`/api/tasks/moveTask`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: taskIdentity.projectId,
-          taskId: taskIdentity.taskId,
-          section_title: section.section_title,
-          sectionId: section.id,
-          section: section.section_title,
-          ranking,
-        }),
-      });
+      const response = await moveTaskRequest({ projectId: taskIdentity.projectId, taskId: taskIdentity.taskId, section_title: section.section_title, sectionId: section.id!, section: section.section_title, ranking });
       if (!response.ok) throw new Error("Unable to move task");
-      return typedClient ? readMoveTaskResponse(response) : response.json();
+      return readMoveTaskResponse(response);
     },
     onMutate: async ({ section }) => {
       if (!taskIdentity) throw new Error("Unable to find task");

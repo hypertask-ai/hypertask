@@ -1,5 +1,3 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { setTaskDueDate } from "@/lib/api/typedClient";
 
 import { Calendar } from "@/components/Common/Calendar"
@@ -49,14 +47,12 @@ interface Props {
 }
 
 interface IScreenProps {
-  typedWrite?: typeof setTaskDueDate;
   closebackHandler: (payload: any, back?:boolean) => void;
   isActive?:Date|undefined;
   mode: TMode;
 }
 
 const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
-  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
   const [inViewObject,__] = useRecoilState(inViewObjectAtom);
   const {data:task}=useGetSingleTask(inViewObject.taskId)
   const currentDate = resolveDueDateForModal(mode, dueDate, task.dueDate)
@@ -118,9 +114,9 @@ const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
           {
             selectedScreen === "Custom"
               ?
-              <CustomCalendarScreen typedWrite={typedClient ? setTaskDueDate : undefined} isActive={currentDate ?? undefined}  closebackHandler={closebackHandler} mode={mode}/>
+              <CustomCalendarScreen isActive={currentDate ?? undefined}  closebackHandler={closebackHandler} mode={mode}/>
               :
-              <SugarDateScreen typedWrite={typedClient ? setTaskDueDate : undefined} key={currentDate?.toISOString() ?? "empty"} isActive={currentDate ?? undefined}  closebackHandler={closebackHandler} mode={mode}/>
+              <SugarDateScreen key={currentDate?.toISOString() ?? "empty"} isActive={currentDate ?? undefined}  closebackHandler={closebackHandler} mode={mode}/>
           }
         </ModalBody>
       </ModalContainerCustom>
@@ -130,7 +126,7 @@ const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
 
 }
 
-const CustomCalendarScreen: React.FC<IScreenProps> = ({ closebackHandler,isActive, mode, typedWrite }) => {
+const CustomCalendarScreen: React.FC<IScreenProps> = ({ closebackHandler,isActive, mode }) => {
   const [inViewObject,__] = useRecoilState(inViewObjectAtom);
   const [date, setDate] = useState<Date| undefined>(isActive??new Date())
   const [, setLastUsedDueDate] = useRecoilState(lastUsedDueDateAtom)
@@ -142,7 +138,7 @@ const CustomCalendarScreen: React.FC<IScreenProps> = ({ closebackHandler,isActiv
       date.setHours(defaultHour,defaultMinutes,0)
       if (mode && mode==="Update" && inViewObject.taskId) {
         const taskId = inViewObject.taskId
-        void setDueDateApiHandler(date, taskId, typedWrite).then((result) =>
+        void setDueDateApiHandler(date, taskId, setTaskDueDate).then((result) =>
           publishDueDateSaved(taskId, result)
         )
       }
@@ -203,9 +199,9 @@ const CustomCalendarScreen: React.FC<IScreenProps> = ({ closebackHandler,isActiv
   )
 }
 
-const SugarDateScreen: React.FC<IScreenProps> = ({ closebackHandler,isActive, mode, typedWrite }) => {
+const SugarDateScreen: React.FC<IScreenProps> = ({ closebackHandler,isActive, mode }) => {
 
-  const { keyword, handleInputChange, selectedIndex, setSelectedIndex, filteredOptions, enterHandler } = useCustomSugar(closebackHandler, isActive, mode, typedWrite);
+  const { keyword, handleInputChange, selectedIndex, setSelectedIndex, filteredOptions, enterHandler } = useCustomSugar(closebackHandler, isActive, mode);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } = useHandleMouseGlobal({ setSelectedIndex })
 
   return (
@@ -247,7 +243,7 @@ const SugarDateScreen: React.FC<IScreenProps> = ({ closebackHandler,isActive, mo
   )
 }
 
-const useCustomSugar = (closebackHandler: (payload: any) => void, isActive:Date|undefined, mode?: TMode, typedWrite?: typeof setTaskDueDate) => {
+const useCustomSugar = (closebackHandler: (payload: any) => void, isActive:Date|undefined, mode?: TMode) => {
   const [inViewObject,__] = useRecoilState(inViewObjectAtom);
   const [lastUsedDueDate, setLastUsedDueDate] = useRecoilState(lastUsedDueDateAtom)
   const { getDueDateOptions } = useGetTimeOptions()
@@ -319,7 +315,7 @@ const useCustomSugar = (closebackHandler: (payload: any) => void, isActive:Date|
     const selectedLabel = filteredOptions[index]
     if (mode && mode==="Update" && inViewObject.taskId) {
       const taskId = inViewObject.taskId
-      void setDueDateApiHandler(selectedLabel.date, taskId, typedWrite).then((result) =>
+      void setDueDateApiHandler(selectedLabel.date, taskId, setTaskDueDate).then((result) =>
         publishDueDateSaved(taskId, result)
       )
     }

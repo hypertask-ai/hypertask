@@ -1,8 +1,5 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { assignTaskUser } from "@/lib/api/typedClient";
 import { useCallback } from "react";
-import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 import globalConstants from "@/lib/constants";
 import { IAgent, IUser } from "@/models/model";
@@ -32,9 +29,6 @@ export const toAssigneeRows = (
     });
 
 export const useAssignTaskUser = () => {
-  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
-  let typedWrite: typeof assignTaskUser | undefined;
-  if (typedClient) typedWrite = assignTaskUser;
   const queryClient = useQueryClient();
 
   return useCallback(
@@ -52,12 +46,7 @@ export const useAssignTaskUser = () => {
         userId = user.id;
       }
 
-      const response = typedWrite ? await typedWrite({ userId, taskId, agentId, intent }) : await axios.post("/api/assignees/assign", {
-        userId,
-        taskId,
-        agentId,
-        intent,
-      });
+      const response = await assignTaskUser({ userId, taskId, agentId, intent });
       queryClient.refetchQueries({
         queryKey: [globalConstants.CommentsTQPrefixKey, taskId],
       });
@@ -66,6 +55,6 @@ export const useAssignTaskUser = () => {
       });
       return response.data.body;
     },
-    [queryClient, typedWrite]
+    [queryClient]
   );
 };

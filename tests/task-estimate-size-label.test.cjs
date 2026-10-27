@@ -30,7 +30,7 @@ function load(relative, dependencies) {
 function picker(mode = "Task") {
   const writes = [], closes = [], refreshes = [];
   const constants = { __esModule: true, default: { EstimateConstants: estimates, CommentsTQPrefixKey: "comments" } };
-  const keys = { HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes", HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" };
+  const keys = { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" };
   const useFlag = key => {
     assert.ok(Object.values(keys).includes(key), `Unexpected flag: ${key}`);
     return false;
@@ -38,7 +38,7 @@ function picker(mode = "Task") {
   const hook = load("src/hooks/MultiPages/Tasks/useEstimateModal.ts", {
     "@/hooks/useFlag": { useFlag },
     "@/lib/flags/keys": keys,
-    "@/lib/api/typedClient": {},
+    "@/lib/api/typedClient": { setTaskEstimate: async body => { writes.push({ url: "/api/estimate/setEstimate", body }); return { data: body }; } },
     "@/hooks/MultiPages/useUpdateTaskInBoards": { __esModule: true, default: () => ({ updateTaskInCache: noop }) },
     "@/hooks/MultiPages/useGetEstimateForTask": { useGetEstimateForTask: () => ({ data: { estimate_index: 3 } }) },
     "@/lib/constants": constants,
