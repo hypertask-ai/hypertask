@@ -318,6 +318,18 @@ def gh_key(text):
     return re.sub(r"[^A-Za-z0-9._-]", "_", str(text))[:200]
 
 
+GH_REPO_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-/")
+
+
+def gh_inside(path):
+    """Resolve path and refuse anything outside GH_NOTIFY_DIR."""
+    root = os.path.realpath(GH_NOTIFY_DIR)
+    full = os.path.realpath(path)
+    if not full.startswith(root + os.sep):
+        raise ValueError("path outside the notify dir")
+    return full
+
+
 def gh_hooks():
     """{hook id: repo} from lines "<id> <owner/repo>"."""
     hooks = {}
@@ -335,7 +347,7 @@ def gh_hooks():
 def gh_event(kind, p):
     """Flatten a workflow_run or pull_request payload to the few fields the fleet uses, or None to ignore it."""
     repo = str((p.get("repository") or {}).get("full_name") or "")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+    if len(repo) > 200 or repo.count("/") != 1 or not set(repo) <= GH_REPO_CHARS or "" in repo.split("/"):
         return None
     if kind == "workflow_run" and p.get("action") == "completed":
         run = p.get("workflow_run") or {}
@@ -379,31 +391,36 @@ def gh_verify(ev):
     if ev["kind"] == "ci":
         if not ev.get("run"):
             return False
-        path, jq = f"repos/{ev['repo']}/actions/runs/{ev['run']}", "[.head_branch, .conclusion, .name] | @json"
+        path, jq = f"repos/{ev['repo']}/actions/runs/{ev['run']}", "[.head_branch, .conclusion, .name, .head_sha, (.pull_requests[0].number // null)] | @json"
         want = [ev["branch"], ev["conclusion"], ev["workflow"]]
     else:
         if not ev.get("pr"):
             return False
-        path, jq = f"repos/{ev['repo']}/pulls/{ev['pr']}", "[.head.ref, .state, .merged] | @json"
+        path, jq = f"repos/{ev['repo']}/pulls/{ev['pr']}", "[.head.ref, .state, .merged, .merge_commit_sha, .number] | @json"
         want = [ev["branch"], "closed", ev["kind"] == "merged"]
     try:
         out = subprocess.run([GH_BIN, "api", path, "--jq", jq], capture_output=True, text=True, timeout=30)
         got = json.loads(out.stdout) if out.returncode == 0 else None
     except Exception:
         got = None
-    if isinstance(got, list) and len(got) == 3 and ev["kind"] == "ci":
+    if not isinstance(got, list) or len(got) != 5:
+        got = [None] * 5
+    if ev["kind"] == "ci":
         got[2] = gh_clean(got[2])
-    if got != want:
+    if got[:3] != want:
         log(f"github notify: read-back did not match for {ev['repo']}")
         return False
+    # The commit and PR number come from GitHub, never from the payload; they feed the message and the dedupe key.
+    ev["sha"] = gh_clean(got[3])[:40]
+    ev["pr"] = got[4] if isinstance(got[4], int) else None
     return True
 
 
 def gh_write(ev):
     """State file per repo and branch, written atomically; ci-wait watches its mtime."""
-    d = os.path.join(GH_NOTIFY_DIR, gh_key(ev["repo"].replace("/", "__")))
+    d = gh_inside(os.path.join(GH_NOTIFY_DIR, gh_key(ev["repo"].replace("/", "__"))))
     os.makedirs(d, exist_ok=True)
-    path = os.path.join(d, gh_key(ev["branch"]) + ".json")
+    path = gh_inside(os.path.join(d, gh_key(ev["branch"]) + ".json"))
     tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
     with open(tmp, "w") as fh:
         json.dump(dict(ev, at=time.time_ns()), fh)
@@ -476,12 +493,12 @@ def gh_message(ev):
 
 
 def gh_wake(ev, delivery):
-    msg = gh_message(ev)
-    if not msg or gh_waiting(ev):
+    if not gh_message(ev) or gh_waiting(ev):
         return
     owner = gh_owner(ev)
-    if not owner:
+    if not owner or not gh_verify(ev):
         return
+    msg = gh_message(ev)
     key = "gh|" + "|".join(str(ev.get(k) or "") for k in ("repo", "branch", "kind", "sha")) + ("|fail" if ev["conclusion"] in GH_FAIL else "|" + ev["workflow"])
     with GH_LOCK:
         if key in GH_INFLIGHT:
@@ -498,8 +515,6 @@ def gh_wake(ev, delivery):
 
 
 def gh_send(ev, owner, msg, key, delivery):
-    if not gh_verify(ev):
-        return
     with GH_LOCK:
         now = time.time()
         GH_WAKES[:] = [t for t in GH_WAKES if now - t < 3600]

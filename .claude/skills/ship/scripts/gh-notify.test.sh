@@ -27,12 +27,12 @@ post() { # hook-id event delivery body
 RUNID=100
 run() { # repo branch workflow conclusion pr sha [forged]; GitHub agrees unless forged
   RUNID=$((RUNID + 1))
-  [ -n "${7:-}" ] || jq -nc --arg b "$2" --arg c "$4" --arg w "$3" '[$b, $c, $w] | @json' | jq -r . > "$T/truth/repos_$(echo "$1" | tr / _)_actions_runs_$RUNID"
+  [ -n "${7:-}" ] || jq -nc --arg b "$2" --arg c "$4" --arg w "$3" --arg s "$6" --argjson p "$5" '[$b, $c, $w, $s, $p] | @json' | jq -r . > "$T/truth/repos_$(echo "$1" | tr / _)_actions_runs_$RUNID"
   jq -nc --arg r "$1" --arg b "$2" --arg w "$3" --arg c "$4" --argjson p "$5" --arg s "$6" --argjson id "$RUNID" \
     '{action:"completed", repository:{full_name:$r}, workflow_run:{id:$id, name:$w, head_branch:$b, conclusion:$c, head_sha:$s, html_url:"https://evil.example", pull_requests:[{number:$p}]}}'
 }
 closed() { # repo branch pr
-  jq -nc --arg b "$2" '[$b, "closed", true] | @json' | jq -r . > "$T/truth/repos_$(echo "$1" | tr / _)_pulls_$3"
+  jq -nc --arg b "$2" --argjson p "$3" '[$b, "closed", true, "m1", $p] | @json' | jq -r . > "$T/truth/repos_$(echo "$1" | tr / _)_pulls_$3"
   jq -nc --arg r "$1" --arg b "$2" --argjson p "$3" '{action:"closed", repository:{full_name:$r}, pull_request:{number:$p, merged:true, merge_commit_sha:"m1", html_url:"u", head:{ref:$b}}}'
 }
 lines() { [ -f "$1" ] && wc -l < "$1" | tr -d ' ' || echo 0; }
@@ -53,6 +53,9 @@ grep -q 'evil.example' "$T/deliver.log" && bad "payload URL reached the message"
 eq "message is one line" "$(lines "$T/deliver.log")" 1
 post 111 workflow_run d4 "$(run hypertask-ai/hypertask runner7/yper4-1 'Lint' failure 5 a1)" >/dev/null
 sleep 0.5; eq "second failure on the same commit does not wake again" "$(lines "$T/deliver.log")" 1
+replay=$(jq -nc '{action:"completed", repository:{full_name:"hypertask-ai/hypertask"}, workflow_run:{id:101, name:"CI Tests", head_branch:"runner7/yper4-1", conclusion:"failure", head_sha:"zz", pull_requests:[{number:99}]}}')
+post 111 workflow_run d4b "$replay" >/dev/null
+sleep 0.5; eq "replayed run with a forged sha and PR does not wake again" "$(lines "$T/deliver.log")" 1
 post 111 workflow_run d5 "$(run hypertask-ai/hypertask runner7/yper4-1 'Lint' success 5 a2)" >/dev/null
 sleep 0.5; eq "a pass outside CI Tests does not wake" "$(lines "$T/deliver.log")" 1
 post 111 workflow_run d6 "$(run hypertask-ai/hypertask runner7/yper4-1 'Lint' cancelled 5 a3)" >/dev/null
