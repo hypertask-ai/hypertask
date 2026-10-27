@@ -28,6 +28,25 @@ function buildNeeded(files) {
     typeof file !== 'string' || file.length === 0 || !isDocsOnlyFile(file));
 }
 
+// The PR event's base SHA is the CURRENT production tip, not where the branch
+// started. Diffing that tip against head counts every commit production gained
+// since the branch point as "changed", so a two-file skill PR ran full CI.
+// Diff from the merge base instead (what GitHub's PR "Files" tab shows).
+// Checkouts are shallow, so deepen until the merge base is visible; if it never
+// is, fail closed and run everything.
+const MERGE_BASE_DEPTHS = [50, 200, 1000];
+
+function mergeBase(base, head, git) {
+  for (const depth of MERGE_BASE_DEPTHS) {
+    git(['fetch', `--depth=${depth}`, 'origin', base, head]);
+    let out = '';
+    try { out = git(['merge-base', base, head]); } catch { out = ''; }
+    const sha = String(out || '').trim();
+    if (/^[a-f0-9]{40}$/.test(sha)) return sha;
+  }
+  throw new Error('Merge base not found within fetch depth');
+}
+
 function changeScope(event, base, head, git = args => execFileSync('git', args, {
   encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
 })) {
@@ -36,9 +55,9 @@ function changeScope(event, base, head, git = args => execFileSync('git', args, 
     if (!/^[a-f0-9]{40}$/.test(base || '') || !/^[a-f0-9]{40}$/.test(head || '')) {
       throw new Error('Missing PR commit SHA');
     }
-    git(['fetch', '--depth=1', 'origin', base, head]);
+    const from = mergeBase(base, head, git);
     // Disable rename detection: moving source into docs must still run CI.
-    const diff = git(['diff', '--no-renames', '--name-only', '-z', base, head]);
+    const diff = git(['diff', '--no-renames', '--name-only', '-z', from, head]);
     if (!diff || !diff.endsWith('\0')) throw new Error('Empty or incomplete diff');
     const files = diff.slice(0, -1).split('\0');
     return { build_needed: buildNeeded(files), files };
@@ -73,6 +92,7 @@ function selfCheck() {
   ]) assert.equal(heavyNeeded(files), expected, files.join(', '));
   const base = 'a'.repeat(40);
   const head = 'b'.repeat(40);
+  const fork = 'c'.repeat(40);
   for (const [name, diff, expected] of [
     ['docs diff', 'docs/a.txt\0README.md\0', false],
     ['mixed diff', 'README.md\0src/a.js\0', true],
@@ -83,18 +103,59 @@ function selfCheck() {
     const calls = [];
     const scope = changeScope('pull_request', base, head, args => {
       calls.push(args);
+      if (args[0] === 'merge-base') return `${fork}\n`;
       return args[0] === 'diff' ? diff : '';
     });
     assert.equal(scope.build_needed, expected, name);
     assert.deepEqual(calls, [
-      ['fetch', '--depth=1', 'origin', base, head],
-      ['diff', '--no-renames', '--name-only', '-z', base, head],
+      ['fetch', '--depth=50', 'origin', base, head],
+      ['merge-base', base, head],
+      ['diff', '--no-renames', '--name-only', '-z', fork, head],
     ]);
   }
-  for (const failAt of ['fetch', 'diff']) {
+  // Production moved after the branch point: its new src/ commits are in
+  // base..head but not in merge-base..head. Only the PR's own files count.
+  {
+    const scope = changeScope('pull_request', base, head, args => {
+      if (args[0] === 'merge-base') return fork;
+      if (args[0] !== 'diff') return '';
+      return args[4] === fork ? '.claude/skills/ship/scripts/ship-claim\0' : '.claude/x\0src/app/page.tsx\0';
+    });
+    assert.deepEqual(scope, { build_needed: false, files: ['.claude/skills/ship/scripts/ship-claim'] });
+  }
+  // Merge base outside the first shallow window: deepen, then diff from it.
+  {
+    const calls = [];
+    let mergeBaseCalls = 0;
+    const scope = changeScope('pull_request', base, head, args => {
+      calls.push(args);
+      if (args[0] === 'merge-base') {
+        mergeBaseCalls += 1;
+        if (mergeBaseCalls === 1) throw new Error('no merge base in shallow history');
+        return fork;
+      }
+      return args[0] === 'diff' ? 'docs/a.md\0' : '';
+    });
+    assert.equal(scope.build_needed, false, 'deepened merge base');
+    assert.deepEqual(calls.map(args => args.slice(0, 2)), [
+      ['fetch', '--depth=50'], ['merge-base', base], ['fetch', '--depth=200'], ['merge-base', base],
+      ['diff', '--no-renames'],
+    ]);
+  }
+  // Merge base never found: fail closed (run everything), never diff the tip.
+  {
+    const calls = [];
+    const scope = changeScope('pull_request', base, head, args => {
+      calls.push(args);
+      return args[0] === 'diff' ? 'docs/a.md\0' : '';
+    });
+    assert.deepEqual(scope, { build_needed: true, files: [] });
+    assert.ok(!calls.some(args => args[0] === 'diff'), 'no diff without a merge base');
+  }
+  for (const failAt of ['fetch', 'merge-base', 'diff']) {
     const scope = changeScope('pull_request', base, head, args => {
       if (args[0] === failAt) throw new Error('git error / missing shallow base');
-      return '';
+      return args[0] === 'merge-base' ? fork : '';
     });
     assert.deepEqual(scope, { build_needed: true, files: [] });
   }

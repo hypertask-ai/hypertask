@@ -255,8 +255,12 @@ unit tests still run. Its legacy docs-only exclusions remain `docs/`, `.claude/`
 `.github/workflows/ci-tests.yml` and `.github/scripts/` always exercise CI. Live
 settings, review and approval guards remain mandatory. No detector job is added.
 
-The detector fetches exact base/head SHAs and uses NUL-delimited
-`git diff --no-renames --name-only`; moving source into docs cannot hide a
+The detector fetches the base/head SHAs, deepens the shallow fetch (50, 200,
+1000) until `git merge-base` is visible, and diffs merge base to head with
+NUL-delimited `git diff --no-renames --name-only`. Diffing the moving
+production tip instead counted every later production commit as changed and
+sent skill-only PRs down the full lane (YPER4 fast lane). No merge base found
+means run everything; moving source into docs cannot hide a
 removed source file. Its self-check covers both outputs and fail-closed cases:
 `node .github/scripts/ci-change-scope.cjs --self-check` (run in CI, not here).
 

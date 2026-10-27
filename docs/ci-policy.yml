@@ -365,7 +365,7 @@ ci_tests:
     paths: ["docs/**", ".claude/**", "scripts/self_hosted_agent/**", ".github/**", "*.md"]
     always_run_paths: [".github/workflows/ci-tests.yml", ".github/scripts/**"]
     markdown_matches_at_any_depth: false
-    diff: exact_pr_base_sha_to_head_sha_no_renames_nul_delimited
+    diff: merge_base_to_head_sha_no_renames_nul_delimited
     detection_before: [setup-node, dependencies, caches, docker]
     unknown_or_empty_diff: run_everything
     detector_failure: run_everything
