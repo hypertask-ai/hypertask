@@ -76,6 +76,7 @@ type UpdateTaskSingleOptions = {
   expectedDescription?: string;
   expectedTitle?: string;
   expectedProjectId?: number;
+  expectedSectionId?: number;
   expectedStatus?: Status;
   taskMovedActivity?: Pick<
     TaskMovedActivityProps,
@@ -261,6 +262,7 @@ export async function updateTaskSingle(
         if (!currentState) throw new Error("Task not found");
         if (
           (options.expectedProjectId !== undefined && currentState.projectId !== options.expectedProjectId) ||
+          (options.expectedSectionId !== undefined && currentState.sectionId !== options.expectedSectionId) ||
           (options.expectedStatus !== undefined && currentState.status !== options.expectedStatus)
         ) {
           throw new TaskTargetChangedError();
@@ -445,7 +447,14 @@ export async function updateTaskSingle(
         }
 
         let updatedTask = await tx.task.update({
-          where: { id: newTask.id },
+          where: {
+            id: newTask.id,
+            ...(options.expectedSectionId !== undefined ? {
+              projectId: options.expectedProjectId,
+              sectionId: options.expectedSectionId,
+              status: options.expectedStatus,
+            } : {}),
+          },
           data: updateData,
           include: taskInclude,
         });
@@ -764,7 +773,9 @@ export async function updateTaskSingle(
         json: { message: "Parent task not found" },
       };
     }
-    if (error instanceof TaskTargetChangedError) {
+    if (error instanceof TaskTargetChangedError || (
+      options.expectedSectionId !== undefined && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
+    )) {
       return {
         status: 409,
         json: { message: "This task moved or changed status. Your note is still here." },
