@@ -103,7 +103,7 @@ const AppShellRail = ({
   notificationsUnseen = 0,
 }: AppShellRailProps) => {
   const isApple = useDeviceContext();
-  const sidebarNewTask = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
+  const sidebarNewTaskEnabled = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
@@ -330,7 +330,7 @@ const AppShellRail = ({
       </div>
 
       <div className={`mt-3 flex flex-col ${wide ? "w-full" : "items-center"}`}>
-        {sidebarNewTask && composeEnabled && (
+        {sidebarNewTaskEnabled && composeEnabled && (
           <button
             type="button"
             aria-label="New Task"

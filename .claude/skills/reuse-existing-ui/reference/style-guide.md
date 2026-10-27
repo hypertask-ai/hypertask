@@ -118,6 +118,8 @@ Destructive actions use the semantic destructive token or an existing destructiv
 
 ### Approved exceptions to the button hierarchy
 
+- The desktop sidebar New Task button in `AppShellRail.tsx` uses `bg-white-black text-white-black-inverted`, matching the existing Sign up for free action. Only its fill changes; placement, size, plus icon, label and Ctrl+J tooltip stay unchanged. Valentin approved the attached keyframe on 2026-10-27: "Yes: use the high-contrast fill." Approval: https://app.hypertask.ai/detail/project-15/8035#comment-321089. Keyframe and exact tokens: https://app.hypertask.ai/detail/project-15/8035#comment-317249.
+
 - Mobile new-task dictation buttons (title and description empty state, `TaskTitleModal.tsx` and `AttachmentsUpload/index.tsx`, `mobilePrimaryTone="default"`) use the inverted-theme white-black treatment instead of `bg-shadcn-primary`, matching the empty dictation action of the mobile comment field below. Owner-approved by Valentin on 2026-09-04, ticket https://app.hypertask.ai/detail/project-15/5995.
 
 ## Reference implementation: mobile comment field
