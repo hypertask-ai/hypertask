@@ -8,8 +8,11 @@ the ticket's existing pull request property. No runner-local file is needed.
 
 ## How to drive it
 
-After merging, rerun this ticket's PR Guards Trusted run. Checkout must use
+After merging, edit this ticket's PR body to trigger a fresh trusted run.
+Old runs retain their original inline workflow even after checkout updates.
+Use a run created after the merge, then rerun that new run. Checkout must use
 production. The title step must log the ticket key and canonical PR URL.
+Ticketed runner bots must bind; unticketed dependency bots stay exempt.
 Delayed runs may bind merged PRs. Read the ticket through the Hypertask CLI;
 its `pullRequests` must contain that URL. Do not manually create the link.
 Repeat the run and confirm the link remains unique.

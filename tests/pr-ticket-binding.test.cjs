@@ -9,7 +9,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const repo = 'hypertask-ai/hypertask';
 
 async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base = repo,
-  state = 'open', token = 'fixture-token', status = 200, result, fetchError } = {}) {
+  login = 'runner', state = 'open', token = 'fixture-token', status = 200, result, fetchError } = {}) {
   const writes = [];
   const failures = [];
   const outputs = {};
@@ -20,7 +20,7 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
   try {
     await new AsyncFunction('github', 'context', 'core', 'fetch', step.with.script)(
       { rest: { pulls: { get: async () => ({ data: {
-        number: 123, title, state, user: { login: 'runner' },
+        number: 123, title, state, user: { login },
         head: { sha: 'a'.repeat(40), repo: { full_name: head } },
         base: { ref: 'production', repo: { full_name: base } },
       } }) } } },
@@ -86,4 +86,15 @@ test('a delayed CI run still binds its merged PR', async () => {
   assert.deepEqual(JSON.parse(result.writes[0].options.body), {
     ticket_number: 'YPER4-731', pull_request_url: 'https://github.com/hypertask-ai/hypertask/pull/123',
   });
+});
+
+test('ticketed runner bots bind while unticketed dependency bots stay exempt', async () => {
+  const runner = await run({ login: 'hypertask-runners[bot]' });
+  assert.equal(runner.writes.length, 1);
+  assert.deepEqual(JSON.parse(runner.writes[0].options.body), {
+    ticket_number: 'YPER4-731', pull_request_url: 'https://github.com/hypertask-ai/hypertask/pull/123',
+  });
+  const dependency = await run({ login: 'dependabot[bot]', title: 'Bump a dependency' });
+  assert.deepEqual(dependency.writes, []);
+  assert.deepEqual(dependency.failures, []);
 });
