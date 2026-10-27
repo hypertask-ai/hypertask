@@ -144,6 +144,8 @@ jobs:
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         id: title
         if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
         with:
           script: |
             // YPER4 = Hypertask Infra board (project 4060): plumbing work
@@ -191,7 +193,31 @@ jobs:
             }
 
             if (shape.test(pr.title)) {
-              core.info(`Title OK: ${pr.title}`);
+              const repository = `${context.repo.owner}/${context.repo.repo}`;
+              if (pr.base.ref !== 'production' ||
+                  pr.base.repo?.full_name !== repository || pr.head.repo?.full_name !== repository) {
+                core.info('Skipping ticket binding outside a same-repository production PR.');
+                return;
+              }
+              const token = process.env.HYPERTASK_MCP_TOKEN;
+              if (!token) throw new Error('HYPERTASK_MCP_TOKEN is missing; ticket binding cannot run.');
+              const ticket = pr.title.split(' ')[0];
+              const url = `https://github.com/${repository}/pull/${pr.number}`;
+              const response = await fetch('https://app.hypertask.ai/api/mcp/tasks/update', {
+                method: 'POST',
+                redirect: 'error',
+                signal: AbortSignal.timeout(30_000),
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticket_number: ticket, pull_request_url: url }),
+              });
+              if (!response.ok) throw new Error(`Ticket binding returned HTTP ${response.status}`);
+              const result = await response.json();
+              if (result.success !== true || result.tasks?.length !== 1 ||
+                  result.tasks[0].ticketNumber !== ticket ||
+                  !result.tasks[0].pullRequests?.some(link => link.url === url)) {
+                throw new Error('Ticket binding was not confirmed by the app.');
+              }
+              core.info(`Title OK: ${pr.title}; linked ${ticket} to ${url}`);
               return;
             }
 
