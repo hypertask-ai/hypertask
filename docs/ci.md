@@ -415,3 +415,51 @@ The offline replay binds the complete corpus hash and recomputes every score.
 `ship-scripts-tests` runs the collector's supported offline runner and claim
 checks: four Vercel reports join the original MCP report with five activities.
 Different roots/routes stay separate. All board commands are private fakes.
+
+## Shared-check incidents (YPER4-842)
+
+The existing five-minute `production-red-alert.timer` reads every context in
+`required_checks.contexts` from this policy, including GitHub check runs and
+commit statuses. Its production-ancestry snapshot catches an individual failed
+job before its workflow finishes. PR-only failures are not evidence of a shared
+production regression. Missing checks are unknown, never green.
+
+A contiguous red streak creates one Infra incident per first-red/last-green
+boundary. Checks sharing that boundary share the incident. An immediate-parent
+green identifies a revert candidate; gaps, incomplete history and multi-parent
+commits require investigation. The proposed single-commit revert preserves later
+changes, never updates production and never enables auto-merge. CI and review
+remain required; adjacency is not proof that the revert repairs the failure.
+The publisher rechecks production before pushing and reconciles an existing
+branch instead of overwriting it.
+
+`ship-claim` refuses new work while an open `[INCIDENT] Shared required checks`
+ticket exists, except for its live claimant. Existing claimed work may resume.
+The dispatcher applies the same claim-only owner rule to new assignments.
+Assignments and manager comments cannot transfer a claim; the claimant must
+release it. Nobody receives an owner exception when there is no live claim.
+The incident itself remains claimable. Closing the incident after recovery and
+live verification lifts the freeze; a successful check alone does not.
+
+The board currently has no agent-valued waiting-on field. The monitor records
+`Blocked on` with an agent mention on the incident, or escalates on that ticket
+to HT Product Lead when no live claimant exists. It never substitutes a human
+owner id or changes another agent's assignment. A separate no-merge-for-two-hours
+alarm creates one Infra ticket per last production head, blocked on HT Product
+Lead in the same way. These are ticket notifications, not session messages.
+
+Install explicitly after merge from a named agent session:
+`SHIP_SESSION_NAME="RUNNER 16" .claude/skills/ship/scripts/production-red-alert install`.
+The installer validates both units with `user-unit-check`; then prove its first
+real run with `user-unit-check --first-run production-red-alert.service`.
+`production-red-alert --dry-run` performs no board, Git or state writes.
+The installed policy is copied from `docs/ci-policy.yml`; reinstall after a
+required-context change. State and ambiguous-write intents remain private under
+`~/.local/state/production-red-alert/`. Never delete an intent to retry a write.
+
+Hosted `ship-scripts-tests` replays the retained 26 October job receipts and
+publishes a revert against a disposable local Git remote. The recorded first
+browser-smoke failure was **17:54:01 UTC**, before the approximate 18:00 time in
+the incident report. Replay detects it at 17:55 UTC and identifies commit
+`7b167459c5127324cf8ed43efb9dc1c6f39f2edd`; the workflow finished at 18:02:41.
+This is historical replay evidence, not a claim that the old revert passed.

@@ -570,7 +570,31 @@ def send(pane, text, claim_path=None):
         raise
 
 
+def incident_owners(boards, comments, now):
+    incidents = [task for task in boards.get(4060, [])
+                 if task["title"].startswith("[INCIDENT] Shared required checks")
+                 and task["section"] not in {"Done", "Archive", "Archived"}]
+    if not incidents:
+        return []
+    script = SCRIPTS / "release-incidents.cjs"
+    if not script.is_file():
+        script = Path.home() / "projects/ht-skills-live/.claude/skills/ship/scripts/release-incidents.cjs"
+    logs = dict(comments)
+    for task in incidents:
+        ticket = task["ticketNumber"]
+        data = json.loads(command("ht", "GET", f"/mcp/tasks/{ticket}/agent-activity?limit=100"))
+        if (data.get("success") is not True or not isinstance(data.get("activities"), list)
+                or len(data["activities"]) >= 100):
+            raise ValueError("Incomplete incident claim history")
+        logs[ticket] = comments.get(ticket, []) + data["activities"]
+    payload = {"tasks": incidents, "logs": logs, "now": now * 1000}
+    result = subprocess.run(["node", str(script), "owners"], input=json.dumps(payload),
+                            capture_output=True, text=True, timeout=25, check=True)
+    return json.loads(result.stdout)
+
+
 def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, loop=LOOP, state=STATE):
+    freeze = incident_owners(boards, comments, now)
     held = held_tickets(boards, comments)
     maintenance_held = held_tickets(boards, comments, MAINTENANCE)
     last = read_last(loop)
@@ -591,6 +615,10 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
             result["action"] = "cleared"
             continue
         blocking = holding if row["state"] != "done" else []
+        if any(not entry["owner"] or entry["owner"]["name"].casefold() != runner.casefold()
+               for entry in freeze):
+            result["action"] = "incident-freeze"
+            continue
         if runner == SPEED:
             if (load > 12 or row["state"] not in SPEED_STATES
                     or blocking or now - last.get(pane, 0) < 600):

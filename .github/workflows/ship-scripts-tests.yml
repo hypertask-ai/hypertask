@@ -76,3 +76,5 @@ jobs:
           bash .claude/skills/ship/scripts/error-collector.test.sh
           node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
           bash .claude/skills/ship/scripts/ship-claim.test.sh
+          node --test .claude/skills/ship/scripts/production-red-alert.test.mjs
+          python3 .claude/skills/ship/scripts/runner-dispatch.test.py

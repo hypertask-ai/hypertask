@@ -1,0 +1,236 @@
+{
+  "source": "GitHub REST actions/runs and jobs, read 2026-10-27; fields retained without user content",
+  "runs": [
+    {
+      "id": 40363188338,
+      "head_sha": "5385a0ef0037ab66dc195ccfb1183d897addd78d",
+      "event": "push",
+      "head_branch": "production",
+      "created_at": "2026-10-26T16:51:55Z",
+      "updated_at": "2026-10-26T17:13:09Z",
+      "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338",
+      "conclusion": "success",
+      "parent": "725a20a1e5f7e3e14c56e16f9726c9496217dc9c",
+      "jobs": [
+        {
+          "id": 121713786794,
+          "name": "browser-smoke",
+          "conclusion": "success",
+          "started_at": "2026-10-26T16:51:58Z",
+          "completed_at": "2026-10-26T17:06:00Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338/job/121713786794"
+        },
+        {
+          "id": 121713787279,
+          "name": "production-cli-parity",
+          "conclusion": "success",
+          "started_at": "2026-10-26T16:51:59Z",
+          "completed_at": "2026-10-26T16:52:14Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338/job/121713787279"
+        },
+        {
+          "id": 121713787844,
+          "name": "ci-prepare",
+          "conclusion": "success",
+          "started_at": "2026-10-26T16:51:59Z",
+          "completed_at": "2026-10-26T16:55:37Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338/job/121713787844"
+        },
+        {
+          "id": 121715851554,
+          "name": "test-shard (0)",
+          "conclusion": "success",
+          "started_at": "2026-10-26T16:55:40Z",
+          "completed_at": "2026-10-26T17:05:26Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338/job/121715851554"
+        },
+        {
+          "id": 121715851950,
+          "name": "test-shard (1)",
+          "conclusion": "success",
+          "started_at": "2026-10-26T16:55:40Z",
+          "completed_at": "2026-10-26T17:12:56Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338/job/121715851950"
+        },
+        {
+          "id": 121721682351,
+          "name": "mcp-cli-api-contract",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:06:03Z",
+          "completed_at": "2026-10-26T17:06:07Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338/job/121721682351"
+        },
+        {
+          "id": 121725547096,
+          "name": "ci-tests",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:12:59Z",
+          "completed_at": "2026-10-26T17:13:08Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338/job/121725547096"
+        },
+        {
+          "id": 121725655938,
+          "name": "production-test-warning",
+          "conclusion": "skipped",
+          "started_at": "2026-10-26T17:13:08Z",
+          "completed_at": "2026-10-26T17:13:08Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40363188338/job/121725655938"
+        }
+      ]
+    },
+    {
+      "id": 40371166808,
+      "head_sha": "7b167459c5127324cf8ed43efb9dc1c6f39f2edd",
+      "event": "push",
+      "head_branch": "production",
+      "created_at": "2026-10-26T17:42:43Z",
+      "updated_at": "2026-10-26T18:02:41Z",
+      "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808",
+      "conclusion": "failure",
+      "parent": "5385a0ef0037ab66dc195ccfb1183d897addd78d",
+      "jobs": [
+        {
+          "id": 121741972146,
+          "name": "production-cli-parity",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:42:46Z",
+          "completed_at": "2026-10-26T17:42:59Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808/job/121741972146"
+        },
+        {
+          "id": 121741972556,
+          "name": "browser-smoke",
+          "conclusion": "failure",
+          "started_at": "2026-10-26T17:42:48Z",
+          "completed_at": "2026-10-26T17:54:01Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808/job/121741972556"
+        },
+        {
+          "id": 121741972573,
+          "name": "ci-prepare",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:42:47Z",
+          "completed_at": "2026-10-26T17:46:20Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808/job/121741972573"
+        },
+        {
+          "id": 121743950817,
+          "name": "test-shard (1)",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:46:23Z",
+          "completed_at": "2026-10-26T18:02:25Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808/job/121743950817"
+        },
+        {
+          "id": 121743950946,
+          "name": "test-shard (0)",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:46:23Z",
+          "completed_at": "2026-10-26T18:00:13Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808/job/121743950946"
+        },
+        {
+          "id": 121748140789,
+          "name": "mcp-cli-api-contract",
+          "conclusion": "failure",
+          "started_at": "2026-10-26T17:54:04Z",
+          "completed_at": "2026-10-26T17:54:07Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808/job/121748140789"
+        },
+        {
+          "id": 121752576859,
+          "name": "ci-tests",
+          "conclusion": "success",
+          "started_at": "2026-10-26T18:02:28Z",
+          "completed_at": "2026-10-26T18:02:40Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808/job/121752576859"
+        },
+        {
+          "id": 121752708833,
+          "name": "production-test-warning",
+          "conclusion": "skipped",
+          "started_at": "2026-10-26T18:02:41Z",
+          "completed_at": "2026-10-26T18:02:40Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371166808/job/121752708833"
+        }
+      ]
+    },
+    {
+      "id": 40371538167,
+      "head_sha": "893aa8dc0879005436cbe4318c86dd63de028edd",
+      "event": "push",
+      "head_branch": "production",
+      "created_at": "2026-10-26T17:45:08Z",
+      "updated_at": "2026-10-26T18:03:33Z",
+      "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167",
+      "conclusion": "failure",
+      "parent": "7b167459c5127324cf8ed43efb9dc1c6f39f2edd",
+      "jobs": [
+        {
+          "id": 121743283498,
+          "name": "ci-prepare",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:45:11Z",
+          "completed_at": "2026-10-26T17:48:27Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167/job/121743283498"
+        },
+        {
+          "id": 121743283879,
+          "name": "browser-smoke",
+          "conclusion": "failure",
+          "started_at": "2026-10-26T17:45:11Z",
+          "completed_at": "2026-10-26T17:56:20Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167/job/121743283879"
+        },
+        {
+          "id": 121743283898,
+          "name": "production-cli-parity",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:45:11Z",
+          "completed_at": "2026-10-26T17:45:23Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167/job/121743283898"
+        },
+        {
+          "id": 121745208098,
+          "name": "test-shard (0)",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:48:42Z",
+          "completed_at": "2026-10-26T18:03:17Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167/job/121745208098"
+        },
+        {
+          "id": 121745208272,
+          "name": "test-shard (1)",
+          "conclusion": "success",
+          "started_at": "2026-10-26T17:48:43Z",
+          "completed_at": "2026-10-26T18:02:09Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167/job/121745208272"
+        },
+        {
+          "id": 121749390563,
+          "name": "mcp-cli-api-contract",
+          "conclusion": "failure",
+          "started_at": "2026-10-26T17:56:23Z",
+          "completed_at": "2026-10-26T17:56:25Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167/job/121749390563"
+        },
+        {
+          "id": 121753032163,
+          "name": "ci-tests",
+          "conclusion": "success",
+          "started_at": "2026-10-26T18:03:20Z",
+          "completed_at": "2026-10-26T18:03:32Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167/job/121753032163"
+        },
+        {
+          "id": 121753169856,
+          "name": "production-test-warning",
+          "conclusion": "skipped",
+          "started_at": "2026-10-26T18:03:33Z",
+          "completed_at": "2026-10-26T18:03:32Z",
+          "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/40371538167/job/121753169856"
+        }
+      ]
+    }
+  ]
+}

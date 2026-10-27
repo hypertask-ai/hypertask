@@ -1,326 +1,296 @@
 #!/usr/bin/env node
-// One free, agent-owned alert per production-red streak.
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
+const { PREFIX, owner, incidents, pages, logs } = require('./release-incidents.cjs');
 const REPO = 'hypertask-ai/hypertask';
-const IDENTITY = 'INFRA MANAGER';
-const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const STATE = path.join(os.homedir(), '.local/state/production-red-alert');
-
+const CHECKOUT = path.join(os.homedir(), 'projects/ht-skills-live');
+const SHA = /^[a-f0-9]{40}$/;
+const QUERY = `query { repository(owner:"hypertask-ai",name:"hypertask") {
+  ref(qualifiedName:"refs/heads/production") { target { ... on Commit { history(first:40) { nodes {
+    oid committedDate messageHeadline parents(first:2) { nodes { oid } }
+    associatedPullRequests(first:10) { nodes { number title mergedAt baseRefName mergeCommit { oid } } }
+    statusCheckRollup { contexts(first:100) { pageInfo { hasNextPage } nodes {
+      ... on CheckRun { name status conclusion completedAt startedAt detailsUrl databaseId }
+      ... on StatusContext { context state createdAt targetUrl }
+    } } }
+  } } } } }
+} }`;
 function command(bin, args, options = {}) {
   try {
     return execFileSync(bin, args, { encoding: 'utf8', timeout: 25000,
       maxBuffer: 32 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'], ...options });
-  } catch {
-    // Never echo command arguments: vcc descriptions and credential-handling tools are not diagnostics.
-    throw new Error(`${bin} failed or timed out; retry after backoff`);
-  }
+  } catch { throw new Error(`${bin} failed or timed out; no credentials or arguments logged`); }
 }
-function json(text) {
-  const value = JSON.parse(text);
-  if (value.success === false) throw new Error('API returned success=false');
-  return value;
+function json(value) {
+  const data = JSON.parse(value);
+  if (data.success === false || data.errors) throw new Error('API refused request');
+  return data;
 }
-function agent(task) {
-  const agents = new Map((task.assignees || []).filter(a => UUID.test(a.agent?.id || ''))
-    .map(a => [a.agent.id, { id: a.agent.id, name: a.agent.displayName }]));
-  if (agents.size !== 1) throw new Error('Chosen PR ticket must have exactly one assigned agent; refusing a human or ambiguous fixer');
-  return [...agents.values()][0];
+function requiredChecks(file = path.join(__dirname, '../../../../docs/ci-policy.yml')) {
+  const policy = fs.readFileSync(file, 'utf8');
+  const match = policy.match(/^required_checks:\n(?:[ \t].*\n)*?  contexts: \[([^\]]+)\]/m);
+  if (!match) throw new Error('Cannot read canonical required checks');
+  return match[1].split(',').map(name => name.trim());
 }
-function identity(run = command) {
-  const helper = path.join(os.homedir(), '.agents/skills/ship/scripts/ship-identity');
-  const expected = path.join(os.homedir(), '.config/hypertask-agents/credentials/sessions/infra-manager-agent-token');
-  const [name, tokenPath] = run(helper, [], { env: { ...process.env, SHIP_SESSION_NAME: IDENTITY } }).trim().split('\t');
-  if (name !== IDENTITY || tokenPath !== expected || !fs.statSync(expected).isFile() || fs.statSync(expected).size === 0) {
-    throw new Error('INFRA MANAGER session credential unavailable; refusing the Valentin fallback');
-  }
-  return { name, credentialPath: expected };
-}
-function runOrder(a, b) {
-  const ta = Date.parse(a.run_started_at || a.created_at), tb = Date.parse(b.run_started_at || b.created_at);
-  return (Number.isFinite(ta) && Number.isFinite(tb) ? tb - ta : 0) || b.id - a.id || (b.run_attempt || 1) - (a.run_attempt || 1);
-}
-function streak(data, state) {
-  const key = `${data.firstRed.id}:${data.firstRed.run_attempt || 1}:${data.green.id}`;
-  const existingKey = Object.keys(state.alerts).find(k => k === key ||
-    (!/^\d+:\d+:\d+$/.test(k) && !state.alerts[k].closed &&
-      state.alerts[k].firstRed === data.firstRed.head_sha && state.alerts[k].runId > data.green.id));
-  return { key, existingKey };
-}
-function live(run = command) {
-  const api = route => json(run('gh', ['api', '-X', 'GET', `repos/${REPO}/${route}`]));
-  const jobs = (id, attempt) => {
-    const all = [];
-    for (let page = 1; ; page++) {
-      const rows = api(`actions/runs/${id}${attempt ? `/attempts/${attempt}` : ''}/jobs?per_page=100&page=${page}`).jobs;
-      if (!Array.isArray(rows)) throw new Error('Unreadable CI jobs');
-      all.push(...rows);
-      if (rows.length < 100) break;
+function snapshot(data) {
+  const commits = data.data?.repository?.ref?.target?.history?.nodes;
+  if (!Array.isArray(commits) || !commits.length) throw new Error('Missing production history');
+  return commits.map(commit => {
+    if (!SHA.test(commit.oid) || commit.statusCheckRollup?.contexts?.pageInfo?.hasNextPage) {
+      throw new Error('Incomplete production checks');
     }
-    return all.filter(j => j.name === 'ci-tests').sort((a, b) => b.id - a.id)[0];
-  };
-  return {
-    async collect(runId, state = { alerts: {} }) {
-      const target = runId ? api(`actions/runs/${runId}`) : null;
-      if (target && (target.name !== 'CI Tests' || target.head_branch !== 'production' || target.status !== 'completed')) {
-        throw new Error('--run must be a completed production CI Tests run');
+    const contexts = new Map();
+    for (const row of commit.statusCheckRollup?.contexts?.nodes || []) {
+      const name = row.name || row.context;
+      const state = row.status && row.status !== 'COMPLETED' ? 'PENDING' : row.conclusion || row.state;
+      const at = row.completedAt || row.startedAt || row.createdAt;
+      const existing = contexts.get(name);
+      if (!existing || Date.parse(at) > Date.parse(existing.at) ||
+          (at === existing.at && (row.databaseId || 0) > (existing.id || 0))) {
+        contexts.set(name, { name, state, at, url: row.detailsUrl || row.targetUrl, id: row.databaseId });
       }
-      let red, firstRed, green, latest;
-      for (let page = 1; !green; page++) {
-        const route = target ? `actions/workflows/${target.workflow_id}/runs` : 'actions/workflows/ci-tests.yml/runs';
-        const rows = api(`${route}?branch=production&status=completed&per_page=100&page=${page}${target ? `&created=<=${target.updated_at || target.created_at}` : ''}`).workflow_runs;
-        if (!Array.isArray(rows)) throw new Error('Unreadable production runs');
-        if (!rows.length) break;
-        rows.sort(runOrder);
-        while (rows.length) {
-          const r = rows.shift();
-          if (r.name !== 'CI Tests' || r.head_branch !== 'production' || r.status !== 'completed' ||
-              r.conclusion === 'cancelled' || (target && runOrder(r, target) < 0)) continue;
-          if (!latest) {
-            latest = r;
-            if (!target && state.lastRun === `${r.id}:${r.run_attempt || 1}:${r.updated_at || ''}`) {
-              return { status: 'idle', run: r };
-            }
-          }
-          // A successful workflow cannot contain a failed ci-tests job.
-          const job = r.conclusion === 'success' ? { status: 'completed', conclusion: 'success' } : jobs(r.id, r.previousAttempt ? r.run_attempt : undefined);
-          if (!job || job.status !== 'completed') throw new Error(`Missing completed ci-tests job for run ${r.id}`);
-          if (!red) {
-            if (job.conclusion !== 'failure') return { status: job.conclusion, run: r };
-            red = { ...r, job }; firstRed = r;
-          } else if (job.conclusion === 'success') { green = r; break; }
-          else if (job.conclusion === 'failure') firstRed = r;
-          if (r.run_attempt > 1) {
-            rows.push({ ...api(`actions/runs/${r.id}/attempts/${r.run_attempt - 1}`), previousAttempt: true });
-            rows.sort(runOrder);
-          }
-        }
-      }
-      if (!red) return { status: 'none' };
-      if (!green) throw new Error('No last green production run found; refusing an incomplete PR range');
-      const failures = json(run('python3', [path.join(__dirname, 'ci-test-failures.py'), '--json'], {
-        input: run('gh', ['api', '-X', 'GET', `repos/${REPO}/actions/jobs/${red.job.id}/logs`])
-      }));
-      if (!failures.length) throw new Error('Failed ci-tests log names no failing test file; refusing to guess');
-      for (const sha of [green.head_sha, red.head_sha, firstRed.head_sha]) {
-        if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid CI commit SHA');
-      }
-      if (streak({ firstRed, green }, state).existingKey) {
-        return { status: 'failure', run: red, firstRed, green, failures, prs: [] };
-      }
-      const commits = [];
-      let total;
-      if (green.head_sha === red.head_sha) commits.push(api(`commits/${red.head_sha}`));
-      else for (let page = 1; ; page++) {
-        const comparison = api(`compare/${green.head_sha}...${red.head_sha}?per_page=100&page=${page}`);
-        if (!Array.isArray(comparison.commits) || !Number.isSafeInteger(comparison.total_commits) ||
-            !['ahead', 'identical'].includes(comparison.status)) throw new Error('Unreadable or divergent production commit range');
-        total ??= comparison.total_commits;
-        if (comparison.total_commits !== total) throw new Error('Production commit range changed during pagination');
-        commits.push(...comparison.commits);
-        if (commits.length === total) break;
-        if (!comparison.commits.length || commits.length > total) throw new Error('Incomplete production commit range');
-      }
-      const prs = [];
-      for (const commit of commits.reverse()) {
-        const sha = commit.sha, title = commit.commit.message.split('\n')[0];
-        const number = title.match(/\(#(\d+)\)$/)?.[1];
-        if (!number) throw new Error(`Non-squash commit ${sha} in production range; refusing to omit it`);
-        const files = [], patches = [];
-        for (let page = 1; ; page++) {
-          const rows = api(`pulls/${number}/files?per_page=100&page=${page}`);
-          if (!Array.isArray(rows)) throw new Error('Unreadable PR files');
-          files.push(...rows.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)));
-          patches.push(...rows.map(f => f.patch || ''));
-          if (rows.length < 100) break;
-          if (page >= 30) throw new Error('GitHub PR file limit reached; refusing a partial range');
-        }
-        prs.push({ number: Number(number), title: title.replace(/ \(#\d+\)$/, ''),
-          url: `https://github.com/${REPO}/pull/${number}`, files, patches });
-      }
-      return { status: 'failure', run: red, firstRed, green, failures, prs };
-    },
-    task(ticket) {
-      const tasks = json(run('hypertask', ['tasks', 'get', ticket, '--json'])).tasks;
-      if (tasks?.length !== 1) throw new Error(`Cannot read chosen PR ticket ${ticket}`);
-      return tasks[0];
-    },
-    identity: () => identity(run),
-    write(args) {
-      return run('vcc', args, { env: { ...process.env, SHIP_SESSION_NAME: IDENTITY } });
-    },
-    recover(title, marker) {
-      const rows = json(run('hypertask', ['tasks', 'list', '--project', '4060', '--search', title, '--limit', '100', '--json'])).tasks;
-      if (!Array.isArray(rows) || rows.length >= 100) throw new Error('Cannot safely reconcile alert creation');
-      const matches = rows.filter(t => t.title === title).map(t => this.task(t.ticketNumber))
-        .filter(t => t.description?.includes(marker));
-      if (matches.length !== 1) throw new Error('Alert creation outcome unknown; reconcile the saved intent manually before retrying (no duplicate created)');
-      return matches[0].ticketNumber;
     }
-  };
+    return { sha: commit.oid, parents: commit.parents.nodes.map(parent => parent.oid),
+      title: commit.messageHeadline, at: commit.committedDate, contexts: [...contexts.values()],
+      prs: commit.associatedPullRequests.nodes.filter(pr => pr.baseRefName === 'production' && pr.mergeCommit?.oid === commit.oid) };
+  });
 }
-async function plan(data, api, state = { alerts: {} }) {
-  if (data.status !== 'failure') return { action: data.status === 'success' ? 'green' : data.status === 'idle' ? 'idle' : 'none', run: data.run };
-  const files = [...new Set(data.failures.map(f => f.file))].sort();
-  const { key, existingKey } = streak(data, state);
-  if (existingKey) return { action: 'alert', key, existingKey, firstRed: data.firstRed.head_sha, run: data.run, green: data.green, failures: data.failures };
-  const touched = data.prs.find(pr => pr.files.some(f => files.includes(f)));
-  const ignored = new Set(['function', 'return', 'iterable', 'unexpected', 'import', 'undefined', 'cannot',
-    'property', 'typeerror', 'referenceerror', 'syntaxerror', 'error', 'module', 'resolve', 'reading']);
-  const errors = data.failures.map(f => f.error).join('\n');
-  const modules = errors.match(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g) || [];
-  const identifiers = new Set((errors.replace(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g, '')
-    .match(/[A-Za-z_$][\w$]{5,}/g) || []).filter(id => !ignored.has(id.toLowerCase())));
-  const modulePath = p => p.replace(/^@\//, 'src/').replace(/^\.\//, '').replace(/\.[cm]?[jt]sx?$/, '');
-  const implicated = data.prs.find(pr => pr.files.some(f => modules.some(m => modulePath(f) === modulePath(m))) ||
-    (pr.patches || []).some(patch => patch.split('\n').some(line => /^[+-]/.test(line) && !/^(?:\+\+\+|---)\s/.test(line) &&
-      ((line.match(/[A-Za-z_$][\w$]{5,}/g) || []).some(id => identifiers.has(id)) ||
-        (line.match(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g) || [])
-          .some(p => modules.some(m => modulePath(p) === modulePath(m)))))));
-  const chosen = touched || implicated || data.prs.at(-1);
-  if (!chosen) throw new Error('Red range contains no PR; refusing to invent a fixer');
-  const ticket = chosen.title.match(/^((?:HTPR|YPER4|HYFA)-\d+)\b/)?.[1];
-  if (!ticket) throw new Error('Chosen PR title has no recognized ticket prefix');
-  const fixer = agent(await api.task(ticket));
-  const marker = `production-red-alert:${createHash('sha256').update(key).digest('hex')}`;
-  const rule = touched ? 'failing-test-file' : implicated ? 'error-identifier' : 'oldest-pr';
-  const why = touched ? `PR #${chosen.number} is the newest PR in this range that changed a failing test file.`
-    : implicated ? `PR #${chosen.number} is the newest PR whose changed lines or module paths match an identifier in the first errors.`
-    : `No PR changed a failing test file or matched an error identifier, so PR #${chosen.number}, the oldest PR (first change after green), owns the fix.`;
-  const description = [
-    'Production tests are failing. One agent owns this fix so runners do not duplicate the work.', '',
-    'Failing tests (first error for each file):', ...data.failures.map(f => `- ${f.file}: ${f.error}`), '',
-    `Red run: ${data.run.html_url}`, `Last green run: ${data.green.html_url}`, '',
-    'PRs merged since the last green run (newest first):', ...data.prs.map(pr => `- #${pr.number} ${pr.title} ${pr.url}`), '',
-    `Fixer: ${fixer.name} (${fixer.id}), the agent assigned to ${ticket}. Rule: ${rule}. ${why}`, '', marker
-  ].join('\n');
-  return { action: 'alert', key, marker, firstRed: data.firstRed.head_sha, run: data.run,
-    green: data.green, failures: data.failures, prs: data.prs, chosenPR: chosen.number, fixer, rule, why,
-    title: `Production red: ${data.failures[0].file}`, description, project: 4060, section: 'In Progress' };
+function plan(commits, required, now = Date.now()) {
+  if (!commits.length || commits.some(commit => !SHA.test(commit.sha))) throw new Error('Invalid production snapshot');
+  const failures = [], recovered = [];
+  for (const name of required) {
+    const observations = commits.flatMap(commit => {
+      const check = commit.contexts.find(row => row.name === name && Date.parse(row.at) <= now);
+      return check && ['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(check.state)
+        ? [{ commit, check }] : [];
+    });
+    if (!observations.length) continue;
+    if (observations[0].check.state === 'SUCCESS') { recovered.push(name); continue; }
+    const boundary = observations.findIndex(row => row.check.state === 'SUCCESS');
+    const first = observations[(boundary < 0 ? observations.length : boundary) - 1];
+    const green = boundary < 0 ? null : observations[boundary];
+    const culprit = green && first.commit.parents.length === 1 && first.commit.parents[0] === green.commit.sha ? first.commit.sha : null;
+    failures.push({ name, first, green, culprit,
+      key: `${first.commit.sha}:${green?.commit.sha || 'unknown'}` });
+  }
+  const head = commits[0];
+  const mergedAt = Math.max(Date.parse(head.at), ...head.prs.map(pr => Date.parse(pr.mergedAt)));
+  return { head: head.sha, failures, recovered, stalled: now - mergedAt >= 7200000, mergedAt };
 }
 function load(dir) {
   try { return json(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')); }
-  catch (e) { if (e.code === 'ENOENT') return { alerts: {}, fails: 0, until: 0 }; throw e; }
+  catch (error) { if (error.code === 'ENOENT') return { incidents: {}, stalls: {} }; throw error; }
 }
 function save(dir, state) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const tmp = path.join(dir, `state.${process.pid}.tmp`);
-  fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(tmp, path.join(dir, 'state.json'));
+  const temporary = path.join(dir, `state.${process.pid}.tmp`);
+  fs.writeFileSync(temporary, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
+  fs.renameSync(temporary, path.join(dir, 'state.json'));
 }
-async function apply(p, state, api, persist) {
-  if (p.action === 'green') {
-    for (const a of Object.values(state.alerts)) {
-      if (a.closed || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
-      if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
-      // Ambiguous activity writes are not retried: retain the intent for operator reconciliation.
-      if (a.closing) throw new Error('Recovery note outcome unknown; reconcile saved closing intent manually');
-      a.closing = true; persist();
-      api.write(['activity', 'add', a.ticket, `Production green again: ${p.run.html_url} (${a.marker}).`]);
-      a.closed = true; a.closing = false; persist();
+const html = value => value.replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
+const marker = key => `shared-check-incident:${createHash('sha256').update(key).digest('hex')}`;
+function live(run = command) {
+  let env;
+  const auth = () => {
+    if (!env) {
+      const token = run('gh-app-token', []).trim();
+      if (!token) throw new Error('Runner App token unavailable; no user-login fallback');
+      env = { ...process.env, GH_TOKEN: token };
     }
-    return;
-  }
-  if (p.action !== 'alert') return;
-  await apply({ action: 'green', run: p.green }, state, api, persist);
-  let a = state.alerts[p.existingKey || p.key];
-  if (a?.closed) return;
-  if (!a) {
-    // Save an intent before the non-idempotent create. An interrupted create is reconciled, never blindly repeated.
-    a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, runAttempt: p.run.run_attempt || 1, runStartedAt: p.run.run_started_at || p.run.created_at, fixer: p.fixer, files: p.failures.map(f => f.file) };
-    persist();
-    const result = json(api.write(['task', 'create', '--project', '4060', '--section', 'In Progress',
-      '--title', p.title, '--description', p.description, '--json']));
-    if (result.success !== true) throw new Error('Create returned no success receipt; reconcile saved intent');
-    a.ticket = result.task?.ticketNumber || result.tasks?.[0]?.ticketNumber;
-    if (!/^YPER4-\d+$/.test(a.ticket || '')) throw new Error('Create returned no alert ticket reference; reconcile saved intent');
-    persist();
-  } else if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
-  if (!a.assigned) {
-    if (!UUID.test(a.fixer.id)) throw new Error('Refusing non-agent assignment');
-    if (json(api.write(['task', 'assign', a.ticket, '--assignee', a.fixer.id, '--json'])).success !== true) {
-      throw new Error('Assignment returned no success receipt');
-    }
-    a.assigned = true; persist();
-  }
-  if (a.updating) throw new Error('Additional failures activity outcome unknown; reconcile saved update intent manually');
-  // Older state keyed by file set already recorded those files in the original alert.
-  const recorded = a.files || Object.keys(state.alerts).find(k => state.alerts[k] === a).split(':').slice(1).join(':').split(',');
-  const added = p.failures.filter(f => !recorded.includes(f.file));
-  if (added.length) {
-    a.updating = true; persist();
-    api.write(['activity', 'add', a.ticket, `Additional failing tests: ${added.map(f => `${f.file}: ${f.error}`).join('; ').replace(/[\r\n]+/g, ' ')} (${a.marker}).`]);
-    a.files = [...recorded, ...added.map(f => f.file)]; a.updating = false; persist();
-  }
+    return env;
+  };
+  const gh = args => json(run('gh', args, { env: auth() }));
+  const task = ticket => {
+    const rows = json(run('hypertask', ['tasks', 'get', ticket, '--json'])).tasks;
+    if (rows?.length !== 1) throw new Error('Cannot read incident ticket');
+    return rows[0];
+  };
+  const write = args => {
+    const [name] = run(path.join(os.homedir(), '.agents/skills/ship/scripts/ship-identity'), []).trim().split('\t');
+    if (!name || name.startsWith('Valentins Claude Code')) throw new Error('Dedicated agent identity required');
+    const output = run('vcc', args[0] === 'activity' ? args : [...args, '--json']);
+    const result = args[0] === 'activity' ? {} : json(output);
+    const ticket = args[1] === 'create' ? result.task?.ticketNumber || result.tasks?.[0]?.ticketNumber : args[2];
+    if (ticket) task(ticket);
+    return result;
+  };
+  return {
+    collect: () => snapshot(gh(['api', 'graphql', '-f', `query=${QUERY}`])),
+    task,
+    logs: ticket => logs(ticket, run),
+    open: () => incidents(pages('hypertask', ['tasks', 'list', '--project', '4060', '--status', 'Normal', '--limit', '500'], 'tasks', run)),
+    write,
+    recover: tag => {
+      const found = pages('hypertask', ['tasks', 'list', '--project', '4060', '--search', tag, '--limit', '100'], 'tasks', run)
+        .filter(row => row.description?.includes(tag));
+      if (found.length !== 1) throw new Error('Creation outcome unknown; reconcile saved intent, do not create again');
+      return found[0].ticketNumber;
+    },
+    propose: (failure, head, ticket) => propose(failure, head, ticket, { run, gh, env: auth() })
+  };
 }
-async function tick({ dryRun = false, runId, dir = STATE, api = live(), now = Math.floor(Date.now() / 1000) } = {}) {
-  const state = load(dir);
-  if (!dryRun && state.until > now) return { action: 'backoff', until: state.until };
+function propose(failure, head, ticket, { run = command, gh, env, checkout = CHECKOUT, remote = `https://github.com/${REPO}.git` } = {}) {
+  if (![failure.culprit, head].every(value => SHA.test(value || ''))) throw new Error('No unique adjacent culprit; manual investigation required');
+  const branch = `shared-check-revert/${failure.culprit}`;
+  const existing = gh(['api', `repos/${REPO}/pulls?state=all&head=hypertask-ai:${branch}`]);
+  if (existing.length) return existing[0].html_url;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shared-check-revert-'));
+  const git = (...args) => run('git', ['-C', dir, ...args], { env, timeout: 60000 }).trim();
   try {
-    const context = dryRun ? { alerts: {} } : state;
-    const p = await plan(await api.collect(runId, context), api, context);
-    if (dryRun) {
-      let writer;
-      try { writer = api.identity(); } catch { writer = { name: IDENTITY, refused: 'Session credential unavailable; writes refused (no Valentin fallback)' }; }
-      return { dryRun: true, identity: writer, ...p, alreadyAlerted: p.key ? !!state.alerts[p.key] : false };
+    run('git', ['clone', '--no-checkout', '--shared', checkout, dir], { env, timeout: 60000 });
+    git('remote', 'set-url', 'origin', remote);
+    git('-c', 'credential.helper=!gh auth git-credential', 'fetch', '--no-tags', 'origin', 'production');
+    if (git('rev-parse', 'FETCH_HEAD') !== head) throw new Error('Production moved; collect again before proposing');
+    git('checkout', '--detach', head);
+    git('merge-base', '--is-ancestor', failure.culprit, head);
+    git('revert', '--no-commit', failure.culprit);
+    const tree = git('write-tree');
+    const prior = git('-c', 'credential.helper=!gh auth git-credential', 'ls-remote', 'origin', `refs/heads/${branch}`).split(/\s/)[0];
+    if (prior) {
+      git('-c', 'credential.helper=!gh auth git-credential', 'fetch', 'origin', branch);
+      if (git('rev-parse', `${prior}^`) !== head || git('rev-parse', `${prior}^{tree}`) !== tree) throw new Error('Existing revert branch differs; owner must reconcile');
+    } else {
+      git('-c', 'user.name=hypertask-agents[bot]', '-c', 'user.email=hypertask-agents[bot]@users.noreply.github.com',
+        'commit', '-m', `${ticket} [INFRA] Revert shared-check regression`, '-m', `This reverts commit ${failure.culprit}.`);
+      const production = git('-c', 'credential.helper=!gh auth git-credential', 'ls-remote', 'origin', 'refs/heads/production').split(/\s/)[0];
+      if (production !== head) throw new Error('Production moved; no branch pushed');
+      git('-c', 'credential.helper=!gh auth git-credential', 'push', 'origin', `HEAD:refs/heads/${branch}`);
     }
-    if (p.action !== 'idle') api.identity();
-    await apply(p, state, api, () => save(dir, state));
-    if (p.run) state.lastRun = `${p.run.id}:${p.run.run_attempt || 1}:${p.run.updated_at || ''}`;
-    state.fails = 0; state.until = 0; save(dir, state);
-    return { action: p.action, key: p.key };
-  } catch (e) {
-    if (!dryRun) {
-      state.fails = Math.min((state.fails || 0) + 1, 10);
-      state.until = now + Math.min(300 * 2 ** state.fails, 3600); save(dir, state);
+    const body = `Summary for non-engineers\n\nPropose undoing the first red production commit.\n\nWhat went wrong\n${failure.name} first failed after ${failure.culprit}; its immediate parent passed.\n\nWhat changes\nOnly that commit is reverted on ${head}. Later changes remain.\n\nWhat you will see\nNo production change until required checks pass and the owner merges.\n\nWatch out for\nRun history identifies a candidate, not proof of causation. This proposal still needs CI and review. Auto-merge remains off.\n\nEvidence: ${failure.first.check.url}\nTicket: https://app.hypertask.ai/detail/project-4060/${ticket.split('-')[1]}\nNo user-visible change: incident tooling only.\n`;
+    return gh(['api', '--method', 'POST', `repos/${REPO}/pulls`, '-f', `head=${branch}`, '-f', 'base=production',
+      '-f', `title=${ticket} [INFRA] Revert shared-check regression`, '-f', `body=${body}`]).html_url;
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+async function tick({ dir = STATE, api = live(), now = Date.now(), required = requiredChecks(), dryRun = false } = {}) {
+  const state = load(dir);
+  if (!state.incidents) state.incidents = {};
+  if (!state.stalls) state.stalls = {};
+  if (!dryRun && state.until > now) return { action: 'backoff' };
+  try {
+    const p = plan(await api.collect(), required, now);
+    if (dryRun) return { dryRun: true, ...p };
+    const persist = () => save(dir, state);
+    const open = api.open();
+    for (const failure of p.failures) {
+      let entry = state.incidents[failure.key];
+      if (!entry) {
+        entry = state.incidents[failure.key] = { marker: marker(failure.key), checks: [failure.name], head: p.head };
+        const matched = open.find(task => task.description?.includes(entry.marker));
+        if (matched) entry.ticket = matched.ticketNumber;
+        persist();
+        if (!entry.ticket) {
+          const result = api.write(['task', 'create', '--project', '4060', '--section', 'In Progress', '--priority', 'urgent', '--labels', 'Infra',
+            '--title', `${PREFIX}: ${failure.name}`, '--description',
+            `Blocked on the live incident claimant. No new tickets until recovery.\nFirst red: ${failure.first.check.url}\nCandidate: ${failure.culprit || 'unknown; missing or non-adjacent green boundary'}\nLast green: ${failure.green?.check.url || 'not present in bounded history'}\n${entry.marker}`]);
+          entry.ticket = result.task?.ticketNumber || result.tasks?.[0]?.ticketNumber;
+          if (!/^YPER4-\d+$/.test(entry.ticket || '')) throw new Error('Creation receipt missing; reconcile intent');
+          persist();
+        }
+      } else if (!entry.ticket) { entry.ticket = api.recover(entry.marker); persist(); }
+      entry.checks = [...new Set([...entry.checks, failure.name])]; persist();
+      const claimed = owner(api.logs(entry.ticket), now);
+      if (!entry.blockedOn || entry.blockedOn !== (claimed?.id || 'HT Product Lead')) {
+        if (entry.blocking) throw new Error('Blocker comment outcome unknown; reconcile intent');
+        entry.blocking = true; persist();
+        api.write(['comment', 'add', entry.ticket, '--text', claimed
+          ? `<p>Blocked on <span data-type="mention" class="mention" data-id="${html(claimed.name)}" data-label="agent-${html(claimed.id)}">${html(claimed.name)}</span>. Live claim owns this incident. Revert first; keep every check.</p>`
+          : '<p>Blocked on <span data-type="mention" class="mention" data-id="HT Product Lead" data-label="agent-9b0f3a93-5e88-4093-b558-cad1c229bc51">HT Product Lead</span>. No live claimant. Assignments and manager comments cannot override claims. Claim this incident before taking new work.</p>']);
+        entry.blockedOn = claimed?.id || 'HT Product Lead'; entry.blocking = false; persist();
+      }
+      if (!entry.proposal && !entry.proposalError) {
+        try { entry.proposal = api.propose(failure, p.head, entry.ticket); }
+        catch (error) { entry.proposalError = error.message; }
+        persist();
+      }
+      if (entry.proposal && !entry.linked) {
+        api.write(['task', 'update', entry.ticket, '--pull-request', entry.proposal]);
+        entry.linked = true; persist();
+      }
+      if (entry.proposalError && !entry.errorNotified) {
+        if (entry.notifyingError) throw new Error('Proposal error notification outcome unknown; reconcile intent');
+        entry.notifyingError = true; persist();
+        api.write(['comment', 'add', entry.ticket, '--text',
+          `<p>Blocked on <span data-type="mention" class="mention" data-id="HT Product Lead" data-label="agent-9b0f3a93-5e88-4093-b558-cad1c229bc51">HT Product Lead</span>. Revert proposal failed. Reconcile before retry.</p>`]);
+        entry.errorNotified = true; entry.notifyingError = false; persist();
+      }
     }
-    throw e;
+    for (const entry of Object.values(state.incidents)) {
+      if (!entry.closed && entry.checks.every(check => p.recovered.includes(check)) && entry.ticket) {
+        if (entry.closing) throw new Error('Recovery activity outcome unknown; reconcile intent');
+        entry.closing = true; persist();
+        api.write(['activity', 'add', entry.ticket, `Required check green on production ${p.head}. Owner must verify live and close the incident before ticket picking resumes.`]);
+        entry.closed = true; entry.closing = false; persist();
+      }
+    }
+    if (p.stalled) {
+      let stall = state.stalls[p.head];
+      if (!stall) {
+        stall = state.stalls[p.head] = { marker: marker(`stall:${p.head}`) }; persist();
+        const result = api.write(['task', 'create', '--project', '4060', '--section', 'In Progress', '--priority', 'high', '--labels', 'Infra',
+          '--title', 'Shipping stalled: no production merge for two hours', '--description',
+          `Blocked on HT Product Lead. Last production merge: ${new Date(p.mergedAt).toISOString()}.\nProduction: https://github.com/${REPO}/commit/${p.head}\n${stall.marker}`]);
+        stall.ticket = result.task?.ticketNumber || result.tasks?.[0]?.ticketNumber;
+        if (!/^YPER4-\d+$/.test(stall.ticket || '')) throw new Error('Stall receipt missing; reconcile intent');
+        persist();
+      } else if (!stall.ticket) { stall.ticket = api.recover(stall.marker); persist(); }
+      if (!stall.notified) {
+        if (stall.notifying) throw new Error('Stall comment outcome unknown; reconcile intent');
+        stall.notifying = true; persist();
+        api.write(['comment', 'add', stall.ticket, '--text', '<p>Blocked on <span data-type="mention" class="mention" data-id="HT Product Lead" data-label="agent-9b0f3a93-5e88-4093-b558-cad1c229bc51">HT Product Lead</span>. No production merge for two hours. Restore shipping before taking more work.</p>']);
+        stall.notified = true; stall.notifying = false; persist();
+      }
+    }
+    state.fails = 0; state.until = 0; persist();
+    return { action: p.failures.length ? 'incident' : 'green', incidents: p.failures.map(row => row.key), stalled: p.stalled };
+  } catch (error) {
+    state.fails = Math.min((state.fails || 0) + 1, 10);
+    state.until = now + Math.min(300000 * 2 ** state.fails, 3600000);
+    if (!dryRun) save(dir, state);
+    throw error;
   }
 }
-function units(lib) {
+function units(lib, session = process.env.SHIP_SESSION_NAME) {
+  if (!/^[A-Za-z][A-Za-z0-9 -]+$/.test(session || '')) throw new Error('Dedicated agent session required');
   if (/[\n\r"%]/.test(lib + os.homedir())) throw new Error('Unsupported systemd path');
   return {
-    service: `[Unit]\nDescription=One assigned fixer for production-red tests\n[Service]\nType=oneshot\nWorkingDirectory=%h\nEnvironment="PATH=${os.homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin"\nExecStart=/usr/bin/nice -n 19 "${lib}/production-red-alert"\nTimeoutStartSec=240\nUMask=0077\n`,
-    timer: '[Unit]\nDescription=Check production CI every five minutes\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=5min\n[Install]\nWantedBy=timers.target\n'
+    service: `[Unit]\nDescription=Stop shipping on shared required check incidents\n[Service]\nType=oneshot\nWorkingDirectory=%h\nEnvironment="PATH=${os.homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin"\nEnvironment="SHIP_SESSION_NAME=${session}"\nExecStart=/usr/bin/nice -n 19 "${lib}/production-red-alert"\nTimeoutStartSec=240\nUMask=0077\n`,
+    timer: '[Unit]\nDescription=Check required production checks every five minutes\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=5min\n[Install]\nWantedBy=timers.target\n'
   };
 }
 function install() {
-  identity();
+  const [session] = command(path.join(os.homedir(), '.agents/skills/ship/scripts/ship-identity'), []).trim().split('\t');
+  if (session !== process.env.SHIP_SESSION_NAME || session === 'Valentins Claude Code') throw new Error('Dedicated agent identity required');
   const lib = path.join(os.homedir(), '.local/lib/hypertask/production-red-alert');
   const unitDir = path.join(os.homedir(), '.config/systemd/user');
-  for (const dir of [lib, unitDir, STATE]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  for (const file of ['production-red-alert', 'ci-test-failures.py', 'user-unit-check']) {
+  fs.mkdirSync(lib, { recursive: true }); fs.mkdirSync(unitDir, { recursive: true });
+  for (const file of ['production-red-alert', 'release-incidents.cjs', 'user-unit-check']) {
     fs.copyFileSync(path.join(__dirname, file), path.join(lib, file)); fs.chmodSync(path.join(lib, file), 0o755);
   }
+  fs.copyFileSync(path.join(__dirname, '../../../../docs/ci-policy.yml'), path.join(lib, 'ci-policy.yml'));
   const u = units(lib);
   fs.writeFileSync(path.join(unitDir, 'production-red-alert.service'), u.service);
   fs.writeFileSync(path.join(unitDir, 'production-red-alert.timer'), u.timer);
-  command(process.env.USER_UNIT_CHECK || path.join(lib, 'user-unit-check'), [path.join(unitDir, 'production-red-alert.service'), path.join(unitDir, 'production-red-alert.timer')]);
+  command(path.join(lib, 'user-unit-check'), [path.join(unitDir, 'production-red-alert.service'), path.join(unitDir, 'production-red-alert.timer')]);
   command('systemctl', ['--user', 'daemon-reload']);
   command('systemctl', ['--user', 'enable', '--now', 'production-red-alert.timer']);
-  console.log('production-red-alert: installed production-red-alert.timer (5 minutes, error backoff to 1 hour)');
 }
 async function main(args) {
   if (args[0] === 'install' && args.length === 1) return install();
-  let dryRun = false, runId;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--dry-run') dryRun = true;
-    else if (args[i] === '--run' && /^\d+$/.test(args[i + 1] || '')) runId = args[++i];
-    else throw new Error('usage: production-red-alert [--dry-run] [--run ID] | install');
-  }
-  if (runId && !dryRun) throw new Error('--run is replay-only; add --dry-run');
-  // Timer and manual writes take the same lock before reading state; dry-run never creates a lock.
+  const dryRun = args.length === 1 && args[0] === '--dry-run';
+  if (args.length && !dryRun) throw new Error('usage: production-red-alert [--dry-run] | install');
   if (!dryRun && !process.env.PRODUCTION_RED_ALERT_LOCKED) {
     fs.mkdirSync(STATE, { recursive: true, mode: 0o700 });
     return process.stdout.write(command('flock', ['-n', path.join(STATE, 'tick.lock'), process.execPath, __filename], {
       timeout: 240000, env: { ...process.env, PRODUCTION_RED_ALERT_LOCKED: '1' }
     }));
   }
-  console.log(JSON.stringify(await tick({ dryRun, runId }), null, 2));
+  const policy = fs.existsSync(path.join(__dirname, 'ci-policy.yml')) ? path.join(__dirname, 'ci-policy.yml') : undefined;
+  console.log(JSON.stringify(await tick({ dryRun, required: requiredChecks(policy) }), null, 2));
 }
-module.exports = { agent, identity, live, plan, apply, tick, units, install, main };
-if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(`production-red-alert: ${e.message}`); process.exitCode = 1; });
+module.exports = { requiredChecks, snapshot, plan, live, propose, tick, units, main };
+if (require.main === module) main(process.argv.slice(2)).catch(error => { console.error(`production-red-alert: ${error.message}`); process.exitCode = 1; });

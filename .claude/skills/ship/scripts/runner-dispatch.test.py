@@ -1144,6 +1144,34 @@ class DispatchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.pages(("hypertask", "comment", "list", "HTPR-4"), "comments")
 
+    def test_shared_incident_freezes_new_work_except_live_claimant(self):
+        at = m.datetime.fromtimestamp(self.now - 10, m.timezone.utc).isoformat()
+        self.boards[4060].append({"ticketNumber": "YPER4-999", "title": "[INCIDENT] Shared required checks: browser-smoke",
+                                  "section": "In Progress", "assignees": [{"agent": {"displayName": "RUNNER 2"}}]})
+        self.comments["YPER4-999"] = [dict(claim("RUNNER 1", at), agent={"id": "a1", "displayName": "RUNNER 1"}),
+                                       dict(claim("HT Product Lead", at, "RUNNER 2 owns this now."),
+                                            agent={"id": "lead", "displayName": "HT Product Lead"})]
+        self.commands.side_effect = None
+        self.commands.return_value = json.dumps({"success": True, "activities": []})
+        result = self.dispatch()
+        first = next(row for row in result if row["runner"] == "RUNNER 1")
+        second = next(row for row in result if row["runner"] == "RUNNER 2")
+        self.assertEqual(first["ticket"], "HTPR-1")
+        self.assertEqual(second["action"], "incident-freeze")
+        self.assertIsNone(second["ticket"])
+        self.assertTrue(all(row["ticket"] is None for row in result if row["runner"] != "RUNNER 1"))
+
+    def test_shared_incident_without_live_claimant_freezes_every_runner(self):
+        self.boards[4060].append({"ticketNumber": "YPER4-999", "title": "[INCIDENT] Shared required checks: ci-tests",
+                                  "section": "In Progress", "assignees": []})
+        self.comments["YPER4-999"] = []
+        self.commands.side_effect = None
+        self.commands.return_value = json.dumps({"success": True, "activities": []})
+        self.assertTrue(all(row["ticket"] is None for row in self.dispatch()))
+        self.commands.return_value = json.dumps({"success": False})
+        with self.assertRaises(ValueError):
+            self.dispatch()
+
     def test_paginated_reads_and_comment_scope_cache(self):
         calls = []
         def api(*args):

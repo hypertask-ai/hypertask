@@ -100,6 +100,10 @@ exit 0
 EOF
 cat > "$D/hypertask" <<'EOF'
 #!/usr/bin/env bash
+if [ "$1 $2" = "tasks list" ]; then
+  if [ -n "${FAKE_INCIDENTS:-}" ]; then cat "$FAKE_INCIDENTS"; else echo '{"success":true,"tasks":[]}'; fi
+  exit
+fi
 if [ "$1 $2" = "tasks get" ]; then [ -n "${FAKE_TASK:-}" ] && cat "$FAKE_TASK"; exit; fi
 cat "$FAKE_COMMENTS"
 EOF
@@ -131,6 +135,14 @@ jq '.activities |= map(.createdAt = "2026-10-11T10:00:09.000Z")' "$D/earlier.jso
 FAKE_AGENT_LOG=$D/tie.json ./ship-claim YPER4-999 >/dev/null; eq "flow: UUID tie uses id string -> step back" "$?" 3
 jq '.activities += [{id:"cccc-uuid",createdAt:"2026-10-11T10:00:05.000Z",agentId:"a1",agentName:"RUNNER 7",text:"Handed over: RUNNER 7 released this ticket."}]' "$D/earlier.json" > "$D/released.json"
 FAKE_AGENT_LOG=$D/released.json ./ship-claim YPER4-999 >/dev/null; eq "flow: earlier log claim released in the log -> proceed" "$?" 0
+jq -n '{success:true,tasks:[{title:"[INCIDENT] Shared required checks: browser-smoke",ticketNumber:"YPER4-999",uniqueIndex:999,section:"In Progress"}]}' > "$D/incidents.json"
+jq -n --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{success:true,activities:[{id:"claim",createdAt:$at,agentId:"a7",agentName:"RUNNER 7",text:"Claimed. Resume: runner7"}]}' > "$D/incident-log.json"
+: > "$D/log"
+out=$(SHIP_SESSION_NAME="RUNNER 16" FAKE_INCIDENTS=$D/incidents.json FAKE_AGENT_LOG=$D/incident-log.json ./ship-claim YPER4-243 2>&1); rc=$?
+eq "shared incident freezes a new claim" "$rc" 3
+[ ! -s "$D/log" ] && ok "freeze refuses before all board writes" || bad "freeze wrote to board"
+[[ $out == *'https://app.hypertask.ai/detail/project-4060/999'* ]] && ok "freeze names incident" || bad "freeze link missing"
+
 if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
 
 # Hand-over replay through the full flow (task read via the stub).
