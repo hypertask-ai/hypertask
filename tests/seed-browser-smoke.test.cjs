@@ -43,7 +43,7 @@ test("local browser smoke persists per-flag defaults and respects flag overrides
   }
 });
 
-test("contract callers and boards are isolated from the browser smoke user", async () => {
+test("browser smoke users and contract callers stay isolated", async () => {
   const records = {};
   const files = {};
   const boards = [];
@@ -54,12 +54,15 @@ test("contract callers and boards are isolated from the browser smoke user", asy
     records[model] = [];
     return [model, {
       create: async ({ data }) => {
-        const row = { ...data, id: nextId++, ...(data.UserSetting ? { UserSetting: { id: nextId++ } } : {}) };
+        const row = { ...data, id: nextId++, ...(data.UserSetting ? { UserSetting: { ...data.UserSetting.create, id: nextId++ } } : {}) };
         records[model].push(row);
         return row;
       },
       createMany: async ({ data }) => { records[model].push(...data); },
-      update: async ({ where, data }) => Object.assign(records[model].find(row => Object.entries(where).every(([key, value]) => row[key] === value)), data),
+      update: async ({ where, data }) => {
+        const index = records[model].findIndex(row => Object.entries(where).every(([key, value]) => row[key] === value));
+        return records[model][index] = { ...records[model][index], ...data };
+      },
       findUnique: async ({ where }) => records[model].find(row => row.id === where.id),
       count: async ({ where }) => records[model].filter(row => where.userId.in.includes(row.userId)).length,
     }];
@@ -88,6 +91,53 @@ await seedSessionFixtures({});`,
   }, root);
 
   const smoke = records.user.find(user => user.displayName === "Browser smoke user");
+  const scopeUsers = ["Desktop", "Mobile"].map(lane => {
+    const state = files[`/fixtures/board-scope-${lane}-state.json`];
+    assert.ok(state, `${lane} board-scope checks need their own login`);
+    const id = JSON.parse(state.cookies.find(cookie => cookie.name === "ht_session").value).id;
+    const user = records.user.find(row => row.id === id);
+    assert.notEqual(id, smoke.id);
+    assert.equal(user.displayName, `Board scope ${lane}`);
+    assert.equal(user.UserSetting.aiChatOpenBoards, true);
+    const persisted = JSON.parse(state.origins[0].localStorage.find(item => item.name === "recoil-persist").value);
+    assert.equal(state.origins[0].origin, "http://127.0.0.1:3100");
+    assert.equal(persisted.aiChatAutoOpenPreferences[id].aiChatOpenBoards, true);
+    const scopeBoards = files["/fixtures/board-scope-fixture.json"];
+    assert.equal(scopeBoards.length, 2);
+    assert.equal(state.cookies.find(cookie => cookie.name === "previousBoard").value, `project-${scopeBoards[0].id}|&|`);
+    for (const board of scopeBoards) {
+      const project = boards.find(row => row.id === board.id);
+      assert.notEqual(project.teamId, boards[0].teamId);
+      assert.ok(project.ownerId === id || records.member.some(row => row.userId === id && row.projectId === board.id && row.status === "Accepted"));
+      assert.ok(!records.member.some(row => row.userId === smoke.id && row.projectId === board.id));
+    }
+    assert.ok(records.user_Activity.some(row => row.userId === id));
+    return id;
+  });
+  assert.equal(new Set(scopeUsers).size, 2);
+  const card = files["/fixtures/card-fixture.json"];
+  assert.deepEqual(Object.keys(card.pages), ["Desktop", "Mobile"]);
+  const pagesBoards = Object.values(card.pages).map(fixture => fixture.projectId);
+  assert.equal(new Set(pagesBoards).size, 2, "parallel Pages tests need separate boards");
+  for (const [lane, fixture] of Object.entries(card.pages)) {
+    const board = boards.find(board => board.id === fixture.projectId);
+    assert.equal(board.title, `Browser smoke Pages ${lane}`);
+    assert.notEqual(board.ownerId, smoke.id);
+    assert.notEqual(board.teamId, boards[0].teamId);
+    const state = files[`/fixtures/pages-${lane}-state.json`];
+    const id = JSON.parse(state.cookies.find(cookie => cookie.name === "ht_session").value).id;
+    assert.equal(id, board.ownerId);
+    const sessionUser = JSON.parse(decodeURIComponent(state.cookies.find(cookie => cookie.name === "nookies_user").value));
+    assert.equal(sessionUser.accountId, board.googleAccountId);
+    assert.equal(sessionUser.UserSettingId, sessionUser.UserSetting.id);
+    assert.equal(state.cookies.find(cookie => cookie.name === "previousBoard").value, `project-${board.id}|&|`);
+    assert.ok(records.user_Activity.some(row => row.userId === id));
+    assert.ok(records.member_Team.some(row => row.userId === id && row.teamId === board.teamId));
+    assert.ok(!records.member_Team.some(row => row.userId === smoke.id && row.teamId === board.teamId));
+    assert.equal(fixture.taskId, board.task.id);
+    assert.equal(fixture.detailPath, `/detail/project-${board.id}/${board.task.uniqueIndex}`);
+    assert.notEqual(fixture.taskId, card.taskId, "Pages links must not push down the layout fixture's comments");
+  }
   const contract = files["/fixtures/contract-fixture.json"];
   const owner = contract.callers.owner;
   assert.notEqual(owner.id, smoke.id, "contract owner must not be the smoke user");

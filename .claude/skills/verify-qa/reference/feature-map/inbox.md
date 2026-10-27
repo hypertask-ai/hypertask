@@ -53,3 +53,31 @@ stay gone after reload. Undo must restore them without clearing the blocker.
 Test a mixed selection containing a real notification and a blocked row for the
 same task: archive and undo must process that blocked task only once. Include an
 ordinary notification for a different task to cover the normal bulk path.
+
+## Boundary keyboard jumps
+
+With blocked tickets present, use a list longer than the desktop viewport.
+Move into its middle, press `gg`, then hold Shift for `gg`.
+The first shortcut must focus and reveal the first displayed row; the second
+must focus and reveal the last. Repeat in Important and Blocked by you:
+their displayed date order differs. Include a draft at a boundary when present.
+Neither shortcut may reorder rows or scroll a hidden split. J/K and Enter must
+continue from the newly focused row. With `htpr-8083-inbox-boundaries` off,
+the previous raw-notification boundary behavior remains.
+
+## Typed comments from your own agent
+
+With `htpr-8090-assignee-inbox` on, assign a sandbox ticket to the QA
+account as a person. Post a `kind: qa`, `done` or `question` comment using
+that account's own agent, without mentioning the person. The comment must
+create one human inbox item even with quiet-owner mode on. An agent-only
+assignment is not a human assignment. With the flag off, quiet-owner mode
+keeps its previous behavior. Untyped agent chatter and the person's own
+human comments stay quiet. Check the Important split, not only All or Agents: typed comments for an
+explicit human assignee must earn the ordinary Important slot. A newer agent
+move must not hide that comment. Keep agent identity, Important permission,
+project split mutes, and stale/done routing intact. For an owner-specific report,
+read that owner's actual inbox through the approved CLI; a QA fixture alone
+does not prove the reported ticket works. Archive the QA item, reload, and
+confirm it stays gone.
+Email recipients must not change: this restoration is inbox-only.

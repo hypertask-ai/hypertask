@@ -158,7 +158,8 @@ function loadUpdateController(
     },
     task: {
       findUnique: async () => ({ ...currentTask }),
-      update: async ({ data }) => {
+      update: async ({ data, where }) => {
+        calls.updateWhere = where;
         if (updateErrorCode) {
           const error = new PrismaClientKnownRequestError("Update failed");
           error.code = updateErrorCode;
@@ -1091,4 +1092,29 @@ test("cross-board move after permanent deletes allocates beyond the highest surv
   assert.equal(result.success, true);
   assert.equal(result.task.uniqueIndex, 5);
   assert.equal(result.task.ticketNumber, "T-5");
+});
+
+
+test("column archive refuses changed targets and atomically binds the successful write", async () => {
+  for (const concurrentState of [{}, { sectionId: SECTION_ID }, { projectId: MEMBER_PROJECT }, { status: "Archive" }]) {
+    const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, { stateAtFence: concurrentState });
+    const result = await updateTaskSingle({ id: TASK_ID, status: "Archive" }, { id: USER_ID }, null, {
+      expectedProjectId: OWNER_PROJECT, expectedSectionId: SECTION_ID - 1, expectedStatus: "Normal", skipAutoAssign: true, skipRecurrence: true,
+    });
+    if (Object.keys(concurrentState).length) {
+      assert.equal(result.status, 409);
+      assert.equal(calls.updateWhere, undefined);
+      assert.equal(calls.sideEffects, 0);
+    } else {
+      assert.equal(result.status, 200);
+      assert.equal(result.json.status, "Archive");
+      assert.deepEqual(calls.updateWhere, { id: TASK_ID, projectId: OWNER_PROJECT, sectionId: SECTION_ID - 1, status: "Normal" });
+    }
+  }
+  const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, { updateErrorCode: "P2025" });
+  const result = await updateTaskSingle({ id: TASK_ID, status: "Archive" }, { id: USER_ID }, null, {
+    expectedProjectId: OWNER_PROJECT, expectedSectionId: SECTION_ID - 1, expectedStatus: "Normal", skipAutoAssign: true, skipRecurrence: true,
+  });
+  assert.equal(result.status, 409);
+  assert.equal(calls.sideEffects, 0);
 });

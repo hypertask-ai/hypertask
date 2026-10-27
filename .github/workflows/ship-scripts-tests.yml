@@ -15,6 +15,9 @@ on:
       - '.claude/skills/verify-qa/scripts/**'
       - '.github/workflows/ship-scripts-tests.yml'
       - 'docs/ci-policy.yml'
+      - '.github/scripts/ci-runner-policy.cjs'
+      - '.github/workflows/pr-guards-trusted.yml'
+      - 'tests/ci-runner-policy.test.cjs'
 
 permissions:
   contents: read
@@ -37,6 +40,14 @@ jobs:
         with:
           node-version: ^24.22.1
           check-latest: true
+
+      - name: Install the workflow parser
+        run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
+
+      - name: CI runner policy fixtures
+        env:
+          NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules
+        run: node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs tests/pr-title-workflow.test.cjs tests/pr-ticket-binding.test.cjs
 
       - name: Install offline test dependencies
         shell: bash

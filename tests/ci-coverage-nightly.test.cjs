@@ -23,7 +23,7 @@ function assertNormalTriggers(ci, request) {
     ci.jobs["ci-tests"].if,
     "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)",
   );
-  assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-test"]);
+  assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-checks", "ci-test"]);
   assert.equal(request.jobs.request.if, "github.event.pull_request.draft == false");
 }
 

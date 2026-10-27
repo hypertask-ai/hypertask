@@ -92,7 +92,7 @@ test("CLI code exchange is consumed atomically and emits once, not on credential
 });
 
 // Compare against this commit's production parent, not a remote ref that can advance mid-run.
-for (const [scenario, userId, enabled] of [["flag-off", 123, false], ["QA", 985, true], ["flag-on", 123, true]] as const) {
+for (const [scenario, userId, enabled] of [["other-flags-off", 123, false], ["QA", 985, true], ["other-flags-on", 123, true]] as const) {
   test(`${scenario}: CLI exchange writes exactly the production status rows before returning`, async (t) => {
     t.mock.timers.enable({ apis: ["Date"], now: 1700000000000 });
     const file = "src/app/api/cli/token-exchange/route.ts";
@@ -120,7 +120,7 @@ for (const [scenario, userId, enabled] of [["flag-off", 123, false], ["QA", 985,
     const statusRows = (h: ReturnType<typeof activationHarness>) => h.logs.filter((row) => row.log === "cli_token_exchange").map(({ id, ...row }) => row);
     assert.deepEqual(statusRows(current), statusRows(production));
     assert.deepEqual(statusRows(current).map(({ log, type, status, LoggedById }) => ({ log, type, status, LoggedById })), Array.from({ length: 2 }, () => ({ log: "cli_token_exchange", type: "Signup", status: "Normal", LoggedById: userId })));
-    assert.equal(current.captures.length, enabled && userId !== 985 ? 2 : 0);
+    assert.equal(current.captures.length, userId !== 985 ? 2 : 0);
     if (current.captures.length) assert.deepEqual(current.captures.map((capture) => capture.properties.is_first), [true, false]);
   });
 
@@ -417,10 +417,10 @@ for (const native of [false, true]) {
   });
 }
 
-for (const scenario of ["human", "flag-off", "rollback", "historical"] as const) {
+for (const scenario of ["human", "ineligible", "rollback", "historical"] as const) {
   test(`bulk completion preserves ${scenario} behavior`, async () => {
     const h = activationHarness();
-    h.setEnabled(scenario !== "flag-off");
+    if (scenario === "ineligible") h.users.get(123).uid = "guest_local";
     if (scenario === "historical") h.history.push({ activity: { type: "TaskArchive", data: { fromAgent: { id: "managed" }, newStatus: "Archive" } } });
     const bulk = bulkSectionController(h, scenario === "rollback");
     const move = bulk.service.deleteSection({ sectionId: 1, projectId: 15, userId: 123, agentId: scenario === "human" ? null : "managed" });
@@ -517,7 +517,7 @@ test("ineligible users never start activation transactions or write markers in a
   const oldQaEmail = process.env.QA_LOGIN_EMAIL;
   process.env.QA_LOGIN_EMAIL = " qa@example.test ";
   try {
-    for (const scenario of ["off", "qa-id", "qa-email", "guest", "missing", "invalid"] as const) {
+    for (const scenario of ["qa-id", "qa-email", "guest", "missing", "invalid"] as const) {
       for (const job of ["occurrence", "connection", "authenticated", "completion"] as const) {
         const h = activationHarness();
         const userId = scenario === "qa-id" ? 985 : scenario === "invalid" ? 0 : 321;
@@ -525,7 +525,6 @@ test("ineligible users never start activation transactions or write markers in a
           uid: scenario === "guest" ? "guest_local" : "real_owner",
           email: scenario === "qa-email" ? "QA@EXAMPLE.TEST" : "owner@example.test",
         });
-        h.setEnabled(scenario !== "off");
         h.projects.get(15).ownerId = userId;
         const api = h.load("src/lib/telemetry/activationOccurrences.ts");
         const before = h.tasks.get(9);
@@ -535,12 +534,11 @@ test("ineligible users never start activation transactions or write markers in a
         if (job === "completion") h.capture.completion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
         await h.drain();
         const expectedCalls = job === "completion" ? ["project.findUnique"] : [];
-        if (!["off", "qa-id", "invalid"].includes(scenario)) expectedCalls.push("user.findUnique");
+        if (!["qa-id", "invalid"].includes(scenario)) expectedCalls.push("user.findUnique");
         assert.deepEqual(h.prismaCalls, expectedCalls, `${scenario}/${job}: only owner and eligibility reads allowed, no writes or transactions`);
         assert.deepEqual(h.logs, []);
         assert.deepEqual(h.captures, []);
-        const categoryCheck = scenario === "off" ? [] : [{ key: "htpr-7292-shared-account-category", userId }];
-        if (!["qa-id", "invalid"].includes(scenario)) assert.deepEqual(h.flagChecks, [{ key: "htpr-7034-activation-analytics", userId }, ...categoryCheck]);
+        if (!["qa-id", "invalid"].includes(scenario)) assert.deepEqual(h.flagChecks, [{ key: "htpr-7292-shared-account-category", userId }]);
       }
     }
   } finally {
@@ -549,7 +547,7 @@ test("ineligible users never start activation transactions or write markers in a
   }
 });
 
-test("when the flag turns on, skipped credentials and occurrences remain eligible and legacy history still prevents false firsts", async () => {
+test("when a user becomes eligible, skipped credentials and occurrences still respect legacy history", async () => {
   const h = activationHarness();
   const api = h.load("src/lib/telemetry/activationOccurrences.ts");
   const before = h.tasks.get(9);
@@ -559,15 +557,15 @@ test("when the flag turns on, skipped credentials and occurrences remain eligibl
     h.capture.completion(before, after, "managed");
     h.capture.activation(123, "board_created", "invite", { method: "link" });
   };
-  h.setEnabled(false);
+  h.users.get(123).uid = "guest_local";
   await record();
   await h.drain();
-  assert.deepEqual(h.prismaCalls, ["project.findUnique"]);
+  assert.deepEqual(h.prismaCalls, ["project.findUnique", "user.findUnique", "user.findUnique", "user.findUnique"]);
   assert.equal(h.logs.length, 0);
   assert.equal(h.captures.length, 0);
   h.logs.push({ LoggedById: 123, log: "cli_token_exchange", id: 1 });
   h.history.push({ activity: { type: "TaskMove", data: { fromAgent: { id: "managed" }, toSection: { sectionId: 3, sectionTitle: "Delivered" } } } });
-  h.setEnabled(true);
+  h.users.get(123).uid = "real_member";
   await record();
   await h.drain();
   assert.ok(h.prismaCalls.includes("$transaction"), "enabled positive control starts transactions");
@@ -582,10 +580,10 @@ test("when the flag turns on, skipped credentials and occurrences remain eligibl
 test("scheduled occurrence callers return before a pending eligibility check", async () => {
   for (const job of ["occurrence", "connection", "completion"] as const) {
     const h = activationHarness();
-    let release!: (enabled: boolean) => void;
+    let release!: (user: null) => void;
     let checkStarted!: () => void;
     const started = new Promise<void>((resolve) => { checkStarted = resolve; });
-    h.mocks["@/lib/flags"].isFeatureEnabled = () => new Promise((resolve) => { release = resolve; checkStarted(); });
+    h.prisma.user.findUnique = () => new Promise((resolve) => { release = resolve; checkStarted(); });
     const api = h.load("src/lib/telemetry/activationOccurrences.ts");
     const before = h.tasks.get(9);
     const result = job === "occurrence" ? h.capture.activation(123, "board_created", "invite", { method: "link" })
@@ -594,7 +592,7 @@ test("scheduled occurrence callers return before a pending eligibility check", a
     assert.equal(result, undefined);
     await started;
     assert.deepEqual(h.prismaCalls, job === "completion" ? ["project.findUnique"] : []);
-    release(false);
+    release(null);
     await h.drain();
     assert.deepEqual(h.logs, []);
   }

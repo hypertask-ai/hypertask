@@ -91,7 +91,7 @@ for (const kind of ['chatter', null, '', 1]) {
   })
 }
 
-for (const options of [{ noRun: true }, { runtime: false }, { activities: false }, { noActivity: true }, { formattedText: '<p><img src="https://example.com/a.png"></p>' }]) {
+for (const options of [{ noRun: true }, { runtime: false }, { noActivity: true }, { formattedText: '<p><img src="https://example.com/a.png"></p>' }]) {
   test(`unavailable log falls back to a comment: ${JSON.stringify(options)}`, async () => {
     const { post, calls } = setup(options)
     const response = await post()
@@ -103,7 +103,7 @@ for (const options of [{ noRun: true }, { runtime: false }, { activities: false 
 }
 
 test('dry run reports routing without run, activity or comment writes', async () => {
-  for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ flag: false }, {}, 'comments'], [{}, { kind: 'question' }, 'comments'], [{ runtime: false }, {}, 'comments'], [{ activities: false }, {}, 'comments']]) {
+  for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ flag: false }, {}, 'comments'], [{}, { kind: 'question' }, 'comments'], [{ runtime: false }, {}, 'comments']]) {
     const { post, calls } = setup(options)
     const response = await post({ ...body, dry_run: true })
     assert.equal(response.status, 200)

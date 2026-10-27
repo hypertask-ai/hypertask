@@ -309,6 +309,83 @@ async function seedSessionFixtures(flags) {
     flag: "wx",
     mode: 0o600,
   });
+  const pages = {};
+  for (const lane of ["Desktop", "Mobile"]) {
+    const pagesUser = await prisma.user.create({ data: {
+      uid: `pages-${lane}-${runKey}`, email: `pages-${lane}-${runKey}@example.invalid`,
+      displayName: `Pages ${lane}`,
+      UserSetting: { create: { notification: false, onboardingTourStatus: true, onboardingTutorialStatus: true } },
+    }, include: { UserSetting: true } });
+    const pagesAccount = await prisma.googleAccount.create({ data: { userId: pagesUser.id, stripe_customer_id: `pages-${lane}-${runKey}` } });
+    const pagesTeam = await prisma.team.create({ data: { title: `Pages ${lane}`, totalSeats: 1, googleAccountId: pagesAccount.id } });
+    await prisma.team_Activity.create({ data: { teamId: pagesTeam.id, lastActiviyAt: new Date() } });
+    await prisma.user.update({ where: { id: pagesUser.id }, data: { UserSettingId: pagesUser.UserSetting.id, accountId: pagesAccount.id } });
+    await prisma.user_Activity.create({ data: { userId: pagesUser.id, totalTeamsOwned: 1, lastActiveAt: new Date() } });
+    await prisma.member_Team.create({ data: {
+      userId: pagesUser.id, teamId: pagesTeam.id, googleAccountId: pagesAccount.id, status: "Accepted", acceptedAt: new Date(),
+    } });
+    const pageBoard = await createBoard({
+      ownerId: pagesUser.id,
+      teamId: pagesTeam.id,
+      googleAccountId: pagesAccount.id,
+      title: `Browser smoke Pages ${lane}`,
+      suffix: `pages${lane.toLowerCase()}`,
+    });
+    pages[lane] = {
+      projectId: pageBoard.id,
+      taskId: pageBoard.task.id,
+      detailPath: `/detail/project-${pageBoard.id}/${pageBoard.task.uniqueIndex}`,
+    };
+    await writeFile(path.join(path.dirname(stateFile), `pages-${lane}-state.json`), JSON.stringify({
+      ...state,
+      cookies: state.cookies.map(cookie => ({ ...cookie,
+        value: cookie.name === "ht_session" ? signSession({ id: pagesUser.id, email: pagesUser.email })
+          : cookie.name === "nookies_user" ? encodeURIComponent(JSON.stringify({ ...pagesUser, accountId: pagesAccount.id, UserSettingId: pagesUser.UserSetting.id }))
+          : cookie.name === "previousBoard" ? `project-${pageBoard.id}|&|` : cookie.value,
+      })),
+    }), { flag: "wx", mode: 0o600 });
+  }
+  let scopeAccount, scopeTeam;
+  const scopeBoards = [];
+  for (const lane of ["Desktop", "Mobile"]) {
+    const preferences = { aiChatOpenNewTickets: true, aiChatOpenTickets: false, aiChatOpenBoards: true };
+    const scopeUser = await prisma.user.create({ data: {
+      uid: `board-scope-${lane}-${runKey}`, email: `board-scope-${lane}-${runKey}@example.invalid`,
+      displayName: `Board scope ${lane}`,
+      UserSetting: { create: { notification: false, onboardingTourStatus: true, onboardingTutorialStatus: true, ...preferences } },
+    }, include: { UserSetting: true } });
+    if (lane === "Desktop") {
+      scopeAccount = await prisma.googleAccount.create({ data: { userId: scopeUser.id, stripe_customer_id: `board-scope-${runKey}` } });
+      scopeTeam = await prisma.team.create({ data: { title: "Board scope", totalSeats: 2, googleAccountId: scopeAccount.id } });
+      await prisma.team_Activity.create({ data: { teamId: scopeTeam.id, lastActiviyAt: new Date() } });
+      for (const [suffix, title] of [["scope-board", "Browser smoke board"], ["scope-demo", "Browser smoke demo board"]]) {
+        scopeBoards.push(await createBoard({ ownerId: scopeUser.id, teamId: scopeTeam.id, googleAccountId: scopeAccount.id, title, suffix }));
+      }
+    }
+    scopeUser.accountId = scopeAccount.id;
+    await prisma.user.update({ where: { id: scopeUser.id }, data: { UserSettingId: scopeUser.UserSetting.id, accountId: scopeAccount.id } });
+    await prisma.user_Activity.create({ data: { userId: scopeUser.id, totalTeamsOwned: lane === "Desktop" ? 1 : 0, lastActiveAt: new Date() } });
+    await prisma.member_Team.create({ data: {
+      userId: scopeUser.id, teamId: scopeTeam.id, googleAccountId: scopeAccount.id, status: "Accepted", acceptedAt: new Date(),
+    } });
+    for (const project of scopeBoards.filter(project => project.ownerId !== scopeUser.id)) {
+      await prisma.member.create({ data: { projectId: project.id, userId: scopeUser.id, status: "Accepted" } });
+    }
+    await writeFile(path.join(path.dirname(stateFile), `board-scope-${lane}-state.json`), JSON.stringify({
+      ...state,
+      cookies: state.cookies.map(cookie => ({ ...cookie,
+        value: cookie.name === "ht_session" ? signSession({ id: scopeUser.id, email: scopeUser.email })
+          : cookie.name === "nookies_user" ? encodeURIComponent(JSON.stringify({ ...scopeUser, UserSettingId: scopeUser.UserSetting.id }))
+          : cookie.name === "previousBoard" ? `project-${scopeBoards[0].id}|&|` : cookie.value,
+      })),
+      origins: [{ origin: new URL(process.env.NEXT_PUBLIC_BASEURL || "http://127.0.0.1:3100").origin, localStorage: [{
+        name: "recoil-persist", value: JSON.stringify({ aiChatAutoOpenPreferences: { [scopeUser.id]: preferences } }),
+      }] }],
+    }), { flag: "wx", mode: 0o600 });
+  }
+  await writeFile(path.join(path.dirname(stateFile), "board-scope-fixture.json"), JSON.stringify(scopeBoards.map(project => ({
+    id: project.id, title: project.title, path: `/project?id=${project.id}&surface=board`,
+  }))), { flag: "wx", mode: 0o600 });
   const { createMcpToken, agentTokenCredentialFields } = jiti(path.join(root, "src/lib/mcp/auth/verifyJwt.ts"));
   const personalChats = [];
   const sidebarLanes = {};
@@ -429,6 +506,7 @@ async function seedSessionFixtures(flags) {
     title: board.task.title,
     description: "This seeded ticket must open from its board card.",
     detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
+    pages,
     longThreadDetailPath: `/detail/project-${threadBoard.id}/${threadBoard.task.uniqueIndex}`,
     agentDescriptionDetailPath: `/detail/project-${agentDescriptionBoard.id}/${agentDescriptionBoard.task.uniqueIndex}`,
     flags,

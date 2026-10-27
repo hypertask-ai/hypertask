@@ -5,6 +5,7 @@ import { isPaidTeam } from "@/lib/freeTier";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
 import { HTPR_7924_FREE_STORAGE_2GB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-storage-2gb";
+import { HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG } from "@/lib/flags/definitions/htpr-7922-unlimited-free-boards";
 import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7923-unlimited-free-tickets";
 import {
   FREE_PLAN_MAX_BOARDS,
@@ -152,7 +153,9 @@ function refuse(limit: PlanLimit, max: number, scope: PlanLimitScope, ctx: PlanL
 }
 
 export async function assertBoardRoom(tx: Prisma.TransactionClient, scope: PlanLimitScope, delta: number, ctx: PlanLimitContext): Promise<void> {
-  if (delta <= 0 || !await isPlanLimitsEnabled(ctx.actorUserId) || !await isFreeScope(scope)) return;
+  if (delta <= 0 || !await isPlanLimitsEnabled(ctx.actorUserId)) return;
+  if (ctx.actorUserId != null && await isFeatureEnabled(HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG, ctx.actorUserId)) return;
+  if (!await isFreeScope(scope)) return;
   await lockPlanLimitScope(tx, scope);
   const count = await tx.project.count({ where: { ...scopeWhere(scope), status: "Normal" } });
   if (count + delta > FREE_PLAN_MAX_BOARDS) refuse("boards", FREE_PLAN_MAX_BOARDS, scope, ctx, { delta });

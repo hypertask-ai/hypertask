@@ -36,17 +36,17 @@ test("guests, QA id, configured QA email, missing users and invalid ids are excl
   }
 });
 
-test("server flag OFF excludes events; ON includes a normal user", async () => {
+test("activation stays enabled independently of the remaining feature flags", async () => {
   const h = activationHarness();
   const { trackActivation } = h.load("src/lib/telemetry/activationAnalytics.ts");
   h.setEnabled(false);
   await trackActivation(123, "board_created");
   await h.drain();
-  assert.equal(h.captures.length, 0);
+  assert.deepEqual(h.captures, [{ distinctId: "123", event: "board_created", properties: {} }]);
   h.setEnabled(true);
   await trackActivation(123, "board_created");
   await h.drain();
-  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures.length, 2);
 });
 
 for (const failure of ["capture", "constructor", "database", "schedule"] as const) {

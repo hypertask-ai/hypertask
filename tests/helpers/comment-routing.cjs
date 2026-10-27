@@ -76,7 +76,6 @@ function setup(options = {}) {
     '@/lib/mcp/readListQuery': {},
     '@/lib/agentRuns/service': {
       runtimeAgentRunsEnabledFor: async () => options.runtime !== false,
-      agentRunActivitiesEnabledFor: async () => options.activities !== false,
       createRuntimeAgentRun: async (...args) => {
         calls.runs.push(args)
         return options.noRun ? null : { id: 'run-1' }

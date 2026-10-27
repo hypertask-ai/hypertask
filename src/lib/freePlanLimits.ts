@@ -7,6 +7,7 @@ export const FREE_BOARD_LIMIT = 3;
 export type FreePlanLimitFlags = {
   planLimits: boolean;
   unlimitedTickets: boolean;
+  unlimitedBoards?: boolean;
   raisedFileLimit?: boolean;
 };
 
@@ -28,12 +29,13 @@ export function ticketCapEnforced(flags: FreePlanLimitFlags): boolean {
 }
 
 export function freePlanLimitLines(flags: FreePlanLimitFlags): FreePlanLimitLine[] {
+  const boardAmount = flags.planLimits && flags.unlimitedBoards
+    ? "Unlimited boards"
+    : `Up to ${flags.planLimits ? FREE_PLAN_MAX_BOARDS : FREE_BOARD_LIMIT} boards (archived don't count)`;
   const lines: FreePlanLimitLine[] = [
     {
       title: "Boards",
-      amount: flags.planLimits
-        ? `Up to ${FREE_PLAN_MAX_BOARDS} boards (archived don't count)`
-        : `Up to ${FREE_BOARD_LIMIT} boards (archived don't count)`,
+      amount: boardAmount,
     },
     {
       title: "Open tickets",

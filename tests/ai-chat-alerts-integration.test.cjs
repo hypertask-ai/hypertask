@@ -27,16 +27,11 @@ function load(file, modules, environment = "production") {
   return loadedModule.exports;
 }
 
-function serviceHarness({ enabled = true, environment = "production", deliveryError = false, processingError = false, flagError = false } = {}) {
-  const calls = { flags: [], samples: [], deliveries: [], finishes: [], reports: [] };
+function serviceHarness({ environment = "production", deliveryError = false, processingError = false } = {}) {
+  const calls = { samples: [], deliveries: [], finishes: [], reports: [] };
   let next = { id: "incident:breach", incidentId: "incident", attemptCount: 1, phase: "breach" };
   const service = load("src/lib/ai/chatAlerts/service.ts", {
     "@/lib/prisma": {},
-    "@/lib/flags": {
-      FEATURE_FLAG_OWNER_USER_ID: 6,
-      isFeatureEnabled: async (...args) => { calls.flags.push(args); if (flagError) throw new Error("private prompt"); return enabled; },
-    },
-    "@/lib/flags/keys": { HTPR_6354_AI_CHAT_ALERTS_FLAG: "htpr-6354-ai-chat-alerts" },
     "@/lib/errors/reportError": { reportError: async (report) => calls.reports.push(report) },
     "./manager": { deliverManagerAlert: async (_, delivery) => { calls.deliveries.push(delivery); if (deliveryError) throw new Error("private reply"); } },
     "./store": {
@@ -48,19 +43,15 @@ function serviceHarness({ enabled = true, environment = "production", deliveryEr
   return { service, calls };
 }
 
-test("server flag is checked before storing samples or delivering alerts", async () => {
-  const { service, calls } = serviceHarness({ enabled: false });
+test("samples and scheduled sweeps always run in production", async () => {
+  const { service, calls } = serviceHarness();
   await service.recordAiChatAlertSample({ userId: 2343, outcome: "failed", latencyMs: 30000 });
   await service.sweepAiChatAlerts();
-  assert.equal(calls.flags.length, 2);
-  assert.deepEqual(Array.from(calls.flags[0]), ["htpr-6354-ai-chat-alerts", 2343]);
-  assert.equal(calls.flags[1][1], 6);
-  assert.equal(calls.samples.length, 0);
-  assert.equal(calls.deliveries.length, 0);
-  const flags = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
-  assert.match(flags, /key: HTPR_6354_AI_CHAT_ALERTS_FLAG,/);
-  assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_6354_AI_CHAT_ALERTS_FLAG = "htpr-6354-ai-chat-alerts"/);
+  assert.deepEqual(calls.samples.map((entry) => entry.environment), ["production", "production", "preview"]);
+  assert.equal(calls.samples[0].sample.statusCode, 500);
+  assert.equal(calls.samples[0].sample.latencyMs, 30000);
+  assert.equal(calls.deliveries.length, 1);
+  assert.equal(calls.finishes[0].success, true);
 });
 
 test("alert samples strictly allow only durations and outcome status codes", async () => {
@@ -85,14 +76,13 @@ test("delivery failures are handled reports and never escape the background obse
   assert.equal(JSON.stringify(calls.reports).includes("private reply"), false);
 });
 
-test("DB and flag failures are absorbed and reported without exception bodies", async () => {
-  for (const options of [{ processingError: true }, { flagError: true }]) {
-    const { service, calls } = serviceHarness(options);
-    await assert.doesNotReject(service.recordAiChatAlertSample({ userId: 6, outcome: "ok", latencyMs: 1000 }));
-    assert.equal(calls.reports.length, 1);
-    assert.equal(calls.reports[0].source, "handled");
-    assert.equal(/secret content|private prompt/.test(JSON.stringify(calls.reports)), false);
-  }
+test("DB failures are absorbed and reported without exception bodies", async () => {
+  const { service, calls } = serviceHarness({ processingError: true });
+  await assert.doesNotReject(service.recordAiChatAlertSample({ userId: 6, outcome: "ok", latencyMs: 1000 }));
+  assert.equal(calls.reports.length, 1);
+  assert.equal(calls.reports[0].source, "handled");
+  assert.equal(calls.reports[0].extra.step, "processing");
+  assert.equal(/secret content/.test(JSON.stringify(calls.reports)), false);
 });
 
 test("cron sweeps production and preview without needing new chat requests", async () => {
@@ -110,7 +100,6 @@ test("non-deployment environments and malformed durations do not collect samples
     const { service, calls } = serviceHarness({ environment });
     await service.recordAiChatAlertSample({ userId: 6, outcome: "ok", latencyMs: 100 });
     await service.sweepAiChatAlerts();
-    assert.equal(calls.flags.length, 0);
     assert.equal(calls.samples.length, 0);
   }
   const { service, calls } = serviceHarness({ environment: "preview" });
@@ -119,6 +108,11 @@ test("non-deployment environments and malformed durations do not collect samples
   }
   await service.sweepAiChatAlerts();
   assert.equal(calls.samples.length, 0);
+  await service.recordAiChatAlertSample({ userId: 2343, outcome: "ok", latencyMs: 10.6 });
+  assert.equal(calls.samples.length, 1);
+  assert.equal(calls.samples[0].environment, "preview");
+  assert.equal(calls.samples[0].sample.latencyMs, 11);
+  assert.equal(calls.samples[0].sample.statusCode, 200);
 });
 
 test("chat schedules alerts without awaiting them and leaves PostHog tracking independent", () => {
@@ -228,7 +222,6 @@ function webhookHarness(messageId) {
     "@/lib/webhooks/credentialScope": { webhookCredentialAllows: async () => true },
     "@/lib/prisma": db,
     "@/lib/flags": { isFeatureEnabled: async () => true },
-    "@/lib/agentRuns/model": { AGENT_RUN_FEATURE_FLAG: "existing-run-flag" },
     "@/lib/webhooks/signingKeyStore": { openWebhookSigningKey: (value) => value },
     "@/lib/flags/definitions/htpr-7905-agent-webhook-auth-header": { AGENT_WEBHOOK_AUTH_HEADER_FLAG: "fixture-auth-header" },
     "@/lib/mcp/webhooks/delivery": { postSignedWebhook: async () => ({ ok: false, statusCode: 503, error: "private upstream body" }) },

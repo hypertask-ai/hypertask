@@ -8,7 +8,6 @@ const {
   areGlobalShortcutsEnabled,
   isGlobalCreateTaskShortcut,
   isGlobalCreateTaskShortcutEnabled,
-  shouldOpenGlobalCreateTask,
 } = jiti(path.join(__dirname, "../src/lib/keyboard/globalShortcutRoutes.ts"));
 
 test("global shortcuts stay enabled on agent and settings pages", () => {
@@ -22,8 +21,10 @@ test("global shortcuts stay enabled on agent and settings pages", () => {
   }
 });
 
-test("C opens task creation from agent and settings pages", () => {
+test("C opens task creation from My Tasks, agent and settings pages", () => {
   for (const pathname of [
+    "/my-tasks",
+    "/my-tasks/",
     "/agents",
     "/agents/ht-bug-fixer",
     "/settings",
@@ -58,22 +59,6 @@ test("C opens task creation from agent and settings pages", () => {
     ),
     true,
     "legacy event without code",
-  );
-});
-
-test("the My Tasks flag lifts only its global create-task carve-out", () => {
-  assert.equal(shouldOpenGlobalCreateTask("/my-tasks", false), false);
-  assert.equal(shouldOpenGlobalCreateTask("/my-tasks", true), true);
-  assert.equal(shouldOpenGlobalCreateTask("/my-tasks/", true), true);
-  assert.equal(shouldOpenGlobalCreateTask("/agents", false), true);
-
-  const provider = fs.readFileSync(
-    path.join(__dirname, "../src/components/ProviderGlobal/GloablProviders.tsx"),
-    "utf8",
-  );
-  assert.match(
-    provider,
-    /shouldOpenGlobalCreateTask\(pathname, myTasksShortcutsWidthEnabled\)/,
   );
 });
 
