@@ -442,6 +442,7 @@ export async function createTask(data: {
     agentTokenGeneration?: string | null;
     creationChannel: CreationChannel;
     analyticsAgentId?: string | null;
+    initializeWriterDefaults?: boolean;
 }) {
     const { projectId, title, description, sectionId, sectionTitle, userId, priorityIndex, estimateIndex, projectUniqueIdentifier, labels: labelIds, parentTaskId, agentId, assigneeIds, creationChannel, analyticsAgentId } = data;
 
@@ -587,6 +588,7 @@ export async function createTask(data: {
         },
         body: JSON.stringify({
             title,
+            ...(data.initializeWriterDefaults ? { initializeWriterDefaults: true } : {}),
             userId,
             projectId,
             projectIdentifier: projectUniqueIdentifier,

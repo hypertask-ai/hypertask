@@ -195,9 +195,10 @@ export function createCreateTaskTool(context: ToolContext) {
           });
           const save = async (taskTitle: string, taskDescription?: string, titleOnly = false) => createTask({
             creationChannel: "agent",
+            ...(titleOnly ? { initializeWriterDefaults: true } : {}),
             projectId: input.project_id,
             title: taskTitle,
-            description: titleOnly ? "" : await inlineAgentImagesForUser(taskDescription ? toStoredHtml(taskDescription) : "", user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || taskDescription?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }),
+            description: await inlineAgentImagesForUser(titleOnly ? "" : taskDescription ? toStoredHtml(taskDescription) : "", user.id, { instructions: body?.message, inlineImages: titleOnly ? false : input.inline_images, attachments: titleOnly ? [] : [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || taskDescription?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }),
             sectionId: sectionCheck.section.id,
             sectionTitle: sectionCheck.section.section_title,
             userId: user.id,
@@ -229,16 +230,6 @@ export function createCreateTaskTool(context: ToolContext) {
                 const initialTitle = taskTitleFromBrief(input.brief);
                 if (!initialTitle) throw new Error("Provide a task brief with a usable title.");
                 earlyTask = await save(initialTitle, undefined, true);
-                const propertyDefaults = {
-                  taskId: earlyTask.id,
-                  sectionId: sectionCheck.section.id,
-                  projectId: input.project_id,
-                  addedByUserId: user.id,
-                };
-                await prisma.$transaction([
-                  prisma.priority.createMany({ data: { ...propertyDefaults, priority_index: 0, Priority_Value: "No Priority" }, skipDuplicates: true }),
-                  prisma.estimate.createMany({ data: { ...propertyDefaults, estimate_index: 0, estimate_value: "No size" }, skipDuplicates: true }),
-                ]);
                 send("task_created", { content: savedLink(earlyTask) });
                 earlyTaskPublished = true;
                 send("status", { content: "Ticket created. Writing its description…" });
