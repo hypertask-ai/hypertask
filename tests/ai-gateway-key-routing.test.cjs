@@ -1633,7 +1633,7 @@ test(`editor models retry unavailable ${currentModel} once before output, but no
   const calls = [];
   let emitBeforeError = false;
   const retryError = { name: "RetryError", lastError: { status: 404 } };
-  stubModule("src/lib/prisma.ts", { default: { userSetting: { findUnique: async () => null } } });
+  stubModule("src/lib/prisma.ts", { default: { userSetting: { findUnique: async () => ({ aiModelPreferences: { improveWriting: currentModel } }) } } });
   stubModule("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {});
   const usageContexts = [];
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
