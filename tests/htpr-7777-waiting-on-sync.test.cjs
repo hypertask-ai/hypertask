@@ -21,7 +21,7 @@ const reaction = (overrides = {}) => ({
 const task = (overrides = {}) => ({
   id: 42, projectId: 15, status: "Normal", section: "Valentin Review",
   waitingOnUserId: 6, waitingOnSetById: 7, waitingOnSetAt: at(0),
-  comments: [question()], sectionEvents: [], ...overrides,
+  blockerCommentId: null, comments: [question()], sectionEvents: [], ...overrides,
 });
 
 function fixture(tasks) {
@@ -66,9 +66,10 @@ for (const [name, comments] of [
   ["restored thumbs up", [question({ reactions: [reaction({ createdAt: at(5), updatedAt: at(20) })] })]],
 ]) {
   test(`Valentin's ${name} after the last agent Question clears all waiting-on fields`, async () => {
-    const row = task({ comments }), f = fixture([row]);
+    const row = task({ comments, blockerCommentId: 10 }), f = fixture([row]);
     assert.equal(await f.sweep(), 1);
     assert.deepEqual([row.waitingOnUserId, row.waitingOnSetById, row.waitingOnSetAt], [null, null, null]);
+    assert.equal(row.blockerCommentId, null);
     assert.deepEqual([f.boards, f.inboxes, f.tickets], [[15], [6], [42]]);
   });
 
@@ -290,3 +291,11 @@ test("a failed transaction emits no realtime changes", async () => {
   await assert.rejects(sweepValentinWaitingOn(), /serialization conflict/);
   assert.deepEqual(broadcasts, []);
 });
+
+for (const blockerCommentId of [10, 99]) {
+  test(`answered question clears only its own blocker marker (${blockerCommentId})`, async () => {
+    const row = task({ comments: [question(), reply()], waitingOnUserId: null, blockerCommentId });
+    assert.equal(await fixture([row]).sweep(), blockerCommentId === 10 ? 1 : 0);
+    assert.equal(row.blockerCommentId, blockerCommentId === 10 ? null : 99);
+  });
+}

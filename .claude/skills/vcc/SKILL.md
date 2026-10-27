@@ -41,3 +41,5 @@ Store proof, checklist, captures, and the self-contained HTML report in the tick
 - FAIL: keep In Progress. For flagged behavior, use the emergency Off path before repairs. Re-run deployment and live verification after repair. After two failed attempts, record the blocker and hand off; do not claim completion.
 
 A real human decision uses one Question in the house-rules tickets skill format: max 3 plain bullets, then Question, My recommendation, Why, Yes, No. No outside links or product precedents. Never use Valentin Review simply to ask for a flag switch. Keep decisions, flags, and follow-up work on their existing product surfaces; never build another decision inbox. Finish with /ship's session-scoped cleanup and proof.
+
+Questions mentioning Valentin use `vcc comment add --kind question`; it marks the saved question and waiting person together. A marking failure names the saved comment for repair; never repost it. Human answers clear both markers.

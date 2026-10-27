@@ -68,6 +68,7 @@ question_refuse() {
   printf 'vcc: Question refused: %s; rewrite it for a product owner (pospeak)\n' "$1" >&2
   exit 5
 }
+question_blocker=false
 question_comment() {
   case "${1:-} ${2:-}" in 'comment add'|'comments add') ;; *) return 0 ;; esac
   local kind='' text='' file='' markdown=false reason
@@ -94,6 +95,13 @@ question_comment() {
   fi
   reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
   [ -z "$reason" ] || question_refuse "$reason"
+  if jq -ne --arg text "$text" '
+    [$text | scan("<span\\b[^>]*>"; "i") |
+      select(test("\\bdata-type=[\"\u0027]mention[\"\u0027]"; "i") and
+        test("\\bdata-label=[\"\u0027]name-6[\"\u0027]"; "i"))] | length > 0
+  ' >/dev/null; then
+    question_blocker=true
+  fi
 }
 question_comment "$@"
 
@@ -173,6 +181,33 @@ review_move() {
 }
 if [ "${1:-}" != activity ]; then
   review_move "$@"
+  if [ "$question_blocker" = true ]; then
+    receipt=$(mktemp)
+    marker=$(mktemp)
+    trap 'rm -f "$receipt" "$marker"' EXIT
+    hypertask "$@" --json > "$receipt" || { status=$?; cat "$receipt"; exit "$status"; }
+    ids=$(jq -er 'select(.success == true) | [.comment.id, (.url | capture("/detail/project-(?<project>[1-9][0-9]*)/(?<index>[1-9][0-9]*)$") | .project, .index)] |
+      if (.[0] | type == "number" and . > 0 and floor == .) then @tsv else error("missing comment id") end' "$receipt") \
+      || { echo 'vcc: question receipt missing comment IDs/link; blocker not set' >&2; exit 5; }
+    IFS=$'\t' read -r comment_id project_id task_index <<< "$ids"
+    task_id=$(hypertask tasks get "$task_index" --project "$project_id" --json |
+      jq -er '.tasks | select(length == 1) | .[0].id | select(type == "number" and . > 0 and floor == .)') \
+      || { printf 'vcc: question saved as comment %s; cannot resolve task; blocker not set\n' "$comment_id" >&2; exit 5; }
+    payload=$(jq -nc --argjson task "$task_id" --argjson comment "$comment_id" \
+      '{taskId:$task,userId:6,blockerCommentId:$comment}')
+    code=$(printf 'header = "Authorization: Bearer %s"\n' "$HT_TOKEN" |
+      curl --config - --silent --show-error --connect-timeout 10 --max-time 30 \
+        --request POST --header 'Content-Type: application/json' \
+        --data "$payload" --output "$marker" --write-out '%{http_code}' \
+        'https://app.hypertask.ai/api/mcp/tasks/waiting-on') || code=000
+    if [[ $code != 2?? ]] || ! jq -e --argjson task "$task_id" --argjson comment "$comment_id" \
+      '.success == true and .task.id == $task and .task.waitingOnUserId == 6 and .task.blockerCommentId == $comment' "$marker" >/dev/null; then
+      printf 'vcc: question saved as comment %s; blocker not set (HTTP %s). Repair this comment, do not repost.\n' "$comment_id" "$code" >&2
+      exit 5
+    fi
+    cat "$receipt"
+    exit 0
+  fi
   exec /usr/bin/env -S hypertask "$@"
 fi
 

@@ -104,3 +104,5 @@ When the Agent Kit blocks work, search board 4060 before filing a fix. Never dup
 Runner timers, webhooks, pickup, and self-update have their own scripts. Read them only for an installation or dispatch task, not every ticket. New user timers require `user-unit-check` before enablement and one successful first real run afterward.
 
 After Done, clean only this session's finished worktree and branch. Keep evidence and unfinished work. Record cleanup proof and suggest the next freshly checked free ticket, without claiming it. Nothing is live until the merge's Production deployment succeeds and its real behavior is proven.
+
+Questions mentioning Valentin use `vcc comment add --kind question`; it marks the saved question and waiting person together. A marking failure names the saved comment for repair; never repost it. Human answers clear both markers.

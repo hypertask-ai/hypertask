@@ -22,6 +22,7 @@ export async function sweepValentinWaitingOn(): Promise<number> {
         section: true,
         status: true,
         waitingOnUserId: true,
+        blockerCommentId: true,
         waitingOnSetById: true,
         waitingOnSetAt: true,
         sectionEvents: {
@@ -92,7 +93,8 @@ export async function sweepValentinWaitingOn(): Promise<number> {
         )
       );
       const shouldWait = inWaitingColumn && !answered;
-      if (shouldWait === (task.waitingOnUserId === VALENTIN_USER_ID)) continue;
+      const clearsBlocker = answered && task.blockerCommentId === question.id;
+      if (shouldWait === (task.waitingOnUserId === VALENTIN_USER_ID) && !clearsBlocker) continue;
       const departure = task.sectionEvents[0];
       if (!inWaitingColumn && !answered && task.waitingOnSetById !== null &&
         (!departure || (explicitWaitSetAt && departure.timestamp < explicitWaitSetAt))) continue;
@@ -100,7 +102,7 @@ export async function sweepValentinWaitingOn(): Promise<number> {
         where: { id: task.id },
         data: shouldWait
           ? { waitingOnUserId: VALENTIN_USER_ID, waitingOnSetById: null, waitingOnSetAt: new Date() }
-          : { waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null },
+          : { waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null, ...(clearsBlocker ? { blockerCommentId: null } : {}) },
       });
       updated.push({ id: task.id, projectId: task.projectId });
     }
