@@ -15,6 +15,7 @@ test("reporter emits whole-file completion once, not nested test or suite durati
     yield { type: "test:complete", data: { nesting: 1, file, name: file, details: { duration_ms: 800 } } };
     yield { type: "test:pass", data: { nesting: 0, file, name: file, details: { duration_ms: 1250 } } };
     yield { type: "test:summary", data: { file, duration_ms: 1100 } };
+    yield { type: "test:complete", data: { nesting: 0, file, name: file, entryFile: file, details: { duration_ms: 700 } } };
     yield { type: "test:complete", data: { nesting: 0, file, name: "tests/example.test.cjs", details: { duration_ms: 1250 } } };
   }
   let output = "";
@@ -32,6 +33,7 @@ test("real Node events capture nested, failing, empty and timed-out files withou
       "failed.cjs": `require('node:test')('broken', () => { throw Error('expected fixture failure'); });`,
       "crashed.cjs": `process.exit(3);`,
       "empty.cjs": `console.log('empty fixture ran');`,
+      "filename.cjs": `require('node:test')(__filename, () => {});`,
       "timeout.cjs": `require('node:test')('hung', t => new Promise(() => { const timer = setInterval(() => {}, 1000); t.signal.addEventListener('abort', () => clearInterval(timer)); }));`,
     };
     for (const [file, source] of Object.entries(sources)) writeFileSync(path.join(directory, file), source);

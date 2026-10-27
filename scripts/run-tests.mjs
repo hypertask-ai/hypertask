@@ -35,7 +35,7 @@ function run(command, args, label, concurrency = 1) {
   const timingFile = path.join(timingDirectory, `${fileDurations.length}.jsonl`);
   if (nodeTests) {
     args = [
-      "--test-reporter=tap", "--test-reporter-destination=stdout",
+      "--test-reporter=spec", "--test-reporter-destination=stdout",
       `--test-reporter=${durationReporter}`, `--test-reporter-destination=${timingFile}`,
       ...args,
     ];

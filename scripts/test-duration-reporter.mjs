@@ -5,6 +5,7 @@ export default async function* testDurationReporter(source) {
     if (
       type === "test:complete" &&
       data.nesting === 0 &&
+      !data.entryFile &&
       data.file &&
       path.resolve(data.name) === path.resolve(data.file)
     ) {

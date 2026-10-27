@@ -116,10 +116,10 @@ test("production full-suite uploads timing JSON even after test failure, not on 
 for (const extraFailure of [false, true]) {
   test(`timing reporter retains quarantine semantics with unrelated failure=${extraFailure}`, (t) => {
     const directory = fixture(t, {
-      "quarantined.test.cjs": `require('node:test')('known flaky case', () => { throw Error('known failure'); });`,
+      "quarantined.test.cjs": `require('node:test')('known flaky #1', () => { throw Error('known failure'); });`,
       "healthy.test.cjs": `require('node:test')('ordinary case', () => { ${extraFailure ? "throw Error('new failure');" : ""} });`,
     });
-    writeFileSync(path.join(directory, "config/quarantined-tests.json"), JSON.stringify({ tests: [{ test: "known flaky case" }] }));
+    writeFileSync(path.join(directory, "config/quarantined-tests.json"), JSON.stringify({ tests: [{ test: "known flaky #1" }] }));
     const { status, report, stderr } = run(directory);
     assert.equal(status, extraFailure ? 1 : 0, stderr);
     assert.match(stderr, /Quarantine: 1 failing test/);
