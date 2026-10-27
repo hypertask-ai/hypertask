@@ -16,8 +16,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   persistAgentRunStoppedWebhook,
   persistAgentWebhookEvent,
-  persistAgentRunTriggerWebhooks,
-  resolveAgentWebhookActor,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
 import {
@@ -495,8 +493,6 @@ type ActivityRunWithContext = AgentRun & {
     id: number;
     userId: number;
     projectId: number;
-    ticketNumber: string | null;
-    title: string;
   } | null;
   chatSession: {
     id: string;
@@ -528,7 +524,7 @@ async function findActivityRun(
           },
         },
       },
-      task: { select: { id: true, userId: true, projectId: true, ticketNumber: true, title: true } },
+      task: { select: { id: true, userId: true, projectId: true } },
       chatSession: { select: { id: true, userId: true } },
     },
   }) as Promise<ActivityRunWithContext | null>;
@@ -589,9 +585,6 @@ async function replayCreatedActivity(
         notificationsCompletedAt: activity.commentNotificationsCompletedAt,
       },
     });
-  }
-  if (activity.type === "THOUGHT" && activity.commentAgentWebhookDeliveryIds.length > 0) {
-    await publishAgentWebhookDeliveries(activity.commentAgentWebhookDeliveryIds);
   }
   return { activity: serializeAgentRunActivity(activity), duplicate: true };
 }
@@ -668,20 +661,16 @@ export async function createAgentRunActivity(
   input: AgentRunActivityInput,
   idempotencyKey: string | null,
   now = new Date(),
-  logCommentHtml?: string,
 ) {
   if (!principal.agentId) return null;
-  const activityIdempotencyKey = idempotencyKey !== null && logCommentHtml !== undefined
-    ? crypto.createHash("sha256").update(JSON.stringify([idempotencyKey, logCommentHtml])).digest("hex")
-    : idempotencyKey;
   const run = await findActivityRun(principal, id);
   if (!run) return null;
   if (run.task) recordAgentBoardScopeMiss(run.task.projectId, "write");
   const exactChatReply = input.type === "RESPONSE" && Boolean(run.chatSession);
   if (exactChatReply && !input.replyToMessageId) throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
 
-  if (activityIdempotencyKey !== null) {
-    const existing = await findIdempotentActivity(run.id, activityIdempotencyKey);
+  if (idempotencyKey !== null) {
+    const existing = await findIdempotentActivity(run.id, idempotencyKey);
     if (existing) return replayCreatedActivity(run, principal, existing, input);
   }
   if (!NONTERMINAL_AGENT_RUN_STATUSES.includes(run.status)) {
@@ -695,7 +684,7 @@ export async function createAgentRunActivity(
     runId: run.id,
     agentId: run.agentId,
     context: activityRunContext(run),
-    idempotencyKey: activityIdempotencyKey,
+    idempotencyKey,
     createdAt: now,
   };
   let activity: AgentRunActivity | null = null;
@@ -750,38 +739,13 @@ export async function createAgentRunActivity(
         return stored;
       });
     } else {
-      activity = await prisma.$transaction(async (tx) => {
-        const stored = await persistAgentRunActivity(tx, persistenceInput);
-        if (input.type !== "THOUGHT" || !run.task || !logCommentHtml) return stored;
-        const { getMentionedAgentIdsFromCommentText } = await import(
-          "@/utils/controllers/comments/processMentions"
-        );
-        const agentIds = getMentionedAgentIdsFromCommentText(logCommentHtml)
-          .filter((agentId) => agentId !== run.agentId);
-        if (agentIds.length === 0) return stored;
-        const actor = await resolveAgentWebhookActor(tx, principal);
-        const deliveryIds: Array<string | null> = [];
-        for (const agentId of agentIds) {
-          deliveryIds.push(...await persistAgentRunTriggerWebhooks(tx, {
-            event: "comment.mention",
-            agentId,
-            projectId: run.task.projectId,
-            taskId: run.task.id,
-            ticketNumber: run.task.ticketNumber,
-            taskTitle: run.task.title,
-            commentHtml: logCommentHtml,
-            actor,
-          }));
-        }
-        return tx.agentRunActivity.update({
-          where: { id: stored.id },
-          data: { commentAgentWebhookDeliveryIds: deliveryIds.filter((id): id is string => id !== null) },
-        });
-      });
+      activity = await prisma.$transaction((tx) =>
+        persistAgentRunActivity(tx, persistenceInput),
+      );
     }
   } catch (error) {
-    if (activityIdempotencyKey !== null && isUniqueConstraintError(error)) {
-      const existing = await findIdempotentActivity(run.id, activityIdempotencyKey);
+    if (idempotencyKey !== null && isUniqueConstraintError(error)) {
+      const existing = await findIdempotentActivity(run.id, idempotencyKey);
       if (existing) return replayCreatedActivity(run, principal, existing, input);
     }
     if (exactChatReply && run.chatSession && isUniqueConstraintError(error)) {
@@ -794,9 +758,6 @@ export async function createAgentRunActivity(
     where: { id: persistenceInput.id },
   });
   if (!activity) throw new Error("Agent run activity was not persisted");
-  if (activity.type === "THOUGHT" && activity.commentAgentWebhookDeliveryIds.length > 0) {
-    await publishAgentWebhookDeliveries(activity.commentAgentWebhookDeliveryIds);
-  }
   if (!run.task || input.type !== "RESPONSE") {
     await broadcastActivityChange(run, principal.userId);
   }
