@@ -36,6 +36,19 @@ export function failedScreens(report) {
   return failed;
 }
 
+export async function validateBaseline(directory) {
+  for (const [project, width, height] of [["desktop", 1440, 900], ["phone", 390, 844]]) {
+    for (const screen of ["board", "task-detail", "comment-box", "ctrl-j", "inbox"]) {
+      const file = path.join(directory, project, `${screen}.png`);
+      const png = await readFile(file);
+      if (png.length < 24 || png.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
+          png.readUInt32BE(16) !== width || png.readUInt32BE(20) !== height) {
+        throw new Error(`Invalid visual baseline: ${project}/${screen}.png`);
+      }
+    }
+  }
+}
+
 function command(root, env, args, input) {
   const result = spawnSync(args[0], args.slice(1), { cwd: root, env, input, stdio: [input ? "pipe" : "ignore", "inherit", "inherit"] });
   if (result.error) throw result.error;
@@ -84,6 +97,12 @@ async function startServer(root, env, log) {
 async function summarize(workspace, temp) {
   const lines = ["## Visual Regression", "", "Base-generated expected PNGs → head comparison; Porcelain, desktop + phone, five screens each.", ""];
   for (const phase of ["base", "head"]) {
+    if (phase === "base" && process.env.VISUAL_BASE_CACHE_HIT === "true") {
+      await validateBaseline(path.join(temp, "visual-expected"));
+      lines.push("- **base**: restored ten validated screenshots from the exact production cache key.");
+      continue;
+    }
+    if (phase === "head" && process.env.VISUAL_BASE_ONLY === "true") continue;
     let report;
     try {
       report = JSON.parse(await readFile(path.join(temp, `visual-${phase}.json`), "utf8"));
@@ -111,7 +130,7 @@ async function main() {
   }
   assertLocalCi(process.env);
   const timings = new Map(["base build", "base seed+capture", "head build", "head seed+capture", "compare"].map(phase => [phase, null]));
-  let currentPhase = "base seed+capture";
+  let currentPhase = process.env.VISUAL_BASE_CACHE_HIT === "true" ? "head seed+capture" : "base seed+capture";
   let phaseStarted = performance.now();
   const recordPhase = nextPhase => {
     const now = performance.now();
@@ -126,7 +145,14 @@ async function main() {
     await cp(path.join(head, "scripts/seed-browser-smoke.mjs"), path.join(base, "scripts/seed-browser-smoke.mjs"));
     const expected = path.join(temp, "visual-expected");
     await mkdir(expected, { recursive: true, mode: 0o700 });
+    const cachedBase = process.env.VISUAL_BASE_CACHE_HIT === "true";
+    if (cachedBase) {
+      await validateBaseline(expected);
+      console.log("Visual base cache hit: ten validated screenshots; skipping base build and capture");
+    }
     for (const phase of ["base", "head"]) {
+      if (phase === "base" && cachedBase) continue;
+      if (phase === "head" && process.env.VISUAL_BASE_ONLY === "true") continue;
       recordPhase(`${phase} seed+capture`);
       const root = path.join(workspace, phase);
       const stateDir = path.join(temp, `visual-${phase}`, "auth");
@@ -161,6 +187,7 @@ async function main() {
         if (report.stats?.expected !== 10 || report.stats?.skipped || report.errors?.length || failedScreens(report).length) {
           throw new Error(`${phase}: expected all ten visual screens to pass`);
         }
+        if (phase === "base") await validateBaseline(expected);
       } finally {
         recordPhase(`${phase} seed+capture`);
         await stop();
