@@ -75,7 +75,7 @@ export const UndoToastContent = ({
           <button
             type="button"
             aria-label="Undo"
-            className={`${MOBILE_TARGET} cursor-pointer text-hypertasks-header-blue`}
+            className={`${MOBILE_TARGET} cursor-pointer text-text-light-gray hover:text-white-black`}
             onClick={() => onUndo(t.id)}
           >
             Undo
