@@ -73,6 +73,20 @@ The Haiku 4.5 retirement ([HTPR-7940](https://app.hypertask.ai/detail/project-15
 was proven this way: a saved `claude-haiku-4.5` chat pick loaded Haiku 5.5 and
 the chat request carried `claude-haiku-5-5`.
 
+## On-demand tool discovery
+
+With `htpr-7862-chat-deferred-tools` enabled, common ticket and inbox
+operations stay immediately available. Ask for a read-only saved-view lookup
+on QA 985's own private board. Record the existing view tool's stream
+status and compare the answer's view identifiers with the board's saved views.
+Follow with a common task lookup and verify its result against the board.
+The stream does not expose discovery calls separately. Use
+`tests/ai-chat-deferred-tools.test.cjs` for provider-request evidence that
+`hypertask_search_tools` finds `hypertask_list_views`, describing it activates
+its schema, and the following step executes the original tool. Those tests
+also verify per-conversation isolation and the full original flag-off catalog.
+Do not request writes, token minting or revocation for this check.
+
 ## What usually breaks
 
 - Provider/gateway slug drift breaking a specific model entirely: Grok chat
