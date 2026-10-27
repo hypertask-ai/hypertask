@@ -1623,7 +1623,11 @@ test("custom instruction upload uses the authenticated project team over caller 
   assert.notEqual(upsertedRows[0].teamId, callerTeamId);
 });
 
-test("editor models retry unavailable Luna once before output, but not after output", async () => {
+for (const [currentModel, previousModel] of [
+  ["gpt-6-luna", "gpt-5.6-luna"],
+  ["gpt-6.1-terra", "gpt-5.6-terra"],
+]) {
+test(`editor models retry unavailable ${currentModel} once before output, but not after output`, async () => {
   resetModules();
   stubPlan();
   const calls = [];
@@ -1654,7 +1658,7 @@ test("editor models retry unavailable Luna once before output, but not after out
       supportedUrls: {},
       doGenerate: async () => {
         calls.push(modelId);
-        if (modelId === "gpt-6-luna") throw retryError;
+        if (modelId === currentModel) throw retryError;
         return { content: [{ type: "text", text: "OK" }], usage: { inputTokens: { total: 1 }, outputTokens: { total: 2 } } };
       },
       doStream: async () => ({
@@ -1663,7 +1667,7 @@ test("editor models retry unavailable Luna once before output, but not after out
             calls.push(modelId);
             controller.enqueue({ type: "stream-start", warnings: [] });
             controller.enqueue({ type: "response-metadata", id: modelId });
-            if (modelId === "gpt-6-luna") {
+            if (modelId === currentModel) {
               if (emitBeforeError) controller.enqueue({ type: "text-delta", id: "1", text: "partial" });
               controller.enqueue({ type: "error", error: retryError });
             } else {
@@ -1677,7 +1681,7 @@ test("editor models retry unavailable Luna once before output, but not after out
   });
   const { selectTaskWriterModel, selectTiptapModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   const options = {
-    modelOptionId: "gpt-6-luna",
+    modelOptionId: currentModel,
     projectId: 1,
     userId: 1,
     teamContext: { teamId: "test-team", settings: {} },
@@ -1688,25 +1692,25 @@ test("editor models retry unavailable Luna once before output, but not after out
   console.warn = (message) => warnings.push(message);
   try {
     assert.equal((await selected.model.doGenerate({ prompt: [] })).content[0].text, "OK");
-    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
-    assert.equal(selected.modelId, "gpt-5.6-luna");
-    assert.match(warnings[0], /^\[ai-model-fallback\] gpt-6-luna -> gpt-5.6-luna: 404$/);
+    assert.deepEqual(calls, [currentModel, previousModel]);
+    assert.equal(selected.modelId, previousModel);
+    assert.equal(warnings[0], `[ai-model-fallback] ${currentModel} -> ${previousModel}: 404`);
     calls.length = 0;
     const editor = await selectTiptapModel(options);
     await editor.model.doGenerate({ prompt: [] });
-    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
-    assert.equal(editor.modelId, "gpt-5.6-luna");
+    assert.deepEqual(calls, [currentModel, previousModel]);
+    assert.equal(editor.modelId, previousModel);
     assert.equal(usageContexts.at(-1).feature, "editor");
     calls.length = 0;
     const streaming = await selectTaskWriterModel(options);
     const { stream } = await streaming.model.doStream({ prompt: [] });
     const chunks = [];
     for await (const chunk of stream) chunks.push(chunk);
-    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.deepEqual(calls, [currentModel, previousModel]);
     assert.deepEqual(chunks.map((chunk) => chunk.type), ["stream-start", "response-metadata", "text-delta"]);
     assert.equal(chunks.filter((chunk) => chunk.type === "stream-start").length, 1);
-    assert.equal(chunks.find((chunk) => chunk.type === "response-metadata").id, "gpt-5.6-luna");
-    assert.equal(streaming.modelId, "gpt-5.6-luna");
+    assert.equal(chunks.find((chunk) => chunk.type === "response-metadata").id, previousModel);
+    assert.equal(streaming.modelId, previousModel);
     calls.length = 0;
     emitBeforeError = true;
     const partial = await selectTaskWriterModel(options);
@@ -1714,9 +1718,10 @@ test("editor models retry unavailable Luna once before output, but not after out
     for await (const chunk of (await partial.model.doStream({ prompt: [] })).stream) {
       partialChunks.push(chunk);
     }
-    assert.deepEqual(calls, ["gpt-6-luna"]);
+    assert.deepEqual(calls, [currentModel]);
     assert.deepEqual(partialChunks.map((chunk) => chunk.type), ["stream-start", "response-metadata", "text-delta", "error"]);
   } finally {
     console.warn = originalWarn;
   }
 });
+}
