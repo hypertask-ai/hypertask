@@ -16,7 +16,10 @@ function styleOffsets(value, sizing = false) {
   const offsets = [];
   valueParser(value).walk((node) => {
     if (["string", "comment"].includes(node.type) || (node.type === "function" && node.value.toLowerCase() === "url")) return false;
-    if (node.type === "word" && (/^#[\da-f]{3,8}(?:!important)?$/i.test(node.value) || (sizing && /^[-+]?(?:\d*\.)?\d/.test(node.value)))) offsets.push(node.sourceIndex);
+    if (node.type === "word") {
+      for (const match of node.value.matchAll(/(?:^|_)#[\da-f]{3,8}(?=_|!important$|$)/gi)) offsets.push(node.sourceIndex + match.index + (match[0].startsWith("_") ? 1 : 0));
+      if (sizing && /^[-+]?(?:\d*\.)?\d/.test(node.value)) offsets.push(node.sourceIndex);
+    }
     if (node.type === "function" && /^(?:rgb|rgba|hsl|hsla)$/i.test(node.value)) {
       const first = node.nodes.find((child) => child.type !== "space" && child.type !== "comment");
       if (first?.type === "word" && /^[-+]?(?:\d*\.)?\d/.test(first.value)) {

@@ -34,7 +34,7 @@ function fixture(t) {
 
 test("rejects JSX raw colors and arbitrary typography; accepts named tokens", async () => {
   const { lintStyles } = await implementation;
-  for (const value of ["text-[11px]", "leading-[1.5]", "hover:bg-blue-500", "bg-[#333B47]", "text-[rgb(1,2,3)]"]) {
+  for (const value of ["text-[11px]", "leading-[1.5]", "hover:bg-blue-500", "bg-[#333B47]", "text-[rgb(1,2,3)]", "shadow-[0_0_2px_#fff]", "shadow-[#fff_0_0_2px]"]) {
     const findings = lintStyles(`<div className="${value}" />`, "src/Probe.tsx");
     assert.ok(findings.length > 0, value);
     assert.match(findings[0].message, /text-micro.*tailwind.config.ts.*globals.scss/);
