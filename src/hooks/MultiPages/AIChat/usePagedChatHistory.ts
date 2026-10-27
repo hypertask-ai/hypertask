@@ -269,7 +269,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       }
     });
     return () => { cancelled = true; };
-  }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt]);
+  }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt, taskId, isTaskScoped, selectionScope.initialTaskId]);
 
   const addMessageToSessionQuery = useCallback((sessionId: string, message: IChatMessage, queryOnly = false, updateLastMessage = false, projectId?: number) => {
     if (!ready || !queryClient.getQueryData<Transcript>(transcriptKey(sessionId))) return false;

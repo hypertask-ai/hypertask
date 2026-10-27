@@ -86,7 +86,7 @@ async function withHistory(config, check) {
     new Function('require', 'module', 'exports', compiled)((name) => mocks[name] ?? require(name), loaded, loaded.exports);
     Chat = loaded.exports.default;
   }
-  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, taskId !== undefined, config.preserveSelection ?? false);
+  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, config.taskScoped ?? taskId !== undefined, config.preserveSelection ?? false);
     if (useAiChatSessions) {
       const sessionsRef = React.useRef(history.sessions); sessionsRef.current = history.sessions;
       const chatHistoryReadyRef = React.useRef(history.isSuccess); chatHistoryReadyRef.current = history.isSuccess;
@@ -1342,6 +1342,21 @@ for (const paging of [true, false]) {
     await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [] }, async ({ history, resolver }) => {
       assert.equal(history().currentSession.taskId, 91);
       assert.equal((await resolver().ensureSessionForCurrentBoard()).id, history().currentSession.id);
+    });
+  });
+}
+
+for (const empty of [false, true]) {
+  test(`following tasks initializes when the ticket resolves after history loads (empty ${empty})`, async () => {
+    await withHistory({ followsTask: true, taskScoped: true, pathname: '/detail/project-4/91', rows: empty ? [] : [session(1, { taskId: 91 })] }, async ({ history, requests, setTask, render }) => {
+      assert.equal(history().historySessions.length, empty ? 0 : 1);
+      assert.equal(requests.filter(([type]) => type === 'page').length, 1);
+      assert.equal(history().currentSession, undefined);
+      assert.equal(requests.some(([type]) => type === 'create'), false);
+      setTask(91); await render();
+      assert.ok(history().currentSession, 'resolving the ticket must initialize its conversation');
+      assert.equal(history().currentSession.taskId, 91);
+      assert.equal(requests.filter(([type]) => type === 'create').length, empty ? 1 : 0);
     });
   });
 }
