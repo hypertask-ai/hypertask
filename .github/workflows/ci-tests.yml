@@ -1,534 +1,14 @@
-name: CI Tests
-
-# Correctness gate that runs on free GitHub-hosted runners without using a Vercel
-# build slot. Purpose: let PRs be verified for merge without competing for the
-# Vercel build slot. This is the intended required check; the preview is not.
-#
-# It also runs on every push to `production`. A PR can be green against the base it
-# branched from and still break once squash-merged onto a production that has moved
-# (HTPR-4632: PR #1959 merged with ci-build SUCCESS, then failed the production
-# build). Nothing typechecked the merge result, so the first signal was a failed
-# Vercel prod deploy blocking every later release. This makes the merge commit
-# itself a checked artifact.
+name: YPER4-826 Outside Proof
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
   push:
-    branches: [production]
-
+    branches: [runner11/yper4-826-outside-proof]
+permissions:
+  contents: read
+  packages: read
 concurrency:
-  group: ci-tests-${{ github.event.pull_request.number || github.sha }}
-  # Superseded PR runs are waste, but every production run must finish its full
-  # test report and warning path.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-# One knob for the Test step. 2 is the cap from YPER4-554 (HT Product Lead,
-# 2026-10-24): the free hosted pool is 20 jobs, and 3 or more shards queued
-# other pulls. The required check stays the aggregate job named ci-tests.
-env:
-  CI_TEST_SHARDS: "2"
-
+  group: yper4-826-outside-proof-${{ github.sha }}
+  cancel-in-progress: false
 jobs:
-  ci-prepare:
-    name: ci-prepare
-    # Skip drafts; pushes always run. HR-04 (Valentin, 2026-09-29): no author
-    # is exempted from the gate any more. The "Vercel bot" author skip this
-    # replaced was ported wholesale from a private-repo template (9f074926b)
-    # and never matched a real PR (no vercel[bot] PR has ever existed in this
-    # repo, confirmed against the full PR history). It also silently exempted
-    # hypertask-agents[bot], our own GitHub App: its PRs open from branches in
-    # this same repo (not a fork), this job runs on `pull_request` (not
-    # `pull_request_target`), holds a read-only token, and never touches a
-    # secret, so there was no security reason to give bot-authored code a free
-    # pass. Every bot-authored PR now runs the exact same gate as a human one.
-    # No label gate any more (HTPR-6734, HR-04: no skipped checks). The
-    # review-first `full-ci` label (owner, 2026-08-26) left ci-tests SKIPPED
-    # until the label arrived, and GitHub's ruleset counts SKIPPED as passing:
-    # PRs 782, 798 and 799 went live that way, and 782 broke the suite. Every
-    # non-draft PR now runs the gate on code/lifecycle events; superseded runs are
-    # cancelled by the concurrency group above, so only the newest one costs
-    # runner time. A job-level skip is never used here, because a skipped run
-    # newer than a failed one would read as passing again.
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    timeout-minutes: 80
-    # This job checks out and executes pull request code, so it never holds a
-    # write token. The production warning is a separate push-only job.
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-      checks: read
-      # "Skip the build when the review is already red" reads commit statuses
-      # for GitHub AI Review; without this the gh call 403s and aborts the job.
-      statuses: read
-      packages: read
-    outputs:
-      run_tests: ${{ steps.shards.outputs.run_tests }}
-      shard_indexes: ${{ steps.shards.outputs.indexes }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 1
-
-      # Never build a commit whose review already failed (owner, 2026-08-26).
-      # This does NOT wait: a pending or absent verdict builds in parallel as
-      # normal; only an existing red verdict stops the build before it starts.
-      - name: Skip the build when the review is already red
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '
-            [.statuses[] | select(.context == "ai-review" or .context == "claude-review") | {context, state}]
-            | group_by(.context) | map(.[0])
-            | if any(.[]; .state == "success") then "success"
-              elif any(.[]; .state == "failure") then "failure" else "none" end')
-          [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
-      - name: Runner admission, dispatcher and selfupdate fixtures
-        run: |
-          python3 .claude/skills/ship/scripts/session-policy-guard.test.py
-          python3 .claude/skills/ship/scripts/runner-dispatch.test.py
-          python3 .claude/skills/ship/scripts/runner-dispatch.cache.test.py
-          python3 .claude/skills/ship/scripts/runner-snapshot.test.py
-          bash .claude/skills/ship/scripts/runner-selfupdate.test.sh
-
-      - name: Guard CI image sources
-        run: node --test tests/ci-image-sources.test.cjs
-
-      # Keep both required jobs running: only their heavy steps may be skipped.
-      - name: Determine change scope
-        id: scope
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          # A missing/broken detector must never suppress correctness checks.
-          if ! node .github/scripts/ci-change-scope.cjs; then
-            echo "build_needed=true" >> "$GITHUB_OUTPUT"
-            : > "$RUNNER_TEMP/changed-files.txt"
-          fi
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        with:
-          node-version: ^24.22.1
-          check-latest: true
-
-
-      - name: Resolve dependency cache version
-        id: dependency-cache-version
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: |
-          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
-          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore node_modules cache
-        id: restore-node-modules
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
-
-      - name: Restore ESLint cache
-        id: restore-eslint-cache
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .cache/eslint
-          key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-${{ github.sha }}
-          restore-keys: |
-            eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-
-
-      - name: Relocate ESLint cache
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: node .github/scripts/relocate-eslint-cache.mjs .cache/eslint/.eslintcache "$GITHUB_WORKSPACE"
-
-      - name: Install dependencies
-        if: (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --prefer-offline --no-audit --no-fund
-
-      - name: Agent scope debt needs a recorded approval
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: node .github/scripts/agent-scope/baseline-approval.mjs
-
-      - name: Restore agent scope pip cache
-        id: agent-scope-pip-cache
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/agent-scope-pip-cache
-          key: agent-scope-pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/agent-scope/requirements.txt') }}
-
-      - name: Guard agent board scope
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        env:
-          PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
-          PIP_DISABLE_PIP_VERSION_CHECK: "1"
-          SEMGREP_SEND_METRICS: "off"
-          SEMGREP_ENABLE_VERSION_CHECK: "0"
-        run: |
-          set -euo pipefail
-          PY312=$(ls -d "$RUNNER_TOOL_CACHE"/Python/3.12.*/x64/bin/python3 2>/dev/null | sort -V | tail -1 || true)
-          PY312=${PY312:-python3}
-          "$PY312" -c 'import sys; assert sys.version_info[:2] == (3, 12), "requirements.txt is locked for Python 3.12, got " + sys.version'
-          "$PY312" -m venv "$RUNNER_TEMP/agent-scope-venv"
-          export PATH="$RUNNER_TEMP/agent-scope-venv/bin:$PATH"
-          python -m pip install --require-hashes -r .github/scripts/agent-scope/requirements.txt
-          python .github/scripts/agent-scope/run.py --self-test
-          python .github/scripts/agent-scope/run.py
-
-      - name: Save agent scope pip cache
-        if: github.event_name == 'push' && steps.agent-scope-pip-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/agent-scope-pip-cache
-          key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
-
-      - name: Save node_modules cache
-        # PRs restore the trusted production cache, but only production pushes save.
-        if: github.event_name == 'push' && steps.restore-node-modules.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: node_modules
-          key: ${{ steps.restore-node-modules.outputs.cache-primary-key }}
-
-      - name: Generate Prisma client
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: npx prisma generate
-
-      - name: Board filter and sort contracts
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: node --test tests/board-filters/*.test.cjs
-
-      - name: Restore TypeScript cache
-        id: restore-tsc-cache
-        # A stale tsbuildinfo is safe: tsc validates it against file hashes and
-        # falls back to a full check when they differ.
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .cache/tsc
-          key: tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-${{ github.sha }}
-          restore-keys: |
-            tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-
-
-      - name: Typecheck
-        # Next.js generates route-handler signature checks outside ordinary tsc.
-        # Generate them first so CI catches the same errors as the Vercel build.
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: npx next typegen && npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
-
-      - name: Save TypeScript cache
-        # PRs may restore the trusted production cache, but only production pushes save.
-        if: github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .cache/tsc
-          key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
-
-      - name: Lint
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
-
-      - name: Save ESLint cache
-        # PRs may restore the trusted base-branch cache, but only production pushes
-        # may refresh it. This prevents untrusted PR cache data from becoming a
-        # production input while still accelerating every subsequent PR.
-        # cache-hit is true only for an exact primary-key match. Restoring the
-        # previous production SHA through restore-keys returns false, so every new
-        # production commit saves a refreshed cache; only same-SHA reruns skip it.
-        if: github.event_name == 'push' && steps.restore-eslint-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .cache/eslint
-          key: ${{ steps.restore-eslint-cache.outputs.cache-primary-key }}
-
-      # Directory discovery in this check is broader than the PR selector's
-      # exact-path heuristic, so run it even when another suite owns the diff.
-      - name: Settings Ctrl+K coverage
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: node --test tests/settings-cmdk-coverage.test.cjs
-
-      # A PR that adds the offending test is exactly the PR the selector never
-      # routes here, so this gate reads the whole tests/ tree on every PR.
-      - name: Source-text regex gate
-        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
-        run: node --test tests/source-text-regex-lint.test.cjs
-
-      # Every PR body claims "npm test N passed" and nothing checked it, so a
-      # broken suite sat green on production for days (HTPR-5161).
-      # HT_REQUIRE_PG_TESTS turns the real-PostgreSQL suites' "docker missing"
-      # skip into a hard failure. Locally a developer without docker still gets a
-      # clean skip; here a skip would be the same false green that let PR #2789's
-      # task-write outage through (HTPR-5467).
-      # PR lane: run only the tests that reference something this PR touched.
-      # The full suite is the production lane's job (below), where a red run
-      # warns without changing the live site. Selection falls back to the whole
-      # suite whenever it cannot be confident (dependency/schema change, wide
-      # fan-out, nothing matched).
-      - name: Select tests for changed files
-        id: select
-        if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Run the selector from the BASE branch, not the PR workspace: a PR
-          # must not be able to edit the thing deciding which of its tests run.
-          # The selector still reads the PR's own tests (cwd is the workspace).
-          SEL="$RUNNER_TEMP/selector"
-          mkdir -p "$SEL/.github/scripts" "$SEL/scripts"
-          if git fetch --depth=1 --quiet origin "$GITHUB_BASE_REF" \
-            && git show "FETCH_HEAD:.github/scripts/select-tests.mjs" > "$SEL/.github/scripts/select-tests.mjs" \
-            && git show "FETCH_HEAD:scripts/test-inventory.mjs" > "$SEL/scripts/test-inventory.mjs"; then
-            SELECTED=$(node "$SEL/.github/scripts/select-tests.mjs" < "$RUNNER_TEMP/changed-files.txt")
-          else
-            # No trusted selector on the base branch yet: run everything.
-            SELECTED=ALL
-          fi
-          echo "$SELECTED"
-          printf '%s\n' "$SELECTED" > "$RUNNER_TEMP/selected-tests.txt"
-          if [ "$SELECTED" = "ALL" ]; then
-            echo "files=" >> "$GITHUB_OUTPUT"
-            echo "require_pg=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "files=$(echo "$SELECTED" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
-            if echo "$SELECTED" | grep -q -- '-postgres\.test\.cjs'; then
-              echo "require_pg=1" >> "$GITHUB_OUTPUT"
-            else
-              echo "require_pg=" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-
-      - name: Write test shards
-        id: shards
-        env:
-          BUILD_NEEDED: ${{ steps.scope.outputs.build_needed }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" != "push" ] && [ "$BUILD_NEEDED" != "true" ]; then
-            echo "run_tests=false" >> "$GITHUB_OUTPUT"
-            echo 'indexes=["0"]' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          OUT="$RUNNER_TEMP/ci-shards"
-          mkdir -p "$OUT"
-          if [ "$GITHUB_EVENT_NAME" = "push" ] || grep -qx ALL "$RUNNER_TEMP/selected-tests.txt"; then
-            node .github/scripts/shard-tests.mjs --discover --count "$CI_TEST_SHARDS" --out "$OUT"
-          elif ! grep -q '[^[:space:]]' "$RUNNER_TEMP/selected-tests.txt"; then
-            echo "selected test list is empty; refusing to skip the suite" >&2
-            exit 1
-          else
-            node .github/scripts/shard-tests.mjs --count "$CI_TEST_SHARDS" --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
-          fi
-          node .github/scripts/shard-tests.mjs --check --out "$OUT"
-          echo "run_tests=true" >> "$GITHUB_OUTPUT"
-          indexes=$(node -e 'const n=Number(process.argv[1]); if (!Number.isInteger(n)||n<1) process.exit(1); process.stdout.write(JSON.stringify([...Array(n).keys()].map(String)))' "$CI_TEST_SHARDS")
-          echo "indexes=${indexes}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload test shard lists
-        if: steps.shards.outputs.run_tests == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: ci-test-shards
-          path: ${{ runner.temp }}/ci-shards
-          retention-days: 7
-
-  ci-test:
-    name: test-shard
-    needs: ci-prepare
-    if: needs.ci-prepare.outputs.run_tests == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.ci-prepare.outputs.shard_indexes || '["0"]') }}
-    # Same read-only token as ci-prepare. That job already uploads artifacts
-    # without actions: write, and a write token would reach PR-controlled tests
-    # through the Docker login that follows.
-    permissions:
-      contents: read
-      packages: read
-    env:
-      HTPR_PG_IMAGE: ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ^24.22.1
-          check-latest: true
-
-      - name: Resolve dependency cache version
-        id: dependency-cache-version
-        run: |
-          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
-          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore node_modules cache
-        id: restore-node-modules
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
-
-      - name: Install dependencies
-        if: steps.restore-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --prefer-offline --no-audit --no-fund
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Download test shard lists
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
-        with:
-          name: ci-test-shards
-          path: ci-test-shards
-
-      - name: Decide shard postgres
-        id: pg
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -q -- '-postgres.test.cjs' "ci-test-shards/shard-${{ matrix.shard }}.txt"; then
-            echo "need=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "need=" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Authenticate CI image pulls
-        if: steps.pg.outputs.need == '1'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Pull PostgreSQL test image
-        if: steps.pg.outputs.need == '1'
-        run: docker pull "$HTPR_PG_IMAGE"
-
-      # Comparison tests `git show origin/production:<file>`. The old single
-      # job fetched the base ref while selecting tests; a fresh shard checkout
-      # does not, and fetch-depth 1 leaves that name missing.
-      - name: Fetch base branch for comparison tests
-        run: |
-          set -euo pipefail
-          ref="${GITHUB_BASE_REF:-production}"
-          git fetch --depth=1 origin "+refs/heads/${ref}:refs/remotes/origin/${ref}"
-
-      - name: Test shard
-        id: push-test
-        shell: bash
-        env:
-          SHARD: ${{ matrix.shard }}
-          HT_REQUIRE_PG_TESTS: ${{ github.event_name == 'push' && '1' || steps.pg.outputs.need }}
-          GITHUB_TOKEN: ""
-          GH_TOKEN: ""
-        run: |
-          set -euo pipefail
-          LIST="ci-test-shards/shard-${SHARD}.txt"
-          mkdir -p "$RUNNER_TEMP/ci-shard-upload"
-          cp "$LIST" "$RUNNER_TEMP/ci-shard-upload/shard-${SHARD}.txt"
-          mapfile -t FILES < "$LIST"
-          echo "shard ${SHARD} files=${#FILES[@]}"
-          if [ "${#FILES[@]}" -eq 0 ]; then
-            echo "shard ${SHARD} empty" | tee "$RUNNER_TEMP/ci-shard-upload/shard-${SHARD}.log"
-            exit 0
-          fi
-          npm test -- "${FILES[@]}" 2>&1 | tee "$RUNNER_TEMP/ci-shard-upload/shard-${SHARD}.log"
-
-      - name: Upload shard result
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: ci-test-shard-${{ matrix.shard }}
-          path: ${{ runner.temp }}/ci-shard-upload
-          if-no-files-found: ignore
-          retention-days: 7
-
-  ci-tests:
-    name: ci-tests
-    needs: [ci-prepare, ci-test]
-    if: always() && (github.event_name == 'push' || github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      test_failed: ${{ steps.test-outcome.outputs.failed }}
-      failed_tests: ${{ steps.test-outcome.outputs.failed_tests }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Download planned shard lists
-        if: always() && needs.ci-prepare.outputs.run_tests == 'true'
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
-        with:
-          name: ci-test-shards
-          path: ci-test-shards
-
-      - name: Download shard results
-        if: always() && needs.ci-prepare.outputs.run_tests == 'true'
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
-        with:
-          pattern: ci-test-shard-*
-          path: ci-shard-results
-
-      - name: Prove every test file ran once
-        id: prove
-        if: always() && needs.ci-prepare.outputs.run_tests == 'true'
-        run: node .github/scripts/shard-tests.mjs --prove --out ci-test-shards --results ci-shard-results
-
-      - name: Combine shard logs
-        if: always() && needs.ci-prepare.outputs.run_tests == 'true'
-        shell: bash
-        run: |
-          set +e
-          : > "$RUNNER_TEMP/push-test.log"
-          find ci-shard-results -name 'shard-*.log' -print | sort | while read -r log; do
-            cat "$log" >> "$RUNNER_TEMP/push-test.log"
-          done
-
-      - name: Record push test outcome
-        id: test-outcome
-        if: always() && github.event_name == 'push'
-        shell: bash
-        run: |
-          echo "failed=${{ needs.ci-test.result == 'failure' }}" >> "$GITHUB_OUTPUT"
-          failures=""
-          if [ -f "$RUNNER_TEMP/push-test.log" ]; then
-            failures=$(sed -nE 's/^[[:space:]]*not ok [0-9]+ - (.*)$/\1/p; s/^[[:space:]]*✖ (.*) \([0-9.]+ms\)$/\1/p' "$RUNNER_TEMP/push-test.log" \
-              | awk 'BEGIN { ORS="" } NR <= 3 { if (NR > 1) printf "; "; printf "%s", $0 }')
-          fi
-          echo "failed_tests=${failures:-test command failed before naming a test}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish ci-tests result
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "${{ needs.ci-prepare.result }}" = "success"
-          if [ "${{ needs.ci-prepare.outputs.run_tests }}" = "true" ]; then
-            test "${{ needs.ci-test.result }}" = "success"
-            test "${{ steps.prove.outcome }}" = "success"
-          else
-            test "${{ needs.ci-test.result }}" = "skipped"
-          fi
-
   browser-smoke:
     name: browser-smoke
     # HR-04 (Valentin, 2026-09-29): no author is exempted and no label is
@@ -540,6 +20,9 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      PROOF_CASE: ${{ contains(github.event.head_commit.message, '[missing-row]') && 'missing-row' || 'green' }}
+      PROOF_NETWORK_DIR: ${{ runner.temp }}/proof-network
     outputs:
       contract: ${{ steps.smoke.outputs.contract }}
       docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
@@ -632,6 +115,41 @@ jobs:
           npx playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y strace
+      - name: Verify observer redaction
+        run: node --test tests/yper4-826-network-proof.test.cjs
+      - name: Capture source and apply requested negative mutation
+        run: |
+          node <<'JS'
+          const fs=require('node:fs'), cp=require('node:child_process'), crypto=require('node:crypto');
+          const source='5429c3dce63a454385da371a9d898fb2d5ca06b4';
+          const seed='scripts/seed-browser-smoke.mjs';
+          const needle='    await prisma.user_Activity.create({ data: { userId: sidebarUser.id, totalTeamsOwned: 0, lastActiveAt: new Date() } });\n';
+          const before=fs.readFileSync(seed,'utf8');
+          if(before.split(needle).length!==2)throw Error('Expected one original activity-row seed');
+          const spec='e2e/smoke/agent-sidebar-chats.spec.ts';
+          const lines=fs.readFileSync(spec,'utf8').split('\n');
+          const assertion=lines.findIndex(line=>line.includes("expect((await activity).status(), 'sidebar board startup records user activity').toBe(200)"));
+          if(assertion<0)throw Error('Original browser200 assertion missing');
+          fs.mkdirSync(process.env.PROOF_NETWORK_DIR,{recursive:true});
+          const appDiff=cp.execFileSync('git',['diff',source,'HEAD','--','src','prisma','package.json','package-lock.json'],{encoding:'utf8'});
+          if(appDiff.trim())throw Error('Proof must not change product, schema, dependencies or flags');
+          if(process.env.PROOF_CASE==='missing-row')fs.writeFileSync(seed,before.replace(needle,''));
+          const after=fs.readFileSync(seed,'utf8');
+          const manifest={source,head:cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),case:process.env.PROOF_CASE,assertion:{file:spec,line:assertion+1,text:lines[assertion].trim()},seedRemoved:before!==after,removedLines:before!==after?1:0,productDiffEmpty:true,budgetMinutes:25,seedBeforeSha256:crypto.createHash('sha256').update(before).digest('hex'),seedAfterSha256:crypto.createHash('sha256').update(after).digest('hex')};
+          fs.writeFileSync(process.env.PROOF_NETWORK_DIR+'/source.json',JSON.stringify(manifest,null,2));
+          fs.writeFileSync(process.env.PROOF_NETWORK_DIR+'/seed-mutation.patch',cp.execFileSync('git',['diff','--',seed],{encoding:'utf8'}));
+          console.log('[proof source]',JSON.stringify(manifest));
+          JS
+      - name: Observe browser metadata without authentication material
+        run: |
+          node <<'JS'
+          const fs=require('node:fs');
+          for(const file of fs.readdirSync('e2e/smoke').filter(file=>file.endsWith('.spec.ts'))){
+            const target='e2e/smoke/'+file;
+            const before=fs.readFileSync(target,'utf8');
+            fs.writeFileSync(target,before.replaceAll("from '@playwright/test'", "from './proof-network'"));
+          }
+          JS
       - name: Prepare disposable local credentials
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash
@@ -744,6 +262,12 @@ jobs:
           curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
           curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"
           node scripts/mcp-cli-api-contract.mjs
+          if [ "$PROOF_CASE" = "missing-row" ]; then
+            BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --all-flags-on
+            npx playwright test -c playwright.config.smoke.ts e2e/smoke/agent-sidebar-chats.spec.ts --project Desktop --grep 'conversation rows contain two-line titles'
+            echo '::error::Missing-row mutation unexpectedly passed the unchanged browser200 assertion'
+            exit 1
+          fi
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
           # Keep the instant-open regression covered even while its live mode is OFF.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --instant-open-control
@@ -810,118 +334,11 @@ jobs:
           printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
 
 
-  mcp-cli-api-contract:
-    name: mcp-cli-api-contract
-    needs: browser-smoke
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions: {}
-    steps:
-      - name: Require a successful producer and explicit contract pass
-        env:
-          SMOKE_RESULT: ${{ needs.browser-smoke.result }}
-          CONTRACT_RESULT: ${{ needs.browser-smoke.outputs.contract }}
-          DOCS_ONLY: ${{ needs.browser-smoke.outputs.docs_only }}
-        run: |
-          test "$SMOKE_RESULT" = success && { test "$CONTRACT_RESULT" = passed || test "${DOCS_ONLY:-false}" = true; }
-
-  production-test-warning:
-    name: production-test-warning
-    # Unit tests report code correctness, not whether the live deployment is
-    # unhealthy. Only the production-health workflow may change the live site.
-    needs: ci-tests
-    if: always() && github.event_name == 'push' && needs.ci-tests.outputs.test_failed == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Upload sanitized outside-proof metadata
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ^24.22.1
-          check-latest: true
-
-      - name: Warn about failed production tests
-        shell: bash
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          FAILED_TESTS: ${{ needs.ci-tests.outputs.failed_tests }}
-          GH_TOKEN: ${{ github.token }}
-          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
-          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          HISTORY=$(node .github/scripts/should-auto-revert.mjs "$GITHUB_REPOSITORY" "$BEFORE_SHA" 2>/dev/null) || HISTORY='{}'
-          HISTORY_REASON=$(printf '%s' "$HISTORY" | jq -r '.reason // "previous production test result unavailable"' 2>/dev/null || true)
-          echo "::notice::Previous run: ${HISTORY_REASON:-previous production test result unavailable}"
-
-          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          FAILED_TESTS="${FAILED_TESTS:-test command failed before naming a test}"
-          MESSAGE=$(printf 'What failed: %s\nLive site changed: no\nNext: production stays live while the test failure is investigated\nRun: %s' "$FAILED_TESTS" "$RUN_URL")
-          node .github/scripts/production-alert.mjs setup production-tests "$MESSAGE"
-          echo "::warning::$FAILED_TESTS failed. Production was not reverted or rolled back."
-
-  production-cli-parity:
-    name: production-cli-parity
-    # Candidate PRs are verified by parity-contract-trusted using the protected
-    # base verifier. This job verifies the merged inventory against production.
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    env:
-      TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
-      TRUSTED_CLI_VERSION: "2.0.10"
-      TRUSTED_CLI_BINARY_VERSION: "0.2.15"
-      TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ^24.22.1
-          check-latest: true
-
-      - name: Verify production CLI parity inventory
-        run: |
-          CONTRACT_PACKAGE=$(node -p "require('./config/parity/contract.json').cliPackage.name")
-          CONTRACT_VERSION=$(node -p "require('./config/parity/contract.json').cliPackage.version")
-          if [ "$CONTRACT_PACKAGE" != "$TRUSTED_CLI_PACKAGE" ]; then
-            echo "Parity contract selected untrusted package $CONTRACT_PACKAGE"
-            exit 1
-          fi
-          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
-            echo "Parity contract selected untrusted version $CONTRACT_VERSION"
-            exit 1
-          fi
-          LATEST_VERSION=$(npm view "$TRUSTED_CLI_PACKAGE" version)
-          if [ "$LATEST_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
-            echo "Parity contract pins $CONTRACT_VERSION but production is $LATEST_VERSION"
-            exit 1
-          fi
-          PARITY_TMP=$(mktemp -d "$RUNNER_TEMP/hypertask-parity.XXXXXX")
-          cp config/parity/runner/package.json config/parity/runner/package-lock.json "$PARITY_TMP/"
-          npm ci --prefix "$PARITY_TMP" --ignore-scripts --no-audit --no-fund
-          CLI_BINARY="$PARITY_TMP/hypertask-native"
-          curl --fail --location --silent --show-error \
-            "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" \
-            --output "$CLI_BINARY"
-          if ! echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then
-            exit 1
-          fi
-          chmod 755 "$CLI_BINARY"
-          env -u GITHUB_TOKEN -u GH_TOKEN "$CLI_BINARY" capabilities --json > "$PARITY_TMP/capabilities.json"
-          node scripts/parity-contract.mjs \
-            --check \
-            --cli-capabilities "$PARITY_TMP/capabilities.json" \
-            --typescript "$PARITY_TMP/node_modules/typescript/lib/typescript.js"
+          name: outside-proof-network
+          path: ${{ runner.temp }}/proof-network/
+          if-no-files-found: error
+          retention-days: 7
