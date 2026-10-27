@@ -161,6 +161,7 @@ jobs:
             echo "Cold-board fixtures unchanged; no stress run needed."
             exit 0
           fi
+          npm run flags:generate
           for iteration in {1..50}; do
             echo "Cold-board fixture stress $iteration/50"
             node --test --test-concurrency=1 tests/htpr-7305-board-from-text.test.cjs tests/htpr-7652-ctrlj-enter-queue.test.cjs tests/search-board-loading.test.cjs
