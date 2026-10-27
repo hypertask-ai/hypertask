@@ -97,3 +97,19 @@ test('claim next: losing a claim race tries the next candidate', () => {
   assert.equal(pick('codex resume mine', run, ticket => { claimed.push(ticket); return ticket === 'HTPR-1' ? 3 : 0; }), 'HTPR-2');
   assert.deepEqual(claimed, ['HTPR-1', 'HTPR-2']);
 });
+
+test('claim next: creator agents do not hold an otherwise free ticket', t => {
+  const f = fixture(t, [{ ...task('HTPR-1', 15), agent: { id: 'creator' } }]);
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), 'HTPR-1');
+});
+test('claim next: answered questions do not strand tickets returned to ready columns', t => {
+  const f = fixture(t, [task('HTPR-1', 15)], { 'HTPR-1': [
+    { id: 1, createdAt: '2026-10-25T17:00:00Z', text: 'Question: Proceed?', agent: { id: 'writer' } },
+    { id: 2, createdAt: '2026-10-25T18:00:00Z', text: 'Yes.', userId: 6 },
+  ] });
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), 'HTPR-1');
+});

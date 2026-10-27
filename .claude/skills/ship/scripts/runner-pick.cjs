@@ -2,12 +2,12 @@
 'use strict';
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { command, pages, logs, liveClaims, text } = require('./release-incidents.cjs');
+const { command, pages, logs, liveClaims } = require('./release-incidents.cjs');
 const ready = new Set(['Bugs', 'Todo', 'Improvements', 'Backlog']);
 const priorities = ['Urgent', 'High', 'Medium', 'Low'];
 function candidates(tasks) {
   return tasks.filter(task => task.status !== 'Deleted' && task.status !== 'Archive' && ready.has(task.section) &&
-    !task.agent?.id && !(task.assignees || []).some(row => row.agent?.id || /abdul/i.test(row.displayName || '')))
+    !(task.assignees || []).some(row => row.agent?.id || /abdul/i.test(row.displayName || '')))
     .sort((a, b) => (priorities.indexOf(a.priority) + 1 || 5) - (priorities.indexOf(b.priority) + 1 || 5));
 }
 function pick(resume, run = command, claim = (ticket) => spawnSync(path.join(__dirname, 'ship-claim'), [ticket, resume],
@@ -30,7 +30,7 @@ function pick(resume, run = command, claim = (ticket) => spawnSync(path.join(__d
       if (!candidates(fresh.tasks).length || fresh.tasks[0].projectId !== Number(project) ||
         (filter.length && fresh.tasks[0].priority !== 'Urgent')) continue;
       const history = logs(task.ticketNumber, run).filter(row => !/^(Product Bot|Dev \d|Feature Dev|QA \d|Supervisor|worker|drain)\b/i.test(row.agent?.displayName || ''));
-      if (liveClaims(history, { reference: 0 }).length || history.some(row => /^Question:/i.test(text(row)))) continue;
+      if (liveClaims(history, { reference: 0 }).length) continue;
       const status = claim(task.ticketNumber);
       if (status === 3) continue;
       if (status !== 0) throw new Error(`Claim failed for ${task.ticketNumber}`);

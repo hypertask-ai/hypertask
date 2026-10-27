@@ -482,8 +482,9 @@ reinstall from production instead of editing the installed file.
 The outer loop calls `ship-claim next` before launching hax. Selection uses the
 board's actual priority value: Urgent Infra first, then product, then remaining
 Infra. Only ready columns (Bugs, Todo, Improvements, Backlog) are eligible.
-Assigned agents, Abdul, unreleased claims (including stale claims), and pending
-questions are skipped. Candidate state is read again before claiming. The normal
+Assigned agents, Abdul, and unreleased claims (including stale claims)
+are skipped. Questions stay protected by their review column; historical
+answered questions do not make ready work permanently ineligible. Candidate state is read again before claiming. The normal
 claim race and shared-incident guard still decide ownership; a lost race tries
 the next candidate. Stale claims remain held for the board-check decision.
 

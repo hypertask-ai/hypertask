@@ -59,8 +59,8 @@ function plan(commits, required, now = Date.now()) {
   if (!commits.length || commits.some(commit => !SHA.test(commit.sha))) throw new Error('Invalid production snapshot');
   const failures = [], recovered = [], pending = [];
   for (const name of required) {
-    const latest = commits.flatMap(commit => commit.contexts.filter(row => row.name === name && Date.parse(row.at) <= now))[0];
-    if (latest && !['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(latest.state)) pending.push(name);
+    const latest = commits[0].contexts.find(row => row.name === name && Date.parse(row.at) <= now);
+    if (!latest || !['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(latest.state)) pending.push(name);
     const observations = commits.flatMap(commit => {
       const check = commit.contexts.find(row => row.name === name && Date.parse(row.at) <= now &&
         ['SUCCESS', 'FAILURE', 'ERROR', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(row.state));

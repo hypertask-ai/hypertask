@@ -22,7 +22,8 @@ function liveClaims(rows, { reference = Date.now(), idle, assigned = [], mine = 
       (!session(text(next)) || session(text(next)) === session(text(row)))) &&
     (!assigned.length || assigned.includes(author(row).id) || Date.parse(row.createdAt) > mine - 300000) &&
     (Date.parse(row.createdAt) >= reference - 21600000 || (idle ? !idle.includes(author(row).id) :
-      sorted.some(next => author(next).id === author(row).id && Date.parse(next.createdAt) >= reference - 21600000))));
+      sorted.some(next => author(next).id === author(row).id && !!session(text(row)) &&
+        session(text(next)) === session(text(row)) && Date.parse(next.createdAt) >= reference - 21600000))));
 }
 function owner(rows, now = Date.now()) {
   const row = liveClaims(rows, { reference: now })[0];

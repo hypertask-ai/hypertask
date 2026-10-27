@@ -84,6 +84,8 @@ test('stale, released and absent claims never grant the assigned agent an owner 
   assert.equal(allowed([incident], {}, 'Runner 8', 'YPER4-999', now), true);
   assert.equal(allowed([{ ...incident, section: 'Done' }], {}, 'Runner 8', 'HTPR-1', now), true);
   const activity = { id: 'activity', createdAt: '2026-10-26T17:54:00Z', agentId: 'runner8', agentName: 'Runner 8', text: 'Still working' };
+  assert.equal(owner([claim('runner8', 'Runner 8', '2026-10-25T17:00:00Z'), activity], now), null);
+  activity.text = 'Still working. tmux attach -t runner8';
   assert.equal(owner([claim('runner8', 'Runner 8', '2026-10-25T17:00:00Z'), activity], now).id, 'runner8');
 });
 test('guard reads real CLI boundaries and refuses before any write, owner and existing work still allowed', () => {
@@ -287,4 +289,27 @@ test('queued check without startedAt remains unresolved instead of recovering fr
   const p = plan(snapshot(data), ['browser-smoke'], now);
   assert.deepEqual(p.pending, ['browser-smoke']);
   assert.deepEqual(p.recovered, []);
+});
+
+test('another session cannot revive an expired claim or inherit its incident exception', () => {
+  const rows = [claim('same', 'Runner 8', '2026-10-25T17:00:00Z', 'Claimed. codex resume expired'),
+    claim('same', 'Runner 8', '2026-10-26T17:50:00Z', 'Claimed. codex resume current')];
+  assert.deepEqual(owner(rows, now), { id: 'same', name: 'Runner 8', session: 'resume:current' });
+  assert.equal(allowed([incident], { 'YPER4-999': rows }, 'Runner 8', 'HTPR-1', now, 'codex resume expired'), false);
+  assert.equal(allowed([incident], { 'YPER4-999': rows }, 'Runner 8', 'HTPR-1', now, 'codex resume current'), true);
+});
+test('missing current-head required checks cannot publish recovery from a green ancestor', async t => {
+  const dir = tmp(t), api = fake(); await runTick(dir, api);
+  const commits = recorded();
+  commits[0].contexts = [];
+  commits[1].contexts = [{ name: 'browser-smoke', state: 'SUCCESS', at: '2026-10-26T17:54:00Z' }];
+  const next = fake(commits);
+  const result = await runTick(dir, next);
+  assert.equal(result.action, 'pending');
+  assert.deepEqual(plan(commits, ['browser-smoke'], now).pending, ['browser-smoke']);
+  assert.deepEqual(plan(commits, ['browser-smoke'], now).recovered, []);
+  assert.equal(next.writes.filter(args => args[0] === 'activity').length, 0);
+  commits[0].contexts = [{ name: 'browser-smoke', state: 'SUCCESS', at: '2026-10-26T17:54:00Z' }];
+  await runTick(dir, next);
+  assert.equal(next.writes.filter(args => args[0] === 'activity').length, 1);
 });
