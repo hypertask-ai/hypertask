@@ -4,8 +4,6 @@ import { ITask } from "@/models/model";
 import type { IAllCommands } from "@/models/model";
 import { shouldFlattenSortedRows, sortedTaskRowSectionKey } from "./tableSortFlatten";
 import { tableSectionKey } from "./tableCreateTask";
-import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG } from "@/lib/flags/keys";
 import { visibleTasksFromRows } from "@/lib/myTasksBulkSelection";
 import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
@@ -24,7 +22,6 @@ export function useTableRows(context: Context) {
   } = context;
 
 
-  const crossBoardPrioritySortEnabled = useFlag(MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG);
   const isPrioritySort = sortState[0]?.column === "priority";
   const savedViewPrioritySort = myTasksSort?.field === "priority";
 
@@ -33,8 +30,7 @@ export function useTableRows(context: Context) {
       const flattenSort = shouldFlattenSortedRows(
         Boolean(_currentProject),
         true,
-        isPrioritySort,
-        crossBoardPrioritySortEnabled
+        isPrioritySort
       ) || savedViewPrioritySort;
       const comparators = sortState.map(({ column, direction }, index) =>
         getSortComparator(
@@ -97,7 +93,6 @@ export function useTableRows(context: Context) {
     timeNow,
     timeTotals,
     isPrioritySort,
-    crossBoardPrioritySortEnabled,
     savedViewPrioritySort,
     snapshot,
   ]);
@@ -186,7 +181,7 @@ export function useTableRows(context: Context) {
     setExpanded((prev) => new Set(prev).add(sid));
   }, []);
   return {
-  crossBoardPrioritySortEnabled, isPrioritySort, savedViewPrioritySort, rows, buildCommandContext,
+  isPrioritySort, savedViewPrioritySort, rows, buildCommandContext,
   focusRowElement, focusTo, expandSection,
   };
 }

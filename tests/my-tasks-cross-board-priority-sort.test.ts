@@ -1,9 +1,3 @@
-// HTPR-6215. Sorting My Tasks by priority only reordered tasks within each
-// board's group; the boards themselves never interleaved (HTPR-4887 kept that
-// grouping on purpose, because most sort columns aren't comparable across
-// boards). Priority is the exception: it's a fixed level already comparable
-// across every board, so it flattens the rows once the flag is on, but only
-// for that one sort column.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -13,31 +7,25 @@ import {
 } from "../src/components/PageComponents/Kanban/TableView/tableSortFlatten";
 import { sortByPriorityAndRankingOrder } from "../src/utils/helperFunctions/helperFunctions";
 
-test("no active sort never flattens, on a board or on My Tasks", () => {
-  assert.equal(shouldFlattenSortedRows(true, false, false, true), false);
-  assert.equal(shouldFlattenSortedRows(false, false, true, true), false);
+for (const hasCurrentProject of [true, false]) {
+  for (const isPrioritySort of [true, false]) {
+    test(`no active sort keeps grouping: board=${hasCurrentProject}, priority=${isPrioritySort}`, () => {
+      assert.equal(shouldFlattenSortedRows(hasCurrentProject, false, isPrioritySort), false);
+    });
+  }
+}
+
+test("a real board flattens every active sort", () => {
+  assert.equal(shouldFlattenSortedRows(true, true, false), true);
+  assert.equal(shouldFlattenSortedRows(true, true, true), true);
 });
 
-test("a real board always flattens an active sort, flag or no flag", () => {
-  assert.equal(shouldFlattenSortedRows(true, true, false, false), true);
-  assert.equal(shouldFlattenSortedRows(true, true, false, true), true);
+test("My Tasks keeps non-priority sorts grouped by board", () => {
+  assert.equal(shouldFlattenSortedRows(false, true, false), false);
 });
 
-test("My Tasks stays grouped by board while the flag is off (HTPR-4887)", () => {
-  assert.equal(shouldFlattenSortedRows(false, true, true, false), false);
-});
-
-test("My Tasks stays grouped when sorted by a non-priority column, even with the flag on", () => {
-  assert.equal(shouldFlattenSortedRows(false, true, false, true), false);
-});
-
-test("My Tasks flattens across boards when sorted by priority with the flag on", () => {
-  assert.equal(shouldFlattenSortedRows(false, true, true, true), true);
-});
-
-test("a saved My Tasks priority sort flattens without the older header-sort flag", () => {
-  assert.equal(shouldFlattenSortedRows(false, true, true, false, true), true);
-  assert.equal(shouldFlattenSortedRows(false, true, false, false, true), false);
+test("My Tasks permanently flattens priority sorts across boards", () => {
+  assert.equal(shouldFlattenSortedRows(false, true, true), true);
 });
 
 test("flat rows keep section ids on boards and board ids on My Tasks", () => {
