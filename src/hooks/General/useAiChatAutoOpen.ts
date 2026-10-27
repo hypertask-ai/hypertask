@@ -37,6 +37,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const previousPage = useRef<string | null>(null);
   const visitedNewTicket = useRef(false);
   const autoOpenedPage = useRef<string | null>(null);
+  const fullScreenReturnPage = useRef<string | null>(null);
   const manualOpen = !embeddedTicketPath && (search?.get("newTaskAi") === "1" || search?.get("welcome_ai") === "1" || search?.has("agentSidebar") === true);
   const allowed = page !== null && (values[page] || (pinned && !mobile));
 
@@ -45,7 +46,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       previousPage.current = null;
       return;
     }
-    const returningFromFullScreen = previousPage.current?.startsWith(`${user.id}:/chat`);
+    const returningFromFullScreen = (previousPage.current ?? lastPage)?.startsWith(`${user.id}:/chat`);
     const changed = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);
     if (lastPage !== pageKey) setLastPage(pageKey);
     previousPage.current = pageKey;
@@ -54,8 +55,12 @@ export function useAiChatAutoOpen(mobile: boolean) {
       visitedNewTicket.current = false;
       setNewTicketPath(null);
     }
-    if (returningFromFullScreen) autoOpenedPage.current = null;
-    if (!page || manualOpen || returningFromFullScreen) return;
+    if (fullScreenReturnPage.current !== pageKey) fullScreenReturnPage.current = null;
+    if (returningFromFullScreen) {
+      autoOpenedPage.current = null;
+      fullScreenReturnPage.current = pageKey;
+    }
+    if (!page || manualOpen || fullScreenReturnPage.current === pageKey) return;
     if (changed) setSuppressed(false);
     if ((suppressed && !changed) || !allowed) {
       const savedOffAfterAutoOpen = !allowed && autoOpenedPage.current !== null && !pageChangedSinceLastVisit(autoOpenedPage.current, null, pageKey, stableDefaultView);

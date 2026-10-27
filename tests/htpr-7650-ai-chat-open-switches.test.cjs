@@ -218,6 +218,22 @@ test("fullscreen return replaces the old automatic opening with an explicit open
   h.navigate("/project?id=15");
   assert.equal(h.values.showAIChatInterfaceAtom, true);
 });
+test("fullscreen return survives a remounted policy and late saved preferences", () => {
+  for (const phone of [false, true]) {
+    let values = { ...allOff, aiChatOpenBoards: true };
+    const h = pageHarness(new Proxy({}, { get: (_target, key) => values[key] }), {
+      state: { aiChatAutoOpenPageAtom: "7:/chat::", showAIChatInterfaceAtom: true },
+    });
+    h.navigate("/project?id=15", phone);
+    values = allOff;
+    h.render();
+    assert.equal(h.values.showAIChatInterfaceAtom, true);
+    h.close();
+    assert.equal(h.values.showAIChatInterfaceAtom, false);
+    h.navigate("/project?id=16", phone);
+    assert.equal(h.values.showAIChatInterfaceAtom, false);
+  }
+});
 test("board switch also covers demo, My Tasks, inbox and calendar; unrelated pages do not auto-open", () => {
   for (const url of ["/demo", "/my-tasks", "/inbox", "/calendar", "/settings"]) {
     const h = pageHarness({ ...allOff, aiChatOpenBoards: true });
