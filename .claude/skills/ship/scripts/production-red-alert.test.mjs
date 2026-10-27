@@ -164,6 +164,19 @@ test('five-minute timer, explicit named identity, bounded service', () => {
   assert.match(u.service, /TimeoutStartSec=240/); assert.match(u.service, /SHIP_SESSION_NAME=RUNNER 16/);
   assert.throws(() => units('/tmp/lib', ''), /Dedicated agent/);
 });
+test('bounded-history rollover retains the open incident; a red rerun after green creates a new incident', async t => {
+  const dir = tmp(t), api = fake(); await runTick(dir, api);
+  const truncated = fake(recorded().slice(0, 2));
+  await runTick(dir, truncated, { now: now + 300000 });
+  assert.equal(truncated.writes.filter(args => args[1] === 'create').length, 0);
+  const green = recorded(); green[0].contexts = [{ name: 'browser-smoke', state: 'SUCCESS', at: '2026-10-26T18:00:00Z' }];
+  await runTick(dir, fake(green), { now: now + 600000 });
+  const rerun = recorded(); rerun[1].contexts.find(row => row.name === 'browser-smoke').at = '2026-10-26T18:10:00Z';
+  const next = fake(rerun); await runTick(dir, next, { now: now + 1200000 });
+  assert.equal(next.writes.filter(args => args[1] === 'create').length, 1);
+  assert.equal(next.proposals.length, 1);
+});
+
 test('real Git publication reverts only culprit, preserves later commits, deduplicates branch and never moves production', t => {
   const root = tmp(t), remote = path.join(root, 'remote.git'), checkout = path.join(root, 'checkout');
   const run = (bin, args, options = {}) => execFileSync(bin, args, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], ...options });

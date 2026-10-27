@@ -177,9 +177,14 @@ async function tick({ dir = STATE, api = live(), now = Date.now(), required = re
     const persist = () => save(dir, state);
     const open = api.open();
     for (const failure of p.failures) {
-      let entry = state.incidents[failure.key];
+      let key = failure.key;
+      if (state.incidents[key]?.closed) key += `:${failure.first.check.at}`;
+      let entry = state.incidents[key];
+      if (!entry && !failure.green) {
+        entry = Object.values(state.incidents).find(value => !value.closed && value.checks.includes(failure.name));
+      }
       if (!entry) {
-        entry = state.incidents[failure.key] = { marker: marker(failure.key), checks: [failure.name], head: p.head };
+        entry = state.incidents[key] = { marker: marker(key), checks: [failure.name], head: p.head };
         const matched = open.find(task => task.description?.includes(entry.marker));
         if (matched) entry.ticket = matched.ticketNumber;
         persist();
