@@ -75,6 +75,9 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
       const script = step.with.script.replace(/^.*const \{ retryGithubRequest \} = await import.*\n/m, '');
       await new AsyncFunction('github', 'context', 'core', 'require', 'retryGithubRequest', script)(
         github, context, core, specifier => {
+          if (specifier.endsWith('/ci-runner-policy.cjs')) return {
+            checkPullRequest: async ({ pr: candidate }) => assert.deepEqual(candidate, results.metadata.outputs.pr ? JSON.parse(results.metadata.outputs.pr) : pr),
+          };
           const impl = require(resolve(specifier));
           return args => impl({ ...args, fetchImpl: async () => ({
             ok: true, json: async () => ({ success: true, tasks: [{
@@ -138,11 +141,11 @@ test('ten workflow push replays recover read and status quota refusals with fres
   }
 });
 
-test('combined guard cannot pass missing, failed or unevaluated outside/title results', async () => {
+test('combined guard cannot pass missing, failed or unevaluated outside/title/runner-policy results', async () => {
   const old = process.env.HYPERTASK_MCP_TOKEN;
   process.env.HYPERTASK_MCP_TOKEN = 'isolated-fixture';
   try {
-    for (const id of ['outside', 'title']) {
+    for (const id of ['outside', 'title', 'runner-policy']) {
       for (const outcome of ['failure', 'skipped', 'cancelled']) {
         const result = await run({ outcomes: { [id]: outcome } });
         assert.equal(result.posts.at(-1).state, 'failure');
