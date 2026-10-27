@@ -103,6 +103,18 @@ test('removing the final row and repeating unstar is a no-op', async () => {
   });
 });
 
+test('a selection still within the refreshed list does not jump to the first row', async () => {
+  await withStarred(async ({ render, press, calls, errors, selected }) => {
+    await render([row(1), row(2), row(3)]);
+    await press(keyCodes.J);
+    await render([row(4), row(5)]);
+    assert.equal(selected(), 'Task 5');
+    await press(keyCodes.S, { altKey: true });
+    assert.deepEqual(errors, []);
+    assert.deepEqual(calls, [['star', 5, 7049, true], ['remove', 5, 'Task']]);
+  });
+});
+
 test('the remaining selected row still opens through the document shortcut', async () => {
   await withStarred(async ({ render, press, calls, errors }) => {
     await render([row(1), row(2)]);
