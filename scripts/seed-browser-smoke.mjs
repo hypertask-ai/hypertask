@@ -549,6 +549,7 @@ try {
   if (allFlagsOn) {
     const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
     modes = Object.fromEntries(FEATURE_FLAG_KEYS.map(key => [key, "EVERYONE"]));
+    modes["htpr-8013-sidebar-width"] = "OFF";
   } else if (liveLikeControl) {
     const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
     // Match the CI plain-user layout even when the local fixture is QA user 985.
