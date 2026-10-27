@@ -40,4 +40,4 @@ List: https://hypertask.app/wireframes. A static image may still go on the ticke
 
 Example: HTPR-6861, https://app.hypertask.ai/page/cmus7aedh000006qezwr17po4
 
-For a clickable multi-state flow, `prototype` has the deeper method; publish its clickable result on hypertask.app and keep a ticket page for static images.
+For new design work, follow the shared `figma-design` skill in `~/.agents/skills/figma-design/SKILL.md`. Work in Yeo UX (or the client’s own Figma team), and attach the Figma frame link and keyframe image to the same ticket comment. This replaces the older HTML prototype flow (Valentin, 2026-10-27).

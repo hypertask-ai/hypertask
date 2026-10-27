@@ -41,7 +41,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | verify-visual | Before merging a UI PR: did it move a main screen? Read the GitHub Visual Regression result and diff PNGs; no heavy VPS runs | .claude/skills/verify-visual/SKILL.md |
 | verify-qa | After deploy | .claude/skills/verify-qa/SKILL.md |
 
-`prototype` is the `/prototype` slash command, not a `/ship` step. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
+Design work uses the shared `figma-design` skill in `~/.agents/skills/figma-design/SKILL.md`. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
 
 `wireframe` is required before new or changed visible UI code, except a `[BUGFIX]` restoring intended behaviour: build options from the live app (Ctrl+K for menus, no invented UI), publish a clickable link, then move to **UX Sign-off** (board 15 column 22502). The last comment has the wireframe link, `New elements: <ComponentName>, ...` (or `New elements: none`), and one yes/no `Question:` @mentioning Valentin. Wait for his yes before code; every new component file still needs his yes naming it, including in a `[BUGFIX]`. The `ux-signoff` check enforces this (Valentin, 2026-10-10).
 

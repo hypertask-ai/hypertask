@@ -118,7 +118,6 @@ Found and intentionally unchanged:
 | Site | Why left |
 | --- | --- |
 | `.claude/skills/wireframe/scripts/wireframe:59`, `:64`, `:128` | Captures a PNG, optionally uses cached npx Playwright, and copies an HTML base kit; no app build or install into evidence. |
-| `.agents/skills/prototype/SKILL.md:45` | Self-contained HTML/CSS/JS prototype, not an app build. |
 | `scripts/speed/measure.mjs:1`, `scripts/speed/README.md:9` | Live measurement using existing dependencies/browser, not app builds. Development setup instructions do not target evidence. |
 | `scripts/speed/fetch-github-runs.mjs:22`, `:57` | Downloads/decrypts small results in `mkdtemp`, removes them in `finally`; no app build. |
 | `.claude/skills/speed-analyst/PLAYBOOK.md:73`, `:99`, `:252`, `:367`, `:401`, `:481` | Historical premerge/live measurement records and small probe/JSON evidence; not executable build instructions. |
