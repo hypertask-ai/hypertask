@@ -1,7 +1,7 @@
-import fetchUrls from '@/utils/controllers/urls/fetchUrls';
+import fetchUrls, { resolveTicketUrls } from '@/utils/controllers/urls/fetchUrls';
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { HTPR_7050_CTRL_O_LINKS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7050_CTRL_O_LINKS_FLAG, HTPR_8096_CTRL_O_TICKET_TITLES_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 
@@ -23,7 +23,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const includeSavedSources = await isFeatureEnabled(HTPR_7050_CTRL_O_LINKS_FLAG, session.userId);
             const response = await fetchUrls(taskId, commentId as string, includeSavedSources);
          
-            return res.status(response.status).json(response.json);
+            const resolveTitles = await isFeatureEnabled(HTPR_8096_CTRL_O_TICKET_TITLES_FLAG, session.userId);
+            const urls = resolveTitles && response.status === 200 && Array.isArray(response.json)
+                ? await resolveTicketUrls(response.json, session.userId)
+                : response.json;
+            return res.status(response.status).json(urls);
         } catch (error) {
             console.log(error);
             return res.status(500).json({ message: "Internal server error" });
