@@ -142,7 +142,7 @@ export async function applyPriorityUpdate(
   priorityValue: string,
   userId: number,
   activityUser: IUser,
-  options: { onlyIfMissing?: boolean } = {},
+  options: { onlyIfUnchangedDefault?: boolean } = {},
 ): Promise<{ error: string | null }> {
   const constant = PriorityConstants.find((p) => p.Priority_Value === priorityValue);
   if (!constant) return { error: `Invalid priority "${priorityValue}"` };
@@ -153,11 +153,11 @@ export async function applyPriorityUpdate(
   });
   if (!task) return { error: "Task not found" };
 
-  if (options.onlyIfMissing) {
+  if (options.onlyIfUnchangedDefault) {
     if (constant.priority_index === 0) return { error: null };
-    await prisma.priority.upsert({
-      where: { taskId },
-      create: {
+    await prisma.priority.updateMany({
+      where: { taskId, priority_index: 0 },
+      data: {
         taskId,
         sectionId: task.sectionId ?? -1,
         projectId: task.projectId,
@@ -165,7 +165,6 @@ export async function applyPriorityUpdate(
         priority_index: constant.priority_index,
         Priority_Value: constant.Priority_Value,
       },
-      update: {},
     });
     return { error: null };
   }
@@ -238,7 +237,7 @@ export async function applyEstimateUpdate(
   estimateIndex: number,
   userId: number,
   activityUser: IUser,
-  options: { onlyIfMissing?: boolean } = {},
+  options: { onlyIfUnchangedDefault?: boolean } = {},
 ): Promise<{ error: string | null }> {
   const constant = EstimateConstants.find(
     (estimate) => estimate.estimate_index === estimateIndex
@@ -251,11 +250,11 @@ export async function applyEstimateUpdate(
   });
   if (!task) return { error: "Task not found" };
 
-  if (options.onlyIfMissing) {
+  if (options.onlyIfUnchangedDefault) {
     if (constant.estimate_index === 0) return { error: null };
-    await prisma.estimate.upsert({
-      where: { taskId },
-      create: {
+    await prisma.estimate.updateMany({
+      where: { taskId, estimate_index: 0 },
+      data: {
         taskId,
         sectionId: task.sectionId ?? -1,
         projectId: task.projectId,
@@ -263,7 +262,6 @@ export async function applyEstimateUpdate(
         estimate_index: constant.estimate_index,
         estimate_value: constant.estimate_value,
       },
-      update: {},
     });
     return { error: null };
   }

@@ -13,7 +13,12 @@ function harness(options = {}) {
     ai: { tool: (definition) => definition },
     "@/lib/flags": { isFeatureEnabled: async (key) => key === flag && options.enabled !== false },
     "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
-    "@/lib/prisma": { default: { agent: { findFirst: async () => ({ id: "agent" }) } } },
+    "@/lib/prisma": { default: {
+      agent: { findFirst: async () => ({ id: "agent" }) },
+      $transaction: async (writes) => Promise.all(writes),
+      priority: { createMany: async () => ({ count: 1 }) },
+      estimate: { createMany: async () => ({ count: 1 }) },
+    } },
     "@/lib/mcp/tasks/services": {
       validateProjectAccess: async () => options.denied ? { error: { message: "Access denied" } } : { project: { uniqueIdentifier: "QA", teamId: "team" } },
       getSectionForTask: async () => ({ section: { id: 7, section_title: "Inbox" } }),
@@ -192,11 +197,11 @@ test("a rejected body update leaves properties untouched", async () => {
   assert.equal(h.estimates.length, 0);
 });
 
-test("background properties use atomic insert-only writes, not stale snapshots", async () => {
+test("background properties use atomic unchanged-default writes, not stale snapshots", async () => {
   const h = updaterHarness({ editedProperties: true });
   assert.equal((await h.execute()).success, true);
-  assert.deepEqual(h.priorities[0][4], { onlyIfMissing: true });
-  assert.deepEqual(h.estimates[0][4], { onlyIfMissing: true });
+  assert.deepEqual(h.priorities[0][4], { onlyIfUnchangedDefault: true });
+  assert.deepEqual(h.estimates[0][4], { onlyIfUnchangedDefault: true });
 });
 
 
@@ -213,19 +218,22 @@ test("the writer retains long descriptions and explicit image settings", async (
   assert.equal(h.updates[0].input.inline_images, false);
 });
 
-for (const existing of [false, true]) {
-  test(`insert-only properties preserve choices even after stale reads: existing=${existing}`, async () => {
-    const rows = existing ? { priority: { priority_index: 4 }, estimate: { estimate_index: 6 } } : {};
-    const upsert = (name) => async ({ create, update }) => {
-      assert.deepEqual(update, {});
-      rows[name] ??= create;
-      return rows[name];
+for (const choice of ["untouched", "changed", "cleared"]) {
+  test(`conditional properties preserve choices and explicit clears: ${choice}`, async () => {
+    const rows = choice === "cleared" ? {} : {
+      priority: { priority_index: choice === "untouched" ? 0 : 4 },
+      estimate: { estimate_index: choice === "untouched" ? 0 : 6 },
+    };
+    const updateMany = (name, field) => async ({ where, data }) => {
+      if (!rows[name] || rows[name][field] !== where[field]) return { count: 0 };
+      rows[name] = { ...rows[name], ...data };
+      return { count: 1 };
     };
     const empty = {};
     const { applyPriorityUpdate, applyEstimateUpdate } = load("src/lib/ai/tools/helpers.ts", {
       "@/lib/prisma": { default: {
         task: { findUnique: async () => ({ id: 1, projectId: 7049, sectionId: 7, priority: null, estimate: null }) },
-        priority: { upsert: upsert("priority") }, estimate: { upsert: upsert("estimate") },
+        priority: { updateMany: updateMany("priority", "priority_index") }, estimate: { updateMany: updateMany("estimate", "estimate_index") },
       } },
       "@/lib/mcp/agents": empty, "@/lib/auth/agentTeamScope": empty,
       "@/utils/controllers/projects/getAllIncludes": empty,
@@ -237,9 +245,12 @@ for (const existing of [false, true]) {
       "@/utils/controllers/projects/views/viewsHelperAPIfunctions": empty,
       "@/utils/helperFunctions/Views/BoardFilterSanitizer": empty,
     });
-    assert.deepEqual(await applyPriorityUpdate(1, "High", 985, { id: 985 }, { onlyIfMissing: true }), { error: null });
-    assert.deepEqual(await applyEstimateUpdate(1, 3, 985, { id: 985 }, { onlyIfMissing: true }), { error: null });
-    assert.equal(rows.priority.priority_index, existing ? 4 : 2);
-    assert.equal(rows.estimate.estimate_index, existing ? 6 : 3);
+    assert.deepEqual(await applyPriorityUpdate(1, "High", 985, { id: 985 }, { onlyIfUnchangedDefault: true }), { error: null });
+    assert.deepEqual(await applyEstimateUpdate(1, 3, 985, { id: 985 }, { onlyIfUnchangedDefault: true }), { error: null });
+    if (choice === "cleared") assert.deepEqual(rows, {});
+    else {
+      assert.equal(rows.priority.priority_index, choice === "untouched" ? 2 : 4);
+      assert.equal(rows.estimate.estimate_index, choice === "untouched" ? 3 : 6);
+    }
   });
 }

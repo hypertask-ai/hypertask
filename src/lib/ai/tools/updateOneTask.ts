@@ -211,7 +211,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
         input.priority,
         user.id,
         activityUser,
-        { onlyIfMissing: expected !== undefined },
+        { onlyIfUnchangedDefault: expected !== undefined },
       );
       if (priorityResult.error) {
         return { success: false, error: priorityResult.error };
@@ -224,7 +224,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
         input.estimate,
         user.id,
         activityUser,
-        { onlyIfMissing: expected !== undefined },
+        { onlyIfUnchangedDefault: expected !== undefined },
       );
       if (estimateResult.error) {
         return { success: false, error: estimateResult.error };

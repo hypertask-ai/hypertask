@@ -227,6 +227,16 @@ export function createCreateTaskTool(context: ToolContext) {
                 const initialTitle = taskTitleFromBrief(input.brief);
                 if (!initialTitle) throw new Error("Provide a task brief with a usable title.");
                 earlyTask = await save(initialTitle, undefined, true);
+                const propertyDefaults = {
+                  taskId: earlyTask.id,
+                  sectionId: sectionCheck.section.id,
+                  projectId: input.project_id,
+                  addedByUserId: user.id,
+                };
+                await prisma.$transaction([
+                  prisma.priority.createMany({ data: { ...propertyDefaults, priority_index: 0, Priority_Value: "No Priority" }, skipDuplicates: true }),
+                  prisma.estimate.createMany({ data: { ...propertyDefaults, estimate_index: 0, estimate_value: "No size" }, skipDuplicates: true }),
+                ]);
                 send("task_created", {
                   content: `<p><a href="${escapeHtml(buildMcpTaskUrl(earlyTask.projectId, earlyTask.uniqueIndex))}">${escapeHtml(earlyTask.ticketNumber || initialTitle)}</a></p>`,
                 });
