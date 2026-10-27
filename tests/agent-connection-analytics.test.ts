@@ -287,11 +287,11 @@ test("the same durable key belongs to separate connections for different users",
 
 test("a connection seen while ineligible is not consumed and counts on a later request", async () => {
   const h = harness();
-  h.setEnabled(false);
+  h.users.get(123).uid = "guest_local";
   const api = h.load("src/lib/telemetry/activationOccurrences.ts");
   assert.equal(await api.enqueueAgentConnection(h.prisma, 123, "eligible-later", "mcp", "Cursor", connectedAt, "agent:later"), null);
   assert.equal(h.intentRows.length, 0);
-  h.setEnabled(true);
+  h.users.get(123).uid = "real_member";
   const key = await api.enqueueAgentConnection(h.prisma, 123, "eligible-later", "mcp", "Cursor", connectedAt, "agent:later");
   assert.equal(await h.load("src/lib/telemetry/analyticsIntents.ts").processAnalyticsIntent(key), "processed");
   assert.equal(h.captures.length, 1);
