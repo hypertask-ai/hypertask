@@ -14,6 +14,7 @@ each ticket only needs the one or two areas it touches.
 
 | Area | File | e2e/smoke id |
 |---|---|---|
+| CI tests and parallel checks | [ci-tests.md](ci-tests.md) | hosted job overlap, fail-closed summary, shard execution proof |
 | CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
 | Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
