@@ -35,7 +35,7 @@ export function useArchiveColumn({ enabled, active, projectId, userId, onClose }
   useEffect(() => {
     if (!active) return;
     const blockPaletteSwitch = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || !["k", "j"].includes(event.key.toLowerCase())) return;
+      if (!(event.ctrlKey || event.metaKey) || !["KeyK", "KeyJ"].includes(event.code)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       close();

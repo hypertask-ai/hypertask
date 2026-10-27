@@ -112,7 +112,11 @@ test("repeated confirmation and cancel cannot interrupt or duplicate a running b
   React.act(() => { running = confirm(); });
   await React.act(() => confirm());
   React.act(() => f.hook.close());
-  window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
+  for (const [key, code] of [["k", "KeyK"], ["л", "KeyK"], ["о", "KeyJ"]]) {
+    const event = new window.KeyboardEvent("keydown", { key, code, ctrlKey: true, bubbles: true, cancelable: true });
+    window.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true);
+  }
   assert.equal(f.closes, 0);
   assert.deepEqual(f.requests.slice(1), [[1, "Archive"]]);
   await React.act(async () => { resume(); await running; });
