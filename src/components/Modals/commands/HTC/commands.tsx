@@ -820,7 +820,7 @@ const Commands = (props: Props) => {
       handleMouseLeave={handleMouseLeave}
       handleMouseEnter={handleMouseEnter}
       commandRef={commandRef}
-      onClickHandler={columnArchiveEnabled ? updateCommandFrequency : (command) => {
+      onClickHandler={columnArchiveEnabled ? updateCommandFrequency : (command: ICommandList) => {
         if (command.commandMode !== CommandMode.ArchiveColumn) updateCommandFrequency(command);
       }}
       isMobile={isMobile}
