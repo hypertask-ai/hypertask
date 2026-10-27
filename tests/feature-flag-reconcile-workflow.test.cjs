@@ -514,7 +514,10 @@ for (const endpoint of ['/commits/', '/pulls?', '/statuses/']) {
 test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
   assert.doesNotMatch(workflow, /\bgh api\b|\$\(gh_api\b/);
   assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
-  assert.equal(yaml.load(workflow).concurrency["cancel-in-progress"], false);
+  assert.deepEqual(yaml.load(workflow).concurrency, {
+    group: "feature-flag-gate-production",
+    "cancel-in-progress": false,
+  }, "fleet sweeps and PR edits must hold the same publication lock");
   assert.doesNotMatch(singlePullRequest, /cancel-in-progress: true/);
 });
 
@@ -592,9 +595,7 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   assert.deepEqual(selected("schedule"), ["reconcile-open-pull-requests"]);
   assert.deepEqual(Object.keys(config.on).sort(), ["pull_request_target", "schedule"]);
   assert.deepEqual(config.on.schedule, [{ cron: "*/15 * * * *" }]);
-  const groupExpression = config.concurrency.group.split("${{")[1].split("}}")[0];
-  const group = (number) => new Function("github", `return (${groupExpression})`)({ event: { pull_request: { number } } });
-  assert.notEqual(group(42), group(43), "another PR must not replace this PR's pending run");
+  assert.equal(config.concurrency.group, "feature-flag-gate-production");
   assert.equal(config.concurrency["cancel-in-progress"], false);
 
   const { result, output, posts, calls, pull } = runWorkflow(t, {

@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: feature-flag-gate-${{ github.event.pull_request.number || 'production' }}
+  group: feature-flag-gate-production
   cancel-in-progress: false
 
 jobs:

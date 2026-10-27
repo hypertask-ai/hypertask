@@ -68,7 +68,7 @@ pr_job_budget:
     - workflow: .github/workflows/feature-flag-gate.yml
       jobs: 2
       published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
-      concurrency_group: "feature-flag-gate-${{ github.event.pull_request.number || 'production' }}"
+      concurrency_group: feature-flag-gate-production
       cancel_in_progress: false
     - workflow: .github/workflows/ux-signoff-gate.yml
       jobs: 1
@@ -314,7 +314,7 @@ policies:
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
-    non_cancelling_reconciliation: ["feature-flag-gate-${{ github.event.pull_request.number || 'production' }}", ux-signoff-gate, dependabot-major-ticket]
+    non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-major-ticket]
     prefer_queue_over_oom: true
   review:
     # The reviewer repository owns provider order, models, and failover; this

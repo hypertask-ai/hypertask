@@ -1158,7 +1158,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /github\.event\.action != 'closed'/);
   assert.match(workflow, /if: github\.event_name == 'schedule'/);
   assert.match(workflow, /timeout-minutes: 5/);
-  assert.ok(workflow.includes("group: feature-flag-gate-${{ github.event.pull_request.number || 'production' }}"));
+  assert.ok(workflow.includes("group: feature-flag-gate-production"));
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal((workflow.match(/cache: npm/g) || []).length, 2);
   assert.equal((workflow.match(/cache-dependency-path: \.github\/scripts\/feature-flag-parser\/package-lock\.json/g) || []).length, 2);
