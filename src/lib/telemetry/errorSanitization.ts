@@ -25,6 +25,7 @@ const ALLOWED_EXTRA_KEYS = new Set([
   "digest",
   "errorMessage",
   "errorName",
+  "featureFlag",
   "meta_modelName",
   "meta_table",
   "meta_column",
@@ -118,7 +119,11 @@ export function safeErrorExtra(extra?: Extra) {
   if (!extra) return {};
   return Object.fromEntries(
     Object.entries(extra)
-      .filter(([key]) => ALLOWED_EXTRA_KEYS.has(key))
+      .filter(([key, value]) =>
+        ALLOWED_EXTRA_KEYS.has(key) &&
+        (key !== "featureFlag" ||
+          (typeof value === "string" && /^htpr-[1-9][0-9]*-[a-z0-9-]+$/.test(value))),
+      )
       .slice(0, 12)
       .map(([key, value]) => [
         `ht_${key}`,

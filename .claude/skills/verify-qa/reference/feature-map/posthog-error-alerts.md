@@ -56,3 +56,18 @@ side effects with private board fakes. After installation, use the installed
 collector's `--dry-run --sources fixture` entry point and an unused state path;
 retain its counters and planned genuine-error writes. Never create real failures,
 restart SSH or file synthetic tickets. Confirm SSH remains active/running.
+
+## Explicit flag attribution (YPER4-735)
+
+- Hosted replay: `npm run test:file -- tests/yper4-735-posthog-flag-links.test.cjs`.
+  It drives a signed native issue payload through `handlePostHogAlert`, with
+  PostHog returning a latest exception tagged `ht_featureFlag`. Creation and
+  reopening must retain one relation and one flag comment. Missing, malformed
+  and unknown tags must create no relation. A relation API failure must fail
+  the alert; deleted tickets and human descriptions must stay untouched.
+- Live: run the existing nightly canary after deployment. Inspect only its
+  own generated ticket and alert workflow. An untagged canary must state
+  “No confirmed feature flag.” The canary still closes its ticket and issue.
+- Do not tag a customer error or alter a flag to manufacture proof. If no real
+  explicitly tagged issue exists, record live tagged attribution as unreachable;
+  distinguish the hosted signed replay from the live untagged canary.
