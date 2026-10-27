@@ -4,6 +4,7 @@ import axios from "axios";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7686_FREE_PLAN_COPY_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-copy";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
+import { HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG } from "@/lib/flags/definitions/htpr-7922-unlimited-free-boards";
 import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7923-unlimited-free-tickets";
 import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
@@ -44,12 +45,17 @@ const PlansSection = () => {
   const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const showFreePlanCopy = useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG);
+  const unlimitedBoards = useFlag(HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG);
   const freePlanLimits = {
     planLimits: useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG),
     unlimitedTickets: useFlag(HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG),
     raisedFileLimit: useFlag(HTPR_7924_FREE_FILE_25MB_FLAG),
   };
   const { planLimits, unlimitedTickets, raisedFileLimit } = freePlanLimits;
+  const freePlanCopy = visibleFreePlanCopy(
+    showFreePlanCopy,
+    unlimitedBoards ? { ...freePlanLimits, unlimitedBoards: true } : freePlanLimits,
+  );
   const freePlanDescription = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : null}</>;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,10 +75,10 @@ const PlansSection = () => {
 
   const plans = useMemo(
     () =>
-      [...subscriptionPlansFor(freePlanLimits)].sort(
+      [...subscriptionPlansFor({ ...freePlanLimits, unlimitedBoards })].sort(
         (left, right) => STORE_PLAN_RANK[left.id] - STORE_PLAN_RANK[right.id],
       ),
-    [planLimits, unlimitedTickets, raisedFileLimit],
+    [planLimits, unlimitedBoards, unlimitedTickets, raisedFileLimit],
   );
 
   useEffect(() => {
@@ -211,7 +217,7 @@ const PlansSection = () => {
                     {selectedType.price} {plan.id === "Free"
                       ? !planFlagReady || startPlanEnabled ? freePlanDescription : selectedType.description
                       : selectedType.description}
-                    {plan.id === "Free" && visibleFreePlanCopy(showFreePlanCopy, freePlanLimits).map((line) => (
+                    {plan.id === "Free" && freePlanCopy.map((line) => (
                       <span key={line} className="block text-dense font-medium text-text-light-gray">
                         {line}
                       </span>

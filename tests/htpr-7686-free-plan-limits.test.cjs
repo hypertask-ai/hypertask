@@ -23,6 +23,7 @@ const sourceModules = [
   "src/lib/planLimits.ts",
   "src/lib/freePlanLimits.ts",
   "src/lib/flags/definitions/htpr-7923-unlimited-free-tickets.ts",
+  "src/lib/flags/definitions/htpr-7922-unlimited-free-boards.ts",
   "src/lib/flags/definitions/htpr-7982-cancelled-free.ts",
   "src/lib/freeTier.ts",
   "src/app/api/ai/_lib/planGate.ts",
@@ -270,7 +271,7 @@ test("third Free board is refused across owners; only Normal boards in the desti
   await refused(h, h.policy.assertBoardRoom(h.db, teamScope, 1, actor), "boards");
   assert.deepEqual(h.calls.find(([kind]) => kind === "project.count")[1], { where: { teamId: "destination", status: "Normal" } });
   assertLockBeforeCount(h, "project");
-  assert.deepEqual(h.calls.filter(([kind]) => kind === "flag").map((call) => call.slice(1)), [[flag, actor.actorUserId]]);
+  assert.deepEqual(h.calls.filter(([kind]) => kind === "flag").map((call) => call.slice(1)), [[flag, actor.actorUserId], ["htpr-7922-unlimited-free-boards", actor.actorUserId]]);
 });
 
 test("251st Free ticket is refused; subtasks count, archived/deleted tickets and boards do not", async () => {
