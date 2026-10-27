@@ -235,7 +235,7 @@ for ticket in HTPR-123 HTPR-124; do
 done
 : > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "two unfinished merged tickets still hold new claims" "$?" 4
 [ ! -s "$D/log" ] && ok "multiple unfinished tickets prevent new claim writes" || bad "multiple unfinished tickets wrote a claim"
-printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX] Open work"}]' > "$HOLD_OPEN"
+printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX] Open work","isDraft":false}]' > "$HOLD_OPEN"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-456 >/dev/null; eq "open PR resumption survives other merged work" "$?" 0
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-123 >/dev/null; eq "merged work resumption survives another open PR" "$?" 0
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "mixed open and merged work still holds new claims" "$?" 4
@@ -284,17 +284,17 @@ cp "$D/valid-board" "$HOLD_BOARD"
 jq '.tasks[0].projectId=null' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1; eq "unusable assigned ticket link refuses" "$?" 4
 cp "$D/valid-board" "$HOLD_BOARD"
-jq '[range(300)|{number:.,headRefName:"other/work",title:"Other work"}]' -n > "$HOLD_OPEN"
+jq '[range(300)|{number:.,headRefName:"other/work",title:"Other work",isDraft:false}]' -n > "$HOLD_OPEN"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1; eq "saturated open PR list refuses" "$?" 4
 printf '[]' > "$HOLD_OPEN"
 jq '[range(100)|{number:.,title:"Other work"}]' -n > "$HOLD_MERGED"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1; eq "saturated merged PR list refuses" "$?" 4
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
-printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX] Open work"}]' > "$HOLD_OPEN"
+printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX] Open work","isDraft":false}]' > "$HOLD_OPEN"
 : > "$D/log"; out=$(SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999); rc=$?; eq "existing open-PR hold is preserved" "$rc" 4
 [[ $out == *'still has open PRs'* && $out == *'/pull/99'* ]] && ok "open-PR hold still names its PR" || bad "wrong open-PR refusal: $out"
 [ ! -s "$D/log" ] && ok "open-PR hold still precedes board writes" || bad "open-PR hold wrote to board"
-printf '[{"number":99,"headRefName":"runner6/yper4-999","title":"YPER4-999 [INFRA] Existing open work"}]' > "$HOLD_OPEN"
+printf '[{"number":99,"headRefName":"runner6/yper4-999","title":"YPER4-999 [INFRA] Existing open work","isDraft":false}]' > "$HOLD_OPEN"
 : > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "actual claim dispatch resumes an open PR despite merged work" "$?" 0
 grep -q '^task move YPER4-999 --section In Progress' "$D/log" && ok "recognized open work reaches the claim move" || bad "open resumption failed to write"
 printf '[]' > "$HOLD_OPEN"
@@ -305,5 +305,65 @@ grep -q '^task move YPER4-999 --section In Progress' "$D/log" && ok "recognized 
 : > "$HOLD_READS"; SHIP_SESSION_NAME='HT Product Lead' ./ship-claim hold YPER4-999 >/dev/null; eq "non-runner identity remains unaffected" "$?" 0
 [ ! -s "$HOLD_READS" ] && ok "non-runner performs no hold reads" || bad "non-runner accessed hold services"
 if [ "$fails" = 0 ]; then echo 'ship-claim completion-hold ok'; fi
+
+# Queue brake and infra first (YPER4-880), on the same hold stubs.
+export HOLD_INFRA=$D/infra.json
+prs() { jq -n --argjson n "$1" --argjson d "${2:-0}" \
+  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: (. < $d)}]' > "$HOLD_OPEN"; }
+prs_own() { jq -n --argjson n "$1" --arg own "$2" --arg tk "$3" \
+  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: false}]
+   + [{number: 999, headRefName: $own, title: "\($tk) [INFRA] own open work", isDraft: false}]' > "$HOLD_OPEN"; }
+free_infra() { jq -n --arg tk "$1" --arg ti "$2" \
+  '{success:true,total:1,tasks:[{ticketNumber:$tk,title:$ti,section:"Backlog",projectId:4060,uniqueIndex:1,agent:null,assignees:[]}]}' > "$HOLD_INFRA"; }
+empty_infra() { printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_INFRA"; }
+prs_adopt() { jq -n --argjson n "$1" --arg tk "$2" \
+  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: false}]
+   + [{number: 999, headRefName: ("cursor/" + ($tk | ascii_downcase) + "-adopt"), title: "\($tk) [BUGFIX] Adopted work", isDraft: false}]' > "$HOLD_OPEN"; }
+holdrc() { SHIP_SESSION_NAME="$1" ./ship-claim hold "$2" >"$D/hold-out" 2>&1; echo $?; }
+printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_BOARD"; printf '[]' > "$HOLD_MERGED"; printf '[]' > "$HOLD_OPEN"
+empty_infra
+prs 5;  eq "queue 5, app ticket -> normal" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+prs 20; eq "queue exactly 20 -> normal" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+prs 21; eq "queue 21, app ticket -> hold" "$(holdrc 'RUNNER 6' HTPR-1)" 4
+grep -q 'queue full: infra only (21 open non-draft PRs > 20)' "$D/hold-out" && ok "queue brake message" || bad "queue brake message: $(cat "$D/hold-out")"
+prs 21; eq "queue 21, YPER4 ticket -> allowed" "$(holdrc 'RUNNER 6' YPER4-2)" 0
+prs 25 10; eq "drafts do not count toward the brake" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+prs 21; eq "no runner name -> no brake" "$(SHIP_SESSION_NAME= ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 0
+prs 5; free_infra YPER4-4 free
+eq "free infra ticket waits -> app hold" "$(holdrc 'RUNNER 6' HTPR-1)" 4
+grep -q 'infra first: free Fleet Infra tickets wait (YPER4-4)' "$D/hold-out" && ok "infra first names the ticket" || bad "infra first message: $(cat "$D/hold-out")"
+eq "free infra ticket waits -> that YPER4 ticket allowed" "$(holdrc 'RUNNER 6' YPER4-4)" 0
+prs 5; free_infra YPER4-5 'do not touch: held by valentin'
+eq "'do not touch' Backlog ticket never blocks an app claim" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+free_infra YPER4-6 'held'; jq '.tasks[0].agent={id:"a1"}' "$HOLD_INFRA" > "$D/next"; mv "$D/next" "$HOLD_INFRA"
+eq "assigned Backlog infra ticket never blocks an app claim" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+free_infra YPER4-7 'assigned to an agent assignee'; jq '.tasks[0].assignees=[{agent:{id:"a1",displayName:"Runner 16"}}]' "$HOLD_INFRA" > "$D/next"; mv "$D/next" "$HOLD_INFRA"
+eq "agent-assigned Backlog infra ticket never blocks an app claim" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+prs 5; empty_infra
+cat > "$D/ht4060fail" <<'EOF'
+#!/usr/bin/env bash
+case " $* " in *' --project 4060 '*) exit 1 ;; esac
+exec "$HOLD_ORIGINAL_HT" "$@"
+EOF
+chmod +x "$D/ht4060fail"
+eq "board 4060 read fails -> app hold" "$(SHIP_CLAIM_HYPERTASK=$D/ht4060fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 4
+eq "board 4060 read fails -> every claim held" "$(SHIP_CLAIM_HYPERTASK=$D/ht4060fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
+prs 5; eq "PR read fails -> hold" "$(HOLD_OPEN_FAIL=1 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
+prs_own 21 runner6/htpr-7-x HTPR-7
+eq "own open app PR ticket, queue full -> allowed" "$(holdrc 'RUNNER 6' HTPR-7)" 0
+eq "own open app PR, other app ticket -> hold" "$(holdrc 'RUNNER 6' HTPR-8)" 4
+prs_own 5 runner6/yper4-9 YPER4-9
+eq "own open PR, other YPER4 ticket -> hold" "$(holdrc 'RUNNER 6' YPER4-2)" 4
+eq "own open PR ticket itself -> allowed" "$(holdrc 'RUNNER 6' YPER4-9)" 0
+prs_adopt 21 HTPR-3
+eq "queue full, ticket with an open PR -> adoption allowed" "$(holdrc 'RUNNER 6' HTPR-3)" 0
+eq "queue full, different app ticket -> still held" "$(holdrc 'RUNNER 6' HTPR-4)" 4
+free_infra YPER4-4 free; prs_adopt 5 HTPR-3
+eq "free infra waits, ticket with an open PR -> adoption allowed" "$(holdrc 'RUNNER 6' HTPR-3)" 0
+prs 5; empty_infra
+prs_own 5 runner16/htpr-7-x HTPR-7
+eq "runner 1 never matches runner 16 branch names" "$(holdrc 'RUNNER 1' HTPR-1)" 0
+eq "runner 16 own PR holds runner 16" "$(holdrc 'RUNNER 16' HTPR-1)" 4
+printf '[]' > "$HOLD_OPEN"; empty_infra
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]
