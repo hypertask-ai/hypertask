@@ -500,7 +500,7 @@ function renderedTagCounts(node) {
 
 function exposureSnapshot(ref, path, mergeBase) {
   let source = "";
-  try { source = git(["show", `${ref}:${path}`]); } catch {}
+  try { source = git(["cat-file", "blob", `${ref}:${path}`]); } catch {}
   const scriptKind = path.endsWith(".tsx") ? typescript.ScriptKind.TSX :
     path.endsWith(".jsx") ? typescript.ScriptKind.JSX :
     path.endsWith(".ts") ? typescript.ScriptKind.TS : typescript.ScriptKind.JS;
