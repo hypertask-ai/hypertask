@@ -45,3 +45,17 @@ These isolated checks do not prove hosted scheduling.
 
 No app fixtures, feature flags or production settings change.
 Keep sanitized job records outside the worktree.
+
+## Informational bugfix regression replay
+
+`Bugfix regression report` runs on non-draft `[BUGFIX]` production PRs.
+Inspect its summary for each changed test: base fails, head passes.
+A missing test or a base pass must be flagged by name.
+The `no-regression-test` label requires a visible written reason.
+Base loader failures and differing Prisma schemas remain unproven.
+Keep report-only setup failures separate from successful reproduction.
+Run `node --test tests/bugfix-regression-check.test.cjs` for isolated controls.
+For historical replay, pass exact `--head` and `--base` SHAs to
+`.github/scripts/bugfix-regression-check.mjs`; record both outcomes.
+Confirm the existing required check set is unchanged before release.
+No application fixtures or customer accounts are needed.
