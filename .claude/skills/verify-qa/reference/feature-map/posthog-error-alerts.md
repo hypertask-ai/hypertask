@@ -46,3 +46,13 @@ with `--dry-run --sources vercel` against a fresh state directory; retain its
 read-only plan and live related-ticket lookup. Never raise real errors or file
 customer tickets merely to verify grouping. A read-only replay proves the live
 lookup and installed code; the hosted isolated replay proves write side effects.
+
+For SSH disconnect classification, replay journal rows with `SYSLOG_IDENTIFIER=sshd`
+and no systemd unit through `parseJournal`. The two debug-send hangup messages
+(`Broken pipe`, `Connection reset by peer`) must count as noise, including the
+`sshd.service` alias. Bind errors, permission failures and matching messages from
+unrelated services must remain errors. Hosted `ship-scripts-tests` proves ticket
+side effects with private board fakes. After installation, use the installed
+collector's `--dry-run --sources fixture` entry point and an unused state path;
+retain its counters and planned genuine-error writes. Never create real failures,
+restart SSH or file synthetic tickets. Confirm SSH remains active/running.
