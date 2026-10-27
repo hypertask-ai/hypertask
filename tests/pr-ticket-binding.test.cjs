@@ -6,6 +6,7 @@ const yaml = require('js-yaml');
 const workflow = yaml.load(readFileSync('.github/workflows/pr-guards-trusted.yml', 'utf8'));
 const step = workflow.jobs['pr-guards-trusted'].steps.find(step => step.id === 'title');
 const checkTitle = require('../.github/scripts/pr-title.cjs');
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const repo = 'hypertask-ai/hypertask';
 
 async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base = repo,
@@ -18,7 +19,7 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
   const previous = process.env.HYPERTASK_MCP_TOKEN;
   process.env.HYPERTASK_MCP_TOKEN = token;
   try {
-    await checkTitle({
+    const args = {
       github: { rest: { pulls: { get: async () => ({ data: {
         number: 123, title, state, user: { login },
         head: { sha: 'a'.repeat(40), repo: { full_name: head } },
@@ -33,7 +34,14 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
           success: true, tasks: [{ ticketNumber: ticket, pullRequests: [{ url }] }],
         } };
       },
-    });
+    };
+    await new AsyncFunction('github', 'context', 'core', 'require', step.with.script)(
+      args.github, args.context, args.core,
+      specifier => {
+        assert.equal(specifier, './.github/scripts/pr-title.cjs');
+        return inputs => checkTitle({ ...inputs, fetchImpl: args.fetchImpl });
+      },
+    );
     return { writes, failures, outputs };
   } finally {
     if (previous === undefined) delete process.env.HYPERTASK_MCP_TOKEN;
