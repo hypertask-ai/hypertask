@@ -135,7 +135,6 @@ async function dispatchWorkflow(
 }
 
 export async function POST(request: NextRequest) {
-
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "Payload too large" }, { status: 413 });
