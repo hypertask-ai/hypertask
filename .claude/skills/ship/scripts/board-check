@@ -4,76 +4,36 @@ set -euo pipefail
 REPO=hypertask-ai/hypertask
 now=$(date -u +%s)
 work=$(mktemp -d)
-pids=()
-trap 'for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || :; done; wait || :; rm -rf "$work"' EXIT
+trap 'rm -rf "$work"' EXIT
 fail() { echo "board-check: $*" >&2; exit 1; }
 
-identity=$("$(dirname "$(readlink -f "$0")")/ship-identity") || fail 'cannot resolve session identity'
-IFS=$'\t' read -r session token_file <<< "$identity"
-[ -n "$session" ] && [ -r "$token_file" ] || fail 'session identity has no readable credential'
-HYPERTASKS_JWT_TOKEN=$(cat "$token_file") || fail 'cannot read session credential'
-[ -n "$HYPERTASKS_JWT_TOKEN" ] || fail 'session credential is empty'
-export HYPERTASKS_JWT_TOKEN HT_TOKEN="$HYPERTASKS_JWT_TOKEN"
-
-gh api graphql --paginate -f query='query($endCursor: String) {
+# One GitHub read includes each PR's latest commit, without loading its history.
+gh api graphql -f query='query {
   repository(owner:"hypertask-ai", name:"hypertask") {
-    pullRequests(first:100, after:$endCursor, baseRefName:"production", states:OPEN) {
-      pageInfo { hasNextPage endCursor }
+    pullRequests(first:100, baseRefName:"production", states:OPEN) {
+      pageInfo { hasNextPage }
       nodes { number title body url commits(last:1) { nodes { commit { committedDate } } } }
     }
   }
 }' > "$work/prs.json" || fail 'cannot read open production PRs'
-jq -se 'length > 0 and all(.[]; (.data.repository.pullRequests.nodes | type) == "array")
-  and .[-1].data.repository.pullRequests.pageInfo.hasNextPage == false' "$work/prs.json" >/dev/null \
-  || fail 'PR list incomplete; no stale-work report'
-jq -s '[.[].data.repository.pullRequests.nodes[]]' "$work/prs.json" > "$work/prs"
+jq -e '.data.repository.pullRequests.pageInfo.hasNextPage == false' "$work/prs.json" >/dev/null \
+  || fail 'PR list incomplete; narrow the report before scanning more than 100 PRs'
+jq '.data.repository.pullRequests.nodes' "$work/prs.json" > "$work/prs"
 
 # Verify names rather than silently treating an unknown column as an empty list.
 hypertask sections list --project 15 --json > "$work/sections" || fail 'cannot read board 15 columns'
 for col in 'AI Review' QA 'In Progress'; do
   jq -e --arg c "$col" '.success == true and any(.sections[]; .section_title == $c)' "$work/sections" >/dev/null \
     || fail "board 15 has no column named $col"
-  offset=0
-  echo '[]' > "$work/$col.rows"
-  while :; do
-    hypertask tasks list --project 15 --section "$col" --limit 100 --offset "$offset" --json > "$work/page" \
-      || fail "cannot read $col at offset $offset"
-    jq -e '.success == true and (.tasks | type) == "array" and (.total | type) == "number"
-      and .total >= 0 and (.total | floor) == .total' "$work/page" >/dev/null \
-      || fail "invalid $col page at offset $offset"
-    count=$(jq '.tasks | length' "$work/page")
-    total=$(jq '.total' "$work/page")
-    [ "$offset" -eq 0 ] || [ "$total" -eq "$expected_total" ] \
-      || fail "$col changed while paging; rerun for complete coverage"
-    expected_total=$total
-    jq -s '.[0] + .[1].tasks' "$work/$col.rows" "$work/page" > "$work/rows"
-    mv "$work/rows" "$work/$col.rows"
-    offset=$((offset + count))
-    [ "$offset" -lt "$total" ] || break
-    [ "$count" -gt 0 ] || fail "$col paging made no progress at offset $offset"
-  done
-  jq -e --argjson total "$total" 'length == $total and (unique_by(.ticketNumber) | length) == $total' \
-    "$work/$col.rows" >/dev/null || fail "$col changed while paging; rerun for complete coverage"
-  jq '{tasks: .}' "$work/$col.rows" > "$work/$col"
+  hypertask tasks list --project 15 --section "$col" --limit 100 --json > "$work/$col" \
+    || fail "cannot read $col"
+  jq -e '.success == true and (.tasks | length) == .total' "$work/$col" >/dev/null \
+    || fail "$col list incomplete (over 100 tickets); no partial report"
 done
 jq -s '[.[].tasks[]]' "$work/AI Review" "$work/QA" "$work/In Progress" > "$work/tasks"
-jq -sr '[.[1][] | .title | capture("^(?<ticket>(HTPR|HYFA|YPER4)-[0-9]+)( |$)") | .ticket] + [.[0][].ticketNumber]
-  | reduce .[] as $ticket ([]; if index($ticket) then . else . + [$ticket] end) | .[]' "$work/tasks" "$work/prs" > "$work/tickets"
-total=$(wc -l < "$work/tickets")
-inspected=0
-scan_limit=500
-head -n "$scan_limit" "$work/tickets" > "$work/inspect"
-jq -Rn --slurpfile tasks "$work/tasks" '[inputs | . as $t | select(any($tasks[0][]; .ticketNumber == $t) | not)]
-  | . as $tickets | range(0; length; 100) | $tickets[.:.+100] | join(",")' < "$work/inspect" > "$work/batches"
-while IFS= read -r batch; do
-  batch=$(jq -r . <<< "$batch")
-  ht GET "/mcp/tasks?ticket_number=$batch&limit=100" > "$work/batch" || fail 'cannot read task batch'
-  jq -e --arg tickets "$batch" '.success == true and (.tasks | type) == "array"
-    and ([.tasks[].ticketNumber] | sort) == ($tickets | split(",") | sort)' "$work/batch" >/dev/null \
-    || fail 'task batch incomplete; no stale-work report'
-  jq -s '.[0] + .[1].tasks' "$work/tasks" "$work/batch" > "$work/rows"
-  mv "$work/rows" "$work/tasks"
-done < "$work/batches"
+total=$(jq -s '[.[0][].ticketNumber, (.[1][].title | capture("^(?<ticket>(HTPR|HYFA|YPER4)-[0-9]+)( |$)") | .ticket)]
+  | unique | length' "$work/tasks" "$work/prs")
+[ "$total" -le 100 ] || fail 'over 100 distinct tickets; narrow the report instead of issuing hundreds of reads'
 
 seconds() { if [ -n "$1" ]; then date -u -d "$1" +%s 2>/dev/null || echo 0; else echo 0; fi; }
 recent() { [ "$1" -gt 0 ] && [ "$((now - $1))" -lt 21600 ]; }
@@ -86,9 +46,11 @@ commit_time() {
 inspect_ticket() {
   local t=$1 comments claim claim_id has_resume stamp line rc last_commit
   [[ $t =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || fail "invalid ticket number: $t"
+  [ -f "$work/$t.state" ] && return
   jq --arg t "$t" '[.[] | select(.ticketNumber == $t)][0] // empty' "$work/tasks" > "$work/$t.task"
   if [ ! -s "$work/$t.task" ]; then
-    fail "task batch has no row for $t"
+    hypertask tasks get "$t" --json | jq -e '.tasks[0]' > "$work/$t.task" \
+      || fail "cannot read PR ticket $t"
   fi
   hypertask comment list "$t" --sort createdAt:desc --limit 100 --json > "$work/$t.comments" \
     || fail "cannot read comments for $t"
@@ -108,7 +70,7 @@ inspect_ticket() {
   stamp=$(seconds "$(jq -r '[.comments[].createdAt] | max // ""' "$comments")")
   [ "$last_commit" -le "$stamp" ] || stamp=$last_commit
   echo IDLE > "$work/$t.state"
-  if line=$(VCC_ACTIVITY_AGENT_ID='' vcc activity last "$t" 2> "$work/$t.activity-error"); then
+  if line=$(VCC_ACTIVITY_AGENT_ID='' vcc activity last "$t" 2> "$work/activity-error"); then
     rc=0
     if [ -n "$line" ]; then
       local activity_time activity_name
@@ -118,8 +80,8 @@ inspect_ticket() {
       [ "$activity_seconds" -le "$stamp" ] || stamp=$activity_seconds
       # A newer heartbeat from another agent must neither revive nor hide a claim.
       if [ "$has_resume" = true ] && [ -n "$claim_id" ] && recent "$activity_seconds"; then
-        line=$(VCC_ACTIVITY_AGENT_ID="$claim_id" vcc activity last "$t" 2> "$work/$t.activity-error") \
-          || fail "cannot read claimant activity for $t: $(cat "$work/$t.activity-error")"
+        line=$(VCC_ACTIVITY_AGENT_ID="$claim_id" vcc activity last "$t" 2> "$work/activity-error") \
+          || fail "cannot read claimant activity for $t: $(cat "$work/activity-error")"
         if [ -n "$line" ]; then
           IFS=$'\t' read -r activity_time activity_name <<< "$line"
           activity_seconds=$(seconds "$activity_time")
@@ -130,9 +92,10 @@ inspect_ticket() {
     fi
   else
     rc=$?
-    [ "$rc" = 4 ] || fail "cannot read activity for $t: $(cat "$work/$t.activity-error")"
-    if mkdir "$work/fallback" 2>/dev/null; then
+    [ "$rc" = 4 ] || fail "cannot read activity for $t: $(cat "$work/activity-error")"
+    if [ ! -f "$work/fallback" ]; then
       echo 'board-check: activity route unavailable; using newest comment / PR commit as temporary fallback.' >&2
+      touch "$work/fallback"
     fi
     if recent "$stamp"; then rc=2; fi
   fi
@@ -164,30 +127,13 @@ report() {
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$col" "$ticket" "$title" "$url" "$age" "$suggestion"
 }
 
-wait_reads() {
-  local pid failed=0
-  for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
-  pids=()
-  [ "$failed" = 0 ] || fail 'ticket inspection failed; no stale-work report'
-}
-while IFS= read -r ticket; do
-  if [ "$inspected" -ge "$scan_limit" ]; then
-    echo LIMIT > "$work/$ticket.state"
-    continue
-  fi
-  inspected=$((inspected + 1))
-  inspect_ticket "$ticket" &
-  pids+=("$!")
-  [ "${#pids[@]}" -lt 8 ] || wait_reads
-done < "$work/tickets"
-wait_reads
-
 while IFS= read -r pr; do
   title=$(jq -r .title <<< "$pr")
   ticket='-'; [[ $title =~ ^((HTPR|HYFA|YPER4)-[0-9]+)([[:space:]]|$) ]] && ticket=${BASH_REMATCH[1]}
   stamp=$(seconds "$(jq -r '.commits.nodes[0].commit.committedDate // ""' <<< "$pr")")
   if [ "$ticket" != '-' ]; then
-    [ "$(cat "$work/$ticket.state")" = IDLE ] || continue
+    inspect_ticket "$ticket"
+    [ "$(cat "$work/$ticket.state")" != TAKEN ] || continue
   fi
   recent "$stamp" && continue
   if [ "$ticket" = '-' ]; then suggestion='ask Valentin'
@@ -203,7 +149,8 @@ for col in 'AI Review' QA 'In Progress'; do
   while IFS= read -r task; do
     ticket=$(jq -r '.ticketNumber // empty' <<< "$task")
     [ -n "$ticket" ] || fail "$col ticket has no ticket number"
-    [ "$(cat "$work/$ticket.state")" = IDLE ] || continue
+    inspect_ticket "$ticket"
+    [ "$(cat "$work/$ticket.state")" != TAKEN ] || continue
     # Any sign of life in the last 6 hours: someone is on it, even without a proper claim yet.
     recent "$(cat "$work/$ticket.life")" && continue
     url=$(jq -r '"https://app.hypertask.ai/detail/project-\(.projectId)/\(.uniqueIndex)"' <<< "$task")
@@ -211,5 +158,3 @@ for col in 'AI Review' QA 'In Progress'; do
       "$(cat "$work/$ticket.life")" "$(action "$work/$ticket.task" '')"
   done < <(jq -c '.tasks[]' "$work/$col")
 done
-
-[ "$inspected" -ge "$total" ] || fail "partial coverage: inspected $inspected of $total distinct tickets; remaining tickets were not checked (limit $scan_limit)"

@@ -49,20 +49,6 @@ capture it above the Send box, with no overlap or estimated-height gap. Check
 empty and one-comment threads, repeat with `htpr-6899-stable-layout` on and off in a disposable local build, and
 confirm the separate fixed mobile composer at 390x844 is unchanged.
 
-## Ctrl+O ticket link labels
-
-Open a QA Sandbox task containing absolute and relative ticket links in its
-saved description or comments. Wait for the composer, then press Ctrl+O.
-Every readable ticket row shows its current ticket ID and title. Search by
-title, select the row, and confirm the destination is unchanged. Missing or
-unreadable tickets show a URL-derived `PROJECT-<board>-<number>` identifier,
-never another board's private title or a raw ticket URL. External links and
-attachments keep their labels and destinations. Check after reload and at
-1440x900 and 390x844 across Porcelain, Graphite, AMOLED and Dia.
-
-The `htpr-8096-ctrl-o-ticket-titles` bugfix flag defaults to Everyone. Off
-preserves the old link labels; test Off only in an isolated route test.
-
 ## Cleanup
 
 If you created a test task, hard-delete it via the product UI. Never leave a

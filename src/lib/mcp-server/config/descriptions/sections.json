@@ -3,7 +3,7 @@
   "does": "List, read, create, update or delete board columns, including their completion and automatic-assignment settings.",
   "use_when": "Use when the board structure must change or when you need the tasks in one column.",
   "do_not_use_when": "Do not use to move a ticket between columns; use hypertask_tasks update with section_id instead.",
-  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules. role filters list or checks get by the semantic role the manifest publishes (intake, backlog, ready, in-progress, ai-review, human-review, done, other); it follows the column title and cannot be set.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
   "actions": {
     "list": {
       "tool": "hypertask_section",

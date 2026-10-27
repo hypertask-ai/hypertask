@@ -12,6 +12,7 @@ for (const [operation, bucket] of Object.entries(chat)) {
     const result = await run(operation, 'ON', operation === 'allSessions' ? { query: { compat: null } } : {});
     assert.deepEqual(result.limits, [[985, bucket]]);
     assert.deepEqual(contract(result), baseline[operation]);
+    assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), [['flag', 'htpr-6924-rest-compat', 985]]);
   });
   test(`${operation}: ON 429 precedes JSON, DB, uploads/deletes, transcript reads and empty-session creation`, async () => {
     for (const options of [{}, { emptyHistory: true, lastSession: true }, { query: { delete: 'ALL' } }]) {
@@ -25,16 +26,12 @@ for (const [operation, bucket] of Object.entries(chat)) {
       assert.deepEqual(result.readers, []);
     }
   });
-  test(`${operation}: legacy, absent identity and failed user lookup never charge or inject headers`, async () => {
-    for (const mode of ['OFF', 'NO_SESSION', 'USER_FAILURE']) {
+  test(`${operation}: OFF, absent identity and failed flag probe never charge or inject headers`, async () => {
+    for (const mode of ['OFF', 'FLAG_FAILURE', 'NO_SESSION', 'USER_FAILURE']) {
       const result = await run(operation, mode, { limited: true });
       assert.deepEqual(result.limits, []);
       assert.ok(!result.headers.some(([name]) => name === 'retry-after'));
-      if (mode === 'OFF' && ['allSessions', 'createSession'].includes(operation)) {
-        assert.equal(result.status, 401);
-        assert.equal(result.text, '{"error":"Unauthorized"}');
-        assert.deepEqual(result.calls, []);
-      } else if (mode === 'OFF') assert.deepEqual(contract(result), baseline[operation]);
+      if (['OFF', 'FLAG_FAILURE'].includes(mode)) assert.deepEqual(contract(result), baseline[operation]);
     }
   });
 }
@@ -48,10 +45,11 @@ for (const [operation, [, method]] of Object.entries(pages)) {
     assert.deepEqual(limits, [[985, bucket]]);
   });
   test(`page ${operation}: only trusted ON gets 429; rejected request has no parser/query/write effects`, async () => {
-    for (const [mode, options] of [['ON', {}], ['OFF', {}], ['USER_FAILURE', {}], ['NO_SESSION', {}], ['ON', { profileId: 7 }], ['ON', { noProfile: true }]]) {
+    for (const [mode, options] of [['ON', {}], ['OFF', {}], ['FLAG_FAILURE', {}], ['USER_FAILURE', {}], ['NO_SESSION', {}], ['ON', { profileId: 7 }], ['ON', { noProfile: true }]]) {
       const limits = [];
       const mocks = { '@/lib/api/rateLimit': { checkRestRateLimit: async (...args) => { limits.push(args); return new Response(text429, { status: 429, headers: Object.fromEntries(limitHeaders) }); } } };
       const result = await runPage(operation, mode, { ...options, mocks });
+      // HTPR-7073: with the flag ON a mismatched or missing profile cookie no longer downgrades a signed session.
       if (mode === 'ON') {
         assert.deepEqual({ status: result.status, text: result.text, headers: result.headers }, { status: 429, text: text429, headers: limitHeaders });
         assert.deepEqual(result.calls, []);
@@ -65,7 +63,7 @@ for (const [operation, [, method]] of Object.entries(pages)) {
   });
 }
 
-test('calendar/connections/custom-fields/CLI/raw-profile routes are not charged even with a signed session', async () => {
+test('calendar/connections/custom-fields/CLI/raw-profile routes are not charged even with flag ON', async () => {
   for (const operation of Object.keys(operations).filter((op) => !Object.hasOwn(chat, op))) {
     const result = await run(operation, 'ON', { limited: true });
     assert.deepEqual(result.limits, []);

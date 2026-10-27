@@ -44,7 +44,6 @@ function summaryButton(enabled, comments, flaggedIncomplete = false) {
   const actions = [];
   const { default: Button } = load("src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx", {
     "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
-    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
     "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({ editTicketWithAi: (id) => actions.push(["chat", id]) }) },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ currentTask: { id: 123, description_: { flaggedIncomplete } }, comments, setEditMode: (mode) => actions.push(["mode", mode]) }) },
@@ -68,7 +67,6 @@ function welcome(enabled, editTaskId = 123) {
   const { WelcomeScreen } = load("src/components/AI_CHAT/WelcomeScreen.tsx", {
     react: hookReact,
     "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
-    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ isDetailPage: true, handleSendMessage: (message) => sent.push(message) }) },
@@ -154,10 +152,8 @@ test("opening edit mode opens the existing sidebar and starts a fresh session be
 function editModeCleanup({ enabled = true, open = true, taskId = 123, messages = [] }) {
   const cleared = [];
   const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
-    "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
     react: hookReact,
     "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
-    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
     "@/lib/state": { useRecoilState: () => [123, (value) => cleared.push(value)] },
     "@/store": { aiChatEditTaskIdAtom: "edit" },

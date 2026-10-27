@@ -138,14 +138,14 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
 
     test(`${mode} ${actor}: real update preflight refuses B before persistence`, async () => {
       const f = teamFixture(mode, actor);
-      const { executeTaskUpdate } = f.load('src/lib/mcp/tasks/updateTask.ts', {
+      const { executeTaskUpdateV2 } = f.load('src/lib/mcp/tasks/updateTaskV2.ts', {
         '@/lib/pullRequests/taskPullRequests': {},
         './fields/persist': { persistTaskUpdates: async (_ctx, tasks) => { f.writes.push('task'); return { success: true, tasks: tasks.map(t => ({ id: t.id, title: `${f.projects.find(p => p.id === t.projectId).name}-sentinel` })) }; } },
       });
       for (const board of [15, 16, 25, 26]) {
         const before = f.writes.length;
         const request = req('tasks/update', 'POST', { task_id: board * 10, title: 'Updated' });
-        const result = await f.run(request, () => executeTaskUpdate({ request, ctx: f.state.ctx, requestBody: { task_id: board * 10, title: 'Updated' } }));
+        const result = await f.run(request, () => executeTaskUpdateV2({ request, ctx: f.state.ctx, requestBody: { task_id: board * 10, title: 'Updated' } }));
         await assertResult(result.response, actor !== 'bound' || board < 20, `${f.projects.find(p => p.id === board).name}-sentinel`, f.writes, before);
       }
     });

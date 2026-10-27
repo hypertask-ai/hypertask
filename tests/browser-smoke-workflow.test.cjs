@@ -185,7 +185,7 @@ test("MCP CLI API contract stays fatal inside the required browser-smoke job", a
   assert.notEqual(smoke["continue-on-error"], true);
   const step = smoke.steps.find(s => s.id === "smoke");
   assert.notEqual(step["continue-on-error"], true);
-  assert.equal(step.if, "github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'");
+  assert.equal(step.if, "github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'");
   assert.match(step.run, /^set -euo pipefail$/m);
   const lines = step.run.split("\n").filter(line => line.includes("scripts/mcp-cli-api-contract.mjs"));
   assert.equal(lines.length, 1, "the contract runs exactly once in the browser-smoke step");
@@ -302,67 +302,4 @@ test("YPER4-629: required browser smoke runs the inbox cycle last, with every fl
   assert.match(spec, /getByText\(items\[1\]\.title\)\.first\(\)\.click\(\)/);
   assert.match(spec, /searchParams\.get\('inboxFlow'\)/);
   for (const key of ["'j'", "'e'", "'Control+Enter'", "'Enter'"]) assert.ok(spec.includes(key), key);
-});
-
-test("required smoke reporting preserves newest-head verdicts and skips superseded or cancelled work", async (t) => {
-  const yaml = require("js-yaml");
-  const fs = require("node:fs");
-  const os = require("node:os");
-  const path = require("node:path");
-  const { spawnSync } = require("node:child_process");
-  const workflow = yaml.load(await source(".github/workflows/app-smoke.yml"));
-  const report = workflow.jobs.report;
-  assert.match(report.if, /always\(\) && !cancelled\(\)/);
-  assert.match(report.if, /needs\.validate\.outputs\.superseded != 'true'/);
-  assert.equal(report.permissions["pull-requests"], "read");
-  const step = report.steps[0];
-  assert.equal(step.env.HEAD_SHA, "${{ needs.validate.outputs.head-sha || github.event.workflow_run.head_sha }}");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-smoke-report-"));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(dir, "gh"), `#!/usr/bin/env bash
-set -euo pipefail
-echo "$*" >> "$CALLS"
-case "$*" in
-  "api repos/hypertask-ai/hypertask/pulls/1517") cat "$PULL_FIXTURE" ;;
-  "api --method POST repos/hypertask-ai/hypertask/statuses/"*) echo '{}' ;;
-  "workflow run automerge.yml "*) exit 0 ;;
-  *) echo "unexpected gh call: $*" >&2; exit 9 ;;
-esac
-`, { mode: 0o755 });
-  const sha = "a".repeat(40);
-  for (const fixture of [
-    { smoke: "success", validation: "success", expected: "success", description: "Real build and eight core actions passed" },
-    { smoke: "failure", validation: "success", expected: "failure", description: "App smoke failed" },
-    { smoke: "skipped", validation: "failure", expected: "failure", description: "App smoke failed" },
-    { smoke: "skipped", validation: "success", docsOnly: "true", expected: "success", description: "docs-only change, skipped" },
-    { smoke: "cancelled", validation: "success" },
-    { smoke: "failure", validation: "success", currentSha: "b".repeat(40) },
-    { smoke: "success", validation: "success", currentSha: "b".repeat(40) },
-    { smoke: "skipped", validation: "success", docsOnly: "true", currentSha: "b".repeat(40) },
-    { smoke: "failure", validation: "success", state: "closed" },
-  ]) {
-    const label = JSON.stringify(fixture);
-    const callsFile = path.join(dir, "calls");
-    const pullFixture = path.join(dir, "pull.json");
-    fs.writeFileSync(callsFile, "");
-    fs.writeFileSync(pullFixture, JSON.stringify({ state: fixture.state ?? "open", head: { sha: fixture.currentSha ?? sha } }));
-    const result = spawnSync("bash", ["-c", step.run], {
-      encoding: "utf8",
-      env: {
-        PATH: `${dir}:${process.env.PATH}`, REPO: "hypertask-ai/hypertask", PR: "1517", HEAD_SHA: sha,
-        VALIDATION_RESULT: fixture.validation, SMOKE_RESULT: fixture.smoke, DOCS_ONLY: fixture.docsOnly ?? "false",
-        CALLS: callsFile, PULL_FIXTURE: pullFixture,
-      },
-    });
-    assert.equal(result.status, 0, `${label}: ${result.stdout}${result.stderr}`);
-    const calls = fs.readFileSync(callsFile, "utf8");
-    if (!fixture.expected) {
-      assert.doesNotMatch(calls, /statuses\/|workflow run/, label);
-      continue;
-    }
-    assert.match(calls, new RegExp(`statuses/${sha} -f state=${fixture.expected} -f context=app-smoke`), label);
-    assert.ok(calls.includes(`-f description=${fixture.description}`), label);
-    assert.ok(calls.indexOf("pulls/1517") < calls.indexOf("statuses/"), label);
-    assert.match(calls, /workflow run automerge\.yml/, label);
-  }
 });

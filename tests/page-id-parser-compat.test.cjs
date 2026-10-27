@@ -63,15 +63,15 @@ test('opaque publicId values are never coerced in get, patch, archive, versions 
     }
   }
 });
-test('shared parser runs in every mode with body compatibility options and list defaults', async () => {
+test('shared parser runs only ON with body compatibility options and list defaults', async () => {
   const parser = load('src/lib/parsePositiveInt.ts', {});
-  for (const operation of ['create', 'list', 'patch', 'restore']) for (const mode of ['ON', 'OFF', 'USER_FAILURE', 'NO_SESSION']) {
+  for (const operation of ['create', 'list', 'patch', 'restore']) for (const mode of ['ON', 'OFF', 'FLAG_FAILURE', 'USER_FAILURE', 'NO_SESSION']) {
     const parsed = [];
     const result = await run(operation, mode, { mocks: {
       '@/lib/parsePositiveInt': { parsePositiveInt: (...args) => { parsed.push(args); return parser.parsePositiveInt(...args); } },
     } });
     assert.deepEqual(contract(result), contract(await run(operation, 'OFF')));
     const values = { create: [50, 61], list: ['50'], patch: [3], restore: [91] }[operation];
-    assert.deepEqual(parsed, values.map((value) => operation === 'list' ? [value] : [value, { safe: false, max: Infinity }]));
+    assert.deepEqual(parsed, mode === 'ON' ? values.map((value) => operation === 'list' ? [value] : [value, { safe: false, max: Infinity }]) : []);
   }
 });

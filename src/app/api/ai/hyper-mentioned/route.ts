@@ -358,7 +358,6 @@ async function hyperMention(request: NextRequest) {
       taskId: usageTaskId,
       provider: selected.usageProvider,
       feature: "hyper-mentioned",
-      reasoningFeature: "hyper-mentioned",
     });
     const result = await generateText({
       experimental_download: downloadWithoutBrotli,

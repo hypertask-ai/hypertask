@@ -73,8 +73,8 @@ const { getProjectWhere } = load("src/utils/controllers/projects/getAllIncludes.
   "@/utils/controllers/notifications/visibleInboxScope": {},
 });
 
-function fixture({ userId = 7, compat, failQuery = false, roots = graph(), access = "owner" } = {}) {
-  const calls = { queries: [], auth: [] };
+function fixture({ enabled = false, userId = 7, compat, failFlag = false, failQuery = false, roots = graph(), access = "owner" } = {}) {
+  const calls = { queries: [], flags: [], auth: [] };
   const database = { task: { findMany: async (args) => {
     calls.queries.push(args);
     if (failQuery) throw new Error("synthetic query failure");
@@ -98,6 +98,11 @@ function fixture({ userId = 7, compat, failQuery = false, roots = graph(), acces
     "@/lib/auth/getSessionUser": { getSessionUser: async (...args) => {
       calls.auth.push(args);
       return userId == null ? null : { userId, source: "better-auth" };
+    } },
+    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "htpr-6924-rest-compat", isFeatureEnabled: async (...args) => {
+      calls.flags.push(args);
+      if (failFlag) throw new Error("synthetic flag failure");
+      return enabled;
     } },
   };
   const controller = load("src/utils/controllers/tasks/getAll.ts", mocks).default;

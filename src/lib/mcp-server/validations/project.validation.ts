@@ -1,23 +1,8 @@
 
 import { z } from 'zod';
-import type { BoardColumnRole } from '@/lib/mcp/boards/columnRole';
-import { paginationSchema, sortOrderSchema } from './common/pagination';
-import { listFilterSchema, withListQuerySchema } from './common/listQuery';
-import { parseSort } from '@/lib/mcp/listQuery';
+import { paginationSchema, sortBySchema, sortOrderSchema } from './common/pagination';
+import { withListQuerySchema } from './common/listQuery';
 import { estimateIndexOptionalSchema, statusFilterSchema } from './common/filters';
-
-export const SECTION_ROLE_VALUES: [BoardColumnRole, ...BoardColumnRole[]] = [
-  'intake',
-  'backlog',
-  'ready',
-  'in-progress',
-  'ai-review',
-  'human-review',
-  'done',
-  'other',
-];
-
-export const sectionRoleSchema = z.enum(SECTION_ROLE_VALUES);
 
 export function getListProjectsInputSchema() {
   return withListQuerySchema(
@@ -29,14 +14,8 @@ export function getListProjectsInputSchema() {
       .merge(paginationSchema),
   )
     .extend({
-      sort_by: z.enum(['createdAt', 'title']).optional(),
+      sort_by: sortBySchema,
       sort_order: sortOrderSchema,
-      sort: z.string().min(1).refine(value => {
-        const { sortBy } = parseSort(value);
-        return sortBy === 'title' || sortBy === 'createdAt';
-      }, 'sort must be title or createdAt').optional()
-        .describe('Sort by title or createdAt, optionally with :asc or :desc. Boards do not track update times.'),
-      filter: listFilterSchema.unwrap().omit({ updated_since: true }).optional(),
     })
     .strict();
 }
@@ -76,7 +55,6 @@ export function getBoardConfigBaseSchema() {
   return z
     .object({
       action: z.enum([
-        'get_hygiene',
         'get_playbook',
         'set_playbook',
         'get_instructions',
@@ -389,18 +367,13 @@ export function getSectionCrudBaseSchema() {
         .describe('For get: include tasks in the column. Default true.'),
       limit: z.number().int().positive().optional().describe('For get: max tasks to return. Default 50.'),
       offset: z.number().int().nonnegative().optional().describe('For get: pagination offset.'),
-      role: sectionRoleSchema
-        .optional()
-        .describe(
-          'For list: return only columns with this semantic role. For get: fail unless the column has this role. The manifest publishes these roles and they follow the title, so they cannot be set.'
-        ),
     }),
   ).strict();
 }
 
 export function getSectionCrudInputSchema() {
   return getSectionCrudBaseSchema().superRefine((data, ctx) => {
-    const { action, project_id, section_id, title, move_after_section_id, is_done, auto_assign, role } = data;
+    const { action, project_id, section_id, title, move_after_section_id, is_done, auto_assign } = data;
 
     if (!project_id) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'project_id is required for all actions', path: ['project_id'] });
@@ -410,13 +383,6 @@ export function getSectionCrudInputSchema() {
     }
     if (action === 'create' && !title) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'title is required for create', path: ['title'] });
-    }
-    if ((action === 'create' || action === 'update' || action === 'delete') && role !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `role follows the column title and cannot be set; use action list with role to find the ${role} column`,
-        path: ['role'],
-      });
     }
     if (action === 'update' && !title && !move_after_section_id && is_done === undefined && auto_assign === undefined) {
       ctx.addIssue({

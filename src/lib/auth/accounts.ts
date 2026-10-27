@@ -3,7 +3,6 @@
 import nookies, { parseCookies } from "nookies";
 import authConfig from "@/lib/configs/auth.config";
 import { authClient } from "@/lib/auth/betterAuthClient";
-import type { ForceSignOutResult } from "@/lib/auth/session";
 
 export interface SwitchAccount {
   sessionToken: string;
@@ -141,15 +140,8 @@ export const signOutCurrentAccount = async (
 
 export const signOutAllAccounts = async (): Promise<boolean> => {
   try {
-    const response = await fetch("/api/auth/force-signout", {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!response.ok) return false;
-    const result: ForceSignOutResult = await response.json();
-    if (!result.browserCookiesCleared) return false;
-    authClient.$store.notify("$sessionSignal");
-    return true;
+    const response = await authClient.signOut();
+    return !response?.error && response?.data?.success !== false;
   } catch {
     return false;
   }

@@ -22,7 +22,6 @@ export function useCommentToAiChat() {
     chatHistoryReady,
     startNewSession,
     restoreChat,
-    currentSession,
   } = useOptionalAiChatContext() ?? {};
   const [chatOpen, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(
@@ -41,8 +40,6 @@ export function useCommentToAiChat() {
   startNewSessionRef.current = startNewSession;
   const restoreChatRef = useRef(restoreChat);
   restoreChatRef.current = restoreChat;
-  const currentSessionRef = useRef(currentSession);
-  currentSessionRef.current = currentSession;
   const sendingRef = useRef(false);
   const isTypingRef = useRef(isTyping);
   const chatHistoryReadyRef = useRef(chatHistoryReady);
@@ -144,35 +141,5 @@ export function useCommentToAiChat() {
     setAiChatExplicitOpenAt(Date.now());
   };
 
-  const runCommentSkill = async (taskId: number, prompt: string, commentText: string) => {
-    if (taskId <= 0) return false;
-    setSidebarMode(true);
-    chatOpenRef.current = true;
-    openChat();
-    restoreChatRef.current?.();
-    if (sendingRef.current || isTypingRef.current) return false;
-    sendingRef.current = true;
-    const request = ++editRequestRef.current;
-    const isCurrent = () => chatOpenRef.current && taskInViewRef.current === taskId && request === editRequestRef.current;
-    try {
-      if (!(await waitForSession()) || !isCurrent() || !startNewSessionRef.current) return false;
-      const session = await startNewSessionRef.current();
-      if (!session || !isCurrent()) return false;
-      setEditTaskId(null);
-      window.dispatchEvent(new window.CustomEvent("ht-ticket-chat-resume", {
-        cancelable: true, detail: { sessionId: session.id },
-      }));
-      const deadline = Date.now() + 5000;
-      while (currentSessionRef.current?.id !== session.id && Date.now() < deadline && isCurrent()) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      if (!isCurrent() || currentSessionRef.current?.id !== session.id || isTypingRef.current) return false;
-      restoreChatRef.current?.();
-      return await handleSendMessageRef.current?.(`${prompt.trim()}\n\n${commentText}`) ?? false;
-    } finally {
-      sendingRef.current = false;
-    }
-  };
-
-  return { copyCommentToAiChat, summarizeComment, summarizeTicket, editTicketWithAi, runCommentSkill };
+  return { copyCommentToAiChat, summarizeComment, summarizeTicket, editTicketWithAi };
 }

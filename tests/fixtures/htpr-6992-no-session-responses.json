@@ -138,12 +138,6 @@
         "message": "Unauthorized"
       }
     },
-    "POST": {
-      "status": 401,
-      "body": {
-        "message": "Unauthorized"
-      }
-    },
     "wrong:PATCH": {
       "status": 405,
       "body": {

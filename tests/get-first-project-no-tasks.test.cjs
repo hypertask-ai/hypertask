@@ -19,11 +19,7 @@ stubModule("src/lib/prisma.ts", {
   },
 });
 stubModule("src/utils/helperFunctions/Views/BoardFilterSanitizer.ts", { sanitizeProjectBoardFilters: (project) => project });
-stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
-  projectContentAccessWhere: (userId) => ({ ownerId: userId }),
-  getProjectWhere: (userId) => ({ ownerId: userId, teamId: { not: null } }),
-});
-stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => true });
+stubModule("src/utils/controllers/projects/getAllIncludes.ts", { projectContentAccessWhere: (userId) => ({ ownerId: userId }) });
 stubModule("src/utils/controllers/projects/create.ts", { createProjectViewAndCreateDefault: async () => {} });
 stubModule("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: () => true });
 

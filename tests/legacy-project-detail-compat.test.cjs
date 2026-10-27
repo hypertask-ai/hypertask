@@ -21,8 +21,8 @@ test.after(() => {
 });
 const { signSession } = load("src/lib/auth/session.ts", {});
 
-function fixture({ compat, userId = 7, failAuth = false, project = frozen.json.json, failQuery = false, realAuth = false, token } = {}) {
-  const calls = { queries: [], auth: [] };
+function fixture({ enabled = false, compat, userId = 7, failFlag = false, failAuth = false, project = frozen.json.json, failQuery = false, realAuth = false, token } = {}) {
+  const calls = { flags: [], queries: [], auth: [] };
   const handler = load("src/pages/api/projects/detail.ts", {
     "@/lib/auth/agentScope": scope,
     "@/lib/prisma": { default: { agent: { findFirst: async () => ({ credentialTeamId: null, credentialTeamAccessBinding: null, mcpTokenJti: null }) }, project: { findFirst: async (args) => {
@@ -38,16 +38,23 @@ function fixture({ compat, userId = 7, failAuth = false, project = frozen.json.j
       if (failAuth) throw new Error("synthetic auth failure");
       return userId == null ? null : { userId };
     } } } : {}),
+    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "htpr-6924-rest-compat", isFeatureEnabled: async (...args) => {
+      calls.flags.push(args);
+      if (failFlag) throw new Error("synthetic flag failure");
+      return enabled;
+    } },
   }).default;
   const invoke = (body = { projectId: 15 }, method = "POST") => pages(handler, { method, body, headers: token === undefined ? {} : { cookie: `ht_session=${token}` }, query: compat === undefined ? {} : { compat } });
   return { invoke, calls };
 }
 
 for (const [name, options] of [
-  ["absent opt-in", {}],
-  ["wrong opt-in", { compat: "other" }],
-  ["duplicate opt-in", { compat: ["htpr-6924", "htpr-6924"] }],
-  ["another user", { userId: 99 }],
+  ["OFF with opt-in", { compat: "htpr-6924" }],
+  ["ON without opt-in", { enabled: true }],
+  ["ON with wrong opt-in", { enabled: true, compat: "other" }],
+  ["ON with duplicate opt-in", { enabled: true, compat: ["htpr-6924", "htpr-6924"] }],
+  ["flag lookup failure", { enabled: true, compat: "htpr-6924", failFlag: true }],
+  ["ordinary audience", { enabled: false, compat: "htpr-6924", userId: 99 }],
 ]) {
   test(`${name} keeps frozen full-project bytes, statuses, headers and query`, async () => {
     const f = fixture(options);
@@ -61,22 +68,25 @@ for (const [name, options] of [
     assert.deepEqual(where, { id: 15, status: "Normal", ...projectContentAccessWhere(options.userId ?? 7) });
     assert.deepEqual(include, frozen.args.include);
     assert.deepEqual(Object.keys(f.calls.queries[0]).sort(), ["include", "relationLoadStrategy", "where"]);
+    const optedIn = options.compat === "htpr-6924";
+    assert.deepEqual(f.calls.flags, optedIn ? [["htpr-6924-rest-compat", options.userId ?? 7]] : []);
     assert.deepEqual(f.calls.auth, [true]);
   });
 }
 
-for (const userId of [6, 985, 99]) {
-  test(`user ${userId} with explicit opt-in receives only negotiated 410`, async () => {
-    const f = fixture({ userId, compat: "htpr-6924" });
+for (const userId of [6, 985]) {
+  test(`allowed audience ${userId} plus explicit opt-in receives only negotiated 410`, async () => {
+    const f = fixture({ userId, enabled: true, compat: "htpr-6924" });
     const response = await f.invoke({ projectId: 15, userId: 999 });
     assert.equal(response.status, 410);
     assert.equal(response.text, '{"error":"Legacy project detail has been retired","replacement":"/api/projects/boardTasks"}');
     assert.deepEqual(response.headers, {});
+    assert.deepEqual(f.calls.flags, [["htpr-6924-rest-compat", userId]]);
     assert.deepEqual(f.calls.queries, []);
   });
 }
 
-for (const options of [{}, { compat: "other" }]) {
+for (const options of [{}, { compat: "htpr-6924" }, { enabled: true }, { enabled: true, compat: "htpr-6924", failFlag: true }]) {
   test(`legacy project errors remain byte-identical: ${JSON.stringify(options)}`, async () => {
     const missing = await fixture(options).invoke({});
     assert.equal(missing.status, 400);
@@ -90,38 +100,35 @@ for (const options of [{}, { compat: "other" }]) {
   });
 }
 
-test("project retirement preserves POST-only method handling before the retirement check", async () => {
-  const f = fixture({ compat: "htpr-6924" });
+test("project retirement preserves POST-only method handling before probes", async () => {
+  const f = fixture({ enabled: true, compat: "htpr-6924" });
   const response = await f.invoke({}, "GET");
   assert.equal(response.status, 405);
   assert.equal(response.text, '{"message":"Method not allowed"}');
-  assert.deepEqual(f.calls, { queries: [], auth: [] });
+  assert.deepEqual(f.calls, { flags: [], queries: [], auth: [] });
 });
 
 
-for (const compat of [undefined, "other", "htpr-6924"]) {
+for (const compat of [undefined, "htpr-6924"]) {
   for (const [name, token] of [["cookie-less", undefined], ["forged", "forged"], ["expired", signSession({ id: 6 }, -1)]]) {
-    test(`${name} POST with compat=${compat} is Unauthorized before project queries`, async () => {
-      const f = fixture({ realAuth: true, token, compat });
+    test(`${name} POST with compat=${compat} is Unauthorized before project queries or flag probes`, async () => {
+      const f = fixture({ realAuth: true, token, enabled: true, compat });
       const result = await f.invoke({ projectId: 15, userId: 6 });
       assert.equal(result.status, 401);
       assert.equal(result.text, '{"message":"Unauthorized"}');
       assert.deepEqual(result.headers, {});
-      assert.deepEqual(f.calls, { queries: [], auth: [true] });
+      assert.deepEqual(f.calls, { flags: [], queries: [], auth: [true] });
     });
   }
 
   test(`identity lookup failure with compat=${compat} returns no project data`, async () => {
-    const f = fixture({ failAuth: true, compat });
+    const f = fixture({ failAuth: true, enabled: true, compat });
     const result = await f.invoke();
     assert.equal(result.status, 400);
     assert.equal(result.text, '{"message":"{}"}');
-    assert.deepEqual(f.calls, { queries: [], auth: [true] });
+    assert.deepEqual(f.calls, { flags: [], queries: [], auth: [true] });
   });
 
-}
-
-for (const compat of [undefined, "other"]) {
   test(`resolved unrelated user with compat=${compat} gets Project not found from the scoped query`, async () => {
     const f = fixture({ realAuth: true, token: signSession({ id: 99 }), project: null, compat });
     const result = await f.invoke({ projectId: 15, userId: 7 });
@@ -130,6 +137,7 @@ for (const compat of [undefined, "other"]) {
     assert.equal(f.calls.queries.length, 1);
     assert.deepEqual(f.calls.queries[0].where, { id: 15, status: "Normal", ...projectContentAccessWhere(99) });
     assert.deepEqual(f.calls.queries[0].include, frozen.args.include);
+    assert.deepEqual(f.calls.flags, compat ? [["htpr-6924-rest-compat", 99]] : []);
   });
 
   test(`resolved member with compat=${compat} gets frozen full-project bytes`, async () => {
@@ -142,16 +150,24 @@ for (const compat of [undefined, "other"]) {
     assert.deepEqual(f.calls.queries[0].where, { id: 15, status: "Normal", ...projectContentAccessWhere(7) });
     assert.deepEqual(f.calls.queries[0].include, frozen.args.include);
     assert.equal(f.calls.queries[0].relationLoadStrategy, "join");
+    assert.deepEqual(f.calls.flags, compat ? [["htpr-6924-rest-compat", 7]] : []);
   });
 }
 
 for (const userId of [6, 99]) {
-  test(`real signed-session resolver retires project detail for user ${userId}`, async () => {
-    const f = fixture({ realAuth: true, token: signSession({ id: userId }), compat: "htpr-6924" });
+  test(`real signed-session resolver uses user ${userId} for the retirement probe`, async () => {
+    const f = fixture({ realAuth: true, token: signSession({ id: userId }), enabled: userId === 6, compat: "htpr-6924" });
     const result = await f.invoke({ projectId: 15, userId: 6 });
-    assert.equal(result.status, 410);
-    assert.equal(result.text, '{"error":"Legacy project detail has been retired","replacement":"/api/projects/boardTasks"}');
-    assert.deepEqual(f.calls.queries, []);
+    assert.equal(result.status, userId === 6 ? 410 : 200);
+    assert.deepEqual(f.calls.flags, [["htpr-6924-rest-compat", userId]]);
+    if (userId === 6) {
+      assert.equal(result.text, '{"error":"Legacy project detail has been retired","replacement":"/api/projects/boardTasks"}');
+      assert.deepEqual(f.calls.queries, []);
+    } else {
+      assert.equal(result.text, JSON.stringify(frozen.json.json));
+      assert.deepEqual(f.calls.queries[0].where, { id: 15, status: "Normal", ...projectContentAccessWhere(userId) });
+      assert.deepEqual(f.calls.queries[0].include, frozen.args.include);
+    }
   });
 }
 
@@ -171,6 +187,7 @@ for (const project of [frozen.json.json, null]) {
       { members: { some: { agentId, agent: { userId: 7, revokedAt: null } } } },
     ]);
     assert.deepEqual(include, frozen.args.include);
+    assert.deepEqual(f.calls.flags, []);
   });
 }
 

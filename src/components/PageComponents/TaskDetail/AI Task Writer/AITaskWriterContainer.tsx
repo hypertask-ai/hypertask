@@ -77,7 +77,6 @@ const AITaskWriterContainer: React.FC<
   EscapeHandler,
   returnTitleAndDescription,
   applyCreateTaskResult,
-  onCreateTaskFailure,
   mobileCreateTask,
   projectLabels,
   projectSections,
@@ -137,9 +136,6 @@ const AITaskWriterContainer: React.FC<
   const hasAutoTriggered = useRef(false);
   const hasSeededPrompt = useRef(false);
   const appliedCreateResponseRef = useRef("");
-  const [mobileRequestFinished, setMobileRequestFinished] = useState(false);
-  const mobileFallbackAttemptedRef = useRef(false);
-  const mobileFallbackPromptRef = useRef("");
   const hasFocusedMobilePrompt = useRef(false);
   const mobilePromptVisibilityObserver = useRef<MutationObserver | null>(null);
   const mobilePromptCanFocus = useRef(true);
@@ -235,18 +231,15 @@ const AITaskWriterContainer: React.FC<
       const taskTitle = document.getElementById(
         DIV_ID_CONSTANTS.titleInputModal,
       )?.innerHTML;
-      if (onCreateTaskFailure) setMobileRequestFinished(false);
       void sendAIRequest(
         buildTaskWriterPrompt(initialPrompt, taskTitle),
         loadingMessage,
         presentation === "description-suggestion"
           ? "auto-description"
           : "manual",
-      ).finally(() => {
-        if (onCreateTaskFailure) setMobileRequestFinished(true);
-      });
+      );
     },
-    [initialPrompt, onCreateTaskFailure, presentation, sendAIRequest],
+    [initialPrompt, presentation, sendAIRequest],
   );
 
   const onClickHandler = useCallback(() => {
@@ -272,10 +265,6 @@ const AITaskWriterContainer: React.FC<
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
 
     if (isMobileCreateFlow) mobileCreateRequestPendingRef.current = true;
-    if (onCreateTaskFailure) {
-      mobileFallbackPromptRef.current = userPrompt || (autoTrigger ? "" : promptToUse);
-      setMobileRequestFinished(false);
-    }
     void (async () => {
       try {
         await sendAIRequest(
@@ -287,7 +276,6 @@ const AITaskWriterContainer: React.FC<
         toast.error("Could not send the request. Try again.");
       } finally {
         mobileCreateRequestPendingRef.current = false;
-        if (onCreateTaskFailure) setMobileRequestFinished(true);
       }
     })();
   }, [
@@ -300,7 +288,6 @@ const AITaskWriterContainer: React.FC<
     presentation,
     userPrompt,
     sendAIRequest,
-    onCreateTaskFailure,
     isUploadingAttachments,
     uploadProgress,
   ]);
@@ -412,20 +399,6 @@ const AITaskWriterContainer: React.FC<
       projectAssignees,
     ]
   );
-
-  useEffect(() => {
-    if (isLoading) {
-      mobileFallbackAttemptedRef.current = false;
-      return;
-    }
-    if (!isMobileCreateFlow || !onCreateTaskFailure || mobileFallbackAttemptedRef.current) return;
-    if (!hasError && !isByokBlocked && !(mobileRequestFinished && !currentDisplayResponse)) return;
-    mobileFallbackAttemptedRef.current = true;
-    const rawPrompt = mobileFallbackPromptRef.current || (!autoTrigger ? userPrompt || initialPrompt : "");
-    void onCreateTaskFailure(rawPrompt).then((handled) => {
-      if (handled) clearHistory();
-    });
-  }, [autoTrigger, clearHistory, currentDisplayResponse, hasError, initialPrompt, isByokBlocked, isLoading, isMobileCreateFlow, mobileRequestFinished, onCreateTaskFailure, userPrompt]);
 
   useEffect(() => {
     if (

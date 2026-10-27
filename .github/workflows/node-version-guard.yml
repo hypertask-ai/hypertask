@@ -3,19 +3,6 @@ name: Node version guard
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - package.json
-      - '**/package-lock.json'
-      - .github/workflows/**
-      - .github/scripts/check-node-*.cjs
-      - .github/scripts/check-known-bad-packages.cjs
-      - .github/scripts/node-version-guard/**
-      - .github/scripts/feature-flag-parser/**
-      - .github/known-bad-packages.json
-      - src/lib/runtime/nodeSecurityFloor.json
-      - tests/known-bad-packages.test.cjs
-      - tests/light-gate-dependencies.test.cjs
-      - tests/node-version-guard.test.cjs
   push:
     branches: [production]
 

@@ -25,7 +25,7 @@ test("BYOK test requests use one-token provider calls without exposing keys in U
     baseten: ["https://inference.baseten.co/v1/chat/completions", "deepseek-ai/DeepSeek-V4.1-Flash-1017"],
     gateway: ["https://ai-gateway.vercel.sh/v1/chat/completions", "openai/gpt-6-luna"],
     openai: ["https://api.openai.com/v1/chat/completions", "gpt-6-luna"],
-    claude: ["https://api.anthropic.com/v1/messages", "claude-haiku-5-5"],
+    claude: ["https://api.anthropic.com/v1/messages", "claude-haiku-4.5"],
     google: ["https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-3.5-flash-lite"],
     deepseek: ["https://api.deepseek.com/chat/completions", "deepseek-flash"],
     moonshot: ["https://api.moonshot.ai/v1/chat/completions", "kimi-k2.5"],

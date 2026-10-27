@@ -18,7 +18,7 @@ on:
       - 'e2e/visual/**'
       - 'scripts/seed-browser-smoke.mjs'
       - 'scripts/visual-regression-ci.mjs'
-      - '!**/*.md'
+      - 'tests/visual-regression.test.cjs'
   workflow_dispatch:
     inputs:
       base:

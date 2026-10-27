@@ -219,9 +219,10 @@ export async function runContract() {
     // This is the same action/name source imported by the server's catalog selector.
     descriptions[family] = JSON.parse(await readFile(path.join(root, `src/lib/mcp-server/config/descriptions/${family}.json`), "utf8"));
   }
+  const consolidated = fixture.flags["htpr-6804-mcp-tools"];
   const operations = [["projects", "list"], ["tasks", "get"], ["search", "tasks"], ["tasks", "create"], ["comments", "add"],
     ["comments", "list"], ["tasks", "update"], ["labels", "list"], ["pages", "create"], ["pages", "get"]];
-  const coreNames = pairs => [...new Set(pairs.map(([family]) => descriptions[family].name))];
+  const coreNames = pairs => [...new Set(pairs.map(([family, action]) => consolidated ? descriptions[family].name : descriptions[family].actions[action].tool))];
   const tokens = {};
   for (const role of ["owner", "member", "guest", "unaccepted"]) tokens[role] = await mint(base, fixture.callers[role]);
   async function rest(route, token = tokens.owner, options = {}) {
@@ -236,9 +237,10 @@ export async function runContract() {
   tokens.oauth = await oauth(base, fixture.callers.owner);
   async function call(token, family, action, input) {
     const definition = descriptions[family];
+    const operation = definition.actions[action];
     const result = await rpc(base, token, "tools/call", {
-      name: definition.name,
-      arguments: { action, input, response_format: "detailed" },
+      name: consolidated ? definition.name : operation.tool,
+      arguments: consolidated ? { action, input, response_format: "detailed" } : { ...input, ...(operation.legacy_action ? { action: operation.legacy_action } : {}) },
     });
     return toolData(result, `${family}/${action}`);
   }
@@ -267,7 +269,7 @@ export async function runContract() {
     for (const comments of [await call(token, "comments", "list", { task_id: id }), await rest(`/comments?task_id=${id}`, token)]) {
       requireThat(comments.comments?.some(row => row.id === added.comment.id && row.text.includes(text)), `${role}: comment readback missing content`);
     }
-    const moved = await call(token, "tasks", "update", { task_id: id, section_id: board.columns[1].id });
+    const moved = await call(token, "tasks", "update", { task_id: id, [consolidated ? "section_id" : "sectionId"]: board.columns[1].id });
     requireThat(moved.task?.id === id, `${role}: wrong move receipt`);
     for (const data of [await call(token, "tasks", "get", { task_id: [id] }), await rest(`/tasks?task_id=${id}`, token)]) {
       requireThat(taskRow(data, id, title).sectionId === board.columns[1].id, `${role}: move readback wrong column`);
@@ -287,8 +289,8 @@ export async function runContract() {
   await initialize(readToken, operations.filter(([family, action]) => descriptions[family].actions[action].read_only));
   taskRow(await call(readToken, "tasks", "get", { task_id: [board.task.id] }), board.task.id, board.task.title);
   const writeInput = { project_id: board.id, title: "Read agent must not write" };
-  const denied = await rpcEnvelope(base, readToken, "tools/call", { name: descriptions.tasks.name,
-    arguments: { action: "create", input: writeInput } });
+  const denied = await rpcEnvelope(base, readToken, "tools/call", { name: consolidated ? descriptions.tasks.name : descriptions.tasks.actions.create.tool,
+    arguments: consolidated ? { action: "create", input: writeInput } : writeInput });
   requireThat(denied.envelope?.id === denied.id && (denied.envelope.error || denied.envelope.result?.isError === true), "Read agent: MCP write was not refused");
   const restDenied = await requestLocal(base, "/api/mcp/tasks/create", { method: "POST", headers: { Authorization: `Bearer ${readToken}`, "Content-Type": "application/json" }, body: JSON.stringify(writeInput) });
   requireThat(restDenied.status === 403, "Read agent: REST write was not refused");

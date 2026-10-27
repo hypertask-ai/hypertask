@@ -68,7 +68,7 @@ stub("src/lib/agents/runtimeState.ts", {
 stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => viewer });
 stub("src/lib/flags.ts", {
-  SHARED_AGENT_CHAT_FLAG: "shared", AGENT_CHAT_TICKET_CONFIRM_FLAG: "confirm",
+  SHARED_AGENT_CHAT_FLAG: "shared", AGENT_CHAT_BRIEF_FLAG: "brief", AGENT_CHAT_TICKET_CONFIRM_FLAG: "confirm",
   isFeatureEnabled: async (key) => key === FLAG ? enabled : key === "shared" ? shared : false,
 });
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: (userId) => ({ __visibleTo: userId }) });

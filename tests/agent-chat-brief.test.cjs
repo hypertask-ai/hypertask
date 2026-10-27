@@ -26,6 +26,7 @@ function stubModule(relativePath, exports) {
 }
 
 function loadMessageRoute({
+  flagEnabled,
   brief,
   briefError = null,
   adhdReplyEnabled = false,
@@ -89,7 +90,9 @@ function loadMessageRoute({
   });
   stubModule("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
   stubModule("src/lib/flags.ts", {
+    AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
     isFeatureEnabled: async (key) => {
+      if (key === "htpr-6155-chat-agent-brief") return flagEnabled;
       if (key === "htpr-6407-mobile-agent-chat-layout") return adhdReplyEnabled;
       return false;
     },
@@ -393,31 +396,37 @@ async function sendMessage(route) {
   );
 }
 
-test("message send always includes the brief without a feature flag", async () => {
+test("message send includes the brief only when its server flag is enabled", async () => {
   const brief = {
     currentTicket: { ticketNumber: "HTPR-6155" },
     recentTickets: [],
     openPullRequests: [],
     recentComments: [],
   };
-  const route = loadMessageRoute({ brief });
-  assert.equal((await sendMessage(route)).status, 200);
-  assert.equal(route.briefCalls(), 1);
-  assert.deepEqual(route.deliveries[0].agentBrief, brief);
-  assert.deepEqual(route.participantUpdates[0].where, {
+  const enabled = loadMessageRoute({ flagEnabled: true, brief });
+  assert.equal((await sendMessage(enabled)).status, 200);
+  assert.equal(enabled.briefCalls(), 1);
+  assert.deepEqual(enabled.deliveries[0].agentBrief, brief);
+
+  const disabled = loadMessageRoute({ flagEnabled: false, brief });
+  assert.equal((await sendMessage(disabled)).status, 200);
+  assert.equal(disabled.briefCalls(), 0);
+  assert.equal("agentBrief" in disabled.deliveries[0], false);
+  assert.deepEqual(disabled.participantUpdates[0].where, {
     sessionId: "session-1",
     userId: 6,
   });
-  assert.equal(route.participantUpdates[0].data.draft, null);
+  assert.equal(disabled.participantUpdates[0].data.draft, null);
   assert.equal(
-    route.participantUpdates[0].data.lastReadAt.toISOString(),
+    disabled.participantUpdates[0].data.lastReadAt.toISOString(),
     "2026-09-05T12:00:00.000Z",
-    "sending still clears the draft and marks the message as read",
+    "turning sharing off cannot leave a sent draft or stale read marker",
   );
 });
 
 test("message send keeps the exact legacy payload when enrichment fails", async () => {
   const route = loadMessageRoute({
+    flagEnabled: true,
     brief: null,
     briefError: new Error("brief unavailable"),
   });
@@ -441,6 +450,7 @@ test("message send keeps the exact legacy payload when enrichment fails", async 
 
 test("message send adds ADHD reply guidance when the layout flag is on", async () => {
   const route = loadMessageRoute({
+    flagEnabled: false,
     brief: null,
     adhdReplyEnabled: true,
   });

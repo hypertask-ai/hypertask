@@ -172,28 +172,40 @@ test('initial and resent links allow only campaign attribution and auth/invite f
   }
 })
 
-test('new emails get first-time copy and existing accounts retain sign-in copy on send and resend', async t => {
-  for (const existingUser of [null, { id: 6 }, { id: 7 }]) {
-    await t.test(existingUser ? `existing account ${existingUser.id}` : 'new email', async t => {
-      const h = harness(t, { existingUser })
-      for (let send = 0; send < 2; send++) {
-        assert.equal((await h.send({ firstTime: !!existingUser, userId: 6 })).status, 200)
-        const email = h.sent.at(-1)
-        if (existingUser) {
-          assert.equal(email.subject, 'Sign in to Hypertask')
-          assert.match(email.html, /Choose your preferred sign-in method below/)
-          assert.doesNotMatch(email.html, /people and AI agents work together/)
-        } else {
-          assert.equal(email.subject, 'Confirm your email to open your Hypertask board')
-          assert.match(email.html, /Confirm your email to land on your board, where people and AI agents work together\./)
-          assert.doesNotMatch(email.html, /Choose your preferred sign-in method below/)
-        }
-        assert.match(email.html, /This link expires in 15 minutes/)
-        assert.match(email.html, /This code expires in 30 minutes/)
-        h.advance(60_000)
-      }
-    })
+test('first-time variant is off for anonymous recipients under default Owner + QA, irrespective of sender session', async t => {
+  const h = harness(t)
+  assert.equal((await h.send({ firstTime: true, userId: 6 })).status, 200)
+  assert.equal(h.sent[0].subject, 'Sign in to Hypertask')
+  assert.match(h.sent[0].html, /Choose your preferred sign-in method below/)
+  assert.doesNotMatch(h.sent[0].html, /people and AI agents work together/)
+  assert.ok(h.flagReads.includes('htpr-7032-first-time-email'))
+})
+
+test('first-time variant renders on first send and resend only when owner releases it to Everyone', async t => {
+  const h = harness(t, { modes: { 'htpr-7032-first-time-email': 'EVERYONE' } })
+  for (let send = 0; send < 2; send++) {
+    assert.equal((await h.send()).status, 200)
+    assert.equal(h.sent.at(-1).subject, 'Confirm your email to open your Hypertask board')
+    assert.match(h.sent.at(-1).html, /Confirm your email to land on your board, where people and AI agents work together\./)
+    assert.match(h.sent.at(-1).html, /This link expires in 15 minutes/)
+    assert.match(h.sent.at(-1).html, /This code expires in 30 minutes/)
+    h.advance(60_000)
   }
+})
+
+test('first-time variant respects Off', async t => {
+  const h = harness(t, { modes: { 'htpr-7032-first-time-email': 'OFF' } })
+  assert.equal((await h.send()).status, 200)
+  assert.equal(h.sent[0].subject, 'Sign in to Hypertask')
+})
+
+test('existing accounts including owner retain normal sign-in email even with first-time flag Everyone', async t => {
+  const h = harness(t, { existingUser: { id: 6 }, modes: { 'htpr-7032-first-time-email': 'EVERYONE' } })
+  assert.equal((await h.send()).status, 200)
+  assert.equal(h.sent[0].subject, 'Sign in to Hypertask')
+  assert.match(h.sent[0].html, /Choose your preferred sign-in method below/)
+  assert.doesNotMatch(h.sent[0].html, /people and AI agents work together/)
+  assert.ok(!h.flagReads.includes('htpr-7032-first-time-email'))
 })
 
 test('invalid external returnTo stays excluded and immediate resend remains rate limited', async t => {

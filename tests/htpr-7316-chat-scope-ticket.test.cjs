@@ -88,7 +88,7 @@ for (const default_context of [{ project_id: 15, task_id: 42 }, { project_id: 22
     assert.equal((await h.send(default_context)).status, 200);
     assert.deepEqual(h.started[0].body.default_context, default_context);
     assert.deepEqual(h.started[0].body.context_list, [{ type: "task", id: 999 }]);
-    assert.deepEqual(h.flags, [["htpr-7765-parallel-chats", user.id]]);
+    assert.deepEqual(h.flags, []);
   });
 }
 

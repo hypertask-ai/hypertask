@@ -28,7 +28,7 @@ source('src/lib/mcp-server/legacy-sse.ts', {
 })
 const flagChecks = []
 source('src/lib/flags.ts', {
-  HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'htpr-7203-mcp-flat-schema',
+  HTPR_6804_MCP_TOOLS_FLAG: 'htpr-6804-mcp-tools',
   isFeatureEnabled: async (key, userId) => {
     flagChecks.push({ key, userId })
     return false
@@ -117,21 +117,13 @@ test('each legacy route and supported method captures verified identity and requ
   }
 })
 
-test('transport analytics evaluates remaining schema flags through an isolated fixture for the verified user', async () => {
+test('transport analytics evaluates the catalog flag through an isolated fixture for the verified user', async () => {
   for (const endpoint of ['/sse', '/message', '/mcp']) {
     await call(endpoint)
     assert.deepEqual(flagChecks, [
+      { key: 'htpr-6927-mcp-v2', userId: 2343 },
       { key: 'htpr-7195-ai-feedback', userId: 2343 },
-      { key: 'htpr-7902-team-id', userId: 2343 },
-      { key: 'htpr-7203-mcp-flat-schema', userId: 2343 },
-      { key: 'htpr-7863-mcp-page-alias', userId: 2343 },
-      { key: 'htpr-7895-task-number-alias', userId: 2343 },
-      { key: 'htpr-7893-board-alias', userId: 2343 },
-      { key: 'htpr-7897-mcp-input-fields', userId: 2343 },
-      { key: 'htpr-7917-mcp-input-wrappers', userId: 2343 },
-      { key: 'htpr-7914-ticket-number-hint', userId: 2343 },
-      { key: 'htpr-7894-task-id-ticket-reference', userId: 2343 },
-      { key: 'htpr-7910-renamed-field-hint', userId: 2343 },
+      { key: 'htpr-6804-mcp-tools', userId: 2343 },
     ])
   }
   authenticated = false

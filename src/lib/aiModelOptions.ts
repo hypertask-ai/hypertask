@@ -12,7 +12,7 @@ export type TAiReasoningVariant = "instant" | "thinking" | "mini";
 
 export type TAiModelKey =
   | "gpt-6-luna"
-  | "gpt-6.1-terra"
+  | "gpt-5.6-terra"
   | "gpt-6.1-sol"
   | "claude-sonnet-5-5"
   | "claude-opus-5-5"
@@ -25,8 +25,7 @@ export type TAiModelKey =
   | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
-  | "gemini-4-argon"
-  | "grok-4.7"
+  | "claude-haiku-4.5"
   | "claude-haiku-5-5"
   | "custom";
 
@@ -36,9 +35,9 @@ export type TAiModelOptionId =
   | "gpt-6-luna"
   | "gpt-6-luna-light"
   | "gpt-6-luna-high"
-  | "gpt-6.1-terra"
-  | "gpt-6.1-terra-light"
-  | "gpt-6.1-terra-high"
+  | "gpt-5.6-terra"
+  | "gpt-5.6-terra-light"
+  | "gpt-5.6-terra-high"
   | "gpt-6.1-sol"
   | "gpt-6.1-sol-light"
   | "gpt-6.1-sol-high"
@@ -55,8 +54,7 @@ export type TAiModelOptionId =
   | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
-  | "gemini-4-argon"
-  | "grok-4.7"
+  | "claude-haiku-4.5"
   | "claude-haiku-5-5"
   | "custom";
 
@@ -99,21 +97,21 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
   {
     key: "gpt-6-luna",
     modelClass: "gpt-luna",
-    label: "Luna 6",
+    label: "6 Luna",
     provider: "openai",
     priceTier: 2,
   },
   {
-    key: "gpt-6.1-terra",
+    key: "gpt-5.6-terra",
     modelClass: "gpt-terra",
-    label: "Terra 6.1",
+    label: "5.6 Terra",
     provider: "openai",
     priceTier: 2,
   },
   {
     key: "gpt-6.1-sol",
     modelClass: "gpt-sol",
-    label: "Sol 6.1",
+    label: "6.1 Sol",
     provider: "openai",
     priceTier: 3,
     premium: true,
@@ -132,6 +130,13 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     label: "Sonnet 5.5",
     provider: "anthropic",
     priceTier: 2,
+  },
+  {
+    key: "claude-haiku-4.5",
+    modelClass: "claude-haiku",
+    label: "Haiku 4.5",
+    provider: "anthropic",
+    priceTier: 1,
   },
   {
     key: "claude-haiku-5-5",
@@ -204,20 +209,6 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 2,
   },
   {
-    key: "gemini-4-argon",
-    modelClass: "gemini-argon",
-    label: "Gemini 4 Argon",
-    provider: "google",
-    priceTier: 2,
-  },
-  {
-    key: "grok-4.7",
-    modelClass: "grok",
-    label: "Grok 4.7",
-    provider: "xai",
-    priceTier: 2,
-  },
-  {
     key: "custom",
     modelClass: "custom",
     label: "Custom endpoint",
@@ -265,7 +256,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6-luna",
     source: "openai",
-    title: "GPT Luna 6",
+    title: "GPT 6 Luna",
     model: "gpt-6-luna",
     desc: "Cheap and fast",
     reasoning: "instant",
@@ -280,7 +271,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6-luna-light",
     source: "openai",
-    title: "GPT Luna 6 Light",
+    title: "GPT 6 Luna Light",
     model: "gpt-6-luna",
     desc: "Fastest Luna replies",
     reasoning: "instant",
@@ -291,7 +282,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6-luna-high",
     source: "openai",
-    title: "GPT Luna 6 High",
+    title: "GPT 6 Luna High",
     model: "gpt-6-luna",
     desc: "Deep Luna reasoning",
     reasoning: "thinking",
@@ -300,42 +291,42 @@ export const aiModelOptions: TAiModelOption[] = [
     providerOptions: { openai: { reasoningEffort: "high" } },
   },
   {
-    id: "gpt-6.1-terra",
+    id: "gpt-5.6-terra",
     source: "openai",
-    title: "GPT Terra 6.1",
-    model: "gpt-6.1-terra",
+    title: "GPT 5.6 Terra",
+    model: "gpt-5.6-terra",
     desc: "Balanced mid tier",
     reasoning: "instant",
-    modelKey: "gpt-6.1-terra",
+    modelKey: "gpt-5.6-terra",
     effort: "standard",
     providerOptions: { openai: { reasoningEffort: "medium" } },
   },
   {
-    id: "gpt-6.1-terra-light",
+    id: "gpt-5.6-terra-light",
     source: "openai",
-    title: "GPT Terra 6.1 Light",
-    model: "gpt-6.1-terra",
+    title: "GPT 5.6 Terra Light",
+    model: "gpt-5.6-terra",
     desc: "Fastest Terra replies",
     reasoning: "instant",
-    modelKey: "gpt-6.1-terra",
+    modelKey: "gpt-5.6-terra",
     effort: "light",
     providerOptions: { openai: { reasoningEffort: "low" } },
   },
   {
-    id: "gpt-6.1-terra-high",
+    id: "gpt-5.6-terra-high",
     source: "openai",
-    title: "GPT Terra 6.1 High",
-    model: "gpt-6.1-terra",
+    title: "GPT 5.6 Terra High",
+    model: "gpt-5.6-terra",
     desc: "Deep Terra reasoning",
     reasoning: "thinking",
-    modelKey: "gpt-6.1-terra",
+    modelKey: "gpt-5.6-terra",
     effort: "high",
     providerOptions: { openai: { reasoningEffort: "high" } },
   },
   {
     id: "gpt-6.1-sol",
     source: "openai",
-    title: "GPT Sol 6.1",
+    title: "GPT 6.1 Sol",
     model: "gpt-6.1-sol",
     desc: "OpenAI flagship",
     reasoning: "thinking",
@@ -346,7 +337,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6.1-sol-light",
     source: "openai",
-    title: "GPT Sol 6.1 Light",
+    title: "GPT 6.1 Sol Light",
     model: "gpt-6.1-sol",
     desc: "Fastest Sol replies",
     reasoning: "instant",
@@ -357,7 +348,7 @@ export const aiModelOptions: TAiModelOption[] = [
   {
     id: "gpt-6.1-sol-high",
     source: "openai",
-    title: "GPT Sol 6.1 High",
+    title: "GPT 6.1 Sol High",
     model: "gpt-6.1-sol",
     desc: "Deep Sol reasoning",
     reasoning: "thinking",
@@ -432,6 +423,15 @@ export const aiModelOptions: TAiModelOption[] = [
         effort: "high",
       },
     },
+  },
+  {
+    id: "claude-haiku-4.5",
+    source: "claude",
+    title: "Haiku 4.5",
+    model: "claude-haiku-4.5",
+    desc: "Fast and cheap Claude",
+    reasoning: "instant",
+    modelKey: "claude-haiku-4.5",
   },
   {
     id: "claude-haiku-5-5",
@@ -527,24 +527,6 @@ export const aiModelOptions: TAiModelOption[] = [
     desc: "Newest fast Gemini",
     reasoning: "instant",
     modelKey: "gemini-3.8-flash",
-  },
-  {
-    id: "gemini-4-argon",
-    source: "gateway",
-    title: "Gemini 4 Argon",
-    model: "google/gemini-4-argon",
-    desc: "Newest Gemini",
-    reasoning: "instant",
-    modelKey: "gemini-4-argon",
-  },
-  {
-    id: "grok-4.7",
-    source: "gateway",
-    title: "Grok 4.7",
-    model: "spacexai/grok-4.7",
-    desc: "Newest Grok from xAI",
-    reasoning: "instant",
-    modelKey: "grok-4.7",
   },
   {
     id: "custom",
@@ -649,9 +631,6 @@ export function isLunaBlockedForPlan(
 }
 
 const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
-  "gpt-5.6-terra": "gpt-6.1-terra",
-  "gpt-5.6-terra-light": "gpt-6.1-terra-light",
-  "gpt-5.6-terra-high": "gpt-6.1-terra-high",
   "gpt-5.6-luna": "gpt-6-luna",
   "gpt-5.6-luna-light": "gpt-6-luna-light",
   "gpt-5.6-luna-high": "gpt-6-luna-high",
@@ -704,9 +683,10 @@ export function getAiModelOptionById(
   haiku55Enabled = false,
 ): TAiModelOption | undefined {
   const trimmed = id?.trim();
-  if (!trimmed) return undefined;
-  const haiku = isHaiku45Model(trimmed) || isHaiku55Model(trimmed) ? "claude-haiku-5-5" : trimmed;
-  const aliased = RETIRED_OPTION_ID_ALIASES[haiku] ?? haiku;
+  const normalized = trimmed && haiku55Enabled && (isHaiku45Model(trimmed) || isHaiku55Model(trimmed))
+    ? "claude-haiku-5-5" : trimmed;
+  if (!normalized) return undefined;
+  const aliased = RETIRED_OPTION_ID_ALIASES[normalized] ?? normalized;
   const resolved = haiku55Enabled ? upgradeLegacyClaudeOptionId(aliased) : aliased;
   return aiModelOptions.find((option) => option.id === resolved);
 }
@@ -853,26 +833,23 @@ export function isHaiku55Model(modelId: string): boolean {
   return /(?:^|\/)claude-haiku-5[.-]5$/.test(modelId);
 }
 
-export function isGrokGemini4ModelKey(modelKey: string | null | undefined): boolean {
-  return modelKey === "grok-4.7" || modelKey === "gemini-4-argon";
-}
-
 export function isAiModelOptionVisible(
   option: TAiModelOption,
-  _haiku55Enabled: boolean,
+  haiku55Enabled: boolean,
   deepseekFlashFastEnabled = false,
-  grokGemini4Enabled = false,
 ): boolean {
-  if (isGrokGemini4ModelKey(option.modelKey) && !grokGemini4Enabled) return false;
-  return option.modelKey !== "deepseek-v4.1-flash-fast" || deepseekFlashFastEnabled;
+  if (option.modelKey === "deepseek-v4.1-flash-fast" && !deepseekFlashFastEnabled) return false;
+  return haiku55Enabled
+    ? option.modelKey !== "claude-haiku-4.5"
+    : option.modelKey !== "claude-haiku-5-5";
 }
 
 export function isHaiku45Model(modelId: string): boolean {
   return /(?:^|\/)claude-haiku-4[.-]5(?:-\d{8})?$/.test(modelId);
 }
 
-export function resolveHaikuModelId(modelId: string, _haiku55Enabled = false): string {
-  return isHaiku45Model(modelId)
+export function resolveHaikuModelId(modelId: string, haiku55Enabled: boolean): string {
+  return haiku55Enabled && isHaiku45Model(modelId)
     ? modelId.includes("/") ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5"
     : modelId;
 }

@@ -123,7 +123,7 @@ function rawSql(strings, values) {
   return strings.reduce((sql, part, index) => sql + part + (index < values.length ? values[index] : ""), "");
 }
 
-function loadReset(prisma, redis) {
+function loadReset(prisma, enabled, redis) {
   const source = fs.readFileSync(path.join(root, "src/lib/ai/htpr7038ModelReset.ts"), "utf8");
   const javascript = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
@@ -132,6 +132,11 @@ function loadReset(prisma, redis) {
   const stubs = {
     react: { cache: (fn) => fn },
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+      assert.equal(key, "htpr-7038-reset-saved-model-choices");
+      return enabled(userId);
+    } },
+    "@/lib/flags/keys": { HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG: "htpr-7038-reset-saved-model-choices" },
     "@/lib/redis": { getRedis: async () => redis },
   };
   new Function("module", "exports", "require", javascript)(loadedModule, loadedModule.exports, (id) => {
@@ -204,7 +209,7 @@ function database(container, admin, afterRowLock = async () => {}) {
   return { prisma, lookupCount: () => lookups };
 }
 
-test("released server reset, migration history, exact backups, once-only execution and undo on disposable Postgres", { timeout: 180_000 }, async () => {
+test("flagged server reset, migration history, exact backups, once-only execution and undo on disposable Postgres", { timeout: 180_000 }, async () => {
   const history = fs.readdirSync(migrations).filter((name) => name < migrationName && fs.existsSync(path.join(migrations, name, "migration.sql"))).sort();
   assert.ok(history.length > 0);
   assert.doesNotMatch(migration, /\b(UPDATE|INSERT|DELETE|DO)\b/, "migration contains no data-changing SQL");
@@ -264,14 +269,19 @@ test("released server reset, migration history, exact backups, once-only executi
     }
 
     const db = database(container, admin);
+    let flag = false;
     let failCache = false;
     const invalidations = [];
-    const reset = loadReset(db.prisma, { setex: async (...args) => {
+    const reset = loadReset(db.prisma, () => flag, { setex: async (...args) => {
       if (failCache) throw new Error("Synthetic invalidation failure");
       invalidations.push(args);
     } });
+    assert.equal(await reset(1), "disabled");
+    assert.equal(db.lookupCount(), 0, "flag off has no marker lookup or database writes");
+    assert.deepEqual(await snap(), migrated);
+    flag = true;
     failCache = true;
-    assert.equal(await reset(1), "failed", "reset failure is distinct from completed");
+    assert.equal(await reset(1), "failed", "reset failure is distinct from disabled or completed");
     assert.deepEqual(await snap(), migrated, "failed reset rolls back preferences, backups and completion");
     failCache = false;
     for (let id = 1; id <= fixtures.length; id++) await reset(id);
@@ -321,7 +331,7 @@ test("released server reset, migration history, exact backups, once-only executi
     const otherAdmin = session(container);
     try {
       const otherDb = database(container, otherAdmin);
-      const otherReset = loadReset(otherDb.prisma, { setex: async () => {} });
+      const otherReset = loadReset(otherDb.prisma, () => true, { setex: async () => {} });
       const results = await Promise.all([reset(11), otherReset(11)]);
       assert.equal(results.filter((result) => result === "reset").length, 1, "racing first reads execute one reset");
       const concurrent = await snap();
@@ -382,7 +392,7 @@ test("released server reset, migration history, exact backups, once-only executi
       let undoing;
       try {
         const pausedDb = database(container, resetAdmin, async () => { locked(); await resume; });
-        const pausedReset = loadReset(pausedDb.prisma, { setex: async () => {} });
+        const pausedReset = loadReset(pausedDb.prisma, () => true, { setex: async () => {} });
         resetting = pausedReset(userId);
         await paused;
         const application = `htpr_7038_undo_${userId}`;

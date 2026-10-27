@@ -55,7 +55,6 @@ const useHTC = (
   allCommands_: CommandGroup[],
   emptyQueryCommands: CommandGroup[] = allCommands_,
   selectFirstOnEmpty = true,
-  refreshSearchOnCommandsChange = false,
 ) => {
   const [_currentProject] = useRecoilState(currentProjectAtom);
   const [frequentlyUsed] = useRecoilState(frequentlyUsedHTCAton);
@@ -145,9 +144,8 @@ const useHTC = (
   }, [filterCommands, keyword, selectFirstOnEmpty]);
 
   useEffect(() => {
-    if (refreshSearchOnCommandsChange) filterData(keyword);
-    else if (!keyword.trim()) setFilteredCommands(emptyQueryCommands);
-  }, [emptyQueryCommands, filterData, keyword, refreshSearchOnCommandsChange]);
+    if (!keyword.trim()) setFilteredCommands(emptyQueryCommands);
+  }, [emptyQueryCommands, keyword]);
 
   return {
     onKeyChange,

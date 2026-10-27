@@ -44,7 +44,6 @@ async function pick({ mode = "create-comment", enabled = true, inline = true, ba
   window.addEventListener("ai-task-writer-trigger", onEvent);
   const load = loader({
     "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === inlineFlag ? inline : false },
-    "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/keys": keys,
     "@/lib/state": { useRecoilState: () => [{ id: 7049 }, () => {}], useSetRecoilState: () => () => {} },
     "@/store": { currentProjectAtom: "project" },
@@ -141,7 +140,7 @@ test("task detail passes its event target id through Tiptap into slash command s
   const path = require("node:path");
   const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
   assert.match(read("src/components/RTE/useTaskDetailEditorState.tsx"), /useTiptap\(\{\s*mode,\s*editorId: id,/);
-  assert.match(read("src/components/RTE/Tiptap.ts"), /SlashCommands\(mode, editorId, \(\) => skillProjectIdRef\.current\)/);
+  assert.match(read("src/components/RTE/Tiptap.ts"), /SlashCommands\(mode, editorId\)/);
 });
 
 test("skill prompts reach AITaskWriter rather than the draft editor that drops initialPrompt", () => {

@@ -264,7 +264,6 @@ async function taskQuestions(request: NextRequest) {
       taskId: task.id,
       provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "task-questions",
-      reasoningFeature: "suggested-questions",
     });
     const newTicket = parsedBody.data.kind === "new-ticket";
     const writingQuestions = newTicket && await isFeatureEnabled(HTPR_7534_WRITING_QUESTIONS_FLAG, viewer.id);

@@ -21,7 +21,6 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | reflect | Last /ship step, once after the last ticket's Clean up: three reviewers and a synthesizer turn this session's lessons into proposed repo skill edits for HT Product Lead to approve (pstack by Lauren Tan, MIT) | .claude/skills/reflect/SKILL.md |
 | drain-board | `/drain-board <board>`: works every open ticket on a board until each is Done or waiting on Valentin, one ledger gate per ticket | .claude/skills/drain-board/SKILL.md |
 | vcc | Claim, board writes, merge, deploy watch, report | .claude/skills/vcc/SKILL.md |
-| message-poteto | Hypertask-only pstack, token ladder and runner setup questions; blockers go to HT Product Lead first | .claude/skills/message-poteto/SKILL.md |
 | wireframe | New or changed visible UI, except a `[BUGFIX]` restoring intended behaviour, before code: full-app base kit on hypertask.app, clickable link and PNGs, one Question, UX Sign-off, Valentin's yes (Valentin, 2026-10-10) | .claude/skills/wireframe/SKILL.md |
 | reuse-existing-ui | Before UI code | .claude/skills/reuse-existing-ui/SKILL.md |
 | fix-bug | The fix, when it restores behaviour that used to work | .claude/skills/fix-bug/SKILL.md |
@@ -48,6 +47,6 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 ## The flag rule
 
 A real bug fix restores behaviour that used to work or was clearly intended.
-Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get cleanup after 7 days on Everyone; money, access and data-deletion flags stay at 14 days. The daily cron at `/api/cron/feature-flag-removals` files the removal ticket and does not switch the flag. New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode (Valentin, 2026-10-20, HTPR-7389). A `[BUGFIX]` title is only a hint to the mechanical gate: the
+Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode (Valentin, 2026-10-20, HTPR-7389). A `[BUGFIX]` title is only a hint to the mechanical gate: the
 reviewer decides from the diff whether this is truly a fix. New visible
 behaviour dressed as a fix still needs a flag. (Matches `fix-bug/SKILL.md`.)

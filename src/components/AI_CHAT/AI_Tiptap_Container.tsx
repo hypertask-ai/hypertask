@@ -1,6 +1,5 @@
 import AIModelDropDownButton from "../Global/ModelSelectorDropdown";
 import Tooltip from "../Common/Tooltip";
-import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { EditorContent, useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
@@ -9,6 +8,7 @@ import { ControlledComposerEditor } from "@/lib/controlledComposerEditor";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   ArrowDown,
+  Check,
   ChevronDown,
   Clipboard,
   Image as ImageIcon,
@@ -46,7 +46,6 @@ import {
   recentChatBoardIdsAtom,
 } from "@/store";
 import { useDockedChatScope } from "@/hooks/MultiPages/AIChat/useDockedChatScope";
-import { isDockedChatTicketScope } from "@/hooks/MultiPages/AIChat/dockedChatScope";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
@@ -54,7 +53,6 @@ import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
@@ -73,7 +71,6 @@ const SCREENSHOT_MIME_TYPES = new Set([
 ]);
 
 type ControlledComposer = {
-  showScope?: boolean;
   value: string;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   editorRef?: RefObject<Editor | null>;
@@ -106,8 +103,6 @@ export function AI_Tiptap_Container({
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
-  const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
-  const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
   let composeBoardChipEnabled = false;
@@ -276,13 +271,13 @@ export function AI_Tiptap_Container({
           onRemove={removeQueuedMessage}
         />
       )}
-      {(!controlledComposer || (agentContextFlag && agentContextEnabled)) && isMbl && (
+      {!controlledComposer && isMbl && (
         <div
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
         >
           {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
-          {!controlledComposer && <div
+          <div
             data-ai-chat-mobile-context-scroll
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
           >
@@ -292,7 +287,7 @@ export function AI_Tiptap_Container({
               mobile
             />
             <AddContextButton onClick={handleAddContext} mobile />
-          </div>}
+          </div>
         </div>
       )}
       <div
@@ -380,7 +375,7 @@ export function AI_Tiptap_Container({
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
           leadingControls={
-            controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
+            controlledComposer ? null : (
               <>
                 <AIModelDropDownButton
                   optionCallback={dropDownButtonAICallback}
@@ -549,6 +544,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
   );
   const { data: allTeams } = useGetAllTeamsMinimal(currentUser?.id ?? null);
   const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const teams = useMemo(
     () =>
       sortBoardsByRecent(
@@ -571,13 +567,26 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
       ? { kind: "boards", label: "All boards", title: "All boards" }
       : typeof dockedScope === "number"
         ? { kind: "board", label: pickedBoardName, title: pickedBoardName }
-        : isDockedChatTicketScope(dockedScope, onTask, ticketScopeEnabled) && inViewObject.taskTicketNumber
+        : onTask && (!ticketScopeEnabled || dockedScope === "ticket") && inViewObject.taskTicketNumber
           ? {
               kind: "task",
               label: inViewObject.taskTicketNumber,
               title: inViewObject.taskTitle ?? inViewObject.taskTicketNumber,
             }
           : { kind: "board", label: currentBoardName, title: currentBoardName };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
 
   const selectScope = (projectId: number | "all" | "ticket" | null) => {
     if (typeof projectId === "number") {
@@ -594,16 +603,17 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
 
   return (
     <div
+      ref={rootRef}
       data-ai-chat-mobile-scope={mobile || undefined}
       data-ai-chat-scope
       className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
     >
       {reuseChip ? (
         <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={scopeChip.title}
-          mobile={mobile} isOpen={isOpen} aria-haspopup="dialog" onClick={() => setIsOpen((open) => !open)} />
+          mobile={mobile} isOpen={isOpen} onClick={() => setIsOpen((open) => !open)} />
       ) : <button
         type="button"
-        aria-haspopup="dialog"
+        aria-haspopup="menu"
         aria-expanded={isOpen}
         className={`inline-flex w-full min-w-0 items-center text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active ${
           mobile
@@ -638,32 +648,68 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
       </button>}
 
       {isOpen && (
-        <OptionPickerModal
-          header="Chat context"
-          options={[
-            ...(ticketScopeEnabled && onTask
-              ? [{ id: "ticket", label: "Current ticket", checked: dockedScope === "ticket" }]
-              : []),
-            { id: null, label: "Current board", checked: dockedScope === null },
-            { id: "all", label: "All boards", checked: dockedScope === "all" },
-            ...teams.flatMap((team) =>
-              team.projects.map((project) => ({
-                id: project.id,
-                label: project.title ?? project.name,
-                hint: team.title,
-                checked: dockedScope === project.id,
-              }))
-            ),
-          ]}
-          onClose={() => setIsOpen(false)}
-          onSelect={({ id }) => {
-            if (id === null || typeof id === "number" || id === "all" || id === "ticket") {
-              selectScope(id);
-            }
-          }}
-        />
+        <div
+          role="menu"
+          className="absolute bottom-[calc(100%+6px)] left-0 z-50 max-h-60 w-64 overflow-y-auto rounded-md bg-modalBackground py-1 shadow-lg scrollbar-thin hover:scrollbar-thumb-gray-500 scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
+        >
+          {ticketScopeEnabled && onTask && (
+            <ScopeMenuRow
+              label="Current ticket"
+              selected={dockedScope === "ticket"}
+              onClick={() => selectScope("ticket")}
+            />
+          )}
+          <ScopeMenuRow
+            label="Current board"
+            selected={dockedScope === null}
+            onClick={() => selectScope(null)}
+          />
+          <ScopeMenuRow
+            label="All boards"
+            selected={dockedScope === "all"}
+            onClick={() => selectScope("all")}
+          />
+          {teams.map((team) => (
+            <div key={team.id} className="pt-1">
+              <div className="px-3 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">
+                {team.title}
+              </div>
+              {team.projects.map((project) => (
+                <ScopeMenuRow
+                  key={project.id}
+                  label={project.title ?? project.name}
+                  selected={dockedScope === project.id}
+                  onClick={() => selectScope(project.id)}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
       )}
     </div>
+  );
+}
+
+function ScopeMenuRow({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={selected}
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black transition-colors hover:bg-active-modal-element"
+      onClick={onClick}
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {selected && <Check size={16} className="shrink-0" strokeWidth={1.75} />}
+    </button>
   );
 }
 

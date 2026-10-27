@@ -1,6 +1,6 @@
 # `@hypertask/agent-sdk`
 
-Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package has no runtime or framework dependencies. Agent run lifecycle endpoints are permanently available to authorized callers.
+Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package has no runtime or framework dependencies. SDK requests remain protected by the `htpr-6115-agent-sdk` and `htpr-6123-add-typescript-agent-sdk` flags.
 
 ## Hello world in under 30 minutes
 
@@ -44,7 +44,7 @@ app.post(
 app.listen(3000);
 ```
 
-`createAgent` only constructs local objects and performs no network work. SDK requests identify themselves with `X-Hypertask-Agent-SDK: typescript`. Every delivery is preflighted through the run API before callbacks can execute; that API enforces run ownership and access. Activity writes additionally require the independent activity flag.
+`createAgent` only constructs local objects and performs no network work. SDK requests identify themselves with `X-Hypertask-Agent-SDK: typescript`. Every delivery is preflighted through the run API before callbacks can execute; that API enforces both `htpr-6115-agent-sdk` and the owner-only `htpr-6123-add-typescript-agent-sdk` for SDK requests, and activity writes enforce them again alongside the activity flag. Until those flags are enabled for the token owner, SDK run requests intentionally answer as not found.
 
 ## API
 

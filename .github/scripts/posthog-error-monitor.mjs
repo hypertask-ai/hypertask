@@ -46,33 +46,6 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env.HYP
   return { action: existing ? "updated" : "created", workflow };
 }
 
-export async function findCanaryIssue({ fetchImpl = fetch, apiKey, marker, deadline, now = Date.now }) {
-  const endpoint = "https://eu.posthog.com/api/projects/236160/error_tracking/issues/";
-  let next = `${endpoint}?limit=100`;
-  const seen = new Set();
-  const matches = new Set();
-  while (next) {
-    const url = new URL(next, endpoint);
-    if (url.origin !== new URL(endpoint).origin || url.pathname !== new URL(endpoint).pathname || url.username || url.password || seen.has(url.href) || seen.size >= 20) throw new Error("Canary REST issue pagination is invalid or incomplete");
-    if (now() >= deadline) throw new Error("Canary issue lookup exceeded fifteen minutes");
-    seen.add(url.href);
-    const response = await fetchImpl(url.href, {
-      method: "GET", headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(Math.min(30_000, deadline - now())),
-    });
-    if (!response.ok) throw new Error(`Canary PostHog lookup returned HTTP ${response.status}`);
-    const page = await response.json();
-    if (!Array.isArray(page.results) || !Object.hasOwn(page, "next") || (page.next != null && typeof page.next !== "string")) throw new Error("Canary REST issue lookup is incomplete");
-    for (const issue of page.results) {
-      if (typeof issue.description !== "string" || !issue.description.includes(marker)) continue;
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(issue.id)) throw new Error("Canary fallback issue ID is invalid");
-      matches.add(issue.id);
-      if (matches.size > 1) throw new Error("Canary fallback issue lookup is ambiguous");
-    }
-    next = page.next || "";
-  }
-  return [...matches][0];
-}
-
 export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, testToken = process.env.POSTHOG_ERROR_TEST_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, runId = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT || "1", now = Date.now, wait = setTimeout, timeoutMs = 15 * 60 * 1000 } = {}) {
   if (!token || !testToken || !apiKey || !/^\d{1,20}$/.test(String(runId)) || !/^\d{1,3}$/.test(String(attempt))) {
     throw new Error("Nightly canary credentials or run identity are missing");
@@ -84,29 +57,13 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
     headers: { "x-error-test-token": testToken, "x-posthog-canary": marker },
   });
   if (triggered.status !== 500) throw new Error(`Production error-test returned HTTP ${triggered.status}, expected 500`);
-  let fallbackIssueId;
   while (now() < deadline) {
     const page = await api(fetchImpl, token, `/tasks?project_id=15&status=Normal&search=${marker}&limit=100`);
     if (!Array.isArray(page.tasks)) throw new Error("Nightly canary lookup returned no tasks");
     // A legacy error reporter's ticket is not proof of PostHog issue ingestion.
-    let ticket = page.tasks.find((task) => task.description?.includes(marker) && task.description.includes("PostHog issue ID: <code>") && /posthog-alert:issue_(?:created|reopened):/.test(task.description));
-    let boardId = 15;
-    let delivery = "github";
-    if (!ticket) {
-      if (!fallbackIssueId) {
-        fallbackIssueId = await findCanaryIssue({ fetchImpl, apiKey, marker, deadline, now });
-      }
-      if (fallbackIssueId) {
-        const fallback = await api(fetchImpl, token, `/tasks?project_id=4060&status=Normal&search=${fallbackIssueId}&limit=100`);
-        if (!Array.isArray(fallback.tasks)) throw new Error("Canary fallback lookup returned no tasks");
-        const receipt = new RegExp(`<p>posthog-dispatch-fallback:issue:${fallbackIssueId}:[0-9a-f-]{36}<\\/p>`);
-        ticket = fallback.tasks.find((task) => receipt.test(task.description ?? ""));
-        boardId = 4060;
-        delivery = "fallback";
-      }
-    }
+    const ticket = page.tasks.find((task) => task.description?.includes(marker) && task.description.includes("PostHog issue ID: <code>") && /posthog-alert:issue_(?:created|reopened):/.test(task.description));
     if (ticket) {
-      const issueId = delivery === "fallback" ? fallbackIssueId : /PostHog issue ID: <code>([0-9a-f-]{36})<\/code>/.exec(ticket.description)?.[1];
+      const issueId = /PostHog issue ID: <code>([0-9a-f-]{36})<\/code>/.exec(ticket.description)?.[1];
       if (!issueId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(issueId)) throw new Error("Canary ticket has no valid PostHog issue ID");
       const issueUrl = `https://eu.posthog.com/api/projects/236160/error_tracking/issues/${issueId}/`;
       const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
@@ -116,16 +73,16 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
       if (issue.id !== issueId || !issue.description?.includes(marker)) throw new Error("PostHog issue does not match the nightly canary");
       if (now() >= deadline) throw new Error("Canary alert ticket arrived after fifteen minutes");
       const projects = await api(fetchImpl, token, "/projects?limit=100");
-      const project = projects.projects?.find((item) => Number(item.id) === boardId);
+      const project = projects.projects?.find((item) => Number(item.id) === 15);
       const done = project?.sections?.find((item) => (item.section_title ?? item.title) === "Done");
-      if (!done?.id) throw new Error(`Board ${boardId} Done section is unavailable`);
+      if (!done?.id) throw new Error("Board 15 Done section is unavailable");
       await api(fetchImpl, token, "/tasks/update", { task_id: ticket.id, sectionId: Number(done.id) }, `posthog-canary-close-${marker}`);
       const resolved = await fetchImpl(issueUrl, {
         method: "PATCH", headers, signal: AbortSignal.timeout(30_000), body: JSON.stringify({ status: "resolved" }),
       });
       if (!resolved.ok || (await resolved.json()).status !== "resolved") throw new Error("Canary PostHog issue resolution failed");
-      console.log(`Nightly PostHog canary passed and closed its ticket (${delivery}): ${marker}`);
-      return { action: "verified", ticketId: ticket.id, marker, boardId, delivery };
+      console.log(`Nightly PostHog canary passed and closed its ticket: ${marker}`);
+      return { action: "verified", ticketId: ticket.id, marker };
     }
     await wait(Math.min(30_000, Math.max(0, deadline - now())));
   }

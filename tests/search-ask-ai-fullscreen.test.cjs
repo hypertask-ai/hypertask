@@ -355,7 +355,7 @@ test('the reused sender adds the question first and streams the reply without se
       assert.equal(messages[0].role, 'human')
       assert.equal(messages[0].content, 'Where is my work?')
       assert.deepEqual(messages.slice(2).map(({ content, isDelivered }) => [content, isDelivered]), [['Hello', false], ['Hello world', false], ['Hello world', true]])
-      assert.deepEqual(cleared, preserveComposer ? [] : ['files'])
+      assert.deepEqual(cleared, preserveComposer ? [] : ['draft', 'files'])
       assert.equal(processed.length, preserveComposer ? 0 : 1)
       assert.equal(payload.attachments.length, preserveComposer ? 0 : 1)
     }

@@ -254,19 +254,19 @@ test("task comments do not reactivate runs without run.prompted delivery", async
   assert.equal(tx.runs[0].lastActivityAt, firstAt);
 });
 
-test("triggers create permanent runs without a flag row", async () => {
+test("feature-off trigger preserves the legacy payload and creates no run", async () => {
   const { persistAgentRunTriggerWebhooks } = loadOutbox(false);
   const tx = fakeRunTransaction();
 
   const ids = await persistAgentRunTriggerWebhooks(tx, mention);
 
-  assert.equal(ids.length, 2);
-  assert.equal(tx.runs.length, 1);
+  assert.equal(ids.length, 1);
+  assert.equal(tx.runs.length, 0);
   assert.equal(tx.deliveries[0].event, "comment.mention");
-  assert.equal(tx.deliveries[0].payload.runId, tx.runs[0].id);
+  assert.equal(tx.deliveries[0].payload.runId, undefined);
 });
 
-test("queued run payloads deliver without a flag row", async () => {
+test("turning the flag off cancels queued run payloads before delivery", async () => {
   const deliveryPath = path.join(root, "src/lib/agentWebhooks/delivery.ts");
   delete require.cache[deliveryPath];
   let posts = 0;
@@ -287,8 +287,6 @@ test("queued run payloads deliver without a flag row", async () => {
     },
   };
   const prisma = {
-    $transaction: async (operations) => Promise.all(operations),
-    agentWebhookSubscription: { update: async () => ({}) },
     agentWebhookDelivery: {
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => row,
@@ -312,9 +310,9 @@ test("queued run payloads deliver without a flag row", async () => {
   });
   const { deliverAgentWebhook } = jiti(deliveryPath);
 
-  assert.deepEqual(await deliverAgentWebhook(row.id), { status: "delivered", statusCode: 200 });
-  assert.equal(row.status, "delivered");
-  assert.equal(posts, 1);
+  assert.deepEqual(await deliverAgentWebhook(row.id), { status: "skipped" });
+  assert.equal(row.status, "cancelled");
+  assert.equal(posts, 0);
 });
 
 function loadService({ rows, validateAuth, sessionUser } = {}) {
@@ -549,15 +547,17 @@ test("the migration enforces one nonterminal run and exactly one context", () =>
   assert.match(migration, /AgentRun_stoppedById_idx[\s\S]*\("stoppedById"\)/);
 });
 
-test("run events are always discoverable and accepted", () => {
+test("run event discovery is hidden and rejected when the flag is off", () => {
   const jiti = createJiti(path.join(root, `tests/agent-runs-events-${++loadId}.cjs`), {
     alias: { "@": path.join(root, "src") },
     interopDefault: true,
   });
   const events = jiti(path.join(root, "src/lib/agentWebhooks/events.ts"));
-  assert.equal(events.AGENT_WEBHOOK_EVENTS.includes("run.created"), true);
-  assert.deepEqual(events.parseAgentWebhookEvents(["run.created"]), { ok: true, events: ["run.created"] });
-  assert.equal(events.AGENT_WEBHOOK_EVENT_DEFINITIONS["run.created"].subscribable, true);
+  const hidden = events.availableAgentWebhookEvents(false);
+
+  assert.equal(hidden.includes("run.created"), false);
+  assert.equal(events.parseAgentWebhookEvents(["run.created"], hidden).ok, false);
+  assert.equal(events.availableAgentWebhookEventDefinitions(false)["run.created"], undefined);
 });
 
 test("the MCP webhook tool accepts chat and lifecycle event names", () => {
@@ -582,7 +582,7 @@ test("the MCP webhook tool accepts chat and lifecycle event names", () => {
   ]);
 });
 
-test("webhook updates preserve visible run subscriptions without a flag row", async () => {
+test("flag-off webhook updates preserve hidden run subscriptions", async () => {
   const managementPath = path.join(root, "src/lib/agentWebhooks/management.ts");
   delete require.cache[managementPath];
   const existing = {
@@ -643,6 +643,6 @@ test("webhook updates preserve visible run subscriptions without a flag row", as
   });
 
   assert.deepEqual(persisted.events, ["run.created"]);
-  assert.deepEqual(result.subscription.events, ["run.created"]);
+  assert.deepEqual(result.subscription.events, []);
   assert.equal(result.subscription.active, false);
 });

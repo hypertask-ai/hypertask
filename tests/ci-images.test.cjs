@@ -39,15 +39,17 @@ test("every CI service and command-line consumer uses a pinned GHCR copy with re
     }
   }
   assert.ok(services > 0, "service inventory must not be vacuous");
-  const ci = workflow("ci-tests").jobs["ci-test"];
+  const ci = workflow("ci-tests").jobs["ci-tests"];
   assert.equal(ci.env.HTPR_PG_IMAGE, reference(images.find((image) => image.tag === "16-alpine")));
-  assertLoginBefore(ci, "Pull PostgreSQL test image");
-  assertLoginBefore(ci, "Test shard", "steps.pg.outputs.need == '1'");
+  assertLoginBefore(ci, "Pull PostgreSQL test image", "github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'");
+  for (const step of ["Test", "Test full suite"]) {
+    assertLoginBefore(ci, step, "github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'");
+  }
   const nightly = workflow("coverage-nightly").jobs["coverage-nightly"];
   assert.equal(nightly.env.HTPR_PG_IMAGE, ci.env.HTPR_PG_IMAGE);
   assertLoginBefore(nightly, "Pull PostgreSQL test image");
   assertLoginBefore(nightly, "Test with coverage collection");
-  const guard = workflow("ci-tests").jobs["ci-prepare"].steps.find((step) => step.name === "Guard CI image sources");
+  const guard = ci.steps.find((step) => step.name === "Guard CI image sources");
   assert.equal(guard.run, "node --test tests/ci-image-sources.test.cjs");
   assert.equal(guard.if, undefined, "guard must run even for workflow-only PRs");
   const smoke = workflow("app-smoke").jobs["app-smoke"];
@@ -77,7 +79,7 @@ test("CI image assertions reject anonymous sources, missing credentials, and log
   assert.throws(() => assertService({ ...service, image: service.image.replace("ghcr.io/hypertask-ai/ci-", ["public", "ecr", "aws/docker/library/"].join(".")) }, job));
   assert.throws(() => assertService({ ...service, credentials: undefined }, job));
   assert.throws(() => assertService(service, { ...job, permissions: { contents: "read" } }));
-  const cli = workflow("ci-tests").jobs["ci-test"];
+  const cli = workflow("ci-tests").jobs["ci-tests"];
   const steps = [...cli.steps];
   const login = steps.splice(steps.findIndex((step) => step.uses?.startsWith("docker/login-action@")), 1)[0];
   steps.push(login);

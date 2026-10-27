@@ -206,10 +206,6 @@ export async function POST(request: NextRequest) {
           projectId: body.project_id === undefined ? undefined : body.project_id,
           active: body.active,
           deliveryId: body.delivery_id,
-          authHeaderName: body.auth_header_name,
-          authHeaderValue: body.auth_header_value,
-          bearerSecret: body.bearer_secret,
-          clearAuthHeader: body.clear_auth_header,
         })
         return NextResponse.json(
           result,

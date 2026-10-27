@@ -1,14 +1,10 @@
 "use client";
-import Unauthorized from "../unauthorized/page";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
 
 export default function ErrorScreen() {
-    const projectEntryEnabled = useFlag(HTPR_7799_PROJECT_ENTRY_FLAG);
     const router = useRouter();
     const queryClient = useQueryClient();
 
@@ -19,7 +15,7 @@ export default function ErrorScreen() {
     };
 
     const {handleHardReset} = useSignout()
-    return projectEntryEnabled ? <Unauthorized /> : (
+    return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground px-4">
             <div className="bg-card shadow-lg rounded-xl p-8 flex flex-col items-center max-w-md w-full">
                 <h1 className="text-display font-bold mb-2">Something went wrong</h1>

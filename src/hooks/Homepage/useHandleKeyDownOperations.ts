@@ -30,7 +30,6 @@ import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
-import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
@@ -43,7 +42,6 @@ interface IHandleKeyDownOperations {
 const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const {initialSections , handleBoardChange, filteredSections} = props
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
-    const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
     const queryClient = useQueryClient();   
     const store = useStore();
     const {showManageColumnsModal, showSaveModal, toggleViewsModal, toggleSaveViewsModal, toggleSearchTasks, showSearchTasks} = useKanbanModalStatesContext()
@@ -474,7 +472,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     ])
     const filterRuntimeContext = {
       legacyAgentAssigneeMatch: !assigneeFixEnabled,
-      legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
       ...(Array.isArray(runningTimers)
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
         : {}),

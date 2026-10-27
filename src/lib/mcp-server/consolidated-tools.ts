@@ -34,7 +34,7 @@ function canCall(action: Action, caller: ToolCaller): boolean {
   return !permissions || hasDataPermission(permissions)
 }
 
-function inputSchema(tool: PortableTool, action: Action, boardAlias = false): Record<string, unknown> {
+function inputSchema(tool: PortableTool, action: Action): Record<string, unknown> {
   const schema = z.toJSONSchema(tool.parameters, { target: 'draft-7', unrepresentable: 'any', io: 'input' }) as Record<string, unknown>
   delete schema.$schema
   const properties = schema.properties as Record<string, unknown>
@@ -55,108 +55,15 @@ function inputSchema(tool: PortableTool, action: Action, boardAlias = false): Re
     }
   }
   document(schema)
-  const inputProperties = schema.properties as Record<string, unknown>
-  if (boardAlias && inputProperties.project_id) {
-    inputProperties.board_id = { ...(inputProperties.project_id as Record<string, unknown>), description: 'Alias for project_id.' }
-    if (Array.isArray(schema.required) && schema.required.includes('project_id')) {
-      schema.required = schema.required.filter((key) => key !== 'project_id')
-      schema.anyOf = [{ required: ['project_id'] }, { required: ['board_id'] }]
-    }
-  }
   return schema
 }
 
-const TOP_LEVEL_FIELDS = new Set(['action', 'input', 'response_format', 'limit', 'offset', 'page'])
-const CALL_WRAPPER_FIELDS = ['response_format', 'limit', 'offset', 'page']
-
-type PlacementOptions = { topLevelInputFields: boolean; inputWrapperFields: boolean; taskIdTicketReference: boolean; pageAlias: boolean }
-
-function placementConflict(key: string): z.ZodError {
-  return new z.ZodError([{ code: 'custom', path: ['input', key], message: `Pass ${key} inside input or at the top level, not both with different values.` }])
-}
-
-const TICKET_REFERENCE = /^[A-Z0-9]{2,}-\d+$/i
-
-function ticketReferenceFromTaskId(value: unknown): string | string[] | undefined {
-  const reference = (entry: unknown) => typeof entry === 'string' && TICKET_REFERENCE.test(entry.trim()) ? entry.trim().toUpperCase() : undefined
-  if (Array.isArray(value)) {
-    const references = value.map(reference)
-    return references.length && references.every((entry): entry is string => entry !== undefined) ? references : undefined
-  }
-  return reference(value)
-}
-
-function normalizeInputPlacement(
-  raw: unknown,
-  actions: Record<string, Action>,
-  byName: Map<string, PortableTool>,
-  legacyShape: Record<string, unknown>,
-  options: PlacementOptions,
-): unknown {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw
-  const requested = (raw as Record<string, unknown>).action
-  const action = typeof requested === 'string' ? actions[requested] : undefined
-  const tool = action ? byName.get(action.tool) : undefined
-  if (!tool) return raw
-  const rawFields = raw as Record<string, unknown>
-  const nested = rawFields.input
-  if (nested !== undefined && (typeof nested !== 'object' || nested === null || Array.isArray(nested))) return raw
-  const input = { ...(nested as Record<string, unknown> | undefined) }
-  const documented = new Set(Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field))
-  const placed = { ...rawFields }
-  if (options.topLevelInputFields) {
-    for (const [key, value] of Object.entries(rawFields)) {
-      if (TOP_LEVEL_FIELDS.has(key) || key in legacyShape || !documented.has(key)) continue
-      if (input[key] !== undefined && JSON.stringify(input[key]) !== JSON.stringify(value)) throw placementConflict(key)
-      input[key] = value
-      delete placed[key]
-    }
-  }
-  if (options.inputWrapperFields) {
-    for (const key of CALL_WRAPPER_FIELDS) {
-      if (input[key] === undefined || documented.has(key) || (key === 'page' && !options.pageAlias)) continue
-      if (placed[key] !== undefined && JSON.stringify(placed[key]) !== JSON.stringify(input[key])) throw placementConflict(key)
-      placed[key] = input[key]
-      delete input[key]
-    }
-  }
-  if (options.taskIdTicketReference && documented.has('task_id') && documented.has('ticket_number') && input.task_id !== undefined) {
-    let reference = ticketReferenceFromTaskId(input.task_id)
-    if (Array.isArray(reference) && !z.safeParse(tool.parameters.shape.ticket_number, reference).success) {
-      reference = reference.length === 1 ? reference[0] : undefined
-    }
-    if (reference !== undefined) {
-      if (input.ticket_number !== undefined && JSON.stringify(input.ticket_number) !== JSON.stringify(reference)) throw placementConflict('task_id')
-      input.ticket_number = reference
-      delete input.task_id
-    }
-  }
-  placed.input = input
-  return placed
-}
-
-function ticketIdentity(value: unknown): { prefix: string; number: string } {
-  const identity = String(value).toLowerCase().trim()
-  const match = identity.match(/^([a-z]+)-?0*(\d+)$/) ?? identity.match(/^(?:([a-z][a-z0-9]*)-)?0*(\d+)$/)
-  return { prefix: match?.[1] ?? '', number: match?.[2] ?? identity }
-}
-
-function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool, taskNumberAlias = false): Record<string, unknown> {
+function legacyArguments(input: Record<string, unknown>, action: Action, tool: PortableTool): Record<string, unknown> {
   const shape = tool.parameters.shape
   const args = Object.fromEntries(Object.entries(input).map(([key, value]) => {
     const original = Object.keys(shape).find((field) => RENAMED_PARAMETERS[field] === key) ?? key
     return [original, value]
   }))
-  if (taskNumberAlias && 'ticket_number' in shape && 'task_number' in args) {
-    const alias = args.task_number
-    delete args.task_number
-    if (args.ticket_number === undefined) args.ticket_number = alias
-    else {
-      const ticket = ticketIdentity(args.ticket_number)
-      const task = ticketIdentity(alias)
-      if (ticket.number !== task.number || (ticket.prefix && task.prefix && ticket.prefix !== task.prefix)) throw new z.ZodError([{ code: 'custom', path: ['input', 'task_number'], message: `Pass either ticket_number or task_number, not both with different values: '${args.ticket_number}' and '${alias}'.` }])
-    }
-  }
   if (action.legacy_action) args.action = action.legacy_action
   return args
 }
@@ -165,17 +72,11 @@ export function selectMcpTools(
   legacyTools: readonly PortableTool[],
   enabled: boolean,
   caller: ToolCaller = {},
+  v2 = false,
   flatSchema = false,
-  pageAlias = false,
-  taskNumberAlias = false,
-  boardAlias = false,
-  topLevelInputFields = false,
-  inputWrapperFields = false,
-  ticketNumberShapeHint = false,
-  taskIdTicketReference = false,
-  renamedFieldHint = false,
 ): readonly PortableTool[] {
   if (!enabled) {
+    if (!v2) return legacyTools
     return legacyTools.flatMap((tool) => {
       const actions = (CONSOLIDATED_TOOL_DESCRIPTIONS as Description[]).flatMap((definition) => Object.values(definition.actions)).filter((action) => action.tool === tool.name)
       const allowed = actions.filter((action) => canCall(action, caller))
@@ -206,7 +107,6 @@ export function selectMcpTools(
   const catalog: PortableTool[] = definitions.flatMap((definition) => {
     const actions = Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => byName.has(action.tool) && canCall(action, caller)))
     const names = Object.keys(actions)
-    const boardAliasEnabled = boardAlias && (definition.name === 'hypertask_tasks' || definition.name === 'hypertask_comments')
     if (!names.length) return []
     const sameNameLegacy = byName.get(definition.name)
     const legacyShape = sameNameLegacy ? Object.fromEntries(Object.entries(sameNameLegacy.parameters.shape).filter(([key]) => key !== 'action').map(([key, schema]) => [key, z.optional(schema as z.ZodType)])) : {}
@@ -217,7 +117,6 @@ export function selectMcpTools(
       response_format: z.enum(['concise', 'detailed']).default('concise').describe('Concise summarizes reads; detailed includes full fields. Writes always retain their receipts.'),
       limit: z.number().int().min(1).max(50).default(20).describe('Maximum rows per read collection; default 20, maximum 50.'),
       offset: z.number().int().min(0).default(0).describe('Rows to skip for paginated or locally bounded reads; default 0. Prefer an input cursor when supplied.'),
-      ...(pageAlias ? { page: z.number().int().min(1).optional().describe('1-based page number; page 1 is the first page. An offset that equals the page start is accepted; any other offset is refused.') } : {}),
     }).strict()
     const baseSchema = z.toJSONSchema(parameters, { target: 'draft-7', io: 'input' }) as Record<string, unknown>
     delete baseSchema.$schema
@@ -234,88 +133,47 @@ export function selectMcpTools(
         input: {
           type: 'object',
           description: `${properties.input.description} Fields depend on action; use the variant whose title is the action.`,
-          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name], boardAliasEnabled) })),
+          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name]) })),
         },
       },
     } : {
       ...baseSchema,
       oneOf: names.map((name) => {
-        const input = inputSchema(byName.get(actions[name].tool)!, actions[name], boardAliasEnabled)
+        const input = inputSchema(byName.get(actions[name].tool)!, actions[name])
         return {
           properties: { action: { const: name }, input },
-          required: (Array.isArray(input.required) && input.required.length) || input.anyOf ? ['action', 'input'] : ['action'],
+          required: Array.isArray(input.required) && input.required.length ? ['action', 'input'] : ['action'],
         }
       }),
     }
     return [{
       name: definition.name,
-      description: `Does: ${definition.does}\nUse when: ${definition.use_when}\nDo not use when: ${definition.do_not_use_when}\nParameters and caveats: ${definition.parameters_and_caveats}${boardAliasEnabled ? ' board_id is an alias for project_id.' : ''}`,
+      description: `Does: ${definition.does}\nUse when: ${definition.use_when}\nDo not use when: ${definition.do_not_use_when}\nParameters and caveats: ${definition.parameters_and_caveats}`,
       parameters,
       inputSchema: schema,
-      annotations: annotationsForActions(Object.values(actions)),
+      ...(v2 ? { annotations: annotationsForActions(Object.values(actions)) } : {}),
       outputSchema: CONSOLIDATED_OUTPUT_SCHEMA,
       input_examples: definition.input_examples.filter((example) => names.includes((example as { action: string }).action)),
-      ...(topLevelInputFields || inputWrapperFields || taskIdTicketReference ? {
-        normalizeArguments: (raw: unknown) => normalizeInputPlacement(raw, actions, byName, legacyShape, { topLevelInputFields, inputWrapperFields, taskIdTicketReference, pageAlias }),
-      } : {}),
-      ...(renamedFieldHint ? { documentedFields: [...new Set([...Object.keys(parameters.shape), ...names.flatMap((name) => Object.keys(byName.get(actions[name].tool)!.parameters.shape)).map((field) => RENAMED_PARAMETERS[field] ?? field)])] } : {}),
-      ...(ticketNumberShapeHint || renamedFieldHint ? {
-        errorHints: {
-          ...(ticketNumberShapeHint ? { ticketNumberShape: true } : {}),
-          ...(renamedFieldHint ? { renamedField: true } : {}),
-        },
-      } : {}),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
-        const rawArgs = (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
         const args = parameters.parse(raw)
         const action = actions[args.action]
         const tool = byName.get(action.tool)!
-        const oldArgs = rawArgs
+        const oldArgs = raw as Record<string, unknown>
         const oldInput = Object.fromEntries(Object.keys(legacyShape).filter((key) => oldArgs[key] !== undefined).map((key) => [key, oldArgs[key]]))
-        const input = { ...oldInput, ...legacyArguments(args.input, action, tool, taskNumberAlias) }
+        const input = { ...oldInput, ...legacyArguments(args.input, action, tool) }
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
-        const inputIssues = (error: z.ZodError) => Object.assign(
-          new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] }))),
-          { documentedFields: Object.keys(tool.parameters.shape).map((field) => RENAMED_PARAMETERS[field] ?? field) },
-        )
-        const requestedPage = pageAlias && typeof args.page === 'number' ? args.page : undefined
-        if (requestedPage !== undefined && input.cursor !== undefined) {
-          throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or cursor, not both.' }])
-        }
         const cursorPaginated = supportsCursor && Boolean(input.cursor)
+        const offset = cursorPaginated ? 0 : Number(input.offset ?? args.offset)
         let readLimit = args.limit
-        let maximum: number | undefined
         let endpointCap: number | undefined
         try {
-          if (boardAliasEnabled && 'board_id' in input) {
-            if (input.project_id !== undefined && Number(input.board_id) !== Number(input.project_id)) {
-              throw new z.ZodError([{ code: 'custom', path: ['board_id'], message: 'board_id and project_id must identify the same board when both are provided.' }])
-            }
-            if (input.project_id === undefined) input.project_id = input.board_id
-            delete input.board_id
-          }
           if (action.read_only && supportsLimit) {
             const requestedLimit = input.limit === undefined ? args.limit : Number(z.object({ limit: tool.parameters.shape.limit }).parse({ limit: input.limit }).limit)
             const limitSchema = z.toJSONSchema(tool.parameters.shape.limit, { unrepresentable: 'any', io: 'input' }) as { maximum?: number }
-            maximum = limitSchema.maximum ?? 50
+            const maximum = limitSchema.maximum ?? 50
             readLimit = Math.min(requestedLimit, args.limit, maximum)
-          }
-        } catch (error) {
-          if (error instanceof z.ZodError) throw inputIssues(error)
-          throw error
-        }
-        const topLevelOffset = Number(args.offset)
-        const suppliedOffset = input.offset === undefined ? topLevelOffset : Number(input.offset)
-        const pageOffset = requestedPage === undefined ? undefined : (requestedPage - 1) * readLimit
-        const offsets = input.offset === undefined ? [topLevelOffset] : [topLevelOffset, suppliedOffset]
-        if (pageOffset !== undefined && offsets.some((offset) => offset !== 0 && offset !== pageOffset)) {
-          throw new z.ZodError([{ code: 'custom', path: ['page'], message: 'Pass either page or offset, not both.' }])
-        }
-        try {
-          const offset = cursorPaginated ? 0 : pageOffset ?? suppliedOffset
-          if (maximum !== undefined) {
             const prefix = supportsOffset || cursorPaginated ? 0 : offset
             const lookahead = !supportsOffset && !supportsCursor ? 1 : 0
             input.limit = Math.min(readLimit + prefix + lookahead, maximum)
@@ -326,7 +184,9 @@ export function selectMcpTools(
           const text = await dispatch(action, validated, token, invocation)
           return formatToolResponse(text, args.response_format, action.read_only, readLimit, offset, supportsOffset || cursorPaginated, endpointCap)
         } catch (error) {
-          if (error instanceof z.ZodError) throw inputIssues(error)
+          if (error instanceof z.ZodError) {
+            throw new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] })))
+          }
           throw error
         }
       },
@@ -335,15 +195,15 @@ export function selectMcpTools(
   for (const tool of legacyTools) {
     if (catalog.some((entry) => entry.name === tool.name)) continue
     const actions = definitions.flatMap((definition) => Object.values(definition.actions)).filter((action) => action.tool === tool.name)
-    const allowed = actions.filter((action) => canCall(action, caller))
-    if (!allowed.length) continue
+    const allowed = v2 ? actions.filter((action) => canCall(action, caller)) : actions
+    if (v2 && !allowed.length) continue
     const names = allowed.map((action) => action.legacy_action).filter((name): name is string => Boolean(name))
     if (!actions.length) throw new Error(`Legacy tool ${tool.name} is missing from the consolidated catalog`)
     catalog.push({
       ...tool,
       hidden: true,
-      annotations: annotationsForActions(allowed),
-      ...(allowed.length !== actions.length && names.length ? { parameters: tool.parameters.extend({ action: z.enum(names as [string, ...string[]]) }) } : {}),
+      ...(v2 ? { annotations: annotationsForActions(allowed) } : {}),
+      ...(v2 && allowed.length !== actions.length && names.length ? { parameters: tool.parameters.extend({ action: z.enum(names as [string, ...string[]]) }) } : {}),
       outputSchema: { type: 'object', additionalProperties: true },
       execute: async (raw, token, invocation) => {
         const requested = (raw as Record<string, unknown>)?.action
@@ -352,7 +212,7 @@ export function selectMcpTools(
       },
     })
   }
-  catalog.push(...createMetaTools(() => catalog).map((tool) => ({
+  catalog.push(...createMetaTools(() => catalog, v2).map((tool) => ({
     ...tool, hidden: true, outputSchema: { type: 'object', additionalProperties: true },
   })))
   return catalog

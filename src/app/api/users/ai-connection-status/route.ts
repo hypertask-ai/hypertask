@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
-import { dismissAgentConnectCard, getAgentConnectCardState, getFirstAgentConnection } from "@/lib/onboarding/agentConnection";
+import { dismissAgentConnectCard, getAgentConnectCardState, getFirstAgentConnection, isAgentConnectCheckEnabledFor } from "@/lib/onboarding/agentConnection";
 
 export const runtime = "nodejs";
 
@@ -28,7 +28,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid since date" }, { status: 400 });
     }
     const match = await getFirstAgentConnection(user.id, sinceDate);
-    const status = { connected: !!match, at: match?.at, client: match?.client };
+    const enabled = await isAgentConnectCheckEnabledFor(user.id);
+    const status = enabled
+      ? { connected: !!match, at: match?.at, client: match?.client }
+      : { connected: !!match, at: match?.at };
     return NextResponse.json(status);
   } catch {
     console.error("GET [users/ai-connection-status] failed");
@@ -43,7 +46,7 @@ export async function POST(request?: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const overlay = request?.nextUrl.searchParams.get("mode") === "overlay";
-    const eligible = overlay ? (await getAgentConnectCardState(user.id, true)).eligible : true;
+    const eligible = overlay ? (await getAgentConnectCardState(user.id, true)).eligible : await isAgentConnectCheckEnabledFor(user.id);
     if (!eligible) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

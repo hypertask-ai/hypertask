@@ -47,7 +47,6 @@ async function withSidebar(options, check) {
   };
   const mocks = {
     "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
-    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {
       HTPR_7586_ONE_QUESTIONS_CALL_FLAG: flag,
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeFlag,
@@ -95,7 +94,6 @@ async function withSidebar(options, check) {
     const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
       ...mocks, "./WelcomeScreen": { WelcomeScreen }, "./MessageList": { MessageList },
       "@/app/agents/chat/AgentChatClient": { default: () => null },
-      "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
       "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
       "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
       "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: () => {} },

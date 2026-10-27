@@ -295,7 +295,7 @@ export function getUpdateTaskInputSchema() {
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount <= 1;
+        return methodCount === 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',
@@ -383,7 +383,7 @@ export function getAssignUserInputSchema() {
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount <= 1;
+        return methodCount === 1;
       },
       {
         message: 'Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.',
@@ -524,7 +524,7 @@ export function getMoveTaskBetweenBoardsInputSchema() {
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
         const methodCount = [hasTaskId, hasTicketNumber, hasUniqueIndex].filter(Boolean).length;
-        return methodCount <= 1;
+        return methodCount === 1;
       },
       {
         message:

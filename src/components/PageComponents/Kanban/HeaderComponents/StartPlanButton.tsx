@@ -122,8 +122,8 @@ export function StartPlanButton({ project, teamId, compact = false }: {
       className={`rounded-[5px] bg-shadcn-primary py-1 text-content font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 ${compact ? "px-3" : "min-w-[280px] px-10"}`}>
       {pending ? "Opening checkout…" : "Start a Hypertask plan"}
     </button>
-    <span className="text-meta text-text-light-gray">{access.data.trialDays && access.data.trialDays > 0
-      ? `$20 per user/month after ${access.data.trialDays} days`
+    <span className="text-meta text-text-light-gray">{access.data.trialDays === 7
+      ? "$20 per user/month after 7 days"
       : "$20 per user/month"}</span>
     {error && <span role="alert" className="text-content text-text-light-gray">{error}</span>}
   </div>;

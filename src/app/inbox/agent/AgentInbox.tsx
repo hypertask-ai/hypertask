@@ -36,9 +36,6 @@ import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigat
 import { useWarmProjectsAllQuery } from "@/hooks/Homepage/useGetBoards";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7892_AGENT_INBOX_KEEPS_SCROLL_FLAG } from "@/lib/flags/definitions/htpr-7892-agent-inbox-keeps-scroll";
-import { resolveInboxFocusScroll } from "@/lib/inboxFocusScroll";
 
 const AgentInbox = ({
   agent,
@@ -59,7 +56,6 @@ const AgentInbox = ({
   homepageRouter: string;
   originProject: string;
 }) => {
-  const agentInboxKeepsScroll = useFlag(HTPR_7892_AGENT_INBOX_KEEPS_SCROLL_FLAG);
   const isMbl = useContext(MobileViewContext);
   const queryClient = useQueryClient();
   const [globalFocus, setGlobalFocus] = useRecoilState(
@@ -256,8 +252,6 @@ const AgentInbox = ({
     }
   };
 
-  const lastFocusedNotificationId = useRef<string | null>(null);
-
   const newCommentsHandler = () => {
     try {
       if (
@@ -285,42 +279,26 @@ const AgentInbox = ({
           _notificationsTQ?.structuredData?.data[0][globalFocus.currIdx ?? 0],
         );
 
-      const splitNotifications =
-        _notificationsTQ?.structuredData?.data[globalFocus.currSplit ?? 0];
-      const focusedNotification =
-        splitNotifications?.[globalFocus.currIdx ?? 0];
-      const focusedNotificationId = focusedNotification
-        ? String(focusedNotification.id)
-        : null;
-      const previousFocusedNotificationId = lastFocusedNotificationId.current;
-      lastFocusedNotificationId.current = focusedNotificationId;
-      const focusedRowStillListed =
-        previousFocusedNotificationId !== null &&
-        splitNotifications?.some(
-          (notification) =>
-            String(notification.id) === previousFocusedNotificationId,
-        ) === true;
-
-      const inboxElement = focusedNotificationId
-        ? document.getElementById(`inbox-${focusedNotificationId}`)
-        : null;
-      const focusScroll = resolveInboxFocusScroll({
-        keepsScroll: agentInboxKeepsScroll,
-        focusedRowStillListed,
-      });
-      if (!focusScroll.scroll) return;
+      const inboxElement = document.getElementById(
+        `inbox-${
+          _notificationsTQ?.structuredData?.data &&
+          _notificationsTQ?.structuredData?.data[globalFocus?.currSplit ?? 0][
+            globalFocus.currIdx ?? 0
+          ]?.id
+        }`,
+      );
       if (!inboxElement)
         document
           .getElementById(`tab-${globalFocus.currSplit}`)
           ?.scrollIntoView({
             behavior: "instant" as ScrollBehavior,
             inline: "center",
-            block: focusScroll.block,
+            block: "center",
           });
       else {
-        inboxElement.scrollIntoView({
+        inboxElement?.scrollIntoView({
           behavior: "instant" as ScrollBehavior,
-          block: focusScroll.block,
+          block: "center",
         });
       }
     } catch (error) {
@@ -330,7 +308,7 @@ const AgentInbox = ({
 
   useEffect(() => {
     newCommentsHandler();
-  }, [_notificationsTQ?.structuredData?.data, trigger, agentInboxKeepsScroll]);
+  }, [_notificationsTQ?.structuredData?.data, trigger]);
 
   const { isInboxZero } = useInboxZeroStyling();
   const handleBulkArchive = async (

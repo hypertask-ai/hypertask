@@ -1,10 +1,11 @@
 const assert = require("node:assert/strict");
-const { load } = require("./task-route-loader.cjs");
+const path = require("node:path");
 const test = require("node:test");
+const { createJiti } = require("jiti");
 const { NextRequest } = require("next/server");
 const { Webhook } = require("svix");
 
-const stubs = {};
+const root = path.resolve(__dirname, "..");
 const calls = [];
 const claims = [];
 const delays = [];
@@ -21,10 +22,10 @@ const alert = {
 };
 
 function stubModule(relativePath, exports) {
-  stubs[relativePath.replace(/^src\//, "@/").replace(/\.ts$/, "")] = exports;
+  const filename = path.join(root, relativePath);
+  require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
-stubModule("src/utils/controllers/errors/recordPostHogDispatchFallback.ts", { recordPostHogDispatchFallback: async () => assert.fail("legacy rollback relay used the native issue fallback") });
 stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => true });
 stubModule("src/lib/redis.ts", { getRedis: async () => ({}) });
 stubModule("src/lib/telemetry/posthogErrorAlert.ts", {
@@ -34,7 +35,11 @@ stubModule("src/lib/telemetry/posthogErrorAlert.ts", {
   commitPostHogAlertClaim: async () => claims.push("commit"),
   releasePostHogAlertClaim: async () => claims.push("release"),
 });
-const { POST } = load("src/app/api/integrations/posthog/error-alert/route.ts", stubs);
+const jiti = createJiti(__filename, {
+  interopDefault: true,
+  alias: { "@": path.join(root, "src") },
+});
+const { POST } = jiti(path.join(root, "src/app/api/integrations/posthog/error-alert/route.ts"));
 
 async function dispatch(overrides = {}, status = 204) {
   const environment = {

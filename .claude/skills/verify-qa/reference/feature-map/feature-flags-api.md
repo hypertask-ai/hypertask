@@ -21,11 +21,3 @@ Checklist written before QA; `ht-flag get` before and after; the 403 response bo
 ## Cleanup
 
 None when only the refusal path and reads were used.
-
-## Release-column safety
-
-Board 15 moves into **Flag: Everyone** must refuse tickets whose own or explicitly mentioned flag is not Everyone. The shared task-update boundary covers board moves, direct task updates and CLI/MCP moves. Ordinary columns and other boards stay unchanged.
-
-Use a temporary ticket created by your own agent, linking a currently restricted flag in its description. Before testing, record its original column. Moving it to Flag: Everyone must return `FLAG_COLUMN_MISMATCH`, name the restricted flag, and leave its original column after rereading. Remove the link from this fixture only, repeat the move to prove an unflagged ticket still moves, then archive the fixture. Never change a real ticket or switch a flag for this test.
-
-`GET /api/cron/flag-column-audit` runs daily at 04:43 UTC with cron authorization. It returns `{ checked, mismatches }` for active board 15 tickets in Flag: Everyone, lists restricted flag keys and modes, and never changes a ticket or flag. Missing authorization returns 401; a missing release column returns 500. If cron authorization is unavailable, use approved CLI reads of that column and `ht-flag get`, checking the same restrictions. Include a restricted fixture as a positive control, even when the column is empty.

@@ -1,8 +1,7 @@
 import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { openWebhookSigningKey } from "@/lib/webhooks/signingKeyStore";
-import { AGENT_WEBHOOK_AUTH_HEADER_FLAG } from "@/lib/flags/definitions/htpr-7905-agent-webhook-auth-header";
+import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { postSignedWebhook } from "@/lib/mcp/webhooks/delivery";
 import { queueAgentWebhookDelivery } from "./queue";
 
@@ -19,22 +18,6 @@ export type AgentWebhookAttemptResult =
   | { status: "skipped" }
   | { status: "delivered"; statusCode: number }
   | { status: "retrying" | "failed"; statusCode: number | null; error: string | null };
-
-async function openAuthHeader(
-  subscription: { authHeaderName: string | null; authHeaderValue: string | null },
-  userId: number,
-): Promise<{ name: string; value: string } | null | "unreadable"> {
-  if (!subscription.authHeaderName || !subscription.authHeaderValue) return null;
-  if (!(await isFeatureEnabled(AGENT_WEBHOOK_AUTH_HEADER_FLAG, userId))) return null;
-  try {
-    return {
-      name: subscription.authHeaderName,
-      value: openWebhookSigningKey(subscription.authHeaderValue),
-    };
-  } catch {
-    return "unreadable";
-  }
-}
 
 export async function deliverAgentWebhook(
   deliveryId: string,
@@ -116,21 +99,33 @@ export async function deliverAgentWebhook(
     }
   }
 
-  const authHeader = await openAuthHeader(
-    delivery.subscription,
-    delivery.subscription.agent.userId,
-  );
-  const result =
-    authHeader === "unreadable"
-      ? { ok: false as const, statusCode: null, error: "Saved auth header could not be read" }
-      : await postSignedWebhook({
-          url: delivery.subscription.url,
-          secret: delivery.subscription.secret,
-          authHeader,
-          event: delivery.event,
-          deliveryId: delivery.id,
-          body: JSON.stringify(delivery.payload),
-        });
+  const carriesRun =
+    delivery.event.startsWith("run.") ||
+    (typeof payload === "object" &&
+      payload !== null &&
+      !Array.isArray(payload) &&
+      "runId" in payload);
+  if (
+    carriesRun &&
+    !(await isFeatureEnabled(
+      AGENT_RUN_FEATURE_FLAG,
+      delivery.subscription.agent.userId,
+    ))
+  ) {
+    await prisma.agentWebhookDelivery.update({
+      where: { id: delivery.id },
+      data: { status: "cancelled", processingAt: null },
+    });
+    return { status: "skipped" };
+  }
+
+  const result = await postSignedWebhook({
+    url: delivery.subscription.url,
+    secret: delivery.subscription.secret,
+    event: delivery.event,
+    deliveryId: delivery.id,
+    body: JSON.stringify(delivery.payload),
+  });
   const attemptCount = delivery.attemptCount + 1;
 
   if (result.ok) {

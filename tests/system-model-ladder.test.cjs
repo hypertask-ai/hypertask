@@ -50,7 +50,7 @@ test("default settings resolve to Gemini", () => {
   });
 });
 
-test("disabling Google resolves to GPT Luna 6", () => {
+test("disabling Google resolves to GPT 6 Luna", () => {
   assert.deepEqual(
     resolveSystemModel("summaries", { providers: { google: false } }),
     {
@@ -60,7 +60,7 @@ test("disabling Google resolves to GPT Luna 6", () => {
   );
 });
 
-test("disabling Google and xAI resolves to GPT Luna 6", () => {
+test("disabling Google and xAI resolves to GPT 6 Luna", () => {
   assert.deepEqual(
     resolveSystemModel("summaries", {
       providers: { google: false, xai: false },

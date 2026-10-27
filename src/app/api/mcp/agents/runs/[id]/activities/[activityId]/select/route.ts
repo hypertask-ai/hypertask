@@ -1,6 +1,7 @@
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import {
+  agentRunActivitiesEnabledFor,
   authenticateAgentRunRequest,
   browserMutationIsSameOrigin,
   selectAgentRunActivity,
@@ -60,6 +61,9 @@ export async function POST(
     }
     if (!browserMutationIsSameOrigin(request)) {
       return noStore({ success: false, error: "Cross-origin request rejected" }, 403);
+    }
+    if (!(await agentRunActivitiesEnabledFor(principal))) {
+      return noStore({ success: false, error: "Run not found" }, 404);
     }
 
     const selectedValue = parseAgentRunSelection(

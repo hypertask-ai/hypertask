@@ -6,6 +6,7 @@ import projectDetail from "@/utils/controllers/projects/detail";
 import { parseCookies } from "better-auth/cookies";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -18,10 +19,17 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const signed = verifySession(cookieHeader ? parseCookies(cookieHeader).get(SESSION_COOKIE) : undefined);
             const agentId = signed?.id === sessionUser.userId ? signed.agentId : undefined;
             if (req.query?.compat === "htpr-6924") {
-                return res.status(410).json({
-                    error: "Legacy project detail has been retired",
-                    replacement: "/api/projects/boardTasks"
-                });
+                let retired = false;
+                try {
+                    retired = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, sessionUser.userId);
+                } catch {
+                }
+                if (retired) {
+                    return res.status(410).json({
+                        error: "Legacy project detail has been retired",
+                        replacement: "/api/projects/boardTasks"
+                    });
+                }
             }
             const { projectId } = req.body;
             const response = await projectDetail(projectId, sessionUser.userId, agentId)

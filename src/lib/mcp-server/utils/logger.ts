@@ -2,18 +2,7 @@ export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 const CALLER_ERROR_CODES = new Set([-32001, -32003, -32004, -32602]);
 
-export function isValidationError(error: unknown): boolean {
-  const candidate = error as { name?: unknown; issues?: unknown };
-  return (
-    !!candidate &&
-    typeof candidate === 'object' &&
-    candidate.name === 'ZodError' &&
-    Array.isArray(candidate.issues)
-  );
-}
-
-export function isCallerError(error: unknown): boolean {
-  if (isValidationError(error)) return true;
+function isCallerError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const { code, httpStatus } = error as { code?: unknown; httpStatus?: unknown };
   if (typeof httpStatus === 'number') return httpStatus >= 400 && httpStatus < 500;

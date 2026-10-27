@@ -39,7 +39,7 @@ function moduleWithStubs(file, stubs) {
     module: loaded, exports: loaded.exports,
     require: (id) => stubs[id] ?? (id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
     process: { env: { DEMO_AI_GATEWAY_API_KEY: "demo-key" } },
-    console: { log() {}, info() {}, warn() {}, error() {} },
+    console: { log() {}, warn() {}, error() {} },
     Error, Promise, Object, Array, Set, Map,
   }, { filename: path.join(root, file) });
   return loaded.exports;
@@ -85,11 +85,11 @@ test("an explicit non-Claude team pick for a system feature is still honoured", 
   );
 });
 
-test("with the flag off the fast ladder keeps its order and uses Haiku 5.5", () => {
+test("with the flag off the old fast ladder is unchanged", () => {
   const resolved = ladder.resolveSystemModel("summaries", {}, false, {});
   assert.equal(resolved.provider, "google");
   assert.equal(resolved.model, "google/gemini-3.5-flash-lite");
-  assert.deepEqual(ladder.SYSTEM_MODEL_LADDERS.fast.filter((entry) => entry.provider === "anthropic").map((entry) => entry.model), [HAIKU_SLUG]);
+  assert.ok(ladder.SYSTEM_MODEL_LADDERS.fast.some((entry) => entry.model === "anthropic/claude-haiku-4.5"));
 });
 
 test("every default with no user choice is Haiku 5.5 when the flag is on", () => {
@@ -128,7 +128,8 @@ test("saved picks of older Claude versions read as the 5.5 model of the same cla
     const oldClass = saved.split("-")[1];
     assert.equal(catalog.getAiModelDefinition(option.modelKey).modelClass, `claude-${oldClass}`);
   }
-  assert.equal(catalog.getAiModelOptionById("claude-haiku-4.5", false)?.id, "claude-haiku-5-5");
+  // Read-time only: flag off, Haiku 4.5 is still its own option.
+  assert.equal(catalog.getAiModelOptionById("claude-haiku-4.5", false)?.id, "claude-haiku-4.5");
 });
 
 test("a team that disabled Anthropic is reported, and callers return no result instead of switching provider", async () => {

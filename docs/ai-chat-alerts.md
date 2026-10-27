@@ -2,9 +2,9 @@
 
 Ticket: https://app.hypertask.ai/detail/project-15/6354
 
-Alert monitoring runs for all production and preview chat turns. The rollout
-flag was retired after remaining on Everyone for more than 14 days. Existing
-PostHog tracking is unchanged and does not depend on alert delivery.
+The server flag `htpr-6354-ai-chat-alerts` defaults to Owner + QA. Only turns in
+that audience contribute samples until the flag is widened. Existing PostHog
+tracking is unchanged and does not depend on alert delivery.
 
 ## Policy
 

@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { openAgentChat } from "@/lib/agents/chatService";
-import { isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags";
 import { HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
 import { initialChatTitle } from "@/lib/ai/chatNames";
 import { taskAccessWhere } from "@/utils/controllers/tasks/assertTaskAccess";
@@ -33,26 +33,37 @@ async function createSession(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const limited = await checkRestRateLimit(userId, "write");
-    if (limited) return limited;
+    let restCompat = false;
+    try {
+      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, userId);
+    } catch {
+    }
+    if (restCompat) {
+      const limited = await checkRestRateLimit(userId, "write");
+      if (limited) return limited;
+    }
 
     let body: Awaited<ReturnType<typeof request.json>>;
-    let jsonError: unknown;
-    const result = await readJsonBody<typeof body>({
-      json: async () => {
-        try {
-          body = await request.json().catch(() => ({}));
-          return body;
-        } catch (error) {
-          jsonError = error;
-          throw error;
-        }
-      },
-    } as Request, {
-      invalidJson: () => { throw jsonError },
-      invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
-    });
-    if (result.ok) body = result.body;
+    if (restCompat) {
+      let jsonError: unknown;
+      const result = await readJsonBody<typeof body>({
+        json: async () => {
+          try {
+            body = await request.json().catch(() => ({}));
+            return body;
+          } catch (error) {
+            jsonError = error;
+            throw error;
+          }
+        },
+      } as Request, {
+        invalidJson: () => { throw jsonError },
+        invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
+      });
+      if (result.ok) body = result.body;
+    } else {
+      body = await request.json().catch(() => ({}));
+    }
     const parsed = createSessionSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(

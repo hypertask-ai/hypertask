@@ -5,7 +5,6 @@ export function nextFocusAfterRemoval(
   sections: FocusSection[],
   sectionIndex: number,
   removedIndex: number,
-  scope: "board" | "column" = "board",
 ): number | null {
   const items = sections?.[sectionIndex]?.items;
 
@@ -19,8 +18,6 @@ export function nextFocusAfterRemoval(
     }
     return items[0]?.id ?? null;
   }
-
-  if (scope === "column") return null;
 
   for (let d = 1; d < (sections?.length ?? 0); d++) {
     const right = sections[sectionIndex + d]?.items;

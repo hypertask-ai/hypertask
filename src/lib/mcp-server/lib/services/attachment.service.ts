@@ -33,7 +33,7 @@ export interface InlineAttachmentOutcome {
   error?: string;
   status?: 402;
   code?: "PLAN_LIMIT_REACHED";
-  limit?: "boards" | "tickets" | "file_size" | "storage";
+  limit?: "boards" | "tickets" | "file_size";
   max?: number;
   operation_message?: string;
   attachments: AttachmentUploadItem[];

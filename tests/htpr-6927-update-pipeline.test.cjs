@@ -5,6 +5,9 @@ const { loader } = require('./htpr-6927-fixtures.cjs')
 
 const user = { id: 42, email: 'fixture@example.com', displayName: 'Fixture', photoURL: null }
 let state
+let flag = false
+let flagFailure = false
+let observedBody
 const events = () => state.events
 const prisma = {
   task: {
@@ -64,6 +67,13 @@ const load = loader({
     return JSON.stringify(claims)
   } },
   '@/lib/mcp/auth': { checkMcpRateLimit: async () => null, validateMcpAuth: async () => state.ctx },
+  '@/lib/flags': { isFeatureEnabled: async (key, id) => {
+    if (key !== 'htpr-6927-mcp-v2') return false
+    assert.equal(id, state.ctx.user.id)
+    if (observedBody) assert.equal(observedBody.description, state.originalDescription)
+    if (flagFailure) throw new Error('flag unavailable')
+    return flag
+  } },
   '@/lib/mcp/agents': { getMcpSessionAgentSummary: async (id) => id ? { id, name: 'Fixture Agent' } : null },
   '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: (id, agentId) => ({ id, agentId }) },
   '@/utils/controllers/getMemberAndOwnerForBoard': { __esModule: true, default: async () => [7, 8] },
@@ -81,7 +91,9 @@ const load = loader({
     broadcastTaskChange: async (id, payload) => { events().push(['task', id, payload]); if (state.delivery) await state.delivery },
   },
 })
-const executor = load('src/lib/mcp/tasks/updateTask.ts').executeTaskUpdate
+const v1 = load('src/lib/mcp/tasks/updateTask.ts').executeTaskUpdate
+const v2 = load('src/lib/mcp/tasks/updateTaskV2.ts').executeTaskUpdateV2
+const selector = load('src/lib/mcp/tasks/updateTaskSelector.ts').executeTaskUpdate
 const operation = load('src/lib/mcp/operations/tasks/update/operation.ts').POST
 const batch = load('src/lib/mcp/tasks/batchTasks.ts').handleBatchBody
 
@@ -91,6 +103,8 @@ function reset(extra = {}) {
     tasks: [{ id: 101, projectId: 15, sectionId: 10, status: 'Normal', title: 'Before' }],
     ctx: { user, agentId: null }, ...extra,
   }
+  observedBody = undefined
+  flagFailure = false
 }
 function request(body, key) {
   return new NextRequest('http://localhost/api/mcp/tasks/update', {
@@ -145,26 +159,15 @@ const cases = [
   ['validation precedence', { task_id: 101, description: '', content_type: 'invalid', due_date: 'invalid' }],
 ]
 for (const [name, body, extra] of cases) {
-  test(`${name} preserves update responses and side effects`, async () => {
-    const after = await execute(executor, body, extra)
-    const expectedStatus = {
-      'all failed': 500, 'strict side effect failure': 500,
-      'agent archive of Done task denied': 403, 'mixed denied and failed batch': 500,
-      'not found': 404, 'archived move': 409, 'deleted assignment': 404,
-      'missing user': 404, 'invalid title': 400, 'validation precedence': 400,
-    }[name] ?? 200
-    assert.equal(after.status, expectedStatus, after.text)
-    assert.equal(JSON.parse(after.text).success, expectedStatus === 200)
-    if (expectedStatus === 200) {
+  test(`V2 parity: ${name} retains response bytes, normalized body, ordered field writes and side effects`, async () => {
+    const before = await execute(v1, body, extra)
+    const after = await execute(v2, body, extra)
+    assert.deepEqual(after, before)
+    if (!extra && !['invalid title', 'validation precedence'].includes(name)) {
+      assert.equal(after.status, 200, after.text)
+      assert.equal(JSON.parse(after.text).success, true)
       assert.ok(after.events.some(([kind]) => kind === 'task'))
-    } else {
-      assert.equal(after.events.some(([kind]) => kind === 'task' || kind === 'board'), false)
-      assert.equal(typeof JSON.parse(after.text).error, 'string')
     }
-    if (['not found', 'archived move', 'deleted assignment', 'missing user', 'invalid title', 'validation precedence'].includes(name)) {
-      assert.deepEqual(after.events, [])
-    }
-    if (name === 'validation precedence') assert.equal(JSON.parse(after.text).field, 'content_type')
     if (name === 'agent archive of Done task denied') {
       assert.equal(after.status, 403, after.text)
       assert.equal(JSON.parse(after.text).code, 'agent_done_lifecycle_denied')
@@ -180,86 +183,107 @@ for (const [name, body, extra] of cases) {
   })
 }
 
-test('direct, single and batch updates normalize descriptions without consulting flags', async () => {
+test('single update and batch callers select ON/OFF before description normalization', async () => {
   const body = { task_id: 101, description: '## Heading', content_type: 'markdown' }
-  for (const caller of ['direct', 'single', 'batch']) {
-    reset()
-    const input = structuredClone(body)
-    const result = await withFetch(() => caller === 'direct' ? executor({ request: request(input), ctx: state.ctx, requestBody: input }) : caller === 'single' ? operation(request(input)) : batch(request(input), state.ctx, { op: 'update', updates: [input] }, { assignAssignees: async () => {} }))
-    const response = caller === 'direct' ? result.response : result
-    assert.equal(response.status, 200, await response.text())
-    assert.ok(state.events.some(([kind, , text]) => kind === 'description_urls' && text.includes('<h2>Heading</h2>')))
-  }
-})
-
-test('idempotent replay suppresses duplicate side effects', async () => {
-  reset()
-  const body = { task_id: 101, description: '## Heading', content_type: 'markdown' }
-  const first = await withFetch(() => operation(request(body, 'replay-key')))
-  assert.equal(first.status, 200)
-  const effects = [...state.events]
-  const replay = await withFetch(() => operation(request(body, 'replay-key')))
-  assert.equal(JSON.parse(await replay.text()).idempotent_replayed, true)
-  assert.deepEqual(state.events, effects)
-})
-
-test('agent lease conflicts refuse writes and successful updates release leases', async () => {
-  for (const conflict of [false, true]) {
-    reset({ ctx: { user, agentId: 'agent-fixture' }, lease: conflict ? { agentId: 'other-agent', token: 'other-lease', adoptionCount: 0 } : null })
-    const response = await withFetch(() => operation(request({ task_id: 101, title: 'After' })))
-    const text = await response.text()
-    if (conflict) {
-      assert.equal(response.status, 409)
-      assert.equal(JSON.parse(text).code, 'agent_mutation_lease_conflict')
-      assert.deepEqual(state.events, [['lease_lock', 101]])
-    } else {
-      assert.equal(response.status, 200)
-      assert.equal(state.lease, null)
-      assert.deepEqual(state.events.slice(-2), [['lease_release_ref', 101], ['lease_delete', 101]])
-      assert.ok(state.events.findIndex(([kind]) => kind === 'task') < state.events.findIndex(([kind]) => kind === 'lease_delete'))
+  for (const caller of ['selector', 'single', 'batch']) {
+    const results = []
+    for (const enabled of [false, true]) {
+      reset()
+      flag = enabled
+      const input = structuredClone(body)
+      state.originalDescription = input.description
+      observedBody = input
+      const result = await withFetch(() => caller === 'selector' ? selector({ request: request(input), ctx: state.ctx, requestBody: input }) : caller === 'single' ? operation(request(input)) : batch(request(input), state.ctx, { op: 'update', updates: [input] }, { assignAssignees: async () => {} }))
+      const response = caller === 'selector' ? result.response : result
+      results.push({ text: await response.text(), status: response.status, events: state.events })
     }
+    assert.deepEqual(results[1], results[0], caller)
+  }
+  reset()
+  flagFailure = true
+  assert.deepEqual(await withFetch(async () => {
+    const result = await selector({ request: request(body), ctx: state.ctx, requestBody: structuredClone(body) })
+    return result.response.text()
+  }), (await execute(v1, body)).text)
+})
+
+test('idempotent replay retains bytes and suppresses duplicate side effects in both single update versions', async () => {
+  const results = []
+  for (const enabled of [false, true]) {
+    reset()
+    flag = enabled
+    const body = { task_id: 101, description: '## Heading', content_type: 'markdown' }
+    const first = await withFetch(() => operation(request(body, 'replay-key')))
+    const firstText = await first.text()
+    const effects = [...state.events]
+    const replay = await withFetch(() => operation(request(body, 'replay-key')))
+    const replayText = await replay.text()
+    assert.equal(JSON.parse(replayText).idempotent_replayed, true)
+    assert.deepEqual(state.events, effects)
+    results.push({ firstText, replayText, effects })
+  }
+  assert.deepEqual(results[1], results[0])
+})
+
+test('agent lease conflict receipts and cleanup match for single updates and adopted V1/V2 writes', async () => {
+  for (const conflict of [false, true]) {
+    const results = []
+    for (const enabled of [false, true]) {
+      reset({ ctx: { user, agentId: 'agent-fixture' }, lease: conflict ? { agentId: 'other-agent', token: 'other-lease', adoptionCount: 0 } : null })
+      flag = enabled
+      const response = await withFetch(() => operation(request({ task_id: 101, title: 'After' })))
+      const text = await response.text()
+      results.push({ text, status: response.status, events: state.events })
+      if (conflict) {
+        assert.equal(response.status, 409)
+        assert.equal(JSON.parse(text).code, 'agent_mutation_lease_conflict')
+        assert.deepEqual(state.events, [['lease_lock', 101]])
+      } else {
+        assert.equal(state.lease, null)
+        assert.deepEqual(state.events.slice(-2), [['lease_release_ref', 101], ['lease_delete', 101]])
+        assert.ok(state.events.findIndex(([kind]) => kind === 'task') < state.events.findIndex(([kind]) => kind === 'lease_delete'))
+      }
+    }
+    assert.deepEqual(results[1], results[0])
   }
 })
 
-test('updates await realtime delivery and tolerate broadcast failures before returning receipts', async () => {
-  let release
-  reset({ delivery: new Promise((resolve) => { release = resolve }), deliveryFailure: true })
-  let settled = false
-  const pending = withFetch(() => executor({ request: request({}), ctx: state.ctx, requestBody: { task_id: 101, title: 'After' } })).then((result) => { settled = true; return result })
-  await new Promise((resolve) => setImmediate(resolve))
-  assert.equal(settled, false)
-  assert.ok(state.events.some(([kind]) => kind === 'task'))
-  release()
-  assert.equal((await pending).response.status, 200)
+test('both executors await realtime delivery and tolerate broadcast failures before returning receipts', async () => {
+  for (const executor of [v1, v2]) {
+    let release
+    reset({ delivery: new Promise((resolve) => { release = resolve }), deliveryFailure: true })
+    let settled = false
+    const pending = withFetch(() => executor({ request: request({}), ctx: state.ctx, requestBody: { task_id: 101, title: 'After' } })).then((result) => { settled = true; return result })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(settled, false)
+    assert.ok(state.events.some(([kind]) => kind === 'task'))
+    release()
+    assert.equal((await pending).response.status, 200)
+  }
 })
 
-
-test('updates overlap independent user/section reads after access and preserves rejection precedence', async () => {
+test('V2 overlaps independent user/section reads after access and preserves rejection precedence', async () => {
   let release
   reset({ waitUser: new Promise((resolve) => { release = resolve }) })
-  const pending = withFetch(() => executor({ request: request({}), ctx: state.ctx, requestBody: { task_id: 101, sectionId: 20 } }))
+  const pending = withFetch(() => v2({ request: request({}), ctx: state.ctx, requestBody: { task_id: 101, sectionId: 20 } }))
   await new Promise((resolve) => setImmediate(resolve))
   assert.deepEqual(state.reads, ['user', 'section'])
   assert.equal(state.events.length, 0)
   release()
   await pending
-  for (const [extra, message] of [
-    [{ userFailure: true, sectionFailure: true }, 'user read failed'],
-    [{ cookieFailure: true, sectionFailure: true }, 'cookie failed'],
-    [{ sectionFailure: true }, 'section read failed'],
-  ]) {
-    await assert.rejects(execute(executor, { task_id: 101, sectionId: 20 }, extra), { message })
+  for (const extra of [{ userFailure: true, sectionFailure: true }, { cookieFailure: true, sectionFailure: true }, { sectionFailure: true }]) {
+    let before
+    await assert.rejects(execute(v1, { task_id: 101, sectionId: 20 }, extra), (error) => { before = error.message; return true })
+    await assert.rejects(execute(v2, { task_id: 101, sectionId: 20 }, extra), (error) => error.message === before)
   }
 })
 
 test('dry-run receipts retain normalization, validation and missing-target outcomes without writes', async () => {
   for (const extra of [{}, { tasks: [] }, { missingUser: true }]) {
     const body = { task_id: 101, title: 'After', sectionId: 20, dry_run: true }
-    const after = await execute(executor, body, extra)
-    assert.equal(after.status, extra.missingUser ? 404 : 200)
-    const result = JSON.parse(after.text)
-    assert.equal(result.valid, !extra.missingUser)
-    if (!extra.missingUser) assert.equal(result.dry_run, true)
+    const before = await execute(v1, body, extra)
+    const after = await execute(v2, body, extra)
+    assert.deepEqual(after, before)
     assert.deepEqual(after.events, [])
   }
 })

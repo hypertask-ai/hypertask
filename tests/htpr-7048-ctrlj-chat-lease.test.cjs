@@ -68,9 +68,8 @@ function memoryRedis() {
       }
       if (script.includes("local active =")) {
         const registered = values.get(keys[4]);
-        const scopedActive = values.get(keys[5]);
-        const sessionActive = values.get(keys[6]);
-        if (!registered || (registered !== values.get(keys[3]) && registered !== scopedActive && registered !== sessionActive)) return 4;
+        const scopedActive = keyCount === 6 ? values.get(keys[5]) : undefined;
+        if (!registered || (registered !== values.get(keys[3]) && registered !== scopedActive)) return 4;
         if (values.get(keys[1]) === "complete") return 0;
         if (values.has(keys[1])) return 3;
         values.set(keys[0], "1");

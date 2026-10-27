@@ -19,7 +19,7 @@ const { MCP_FEEDBACK_ROUTE_TEMPLATES } = load('src/lib/aiFeedback/routes.ts')
 test('every registered legacy, consolidated and discovery MCP tool name passes the credential filter', () => {
   const legacy = resolvePortableTools(MCP_TOOLS)
   const names = new Set(MCP_TOOLS.map((tool) => tool.name))
-  for (const consolidated of [false, true]) for (const tool of toolsForConnect(selectMcpTools(legacy, consolidated, {}), true)) names.add(tool.name)
+  for (const consolidated of [false, true]) for (const tool of toolsForConnect(selectMcpTools(legacy, consolidated, {}, true), true)) names.add(tool.name)
   assert.ok(names.has('hypertask_report_feedback'))
   assert.ok(names.has('hypertask_search_tools'))
   assert.ok(names.has('hypertask_describe_tool'))

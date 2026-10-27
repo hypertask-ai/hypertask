@@ -146,36 +146,6 @@ test("the API request alone receives the Vercel secret and missing settings fail
   assert.ok(steps.some((step) => step.run?.includes("node .github/scripts/check-node-version.cjs")));
 });
 
-test("YPER4-706: PR paths skip unrelated changes but include guard inputs; production pushes remain unfiltered", () => {
-  const workflow = yaml.load(fs.readFileSync(".github/workflows/node-version-guard.yml", "utf8"));
-  const runsFor = (files) => files.some(file => workflow.on.pull_request.paths.some(pattern => path.matchesGlob(file, pattern)));
-  for (const file of ["src/app/page.tsx", "src/components/Task.tsx", "docs/ci.md", "README.md"]) {
-    assert.equal(runsFor([file]), false, file);
-  }
-  for (const file of [
-    "package.json",
-    "package-lock.json",
-    "config/parity/runner/package-lock.json",
-    ".github/workflows/node-version-guard.yml",
-    ".github/workflows/ci-tests.yml",
-    ".github/scripts/check-node-version.cjs",
-    ".github/scripts/check-node-security-floor.cjs",
-    ".github/scripts/check-known-bad-packages.cjs",
-    ".github/scripts/node-version-guard/package.json",
-    ".github/scripts/feature-flag-parser/package.json",
-    ".github/known-bad-packages.json",
-    "src/lib/runtime/nodeSecurityFloor.json",
-    "tests/known-bad-packages.test.cjs",
-    "tests/light-gate-dependencies.test.cjs",
-    "tests/node-version-guard.test.cjs",
-  ]) {
-    assert.equal(runsFor([file]), true, file);
-  }
-  assert.equal(runsFor(["src/app/page.tsx", "package.json"]), true);
-  assert.deepEqual(workflow.on.pull_request.types, ["opened", "synchronize", "reopened", "ready_for_review"]);
-  assert.deepEqual(workflow.on.push, { branches: ["production"] });
-});
-
 test("only Dependabot pull requests may skip the live Vercel read; everyone else still fails without the token", () => {
   const workflow = yaml.load(fs.readFileSync(".github/workflows/node-version-guard.yml", "utf8"), { schema: yaml.JSON_SCHEMA });
   const read = workflow.jobs["vercel-node-version"].steps.find(step => step.id === "vercel");

@@ -1,5 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
@@ -32,10 +32,8 @@ const createDemoSession = (user: IUser): IChatSession => {
 export const useSessionAndChatHistory = (
   taskId?: number,
   historyEnabled = true,
-  isTaskScoped = false,
-  preserveSessionSelection = false
+  isTaskScoped = false
 ) => {
-  const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
@@ -224,13 +222,11 @@ export const useSessionAndChatHistory = (
             previous.map((session) => {
               if (session.id !== sessionId) return session;
               const previousMessages = session.messages ?? [];
-              const messageIndex = stopClosesStream && updateLastMessage
-                ? previousMessages.findIndex((previous) => previous.id === message.id)
-                : -1;
-              const messages = [...previousMessages];
-              if (messageIndex >= 0) messages[messageIndex] = message;
-              else if (updateLastMessage && messages.length > 0) messages[messages.length - 1] = message;
-              else messages.push(message);
+              const messages = updateLastMessage
+                ? previousMessages.length > 0
+                  ? [...previousMessages.slice(0, -1), message]
+                  : [message]
+                : [...previousMessages, message];
               return { ...session, messages, updatedAt: new Date() };
             }),
           );
@@ -248,13 +244,11 @@ export const useSessionAndChatHistory = (
 
             const target = sessionsList[index];
             const prevMessages = target.messages ?? [];
-            const messageIndex = stopClosesStream && updateLastMessage
-              ? prevMessages.findIndex((previous) => previous.id === message.id)
-              : -1;
-            const nextMessages = [...prevMessages];
-            if (messageIndex >= 0) nextMessages[messageIndex] = message;
-            else if (updateLastMessage && nextMessages.length > 0) nextMessages[nextMessages.length - 1] = message;
-            else nextMessages.push(message);
+            const nextMessages = updateLastMessage
+              ? prevMessages.length > 0
+                ? [...prevMessages.slice(0, -1), message]
+                : [message]
+              : [...prevMessages, message];
 
             const updatedSession = {
               ...target,
@@ -318,7 +312,7 @@ export const useSessionAndChatHistory = (
         console.error("Error adding message to session:", error);
       }
     },
-    [hasRequiredData, currentUser?.uid, isDemo, queryClient, stopClosesStream]
+    [hasRequiredData, currentUser?.uid, isDemo, queryClient]
   );
 
   const updateLastMessageInSessionCache = useCallback(
@@ -405,7 +399,7 @@ export const useSessionAndChatHistory = (
     async (sessionId: string) => {
       if (!hasRequiredData || !currentUser?.uid) {
         console.warn("Cannot delete session: missing user data");
-        return false;
+        return;
       }
 
       const queryKey = ["chat-sessions", currentUser.uid] as const;
@@ -426,14 +420,14 @@ export const useSessionAndChatHistory = (
               : [createDemoSession(currentUser)];
           setDemoSessions(nextSessions);
           setActiveSession(nextSessions[0].id);
-          return true;
+          return;
         }
 
         await AI_Chat_API.deleteSession(sessionId);
 
         if (onlySessionInCache) {
           await queryClient.invalidateQueries({ queryKey });
-          return true;
+          return;
         }
 
         const nextSessions = sessionsList.filter((s) => s.id !== sessionId);
@@ -458,11 +452,9 @@ export const useSessionAndChatHistory = (
         if (deletedWasActive) {
           setActiveSession(nextSessions[0]?.id ?? null);
         }
-        return true;
       } catch (error) {
         console.error("Error deleting chat session:", error);
         await queryClient.invalidateQueries({ queryKey });
-        return false;
       }
     },
     [
@@ -501,9 +493,7 @@ export const useSessionAndChatHistory = (
 
         if (taskId === undefined) {
           if (isTaskScoped) return;
-          if (preserveSessionSelection) {
-            setActiveSession((selected) => sessions.some((session) => session.id === selected) ? selected : sessions[0]?.id);
-          } else setActiveSession(sessions[0]?.id);
+          setActiveSession(sessions[0]?.id);
           return;
         }
 
@@ -540,7 +530,7 @@ export const useSessionAndChatHistory = (
     isTaskScoped,
     sessionsData,
     taskId,
-    startNewSession, paged, preserveSessionSelection,
+    startNewSession, paged,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];

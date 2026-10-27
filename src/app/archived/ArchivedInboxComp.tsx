@@ -4,6 +4,8 @@
 "use client"
 
 import { unarchiveNotification } from "@/lib/api/typedClient";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -12,6 +14,7 @@ import { ArchivedTaskIndexAtom, activeItemAtom, showCommandsAtom, tasksPlayListA
 
 import {  INotification, ITask, IUser } from '@/models/model';
 import formatDateDifference from '@/utils/generateTime';
+import axios from 'axios';
 import { parseCookies } from 'nookies';
 import {  useQueryClient } from '@tanstack/react-query';
 import {  scrollToCenterIfNearBottom, scrollToCenterIfNearTop } from '@/utils/helperFunctions/helperFunctions';
@@ -48,6 +51,9 @@ const ArchivedNotificationsContainer = ({
             
         }
     }
+    const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
+    let typedWrite: typeof unarchiveNotification | undefined;
+    if (typedWrites) typedWrite = unarchiveNotification;
     const queryClient = useQueryClient();   
     const router = useRouter();
     const { navigateToTask } = useHypertasksNavigate()
@@ -193,7 +199,7 @@ const ArchivedNotificationsContainer = ({
     const markAsUnarchive = async (notification: INotification) => {
    
         try {
-            await unarchiveNotification({ notificationId: notification.id })
+            typedWrite ? await typedWrite({ notificationId: notification.id }) : await axios.post("/api/notifications/unArchiveNotificationById",{notificationId:notification.id})
             queryClient.refetchQueries({queryKey:["archivedInbox"]});
             queryClient.refetchQueries({queryKey:["archivedInboxMeta"]});
 

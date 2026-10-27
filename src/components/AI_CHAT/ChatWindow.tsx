@@ -7,12 +7,9 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { AI_Tiptap_Container } from "./AI_Tiptap_Container";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { Sparkles, X } from "lucide-react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 
 export const ChatWindow = () => {
   const isMbl = useContext(MobileViewContext);
-  const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover } =
     useAiChatContext();
 
@@ -45,7 +42,6 @@ export const ChatWindow = () => {
     <div
       className={cn(
         "bg-ai-chat text-meta flex flex-col overflow-hidden chatwindow",
-        amoledChatBorder && !isMbl && "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:-outline-offset-1 [.amoled_&]:outline-[var(--border-light-gray-thin)] [.amoled_&]:[--bs-border-radius:5px]",
         isMbl
           ? "h-full min-h-0 w-full flex-1 rounded-none"
           : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded"

@@ -341,7 +341,7 @@ test("only an ownership-checked chat session becomes a trusted cache scope", asy
         userSetting: { findUnique: async () => ({}) },
       } },
       "@/app/api/ai/_lib/modelProvider": h,
-      "@/lib/aiModelOptions": { getDefaultAiModelOptionForPlan: () => ({}), isLunaBlockedForPlan: () => false, isGrokGemini4ModelKey: () => false },
+      "@/lib/aiModelOptions": { getDefaultAiModelOptionForPlan: () => ({}), isLunaBlockedForPlan: () => false },
       "@/app/api/ai/_lib/chatTeamContext": {
         resolveChatTeamContext: async () => ({ teamId: "team-a" }),
         buildChatProviderContext: () => ({ keyLookupContext: { trustedTeamId: "team-a" } }),

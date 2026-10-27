@@ -10,7 +10,7 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const modulePath = (relativePath) => path.join(root, relativePath);
 
-test("Agent Chat skill UI stays available with comment skill execution OFF", async () => {
+test("Agent Chat skill UI stays available with typed transport and comment skill execution OFF", async () => {
   const stubs = new Map();
   const globals = ["window", "document", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"];
   const previousGlobals = new Map(
@@ -33,7 +33,7 @@ test("Agent Chat skill UI stays available with comment skill execution OFF", asy
     stubModule("src/hooks/useFlag.tsx", {
       useFlag: (key) => {
         flagChecks.add(key);
-        assert.ok(["htpr-7480-comment-skill-run", "htpr-7393-comment-inline-ai", "htpr-7879-skill-menu"].includes(key), "Skill availability is not flag-gated");
+        assert.ok(["htpr-6925-typed-api-client", "htpr-7480-comment-skill-run", "htpr-7393-comment-inline-ai"].includes(key), "Skill availability is not flag-gated");
         return false;
       },
     });
@@ -100,7 +100,7 @@ test("Agent Chat skill UI stays available with comment skill execution OFF", asy
       assert.match(html, /@hyperai \/slug in a comment/);
     }
 
-    assert.deepEqual([...flagChecks], [], "Settings skills no longer depend on a transport flag");
+    assert.deepEqual([...flagChecks], ["htpr-6925-typed-api-client"], "Only settings transport is flagged");
     flagChecks.clear();
 
     dom = new JSDOM('<div id="root"></div>', {
@@ -129,7 +129,7 @@ test("Agent Chat skill UI stays available with comment skill execution OFF", asy
     });
     assert.match(container.textContent, /Unslop/);
     assert.equal(fetches, 1);
-    assert.deepEqual([...flagChecks].sort(), ["htpr-7393-comment-inline-ai", "htpr-7480-comment-skill-run", "htpr-7879-skill-menu"], "Execution and project-scoping flags do not hide slash skills");
+    assert.deepEqual([...flagChecks].sort(), ["htpr-7393-comment-inline-ai", "htpr-7480-comment-skill-run"], "Only comment execution flags are read without hiding slash skills");
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     dom?.window.close();

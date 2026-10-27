@@ -1,9 +1,0 @@
-[Unit]
-Description=Top up Hypertask Codex runners while CPU and RAM allow
-
-[Service]
-Type=oneshot
-KillMode=process
-Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/.local/lib/hypertask/ht-hax-runner/ht-hax-runner top-up
-TimeoutStartSec=180

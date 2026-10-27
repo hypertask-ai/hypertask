@@ -14,15 +14,6 @@ function isDocsOnlyFile(file) {
     (!file.includes('/') && file.endsWith('.md'));
 }
 
-// Smoke builds add no coverage for documentation, skills or unit-test-only edits.
-// Correctness CI still runs changed tests using the stricter build_needed output.
-function heavyNeeded(files) {
-  return !Array.isArray(files) || files.length === 0 || files.some(file =>
-    typeof file !== 'string' || file.length === 0 || file.startsWith('src/') ||
-    !(file.startsWith('docs/') || file.startsWith('.claude/') || file.endsWith('.md') || file.startsWith('skills/') ||
-      file.startsWith('.agents/skills/') || file.startsWith('tests/')));
-}
-
 function buildNeeded(files) {
   return !Array.isArray(files) || files.length === 0 || files.some(file =>
     typeof file !== 'string' || file.length === 0 || !isDocsOnlyFile(file));
@@ -65,12 +56,6 @@ function selfCheck() {
     ['newline in non-doc path', ['src/code.js\nREADME.md.js'], true],
     ['invalid entry', [''], true],
   ]) assert.equal(buildNeeded(files), expected, name);
-  for (const [files, expected] of [
-    [['tests/unit.test.cjs'], false], [['skills/foo/SKILL.md'], false],
-    [['nested/guide.md'], false], [['.agents/skills/a/script.sh'], false],
-    [['src/app/wiki/agents/agents.md'], true], [['tests/a.cjs', 'src/a.ts'], true],
-    [['package.json'], true], [[], true], [['.github/scripts/ci-change-scope.cjs'], true],
-  ]) assert.equal(heavyNeeded(files), expected, files.join(', '));
   const base = 'a'.repeat(40);
   const head = 'b'.repeat(40);
   for (const [name, diff, expected] of [
@@ -109,14 +94,11 @@ if (require.main === module) {
   if (process.argv.includes('--self-check')) {
     selfCheck();
   } else {
-    const event = process.env.SCOPE_EVENT_NAME || process.env.GITHUB_EVENT_NAME;
-    const scope = changeScope(event, process.env.BASE_SHA, process.env.HEAD_SHA);
+    const scope = changeScope(process.env.GITHUB_EVENT_NAME, process.env.BASE_SHA, process.env.HEAD_SHA);
     // Keep the existing test selector's newline input. Unknown scope means ALL.
     writeFileSync(path.join(process.env.RUNNER_TEMP, 'changed-files.txt'),
       scope.files.some(file => /[\r\n]/.test(file)) ? '' : scope.files.join('\n'));
-    const heavy = event === 'pull_request' && scope.files.length ? heavyNeeded(scope.files) : true;
-    appendFileSync(process.env.GITHUB_OUTPUT, `build_needed=${scope.build_needed}\nheavy_needed=${heavy}\n`);
-    if (!heavy) console.log('docs-only change, skipped heavy smoke build (documentation/skills/tests only).');
+    appendFileSync(process.env.GITHUB_OUTPUT, `build_needed=${scope.build_needed}\n`);
     console.log(scope.build_needed ? 'Run full CI (non-docs or unknown diff).' : 'Docs-only PR: heavy CI steps are not needed.');
   }
 }

@@ -22,19 +22,8 @@ function defaultExport(value) { return { __esModule: true, default: value }; }
 const resetModule = "@/lib/ai/htpr7038ModelReset";
 const preferenceFile = "src/utils/controllers/users/fetch_preferences.ts";
 
-test("released reset checks completion without a feature flag dependency", async () => {
-  const users = [];
-  const reset = load("src/lib/ai/htpr7038ModelReset.ts", {
-    "@/lib/prisma": defaultExport({ htpr7038ModelChoiceResetDone: {
-      findUnique: async ({ where }) => { users.push(where.userId); return { userId: where.userId }; },
-    } }),
-  });
-  assert.equal(await reset.ensureHtpr7038ModelReset(7), "done");
-  assert.deepEqual(users, [7]);
-});
-
 test("preferences controller runs reset before a cache hit, bypasses stale cache after reset, and reads normally after failure", async () => {
-  for (const result of ["reset", "done", "failed"]) {
+  for (const result of ["reset", "done", "disabled", "failed"]) {
     const events = [];
     const previous = { aiModelPreferences: { aiChat: "luna" } };
     const current = { aiModelPreferences: { aiChat: "claude-haiku-5-5" } };
@@ -55,9 +44,8 @@ test("preferences controller runs reset before a cache hit, bypasses stale cache
 
   // Exercise real fail-open behavior, not a reset stub that already hides errors.
   const reset = load("src/lib/ai/htpr7038ModelReset.ts", {
-    "@/lib/prisma": defaultExport({ htpr7038ModelChoiceResetDone: {
-      findUnique: async () => { throw new Error("synthetic lookup failure"); },
-    } }),
+    "@/lib/flags": { isFeatureEnabled: async () => { throw new Error("synthetic lookup failure"); } },
+    "@/lib/flags/keys": {},
   });
   const controller = load(preferenceFile, {
     [resetModule]: reset,
@@ -69,17 +57,15 @@ test("preferences controller runs reset before a cache hit, bypasses stale cache
   assert.equal(result.res.aiModelPreferences.aiChat, "luna");
 });
 
-test("chat and every editor saved-model surface await reset before reading and selecting", async () => {
+test("chat and every editor/task-writer saved-model surface await reset before reading and selecting", async () => {
   const selected = new Error("selection reached");
   const model = { id: "fixture-model", modelKey: "fixture-model", source: "openai", model: "fixture-model" };
   for (const file of ["src/lib/ai/chatStream/turnModel.ts", "src/app/api/ai/_lib/editorAi.ts"]) {
-    for (const surface of file.includes("turnModel")
-      ? ["aiChat", "taskWriter", "writeWithAi", "improveWriting", "askAi"]
-      : ["aiChat", "writeWithAi", "improveWriting", "askAi"]) {
+    for (const surface of ["aiChat", "taskWriter", "writeWithAi", "improveWriting", "askAi"]) {
       const events = [];
       const preferences = { [surface]: "global-choice", teams: { team: { [surface]: "team-choice" } } };
       const stubs = {
-        [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); await Promise.resolve(); events.push("reset-done"); return "done"; } },
+        [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); await Promise.resolve(); events.push("reset-done"); return "disabled"; } },
         "@/lib/prisma": defaultExport({ userSetting: { findUnique: async () => { events.push("read"); return { aiModelPreferences: preferences }; } } }),
         "@/lib/aiModelPreferences": { getAiModelPreferenceIds: (value, requested, team) => {
           assert.equal(value, preferences); assert.equal(requested, surface); assert.equal(team, "team");
@@ -109,7 +95,7 @@ test("chat and every editor saved-model surface await reset before reading and s
 test("preferences API GET reaches the shared controller and POST resets before reading or saving a pick", async () => {
   const events = [];
   const api = load("src/app/api/users/preferences/route.ts", {
-    [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); return "done"; } },
+    [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); return "disabled"; } },
     "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: ["aiChatOpenNewTickets", "aiChatOpenTickets", "aiChatOpenBoards"] },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => ({ userId: 7, user: { id: 7 } }) },
     "@/lib/flags": { isFeatureEnabled: async () => true },

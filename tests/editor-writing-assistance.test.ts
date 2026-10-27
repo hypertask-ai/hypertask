@@ -216,7 +216,7 @@ test("local writing assistance skips code blocks and unfinished keyboard input",
 
 function makeUndoEditor(
   t: { after: (fn: () => void) => void },
-  options: { undo: boolean; retype?: boolean },
+  options: { undo: boolean },
 ) {
   const dom = new JSDOM('<div id="editor"></div>');
   const restoreGlobals = installBrowserGlobals(dom.window);
@@ -227,7 +227,6 @@ function makeUndoEditor(
       LocalWritingAssistance.configure({
         localCapitalizationEnabled: () => true,
         undoCapitalizationEnabled: () => options.undo,
-        retypeLowercaseEnabled: () => options.retype ?? false,
       }),
     ],
     content: "<p>hello.</p>",
@@ -363,66 +362,4 @@ test("HTPR-6906: with the undo flag off nothing changes", (t) => {
   // Ctrl+Z is plain history undo again: it removes the letter, no lowercase restore.
   pressKey(editor, { key: "z", ctrlKey: true });
   assert.equal(editor.getText(), "hello.");
-});
-
-
-test("HTPR-5908: deleting the whole corrected word lets you retype it lowercase", (t) => {
-  const editor = makeUndoEditor(t, { undo: true, retype: true });
-  assert.equal(dispatchTextInput(editor, "h"), true);
-  for (const letter of "ello") {
-    assert.equal(dispatchTextInput(editor, letter), false);
-    editor.commands.insertContent(letter);
-  }
-  assert.equal(editor.getText(), "hello. Hello");
-  assert.equal(editor.view.dom.querySelector("span[style*='underline']")?.textContent, "Hello");
-  editor.commands.deleteRange({ from: 8, to: 13 });
-  assert.equal(dispatchTextInput(editor, "h"), false);
-  editor.commands.insertContent("hello");
-  assert.equal(editor.getText(), "hello. hello");
-  assert.equal(underlined(editor), 0);
-  editor.commands.insertContent(". ");
-  assert.equal(dispatchTextInput(editor, "w"), true);
-  assert.equal(editor.getText(), "hello. hello. W");
-});
-
-test("HTPR-5908: replacing the whole corrected word also keeps lowercase", (t) => {
-  const editor = makeUndoEditor(t, { undo: true, retype: true });
-  dispatchTextInput(editor, "h");
-  editor.commands.insertContent("ello");
-  editor.commands.setTextSelection({ from: 8, to: 13 });
-  assert.equal(dispatchTextInput(editor, "h"), false);
-  editor.commands.insertContent("hello");
-  assert.equal(editor.getText(), "hello. hello");
-});
-
-test("HTPR-5908: retyping after a full deletion still capitalizes with the fix off", (t) => {
-  const editor = makeUndoEditor(t, { undo: true, retype: false });
-  dispatchTextInput(editor, "h");
-  editor.commands.insertContent("ello");
-  editor.commands.deleteRange({ from: 8, to: 13 });
-  assert.equal(dispatchTextInput(editor, "h"), true);
-  assert.equal(editor.getText(), "hello. H");
-});
-
-test("HTPR-5908: replacing a corrected word with a paragraph still capitalizes", (t) => {
-  const editor = makeUndoEditor(t, { undo: true, retype: true });
-  dispatchTextInput(editor, "h");
-  editor.commands.insertContent("ello");
-  editor.commands.setTextSelection({ from: 8, to: 13 });
-  editor.chain().deleteSelection().splitBlock().run();
-  assert.equal(dispatchTextInput(editor, "w"), true);
-  assert.equal(editor.getText(), "hello. \n\nW");
-});
-
-
-test("HTPR-5908: Select All and delete also preserves lowercase on retyping", (t) => {
-  const editor = makeUndoEditor(t, { undo: true, retype: true });
-  editor.commands.setContent("<p></p>", { emitUpdate: false });
-  dispatchTextInput(editor, "h");
-  editor.commands.insertContent("ello");
-  editor.commands.selectAll();
-  editor.commands.deleteSelection();
-  assert.equal(dispatchTextInput(editor, "h"), false);
-  editor.commands.insertContent("hello");
-  assert.equal(editor.getText(), "hello");
 });

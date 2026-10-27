@@ -33,9 +33,10 @@ function loadHello(flagOn, agentLookups, options = {}) {
     },
   });
   stubModule("src/lib/flags.ts", {
+    HTPR_6804_MCP_TOOLS_FLAG: "htpr-6804-mcp-tools",
     isFeatureEnabled: async (key, userId) => {
       options.flagCalls?.push([key, userId]);
-      return key === FLAG ? flagOn : false;
+      return key === FLAG ? flagOn : key === "htpr-6804-mcp-tools" && Boolean(options.consolidated);
     },
   });
   stubModule("src/lib/mcp/auth.ts", {
@@ -68,22 +69,24 @@ test("flag on, agent token: hello names the agent, starts on the newest board an
   assert.deepEqual(lookups, ["agent-1"]);
 });
 
-for (const role of ["read", "write", "admin"]) {
-  test(`hello uses the permanent consolidated catalog and permissions role=${role}`, async () => {
-    const flagCalls = [];
-    const roleLookups = [];
-    const payload = await loadHello(true, [], { permissions: { role }, flagCalls, roleLookups })
-      .getHelloPayload({ user, agentId: "agent-1" });
-    assert.deepEqual(roleLookups, ["agent-1"]);
-    assert.deepEqual(flagCalls.filter(([key]) => key === "htpr-6804-mcp-tools"), []);
-    const expected = [
-      ["hypertask_tasks", { action: "list", input: { project_id: 9142 } }],
-      ...(role === "read" ? [] : [["hypertask_tasks", { action: "create", input: { project_id: 9142, title: "My first task" } }]]),
-      ["hypertask_projects", { action: "playbook", input: { project_id: 9142 } }],
-    ];
-    assert.deepEqual(payload.nextSteps.map((step) => [step.tool, step.arguments]), expected);
-    assert.deepEqual(payload.agent, { id: "agent-1", displayName: "Claude Code" });
-  });
+for (const consolidated of [false, true]) {
+  for (const role of ["read", "write", "admin"]) {
+    test(`hello uses credential catalog consolidated=${consolidated} and permissions role=${role}`, async () => {
+      const flagCalls = [];
+      const roleLookups = [];
+      const payload = await loadHello(true, [], { consolidated, permissions: { role }, flagCalls, roleLookups })
+        .getHelloPayload({ user, agentId: "agent-1" });
+      assert.deepEqual(roleLookups, ["agent-1"]);
+      assert.deepEqual(flagCalls.filter(([key]) => key === "htpr-6804-mcp-tools"), [["htpr-6804-mcp-tools", user.id]]);
+      const expected = [
+        [consolidated ? "hypertask_tasks" : "hypertask_list_tasks", consolidated ? { action: "list", input: { project_id: 9142 } } : { project_id: 9142 }],
+        ...(role === "read" ? [] : [[consolidated ? "hypertask_tasks" : "hypertask_create_task", consolidated ? { action: "create", input: { project_id: 9142, title: "My first task" } } : { project_id: 9142, title: "My first task" }]]),
+        [consolidated ? "hypertask_projects" : "hypertask_get_board_playbook", consolidated ? { action: "playbook", input: { project_id: 9142 } } : { project_id: 9142 }],
+      ];
+      assert.deepEqual(payload.nextSteps.map((step) => [step.tool, step.arguments]), expected);
+      assert.deepEqual(payload.agent, { id: "agent-1", displayName: "Claude Code" });
+    });
+  }
 }
 
 test("newest board with no title falls back to its name", async () => {
@@ -145,7 +148,7 @@ test("newest board outside the 50-board listing is the start board with the same
   assert.deepEqual(payload.startBoard, {
     id: 9142, title: "Zulu Launch", boardUrl: "https://app.hypertask.ai/project?id=9142",
   });
-  assert.deepEqual(payload.nextSteps.map((step) => step.arguments.input.project_id), [9142, 9142, 9142]);
+  assert.deepEqual(payload.nextSteps.map((step) => step.arguments.project_id), [9142, 9142, 9142]);
   assert.deepEqual(payload.nextSteps.map((step) => step.command), [
     "hypertask task list --project 9142",
     'hypertask task create --project 9142 --title "My first task"',

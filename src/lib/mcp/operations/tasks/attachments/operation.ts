@@ -1,4 +1,4 @@
-import { assertUploadAllowedForProject, isPlanLimitsEnabled, isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
+import { assertFileSizeForProject, isPlanLimitsEnabled, isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
         inlineImages: mayRewriteTargetText && parsed.inline_images !== false && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id),
       },
       planLimitContext ? {
-        assertFileSize: (bytes) => assertUploadAllowedForProject(task.projectId, bytes, planLimitContext),
+        assertFileSize: (bytes) => assertFileSizeForProject(task.projectId, bytes, planLimitContext),
       } : {}
     );
 

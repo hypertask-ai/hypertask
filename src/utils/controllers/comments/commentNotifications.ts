@@ -3,7 +3,6 @@ import type { CommentDependencies } from './commentCreationTypes';
 import type { CreateCommentParams } from './commentCreationTypes';
 import { isAgentCommentFanoutFixOn } from './agentCommentFanout';
 import { isQuietOwnerInboxOn } from '@/utils/controllers/notifications/quietOwnerInbox';
-import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from '@/lib/flags/definitions/htpr-8090-assignee-inbox';
 
 export async function resolveCommentRecipientUserIds(
   dependencies: CommentDependencies,
@@ -70,22 +69,7 @@ export async function createNotificationForComment(
   dedupeByComment = false,
 ) {
   const { prisma, checkRemindersAndCreateNotifications, broadcastInboxChange } = dependencies;
-  let inboxRecipientUserIds = recipientUserIds;
-  if (
-    fromAgentId &&
-    !recipientUserIds.includes(creatorId) &&
-    (comment.kind === "question" || comment.kind === "qa" || comment.kind === "done")
-  ) {
-    const { isFeatureEnabled } = await import("@/lib/flags");
-    if (await isFeatureEnabled(HTPR_8090_ASSIGNEE_INBOX_FLAG, creatorId)) {
-      const humanAssignee = await prisma.assignees.findFirst({
-        where: { taskId: task.id, userId: creatorId, agentId: null },
-        select: { userId: true },
-      });
-      if (humanAssignee) inboxRecipientUserIds = [...recipientUserIds, creatorId];
-    }
-  }
-  let humanUserIds = inboxRecipientUserIds.filter(
+  let humanUserIds = recipientUserIds.filter(
     (recipientUserId) => recipientUserId !== directReplyUserId,
   );
   if (dedupeByComment && humanUserIds.length > 0) {

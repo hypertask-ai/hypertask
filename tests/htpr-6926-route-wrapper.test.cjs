@@ -26,15 +26,16 @@ function load(file, stubs, extra = '', env = {}, clock = performance) {
   return mod.exports
 }
 
-function harness({ legacy = false, count = 1, revoked = false, agent = false, userId = 6, env = {}, clock = performance } = {}) {
+function harness({ enabled = true, count = 1, revoked = false, agent = false, userId = 6, env = {}, clock = performance, onFlag = () => {} } = {}) {
   const events = []
   const secret = crypto.randomBytes(32).toString('hex')
   const user = { id: userId, email: 'fixture@example.test', mcpTokensRevokedAt: null }
   const authContext = { user, agentId: null }
+  let flagCalls = 0
   let authCalls = 0
   let verifyCalls = 0
   let connections = 0
-  const flags = { isFeatureEnabled: async () => true }
+  const flags = { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper', isFeatureEnabled: async () => { flagCalls++; await onFlag(); return enabled } }
   const context = load('src/lib/mcp/operationContext.ts', { 'node:async_hooks': require('node:async_hooks') })
   const permissions = load('src/lib/mcp/managementPermissions.ts', {})
   const oauth = load('src/lib/mcp/oauthTokenContract.ts', { jsonwebtoken: jwt })
@@ -83,16 +84,15 @@ function harness({ legacy = false, count = 1, revoked = false, agent = false, us
   })
   const auth = { ...session, ...rate, ...errors, validateMcpAuth: async (request, options) => { authCalls++; events.push('auth'); return session.validateMcpAuth(request, options) } }
   const wrapper = load('src/lib/mcp/routeWrapper.ts', {
-    'node:async_hooks': require('node:async_hooks'), 'node:crypto': crypto, jsonwebtoken: jwt,
+    'node:async_hooks': require('node:async_hooks'), 'node:crypto': crypto, jsonwebtoken: jwt, '@/lib/flags': flags, '@/lib/flags/keys': flags,
     './operationContext': context, '@/lib/mcp/auth': auth, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease,
-  }, '', env, clock)
-  if (legacy) wrapper.wrapMcpRoute = handler => handler
+  }, 'module.exports.__flags = flagDecisions;', env, clock)
   const token = jwt.sign({ userId: user.id, aud: 'mcp-api', iss: 'hypertask', jti: 'fixture', ...(agent ? { agentId: 'agent-fixture' } : {}) }, secret)
   const request = (body = '{}', bearer = token) => new NextRequest('http://mcp.test/api/mcp/tasks/create', {
     method: 'POST', headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' }, body,
   })
   return { wrapper, auth, errors, session, context, verify, telemetry, lease, db, request, events, authContext,
-    counts: () => ({ authCalls, verifyCalls, connections }) }
+    setEnabled: value => { enabled = value }, counts: () => ({ flagCalls, authCalls, verifyCalls, connections }) }
 }
 
 // HTPR-6965: Server-Timing carries live durations, so wire comparisons leave it out.
@@ -117,15 +117,27 @@ function scaffold(h, run = async () => NextResponse.json({ success: true })) {
   })
 }
 
-test('opaque keys, missing bearer, email-only and ambiguous claims retain the unwrapped path without authenticating during selection', async () => {
+test('flag off calls the verbatim legacy handler with the original request and no wrapper auth or counters', async () => {
+  const h = harness({ enabled: false })
+  const req = h.request()
+  let calls = 0
+  const response = await h.wrapper.wrapMcpRoute(async received => { calls++; assert.equal(received, req); return NextResponse.json({ legacy: true }) })(req)
+  assert.deepEqual(await response.json(), { legacy: true })
+  assert.equal(calls, 1)
+  assert.deepEqual(h.events, [])
+  assert.equal(h.counts().authCalls, 0)
+})
+
+test('opaque keys, missing bearer, email-only and ambiguous claims never authenticate or evaluate the flag during selection', async () => {
   const h = harness()
   const candidates = ['htk_fixture', 'htmk_fixture', 'httk_fixture', 'garbage', jwt.sign({ userId: '6' }, 'fixture'), jwt.sign({ sub: 'fixture@example.test' }, 'fixture')]
   for (const bearer of candidates) assert.equal(await h.wrapper.shouldUseMcpRouteWrapper(h.request('{}', bearer)), false)
   assert.equal(await h.wrapper.shouldUseMcpRouteWrapper(new NextRequest('http://mcp.test')), false)
+  assert.equal(h.counts().flagCalls, 0)
   assert.deepEqual(h.events, [])
 })
 
-test('permanent wrapper authenticates and consumes rate exactly once, including tier resolution and repeated scaffold calls', () => quiet(async () => {
+test('flag on authenticates and consumes rate exactly once, including tier resolution and repeated scaffold calls', () => quiet(async () => {
   const h = harness({ count: 121 })
   const response = await scaffold(h)(h.request())
   assert.equal(response.status, 429)
@@ -219,14 +231,43 @@ test('adopted lease cleanup runs on throw and cleanup failure cannot overwrite s
   assert.equal(value, 'committed')
 }))
 
-test('JWT requests always use the wrapper without a feature flag lookup', () => quiet(async () => {
-  const h = harness()
-  assert.equal(h.wrapper.shouldUseMcpRouteWrapper(h.request()), true)
-  const response = await scaffold(h)(h.request())
-  assert.equal(response.status, 200)
-  assert.equal(h.counts().authCalls, 1)
-  assert.ok(response.headers.has('Server-Timing'))
-}))
+test('flag memo has a 30 second TTL, caches off decisions, bounds entries and evicts oldest', async () => {
+  const h = harness({ enabled: false })
+  const now = Date.now
+  let time = 10_000
+  Date.now = () => time
+  try {
+    await h.wrapper.shouldUseMcpRouteWrapper(h.request())
+    time += 29_999
+    await h.wrapper.shouldUseMcpRouteWrapper(h.request())
+    assert.equal(h.counts().flagCalls, 1)
+    h.setEnabled(true)
+    assert.equal(await h.wrapper.shouldUseMcpRouteWrapper(h.request()), false)
+    time++
+    assert.equal(await h.wrapper.shouldUseMcpRouteWrapper(h.request()), true)
+    assert.equal(h.counts().flagCalls, 2)
+    for (let userId = 10; userId < 1011; userId++) {
+      const token = jwt.sign({ userId }, 'fixture')
+      await h.wrapper.shouldUseMcpRouteWrapper(h.request('{}', token))
+    }
+    assert.equal(h.wrapper.__flags.size, 1000)
+    assert.equal(h.wrapper.__flags.has('htpr-6926-mcp-route-wrapper:6'), false)
+    assert.equal(h.wrapper.__flags.has('htpr-6926-mcp-route-wrapper:10'), false)
+  } finally { Date.now = now }
+})
+
+test('flag lookup failure falls back without authentication, rate consumption or logging', async () => {
+  const wrapper = load('src/lib/mcp/routeWrapper.ts', {
+    'node:async_hooks': require('node:async_hooks'), 'node:crypto': crypto, jsonwebtoken: jwt,
+    '@/lib/flags/keys': { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper' },
+    '@/lib/flags': { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper', isFeatureEnabled: async () => { throw new Error('offline') } },
+    './operationContext': { getMcpOperationContext: () => undefined }, '@/lib/mcp/auth': { extractBearerToken: header => header?.slice(7) }, '@/lib/mcp/readJsonBody': {}, '@/lib/mcp/tasks/agentMutationLeaseAdoption': {},
+  })
+  const request = new NextRequest('http://mcp.test', { headers: { Authorization: `Bearer ${jwt.sign({ userId: 6 }, 'fixture')}` } })
+  let called = false
+  assert.equal(await wrapper.wrapMcpRoute(async req => { assert.equal(req, request); called = true; return 'legacy' })(request), 'legacy')
+  assert.equal(called, true)
+})
 
 test('bounded auth logs cap unverified strings and arrays, throttle identical JWT failures, expire and evict', async () => {
   const h = harness()
@@ -295,7 +336,7 @@ test('CLI auth telemetry string fields are bounded only when explicitly opted in
   } finally { console.log = original }
 })
 
-test('all adopted REST methods preserve unwrapped wire results and scaffold order', async () => {
+test('all adopted REST methods preserve legacy wire results and scaffold order with the flag off and on', async () => {
   const cp = require('node:child_process')
   const { loadRouteWrapper } = require('./helpers/mcp-route-wrapper.cjs')
   const walk = dir => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? walk(dir + '/' + entry.name) : [dir + '/' + entry.name])
@@ -306,12 +347,15 @@ test('all adopted REST methods preserve unwrapped wire results and scaffold orde
   const json = require('./task-route-loader.cjs').load('src/lib/mcp/readJsonBody.ts', {})
   const lease = require('./task-route-loader.cjs').load('src/lib/mcp/tasks/agentMutationLeaseAdoption.ts', {})
   const authForwarder = Object.fromEntries(['checkMcpRateLimit', 'validateMcpAuth', 'mcpUnauthorizedResponse', 'createUnauthorizedResponse'].map(name => [name, (...args) => activeAuth[name](...args)]))
-  const wrapper = loadRouteWrapper({ '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, '@/lib/mcp/auth': authForwarder, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease })
+  const wrappers = Object.fromEntries(['off', 'on'].map(mode => [mode, loadRouteWrapper({ '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, '@/lib/mcp/auth': authForwarder, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease })]))
+  const originalMode = process.env.HTPR_6926_TEST_FLAG
   let legacyBase = null
   try { legacyBase = cp.execFileSync('git', ['merge-base', 'HEAD', 'origin/production'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch {}
   await quiet(async () => {
     for (const file of files) {
       const current = fs.readFileSync(path.join(root, file), 'utf8')
+      // Compare against the pre-wrapper source when the merge base is available (local runs). CI checks out
+      // one commit, so there the verbatim legacy body inside the current file (the flag-off branch) is the reference.
       let original = current
       if (legacyBase) {
         try { original = cp.execFileSync('git', ['show', `${legacyBase}:${file}`], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }) } catch {}
@@ -356,12 +400,10 @@ test('all adopted REST methods preserve unwrapped wire results and scaffold orde
             }
             mocks['@/lib/flags/http'] = loadSource('src/lib/flags/http.ts', { 'next/server': { NextResponse } })
             mocks['@/lib/flags/agentAuthorization'] = loadSource('src/lib/flags/agentAuthorization.ts', mocks)
+            process.env.HTPR_6926_TEST_FLAG = mode
             activeAuth = auth
-            mocks['@/lib/mcp/routeWrapper'] = mode === 'wrapped' ? wrapper : {
-              ...wrapper, wrapMcpRoute: handler => handler,
-              checkMcpRouteRateLimit: auth.checkMcpRateLimit, validateMcpRouteAuth: auth.validateMcpAuth,
-              mcpRouteUnauthorizedResponse: auth.mcpUnauthorizedResponse, readMcpRouteJsonBody: json.readJsonBody,
-            }
+            const wrapper = wrappers[mode]
+            mocks['@/lib/mcp/routeWrapper'] = wrapper
             if (!compiled.has(source)) compiled.set(source, ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText)
             const code = compiled.get(source)
             const mod = { exports: {} }
@@ -374,12 +416,16 @@ test('all adopted REST methods preserve unwrapped wire results and scaffold orde
             })
             return Promise.resolve().then(() => mod.exports[method](request, { params: Promise.resolve({ projectId: '15', taskId: '123', fieldId: 'field', comment_id: '1', draft_id: 'draft', id: '1', roomId: 'room', sessionId: 'session', skill_id: 'skill', viewId: '1', sectionId: '1' }) })).then(async response => ({ status: response.status, headers: withoutTiming(response.headers), body: await response.text(), events }), error => ({ thrown: error.message, events }))
           }
-          const legacy = await execute(original, 'unwrapped')
-          assert.deepEqual(await execute(current, 'wrapped'), legacy, `${file}:${method}:${scenario}`)
+          const legacy = await execute(original, 'off')
+          assert.deepEqual(await execute(current, 'off'), legacy, `${file}:${method}:${scenario}:off`)
+          assert.deepEqual(await execute(current, 'on'), legacy, `${file}:${method}:${scenario}:on`)
         }
         compared++
       }
     }
+  }).finally(() => {
+    if (originalMode === undefined) delete process.env.HTPR_6926_TEST_FLAG
+    else process.env.HTPR_6926_TEST_FLAG = originalMode
   })
   assert.equal(files.length, 111)
   assert.equal(compared, 149)
@@ -388,7 +434,7 @@ test('all adopted REST methods preserve unwrapped wire results and scaffold orde
 
 test('successful agent-tier requests reuse the authenticated context while legacy still performs both auth passes', () => quiet(async () => {
   const on = harness({ count: 121, agent: true })
-  const off = harness({ legacy: true, count: 121, agent: true })
+  const off = harness({ enabled: false, count: 121, agent: true })
   const a = await scaffold(on)(on.request())
   const b = await scaffold(off)(off.request())
   assert.equal(a.status, 200)
@@ -421,22 +467,23 @@ test('wrapped responses carry existing and diagnostic Server-Timing names withou
   assert.equal(legacy.headers.has('Server-Timing'), false)
 }))
 
-test('timing excludes wrapper setup from handler, and instance age advances across requests', async () => {
+test('flag latency is included in total but not handler, and instance age advances across requests', async () => {
   let now = 100
-  const h = harness({ clock: { now: () => now }, env: { VERCEL_REGION: 'iad1' } })
+  const h = harness({ clock: { now: () => now }, env: { VERCEL_REGION: 'iad1' }, onFlag: () => { now += 1100 } })
   now = 150
   const response = NextResponse.json({ unchanged: true }, { status: 201, headers: { 'X-Fixture': 'kept' } })
   const run = h.wrapper.wrapMcpRoute(async () => { now += 25; return response })
   assert.equal(await run(h.request()), response)
   const first = response.headers.get('Server-Timing')
   const id = first.match(/inst;desc="([0-9a-f]{8})"/)[1]
-  assert.equal(first, `handler;dur=25.0, wrap_flag;dur=0.0, total;dur=25.0, age;dur=75.0, inst;desc="${id}", region;desc="iad1", db_q;dur=0.0;desc="0", db_max;dur=0.0, db_conn;dur=0.0;desc="0", db_wait;dur=0.0`)
+  assert.equal(first, `handler;dur=25.0, wrap_flag;dur=1100.0, total;dur=1125.0, age;dur=1175.0, inst;desc="${id}", region;desc="iad1", db_q;dur=0.0;desc="0", db_max;dur=0.0, db_conn;dur=0.0;desc="0", db_wait;dur=0.0`)
   assert.equal(response.status, 201)
   assert.equal(response.headers.get('X-Fixture'), 'kept')
   assert.deepEqual(await response.json(), { unchanged: true })
   now += 10
   const second = await h.wrapper.wrapMcpRoute(async () => { now += 5; return NextResponse.json({}) })(h.request())
-  assert.equal(second.headers.get('Server-Timing'), `handler;dur=5.0, wrap_flag;dur=0.0, total;dur=5.0, age;dur=90.0, inst;desc="${id}", region;desc="iad1", db_q;dur=0.0;desc="0", db_max;dur=0.0, db_conn;dur=0.0;desc="0", db_wait;dur=0.0`)
+  assert.equal(second.headers.get('Server-Timing'), `handler;dur=5.0, wrap_flag;dur=0.0, total;dur=5.0, age;dur=1190.0, inst;desc="${id}", region;desc="iad1", db_q;dur=0.0;desc="0", db_max;dur=0.0, db_conn;dur=0.0;desc="0", db_wait;dur=0.0`)
+  assert.equal(h.counts().flagCalls, 1)
 })
 
 test('instance id is four random bytes generated only once per module load', async () => {
@@ -444,6 +491,8 @@ test('instance id is four random bytes generated only once per module load', asy
   const wrapper = load('src/lib/mcp/routeWrapper.ts', {
     'node:async_hooks': require('node:async_hooks'), jsonwebtoken: jwt,
     'node:crypto': { randomBytes: size => { assert.equal(size, 4); calls++; return Buffer.from('89abcdef', 'hex') } },
+    '@/lib/flags/keys': { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper' },
+    '@/lib/flags': { isFeatureEnabled: async () => true },
     './operationContext': { getMcpOperationContext: () => undefined }, '@/lib/mcp/auth': {}, '@/lib/mcp/readJsonBody': {}, '@/lib/mcp/tasks/agentMutationLeaseAdoption': {},
   })
   const request = new NextRequest('http://mcp.test', { headers: { Authorization: `Bearer ${jwt.sign({ userId: 6 }, 'fixture')}` } })
@@ -462,12 +511,16 @@ test('region description escapes quotes and backslashes without injecting timing
   assert.doesNotMatch(header, /[\r\n\u2603]/)
 })
 
-test('diagnostics preserve internal responses, immutable headers, non-responses and thrown errors', async () => {
+test('diagnostics preserve flag-off and internal responses, immutable headers, non-responses and thrown errors', async () => {
+  const off = harness({ enabled: false })
+  const legacy = await off.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(off.request())
+  assert.equal(legacy.headers.has('Server-Timing'), false)
   const h = harness()
   const internal = h.request()
   h.context.bindMcpOperationContext(internal, h.authContext, true)
   const trusted = await h.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(internal)
   assert.equal(trusted.headers.has('Server-Timing'), false)
+  assert.equal(h.counts().flagCalls, 0)
   const immutable = Response.redirect('http://mcp.test/redirect')
   assert.equal(await h.wrapper.wrapMcpRoute(async () => immutable)(h.request()), immutable)
   assert.equal(immutable.headers.has('Server-Timing'), false)

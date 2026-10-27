@@ -1,34 +1,9 @@
 import type { FeatureFlagRow } from "@/lib/flags";
-import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
-import { removalWindowDays } from "@/lib/flags/removalWindow.mjs";
 
-export { BUGFIX_FLAG_REMOVAL_DAYS, FEATURE_FLAG_REMOVAL_DAYS, FLAG_REMOVAL_TICKETS_PER_RUN, removalWindowDays, selectDueFlags } from "@/lib/flags/removalWindow.mjs";
+export const FEATURE_FLAG_REMOVAL_DAYS = 14;
 
 export const PENDING_REMOVAL_TASK_ID = 0;
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-const removalProfileByKey = new Map<string, { kind?: string; highRisk?: string }>(
-  (FEATURE_FLAG_DEFINITIONS as readonly { key: string; kind?: string; releaseRisk?: { highRisk?: string } }[]).map((definition) => [
-    definition.key,
-    { kind: definition.kind, highRisk: definition.releaseRisk?.highRisk },
-  ]),
-);
-
-export function removalProfile(key: string): { kind?: string; highRisk?: string } {
-  return removalProfileByKey.get(key) ?? {};
-}
-
-export function removalWindowForFlag(row: {
-  key?: string;
-  kind?: string | null;
-  highRisk?: string | null;
-}): number {
-  const profile = row.key ? removalProfileByKey.get(row.key) : undefined;
-  return removalWindowDays({
-    kind: row.kind ?? profile?.kind,
-    highRisk: row.highRisk !== undefined ? row.highRisk : profile?.highRisk,
-  });
-}
 
 export type FeatureFlagRemovalState =
   | { kind: "counting"; days: number; label: string }
@@ -37,22 +12,17 @@ export type FeatureFlagRemovalState =
   | { kind: "filed"; label: string };
 
 export function featureFlagRemovalDueAt(row: {
-  key?: string;
-  kind?: string | null;
-  highRisk?: string | null;
   mode: FeatureFlagRow["mode"];
   releasedAt: Date | string | null;
 }): Date | null {
   if (row.mode !== "EVERYONE" || !row.releasedAt) return null;
   const released = new Date(row.releasedAt);
   if (Number.isNaN(released.getTime())) return null;
-  return new Date(released.getTime() + removalWindowForFlag(row) * DAY_MS);
+  return new Date(released.getTime() + FEATURE_FLAG_REMOVAL_DAYS * DAY_MS);
 }
 
 export function featureFlagRemovalState(
-  row: Pick<FeatureFlagRow, "key" | "kind" | "mode" | "releasedAt" | "keep" | "removalTaskId"> & {
-    highRisk?: string | null;
-  },
+  row: Pick<FeatureFlagRow, "mode" | "releasedAt" | "keep" | "removalTaskId">,
   now: Date = new Date(),
 ): FeatureFlagRemovalState | null {
   const dueAt = featureFlagRemovalDueAt(row);

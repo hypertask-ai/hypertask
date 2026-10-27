@@ -6,7 +6,7 @@ name: Dependabot Major Upgrade Ticket
 # PR, so the upgrade is on the board the day it lands instead of rotting as an
 # open PR nobody owns.
 #
-# `pull_request_target` for the same reason as `pr-guards-trusted.yml`: a `pull_request`
+# `pull_request_target` for the same reason as `pr-size.yml`: a `pull_request`
 # run on a Dependabot PR receives no repository secrets, so HYPERTASK_MCP_TOKEN
 # would arrive empty and the ticket would silently never be created. No PR code
 # is checked out or executed here.

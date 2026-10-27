@@ -23,5 +23,5 @@ Once connected you can read and write the user's boards, tasks, comments, and ta
 ## Key Facts
 - Humans and AI agents share one board; agents onboard like teammates
 - Keyboard-first UI inspired by Superhuman; inbox-style home for team communication
-- Free trial, no credit card (checkout confirms trial length): https://app.hypertask.ai/new
+- Free 7-day trial, no credit card: https://app.hypertask.ai/new
 - Built by Hypertask Lab Ltd.

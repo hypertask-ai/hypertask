@@ -2,15 +2,13 @@ import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
-import { z } from 'zod'
-import { parseSortOrderParam } from '@/lib/mcp/listParams'
 
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import {
   normalizeTaskStatus,
   parseNumericCursor,
+  parseUpdatedSince,
   projectRows,
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
@@ -85,30 +83,10 @@ export async function GET(request: NextRequest) {
       )
     }
     const search = listQuery?.query || searchParams.get('search') || undefined
-    const pagination = z.object({
-      limit: z.coerce.number().int().positive().safe().default(50),
-      offset: z.coerce.number().int().min(0).max(2_147_483_647).default(0),
-    }).safeParse({
-      limit: searchParams.get('limit') ?? undefined,
-      offset: searchParams.get('offset') ?? undefined,
-    })
-    if (!pagination.success) {
-      return NextResponse.json(
-        { success: false, error: 'Validation error', message: pagination.error.issues[0].message },
-        { status: 400 },
-      )
-    }
-    const limit = Math.min(pagination.data.limit, 100)
-    const offset = pagination.data.offset
+    const limit = Math.min(listQuery?.limit ?? parseInt(searchParams.get('limit') || '50'), 100)
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
     const sortBy = listQuery?.sortBy || searchParams.get('sort_by') || 'title'
-    const legacySortOrder = parseSortOrderParam(searchParams.get('sort_order'), 'asc')
-    if (!legacySortOrder) {
-      return NextResponse.json(
-        { success: false, error: 'Validation error', message: 'sort_order must be asc or desc' },
-        { status: 400 },
-      )
-    }
-    const sortOrder = listQuery?.sortOrder ?? legacySortOrder
+    const sortOrder = listQuery?.sortOrder || searchParams.get('sort_order') || 'asc'
     const cursorId = listQuery?.cursor ? parseNumericCursor(listQuery.cursor) : null
     if (listQuery?.cursor && cursorId === null) {
       return NextResponse.json(
@@ -121,45 +99,53 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (sortBy !== 'title' && sortBy !== 'createdAt') {
-      return NextResponse.json(
-        { success: false, error: 'Validation error', message: 'sort must be title or createdAt; boards do not track update times' },
-        { status: 400 },
-      )
-    }
-    if (sortOrder !== 'asc' && sortOrder !== 'desc') {
-      return NextResponse.json(
-        { success: false, error: 'Validation error', message: 'sort_order must be asc or desc' },
-        { status: 400 },
-      )
+    const where: any = {
+      status: status ?? 'Normal',
+      AND: [
+        getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
+        ...(search
+          ? [
+              {
+                OR: [
+                  { title: { contains: search, mode: 'insensitive' } },
+                  { name: { contains: search, mode: 'insensitive' } },
+                  { description: { contains: search, mode: 'insensitive' } },
+                ],
+              },
+            ]
+          : []),
+      ],
     }
     if (listQuery?.filter.updated_since) {
-      return NextResponse.json(
-        { success: false, error: 'Validation error', message: 'filter.updated_since is not supported; boards do not track update times' },
-        { status: 400 },
-      )
+      const since = parseUpdatedSince(listQuery.filter.updated_since)
+      if (!since) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'filter.updated_since must be an ISO datetime',
+          },
+          { status: 400 },
+        )
+      }
+      where.updatedAt = { gte: since }
     }
 
-    const where: Prisma.ProjectWhereInput = {
-      status: status ?? 'Normal',
-      ...(search
-        ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { name: { contains: search, mode: 'insensitive' } },
-              { description: { contains: search, mode: 'insensitive' } },
-            ],
-          } satisfies Prisma.ProjectWhereInput
-        : {}),
+    const orderBy: any = {}
+    if (sortBy === 'title') {
+      orderBy.title = sortOrder
+    } else if (sortBy === 'createdAt') {
+      orderBy.createdAt = sortOrder
+    } else if (sortBy === 'updatedAt') {
+      orderBy.updatedAt = sortOrder
+    } else {
+      orderBy.title = 'asc'
     }
-    const orderBy: Prisma.ProjectOrderByWithRelationInput = { [sortBy]: sortOrder }
 
-    const total = await prisma.project.count({
-      where: { ...where, AND: [getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope)] },
-    })
+    const total = await prisma.project.count({ where })
 
     const projects = await prisma.project.findMany({
-      where: { ...where, AND: [getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope)] },
+      where,
       select: {
         id: true,
         title: true,

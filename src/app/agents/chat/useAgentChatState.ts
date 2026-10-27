@@ -13,7 +13,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useContext, useEffect, useRef, useState } from "react";
 import type { TAgent } from "../AgentsRegister";
 import { IProp, TAgentChatSession, TChatMessage } from "./agentChatTypes";
-import type { QueuedAgentChatMessage } from "@/lib/agents/chatContext";
 
 export function useAgentChatState(props: IProp) {
   const { currentUser, roomsEnabled, embedded } = props;
@@ -57,9 +56,9 @@ export function useAgentChatState(props: IProp) {
   const [awaiting, setAwaiting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<
-    QueuedAgentChatMessage[]
+    { id: string; content: string }[]
   >([]);
-  const messageQueueRef = useRef<QueuedAgentChatMessage[]>([]);
+  const messageQueueRef = useRef<{ id: string; content: string }[]>([]);
   const blockedQueueIdRef = useRef<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<

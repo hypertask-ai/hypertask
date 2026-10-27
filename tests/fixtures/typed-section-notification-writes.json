@@ -530,15 +530,15 @@
   "toggleNotificationArchive": [
     {
       "phase": "notification-archive",
-      "method": "POST",
+      "method": "GET",
       "path": "/api/notifications/markAsDone",
-      "query": null,
-      "body": {
+      "query": {
         "id": "6",
-        "taskId": 1,
-        "userId": 985,
+        "taskId": "1",
+        "userId": "985",
         "type": "TaskMovedToInbox"
       },
+      "body": null,
       "status": 200,
       "clientHeader": "htpr-6925",
       "data": {
@@ -569,15 +569,15 @@
     },
     {
       "phase": "notification-archive-for-undo",
-      "method": "POST",
+      "method": "GET",
       "path": "/api/notifications/markAsDone",
-      "query": null,
-      "body": {
+      "query": {
         "id": "6",
-        "taskId": 1,
-        "userId": 985,
+        "taskId": "1",
+        "userId": "985",
         "type": "TaskMovedToInbox"
       },
+      "body": null,
       "status": 200,
       "clientHeader": "htpr-6925",
       "data": {
@@ -608,15 +608,15 @@
     },
     {
       "phase": "notification-archive",
-      "method": "POST",
+      "method": "GET",
       "path": "/api/notifications/markAsDone",
-      "query": null,
-      "body": {
+      "query": {
         "id": "7",
-        "taskId": 1,
-        "userId": 985,
+        "taskId": "1",
+        "userId": "985",
         "type": "TaskMovedToInbox"
       },
+      "body": null,
       "status": 200,
       "clientHeader": null,
       "data": {
@@ -647,15 +647,15 @@
     },
     {
       "phase": "notification-archive-for-undo",
-      "method": "POST",
+      "method": "GET",
       "path": "/api/notifications/markAsDone",
-      "query": null,
-      "body": {
+      "query": {
         "id": "7",
-        "taskId": 1,
-        "userId": 985,
+        "taskId": "1",
+        "userId": "985",
         "type": "TaskMovedToInbox"
       },
+      "body": null,
       "status": 200,
       "clientHeader": null,
       "data": {

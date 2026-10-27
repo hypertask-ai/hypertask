@@ -16,8 +16,6 @@ import {
 } from "./gatewayUsage";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { teamAiAllowanceUsd } from "@/lib/aiAllowancePolicy";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8008_GATEWAY_KEY_ERRORS_FLAG } from "@/lib/flags/definitions/htpr-8008-gateway-key-errors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -386,21 +384,6 @@ export async function GET(request: Request) {
       !modelReportResponse.ok ||
       !tagReportResponse.ok
     ) {
-      const reportStatuses = [dailyReportResponse, modelReportResponse, tagReportResponse]
-        .map((response) => response.status);
-      if (
-        funding.source === "customer" &&
-        reportStatuses.some((status) => status === 401 || status === 403) &&
-        await isFeatureEnabled(HTPR_8008_GATEWAY_KEY_ERRORS_FLAG, user.id)
-      ) {
-        const usageMessage = reportStatuses.includes(401)
-          ? "Your team's AI Gateway key was rejected. Check it in Settings > Bring your own key."
-          : "Your team's AI Gateway key cannot read usage reports. Check its permissions with your provider.";
-        return NextResponse.json(
-          { message: "Could not load AI Gateway usage", usageMessage },
-          { status: 502 },
-        );
-      }
       throw new Error(
         `AI Gateway report returned ${dailyReportResponse.status}/${modelReportResponse.status}/${tagReportResponse.status}`,
       );

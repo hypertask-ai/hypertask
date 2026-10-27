@@ -6,9 +6,6 @@ import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
-import { BLOCKED_INBOX_DISMISSAL_MESSAGE } from "@/lib/inbox/blockedInboxDismissal";
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { HTPR_7691_IDEMPOTENT_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7691-idempotent-archive";
 
 const route = taskWriteRoute({
@@ -30,76 +27,6 @@ const route = taskWriteRoute({
       return NextResponse.json({
         message: "Tutorial notification id is required",
       }, { status: 400 });
-    }
-
-    if (
-      parsedTaskId !== null &&
-      parsedTaskId > 0 &&
-      Number(id) === -parsedTaskId &&
-      await isFeatureEnabled(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG, userId)
-    ) {
-      const task = await prisma.task.findFirst({
-        where: {
-          id: parsedTaskId,
-          waitingOnUserId: userId,
-          status: "Normal",
-          project: projectContentAccessWhere(userId, session.agentId, session.teamScope),
-        },
-        select: { id: true, projectId: true, waitingOnSetAt: true, createdAt: true },
-      });
-      if (!task) {
-        return NextResponse.json({ message: "Notification not found" }, { status: 404 });
-      }
-      const result = await prisma.$transaction(async (tx) => {
-        const archived = await tx.notification.findFirst({
-          where: {
-            taskId: task.id, userId, agentId: null, status: "Archive",
-            archivedAt: { gte: task.waitingOnSetAt ?? task.createdAt },
-          },
-          orderBy: { archivedAt: "desc" },
-        });
-        if (intent !== "archive" && archived) {
-          const marker = await tx.notification.findFirst({
-            where: {
-              taskId: task.id, userId, agentId: null, status: "Archive",
-              type: "TaskReminder", message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
-              archivedAt: archived.archivedAt,
-            },
-          });
-          await tx.notification.updateMany({
-            where: {
-              taskId: task.id, userId, agentId: null, status: "Archive", archivedAt: archived.archivedAt,
-              ...(marker ? { id: { not: marker.id } } : {}),
-            },
-            data: { status: "Normal", archivedAt: null },
-          });
-          if (marker) await tx.notification.delete({ where: { id: marker.id } });
-          return { ...archived, status: "Normal", archivedAt: null };
-        }
-        await tx.notification.updateMany({
-          where: { taskId: task.id, userId, agentId: null, status: "Normal" },
-          data: { status: "Archive", archivedAt: timeNow },
-        });
-        const marker = archived?.type === "TaskReminder" && archived.message === BLOCKED_INBOX_DISMISSAL_MESSAGE
-          ? archived
-          : await tx.notification.findFirst({
-              where: {
-                taskId: task.id, userId, agentId: null, status: "Archive",
-                type: "TaskReminder", message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
-                archivedAt: { gte: task.waitingOnSetAt ?? task.createdAt },
-              },
-            });
-        if (marker) return marker;
-        return tx.notification.create({
-          data: {
-            taskId: task.id, projectId: task.projectId, userId,
-            type: "TaskReminder", status: "Archive", archivedAt: timeNow, seen: true,
-            message: BLOCKED_INBOX_DISMISSAL_MESSAGE,
-          },
-        });
-      });
-      void broadcastInboxChange(userId, { originUserId: userId }, excludeSocketId);
-      return NextResponse.json(result, { status: 200 });
     }
 
     if (!id) {
@@ -201,7 +128,7 @@ const route = taskWriteRoute({
             id: { not: notification_.id },
             taskId: parsedTaskId,
             userId,
-            status: "Normal"
+            status: { not: "Deleted" }
           },
           data: {
             status: "Archive",
@@ -260,25 +187,6 @@ const route = taskWriteRoute({
     return NextResponse.json(notification_, { status: 200 });
   },
 });
-
-const archiveBodyFields = (raw: unknown) => Object.fromEntries(
-  Object.entries(raw && typeof raw === "object" ? raw : {})
-    .filter(([, value]) => value !== null && value !== undefined)
-    .map(([key, value]) => [key, String(value)]),
-);
-
-export const POST: TaskWriteRoute = async (request, authenticatedSession) => {
-  try {
-    const session = authenticatedSession ?? await getSessionUser(request.headers);
-    if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    const body = archiveBodyFields(await request.json());
-    return await route({ ...request, headers: request.headers, json: async () => body }, session);
-  } catch (error) {
-    console.log(error);
-
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
-  }
-};
 
 export const GET: TaskWriteRoute = async (request, authenticatedSession) => {
   try {

@@ -3,7 +3,7 @@ const { assert, fixture, session, id } = require('./ai-chat-session-fixture.cjs'
 
 test('synthetic delegate evidence bounds summary rows and projects no transcript bodies', async () => {
   const rows = Array.from({ length: 70 }, (_, n) => session(n + 1, { updatedAt: new Date('2026-01-01T00:00:00.000Z') }));
-  const legacy = fixture({ rows });
+  const legacy = fixture({ rows, on: false });
   const paged = fixture({ rows });
   const legacyText = await (await legacy.get()).text();
   const summaryText = await (await paged.get('compat=htpr-6924')).text();

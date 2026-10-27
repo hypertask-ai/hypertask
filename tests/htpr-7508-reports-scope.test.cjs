@@ -3,7 +3,7 @@ const test = require("node:test");
 const { NextRequest } = require("next/server");
 const { fixture, matches, hydrate } = require("./helpers/agent-board-scope.cjs");
 
-function harness(area, { actor = "agent", enforce = true, teamless = false, grant = "none", bypassProjectGate = false, empty = false, authenticated = true } = {}) {
+function harness(area, { actor = "agent", enforce = true, restCompat = true, teamless = false, grant = "none", bypassProjectGate = false, empty = false, authenticated = true } = {}) {
   const f = fixture();
   f.state.enforce = enforce;
   const project = f.projects[2];
@@ -44,6 +44,7 @@ function harness(area, { actor = "agent", enforce = true, teamless = false, gran
       return session ? { userId: session.userId, user: { id: session.userId } } : null;
     } },
     "next/headers": { cookies: async () => ({ get: () => authenticated ? { value: JSON.stringify({ id: f.state.ctx.user.id }) } : undefined }) },
+    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "htpr-6924-rest-compat", isFeatureEnabled: async () => restCompat },
     "@/app/api/ai/_lib/byokKeys": { getAiDefaultModelContext: async () => ({ haiku55Enabled: false }), getTeamGatewayApiKey: async () => "fixture-key" },
     "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), configureAiModelUsage: () => {}, providerOptionsForAiModel: () => ({}) },
     "@/lib/systemModelLadder": { resolveSystemModel: () => ({ model: "fixture-model", provider: "gateway" }) },
@@ -71,112 +72,115 @@ function harness(area, { actor = "agent", enforce = true, teamless = false, gran
 }
 
 for (const area of ["status-update", "velocity"]) {
-  test(`${area}: ungranted agent now refused in ENFORCE`, async () => {
-    const h = harness(area);
-    assert.equal((await h.request()).status, 404);
-    assert.equal(h.taskQueries.length, 0);
-    assert.equal(h.generated.length, 0);
-    assert.equal(h.saved.length, 0);
-    assert.equal(h.state.flagReads, 1);
-  });
-
-  test(`${area}: same ungranted agent still allowed with flag Off (WATCH)`, async () => {
-    const h = harness(area, { enforce: false });
-    assert.equal((await h.request()).status, 200);
-    assert.equal(h.state.flagReads, 1);
-    assert.ok(h.taskResults.every(rows => rows.length === 1));
-  });
-
-  test(`${area}: Accepted same-owner agent grant still allowed in ENFORCE`, async () => {
-    const h = harness(area, { grant: "accepted" });
-    assert.equal((await h.request()).status, 200);
-    assert.ok(h.taskResults.every(rows => rows.length === 1));
-  });
-
-  for (const grant of ["pending", "revoked", "wrong-owner"]) {
-    test(`${area}: ${grant} agent grant still refused`, async () => {
-      const h = harness(area, { grant });
+  for (const restCompat of area === "velocity" ? [true, false] : [true]) {
+    const label = `${area} (REST compat ${restCompat ? "On" : "Off"})`;
+    test(`${label}: ungranted agent now refused in ENFORCE`, async () => {
+      const h = harness(area, { restCompat });
       assert.equal((await h.request()).status, 404);
       assert.equal(h.taskQueries.length, 0);
+      assert.equal(h.generated.length, 0);
+      assert.equal(h.saved.length, 0);
+      assert.equal(h.state.flagReads, 1);
     });
-  }
 
-  for (const actor of ["owner", "member"]) {
-    test(`${area}: human ${actor} still allowed`, async () => {
-      const h = harness(area, { actor });
+    test(`${label}: same ungranted agent still allowed with flag Off (WATCH)`, async () => {
+      const h = harness(area, { restCompat, enforce: false });
       assert.equal((await h.request()).status, 200);
-      assert.equal(h.state.flagReads, 0);
+      assert.equal(h.state.flagReads, 1);
       assert.ok(h.taskResults.every(rows => rows.length === 1));
     });
-  }
 
-  test(`${area}: non-member human and teamless owner still refused`, async () => {
-    for (const options of [{ actor: "outsider" }, { actor: "owner", teamless: true }]) {
-      const h = harness(area, { ...options });
-      assert.equal((await h.request()).status, 404);
-      assert.equal(h.taskQueries.length, 0);
+    test(`${label}: Accepted same-owner agent grant still allowed in ENFORCE`, async () => {
+      const h = harness(area, { restCompat, grant: "accepted" });
+      assert.equal((await h.request()).status, 200);
+      assert.ok(h.taskResults.every(rows => rows.length === 1));
+    });
+
+    for (const grant of ["pending", "revoked", "wrong-owner"]) {
+      test(`${label}: ${grant} agent grant still refused`, async () => {
+        const h = harness(area, { restCompat, grant });
+        assert.equal((await h.request()).status, 404);
+        assert.equal(h.taskQueries.length, 0);
+      });
     }
-  });
 
-  test(`${area}: empty report still allowed for a human owner`, async () => {
-    const h = harness(area, { actor: "owner", empty: true });
-    const response = await h.request();
-    assert.equal(response.status, 200);
-    assert.ok(h.taskResults.every(rows => rows.length === 0));
-    if (area === "velocity") assert.equal((await response.json()).now.openTotal, 0);
-    else assert.equal(h.saved.length, 1);
-  });
+    for (const actor of ["owner", "member"]) {
+      test(`${label}: human ${actor} still allowed`, async () => {
+        const h = harness(area, { restCompat, actor });
+        assert.equal((await h.request()).status, 200);
+        assert.equal(h.state.flagReads, 0);
+        assert.ok(h.taskResults.every(rows => rows.length === 1));
+      });
+    }
 
-  test(`${area}: recorded task queries independently refuse ungranted agent data in ENFORCE`, async () => {
-    const h = harness(area, { bypassProjectGate: true });
-    assert.equal((await h.request()).status, 200);
-    assert.equal(h.taskQueries.length, area === "velocity" ? 1 : 2);
-    assert.ok(h.taskResults.every(rows => rows.length === 0));
-    for (const query of h.taskQueries) assert.equal(matches(h.tasks[2], query.where), false);
-  });
-
-  test(`${area}: recorded queries retain project, deletion, status, history and movement predicates`, async () => {
-    const h = harness(area, { grant: "accepted" });
-    assert.equal((await h.request()).status, 200);
-    for (const [index, query] of h.taskQueries.entries()) {
-      const task = h.tasks[2];
-      assert.equal(matches(task, query.where), true);
-      assert.equal(matches({ ...task, projectId: h.projects[0].id, project: h.projects[0] }, query.where), false);
-      assert.equal(matches({ ...task, deletedAt: new Date() }, query.where), false);
-      assert.equal(matches({ ...task, status: "Deleted" }, query.where), false);
-      assert.equal(matches({ ...task, status: "Archive", updatedAt: new Date(), sectionChangedAt: new Date() }, query.where), true);
-      assert.equal(matches({ ...task, status: "Archive", updatedAt: new Date(0), sectionChangedAt: new Date(0) }, query.where), false);
-      if (index === 0) {
-        assert.equal(matches({ ...task, status: "Normal", updatedAt: new Date(0), sectionChangedAt: new Date(0) }, query.where), true);
-        assert.equal(matches({ ...task, status: "Archive", updatedAt: new Date(), sectionChangedAt: new Date(0) }, query.where), true);
-      } else {
-        assert.equal(query.take, 60);
-        assert.deepEqual(query.orderBy, { sectionChangedAt: "desc" });
-        assert.equal(matches({ ...task, sectionChangedAt: new Date(0) }, query.where), false);
+    test(`${label}: non-member human and teamless owner still refused`, async () => {
+      for (const options of [{ actor: "outsider" }, { actor: "owner", teamless: true }]) {
+        const h = harness(area, { restCompat, ...options });
+        assert.equal((await h.request()).status, 404);
+        assert.equal(h.taskQueries.length, 0);
       }
-      assert.equal(matches({ ...task, project: { ...h.project, teamId: null } }, query.where), false);
-      const members = h.project.members;
-      h.project.members = [];
-      assert.equal(matches(task, query.where), false);
-      h.project.members = members;
-    }
-  });
+    });
 
-  test(`${area}: agent grant alone never widens the original human predicate`, async () => {
-    for (const enforce of [true, false]) {
-      const h = harness(area, { grant: "accepted", enforce });
-      h.project.ownerId = 99;
-      h.project.owner = { id: 99, agents: [] };
-      assert.equal((await h.request()).status, 404);
-      assert.equal(h.taskQueries.length, 0);
-    }
-  });
+    test(`${label}: empty report still allowed for a human owner`, async () => {
+      const h = harness(area, { restCompat, actor: "owner", empty: true });
+      const response = await h.request();
+      assert.equal(response.status, 200);
+      assert.ok(h.taskResults.every(rows => rows.length === 0));
+      if (area === "velocity") assert.equal((await response.json()).now.openTotal, 0);
+      else assert.equal(h.saved.length, 1);
+    });
 
-  test(`${area}: missing identity and invalid board ids still refused`, async () => {
-    const anonymous = harness(area, { authenticated: false });
-    assert.equal((await anonymous.request()).status, 401);
-    const h = harness(area, { actor: "owner" });
-    assert.equal((await h.request(0)).status, 400);
-    assert.equal(h.projectQueries.length, 0);
-  });
+    test(`${label}: recorded task queries independently refuse ungranted agent data in ENFORCE`, async () => {
+      const h = harness(area, { restCompat, bypassProjectGate: true });
+      assert.equal((await h.request()).status, 200);
+      assert.equal(h.taskQueries.length, area === "velocity" ? 1 : 2);
+      assert.ok(h.taskResults.every(rows => rows.length === 0));
+      for (const query of h.taskQueries) assert.equal(matches(h.tasks[2], query.where), false);
+    });
+
+    test(`${label}: recorded queries retain project, deletion, status, history and movement predicates`, async () => {
+      const h = harness(area, { restCompat, grant: "accepted" });
+      assert.equal((await h.request()).status, 200);
+      for (const [index, query] of h.taskQueries.entries()) {
+        const task = h.tasks[2];
+        assert.equal(matches(task, query.where), true);
+        assert.equal(matches({ ...task, projectId: h.projects[0].id, project: h.projects[0] }, query.where), false);
+        assert.equal(matches({ ...task, deletedAt: new Date() }, query.where), false);
+        assert.equal(matches({ ...task, status: "Deleted" }, query.where), false);
+        assert.equal(matches({ ...task, status: "Archive", updatedAt: new Date(), sectionChangedAt: new Date() }, query.where), true);
+        assert.equal(matches({ ...task, status: "Archive", updatedAt: new Date(0), sectionChangedAt: new Date(0) }, query.where), false);
+        if (index === 0) {
+          assert.equal(matches({ ...task, status: "Normal", updatedAt: new Date(0), sectionChangedAt: new Date(0) }, query.where), true);
+          assert.equal(matches({ ...task, status: "Archive", updatedAt: new Date(), sectionChangedAt: new Date(0) }, query.where), true);
+        } else {
+          assert.equal(query.take, 60);
+          assert.deepEqual(query.orderBy, { sectionChangedAt: "desc" });
+          assert.equal(matches({ ...task, sectionChangedAt: new Date(0) }, query.where), false);
+        }
+        assert.equal(matches({ ...task, project: { ...h.project, teamId: null } }, query.where), false);
+        const members = h.project.members;
+        h.project.members = [];
+        assert.equal(matches(task, query.where), false);
+        h.project.members = members;
+      }
+    });
+
+    test(`${label}: agent grant alone never widens the original human predicate`, async () => {
+      for (const enforce of [true, false]) {
+        const h = harness(area, { restCompat, grant: "accepted", enforce });
+        h.project.ownerId = 99;
+        h.project.owner = { id: 99, agents: [] };
+        assert.equal((await h.request()).status, 404);
+        assert.equal(h.taskQueries.length, 0);
+      }
+    });
+
+    test(`${label}: missing identity and invalid board ids still refused`, async () => {
+      const anonymous = harness(area, { restCompat, authenticated: false });
+      assert.equal((await anonymous.request()).status, 401);
+      const h = harness(area, { restCompat, actor: "owner" });
+      assert.equal((await h.request(0)).status, 400);
+      assert.equal(h.projectQueries.length, 0);
+    });
+  }
 }

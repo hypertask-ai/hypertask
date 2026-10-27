@@ -120,7 +120,7 @@ test('deferred tools/list stays far cheaper than the full catalog', () => {
   const baselineTokens = deferredTokens(baseline)
   const feedbackTokens = deferredTokens(withoutFeatures) - baselineTokens
   const featureTokens = deferredTokens(withoutWaitingOn) - baselineTokens - feedbackTokens
-  assert.ok(listed.filter((tool) => ['hypertask_search_tools', 'hypertask_describe_tool'].includes(tool.name)).every((tool) => tool.annotations?.readOnlyHint === true))
+  assert.ok(baselineTokens < 2100, `flag-off deferred list used ${baselineTokens} tokens`)
   assert.ok(feedbackTokens < 60, `feedback discovery added ${feedbackTokens} tokens`)
   assert.ok(featureTokens < 60, `feature discovery added ${featureTokens} tokens`)
   assert.ok(tokens - deferredTokens(withoutWaitingOn) < 60, `waiting-on tool added ${tokens - deferredTokens(withoutWaitingOn)} tokens`)

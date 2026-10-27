@@ -3,7 +3,6 @@ const { spawnSync } = require("node:child_process");
 const { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const yaml = require("js-yaml");
 
 const root = path.join(__dirname, "..");
 const { scripts } = require("../package.json");
@@ -44,10 +43,7 @@ function component(className) {
 
 test("the required CI lint step uses the baseline-aware npm command without regenerating it", () => {
   const workflow = readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8");
-  const checks = yaml.load(workflow).jobs["ci-checks"];
-  assert.equal(checks.if, "needs.ci-prepare.outputs.run_tests == 'true'");
-  assert.equal(checks.steps.find((step) => step.name === "Lint").run,
-    "npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache");
+  assert.match(workflow, /name: Lint\s+if:[^\n]+\s+run: npm run lint -- --cache/);
   assert.match(scripts.lint, /--suppressions-location eslint-local-rules\/style-guide-suppressions\.json/);
   assert.doesNotMatch(scripts.lint, /--suppress-all|--suppress-rule|--prune-suppressions/);
 });

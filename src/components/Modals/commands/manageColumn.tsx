@@ -1,5 +1,5 @@
 import { updateSection as writeSection } from "@/lib/api/typedClient";
-import { HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
+import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -51,8 +51,11 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void }) => {
   const queryClient = useQueryClient();
+  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   const lastColumnDeleteMessage = useFlag(HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG);
   const noEmptyBoardFlash = useFlag(HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG);
+  let typedWrite: typeof writeSection | undefined;
+  if (typedWrites) typedWrite = writeSection;
   const isMobile = useContext(MobileViewContext);
   const [title, setTitle] = useState("");
   const [updating, setUpdating] = useState<boolean>(false);
@@ -168,7 +171,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         );
       updateCache(reorderedSections, false);
       try {
-        await writeSection({
+        typedWrite ? await typedWrite({
+          userId: currentUser?.id,
+          sectionId: updatedSection.id,
+          newSection: { ranking },
+        }) : await axios.post(`/api/section/update`, {
           userId: currentUser?.id,
           sectionId: updatedSection.id,
           newSection: { ranking },
@@ -241,10 +248,14 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       if (saveMode === "DELETE") {
         sendUpdateSection = { ...section, deleted: !section.deleted };
         updatedSections = updateSection(sections, sendUpdateSection, "Delete");
-        await writeSection({
+        typedWrite ? await typedWrite({
           userId: currentUser?.id,
           sectionId: section.id,
           newSection: { ...sendUpdateSection },
+        }) : await axios.post(`/api/section/update`, {
+          userId: currentUser?.id,
+          sectionId: section.id,
+          newSection: sendUpdateSection,
         });
         const queryKey = [
           globalConstants.GetAllManageColumnsPrefixKey,
@@ -261,7 +272,14 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           section_title: nextTitle,
           isDone: nextIsDone,
         };
-        await writeSection({
+        typedWrite ? await typedWrite({
+          userId: currentUser?.id,
+          sectionId: section.id,
+          newSection: {
+            section_title: nextTitle,
+            isDone: nextIsDone,
+          },
+        }) : await axios.post(`/api/section/update`, {
           userId: currentUser?.id,
           sectionId: section.id,
           newSection: {

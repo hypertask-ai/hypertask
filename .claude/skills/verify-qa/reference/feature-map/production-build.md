@@ -13,22 +13,12 @@ Merge to `production`, then read the commit's `Vercel` status (`gh api repos/hyp
 - The Next.js build worker is killed (SIGKILL) and Vercel reports an Out of Memory event. The build container has 8 GB. Build memory is set in `next.config.js` (`experimental.cpus`, `webpackBuildWorker`, `webpackMemoryOptimizations`) and by the `NODE_OPTIONS=--max-old-space-size` cap on `next build` in `package.json` (YPER4-571).
 - Build time creeping toward the Vercel limit after a memory setting is lowered.
 
-## What proof to collect
+## Proof to collect
 
 - The Vercel status `success` and the deployment status Ready for the merge sha.
 - The build log lines for the CPU count, compile time, static pages and `Build Completed`, with no SIGKILL or Out of Memory.
 - For a fix, the matching lines from the last failing build.
 
-### Automated evidence
-
-`node --test tests/build-memory-config.test.cjs` checks the build worker, memory optimizations and single-CPU settings with smoke and PostHog on and off; it does not run a production build or prove deployment success.
-
 ## Cleanup
 
 None.
-
-## Production revert proposals
-
-In GitHub Actions, dispatch Production Revert Proposal on production with failed CI run `40201291546`. Manual replay must identify culprit `73cc4b70870fb411935a3a169779a8fb8b49f168` and skip the publisher. Never manufacture a production break to test publication.
-
-Automated evidence: `production-revert-check.yml` checks six real-Git fixtures and historical causal replay on relevant PRs. The fixtures prove later-work preservation, flaky/rate-limit/timeout refusals, output/hook isolation, and partial publication recovery. Only the GitHub PR transport is faked. Keep the run URL and logs. Probe worktrees clean themselves; manual replay creates no live branch or PR.

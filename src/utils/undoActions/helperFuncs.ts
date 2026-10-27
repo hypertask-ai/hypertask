@@ -28,29 +28,19 @@ export async function UndoInboxArchive(data:any){
     });
   } else if (data.isBulkOperation) {
         const { notificationIds } = data;
-        const restores: Promise<Response>[] = (data.syntheticNotifications ?? []).map(
-          (notification: { id: string; taskId: number; type: string }) =>
-            fetch(`/api/notifications/markAsDone?id=${notification.id}&taskId=${notification.taskId}&userId=${data.currentUser.id}&type=${notification.type}`, { headers: realtimeEchoHeaders() })
-        );
-        if (notificationIds.length > 0) {
-          restores.push(fetch('/api/notifications/(un)archiveBulk', {
+        
+        const response = await fetch('/api/notifications/(un)archiveBulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...realtimeEchoHeaders() },
-            body: JSON.stringify({ notificationIds, status: 'Normal' })
-          }));
-        }
-        const results = await Promise.allSettled(restores);
-        const failed = results.find(result => result.status === 'rejected');
-        if (failed?.status === 'rejected') throw failed.reason;
-        const httpFailure = results.find(result => result.status === 'fulfilled' && result.value && (result.value as Response).ok === false);
-        if (httpFailure?.status === 'fulfilled') throw new Error(`Undo restore failed with status ${(httpFailure.value as Response).status}`);
-        return results.at(-1)?.status === 'fulfilled' ? restores.at(-1) : undefined;
+            body: JSON.stringify({
+                notificationIds,
+                status: 'Normal'
+            })
+        });
+
+        return response;
     } else {
-      await fetch("/api/notifications/markAsDone", {
-        method: "POST",
-        headers: { ...realtimeEchoHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ id: data.notification.id, taskId: data.notification.taskId, userId: data.currentUser.id, type: data.notification.type }),
-      })
+      await fetch(`/api/notifications/markAsDone?id=${data.notification.id}&taskId=${data.notification.taskId}&userId=${data.currentUser.id}&type=${data.notification.type}`, { headers: realtimeEchoHeaders() })
 
     }
 

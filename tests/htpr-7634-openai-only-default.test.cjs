@@ -35,7 +35,7 @@ function moduleWithStubs(file, stubs) {
     require: (id) => stubs[id] ?? (id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
     process: { env: { AI_GATEWAY_API_KEY: sharedKey } },
     performance, setTimeout, clearTimeout, ReadableStream, Response, Headers, TextEncoder, Error,
-    console: { log() {}, info() {}, warn() {}, error() {} },
+    console: { log() {}, warn() {}, error() {} },
   }, { filename });
   return loadedModule.exports;
 }
@@ -219,7 +219,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
     app: moduleWithStubs("src/app/api/ai/task-writer/route.ts", routeStubs),
     mcp: moduleWithStubs("src/app/api/mcp/ai/task-writer/route.ts", routeStubs),
   };
-  const post = async (kind, mode = "write_with_ai") => {
+  const post = async (kind, mode = "task_writer") => {
     const body = kind === "mcp" ? { project_id: projectId, prompt: "Fixture", mode }
       : { projectId, PROMPT: "Fixture", aiMode: mode === "task_writer" ? "AiTaskWriter" : "WriteWithAI", modelOptionId: "claude-opus-5-5-thinking", modelSelected: "claude-opus-5.5" };
     const response = await routes[kind].POST({ json: async () => body });
@@ -301,14 +301,14 @@ for (const kind of ["app", "mcp"]) {
     test(`${kind}: saved ${scope} Claude choice is not replaced by Luna`, async () => {
       const saved = "claude-haiku-5-5";
       for (const enabled of [false, true]) {
-        const h = harness({ enabled, openai: true, ...(scope === "personal" ? { saved } : { settings: { featureModels: { writeWithAi: saved } } }) });
+        const h = harness({ enabled, openai: true, ...(scope === "personal" ? { saved } : { settings: { featureModels: { taskWriter: saved } } }) });
         await assertMissingClaudeKey(h, kind);
       }
     });
 
     test(`${kind}: saved ${scope} Luna choice wins over a Claude-capable default`, async () => {
       const saved = "gpt-6-luna";
-      const h = harness({ teamByok: true, openai: true, ...(scope === "personal" ? { saved } : { settings: { featureModels: { writeWithAi: saved } } }) });
+      const h = harness({ teamByok: true, openai: true, ...(scope === "personal" ? { saved } : { settings: { featureModels: { taskWriter: saved } } }) });
       const result = await h.post(kind);
       assert.equal(result.status, 200, result.content);
       assertCall(h, "gpt-6-luna", "fixture-direct-openai");
@@ -402,11 +402,11 @@ test("the OpenAI-only default needs Luna to run on the team's stored direct key,
   }
 });
 
-async function agentEditorOutcome(input) {
+async function agentTaskWriterOutcome(input) {
   const h = harness({ openai: true, agentId: "fixture-agent", ...input });
   const observed = () => h.calls.map(({ modelId, credential }) => ({ modelId, credential }));
   try {
-    const selected = await h.editor.selectTaskWriterModel({ aiFeature: "writeWithAi", byokProviderFlags: [], teamContext: { teamId, settings: {} }, userId, agentId: "fixture-agent" });
+    const selected = await h.editor.selectTaskWriterModel({ aiFeature: "taskWriter", byokProviderFlags: [], teamContext: { teamId, settings: {} }, userId, agentId: "fixture-agent" });
     await selected.model.doGenerate({ prompt: [], providerOptions: selected.providerOptions ?? {} });
     return { calls: observed(), reservations: h.reservations.length };
   } catch (error) {
@@ -422,22 +422,22 @@ for (const [label, input] of [
   ["agent OpenAI slot holding the managed gateway key", { agentProvider: "openai", agentCiphertext: managedKey, managed: true }],
 ]) {
   test(`team OpenAI key plus ${label}: the final model and key match the flag-off behavior and never Luna`, async () => {
-    const on = await agentEditorOutcome({ ...input, enabled: true });
-    const off = await agentEditorOutcome({ ...input, enabled: false });
+    const on = await agentTaskWriterOutcome({ ...input, enabled: true });
+    const off = await agentTaskWriterOutcome({ ...input, enabled: false });
     assert.deepEqual(on, off);
     assert.ok(on.calls.every(({ modelId }) => modelId !== "gpt-6-luna"), JSON.stringify(on));
   });
 }
 
 test("team OpenAI key plus an agent Claude key still runs Haiku on the agent's Claude key", async () => {
-  const outcome = await agentEditorOutcome({ agentProvider: "claude", enabled: true });
+  const outcome = await agentTaskWriterOutcome({ agentProvider: "claude", enabled: true });
   assert.equal(outcome.refused, undefined, JSON.stringify(outcome));
   assert.deepEqual(outcome.calls, [{ modelId: "claude-haiku-5-5", credential: agentKey }]);
 });
 
 test("without an agent, the team OpenAI-only default runs Luna on the team's own direct key", async () => {
   const h = harness({ openai: true });
-  const selected = await h.editor.selectTaskWriterModel({ aiFeature: "writeWithAi", byokProviderFlags: [], teamContext: { teamId, settings: {} }, userId });
+  const selected = await h.editor.selectTaskWriterModel({ aiFeature: "taskWriter", byokProviderFlags: [], teamContext: { teamId, settings: {} }, userId });
   await selected.model.doGenerate({ prompt: [], providerOptions: selected.providerOptions ?? {} });
   assert.deepEqual(h.calls.map(({ modelId, credential }) => ({ modelId, credential })), [{ modelId: "gpt-6-luna", credential: "fixture-direct-openai" }]);
 });
@@ -576,7 +576,7 @@ test("a request-supplied shared or managed key is refused the Luna default", asy
       if (register) run.modelApi.registerManagedGatewayKey(managedKey);
       const flags = [{ provider: "openai", enabled: true, ciphertext: register ? managedKey : sharedKey }];
       try {
-        const selected = await run.editor.selectTaskWriterModel({ aiFeature: "writeWithAi", byokProviderFlags: flags, teamContext: { teamId, settings: {} }, userId });
+        const selected = await run.editor.selectTaskWriterModel({ aiFeature: "taskWriter", byokProviderFlags: flags, teamContext: { teamId, settings: {} }, userId });
         await selected.model.doGenerate({ prompt: [], providerOptions: selected.providerOptions ?? {} });
       } catch (error) {
         return { refused: String(error?.message ?? error), calls: run.calls.map(({ modelId, credential }) => ({ modelId, credential })), reservations: run.reservations.length };

@@ -31,7 +31,7 @@ const renderLegacy = (scopeChip, mobile, isOpen) => {
 
 test('shared chat chip renders exactly the retained production icon, name, chevron and theme classes', () => {
   for (const kind of ['task', 'board', 'boards']) for (const mobile of [false, true]) for (const isOpen of [false, true]) {
-    const props = { kind, label: 'QA Sandbox', title: 'QA Sandbox', mobile, isOpen, 'aria-haspopup': 'dialog', onClick() {} };
+    const props = { kind, label: 'QA Sandbox', title: 'QA Sandbox', mobile, isOpen, onClick() {} };
     const shared = new JSDOM(renderToStaticMarkup(React.createElement(ChatScopeChip, props)));
     const legacy = new JSDOM(renderLegacy(props, mobile, isOpen));
     assert.equal(shared.window.document.body.isEqualNode(legacy.window.document.body), true);

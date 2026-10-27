@@ -21,6 +21,7 @@ function setup(mode = null) {
       extractBearerToken: (header) => header?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null,
       validateMcpAuth: async (request) => request.headers.get('Authorization') === 'Bearer valid-token' ? { user: { id: 7 } } : null,
     },
+    '@/lib/mcp/mcpV2': { isMcpV2Enabled: async () => false },
     '@/lib/aiFeedback/enabled': { aiFeedbackEnabled: async () => false },
     '@/lib/aiFeedback/automatic': {
       observeFeedbackTools: (tools) => tools,

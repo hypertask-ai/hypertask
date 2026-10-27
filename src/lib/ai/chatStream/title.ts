@@ -21,16 +21,6 @@ export function fallbackTitle(message: string) {
     .trim();
 }
 
-async function chatTitleTokenCap(userId: number | null | undefined): Promise<number | undefined> {
-  try {
-    const loaded = require("@/app/api/ai/_lib/reasoningEffort") as Partial<typeof import("@/app/api/ai/_lib/reasoningEffort")> | null;
-    if (!loaded || typeof loaded.aiThinkingOptInEnabled !== "function") return undefined;
-    return await loaded.aiThinkingOptInEnabled(userId) ? loaded.CHAT_TITLE_MAX_OUTPUT_TOKENS : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export async function generateConversationTitle(
   content: string,
   message: string,
@@ -61,14 +51,11 @@ export async function generateConversationTitle(
         })
       : byokApiKey, new Error("This team needs its own AI key for titles."));
     const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, feature: "chat" }) : resolveLegacyAiModel("openai", "gpt-6-luna", byokApiKey);
-    const thinkingOptIn = await chatTitleTokenCap(usageContext?.userId ?? tags?.userId);
-    configureAiModelUsage(model, {
+    if (usageContext) configureAiModelUsage(model, {
       ...usageContext,
-      userId: usageContext?.userId ?? tags?.userId,
       teamId: tags?.teamId ?? null,
       provider: useHaiku ? aiUsageProviderForCredential(provider, modelInput) : provider,
       feature: "chat",
-      reasoningFeature: "chat-title",
     });
     const result = await generateText({
       experimental_download: downloadWithoutBrotli,
@@ -79,7 +66,6 @@ export async function generateConversationTitle(
       temperature: 1,
       maxRetries: 1,
       abortSignal,
-      ...(thinkingOptIn ? { maxOutputTokens: thinkingOptIn } : {}),
       providerOptions: providerOptionsForAiModel(model, "chat", tags),
     });
 

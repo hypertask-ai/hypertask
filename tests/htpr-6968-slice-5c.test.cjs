@@ -8,8 +8,11 @@ const { graph, getProjectWhere, projectRow, relationFields, visibility } = requi
 // Responses, effects and HTTP bytes are pinned by digest from the pre-retirement handler (HTPR-6992).
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const pin = pins("a1-slice5c");
-const pinKey = (kind, label) => [kind, `${kind}|${label}`];
+// Pin groups are "<kind>|<compat flag mode>".
+const pinKey = (kind, compatMode, label) => [`${kind}|${compatMode}`, `${kind}|${compatMode}|${label}`];
 const legacyContract = require("./legacy-task-relations-contract.json");
+const compatFlag = "htpr-6924-rest-compat";
+const modes = [false, "outage", true];
 const savedEnv = Object.fromEntries(["SESSION_SECRET", "BETTER_AUTH_ENABLED", "AUTH_LEGACY_FAST_PATH"].map(name => [name, process.env[name]]));
 process.env.SESSION_SECRET = "isolated-slice-5c-test-secret";
 process.env.BETTER_AUTH_ENABLED = "1";
@@ -22,8 +25,8 @@ test.after(() => {
 });
 const { signSession } = load("src/lib/auth/session.ts", {});
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-function fixture(scenario = {}) {
-  const effects = [], auth = [], loads = [], inbox = [], realtime = [];
+function fixture(scenario = {}, compatMode = false) {
+  const effects = [], flags = [], auth = [], loads = [], inbox = [], realtime = [];
   const userId = scenario.userId ?? 7;
   const token = Object.hasOwn(scenario, "token") ? scenario.token : signSession({ id: userId });
   const headers = {
@@ -33,6 +36,12 @@ function fixture(scenario = {}) {
   const record = (label, calls) => (...args) => { calls.push(clean(args)); effects.push([label, ...clean(args)]); };
   const mocks = {
     "@/lib/auth/betterAuth": { auth: { api: { getSession: async () => scenario.betterAuthId === undefined ? null : { user: { id: String(scenario.betterAuthId) } } } } },
+    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: compatFlag, isFeatureEnabled: async (key, id) => {
+      flags.push([key, id]);
+      assert.equal(key, compatFlag);
+      if (compatMode === "outage") throw new Error("Flag unavailable");
+      return compatMode;
+    } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere },
     "@/lib/agents/visibility": visibility,
     "@/lib/prisma": { default: {
@@ -65,7 +74,7 @@ function fixture(scenario = {}) {
     if (scenario.loadThrows) throw new Error("Route load unavailable");
     return web;
   } };
-  return { current: load("src/pages/api/tasks/getAll.ts", mocks).default, web, effects, auth, loads, inbox, realtime, headers };
+  return { current: load("src/pages/api/tasks/getAll.ts", mocks).default, web, effects, flags, auth, loads, inbox, realtime, headers };
 }
 function input(fx, scenario = {}) {
   return {
@@ -133,17 +142,18 @@ function assertNoSideChannels(fx) {
   assert.deepEqual(fx.inbox, [], "reader never writes/reads inbox separately");
   assert.deepEqual(fx.realtime, [], "reader never broadcasts");
 }
-async function parity(scenario, kind, label) {
+async function parity(scenario, compatMode, kind, label) {
   let recorded;
   for (const target of ["current", "web"]) {
-    const fx = fixture(scenario);
+    const fx = fixture(scenario, compatMode);
     const response = clean(await invoke(fx, scenario, target));
-    if (target === "current") recorded = pin(...pinKey(kind, label), { response: clean(response), effects: clean(fx.effects) });
+    if (target === "current") recorded = pin(...pinKey(kind, compatMode, label), { response: clean(response), effects: clean(fx.effects), flags: clean(fx.flags) });
     else assert.deepEqual(response, recorded.response, "Web matches the Pages adapter");
     assert.deepEqual(clean(fx.effects), recorded.effects, "ordered controller/storage/inbox/realtime effects");
     assertNoSideChannels(fx);
     const authenticated = !scenario.authThrows && !(scenario.token === null && scenario.betterAuthId === undefined);
     assert.equal(fx.loads.length, target === "current" ? 1 : 0);
+    assert.deepEqual(clean(fx.flags), recorded.flags);
     assert.equal(fx.auth.length, target === "web" || authenticated ? 1 : 2, "the adapter session is reused by the shared route; a missing session is retried once by the route");
   }
   return recorded.response;
@@ -160,11 +170,11 @@ const queries = [
   ["empty scalar", { compat: "" }], ["singleton array", { compat: ["htpr-6924"] }],
   ["duplicate array", { compat: ["htpr-6924", "htpr-6924"] }], ["empty array", { compat: [] }],
 ];
-for (const [label, query] of queries) {
-  test(`${label}: shared handler matches the pinned contract and full/compact shapes`, async () => {
-    const result = await parity({ query }, "q", label);
+for (const compatMode of modes) for (const [label, query] of queries) {
+  test(`compat flag ${compatMode}, ${label}: shared handler matches the pinned contract and full/compact shapes`, async () => {
+    const result = await parity({ query }, compatMode, "q", label);
     assert.equal(result.status, 200);
-    const compact = query.compat === "htpr-6924";
+    const compact = compatMode === true && query.compat === "htpr-6924";
     if (!compact) assert.equal(JSON.stringify(result.body), legacyContract.text);
     else {
       const rows = result.body;
@@ -181,15 +191,15 @@ for (const [label, query] of queries) {
       }
     }
   });
-  test(`${label}: real Pages HTTP bytes/status/headers and ordered effects`, async () => {
+  test(`compat flag ${compatMode}, ${label}: real Pages HTTP bytes/status/headers and ordered effects`, async () => {
     const scenario = { query };
-    const fx = fixture(scenario);
+    const fx = fixture(scenario, compatMode);
     const expected = await httpInvoke(fx, scenario);
     assert.equal(expected.status, 200);
     assert.match(expected.headers["content-type"], /application\/json/);
     assert.equal(Number(expected.headers["content-length"]), Buffer.byteLength(expected.text));
     assert.ok(expected.headers.etag);
-    pin(...pinKey("qhttp", label), { response: clean(expected), effects: clean(fx.effects) });
+    pin(...pinKey("qhttp", compatMode, label), { response: clean(expected), effects: clean(fx.effects), flags: clean(fx.flags) });
     assertNoSideChannels(fx);
   });
 }
@@ -204,31 +214,32 @@ const cases = [
   ["different signed identity", { userId: 2343 }], ["stale Better Auth identity", { betterAuthId: 6 }],
   ["Better Auth only", { token: null, betterAuthId: 7 }],
 ];
-for (const [label, scenario] of cases) {
-  test(`${label}: shared handler matches the pinned contract`, () => parity(scenario, "c", label));
-  test(`${label}: real Pages HTTP error/auth contract`, async () => {
-    const fx = fixture(scenario);
-    pin(...pinKey("chttp", label), { response: clean(await httpInvoke(fx, scenario)), effects: clean(fx.effects) });
+for (const compatMode of modes) for (const [label, scenario] of cases) {
+  test(`${label}, compat flag ${compatMode}: shared handler matches the pinned contract`, () => parity(scenario, compatMode, "c", label));
+  test(`${label}, compat flag ${compatMode}: real Pages HTTP error/auth contract`, async () => {
+    const fx = fixture(scenario, compatMode);
+    pin(...pinKey("chttp", compatMode, label), { response: clean(await httpInvoke(fx, scenario)), effects: clean(fx.effects), flags: clean(fx.flags) });
     assertNoSideChannels(fx);
   });
 }
-for (const token of ["forged", signSession({ id: 7 }, -1)]) {
-  test(`invalid signed token: spoofed profile/body/query/header cannot authenticate`, async () => {
-    const fx = fixture({ token });
+for (const token of ["forged", signSession({ id: 7 }, -1)]) for (const compatMode of modes) {
+  test(`invalid signed token, compat flag ${compatMode}: spoofed profile/body/query/header cannot authenticate`, async () => {
+    const fx = fixture({ token }, compatMode);
     assert.deepEqual(await invoke(fx, { token }), { status: 401, body: { message: "Unauthorized" }, headers: {} });
-    assert.deepEqual(fx.effects, []); assert.equal(fx.loads.length, 1);
+    assert.deepEqual(fx.flags, []); assert.deepEqual(fx.effects, []); assert.equal(fx.loads.length, 1);
   });
 }
-for (const method of ["GET", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "CUSTOM", undefined]) {
-  test(`other method ${method}: 405 with no auth, controller or route load`, async () => {
-    const scenario = { method, authThrows: true }, fx = fixture(scenario);
+for (const method of ["GET", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "CUSTOM", undefined]) for (const compatMode of modes) {
+  test(`other method ${method}, compat flag ${compatMode}: 405 with no auth, flag, controller or route load`, async () => {
+    const scenario = { method, authThrows: true }, fx = fixture(scenario, compatMode);
     assert.deepEqual(await invoke(fx, scenario), { status: 405, body: { message: "Method not allowed" }, headers: {} });
-    assert.deepEqual(fx.auth, []); assert.deepEqual(fx.loads, []); assert.deepEqual(fx.effects, []);
+    assert.deepEqual(fx.auth, []); assert.deepEqual(fx.flags, []); assert.deepEqual(fx.loads, []); assert.deepEqual(fx.effects, []);
   });
 }
-test("independent expectations: signed user controls the controller scope, without duplicate auth or fan-out", async () => {
-  const scenario = { userId: 2343 }, fx = fixture(scenario);
+test("independent expectations: signed user controls the flag and controller scope, without duplicate auth or fan-out", async () => {
+  const scenario = { userId: 2343 }, fx = fixture(scenario, true);
   await invoke(fx, scenario);
+  assert.deepEqual(fx.flags, [[compatFlag, 2343]]);
   assert.deepEqual(fx.effects[0], ["controller", 15, 2343, "compact"]);
   assert.deepEqual(fx.effects[1][1].where.project, getProjectWhere(2343));
   assert.equal(fx.effects[1][1].select.comments.select.notifications.where.userId, 2343);
@@ -236,23 +247,23 @@ test("independent expectations: signed user controls the controller scope, witho
   assert.deepEqual(fx.inbox, []); assert.deepEqual(fx.realtime, []);
 });
 test("route load failure rejects without any fallback", async () => {
-  const fx = fixture({ loadThrows: true });
+  const fx = fixture({ loadThrows: true }, true);
   assert.deepEqual(await invoke(fx), { throws: "Error: Route load unavailable" });
-  assert.deepEqual(fx.effects, []);
+  assert.deepEqual(fx.effects, []); assert.deepEqual(fx.flags, []);
   assert.equal(fx.auth.length, 1); assert.equal(fx.loads.length, 1);
 });
-for (const [label, query] of queries.filter(([, query]) => !Array.isArray(query.compat) || query.compat.length > 1)) {
-  test(`real Web URL ${label}: scalar/duplicate negotiation matches the pinned contract`, async () => {
-    const scenario = { realWeb: true, query }, fx = fixture(scenario);
+for (const compatMode of modes) for (const [label, query] of queries.filter(([, query]) => !Array.isArray(query.compat) || query.compat.length > 1)) {
+  test(`real Web URL ${label}, compat flag ${compatMode}: scalar/duplicate negotiation matches the pinned contract`, async () => {
+    const scenario = { realWeb: true, query }, fx = fixture(scenario, compatMode);
     const response = clean(await invoke(fx, scenario, "web"));
-    pin(...pinKey("rw", label), { response: clean(response), effects: clean(fx.effects) });
+    pin(...pinKey("rw", compatMode, label), { response: clean(response), effects: clean(fx.effects), flags: clean(fx.flags) });
     assertNoSideChannels(fx);
   });
 }
 for (const scenario of [{ jsonThrows: true }, { realWeb: true, malformed: true }]) test("Web JSON failure preserves empty-200 catch and auth ordering", async () => {
-  const fx = fixture(scenario);
+  const fx = fixture(scenario, true);
   assert.deepEqual(await invoke(fx, scenario, "web"), { status: 200, body: [], headers: {} });
-  assert.equal(fx.auth.length, 1); assert.deepEqual(fx.effects, []);
-  const unauthorized = fixture({ token: null });
+  assert.equal(fx.auth.length, 1); assert.deepEqual(fx.flags, []); assert.deepEqual(fx.effects, []);
+  const unauthorized = fixture({ token: null }, true);
   assert.equal((await invoke(unauthorized, scenario, "web")).status, 401);
 });

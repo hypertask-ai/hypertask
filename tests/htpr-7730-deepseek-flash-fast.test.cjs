@@ -253,5 +253,5 @@ test("Settings model responses and writes honor the authenticated user's flag", 
   assert.equal(fallback.aiChat.effectiveModel, "claude-haiku-5-5");
   enabled = true;
   assert.equal((await request("POST")).aiChat.model, optionId);
-  assert.deepEqual(checks.filter(([key]) => key === flagKey), Array.from({ length: 5 }, () => [flagKey, 985]));
+  assert.deepEqual(checks, Array.from({ length: 5 }, () => [flagKey, 985]));
 });

@@ -472,7 +472,6 @@ async function generateTaskSummary(args: {
     agentId: args.agentId,
     provider: args.haikuByok ? aiUsageProviderForCredential(args.haikuByok.provider, args.haikuByok.credential) : args.systemModel.provider,
     feature: "summary",
-    reasoningFeature: "summaries",
   });
   try {
     const result = await generateText({

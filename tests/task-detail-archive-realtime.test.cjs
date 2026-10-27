@@ -32,12 +32,10 @@ function transpileHandler(relativePath) {
   }).outputText;
 }
 
-function loadArchiveHandler(columnFlag = true) {
+function loadArchiveHandler() {
   const broadcasts = [];
   const updated = [];
-  const targets = [];
   const stubs = {
-    "@/lib/flags": { isFeatureEnabled: async () => columnFlag },
     "@/lib/prisma": {
       __esModule: true,
       default: {
@@ -83,8 +81,7 @@ function loadArchiveHandler(columnFlag = true) {
       cancelDueDateJob: async () => undefined,
     },
     "@/utils/controllers/tasks/single": {
-      updateTaskSingle: async (newTask, _user, _agent, options) => {
-        targets.push(options);
+      updateTaskSingle: async (newTask) => {
         updated.push(newTask);
         return {
           status: 200,
@@ -102,13 +99,13 @@ function loadArchiveHandler(columnFlag = true) {
   };
 
   const { handler } = { handler: load("src/pages/api/tasks/(un)archive.ts", stubs).default };
-  return { handler, updated, broadcasts, targets };
+  return { handler, updated, broadcasts };
 }
 
-async function callArchive(handler, { taskId, status, userId = MEMBER_USER_ID, column }) {
+async function callArchive(handler, { taskId, status, userId = MEMBER_USER_ID }) {
   const req = {
     method: "POST",
-    body: { taskId, status, ...(column !== undefined ? { column } : {}) },
+    body: { taskId, status },
     cookies: { nookies_user: JSON.stringify({ id: userId, displayName: "Member" }) },
   };
   let statusCode = 0;
@@ -254,20 +251,4 @@ test("auto-archive sweep broadcasts task detail changes for each archived row", 
     broadcasts.filter(([kind]) => kind === "board").map(([, projectId]) => projectId),
     [MEMBER_PROJECT]
   );
-});
-
-
-test("column archive entry point validates its flag and target without changing single-ticket archive", async () => {
-  const column = { projectId: MEMBER_PROJECT, sectionId: 11 };
-  const allowed = loadArchiveHandler();
-  assert.equal((await callArchive(allowed.handler, { taskId: TASK_ID, status: "Archive", column })).status, 200);
-  assert.deepEqual(allowed.targets, [{ teamScope: undefined, expectedProjectId: MEMBER_PROJECT, expectedSectionId: 11, expectedStatus: "Normal" }]);
-  for (const [target, status] of [[column, 403], [{ projectId: MEMBER_PROJECT, sectionId: "11" }, 400]]) {
-    const disabled = loadArchiveHandler(false);
-    assert.equal((await callArchive(disabled.handler, { taskId: TASK_ID, status: "Archive", column: target })).status, status);
-    assert.equal(disabled.updated.length, 0);
-  }
-  const legacy = loadArchiveHandler(false);
-  assert.equal((await callArchive(legacy.handler, { taskId: TASK_ID, status: "Archive" })).status, 200);
-  assert.deepEqual(legacy.targets, [{ teamScope: undefined }]);
 });

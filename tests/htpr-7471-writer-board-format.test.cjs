@@ -32,7 +32,7 @@ function moduleWithStubs(file, stubs) {
   const loadedModule = { exports: {} };
   vm.runInNewContext(code, {
     module: loadedModule, exports: loadedModule.exports, Error, Date, AbortController, Response, Headers, ReadableStream, TextEncoder, TextDecoder, DOMParser: new (require("jsdom").JSDOM)("").window.DOMParser, fetch: (...args) => global.fetch(...args), performance,
-    console: { log() {}, info() {}, warn() {}, error() {} },
+    console: { log() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
       if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});

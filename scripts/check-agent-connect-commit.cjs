@@ -1,0 +1,16 @@
+const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
+const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
+const base = git("merge-base", "origin/production", "HEAD").trim();
+const files = git("diff", "--name-only", base, "HEAD").trim().split("\n");
+const hasDash = (diff) => diff.split("\n").some((line) => line.startsWith("+") && !line.startsWith("+++") && line.includes("\u2014"));
+assert.equal(hasDash("+positive control \u2014"), true);
+assert.equal(hasDash(git("diff", "--unified=0", base, "HEAD")), false, "Added em dash");
+assert.equal(files.some((file) => /(^|\/)node_modules(\/|$)|schema\.prisma|prisma\/migrations\//.test(file)), false, "Migration or node_modules included");
+const message = git("log", "-1", "--format=%B");
+assert.match(message, /^HTPR-7026 \[FEATURE\] Live agent Connected check on the board and a connected email/);
+assert.match(message, /Co-Authored-By: Claude Opus 5\.5 <noreply@anthropic\.com>/);
+assert.match(message, /Claude-Session: https:\/\/claude\.ai\/code\/session_015vvpfaf3Uj77guJJ6A7SwJ/);
+assert.equal(git("branch", "--show-current").trim(), "htpr-7026-agent-connect");
+assert.ok(files.includes("src/lib/onboarding/agentConnection.ts"));
+console.log(`Commit safety passed: ${files.length} changed files, required trailers, no migration or tracked dependency symlink.`);

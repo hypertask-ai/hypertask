@@ -7,7 +7,7 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7765_PARALLEL_CHATS_FLAG, HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
+import { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -214,7 +214,6 @@ export async function POST(request: NextRequest) {
     undefined,
     actingAgent?.id,
     isolateAgentLease,
-    await isFeatureEnabled(HTPR_7765_PARALLEL_CHATS_FLAG, dbUser.id),
   );
   if (streamLease === "busy") {
     return createSseErrorResponse(

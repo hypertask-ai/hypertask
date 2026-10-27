@@ -247,7 +247,10 @@ export class ViewService {
 
       return response;
     } catch (error) {
-      logger.failure("Failed to create view", error, { correlationId });
+      logger.error("Failed to create view", {
+        correlationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }

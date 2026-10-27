@@ -120,15 +120,3 @@ Source-only read, without board writes or state changes (use an unused state pat
 ```sh
 ERROR_COLLECTOR_STATE_DIR=/tmp/realtime-collector-dry-run node .claude/skills/ship/scripts/error-collector/collector.mjs --once --sources realtime --dry-run
 ```
-
-
-## Related production incidents
-
-Prisma errors share a root by route, model, and unknown field. Project-list
-wrappers join only one root within ten minutes. Other fields, models, routes,
-and ambiguous wrappers stay separate. One nearby open MCP HTTP 500 report can
-own the incident. Counted activities group identical hits within one collection
-window; durable markers recover interrupted writes. Ordinary errors retain their
-six-hour activity policy. Tagged product alerts get the same related-incident
-check before `ship-claim` writes. The sanitized historical replay lives in
-`fixtures/project-validation.json`; hosted tests prove writes with fake CLIs.

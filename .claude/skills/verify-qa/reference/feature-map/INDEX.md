@@ -3,7 +3,7 @@
 One file per customer-facing area. Each file says how a customer reaches the
 area, how to drive it, what usually breaks there, what proof to collect, and
 the cleanup. Read the file for the area a ticket touches before verifying it;
-don't read them all for a one-line fix.
+don't read all ten for a one-line fix.
 
 Pattern borrowed from
 [poteto/verification-skill-example](https://github.com/poteto/verification-skill-example):
@@ -14,26 +14,18 @@ each ticket only needs the one or two areas it touches.
 
 | Area | File | e2e/smoke id |
 |---|---|---|
-| CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | live repository visibility, trusted workflow rejection, title binding |
-| CI tests and parallel checks | [ci-tests.md](ci-tests.md) | hosted job overlap, fail-closed summary, shard execution proof |
 | CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
-| Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
 | Visual Regression check | [visual-regression.md](visual-regression.md) | dispatch on production one run at a time, 3 green on one commit, per-screen capture times, no app writes |
 | Production build and deploy | [production-build.md](production-build.md) | Vercel build log of the merge sha, no app writes |
 | Premerge evidence status | [premerge-evidence.md](premerge-evidence.md) | read-only status sweep of open PRs, no app writes |
-| PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
 | Runner dispatch | [runner-dispatch.md](runner-dispatch.md) | read-only plan from the live copy, no --go, no app writes |
 | Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
 | Webhooks | [webhooks.md](webhooks.md) | no smoke id; QA 985 team-wide endpoint on team 9bca4a7c via /api/settings/webhooks, test delivery to a 2xx receiver, hint vs one-time key; delete fixtures |
-| Team credential database races | [team-credential-db-races.md](team-credential-db-races.md) | 62 real PostgreSQL cases in CI; live doctor, MCP reads and core inbox only |
-| Agent run lifecycle | [agent-runs.md](agent-runs.md) | read-only QA 985 lifecycle discovery, run reads and authentication refusals |
 | Agents and board access | [agents-board-access.md](agents-board-access.md) | QA 985 throwaway agents on sandbox 7049; self-access 403 text, /mcp safe reason, 24/24 invite picker opens; delete fixtures |
 | Secret scan workflow installer | [secret-scan-workflow.md](secret-scan-workflow.md) | temp checkouts from merged production, no app writes |
 | PostHog error alerts | [posthog-error-alerts.md](posthog-error-alerts.md) | nightly canary workflow, closes its own ticket |
-| Automatic AI feedback tickets | [ai-feedback-reports.md](ai-feedback-reports.md) | live MCP call with an invented field, board count before and after, no ticket |
 | Signup check (hypertask.app) | [signup-check.md](signup-check.md) | Access service identity, read-only, daily counts snapshot |
-| Activation analytics | [activation-analytics.md](activation-analytics.md) | read-only flags, core inbox; synthetic accounts excluded |
 | Login | [login.md](login.md) | `login` (write journey) |
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
@@ -41,9 +33,7 @@ each ticket only needs the one or two areas it touches.
 | Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and table New task verify by hand |
 | Figma connect | [figma-connect.md](figma-connect.md) | none; verify by hand on Settings > Accounts |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
-| Command palette | [command-palette.md](command-palette.md) | no smoke id; read-only shots of the palette rows, the help list and a Share Task tooltip |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
-| Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | production workflow dispatch, QA-only fixtures and score artifacts |
 | AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |
 | Board skills | [board-skills.md](board-skills.md) | no smoke id; create one skill from the textarea, prove POST /api/ai/skills 201 and the reload, delete it |
 | Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | no smoke id; no-login 401 checks on the three admin routes |
@@ -56,16 +46,12 @@ each ticket only needs the one or two areas it touches.
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); suggestions verify by hand |
 | Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
 | CLI install commands and login | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots, real install and read-only token-login guided start |
-| AI model canary | [model-canary.md](model-canary.md) | internal cron, dedicated internal-key request identity, read-only MCP status |
-| Team AI usage | [ai-usage.md](ai-usage.md) | read-only customer key error and successful report checks |
 | Billing and plans | [billing-and-plans.md](billing-and-plans.md) | no payment journey; open checkout and cancel without payment |
 | My Tasks | [my-tasks.md](my-tasks.md) | no write journey; verify by hand |
 | Pages | [pages.md](pages.md) | no write journey; verify by hand (flagged standalone parts through the session API) |
 | Slack app | [slack-app.md](slack-app.md) | read-only install/support pages and redirects; real workspace parity needs a human |
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 | Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
-| MCP and CLI project listing | [mcp-project-list.md](mcp-project-list.md) | read-only pagination, malformed-input refusals, metadata and scoped caller checks |
-| MCP task moves | [mcp-task-moves.md](mcp-task-moves.md) | disposable fixture refusal, unchanged column, successful moves; delete fixture |
 | MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
 | MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; never revoke-all on QA 2343 (it runs the MCP watcher) |
 

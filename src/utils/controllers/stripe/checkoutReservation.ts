@@ -44,7 +44,7 @@ export type CheckoutAttemptDesired = {
   cancelUrl: string;
   checkoutMode: CheckoutMode;
   trialDays?: number;
-  checkoutIntent?: "signup-straight-to-board" | "start-plan";
+  checkoutIntent?: "signup-straight-to-board";
   ownerUserId?: number;
   customerId: string;
   googleAccountId: string;

@@ -89,21 +89,10 @@ fi
 cat "$run/checker.md"
 mapfile -t picked < "$run/picked"
 if ((${#picked[@]})); then
-  if admission=$(timeout 30 "$HOME/projects/token-ladder/bin/token-ladder" pick --role runner --harness hax --json); then
-    node -e 'const pick = JSON.parse(process.argv[1]); if (pick.allowed !== true || pick.pool !== "codex") process.exit(1)' "$admission" || {
-      echo 'maintain-verification: invalid Codex admission; no helpers started' >&2
-      exit 1
-    }
-  else
-    status=$?
-    if [[ $status == 3 ]]; then
-      echo 'maintain-verification: Codex admission refused; pending pages wait for CPU/RAM' >&2
-      exit 0
-    fi
-    echo 'maintain-verification: token ladder admission failed; no helpers started' >&2
-    exit 1
-  fi
-  ladder='Token ladder: CODEX mode.'
+  mode=$(timeout 30 "$HOME/projects/token-ladder/bin/token-ladder" hook-prompt | grep -m1 -oE '(CODEX|CLAUDE) mode' || true)
+  [[ -n $mode ]] || { echo 'maintain-verification: token ladder printed no mode' >&2; exit 1; }
+  [[ $mode == 'CODEX mode' ]] || { echo "maintain-verification: token ladder is in $mode; Codex helpers wait for CODEX mode, nothing filed" >&2; exit 0; }
+  ladder="Token ladder: $mode."
 fi
 
 source_page() {

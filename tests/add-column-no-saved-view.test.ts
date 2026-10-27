@@ -120,7 +120,7 @@ test("createColumn hands the created section to the cache update", () => {
   const start = commands.indexOf("const createColumn = async");
   const createColumn = commands.slice(start, commands.indexOf("const updateBoard", start));
   assert.ok(
-    /updateProjectView\(\s*projectToUpdateIndex,\s*response\.data\.project_view(?: as [^,]+)?,/.test(
+    /updateProjectView\(\s*projectToUpdateIndex,\s*response\.data\.project_view,/.test(
       createColumn,
     ),
     "the created section must be passed alongside the refreshed view",

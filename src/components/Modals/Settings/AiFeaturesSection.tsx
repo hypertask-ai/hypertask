@@ -5,7 +5,6 @@ import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
-import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
@@ -20,7 +19,6 @@ import {
   aiModelOptions,
   getDefaultAiModelOptionForPlan,
   isAiModelOptionVisible,
-  isGrokGemini4ModelKey,
   getAiModelDefinition,
   getAiModelOptionById,
 } from "@/lib/aiModelOptions";
@@ -314,18 +312,14 @@ function DictationProviderDropdown({
 
 const AiFeaturesSection = () => {
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
-  const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const flagModelOptions = deepseekFlashFastEnabled
     ? aiModelOptions
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
-  const gatedModelOptions = grokGemini4Enabled
-    ? flagModelOptions
-    : flagModelOptions.filter((option) => !isGrokGemini4ModelKey(option.modelKey));
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
-    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
+    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true))
+    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();

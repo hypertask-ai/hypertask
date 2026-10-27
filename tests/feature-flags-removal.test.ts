@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BUGFIX_FLAG_REMOVAL_DAYS,
   FEATURE_FLAG_REMOVAL_DAYS,
   featureFlagRemovalDueAt,
   featureFlagRemovalState,
@@ -11,7 +10,7 @@ import type { FeatureFlagRow } from "../src/lib/flags";
 const NOW = new Date("2026-09-20T12:00:00Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function row(overrides: Partial<FeatureFlagRow> & { highRisk?: string | null }): FeatureFlagRow & { highRisk?: string | null } {
+function row(overrides: Partial<FeatureFlagRow>): FeatureFlagRow {
   return {
     key: "htpr-1-some-flag",
     kind: "feature",
@@ -82,32 +81,6 @@ test("a filed removal ticket ends the countdown, even if Keep is pressed afterwa
     label: "removal ticket filed",
   });
   assert.equal(featureFlagRemovalState(row({ ...overdue, keep: true }), NOW)?.kind, "filed");
-});
-
-test("a bugfix flag is due after 7 days and a money, access or data-deletion flag stays at 14", () => {
-  assert.equal(BUGFIX_FLAG_REMOVAL_DAYS, 7);
-  assert.equal(featureFlagRemovalState(row({ kind: "bugfix", releasedAt: NOW }), NOW)?.label, "removed in 7 days");
-  assert.equal(featureFlagRemovalState(row({ kind: "bugfix", releasedAt: daysBefore(6) }), NOW)?.label, "removed in 1 day");
-  assert.deepEqual(featureFlagRemovalState(row({ kind: "bugfix", releasedAt: daysBefore(7) }), NOW), {
-    kind: "due",
-    label: "due for removal",
-  });
-  for (const highRisk of ["money", "access", "data-deletion"] as const) {
-    assert.equal(
-      featureFlagRemovalState(row({ kind: "bugfix", highRisk, releasedAt: daysBefore(7) }), NOW)?.label,
-      "removed in 7 days",
-    );
-    assert.equal(featureFlagRemovalState(row({ kind: "bugfix", highRisk, releasedAt: daysBefore(14) }), NOW)?.kind, "due");
-  }
-  assert.equal(
-    featureFlagRemovalState(row({ kind: "bugfix", highRisk: "customer-email", releasedAt: daysBefore(7) }), NOW)?.kind,
-    "due",
-  );
-  assert.equal(featureFlagRemovalDueAt({
-    mode: "EVERYONE",
-    kind: "bugfix",
-    releasedAt: daysBefore(1),
-  })?.getTime(), daysBefore(1).getTime() + BUGFIX_FLAG_REMOVAL_DAYS * DAY_MS);
 });
 
 test("the due date is the release date plus the removal window, and null without one", () => {

@@ -19,7 +19,6 @@ const mocks = {
   "@/store": { composeTaskQuestionsTaskIdAtom: "questionsTaskId" },
   "@/lib/state": { useRecoilValue: () => null, useSetRecoilState: () => () => {} },
   "@/hooks/useFlag": { useFlag: (key) => enabled && key === flag },
-  "@/lib/ai/chipEvents": { signalAiChip: () => {} },
   "@/lib/flags/keys": { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG: flag },
   "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", { "data-message": message.id }, message.content) },
   "./TypingIndicator": { TypingIndicator: () => React.createElement("span", { "data-typing": "" }) },

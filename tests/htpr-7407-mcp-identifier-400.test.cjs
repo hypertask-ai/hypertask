@@ -68,7 +68,7 @@ function setup(failure) {
       IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
     },
-    '@/lib/mcp/tasks/updateTask': {
+    '@/lib/mcp/tasks/updateTaskSelector': {
       executeTaskUpdate: async ({ requestBody }) => {
         await batch.findTasksByIdentifier(user, requestBody)
         return { response: Response.json({ success: true }) }

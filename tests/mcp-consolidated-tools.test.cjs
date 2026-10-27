@@ -34,6 +34,7 @@ const { executeToolResult, formatToolResponse, actionableToolError } = load('src
 const { handleStatelessMcpRequest } = load('src/lib/mcp-server/stateless-http.ts')
 const { handleMcpHttp } = load('src/lib/mcp-server/mcp-http.ts')
 const { mcpHandler } = load('src/lib/mcp-server/handler.ts')
+const flags = load('src/lib/flags.ts')
 const legacy = resolvePortableTools(MCP_TOOLS)
 const ajv = new Ajv({ strict: false })
 require('ajv-formats')(ajv)
@@ -83,16 +84,18 @@ function spyTools() {
   return { calls, tools: selectMcpTools(tools, true) }
 }
 
-test('legacy catalog retains allowed tools, annotations and management scope filtering', async () => {
+test('catalog flag off preserves the entire current deferred list exactly', async () => {
   const deferred = selectMcpTools(legacy, false)
   assert.ok(toolNamed(deferred, 'hypertask_list_features'))
   assert.ok((await rpc(deferred, 'tools/list')).result.tools.some(({ name }) => name === 'hypertask_list_features'))
   assert.equal(definitions.find(({ name }) => name === 'hypertask_user_context').actions.features.tool, 'hypertask_list_features')
   const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features', 'hypertask_set_task_waiting_on'].includes(tool.name))
   const selected = selectMcpTools(originalLegacy, false, { managementPermissions: { management: ['read'] } })
+  assert.equal(selected, originalLegacy)
   const listed = (await rpc(selected, 'tools/list')).result.tools
-  assert.deepEqual(listed.map((tool) => tool.name), ['hypertask_list_agents', 'hypertask_list_connections', 'hypertask_search_tools', 'hypertask_describe_tool'])
-  assert.ok(listed.every((tool) => tool.annotations.readOnlyHint))
+  const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/mcp-6804/legacy-catalog.json')))
+  assert.deepEqual(listed, baseline)
+  assert.deepEqual(baseline.filter((tool) => !['hypertask_search_tools', 'hypertask_describe_tool'].includes(tool.name)).map((tool) => tool.name), originalLegacy.map((tool) => tool.name))
 })
 
 test('user_context features dispatches to the deferred feature tool', async () => {
@@ -116,17 +119,19 @@ test('catalog flag on advertises 15 to 25 consolidated tools, with no duplicate 
   }
 })
 
-test('authenticated users retain the consolidated catalog without a stored rollout mode', async () => {
-  for (const storedMode of [null, 'OFF', 'EVERYONE']) {
-    mode = storedMode
-    for (const id of [6, 985, 7]) {
-      authUserId = id
-      const listed = (await (await mcpHandler(request('tools/list'))).json()).result.tools
-      assert.ok(listed.some((tool) => tool.name === 'hypertask_tasks'))
-      assert.equal(listed.some((tool) => tool.name === 'hypertask_list_tasks'), false)
-      assert.equal(new Set(listed.map((tool) => tool.name)).size, listed.length)
-    }
+test('server flag defaults to Owner + QA and evaluates the authenticated user', async () => {
+  mode = null
+  for (const [id, enabled] of [[6, true], [985, true], [7, false]]) {
+    authUserId = id
+    assert.equal(await flags.isFeatureEnabled(flags.HTPR_6804_MCP_TOOLS_FLAG, id), enabled)
+    const listed = (await (await mcpHandler(request('tools/list'))).json()).result.tools
+    assert.equal(listed.length, enabled ? definitions.length : legacy.length + 1)
   }
+  mode = 'OFF'
+  authUserId = 6
+  assert.equal((await (await mcpHandler(request('tools/list'))).json()).result.tools.length, legacy.length + 1)
+  const disabledCall = await (await mcpHandler(request('tools/call', { name: 'hypertask_tasks', arguments: { action: 'create', input: { project_id: 15, title: 'Not executed' } } }))).json()
+  assert.equal(disabledCall.error.code, -32602)
   mode = null
   authUserId = 985
 })
@@ -141,7 +146,7 @@ test('scope filtering advertises only callable actions for management, agent and
     assert.deepEqual(Object.fromEntries(listed.map((tool) => [tool.name, tool.inputSchema.properties.action.enum])), expected)
     const denied = await rpc(tools, 'tools/call', { name: 'hypertask_create_task', arguments: { project_id: 15, title: 'Denied' } })
     assert.equal(denied.result.isError, true)
-    assert.match(denied.result.content[0].text, /Unknown tool hypertask_create_task/)
+    assert.match(denied.result.content[0].text, /required scope|not allowed/)
   }
   const agent = visible(selectMcpTools(legacy, true, { agent: true }))
   assert.equal(agent.some((tool) => tool.name === 'hypertask_tokens'), false)

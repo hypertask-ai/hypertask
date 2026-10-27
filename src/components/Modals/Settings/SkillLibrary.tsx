@@ -3,6 +3,8 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6925_TYPED_API_CLIENT_FLAG } from "@/lib/flags/keys";
 import { listSkills } from "@/lib/api/typedClient";
 
 import SettingsCard from "./SettingsCard";
@@ -37,6 +39,7 @@ export default function SkillLibrary({
   projectId?: number;
   teamId?: string | null;
 }) {
+  const typedClient = useFlag(HTPR_6925_TYPED_API_CLIENT_FLAG);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +56,15 @@ export default function SkillLibrary({
     [projectId, teamId]
   );
 
-  const fetchSkills = useCallback(() => listSkills(params), [params]);
+  let readSkills;
+  if (typedClient) {
+    readSkills = () => listSkills(params);
+  } else {
+    readSkills = () => axios.get<{ skills: Skill[] }>("/api/ai/skills", {
+      params,
+    });
+  }
+  const fetchSkills = useMemo(() => readSkills, [params, typedClient]);
 
   const loadSkills = useCallback(async () => {
     setLoading(true);

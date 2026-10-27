@@ -26,17 +26,6 @@ has height >=24px and `elementFromPoint` at its centre hits it; the
 input. Repeat on desktop to check
 the unchanged desktop path (https://app.hypertask.ai/detail/project-15/6970).
 
-For description-only New Task creation (`/new?id=<private QA board>`), leave the
-title empty, enter a description, and save. Under `htpr-8031-auto-title`, the
-`/api/ai/task-writer` request carries `requestKind: "auto-title"`; a title-only
-reply is valid, but a full task draft still needs a description. Check the saved
-title and original description after reload on iPhone-sized, Android-sized and
-desktop viewports. Repeat with a manual title and confirm it stays unchanged.
-Intercept only the title request with a 503 in a separate browser context to
-prove saving uses the first 80 description characters and shows the fallback
-notice. This injected failure proves recovery, not live provider health. Never
-change shared provider settings. Delete only this run's QA fixtures.
-
 ## What usually breaks
 
 Mobile-only layout and interaction bugs desktop testing never catches, most

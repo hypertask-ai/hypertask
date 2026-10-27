@@ -98,7 +98,6 @@ export function createCreateTaskTool(context: ToolContext) {
         }
 
         const createOneTask = async (taskInput: TaskInput) => {
-          const creationStartedAt = Date.now();
           const parsed = itemSchema.safeParse(
             dropEmptyPadding(taskInput, [
               "description",
@@ -212,7 +211,6 @@ export function createCreateTaskTool(context: ToolContext) {
               estimateIndex = draft.estimate ?? 0;
               abortSignal?.throwIfAborted();
             }
-            const saveStartedAt = Date.now();
             const task = await createTask({
               creationChannel: "agent",
               projectId: input.project_id,
@@ -236,13 +234,6 @@ export function createCreateTaskTool(context: ToolContext) {
               const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
               await saveWriterCustomFieldValues(task.id, customFields);
             }
-
-            console.info(`[ai/chat-task-create] stages ${JSON.stringify({
-              projectId: input.project_id,
-              writer: chatTaskWriterEnabled && "brief" in input,
-              saveMs: Date.now() - saveStartedAt,
-              toolMs: Date.now() - creationStartedAt,
-            })}`);
 
             return sanitizeForJson({
               success: true,

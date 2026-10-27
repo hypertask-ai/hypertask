@@ -22,10 +22,6 @@ Use the shared fixture board 7283 (**QA Team Board**): owner 4036 (`~/.config/ht
 
 Checklist written before QA; statuses for steps 2 to 4 (ids only, no emails or cookies in the proof); a screenshot of the pending invite before and after the outsider's attempt. Record account ids, never credentials.
 
-### Automated evidence
-
-`node --test tests/invite-email.test.cjs` exercises invite creation and resend with mocked email delivery, including refusal of an outsider and use of the session identity instead of the body userId; cancel-route authorization is not covered.
-
 ## Cleanup
 
 As owner 4036, Cancel the throwaway invite and confirm it is gone after reload.

@@ -36,7 +36,6 @@ const noop = () => {};
 const noopComponent = () => null;
 const atoms = new Proxy({}, { get: (_, key) => key });
 const moduleMocks = {
-  "../unauthorized/page": { __esModule: true, default: noopComponent },
   "@/components/Global/FirstScreenMobileChrome": { __esModule: true, default: noopComponent },
   "@/hooks/useConnectAgentOverlay": { useConnectAgentOverlay: () => ({ blocked: false }) },
   "@/components/PageComponents/Onboarding/AgentConnectCard": { AgentConnectCard: noopComponent },

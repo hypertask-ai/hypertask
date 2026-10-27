@@ -119,11 +119,11 @@ async function main() {
         },
       });
       if (plan !== "BYOK") {
-        const request = { userId: 7, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: {} } };
+        const request = { userId: 7, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } };
         const selected = await editor.selectTaskWriterModel(request);
         assert.equal(selected.modelId, enabled || plan !== "Free" ? "claude-haiku-5.5" : "gpt-6-luna");
         if (enabled) {
-          storedPreference = { writeWithAi: "gpt-6-luna" };
+          storedPreference = { taskWriter: "gpt-6-luna" };
           const saved = await editor.selectTaskWriterModel(request);
           assert.equal(saved.modelId, "gpt-6-luna");
         }

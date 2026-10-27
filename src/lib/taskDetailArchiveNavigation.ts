@@ -25,7 +25,6 @@ export function inboxMessageForTask<T extends InboxMessage>(
   inboxMessages: T[] | undefined,
   task: { id?: number; projectId?: number } | null | undefined,
   userId: number | null | undefined,
-  blockedInboxArchive = false,
 ): T | undefined {
   return inboxMessages?.find(
     (message) =>
@@ -33,10 +32,9 @@ export function inboxMessageForTask<T extends InboxMessage>(
       message.projectId === task?.projectId &&
       message.userId === userId &&
       message.status === "Normal" &&
-      ((blockedInboxArchive && message.waitingOnSynthetic === true && String(message.id) === `-${message.taskId}`) ||
-        (!message.waitingOnSynthetic &&
-          Number.isSafeInteger(Number(message.id)) &&
-          Number(message.id) > 0)),
+      !message.waitingOnSynthetic &&
+      Number.isSafeInteger(Number(message.id)) &&
+      Number(message.id) > 0,
   );
 }
 

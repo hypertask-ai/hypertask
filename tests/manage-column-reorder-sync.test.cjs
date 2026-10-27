@@ -83,7 +83,7 @@ test("a minimal board payload patches its only section list without throwing", (
 
 test("Manage Columns patches the open board caches after ranking persistence", () => {
   const source = read("src/components/Modals/commands/manageColumn.tsx");
-  const persist = source.indexOf("await writeSection(");
+  const persist = source.indexOf("await axios.post(`/api/section/update`");
   const synchronizationDefinition = source.indexOf(
     "const synchronizeBoardSectionOrder = async",
   );

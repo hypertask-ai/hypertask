@@ -10,9 +10,6 @@ const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
   "./aiChatStream": { consumeAiChatStream: async () => {} },
 });
 const { useAiChatSessions } = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
-  "@/hooks/useFlag": { useFlag: () => false },
-  "@/lib/ai/chipEvents": { signalAiChip: () => {} },
-  "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
   react: { useCallback: (callback) => callback, useRef: (current) => ({ current }), useEffect() {} },
   "@/lib/constants": { default: {} },
   "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
@@ -159,10 +156,9 @@ test("still works: flag off uses the original in-view enqueue, cancellation and 
   assert.equal(await fixture.enqueue("legacy cancelled"), true);
   fixture.controls.removeQueuedMessage(fixture.context.messageQueueRef.current[1].id);
   fixture.bind();
-  fixture.setDraft("unfinished next question");
   await withTransport(fixture, async () => { fixture.controls.drainQueuedMessage(); await flush(); });
   assert.deepEqual(fixture.sent.map((item) => [item.session_id, item.message]), [["A", "legacy first"]]);
-  assert.equal(fixture.draft(), "unfinished next question");
+  assert.equal(fixture.clears(), 3);
 });
 
 test("switching during queued session resolution cannot redirect A's message into B", async () => {
@@ -303,7 +299,6 @@ test("legacy history stays clean across repeated queue failures and recovery", a
   const { useSessionAndChatHistory } = load("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts", {
     react: { useCallback: (callback) => callback, useRef: (current) => ({ current }), useEffect() {}, useState: (initial) => [initial, () => {}] },
     "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/store": { currentUserAtom: "user" },
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? { id: 985, uid: "qa-985" } : null, useRecoilState: () => [null, () => {}] },
     "@/utils/api/ai_chat": { AI_Chat_API: { addMessage: async () => ({ data: {} }) } },

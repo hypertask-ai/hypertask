@@ -14,6 +14,7 @@ import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
+  MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
@@ -152,6 +153,7 @@ const MyTasks = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
+  const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
   const [sections, setSections] = useState(initialSections);
   const [tabs, setTabs] = useState(initialTabs);
@@ -164,7 +166,9 @@ const MyTasks = ({
   );
   const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const [activeSplit, setActiveSplitState] = useState(() =>
-    getMyTasksSplitIndex(initialSections, boardParam)
+    myTasksShortcutsWidthEnabled
+      ? getMyTasksSplitIndex(initialSections, boardParam)
+      : 0
   );
   const activeSplitRef = useRef(activeSplit);
   const setActiveSplit = useCallback((split: number) => {
@@ -684,9 +688,11 @@ const MyTasks = ({
     (index: number) => {
       const nextIndex = Math.max(0, Math.min(index, tabs.length - 1));
       setActiveSplit(nextIndex);
-      replaceBoardParam(sections[nextIndex - 1]?.projectId ?? null);
+      if (myTasksShortcutsWidthEnabled || iconControlsEnabled) {
+        replaceBoardParam(sections[nextIndex - 1]?.projectId ?? null);
+      }
     },
-    [replaceBoardParam, sections, tabs.length]
+    [iconControlsEnabled, myTasksShortcutsWidthEnabled, replaceBoardParam, sections, tabs.length]
   );
 
   const updateSplit = useCallback(
@@ -706,12 +712,16 @@ const MyTasks = ({
         const nextBoardId = availableBoards[nextIndex - 1]?.id ?? null;
         activeBoardId.current = nextBoardId;
         setActiveSplit(nextIndex);
-        replaceBoardParam(nextBoardId);
+        if (myTasksShortcutsWidthEnabled || iconControlsEnabled) {
+          replaceBoardParam(nextBoardId);
+        }
         return;
       }
       activeBoardId.current = filteredSections[nextIndex - 1]?.projectId ?? null;
       setActiveSplit(nextIndex);
-      replaceBoardParam(filteredSections[nextIndex - 1]?.projectId ?? null);
+      if (myTasksShortcutsWidthEnabled || iconControlsEnabled) {
+        replaceBoardParam(filteredSections[nextIndex - 1]?.projectId ?? null);
+      }
     },
     [
       activeTabs.length,
@@ -722,6 +732,7 @@ const MyTasks = ({
       groupBy,
       iconControlsEnabled,
       currentUser.id,
+      myTasksShortcutsWidthEnabled,
       replaceBoardParam,
       updateLegacySplit,
       viewsFeatureEnabled,
@@ -729,12 +740,22 @@ const MyTasks = ({
   );
 
   useEffect(() => {
+    if (!myTasksShortcutsWidthEnabled && !iconControlsEnabled) return;
     const sources = groupBy === "time" ? boardSplitSources : sections;
     setActiveSplit(getMyTasksSplitIndex(sources, boardParam));
-  }, [boardParam, boardSplitSources, groupBy, sections]);
+  }, [boardParam, boardSplitSources, groupBy, iconControlsEnabled, myTasksShortcutsWidthEnabled, sections]);
 
   useEffect(() => {
     if (groupBy !== "time") return;
+    if (!myTasksShortcutsWidthEnabled && !iconControlsEnabled) {
+      const split = getMyTasksSplitIndex(
+        boardSplitSources,
+        activeBoardId.current === null ? null : String(activeBoardId.current),
+      );
+      activeBoardId.current = availableBoards[split - 1]?.id ?? null;
+      setActiveSplit(split);
+      return;
+    }
     const split = getMyTasksSplitIndex(boardSplitSources, boardParam);
     activeBoardId.current = availableBoards[split - 1]?.id ?? null;
     setActiveSplit(split);
@@ -744,11 +765,22 @@ const MyTasks = ({
     boardParam,
     boardSplitSources,
     groupBy,
+    iconControlsEnabled,
+    myTasksShortcutsWidthEnabled,
     replaceBoardParam,
   ]);
 
   useEffect(() => {
     if (groupBy === "time" || !viewsFeatureEnabled) return;
+    if (!myTasksShortcutsWidthEnabled && !iconControlsEnabled) {
+      const split = getMyTasksSplitIndex(
+        filteredSections,
+        activeBoardId.current === null ? null : String(activeBoardId.current),
+      );
+      activeBoardId.current = filteredSections[split - 1]?.projectId ?? null;
+      setActiveSplit(split);
+      return;
+    }
     const split = getMyTasksSplitIndex(filteredSections, boardParam);
     activeBoardId.current = filteredSections[split - 1]?.projectId ?? null;
     setActiveSplit(split);
@@ -759,6 +791,8 @@ const MyTasks = ({
     boardSplitSources,
     filteredSections,
     groupBy,
+    iconControlsEnabled,
+    myTasksShortcutsWidthEnabled,
     replaceBoardParam,
     viewsFeatureEnabled,
   ]);
@@ -1113,7 +1147,7 @@ const boardTabCounts = useMemo(() => {
     <div
       suppressHydrationWarning
       data-testid="my-tasks-panel"
-      className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 w-full flex linksModal ${styles.links_modal}`}
+      className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 ${myTasksShortcutsWidthEnabled ? "w-full" : "global-view-width"} flex linksModal ${styles.links_modal}`}
     >
       {viewsEnabled && myTasksViewsEnabled && (
         <div className="mb-4 px-[16px] @md:!px-[78px]">
@@ -1382,7 +1416,11 @@ const boardTabCounts = useMemo(() => {
       )}
       {appShellRailOn ? (
         <div
-          className="ml-[var(--app-shell-rail-w,48px)] w-[calc(100%-var(--app-shell-rail-w,48px))]"
+          className={
+            myTasksShortcutsWidthEnabled
+              ? "ml-[var(--app-shell-rail-w,48px)] w-[calc(100%-var(--app-shell-rail-w,48px))]"
+              : "pl-[var(--app-shell-rail-w,48px)]"
+          }
         >
           {content}
         </div>

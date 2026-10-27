@@ -2,6 +2,7 @@ import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import {
+  agentRunActivitiesEnabledFor,
   authenticateAgentRunRequest,
   createAgentRunActivity,
   listAgentRunActivities,
@@ -42,6 +43,11 @@ async function authorize(request: NextRequest) {
         { success: false, error: "Invalid or missing authentication" },
         401,
       ),
+    };
+  }
+  if (!(await agentRunActivitiesEnabledFor(principal))) {
+    return {
+      response: noStore({ success: false, error: "Run not found" }, 404),
     };
   }
   return { principal };

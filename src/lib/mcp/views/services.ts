@@ -1,7 +1,6 @@
 import { savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from '@/lib/prisma';
-import { ValidationError } from '@/lib/mcp-server/utils/errors';
 import { getUniqueSlug, getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions';
 import { matchLabelIds, validateProjectAccess, validateProjectMemberIds } from '@/lib/mcp/tasks/services';
 import { broadcastBoardChange } from '@/lib/realtime/server';
@@ -178,7 +177,7 @@ export async function createView(input: CreateViewInput) {
         select: { id: true },
     });
     if (existing) {
-        throw new ValidationError(`A view titled "${title}" already exists on this board`);
+        throw new Error(`A view titled "${title}" already exists on this board`);
     }
 
     const board_filters = input.board_filters === undefined

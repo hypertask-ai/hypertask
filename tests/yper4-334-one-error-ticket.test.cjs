@@ -18,8 +18,6 @@ function loadReporter({ posthogCaptured }) {
   };
   const stubs = {
     '@/lib/prisma': { __esModule: true, default: prisma },
-    '@/lib/aiAllowancePolicy': load(path.join(root, 'src/lib/aiAllowancePolicy')),
-    '@/lib/flags': {},
     '@/lib/redis': { getRedis: async () => redis },
     '@/lib/mcp/tasks/services': {
       validateProjectAccess: async () => ({ project: { uniqueIdentifier: 'HTPR', teamId: 1 } }),

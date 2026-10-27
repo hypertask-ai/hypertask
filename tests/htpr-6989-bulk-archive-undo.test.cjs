@@ -38,7 +38,6 @@ function fixture(api, original = false) {
   const matches = (row, where) => Object.entries(where).every(([key, value]) => {
     if (value && typeof value === "object" && !(value instanceof Date)) {
       if (Object.hasOwn(value, "in")) return value.in.includes(row[key]);
-      if (Object.hasOwn(value, "notIn")) return !value.notIn.includes(row[key]);
       if (Object.hasOwn(value, "not")) return row[key] !== value.not;
     }
     return value instanceof Date ? row[key]?.getTime() === value.getTime() : row[key] === value;
@@ -105,9 +104,7 @@ function fixture(api, original = false) {
         assert.deepEqual(JSON.parse(options.body), { notificationIds: data.notificationIds, status: "Normal" });
         return invoke(JSON.parse(options.body));
       }
-      assert.equal(url, "/api/notifications/markAsDone");
-      assert.equal(options.method, "POST");
-      assert.deepEqual({ id: JSON.parse(options.body).id, taskId: JSON.parse(options.body).taskId }, { id: "101", taskId: 201 });
+      assert.ok(url.startsWith("/api/notifications/markAsDone?id=101&taskId=201&"));
       return invoke({}, true);
     };
     try { return await undo(data); } finally { global.fetch = saved; }

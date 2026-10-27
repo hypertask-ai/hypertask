@@ -79,7 +79,7 @@ function refactorUiLineCounts(baseSha, headSha) {
   };
 }
 
-function addedLinesFor(baseSha, headSha, path, includeDeletions = false) {
+function addedLinesFor(baseSha, headSha, path) {
   const lines = new Set();
   const diff = git(["diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`, "--", path]);
   for (const row of diff.split("\n")) {
@@ -87,7 +87,7 @@ function addedLinesFor(baseSha, headSha, path, includeDeletions = false) {
     if (!hunk) continue;
     const start = Number(hunk[1]);
     const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-    for (let line = start; line < start + (includeDeletions ? Math.max(count, 1) : count); line += 1) lines.add(line);
+    for (let line = start; line < start + count; line += 1) lines.add(line);
   }
   return lines;
 }
@@ -276,17 +276,12 @@ function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
   return false;
 }
 
-function isJsxCallbackValue(node, checker, live) {
+// True when `node` is the value of a JSX attribute (onClick={node}) in JSX that is consumed.
+function isJsxAttributeValue(node, checker, live) {
   let child = node;
   while (child.parent && typescript.isParenthesizedExpression(child.parent)) child = child.parent;
-  if (!child.parent || !typescript.isJsxExpression(child.parent)) return false;
-  const container = child.parent.parent;
-  const customChild = typescript.isJsxElement(container) &&
-    (typescript.isPropertyAccessExpression(container.openingElement.tagName) ||
-     (typescript.isIdentifier(container.openingElement.tagName) &&
-      /^[A-Z]/.test(container.openingElement.tagName.text)));
-  return (typescript.isJsxAttribute(container) || customChild) &&
-    jsxResultIsConsumed(child, checker, live);
+  return Boolean(child.parent && typescript.isJsxExpression(child.parent) &&
+    typescript.isJsxAttribute(child.parent.parent) && jsxResultIsConsumed(child, checker, live));
 }
 
 function isExportedVariableStatement(statement) {
@@ -426,10 +421,10 @@ function enclosingFunctionLike(node) {
   return null;
 }
 
-function isLiveCallSite(node, live, allowModuleScope = true) {
+function isLiveCallSite(node, live) {
   if (isStaticallyUnreachable(node)) return false;
   const enclosing = enclosingFunctionLike(node);
-  return enclosing ? live.has(enclosing) : allowModuleScope;
+  return !enclosing || live.has(enclosing);
 }
 
 function branchIsNullishOrEmpty(node) {
@@ -684,7 +679,7 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   return null;
 }
 
-function collectLiveFunctions(sourceFile, checker, entries = null) {
+function collectLiveFunctions(sourceFile, checker) {
   const functions = [];
   function collect(node) {
     if (typescript.isFunctionLike(node)) functions.push(node);
@@ -703,8 +698,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
   }));
   // Export recognition remains intact for the ungated-sibling check, but a
   // rebound binding cannot prove which implementation runs. No flow analysis.
-  const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) &&
-    (entries ? entries.has(fn) : isExportedUiEntry(fn, identifierExports))));
+  const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) && isExportedUiEntry(fn, identifierExports)));
   const functionBySymbol = new Map();
   for (const fn of functions) {
     const name = functionBindingName(fn, checker);
@@ -755,7 +749,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
     // An inline callback in a JSX attribute (onClick={() => send()}) runs when
     // the live element it sits in is rendered.
     for (const fn of functions) {
-      if (live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live, !entries)) continue;
+      if (live.has(fn) || !isJsxAttributeValue(fn, checker, live) || !isLiveCallSite(fn, live)) continue;
       live.add(fn);
       changed = true;
     }
@@ -771,19 +765,19 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
         if (isStaticallyUnreachable(node)) return;
         if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
             checker.getSymbolAtLocation(node.expression) === symbol &&
-            isLiveCallSite(node, live, !entries)) {
+            isLiveCallSite(node, live)) {
           referenced = true;
           return;
         }
-        if (typescript.isIdentifier(node) && isJsxCallbackValue(node, checker, live) &&
-            checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live, !entries)) {
+        if (typescript.isIdentifier(node) && isJsxAttributeValue(node, checker, live) &&
+            checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live)) {
           referenced = true;
           return;
         }
         if ((typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) &&
             typescript.isIdentifier(node.tagName) &&
             checker.getSymbolAtLocation(node.tagName) === symbol &&
-            isLiveCallSite(node, live, !entries) && jsxResultIsConsumed(node, checker, live)) {
+            isLiveCallSite(node, live)) {
           referenced = true;
           return;
         }
@@ -1111,6 +1105,7 @@ function functionContainsJsx(fn) {
 }
 
 function exportedJsxEntryHasTicketGate(
+  fn,
   checker,
   helperSymbols,
   flagSymbols,
@@ -1126,10 +1121,10 @@ function exportedJsxEntryHasTicketGate(
   let found = false;
   function visit(node) {
     if (found) return;
-    if (typescript.isFunctionLike(node) && !liveFunctions.has(node)) return;
+    if (node !== fn && typescript.isFunctionLike(node)) return;
     if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
         helperSymbols.has(checker.getSymbolAtLocation(node.expression)) &&
-        liveFunctions.has(enclosingFunctionLike(node)) && !isStaticallyUnreachable(node)) {
+        !isStaticallyUnreachable(node)) {
       let argument = node.arguments[0];
       while (argument && (typescript.isParenthesizedExpression(argument) ||
              typescript.isAsExpression(argument) || typescript.isTypeAssertionExpression(argument) ||
@@ -1160,20 +1155,19 @@ function exportedJsxEntryHasTicketGate(
     }
     typescript.forEachChild(node, visit);
   }
-  visit(sourceFile);
+  visit(fn);
   return found;
 }
 
 function hasUngatedExportedJsxEntry(
   sourceFile,
-  baseSourceFile,
   checker,
   helperSymbols,
   flagSymbols,
   registry,
   allowedKeys,
   addedLines,
-  changedLines,
+  liveFunctions,
   ref,
   path,
   importedFunctions,
@@ -1184,50 +1178,11 @@ function hasUngatedExportedJsxEntry(
     typescript.forEachChild(node, collect);
   }
   collect(sourceFile);
-  const containsChangedLine = (node) => {
-    const startLine = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-    const endLine = sourceFile.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
-    return [...changedLines].some((line) => line >= startLine && line <= endLine);
-  };
-  const moduleState = (file) => file.statements.filter((statement) => {
-    if (typescript.isImportDeclaration(statement) || typescript.isExportDeclaration(statement) ||
-        typescript.isInterfaceDeclaration(statement) || typescript.isTypeAliasDeclaration(statement) ||
-        typescript.isFunctionDeclaration(statement)) return false;
-    return !typescript.isVariableStatement(statement) ||
-      !statement.declarationList.declarations.every((declaration) =>
-        declaration.initializer && typescript.isFunctionLike(unwrapArgumentExpression(declaration.initializer)));
-  }).map((statement) => statement.getText(file)).join("\n");
-  const runtimeImports = (file) => {
-    const bindings = new Set();
-    for (const statement of file.statements) {
-      if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
-      const clause = statement.importClause;
-      if (clause?.isTypeOnly) continue;
-      const moduleName = statement.moduleSpecifier.text;
-      if (!clause) { bindings.add(`${moduleName}:side-effect`); continue; }
-      if (clause.name) bindings.add(`${moduleName}:default:${clause.name.text}`);
-      const named = clause.namedBindings;
-      if (named && typescript.isNamespaceImport(named)) bindings.add(`${moduleName}:*:${named.name.text}`);
-      if (named && typescript.isNamedImports(named)) {
-        for (const binding of named.elements) {
-          if (!binding.isTypeOnly) bindings.add(`${moduleName}:${binding.propertyName?.text ?? binding.name.text}:${binding.name.text}`);
-        }
-      }
-    }
-    return bindings;
-  };
-  const beforeImports = runtimeImports(baseSourceFile), afterImports = runtimeImports(sourceFile);
-  const importsChanged = [...beforeImports].some((binding) => !afterImports.has(binding)) ||
-    [...afterImports].some((binding) => binding.endsWith(":side-effect") && !beforeImports.has(binding));
-  const moduleChanged = importsChanged || moduleState(sourceFile) !== moduleState(baseSourceFile);
   const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   for (const fn of functions) {
     if (!isExportedUiEntry(fn, identifierExports) || !functionContainsJsx(fn)) continue;
-    const entryFunctions = collectLiveFunctions(sourceFile, checker, new Set([fn]));
-    const entryChanged = moduleChanged || !entryFunctions.has(fn) ||
-      [...entryFunctions].some(containsChangedLine);
-    if (!entryChanged) continue;
     if (!exportedJsxEntryHasTicketGate(
+      fn,
       checker,
       helperSymbols,
       flagSymbols,
@@ -1235,7 +1190,7 @@ function hasUngatedExportedJsxEntry(
       allowedKeys,
       addedLines,
       sourceFile,
-      entryFunctions,
+      liveFunctions,
       ref,
       path,
       importedFunctions,
@@ -1244,7 +1199,7 @@ function hasUngatedExportedJsxEntry(
   return false;
 }
 
-function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, changedLines, baseRef) {
+function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
   const source = git(["show", `${ref}:${path}`]);
   let scriptKind = typescript.ScriptKind.JS;
   if (path.endsWith(".tsx")) scriptKind = typescript.ScriptKind.TSX;
@@ -1257,9 +1212,6 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
     true,
     scriptKind,
   );
-  const baseSource = git(["ls-tree", "--name-only", baseRef, "--", path]).trim()
-    ? git(["show", `${baseRef}:${path}`]) : "";
-  const baseSourceFile = typescript.createSourceFile(path, baseSource, typescript.ScriptTarget.Latest, true, scriptKind);
   const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
   const host = {
     getSourceFile: (fileName) => fileName === path ? sourceFile : undefined,
@@ -1310,14 +1262,13 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
 
   if (isUiFile(path) && hasUngatedExportedJsxEntry(
     sourceFile,
-    baseSourceFile,
     checker,
     helperSymbols,
     flagSymbols,
     registry,
     allowedKeys,
     addedLines,
-    changedLines,
+    liveFunctions,
     ref,
     path,
     importedFunctions,
@@ -1719,8 +1670,6 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         headRegistry,
         ticketKeys,
         addedLinesFor(mergeBase, headSha, path),
-        addedLinesFor(mergeBase, headSha, path, true),
-        mergeBase,
       );
       if (key) {
         const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);

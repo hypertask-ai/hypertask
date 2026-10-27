@@ -1,7 +1,6 @@
 import { isClaude55Model, isHaiku55Model } from "../../../../../lib/aiModelOptions";
 
 const PREVIOUS_MODELS: Record<string, string> = {
-  "gpt-6.1-terra": "gpt-5.6-terra",
   "gpt-6-luna": "gpt-5.6-luna",
   "gpt-6.1-sol": "gpt-6-sol",
   "claude-sonnet-5.5": "claude-sonnet-5",

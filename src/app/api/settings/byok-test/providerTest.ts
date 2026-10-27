@@ -18,7 +18,7 @@ export type ByokTestResult = "works" | "invalid" | "no_credit" | "error";
 
 const TEST_MODEL_KEYS: Partial<Record<TByokProviderKey, TAiModelKey>> = {
   openai: "gpt-6-luna",
-  claude: "claude-haiku-5-5",
+  claude: "claude-haiku-4.5",
   google: "gemini-3.5-flash-lite",
   deepseek: "deepseek-v4.1-flash",
   moonshot: "kimi-k2.5",
@@ -32,8 +32,8 @@ type TestRequest = {
   url: string;
 };
 
-function testModel(provider: TByokProviderKey, _haiku55Enabled: boolean) {
-  const modelKey = TEST_MODEL_KEYS[provider];
+function testModel(provider: TByokProviderKey, haiku55Enabled: boolean) {
+  const modelKey = provider === "claude" && haiku55Enabled ? "claude-haiku-5-5" : TEST_MODEL_KEYS[provider];
   if (!modelKey) return null;
   const option = aiModelOptions.find(
     (candidate) => candidate.modelKey === modelKey
@@ -108,7 +108,7 @@ export function buildByokTestRequest(
       apiKey,
       haiku55Enabled
         ? { id: "anthropic/claude-haiku-5.5", label: "Haiku 5.5" }
-        : { id: "openai/gpt-6-luna", label: "GPT Luna 6" }
+        : { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
     );
   }
 
@@ -118,7 +118,7 @@ export function buildByokTestRequest(
       apiKey,
       haiku55Enabled
         ? { id: "anthropic/claude-haiku-5.5", label: "Haiku 5.5" }
-        : { id: "openai/gpt-6-luna", label: "GPT Luna 6" }
+        : { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
     );
   }
 

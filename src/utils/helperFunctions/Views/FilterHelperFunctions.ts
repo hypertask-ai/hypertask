@@ -346,7 +346,7 @@ export const getFilteredSections = (
       : builtinSections;
   }
 
-  const localStorageFilters = getActiveFiltersFromProject(project, runtimeContext)
+  const localStorageFilters = getActiveFiltersFromProject(project)
 
   return applyFilters(
     sections,

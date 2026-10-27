@@ -4,9 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
-import { agentChatContextPayload, readableAgentChatContextIds } from "@/lib/agents/chatContext";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +14,6 @@ type PendingChatMessage = {
   id: string;
   sessionId: string;
   text: string;
-  context?: Prisma.JsonValue;
   userName: string | null;
 };
 
@@ -44,23 +40,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const contextEnabled = await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id);
     const result = await prisma.$transaction(async (tx) => {
-      const agents = await tx.$queryRaw<Array<{ id: string; userId: number }>>`
-        SELECT "id", "userId"
+      const agents = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
         FROM "Agent"
         WHERE "id" = ${agentId}
           AND "revokedAt" IS NULL
         FOR UPDATE
       `;
-      if (agents.length !== 1) return { found: false, messages: [], readableContextIds: new Set<string>() };
-      const agent = agents[0];
+      if (agents.length !== 1) return { found: false, messages: [] };
 
       const subscription = await tx.agentWebhookSubscription.findUnique({
         where: { agentId: agentId },
         select: { active: true },
       });
-      if (subscription?.active) return { found: true, messages: [], readableContextIds: new Set<string>() };
+      if (subscription?.active) return { found: true, messages: [] };
 
       const allowedSessions = ctx.teamScope != null ? await tx.chatSession.findMany({
         where: { agentId, ...await chatContentScopeWhere({ userId: ctx.user.id, agentId, teamScope: ctx.teamScope }, tx) }, select: { id: true },
@@ -72,7 +66,6 @@ export async function GET(request: NextRequest) {
             message."id",
             message."sessionId",
             message."content" AS "text",
-            ${contextEnabled ? Prisma.sql`message."context"` : Prisma.sql`NULL::jsonb`} AS "context",
             COALESCE(author."displayName", owner."displayName") AS "userName",
             message."createdAt"
           FROM "ChatMessage" message
@@ -98,15 +91,12 @@ export async function GET(request: NextRequest) {
           WHERE message."id" = pending."id"
           RETURNING message."id"
         )
-        SELECT pending."id", pending."sessionId", pending."text", pending."context", pending."userName"
+        SELECT pending."id", pending."sessionId", pending."text", pending."userName"
         FROM pending
         JOIN delivered ON delivered."id" = pending."id"
         ORDER BY pending."createdAt" ASC, pending."id" ASC
       `;
-      const readableContextIds = contextEnabled
-        ? await readableAgentChatContextIds(tx, { userId: agent.userId, agentId, teamScope: ctx.teamScope }, messages)
-        : new Set<string>();
-      return { found: true, messages, readableContextIds };
+      return { found: true, messages };
     }, ctx.teamScope != null ? { isolationLevel: "Serializable" } : undefined);
 
     if (!result.found) {
@@ -115,11 +105,7 @@ export async function GET(request: NextRequest) {
         { status: 404 },
       );
     }
-    const messages = result.messages.map(({ context, ...message }) => ({
-      ...message,
-      ...(result.readableContextIds.has(message.id) ? agentChatContextPayload(message.text, context) : {}),
-    }));
-    return NextResponse.json({ success: true, messages });
+    return NextResponse.json({ success: true, messages: result.messages });
   } catch (error) {
     console.error("[mcp chat] GET pending failed:", error);
     return NextResponse.json(

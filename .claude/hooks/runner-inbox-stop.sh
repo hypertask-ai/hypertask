@@ -51,14 +51,7 @@ slot_of() {
   case "$1" in
     "HT Product Lead"|"INFRA MANAGER") echo infra-manager ;;
     "SPEED RUNNER") echo speed-runner ;;
-    *)
-      if [[ $1 =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then echo "runner-${BASH_REMATCH[1]}"
-      else
-        jq -er --arg name "$1" '
-          .[] | select(.name == $name or any(.aliases[]; . == $name))
-          | .slot | select(test("^[a-z][a-z0-9-]*$") and (startswith("runner-") | not))' \
-          "${RUNNER_TARGETS_FILE:-$HOME/projects/company-skills/kit/adapters/hypertask/lead-wake.json}" 2>/dev/null
-      fi ;;
+    *) [[ $1 =~ ^RUNNER\ ([1-9][0-9]*)$ ]] && echo "runner-${BASH_REMATCH[1]}" ;;
   esac
 }
 slot=$(slot_of "$name"); [ -n "$slot" ] || exit 0

@@ -194,21 +194,6 @@ out=$(hook "$LEGACY_NAME" "$pl" post | ctx)
 case "$out" in 'PostToolUse|Board events for HT Product Lead,'*'1) legacy fallback') ok "fallback name takes the same slot with the new display label";; *) bad "fallback slot: $out";; esac
 eq "both names share the same delivery state" "$(undelivered infra-manager)|$(hook 'HT Product Lead' "$pl" post)" "0|"
 eq "SPEED RUNNER gets its own slot" "$(hook 'SPEED RUNNER | perf' "$pl" prompt | ctx | tail -1)" "1) for speed"
-export RUNNER_TARGETS_FILE=$T/lead-targets.json
-printf '[{"name":"HT Test Lead","slot":"ht-test-lead","aliases":["HT Test"]}]' > "$RUNNER_TARGETS_FILE"
-ev ht-test-lead lead1 'for the configured lead'
-eq "configured lead gets its own event" "$(hook 'HT Test Lead | work' "$pl" post | ctx | tail -1)" "1) for the configured lead"
-eq "configured lead receives each event once" "$(hook 'HT Test Lead' "$pl" post)|$(undelivered ht-test-lead)" "|0"
-ev ht-test-lead lead2 'for the alias'
-eq "configured alias shares its lead slot" "$(hook 'HT Test' "$pl" prompt | ctx | tail -1)" "1) for the alias"
-ev ht-test-lead lead3 'not for another session'
-eq "unknown name cannot consume lead events" "$(hook 'HT Other Lead' "$pl" post)|$(undelivered ht-test-lead)" "|1"
-printf '[{"name":"HT Test Lead","slot":"../outside","aliases":[]}]' > "$RUNNER_TARGETS_FILE"
-eq "invalid configured slot is inert" "$(hook 'HT Test Lead' "$pl" post)" ""
-rm "$RUNNER_TARGETS_FILE"
-ev infra-manager lead-control 'legacy without private config'
-eq "missing private config leaves legacy delivery intact" "$(hook 'HT Product Lead' "$pl" post | ctx | tail -1)" "1) legacy without private config"
-unset RUNNER_TARGETS_FILE
 # Waiter (asyncRewake): wakes with exit 2 only for a new event, once, one per session.
 wait_hook() { echo "$pl" | SHIP_SESSION_NAME="$1" SHIP_SESSION_PID="$2" RUNNER_EVENTS_POLL=0.1 RUNNER_EVENTS_WAIT_MAX="${3:-1}" "$HOOK" wait; }
 sleep 300 & LIVE=$!

@@ -1,4 +1,3 @@
-import { HTPR_5908_RETYPE_LOWERCASE_FLAG } from "@/lib/flags/definitions/htpr-5908-retype-lowercase";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import Highlight from "@tiptap/extension-highlight";
 import OrderedList from "@tiptap/extension-ordered-list";
@@ -93,8 +92,6 @@ const useTiptap = ({
   mentionProjectId,
   placeholder,
 }: IProps) => {
-  const skillProjectIdRef = useRef(mentionProjectId);
-  skillProjectIdRef.current = mentionProjectId;
   const isApple = useDeviceContext();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
@@ -103,9 +100,6 @@ const useTiptap = ({
   const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
   const localWritingAssistanceRef = useRef(localWritingAssistance);
   localWritingAssistanceRef.current = localWritingAssistance;
-  const retypeLowercase = useFlag(HTPR_5908_RETYPE_LOWERCASE_FLAG);
-  const retypeLowercaseRef = useRef(retypeLowercase);
-  retypeLowercaseRef.current = retypeLowercase;
   const autocapUndo = useFlag(HTPR_6906_AUTOCAP_UNDO_FLAG);
   const autocapUndoRef = useRef(autocapUndo);
   if (autocapUndo) autocapUndoRef.current = true;
@@ -177,7 +171,7 @@ const useTiptap = ({
       }),
       Underline,
 
-      SlashCommands(mode, editorId, () => skillProjectIdRef.current),
+      SlashCommands(mode, editorId),
       Snippets,
       Link.extend({ inclusive: false }).configure({
         openOnClick: true,
@@ -226,7 +220,6 @@ const useTiptap = ({
       LocalWritingAssistance.configure({
         localCapitalizationEnabled: () => localWritingAssistanceRef.current,
         undoCapitalizationEnabled: () => autocapUndoRef.current,
-        retypeLowercaseEnabled: () => retypeLowercaseRef.current,
       }),
     ],
 

@@ -29,20 +29,7 @@ export function normalizeTaskInput<T extends Record<string, any>>(
   input: T
 ): T {
   const normalized = { ...input };
-  const id = typeof normalized.id === 'string' ? parseInt(normalized.id, 10) : normalized.id;
-  if (id !== undefined && normalized.task_id === undefined) {
-    (normalized as any).task_id = id;
-  }
   coerceTaskIdInput(normalized);
-  if (id !== undefined) {
-    const taskId = Array.isArray(normalized.task_id) && normalized.task_id.length === 1
-      ? normalized.task_id[0]
-      : normalized.task_id;
-    if (id !== taskId) {
-      throw new Error('id and task_id must identify the same task when both are provided');
-    }
-  }
-  delete normalized.id;
   let urlFound = false;
   let urlParseResult: { projectId: number; uniqueIndex: number } | null = null;
   let ticketNumberFound: string | null = null;

@@ -120,7 +120,7 @@
               "selector": ".app-shell-rail [aria-label=\"Search\"]",
               "box": {
                 "x": 6,
-                "y": 310,
+                "y": 272,
                 "width": 36,
                 "height": 34
               }
@@ -368,7 +368,7 @@
               "selector": ".app-shell-rail [aria-label=\"Search\"]",
               "box": {
                 "x": 6,
-                "y": 310,
+                "y": 272,
                 "width": 36,
                 "height": 34
               }
@@ -795,15 +795,13 @@
       }
     }
   },
-  "sourceCommit": "3c4e12bf8bac0a9315cc4c1cda5086bff7dcbf70",
+  "sourceCommit": "fc38d8b752ac871f03e8f189d5961fa5f2dd7004",
   "flagMode": "live-like",
   "flagSnapshotSha256": "dbe55bec498b41eea368b0b8f51e532ef208dfb6565338725bb755822439f505",
   "approvedIn": {
     "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-4060/253",
     "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-4060/253",
     "ticket/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
-    "board/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
-    "inbox/Desktop": "https://app.hypertask.ai/detail/project-15/7298",
-    "app-shell/Desktop": "https://app.hypertask.ai/detail/project-15/7298"
+    "board/Desktop": "https://app.hypertask.ai/detail/project-15/7650"
   }
 }

@@ -166,7 +166,7 @@ function harness(options = {}) {
     '@/utils/controllers/projects/getAllIncludes': access,
     '@/utils/controllers/pages/pageService': service,
     '@/lib/auth/currentUser': { loadCurrentUser: async () => options.noSession ? null : { userId } },
-    '@/lib/flags': { isFeatureEnabled: async () => options.flag !== false },
+    '@/lib/flags': { HTPR_6924_REST_COMPAT_FLAG: 'compat', isFeatureEnabled: async (key) => key === flag ? options.flag !== false : Boolean(options.compat) },
     'next/headers': { cookies: async () => ({ get: () => options.noSession ? undefined : { value: 'synthetic' } }) },
     '@/utils/edgeHelpers': { isValidUser: () => ({ isValid: true, user: { id: userId } }) },
     '@/lib/api/rateLimit': { checkRestRateLimit: async () => options.rateLimited ? new Response('{}', { status: 429 }) : null },
@@ -389,8 +389,8 @@ test('new session endpoints reject a bearer token without a browser session', as
   const h = harness({ noSession: true });
   assert.equal((await h.request('[publicId]/links', 'POST', { task_id: 11 })).status, 401);
 });
-test('link endpoint applies write rate limiting before mutation', async () => {
-  const h = harness({ rateLimited: true });
+test('link endpoint reuses compat write rate limiting before mutation', async () => {
+  const h = harness({ compat: true, rateLimited: true });
   const before = plain(h.state);
   assert.equal((await h.request('[publicId]/links', 'POST', { task_id: 11 })).status, 429);
   assert.deepEqual(plain(h.state), before);

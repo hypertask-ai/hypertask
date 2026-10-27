@@ -325,18 +325,13 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   }, [identity, ready, queryClient]);
 
   const deleteSession = useCallback(async (sessionId: string) => {
-    if (!ready) return false;
+    if (!ready) return;
     try {
       await AI_Chat_API.deleteSession(sessionId);
       await evictSession(sessionId);
-      return true;
     } catch (error) {
-      if ((error as { response?: { status?: number } }).response?.status === 404) {
-        await evictSession(sessionId);
-        return true;
-      }
+      if ((error as { response?: { status?: number } }).response?.status === 404) await evictSession(sessionId);
       console.error("Error deleting chat session:", error);
-      return false;
     }
   }, [identity, ready, queryClient]);
 

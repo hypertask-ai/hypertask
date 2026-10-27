@@ -44,7 +44,6 @@ const inboxZeroNotificationSelect = {
   seen: true,
   createdAt: true,
   fromUserId: true,
-  fromAgentId: true,
   taskId: true,
   task: {
     select: {
@@ -230,7 +229,6 @@ const previewVersionFor = (
         seen: notification.seen,
         createdAt: notification.createdAt.toISOString(),
         fromUserId: notification.fromUserId,
-        fromAgentId: notification.fromAgentId,
         taskId: notification.taskId,
         notificationInviteId: notification.notification_inviteId,
         task: notification.task
@@ -253,8 +251,7 @@ export const evaluateInboxZero = (
   userId: number,
   rules: InboxZeroRules,
   now = new Date(),
-  doneTitlesByProject?: ReadonlyMap<number, ReadonlySet<string>> | null,
-  agentRowsAreNotOwn = false
+  doneTitlesByProject?: ReadonlyMap<number, ReadonlySet<string>> | null
 ): InboxZeroPreview & { notificationIds: number[] } => {
   const cutoff = new Date(now.getTime() - rules.threshold * 24 * 60 * 60 * 1000);
   const items = groupVisibleInboxItems(notifications);
@@ -283,11 +280,7 @@ export const evaluateInboxZero = (
     }
 
     if (
-      item.notifications.some(
-        (notification) =>
-          notification.fromUserId === userId &&
-          !(agentRowsAreNotOwn && notification.fromAgentId)
-      )
+      item.notifications.some((notification) => notification.fromUserId === userId)
     ) {
       matchesByCategory.ownActions.add(item.key);
     }

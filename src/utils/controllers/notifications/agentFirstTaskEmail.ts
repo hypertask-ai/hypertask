@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import type { Task } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { unsubscribeHeaders } from "@/lib/email/unsubscribe";
@@ -77,7 +77,8 @@ async function sendAgentFirstTaskEmail(
     }),
   ]);
   if (
-    !agent || !board || board.ownerId !== agent.userId || !board.owner.email
+    !agent || !board || board.ownerId !== agent.userId || !board.owner.email ||
+    !(await isFeatureEnabled(HTPR_7028_FIRST_TASK_EMAIL_FLAG, board.ownerId))
   ) return;
 
   const claimed = await prisma.$transaction(async (tx) => {

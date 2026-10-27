@@ -53,7 +53,6 @@ stubModule("src/lib/prisma.ts", {
         return teamKeys[provider] ? { enabled: true, ciphertext: teamKeys[provider] } : null;
       },
     },
-    agentByokApiKey: { findUnique: async () => null },
     userSetting: { findUnique: async () => null },
   },
 });
@@ -184,8 +183,8 @@ test("paid teams still resolve their managed gateway or direct BYOK key, never t
     const selected = await selectTaskWriterModel({ projectId, userId, aiFeature: "taskWriter" });
     assert.equal(selected.provider, "claude");
     assert.equal(selected.usageProvider, provider === "managed_gateway" ? "claude" : "byok:claude");
-    assert.equal(selected.modelId, "claude-sonnet-5.5");
-    assert.equal(selected.model.modelId, provider === "managed_gateway" ? "anthropic/claude-sonnet-5.5" : "claude-sonnet-5-5");
+    assert.equal(selected.modelId, "claude-haiku-5.5");
+    assert.equal(selected.model.modelId, provider === "managed_gateway" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5");
   }
   assert.equal(inferenceCalls, 0);
   assert.deepEqual(reports, []);

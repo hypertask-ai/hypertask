@@ -29,44 +29,45 @@ test('starts on the newest board with 3 steps for the CLI and for MCP', () => {
 })
 
 for (const consolidated of [false, true]) {
-  for (const flatSchema of [false, true]) {
-    for (const agentRole of ['read', 'write'] as const) {
-      test(`catalog consolidated=${consolidated}, flat=${flatSchema}, role=${agentRole}: every step is advertised and valid`, async () => {
-        const tools = selectMcpTools(resolvePortableTools(MCP_TOOLS), consolidated, {
-          agent: true,
-          agentRole,
-        }, flatSchema)
-        const request = new Request('https://mcp.example.test/mcp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+  for (const v2 of [false, true]) {
+    for (const flatSchema of [false, true]) {
+      for (const agentRole of ['read', 'write'] as const) {
+        test(`catalog consolidated=${consolidated}, v2=${v2}, flat=${flatSchema}, role=${agentRole}: every step is advertised and valid`, async () => {
+          const tools = selectMcpTools(resolvePortableTools(MCP_TOOLS), consolidated, {
+            agent: true,
+            ...(v2 ? { agentRole } : {}),
+          }, v2, flatSchema)
+          const request = new Request('https://mcp.example.test/mcp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+          })
+          const response = await handleStatelessMcpRequest(request, { token: 'fixture-token', clientId: '6' }, tools)
+          const { result: { tools: catalog } } = await response.json()
+          const { nextSteps } = buildGuidedStart(newestBoard, consolidated, agentRole)
+          assert.deepEqual(nextSteps.map((step) => step.step), agentRole === 'read'
+            ? ['See the board', 'Read the board rules']
+            : ['See the board', 'Create a first task', 'Read the board rules'])
+          const ajv = new Ajv({ strict: false })
+          addFormats(ajv)
+          for (const step of nextSteps) {
+            const tool = catalog.find((entry: { name: string }) => entry.name === step.tool)
+            assert.ok(tool, `${step.tool} must be advertised`)
+            const validate = ajv.compile(tool.inputSchema)
+            assert.equal(validate(step.arguments), true, `${step.tool}: ${JSON.stringify(validate.errors)}`)
+            assert.deepEqual(step.arguments, consolidated
+              ? { action: step.step === 'See the board' ? 'list' : step.step === 'Create a first task' ? 'create' : 'playbook', input: {
+                  project_id: newestBoard.id,
+                  ...(step.step === 'Create a first task' ? { title: 'My first task' } : {}),
+                } }
+              : { project_id: newestBoard.id, ...(step.step === 'Create a first task' ? { title: 'My first task' } : {}) })
+            assert.equal(validate({ ...step.arguments, project_id: 'invalid', input: 'invalid' }), false)
+          }
         })
-        const response = await handleStatelessMcpRequest(request, { token: 'fixture-token', clientId: '6' }, tools)
-        const { result: { tools: catalog } } = await response.json()
-        const { nextSteps } = buildGuidedStart(newestBoard, consolidated, agentRole)
-        assert.deepEqual(nextSteps.map((step) => step.step), agentRole === 'read'
-          ? ['See the board', 'Read the board rules']
-          : ['See the board', 'Create a first task', 'Read the board rules'])
-        const ajv = new Ajv({ strict: false })
-        addFormats(ajv)
-        for (const step of nextSteps) {
-          const tool = catalog.find((entry: { name: string }) => entry.name === step.tool)
-          assert.ok(tool, `${step.tool} must be advertised`)
-          const validate = ajv.compile(tool.inputSchema)
-          assert.equal(validate(step.arguments), true, `${step.tool}: ${JSON.stringify(validate.errors)}`)
-          assert.deepEqual(step.arguments, consolidated
-            ? { action: step.step === 'See the board' ? 'list' : step.step === 'Create a first task' ? 'create' : 'playbook', input: {
-                project_id: newestBoard.id,
-                ...(step.step === 'Create a first task' ? { title: 'My first task' } : {}),
-              } }
-            : { project_id: newestBoard.id, ...(step.step === 'Create a first task' ? { title: 'My first task' } : {}) })
-          assert.equal(validate({ ...step.arguments, project_id: 'invalid', input: 'invalid' }), false)
-        }
-      })
+      }
     }
   }
 }
-
 
 test('no board gives no start board and no steps', () => {
   assert.deepEqual(buildGuidedStart(null, false, 'write'), { startBoard: null, nextSteps: [] })

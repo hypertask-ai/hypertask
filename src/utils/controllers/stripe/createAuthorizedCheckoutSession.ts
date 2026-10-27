@@ -2,7 +2,6 @@ import prisma from "@/lib/prisma";
 import { deriveTeamBilling } from "@/lib/deriveCurrentBoardBilling";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
-import { HTPR_7938_FOURTEEN_DAY_TRIAL_FLAG } from "@/lib/flags/definitions/htpr-7938-fourteen-day-trial";
 import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import {
   createStripeCheckout,
@@ -367,14 +366,6 @@ export async function createAuthorizedCheckoutSession(
   if (signupIntent && !enabled && !(await readTeamCheckoutAttempt(teamId))) {
     return { status: 403, body: { message: "Start plan is not available" } };
   }
-  let fourteenDayTrial = false;
-  if (enabled) {
-    try {
-      fourteenDayTrial = await isFeatureEnabled(HTPR_7938_FOURTEEN_DAY_TRIAL_FLAG, userId);
-    } catch {
-      console.warn("Trial duration flag lookup failed; retaining existing checkout terms");
-    }
-  }
   const stripe = getStripeInstance();
 
   return withTeamCheckoutReservation(teamId, async (reservation) => {
@@ -477,7 +468,7 @@ export async function createAuthorizedCheckoutSession(
       attempt = null;
     }
     if (!enabled && attempt?.state === "in_flight" && staleInFlight &&
-      (effectiveTrialDays(attempt.desired) === 7 || attempt.desired.checkoutIntent !== undefined)) {
+      (effectiveTrialDays(attempt.desired) === 7 || attempt.desired.checkoutIntent === "signup-straight-to-board")) {
       const staleSession = await reconcileAttemptSession(stripe, attempt, teamSessions);
       if (staleSession) {
         if (!teamSessions.some((session) => session.id === staleSession.id)) {
@@ -535,8 +526,7 @@ export async function createAuthorizedCheckoutSession(
     const knownSessions = reservedSession ? [...teamSessions, reservedSession] : teamSessions;
     const awaitingPlanSubscription = knownSessions.some((session) => {
       if (session.status !== "complete" ||
-        (session.metadata?.checkoutIntent !== "signup-straight-to-board" &&
-          session.metadata?.checkoutIntent !== "start-plan" && session.metadata?.trialDays !== "7")) return false;
+        (session.metadata?.checkoutIntent !== "signup-straight-to-board" && session.metadata?.trialDays !== "7")) return false;
       const subscriptionId = checkoutSubscriptionId(session);
       return !subscriptionId || !subscriptions.some((subscription) => subscription.id === subscriptionId);
     });
@@ -551,7 +541,7 @@ export async function createAuthorizedCheckoutSession(
       return { status: 409, body: { message: "Trial already used" } };
     }
     const rolloutAttempt = attempt && (effectiveTrialDays(attempt.desired) === 7 ||
-      attempt.desired.checkoutIntent !== undefined);
+      attempt.desired.checkoutIntent === "signup-straight-to-board");
     const reservedSubscription = reservedSession && subscriptions.find((subscription) =>
       subscription.id === checkoutSubscriptionId(reservedSession));
     if (!enabled && attempt && rolloutAttempt &&
@@ -573,7 +563,7 @@ export async function createAuthorizedCheckoutSession(
       }
       const sameEntry = signupIntent
         ? attempt.desired.checkoutIntent === "signup-straight-to-board"
-        : attempt.desired.checkoutIntent !== "signup-straight-to-board" && attempt.desired.checkoutMode === mode &&
+        : !attempt.desired.checkoutIntent && attempt.desired.checkoutMode === mode &&
           attempt.desired.priceId === priceId && attempt.desired.ownerUserId === userId;
       if (sameEntry && attempt.desired.returnUrl === returnUrl && attempt.desired.cancelUrl === cancelUrl &&
         savedSession?.status === "open" && sessionMatchesDesired(savedSession, attempt.desired)) {
@@ -584,7 +574,7 @@ export async function createAuthorizedCheckoutSession(
       return { status: 409, body: { message: "An existing checkout must be finished or cancelled before starting another" } };
     }
     if (!enabled && openSessions.some((session) => session.metadata?.trialDays === "7" ||
-      session.metadata?.checkoutIntent === "signup-straight-to-board" || session.metadata?.checkoutIntent === "start-plan")) {
+      session.metadata?.checkoutIntent === "signup-straight-to-board")) {
       return { status: 409, body: { message: "An existing checkout must be finished or cancelled before starting another" } };
     }
     if (signupIntent) {
@@ -629,22 +619,8 @@ export async function createAuthorizedCheckoutSession(
       }
       mode = team.team_activity?.hasCompletedTrial || hasHistoricalTrial(subscriptions) || hasCompletedTrialCheckout
         ? "Normal" : "Trial";
+      if (preview) return { status: 200, body: { canStartPlan: true, trialDays: mode === "Trial" ? 7 : 0 } };
     }
-    const savedDesired = attempt && attempt.desired.ownerUserId === userId &&
-      (signupIntent ? attempt.desired.checkoutIntent === "signup-straight-to-board"
-        : attempt.desired.checkoutIntent !== "signup-straight-to-board") &&
-      attempt.desired.checkoutMode === mode && attempt.desired.priceId === priceId &&
-      attempt.desired.returnUrl === returnUrl && attempt.desired.cancelUrl === cancelUrl &&
-      reservedSession?.status !== "expired" ? attempt.desired : null;
-    let trialDays = 0;
-    if (mode === "Trial") {
-      trialDays = fourteenDayTrial ? 14 : 7;
-      if (savedDesired) trialDays = effectiveTrialDays(savedDesired);
-    }
-    let checkoutIntent: CheckoutAttemptDesired["checkoutIntent"];
-    if (savedDesired) checkoutIntent = savedDesired.checkoutIntent;
-    else if (signupIntent) checkoutIntent = "signup-straight-to-board";
-    else if (enabled && fourteenDayTrial) checkoutIntent = "start-plan";
     const desired: CheckoutAttemptDesired = {
       cancelUrl: cancelUrl!,
       checkoutMode: mode!,
@@ -654,18 +630,9 @@ export async function createAuthorizedCheckoutSession(
       quantity: billedQuantity,
       returnUrl: returnUrl!,
       teamId: team.id,
-      ...(enabled ? { ownerUserId: userId, trialDays } : {}),
-      ...(checkoutIntent ? { checkoutIntent } : {}),
+      ...(enabled ? { ownerUserId: userId, trialDays: mode === "Trial" ? 7 : 0 } : {}),
+      ...(signupIntent ? { checkoutIntent: "signup-straight-to-board" as const } : {}),
     };
-    if (!attempt && remainingOpenSessions.some((session) =>
-      session.metadata?.checkoutMode === "Trial" &&
-      (session.metadata?.trialDays === "7" || session.metadata?.checkoutIntent === "start-plan" ||
-        session.metadata?.checkoutIntent === "signup-straight-to-board") &&
-      (Number(session.metadata?.trialDays) !== effectiveTrialDays(desired) ||
-        session.metadata?.checkoutIntent !== desired.checkoutIntent))) {
-      return { status: 409, body: { message: "An existing checkout must be finished or cancelled before changing trial terms" } };
-    }
-    if (preview) return { status: 200, body: { canStartPlan: true, trialDays } };
     if (attempt?.state === "prepared" && !desiredMatches(attempt.desired, desired)) {
       await reservation.clear();
       attempt = null;

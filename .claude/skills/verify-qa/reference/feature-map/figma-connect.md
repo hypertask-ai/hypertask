@@ -19,10 +19,6 @@ Settings > Accounts (`/settings/accounts`, `src/components/Modals/Settings/Accou
 
 Checklist written before QA; screenshots of Settings > Accounts on desktop and phone; the `/api/figma/connection` status; the OAuth redirect host. Record account ids only.
 
-### Automated evidence
-
-`node --test tests/figma-accounts-settings.test.cjs` renders Accounts with mocked connection responses and checks configured OAuth links, the disabled unconfigured button, and the connected name with Disconnect.
-
 ## Cleanup
 
 None: the run never links a Figma account.

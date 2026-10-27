@@ -155,13 +155,14 @@ test("payment flag is independent from subscription_started and flag off preserv
   }
 });
 
-test("payment eligibility excludes QA, guests, and missing users", async () => {
-  for (const scenario of ["qa", "guest", "missing"]) {
+test("payment eligibility excludes QA, guests, missing users and activation-disabled users", async () => {
+  for (const scenario of ["qa", "guest", "missing", "disabled"]) {
     const h = harness();
     h.setFlagEnabled(subscriptionFlag, false);
     if (scenario === "qa") h.prisma.team.findFirst = async () => ({ id: "team", googleAccount: { userId: 985 } });
     if (scenario === "guest") h.users.get(123).uid = "guest_123";
     if (scenario === "missing") h.users.delete(123);
+    if (scenario === "disabled") h.setFlagEnabled("htpr-7034-activation-analytics", false);
     await record(h);
     await h.drain();
     assert.deepEqual(h.captures, [], scenario);

@@ -219,22 +219,22 @@ test("current-account sign-out restores the old identity when revocation fails",
   assert.deepEqual(accounts.assignedPaths, []);
 });
 
-test("all-account sign-out uses server browser revocation and invalidates auth state", async (t) => {
-  const calls = [];
-  t.mock.method(global, "fetch", async (url, options) => {
-    assert.equal(url, "/api/auth/force-signout");
-    assert.equal(options.method, "POST");
-    calls.push("server");
-    return { ok: true, json: async () => ({ browserCookiesCleared: true, serverSessionsRevoked: true }) };
+test("all-account sign-out uses Better Auth's full multi-session logout", async (t) => {
+  let signOutCalls = 0;
+  const authClient = baseClient({
+    signOut: async () => {
+      signOutCalls += 1;
+      return { data: { success: true } };
+    },
   });
-  const authClient = { ...baseClient(), $store: { notify: signal => calls.push(signal) } };
   const accounts = loadAccountsModule(authClient);
   t.after(accounts.restore);
+
   assert.equal(await accounts.signOutAllAccounts(), true);
-  assert.deepEqual(calls, ["server", "$sessionSignal"]);
+  assert.equal(signOutCalls, 1);
 });
 
-test("generic sign-out surfaces keep the browser-wide action and gate the new copy", () => {
+test("both generic sign-out surfaces use the multi-account confirmation", () => {
   const commandSource = fs.readFileSync(
     path.join(__dirname, "../src/components/commands.tsx"),
     "utf8",
@@ -257,10 +257,5 @@ test("generic sign-out surfaces keep the browser-wide action and gate the new co
   assert.match(commandSource, /CommandMode\.Logout[\s\S]*?<SignOutModal/);
   assert.match(sidebarSource, /<SignOutModal/);
   assert.match(modalSource, /Sign out of all accounts/);
-  assert.match(modalSource, /signOutCurrentAccount/);
-  assert.match(
-    modalSource,
-    /projectEntryEnabled[\s\S]*?Sign out of every account on this browser\?[\s\S]*?!projectEntryEnabled && nextAccount[\s\S]*?Sign out of all accounts/,
-  );
-  assert.match(modalSource, /projectEntryEnabled \? handleAllSignOut\(\) : handleCurrentSignOut\(\)/);
+  assert.match(modalSource, /You’ll switch to/);
 });

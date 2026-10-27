@@ -3,6 +3,7 @@ import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "./route";
 import { taskReadQuery } from "./read-query";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import tasksGetAll from "@/utils/controllers/tasks/getAll";
 
 const route = taskWriteRoute({
@@ -15,7 +16,14 @@ const route = taskWriteRoute({
       if (!projectId) {
         return NextResponse.json("Missing Required Data", { status: 200 });
       }
-      const response = taskReadQuery(request).compat === "htpr-6924"
+      let compact = false;
+      if (taskReadQuery(request).compat === "htpr-6924") {
+        try {
+          compact = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, session.userId);
+        } catch {
+        }
+      }
+      const response = compact
         ? await tasksGetAll(projectId, session.userId, "compact")
         : await tasksGetAll(projectId, session.userId);
       return NextResponse.json(response.json, { status: response.status });

@@ -1,7 +1,9 @@
 import { LogType, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_QA_USER_ID, HTPR_7026_AGENT_CONNECT_CHECK_FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7549_FIRST_TASK_POINTER_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
+import { isOnboardingQaArmed } from "@/lib/onboarding/qaArm";
+import { getRedis } from "@/lib/redis";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { renderAgentConnectedEmail } from "@/lib/onboarding/emails/agentConnected";
 import { renderAgentConnectedEmail as renderLegacyAgentConnectedEmail } from "@/utils/controllers/notifications/emailTemplates";
@@ -55,8 +57,21 @@ export async function getFirstAgentConnection(
   return row ? { at: row.createdAt, client: await connectionClient(userId, row) } : null;
 }
 
+export async function isAgentConnectCheckEnabledFor(userId: number): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  let armed = false;
+  if (user?.email) {
+    try {
+      armed = await isOnboardingQaArmed(user.email, await getRedis());
+    } catch {
+    }
+  }
+  return isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, armed ? FEATURE_FLAG_QA_USER_ID : userId);
+}
+
 export async function sendFirstAgentConnectedEmail(userId: number, logId: number): Promise<void> {
   try {
+    if (!(await isAgentConnectCheckEnabledFor(userId))) return;
     const first = await firstConnectionRow(userId);
     if (!first || first.id !== logId) return;
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
@@ -93,7 +108,7 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
 export async function getAgentConnectCardState(userId: number, overlay = false) {
   const eligible = overlay
     ? await isFeatureEnabled(HTPR_7549_FIRST_TASK_POINTER_FLAG, userId) && await isFeatureEnabled(HTPR_7550_CONNECT_OVERLAY_FLAG, userId)
-    : true;
+    : await isAgentConnectCheckEnabledFor(userId);
   if (!eligible) return { eligible, connected: false, dismissed: false };
   const [connection, dismissed, board] = await Promise.all([
     getFirstAgentConnection(userId),

@@ -54,7 +54,7 @@ async function withPalette(t, config, check) {
   const stubbed = new Set();
   const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
+  const flags = { 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const TaskContext = React.createContext(undefined);
   const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
@@ -1050,7 +1050,6 @@ test('edit-mode and empty writer events retain inline writer with 6937 off but r
     await withPalette(t, { enabled, newWindow, open: false }, async ({ source, jiti, mountProbe, dom, values }) => {
       source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
       source('src/components/RTE/Components/EmojiGifPicker.tsx', { OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
-      source('src/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar.ts', { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: 'htpr-7800-skill-runs-in-sidebar' });
       const { useTaskDetailEditorEvents } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorEvents.tsx'));
       const openings = [];
       const context = { mode: 'read-edit-description', id: 'description', shouldTriggerAiTaskWriter: true,
@@ -1080,7 +1079,6 @@ test('description prompts and comment AI toggle, mode trigger, hidden trigger an
       stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({}) });
       stub(require.resolve('next/navigation'), { useRouter: () => ({}), useSearchParams: () => new URLSearchParams() });
       source('src/components/RTE/Components/EmojiGifPicker.tsx', { default: () => null, OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
-      source('src/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar.ts', { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: 'htpr-7800-skill-runs-in-sidebar' });
       source('src/lib/contexts/TaskDetail/TiptapProvider.tsx', { default: ({ children }) => children });
       source('src/components/RTE/Components/TiptapBubbleMenu.tsx', { default: () => null });
       source('src/components/RTE/Components/TiptapMainContainer.tsx', { default: () => null });
@@ -1734,20 +1732,3 @@ test('three-switch creation marks the new ticket and leaves opening to its page 
     assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), true);
   });
 });
-
-for (const modeOutline of [false, true]) for (const mobile of [false, true]) {
-  test(`AMOLED mode outline flag ${modeOutline} preserves tab switching on ${mobile ? 'phone' : 'desktop'}`, async (t) => {
-    await withPalette(t, { newWindow: true, modeOutline, mobile }, async ({ press, input, values }) => {
-      const tabs = document.querySelector('[aria-label="Commands mode"]');
-      assert.ok(tabs);
-      for (const token of ['[.amoled_&]:outline-solid', '[.amoled_&]:outline-1', '[.amoled_&]:outline-[var(--border-light-gray-thin)]']) {
-        assert.equal(tabs.classList.contains(token), modeOutline);
-      }
-      await React.act(async () => [...tabs.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.startsWith('New Task')).click());
-      assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
-      assert.ok(input());
-      await press('Tab', {}, input());
-      assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
-    });
-  });
-}

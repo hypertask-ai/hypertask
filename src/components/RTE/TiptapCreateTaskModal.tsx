@@ -1,7 +1,5 @@
 import { PlanLimitRefusal } from "@/lib/planLimitsClient";
-import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
-import { HTPR_8028_MOBILE_WRITER_SAVE_FLAG } from "@/lib/flags/definitions/htpr-8028-mobile-writer-save";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -90,7 +88,6 @@ const TiptapCreateTaskModal = () => {
     HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   );
   const createSubmissionRef = useRef(false);
-  const appliedRawWriterPromptsRef = useRef(new Set<string>());
   const {
     editMode,
     setEditMode,
@@ -185,13 +182,11 @@ const TiptapCreateTaskModal = () => {
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  const mobileWriterSaveFlag = useFlag(HTPR_8028_MOBILE_WRITER_SAVE_FLAG);
-  const mobileWriterSave = Boolean(isMbl && mobileWriterSaveFlag);
   const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
   let composeShortcutCapture = true;
   if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
   let newTaskWindow = false;
-  if (composeEnabled && newTaskWindowFlag && !mobileWriterSave) newTaskWindow = true;
+  if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const [writerOpen, setShouldShowAITaskWriter] = useState(
@@ -438,7 +433,6 @@ const TiptapCreateTaskModal = () => {
     setShowConfirmationModal(false);
     setFilesDropped([]);
     pendingAttachmentUploadsRef.current.clear();
-    appliedRawWriterPromptsRef.current.clear();
     createTaskAttachmentsRef.current = [];
     setNewCommentAttachments([]);
     setTrigger((current) => !current);
@@ -466,7 +460,7 @@ const TiptapCreateTaskModal = () => {
 
   const CtrlEnterHandler = async (
     param?: TSendBackButtonParam,
-    formValuesOverride?: Partial<IForm>,
+    formValuesOverride?: IForm,
   ) => {
     console.log("🚀 ~ CtrlEnterHandler ~ canSave:", canSave);
     if (isRecording) return;
@@ -1012,20 +1006,6 @@ const TiptapCreateTaskModal = () => {
                 projectAssignees={projectAssignees}
                 mobileCreateTask={mobileCreateTask}
                 applyCreateTaskResult={applyCreateTaskResult}
-                onCreateTaskFailure={mobileWriterSave ? async (prompt) => {
-                  let description = editor?.getHTML() ?? formValues.description;
-                  const rawPrompt = prompt.trim();
-                  if (rawPrompt && !appliedRawWriterPromptsRef.current.has(rawPrompt) && rawPrompt !== editor?.getText().trim()) {
-                    description += `<p>${escapeHtml(rawPrompt).replace(/\n/g, "<br>")}</p>`;
-                    editor?.commands.setContent(description);
-                    handleChange("description", description);
-                    appliedRawWriterPromptsRef.current.add(rawPrompt);
-                  }
-                  const title = getCurrentTitle() || editor?.getText().trim().slice(0, 500) || rawPrompt.slice(0, 500);
-                  if (!title) return false;
-                  applyTaskWriterTitle(title);
-                  return (await CtrlEnterHandler("Save", { title, description })) === true;
-                } : undefined}
                 project={projectForContext}
                 EscapeHandler={() => {
                   closeAiTaskWriter();

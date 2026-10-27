@@ -31,11 +31,6 @@
 - For hello, redacted identity, board and next-step payloads from both transports, the same-credential catalog comparison and flag state.
 - Account or agent identity used, merge sha and deployment success, and the local test results.
 
-### Automated evidence
-
-`node --test tests/get-tasks-single-identifier.test.cjs` checks scalar and list ticket identifiers, numeric task ids, invalid or missing identifiers, and wire-schema JSON conversion.
-`node --test tests/htpr-7519-hello-guided-start.test.cjs` checks hello identity, role/catalog-aware next steps, title fallback, and newest-board selection beyond the first 50 with mocked storage.
-
 ## Cleanup
 
 Read-only calls. No board writes or fixtures.

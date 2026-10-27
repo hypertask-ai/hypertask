@@ -21,7 +21,7 @@ export const getViewAppliedArchivedTasks = (
   const inSection = archivedTasks.filter((task) => task.sectionId === sectionId);
   if (!inSection.length || !project) return [...inSection].sort(byMostRecentlyArchived);
 
-  const filters = getActiveFiltersFromProject(project, runtimeContext);
+  const filters = getActiveFiltersFromProject(project);
   const pseudoSection: ISection = {
     section_title: "",
     sectionId,

@@ -44,7 +44,7 @@ async function replayOnce(h: Harness, event: string) {
   assert.equal(h.intentRows[0].processedAt, null);
   assert.equal(h.captures.length, 0);
   assert.equal(h.jobs.length, 0);
-  const enqueueFlags = event === "agent_connected" ? ["htpr-7292-shared-account-category"] : [];
+  const enqueueFlags = event === "agent_connected" ? ["htpr-7034-activation-analytics", "htpr-7292-shared-account-category"] : [];
   assert.deepEqual([...new Set(h.flagChecks.map(({ key }: any) => key))], h.flagChecks.length ? enqueueFlags : []);
   assert.deepEqual(await h.intents.retryAnalyticsIntents(), { processed: 1, failed: 0, skipped: 0 });
   assert.deepEqual(await h.intents.retryAnalyticsIntents(), { processed: 0, failed: 0, skipped: 0 });
@@ -286,20 +286,20 @@ for (const kind of ["signup_completed", "invite_sent", "member_joined", "agent_c
   });
 }
 
-test("an ineligible connection writes nothing and still counts once eligible", async () => {
+test("a connection seen while analytics is off writes nothing and still counts once it is on", async () => {
   const h = harness();
-  h.users.get(123).uid = "guest_local";
+  h.setEnabled(false);
   assert.equal(await h.activation.enqueueAgentConnection(h.prisma, 123, token, "mcp"), null);
   assert.equal(h.intentRows.length, 0);
-  h.users.get(123).uid = "real_member";
+  h.setEnabled(true);
   assert.ok(await h.activation.enqueueAgentConnection(h.prisma, 123, token, "mcp"));
   await replayOnce(h, "agent_connected");
 });
 
-test("an ineligible connection replay is deferred without spending retries and sent once eligible", async () => {
+test("a connection replayed while analytics is off is deferred without spending retries and sent once analytics is back", async () => {
   const h = harness();
   assert.ok(await h.activation.enqueueAgentConnection(h.prisma, 123, token, "mcp"));
-  h.users.get(123).uid = "guest_local";
+  h.setEnabled(false);
   for (let cycle = 0; cycle < 12; cycle++) {
     h.intentRows[0].nextAttemptAt = new Date(0);
     assert.deepEqual(await h.intents.retryAnalyticsIntents(), { processed: 0, failed: 0, skipped: 1 });
@@ -308,7 +308,7 @@ test("an ineligible connection replay is deferred without spending retries and s
   assert.equal(h.intentRows[0].processedAt, null);
   assert.ok(h.intentRows[0].nextAttemptAt > new Date(Date.now() + 3500000));
   assert.equal(h.captures.length, 0);
-  h.users.get(123).uid = "real_member";
+  h.setEnabled(true);
   assert.equal(await h.activation.enqueueAgentConnection(h.prisma, 123, token, "mcp"), null);
   h.intentRows[0].nextAttemptAt = new Date(0);
   assert.deepEqual(await h.intents.retryAnalyticsIntents(), { processed: 1, failed: 0, skipped: 0 });
@@ -318,7 +318,7 @@ test("an ineligible connection replay is deferred without spending retries and s
 test("a connection deferred for more than seven days is closed instead of kept forever", async () => {
   const h = harness();
   assert.ok(await h.activation.enqueueAgentConnection(h.prisma, 123, token, "mcp"));
-  h.users.get(123).uid = "guest_local";
+  h.setEnabled(false);
   h.intentRows[0].createdAt = new Date(Date.now() - 8 * 86400000);
   assert.deepEqual(await h.intents.retryAnalyticsIntents(), { processed: 0, failed: 0, skipped: 1 });
   assert.ok(h.intentRows[0].processedAt);

@@ -3,9 +3,8 @@ const assert = require("node:assert/strict");
 const { readFile, access } = require("node:fs/promises");
 const yaml = require("js-yaml");
 
-const runOutsideGuard = require("../.github/scripts/outside-pr-guard.cjs");
-const workflowPath = ".github/workflows/pr-guards-trusted.yml";
-const dispatchPath = ".github/workflows/outside-pr-guard.yml";
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const workflowPath = ".github/workflows/outside-pr-guard.yml";
 const base = "hypertask-ai/hypertask";
 const marker = "<!-- outside-pr-guard -->";
 
@@ -34,11 +33,11 @@ async function runGuard({
   inputs = {},
   commentError,
 } = {}) {
+  const workflow = await loadWorkflow();
   const calls = { gets: [], permissions: [], lists: [], writes: [] };
   const logs = [];
   const summaries = [];
   const failures = [];
-  const outputs = {};
   const listComments = () => {};
   const summary = {
     addRaw(message) {
@@ -48,8 +47,8 @@ async function runGuard({
     async write() {},
   };
 
-  await runOutsideGuard({
-    github: {
+  await new AsyncFunction("github", "context", "core", workflow.jobs["outside-pr-guard"].steps[0].with.script)(
+    {
       rest: {
         pulls: {
           async get(params) {
@@ -57,7 +56,7 @@ async function runGuard({
             return { data: {
               number: 347,
               user: { login, type },
-              head: { sha: "a".repeat(40), repo: head === null ? null : { full_name: head } },
+              head: { repo: head === null ? null : { full_name: head } },
               base: { repo: { full_name: base } },
             } };
           },
@@ -86,22 +85,21 @@ async function runGuard({
         return comments;
       },
     },
-    context: {
+    {
       eventName,
       payload: eventName === "pull_request_target"
         ? { pull_request: { number: 347, user: { login: "stale-author" } }, inputs }
         : { inputs },
       repo: { owner: "hypertask-ai", repo: "hypertask" },
     },
-    core: {
-      setOutput(name, value) { outputs[name] = value; },
+    {
       info(message) { logs.push(message); },
       setFailed(message) { failures.push(message); },
       summary,
     },
-  });
+  );
   assert.deepEqual(summaries, logs);
-  return { calls, logs, summaries, failures, outputs };
+  return { calls, logs, summaries, failures };
 }
 
 function assertClosed(result, { comment = true } = {}) {
@@ -120,12 +118,9 @@ function apiError(status) {
 
 test("workflow has safe triggers, permissions, concurrency and a pinned metadata-only job", async () => {
   const workflow = await loadWorkflow();
-  assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request_target", "workflow_dispatch", "workflow_run"]);
-  assert.ok(workflow.on.pull_request_target.types.includes("synchronize"));
-  assert.deepEqual(workflow.on.workflow_run, { workflows: ["PR Guards"], types: ["completed"] });
-  const dispatch = yaml.load(await readFile(dispatchPath, "utf8"));
-  assert.deepEqual(Object.keys(dispatch.on), ["workflow_dispatch"]);
-  const inputs = dispatch.on.workflow_dispatch.inputs;
+  assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request_target", "workflow_dispatch"]);
+  assert.deepEqual(workflow.on.pull_request_target, { types: ["opened", "reopened"] });
+  const inputs = workflow.on.workflow_dispatch.inputs;
   assert.deepEqual(Object.keys(inputs).sort(), ["pr_number", "simulate_author", "simulate_fork"]);
   for (const name of ["pr_number", "simulate_author"]) {
     assert.equal(inputs[name].type, "string");
@@ -133,31 +128,22 @@ test("workflow has safe triggers, permissions, concurrency and a pinned metadata
   }
   assert.equal(inputs.simulate_fork.type, "boolean");
   assert.equal(inputs.simulate_fork.default, false);
-  assert.deepEqual(workflow.permissions, { "pull-requests": "write", contents: "read", statuses: "write" });
+  assert.deepEqual(workflow.permissions, { "pull-requests": "write", contents: "read" });
   assert.match(workflow.concurrency.group, /github\.event\.pull_request\.number/);
-  assert.equal(workflow.concurrency["cancel-in-progress"], true);
-  const job = workflow.jobs["pr-guards-trusted"];
+  assert.match(workflow.concurrency.group, /inputs\.pr_number/);
+  assert.equal(workflow.concurrency["cancel-in-progress"], false);
+  assert.deepEqual(Object.keys(workflow.jobs), ["outside-pr-guard"]);
+  const job = workflow.jobs["outside-pr-guard"];
+  assert.equal(job.name, "outside-pr-guard");
   assert.equal(job["runs-on"], "ubuntu-latest");
-  const step = job.steps.find(step => step.id === "outside");
-  assertSafeSteps([step]);
-  const dispatchJob = dispatch.jobs["outside-pr-guard"];
-  const dispatchStep = dispatchJob.steps.find(step => step.uses?.startsWith("actions/github-script"));
-  assertSafeSteps([dispatchStep]);
-  assert.equal(step.with.script, dispatchStep.with.script);
-  assert.equal(step.with.script.trim(), "await require('./.github/scripts/outside-pr-guard.cjs')({ github, context, core });");
-  for (const guardJob of [job, dispatchJob]) {
-    const checkouts = guardJob.steps.filter(step => step.uses?.startsWith("actions/checkout"));
-    assert.equal(checkouts.length, 1);
-    assert.ok(guardJob.steps.indexOf(checkouts[0]) < guardJob.steps.findIndex(step => step.uses?.startsWith("actions/github-script")));
-    assert.equal(checkouts[0].with.ref, "production");
-    assert.equal(checkouts[0].with["persist-credentials"], false);
-  }
+  assert.equal(job["timeout-minutes"], 5);
+  assertSafeSteps(job.steps);
   assert.throws(() => assertSafeSteps([{ uses: "actions/checkout@v4" }]), assert.AssertionError);
+  assert.match(await readFile(workflowPath, "utf8"), /^# pull_request_target.*never checks out PR code/);
 });
 
 test("same-repo Dependabot branch is trusted without permission lookup or writes", async () => {
   const result = await runGuard({ head: base, login: "dependabot[bot]", type: "Bot", permissionError: apiError(500) });
-  assert.equal(result.outputs.sha, "a".repeat(40));
   assert.deepEqual(result.calls.permissions, []);
   assert.deepEqual(result.calls.writes, []);
   assert.deepEqual(result.calls.lists, []);
@@ -204,7 +190,6 @@ test("dispatch simulated fork outsider logs outside without fetching a PR or wri
   for (const simulate_fork of [true, "true"]) {
     const result = await runGuard({ eventName: "workflow_dispatch", inputs: { simulate_author: "visitor", simulate_fork }, permissionError: apiError(404) });
     assert.deepEqual(result.failures, []);
-    assert.deepEqual(result.outputs, {});
     assert.deepEqual(result.calls.gets, []);
     assert.deepEqual(result.calls.writes, []);
     assert.deepEqual(result.calls.lists, []);
@@ -278,7 +263,7 @@ test("contribution documentation directs outside contributions and security repo
   const hasSecurity = await access("SECURITY.md").then(() => true, () => false);
   assert.match(contributing, hasSecurity ? /SECURITY\.md/ : /security reports, open an issue without sensitive details/);
   assert.match(await readFile("README.md", "utf8"), /\[CONTRIBUTING\.md\]\(CONTRIBUTING\.md\)/);
-  for (const file of [dispatchPath, "CONTRIBUTING.md", "README.md", "tests/outside-pr-guard-workflow.test.cjs"]) {
+  for (const file of [workflowPath, "CONTRIBUTING.md", "README.md", "tests/outside-pr-guard-workflow.test.cjs"]) {
     assert.ok(!(await readFile(file, "utf8")).includes(String.fromCodePoint(0x2014)), `${file} must not contain em dashes`);
   }
   assert.ok("positive control".concat(String.fromCodePoint(0x2014)).includes(String.fromCodePoint(0x2014)));

@@ -1,7 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { isFeatureFlagOwner } from "@/lib/flags";
+import {
+  FEATURE_FLAG_OWNER_USER_ID,
+  isFeatureEnabled,
+  isFeatureFlagOwner,
+  POSTHOG_ERROR_ALERT_FLAG,
+} from "@/lib/flags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +27,14 @@ const TRIGGERABLE_ENVIRONMENTS = new Set(["preview", "production"]);
 
 export async function POST(request: NextRequest) {
   if (!TRIGGERABLE_ENVIRONMENTS.has(process.env.VERCEL_ENV || "")) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (
+    !(await isFeatureEnabled(
+      POSTHOG_ERROR_ALERT_FLAG,
+      FEATURE_FLAG_OWNER_USER_ID,
+    ))
+  ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const canary = request.headers.get("x-posthog-canary");

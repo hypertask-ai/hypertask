@@ -5,16 +5,13 @@
 Open a ticket, then "Add page" next to "Add sub-tasks", or "New page" in the
 ticket's "Pages (n)" list. The page opens at `https://app.hypertask.ai/page/<publicId>`
 with "Back to task", "Saved" and the version. Typing `@` in a description can
-mention a page. With `htpr-7298-standalone-pages` and `htpr-7309-pages-screens` enabled,
-the left rail's Pages row and Commands → Go to Pages open `/pages`.
-This board / All boards, search and Archived pages narrow the list.
-New page creates a standalone document on the selected board (or asks for a
-board). The editor shows Linked tickets, Link ticket and Unlink; a page
-with no visible ticket returns to Pages. A ticket offers Link page next to
-New page, using the existing Commands-style picker. Commands also offers
-New page, Link page on tickets and Link ticket in the page editor.
-The original standalone-pages flag retains its current audience; the new
-screen flag defaults to Everyone but cannot widen standalone-page access.
+mention a page. Behind `htpr-7298-standalone-pages` (Owner + QA), a page can
+also exist with no ticket and link to many tickets; until the screens in
+[HTPR-7309](https://app.hypertask.ai/detail/project-15/7309) ship, that part is
+reachable only through the browser-session API:
+`POST /api/pages/create` with `project_id` and no `task_id`,
+`POST`/`DELETE /api/pages/<publicId>/links` with `task_id`, and
+`GET /api/pages/list?scope=all|board`.
 
 ## How to drive it
 
@@ -40,8 +37,8 @@ cookie is used. Work on a board the QA account owns.
 Ticket with "Pages (1)", the page editor with "Saved", reload keeping the
 title, and "Back to task" returning to the ticket, desktop and 390x844.
 Flagged: a standalone page opening with "Back to board", a link making it
-appear on the ticket, unlink removing it, and the Pages list including it. Search, board scope, Archived pages,
-Commands entries and Link page from the ticket must also work. On a fresh ticket load, search for Link page immediately; late flag or route updates must refresh the open search without retyping or reloading. Repeat at desktop and phone width. Flag-off: 404 from each flagged call. Shoot the changed page screen in
+appear on the ticket, unlink removing it, and the `scope=all` list including
+it. Flag-off: 404 from each flagged call. Shoot the changed page screen in
 all four themes.
 
 ## Cleanup

@@ -51,7 +51,6 @@
   "notification_ids": "Inbox notification identifiers to archive or restore, not task identifiers.",
   "offset": "Number of matching rows to skip; prefer cursor continuation when supported.",
   "order": "Sort direction for the selected field.",
-  "page": "1-based page number; multiplied by limit into offset. An offset equal to that page start is accepted, any other offset is refused.",
   "page_id": "Existing page id or public page identifier accepted by page actions.",
   "parent_page_id": "Existing parent page identifier for a nested page.",
   "photo_url": "Public URL of the authenticated human user's profile image.",
@@ -86,7 +85,7 @@
   "task_identifier": "Numeric ticket id or full ticket key such as HTPR-1234 for timer actions.",
   "team_id": "Team or workspace identifier discovered through user_context.",
   "text": "Comment, draft or related-search text; comment formatting uses content_type.",
-  "ticket_number": "Stable full ticket key such as HTPR-1234; tasks get accepts an array of keys. task_number is accepted as an alias.",
+  "ticket_number": "Stable full ticket key such as HTPR-1234; tasks get accepts an array of keys.",
   "title": "Human-readable title of the ticket, board, column, page or view.",
   "to": "End date of the time-report range in ISO 8601 form.",
   "token": "Signed account MCP token to revoke; never include it in user-visible output.",
@@ -98,9 +97,5 @@
   "visibility": "Whether a saved view is shared (Public) or private to its owner (Private).",
   "visible_section_ids": "Numeric column ids to display in the saved board view.",
   "working_rules": "Board-specific workflow instructions to store in the playbook.",
-  "member_identifier": "One human user id, email address or managed agent UUID to add to the board.",
-  "auth_header_name": "Header name the webhook receiver requires, sent on every delivery, test and resend. Use with auth_header_value.",
-  "auth_header_value": "Value for auth_header_name. Stored encrypted and never returned.",
-  "bearer_secret": "Shortcut for an Authorization: Bearer header. Stored encrypted and never returned.",
-  "clear_auth_header": "True removes the saved receiver auth header."
+  "member_identifier": "One human user id, email address or managed agent UUID to add to the board."
 }

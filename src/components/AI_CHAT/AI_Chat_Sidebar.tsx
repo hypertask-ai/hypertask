@@ -1,7 +1,6 @@
 "use client";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
 import { HTPR_7318_TICKET_CHAT_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
@@ -38,7 +37,6 @@ export const AI_Chat_Sidebar = ({
   const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
-  const skillRunsInSidebar = useFlag(HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG);
   const project = useRecoilValue(currentProjectAtom);
   const currentUser = useRecoilValue(currentUserAtom);
   const projectId = project?.id;
@@ -142,7 +140,7 @@ export const AI_Chat_Sidebar = ({
   const selectTargetRef = useRef(selectTarget);
   selectTargetRef.current = selectTarget;
 
-  useEffect(ticketChatReminder || skillRunsInSidebar ? () => {
+  useEffect(ticketChatReminder ? () => {
     const resumeTicketChat = (event: Event) => {
       event.preventDefault();
       const sessionId = (event as CustomEvent<{ sessionId: string }>).detail.sessionId;
@@ -150,7 +148,7 @@ export const AI_Chat_Sidebar = ({
     };
     window.addEventListener("ht-ticket-chat-resume", resumeTicketChat);
     return () => window.removeEventListener("ht-ticket-chat-resume", resumeTicketChat);
-  } : () => {}, [ticketChatReminder, skillRunsInSidebar]);
+  } : () => {}, [ticketChatReminder]);
 
   useEffect(() => {
     if (!generalChatPending || resolvingGeneralChat.current) return;
@@ -248,7 +246,7 @@ export const AI_Chat_Sidebar = ({
       )}
       style={desktopWidthStyle}
     >
-      <AiChatSidebarResizeHandle />
+      {!inOffcanvas && !isMbl && <AiChatSidebarResizeHandle />}
 
       <div
         className={cn(

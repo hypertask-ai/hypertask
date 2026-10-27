@@ -17,7 +17,7 @@ const root = path.resolve(__dirname, "..");
 const notificationRoutes = {
   "(un)archiveBulk": { module: "archive-bulk", method: "POST", path: "src/pages/api/notifications/(un)archiveBulk.ts" },
   getByTask: { module: "task-seen", method: "POST", path: "src/pages/api/notifications/getByTask.ts" },
-  markAsDone: { module: "mark-done", method: "GET", alsoMethod: "POST", path: "src/pages/api/notifications/markAsDone.ts" },
+  markAsDone: { module: "mark-done", method: "GET", path: "src/pages/api/notifications/markAsDone.ts" },
   markAsUnseen: { module: "mark-unseen", method: "GET", path: "src/pages/api/notifications/markAsUnseen.ts" },
   moveTaskToInbox: { module: "move-task-to-inbox", method: "POST", path: "src/pages/api/notifications/moveTaskToInbox.ts" },
   sendEmailToFollower: { module: "follower-email", method: "POST", path: "src/pages/api/notifications/sendEmailToFollower.ts" },
@@ -61,7 +61,6 @@ function fixture(name, scenario = {}) {
     if (key === "project" || key === "task") return !scenario.tutorialDenied;
     if (value !== null && typeof value === "object" && !(value instanceof Date)) {
       if (Object.hasOwn(value, "in")) return value.in.includes(row[key]);
-      if (Object.hasOwn(value, "notIn")) return !value.notIn.includes(row[key]);
       if (Object.hasOwn(value, "not")) return row[key] !== value.not;
     }
     return clean(row[key]) === clean(value);
@@ -184,7 +183,7 @@ async function parity(name, scenario = {}, key = `${name}: ${JSON.stringify(scen
       if (label !== "updateMany") continue;
       assert.equal(args.data.status, "Normal");
       assert.equal(args.data.archivedAt, null, "bulk undo clears the persisted archive timestamp");
-      for (const row of old.rows.filter(row => args.where.id.in.includes(row.id) && row.userId === args.where.userId && row.status !== "Deleted")) {
+      for (const row of old.rows.filter(row => row.id === args.where.id && row.userId === args.where.userId && row.status !== "Deleted")) {
         assert.equal(row.archivedAt, null, "restored rows are visible after reload");
         pinned.rows.find(entry => entry.id === row.id).archivedAt = timestamp;
       }
@@ -219,7 +218,7 @@ for (const name of Object.keys(endpoints)) {
     assert.deepEqual(fx.effects, old.effects);
   });
   for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", undefined]) {
-    if (method === notificationRoutes[name].method || (notificationRoutes[name].alsoMethod && method === notificationRoutes[name].alsoMethod)) continue;
+    if (method === notificationRoutes[name].method) continue;
     test(`${name}: other method ${method} ${notificationRoutes[name].anyMethod ? "reaches the shared route" : "answers 405"}`, async () => {
       const scenario = { method }, fx = fixture(name);
       const result = await invoke(fx, name, scenario);
@@ -293,7 +292,7 @@ for (const [name, scenarios] of Object.entries(branchCases)) for (const [index, 
 test("bulk archive scopes representative and siblings, never another user or Deleted; undo skips sibling writes", async () => {
   const { old, expected } = await parity("(un)archiveBulk", {}, "bulk archive success");
   assert.equal(expected.status, 200); assert.equal(expected.body.archivedCount, 2);
-  assert.deepEqual(old.effects.map(([label]) => label), ["findFirst", "transaction", "updateMany", "updateMany", "commit", "inbox-realtime"]);
+  assert.deepEqual(old.effects.map(([label]) => label), ["findFirst", "transaction", "updateMany", "updateMany", "updateMany", "commit", "inbox-realtime"]);
   assert.deepEqual(old.effects.at(-1), ["inbox-realtime", 985, { originUserId: 985 }, "123.456"]);
   assert.equal(old.rows.find(row => row.id === 23).status, "Normal"); assert.equal(old.rows.find(row => row.id === 26).status, "Deleted");
   assert.equal(clean(old.rows[0].archivedAt), timestamp); assert.equal(clean(old.rows[1].archivedAt), timestamp);

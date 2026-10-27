@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { loadCurrentUser } from '@/lib/auth/currentUser'
-import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from '@/lib/flags/definitions/htpr-7298-standalone-pages'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
@@ -16,9 +16,16 @@ type RouteContext = { params: Promise<{ publicId: string }> }
 async function changeLink(request: NextRequest, { params }: RouteContext, remove: boolean) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
+    let restCompat = false
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
+      } catch {
+      }
+    }
 
     let userId: number
-    if (currentUser) {
+    if (restCompat && currentUser) {
       userId = currentUser.userId
     } else {
       const userCookie = (await cookies()).get('nookies_user')
@@ -31,7 +38,7 @@ async function changeLink(request: NextRequest, { params }: RouteContext, remove
     if (!(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, userId))) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
-    if (currentUser) {
+    if (restCompat && currentUser) {
       const limited = await checkRestRateLimit(currentUser.userId, 'write')
       if (limited) return limited
     }

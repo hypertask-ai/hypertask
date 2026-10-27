@@ -63,6 +63,7 @@ test("mobile command search uses one flush rounded focus ring", () => {
     commands.indexOf("if (isMobile)"),
   );
 
+  assert.match(commands, /useHTC\(allCommands_, emptyQueryCommands, !isMobile\)/);
   assert.match(
     searchInput,
     /className="flex items-center gap-2\.5 rounded-\[4px\] px-4 ring-1 ring-inset ring-hypertasks-purple"/,

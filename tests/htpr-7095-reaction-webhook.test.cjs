@@ -63,7 +63,7 @@ test("comment.reaction is a registered, subscribable event", () => {
   );
   assert.ok(events.AGENT_WEBHOOK_EVENTS.includes("comment.reaction"));
   assert.equal(events.AGENT_WEBHOOK_EVENT_DEFINITIONS["comment.reaction"].subscribable, true);
-  assert.ok(events.AGENT_WEBHOOK_EVENTS.includes("comment.reaction"));
+  assert.ok(events.availableAgentWebhookEvents(false).includes("comment.reaction"));
   assert.deepEqual(events.parseAgentWebhookEvents(["comment.reaction"]), { ok: true, events: ["comment.reaction"] });
   assert.deepEqual(
     Object.keys(events.AGENT_WEBHOOK_EVENT_DEFINITIONS["comment.reaction"].payload),

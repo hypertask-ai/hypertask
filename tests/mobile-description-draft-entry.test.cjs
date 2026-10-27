@@ -77,8 +77,6 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "./draftSync": { shouldSkipUnchangedMobileDescriptionSave: () => false },
     "@/lib/tutorial/learnTutorialState": {},
     "@/lib/ai/autoDescriptionSuggestion": {},
-    "@/lib/taskDetailArchiveNavigation": load("src/lib/taskDetailArchiveNavigation.ts"),
-    "@/lib/inboxQueryKeys": load("src/lib/inboxQueryKeys.ts"),
   });
   const { useTaskDetailEditorState } = load("src/components/RTE/useTaskDetailEditorState.tsx", {
     "@/lib/flags/keys": {},

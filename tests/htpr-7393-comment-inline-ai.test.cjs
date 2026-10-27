@@ -16,7 +16,6 @@ function harness(enabled, oldEnabled = true) {
   let writer = false;
   const mocks = {
     "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === oldFlag ? oldEnabled : ["compose", "new-task"].includes(key), useFlagLoaded: () => true },
-    "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/keys": keys,
     "@/lib/state": { useSetRecoilState: () => value => actions.push(["commands", value]), useRecoilValue: () => true },
     "@/store": { showCommandsAtom: "commands", showAIChatInterfaceAtom: "chat" },

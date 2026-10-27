@@ -1,6 +1,7 @@
 import { loadSidebarChatRequest, sidebarChatProjectId } from "@/lib/agents/chatAccess";
 import { randomUUID } from "node:crypto";
 import { getRedis } from "@/lib/redis";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import prisma from "@/lib/prisma";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
@@ -134,10 +135,17 @@ export async function GET(request: NextRequest) {
         : NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
     }
 
-    const limited = await checkRestRateLimit(userId, "read");
-    if (limited) return limited;
+    let restCompat = false;
+    try {
+      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, userId);
+    } catch {
+    }
+    if (restCompat) {
+      const limited = await checkRestRateLimit(userId, "read");
+      if (limited) return limited;
+    }
 
-    if (new URL(request.url).searchParams.get("compat") === "htpr-6924") {
+    if (restCompat && new URL(request.url).searchParams.get("compat") === "htpr-6924") {
       return await pagedSessions(request, userId);
     }
 

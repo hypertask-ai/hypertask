@@ -8,7 +8,6 @@ import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useF
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
-import { AiChipEventRecorder } from "@/lib/ai/AiChipEventRecorder";
 import DeploySkewGuard from "@/components/System/DeploySkewGuard";
 import FilesImageFallback from "@/components/FilesImageFallback";
 import { isMobileDevice } from "@/utils/serverActions";
@@ -16,7 +15,7 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
-import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -82,7 +81,6 @@ export default async function RootLayout(
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
-  const chipEventsFlag = await isFeatureEnabled(HTPR_7978_AI_CHIP_EVENTS_FLAG, analyticsSession?.id ?? -1);
   const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
 
   const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;
@@ -192,7 +190,6 @@ export default async function RootLayout(
         ) : null}
         <FilesImageFallback />
         <ClientErrorReporter />
-        {chipEventsFlag && analyticsSession && !analyticsIsGuest ? <AiChipEventRecorder /> : null}
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}

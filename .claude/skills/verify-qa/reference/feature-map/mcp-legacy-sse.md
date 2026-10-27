@@ -29,10 +29,6 @@
 - A read-only PostHog result showing the unique user agent and all requested event fields.
 - Account user id and tier, merge sha and deployment success, and local regression test results.
 
-### Automated evidence
-
-`node --test tests/mcp-sse-analytics.test.cjs` exercises legacy-route analytics with mocked transports: verified and anonymous identity, sanitized metadata, exclusion of current MCP requests, and unchanged responses when analytics fails.
-
 ## Cleanup
 
 Close the SSE connection. No board writes or fixtures are needed. Keep only non-sensitive request and analytics evidence.

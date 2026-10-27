@@ -2,7 +2,6 @@
 
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import prisma from "@/lib/prisma";
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { IUrl } from "@/models/model";
 import { extractUrlsFromContent, mergeUrls } from "@/utils/controllers/urls/extractUrlsFromContent";
 
@@ -117,36 +116,3 @@ const fetchUrls = async (taskId:string | string[], commentId?:string, includeSav
 }
 
 export default fetchUrls;
-export async function resolveTicketUrls(urls: IUrl[], userId: number): Promise<IUrl[]> {
-    const links = urls.map(url => {
-        try {
-            const parsed = new URL(url.urlString, "https://app.hypertask.ai");
-            if (parsed.origin !== "https://app.hypertask.ai") return null;
-            const match = parsed.pathname.match(/^\/detail\/project-(\d+)\/(\d+)\/?$/);
-            if (!match) return null;
-            const projectId = Number(match[1]);
-            const uniqueIndex = Number(match[2]);
-            if (!Number.isSafeInteger(projectId) || !Number.isSafeInteger(uniqueIndex)) return null;
-            return { projectId, uniqueIndex };
-        } catch {
-            return null;
-        }
-    });
-    const references = [...new Map(links.filter(link => link !== null).map(link => [`${link.projectId}/${link.uniqueIndex}`, link])).values()];
-    if (!references.length) return urls;
-    const tasks = await prisma.task.findMany({
-        where: { OR: references, project: projectContentAccessWhere(userId), status: { not: "Deleted" } },
-        select: { projectId: true, uniqueIndex: true, ticketNumber: true, title: true },
-    }).catch(() => {
-        console.error("[urls] Ticket titles unavailable");
-        return [];
-    });
-    const byReference = new Map(tasks.map(task => [`${task.projectId}/${task.uniqueIndex}`, task]));
-    return urls.map((url, index) => {
-        const reference = links[index];
-        if (!reference) return url;
-        const task = byReference.get(`${reference.projectId}/${reference.uniqueIndex}`);
-        if (!task) return { ...url, ticketNumber: undefined, title: `PROJECT-${reference.projectId}-${reference.uniqueIndex}` };
-        return { ...url, ticketNumber: task.ticketNumber ?? undefined, title: task.title };
-    });
-}

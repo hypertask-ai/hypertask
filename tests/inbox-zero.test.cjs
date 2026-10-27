@@ -48,7 +48,6 @@ const notification = ({
   seen = true,
   createdAt = "2026-07-21T12:00:00.000Z",
   fromUserId = 8,
-  fromAgentId = null,
   taskId = id,
   notificationInviteId = null,
   linkedTask = task(),
@@ -59,7 +58,6 @@ const notification = ({
   seen,
   createdAt: new Date(createdAt),
   fromUserId,
-  fromAgentId,
   taskId,
   task: linkedTask,
 });
@@ -98,22 +96,6 @@ test("Inbox Zero keep rules win and overlapping categories archive once", () => 
   assert.equal(result.categoryCounts.ownActions, 1);
   assert.equal(result.totalToArchive, 2);
   assert.equal(result.totalLeft, 3);
-});
-
-test("Inbox Zero own actions never count agent items acting under the user", () => {
-  const ownOnly = { ...DEFAULT_INBOX_ZERO_RULES, categories: { read: false, reactions: false, ownActions: true, superseded: false, pastReminders: false }, keep: { unread: false, mentions: false, assignments: false } };
-  const rows = [
-    notification({ id: 1, type: NotificationType.Comment, fromUserId: 6, fromAgentId: "agent-1", createdAt: "2026-07-01T12:00:00.000Z" }),
-    notification({ id: 2, type: NotificationType.Mentioned, fromUserId: 6, fromAgentId: "agent-1", createdAt: "2026-07-01T12:00:00.000Z" }),
-    notification({ id: 3, type: NotificationType.Comment, fromUserId: 6, createdAt: "2026-07-01T12:00:00.000Z" }),
-  ];
-
-  const result = evaluateInboxZero(rows, 6, ownOnly, now, null, true);
-  const flagOff = evaluateInboxZero(rows, 6, ownOnly, now);
-
-  assert.deepEqual(new Set(result.notificationIds), new Set([3]));
-  assert.equal(result.categoryCounts.ownActions, 1);
-  assert.equal(flagOff.categoryCounts.ownActions, 3);
 });
 
 test("Inbox Zero keeps only the newest move or edit per task", () => {

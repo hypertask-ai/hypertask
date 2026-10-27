@@ -253,12 +253,12 @@ test("bulk archive keeps siblings recoverable with the batch timestamp", async (
   assert.equal(res.statusCode, 200);
 
   const siblingWrite = calls.updateMany.find(
-    (args) => args.where?.id?.notIn?.includes(5)
+    (args) => args.where?.id && args.where.id.not === 5
   );
   assert.ok(siblingWrite, "expected a sibling write");
   assert.equal(siblingWrite.data.status, "Archive", "bulk siblings must stay recoverable");
   const representativeWrite = calls.updateMany.find(
-    (args) => args.where?.id?.in?.includes(5)
+    (args) => args.where?.id === 5
   );
   assert.ok(representativeWrite);
   assert.equal(
@@ -285,7 +285,7 @@ test("bulk unarchive does not delete or re-archive siblings", async () => {
 
   const writes = calls.updateMany;
   assert.equal(writes.length, 1, "only the representative write is expected");
-  assert.deepEqual(writes[0].where.id, { in: [5] });
+  assert.equal(writes[0].where.id, 5);
   assert.equal(writes[0].data.status, "Normal");
   assert.equal(writes[0].data.archivedAt, null);
 });

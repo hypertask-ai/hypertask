@@ -3,7 +3,7 @@ import Suggestion from "@tiptap/suggestion";
 import getSuggestionItems from "./items";
 import renderItems from "./RenderCommands";
 
-const SlashCreate = (mode: string, editorId?: string, getProjectId?: () => number | null | undefined) => {
+const SlashCreate = (mode: string, editorId?: string) => {
   const SlashCommands = Extension.create({
     name: "slashCommands",
 
@@ -41,8 +41,7 @@ const SlashCreate = (mode: string, editorId?: string, getProjectId?: () => numbe
     addStorage() {
       return {
         mode: mode,
-        editorId,
-        getProjectId
+        editorId
       };
     }
   });

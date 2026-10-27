@@ -1,5 +1,6 @@
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
@@ -19,7 +20,14 @@ async function getCurrentUserFromCookies() {
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
-    const user = currentUser
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+      }
+    }
+    const user = restCompat && currentUser
       ? currentUser.user
       : await getCurrentUserFromCookies();
     if (!user?.id) {
@@ -30,22 +38,26 @@ export async function POST(request: NextRequest) {
     }
 
     let body: Awaited<ReturnType<typeof request.json>>;
-    let jsonError: unknown;
-    const result = await readJsonBody<typeof body>({
-      json: async () => {
-        try {
-          body = await request.json();
-          return body;
-        } catch (error) {
-          jsonError = error;
-          throw error;
-        }
-      },
-    } as Request, {
-      invalidJson: () => { throw jsonError },
-      invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
-    });
-    if (result.ok) body = result.body;
+    if (restCompat) {
+      let jsonError: unknown;
+      const result = await readJsonBody<typeof body>({
+        json: async () => {
+          try {
+            body = await request.json();
+            return body;
+          } catch (error) {
+            jsonError = error;
+            throw error;
+          }
+        },
+      } as Request, {
+        invalidJson: () => { throw jsonError },
+        invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
+      });
+      if (result.ok) body = result.body;
+    } else {
+      body = await request.json();
+    }
     const code = body?.code as string | undefined;
     const agentId = body?.agentId as string | null | undefined;
 

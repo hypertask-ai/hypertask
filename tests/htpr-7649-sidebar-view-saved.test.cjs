@@ -305,7 +305,7 @@ function preferencesApi(enabled = true, stored = null) {
   });
   const route = load("src/app/api/users/preferences/route.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
-    "@/lib/mcp/readJsonBody": { readJsonBody: async (request) => ({ ok: true, body: await request.json() }) },
+    "@/lib/mcp/readJsonBody": {},
     "@/lib/auth/currentUser": { loadCurrentUser: async () => null },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => {
       assert.equal(key, flag.HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG);

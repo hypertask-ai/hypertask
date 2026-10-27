@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { isValidUser } from '@/utils/edgeHelpers'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { getPage, listPageVersions } from '@/utils/controllers/pages/pageService'
 
 type RouteContext = { params: Promise<{ publicId: string }> }
@@ -12,9 +13,16 @@ type RouteContext = { params: Promise<{ publicId: string }> }
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
+    let restCompat = false
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
+      } catch {
+      }
+    }
 
     let userId: number
-    if (currentUser) {
+    if (restCompat && currentUser) {
       userId = currentUser.userId
     } else {
       const userCookie = (await cookies()).get('nookies_user')
@@ -24,7 +32,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       userId = user.id
     }
 
-    if (currentUser) {
+    if (restCompat && currentUser) {
       const limited = await checkRestRateLimit(currentUser.userId, 'read')
       if (limited) return limited
     }

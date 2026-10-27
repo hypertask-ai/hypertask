@@ -61,13 +61,15 @@ const { manageAgentWebhook } = jiti(
   path.join(root, "src/lib/agentWebhooks/management.ts"),
 );
 
+const RUNS_FLAG = "htpr-6115-agent-sdk";
+
 async function getWebhook(flags) {
   state.enabledFlags = new Set(flags);
   return manageAgentWebhook({ userId: 6, agentId: "agent-a", action: "get" });
 }
 
 test("the recorded run payload reaches an authorized author without a dev-loop flag", async () => {
-  const on = await getWebhook([]);
+  const on = await getWebhook([RUNS_FLAG]);
   assert.deepEqual(on.deliveries[0].payload, state.delivery.payload);
   assert.equal(on.deliveries[0].id, "wd_1");
 });
@@ -79,11 +81,20 @@ test("only a run delivery carries its payload", async () => {
     event: "comment.mention",
     payload: { event: "comment.mention", commentHtml: "<p>hello</p>" },
   };
-  const result = await getWebhook([]);
+  const result = await getWebhook([RUNS_FLAG]);
   assert.equal(
     "payload" in result.deliveries[0],
     false,
     "replay reads run deliveries only, so comment body text never travels",
   );
   state.delivery = { ...state.delivery, event: "run.created", payload: runPayload };
+});
+
+test("the payload never travels without the agent run flag that records it", async () => {
+  const runsDisabled = await getWebhook([]);
+  assert.deepEqual(
+    runsDisabled.deliveries,
+    [],
+    "run deliveries are filtered out entirely when agent runs are off",
+  );
 });

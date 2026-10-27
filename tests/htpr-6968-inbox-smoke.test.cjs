@@ -11,7 +11,6 @@ function inboxCheck() {
   const checks = new Map();
   const register = (name, ...args) => checks.set(name, args.at(-1));
   register.afterEach = () => {};
-  register.describe = () => {};
   register.skip = condition => assert.equal(condition, false);
   const filename = path.resolve("e2e/smoke/prod.spec.ts");
   const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {

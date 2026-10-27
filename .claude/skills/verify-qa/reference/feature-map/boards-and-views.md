@@ -37,7 +37,7 @@ of the bugs above only showed up after a refresh or a second board switch.
 
 ## First agent connection
 
-https://app.hypertask.ai/detail/project-15/7026 adds a compact Connect your agent card above the columns or table on the user's earliest active owned board (the seeded MyBoard, including after rename). The card shows for a never-connected, non-dismissed user when `htpr-7078-remove-connect-block` is false. The removal flag defaults to Everyone and suppresses this inline card. Read effective flags before running the card checks; if removed, record the inline path as unreachable rather than enabling it or failing for a missing card. Users with any previous CLI or MCP connection, or a server-persisted dismissal, do not see it.
+https://app.hypertask.ai/detail/project-15/7026 adds a compact Connect your agent card above the columns or table on the user's earliest active owned board (the seeded MyBoard, including after rename). It requires `htpr-7026-agent-connect-check` to be true (default Owner + QA) and `htpr-7078-remove-connect-block` to be false. The removal flag defaults to Everyone and suppresses this inline card. Read effective flags before running the card checks; if removed, record the inline path as unreachable rather than enabling it or failing for a missing card. Users with any previous CLI or MCP connection, or a server-persisted dismissal, do not see it.
 
 On a disposable new-user fixture, confirm Claude Code, Cursor, Codex appear first. Select a tool and use the shared onboarding CLI or MCP instructions. While the card is in view, the status checks every four seconds; hidden tabs and offscreen cards stop polling. The first connection shows the actual recorded client or the onboarding choice, plus Ask your agent to pick up the top task. Dismiss and reload, then check another device: the card stays hidden. A connection also hides it on the next visit without needing dismissal. Confirm flag-off users cannot read first-run card state or save a dismissal.
 
@@ -57,60 +57,3 @@ https://app.hypertask.ai/detail/project-15/7263 adds phone selection behind `htp
 
 None if you only viewed and switched. If you changed a saved filter or view
 on the account's own board, revert it to the account's default state.
-
-## Board hygiene report
-
-On a board, Ctrl+K → Manage tags → Board hygiene. Check the report on
-1440x900 and 390x844 in all four themes. Expanding the report must not
-resize the modal or change the board, labels or saved views. Reload and
-reopen; counts must match the read-only `/api/projects/hygiene?projectId=N`
-response. Agents use `hypertask_projects` action `hygiene`, input
-`{ "project_id": N }`, or GET `/api/mcp/projects/N/manifest?include=hygiene`.
-
-Report all board tags, since project/category tag classification is not
-stored. Only a public view filtering solely one tag covers that tag.
-Private views and views with extra filters never hide missing shared views.
-Open means Normal tickets outside done/deleted columns; null-column
-tickets count toward untagged. Idle means no ticket update for seven days.
-Work limits remain unconfigured until the board supports storing them;
-`null` is unknown, not zero. Confirm other boards return 404 for outsiders.
-
-Use a QA-owned scratch board for known labels and tickets. Compare label
-and view lists before and after reading. This report never repairs data.
-
-## MCP duplicate view titles
-
-Creating a view with an existing title must return the same readable
-400 refusal, without changing the existing view or board default.
-For https://app.hypertask.ai/detail/project-15/7985, verify through both
-`POST /api/mcp/view` and `hypertask_views` action `create` on `/mcp`.
-Use a disposable QA-owned view, list it before and after, and remove only
-that fixture. Duplicate refusals log warnings; unexpected storage failures
-must still log errors. Local behavior coverage:
-`node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
-
-## MCP board-list sorting
-
-For https://app.hypertask.ai/detail/project-15/8017, list boards through
-`GET /api/mcp/projects` and `hypertask_projects` action `list` on `/mcp`.
-Default/title and `createdAt` sorts must still return accessible boards;
-check descending order and cursor continuation. Boards have no update-time
-field: `sort_by=updatedAt`, `sort=updatedAt:desc`, and
-`filter.updated_since` must return readable validation refusals, not server
-errors. Check both JSON and dotted filter query parameters. Unsupported
-sort directions must also fail before database access. These reads need
-no fixtures or cleanup. Local behavior coverage:
-`node --test tests/htpr-8017-project-list-sort.test.cjs`.
-
-## Repeated keyboard archive stays in its column
-
-For https://app.hypertask.ai/detail/project-15/8039, create two disposable
-columns on QA 985's sandbox (7049). Put two prefixed fixtures in Done and
-one in AI Review. Focus the first Done card after hydration settles.
-Press Ctrl+E repeatedly, then hold it: only the Done fixtures may archive.
-Focus must stop when Done empties, not jump to AI Review. Reload and read
-`POST /api/projects/boardTasks`: the AI Review fixture must remain Normal.
-Check a single archive and Undo restore the same fixture. Manual keyboard
-navigation into AI Review must still work. Capture desktop and phone
-shots, plus the main path video. Delete only the created fixtures and
-columns afterward. Flag: `htpr-8039-archive-column-boundary` (bugfix, Everyone).

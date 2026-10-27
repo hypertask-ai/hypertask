@@ -94,6 +94,8 @@ function harness() {
   };
   const notify = { default: async () => ({ fromUser: actor, user: recipient }) };
   const mocks = {
+    axios: { default: {} },
+    "@/utils/api/fcmConfig": { default: {} },
     "@prisma/client": { Status: { Deleted: "Deleted" }, Prisma: { DbNull: null } },
     "@/lib/prisma": { default: db },
     "@/lib/auth/agentScope": {

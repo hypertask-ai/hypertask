@@ -8,6 +8,7 @@ import { isValidUser } from '@/utils/edgeHelpers'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   getPage,
   PageConflictError,
@@ -30,12 +31,29 @@ type UpdatePageBody = {
 const CONTENT_TYPES = ['markdown', 'html', 'html_canvas'] as const
 const UPDATE_MODES = ['replace', 'append', 'prepend'] as const
 
+function positiveInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : null
+}
+
+function isRequestBody(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
+    let restCompat = false
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
+      } catch {
+      }
+    }
 
     let userId: number
-    if (currentUser) {
+    if (restCompat && currentUser) {
       userId = currentUser.userId
     } else {
       const userCookie = (await cookies()).get('nookies_user')
@@ -45,7 +63,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       userId = user.id
     }
 
-    if (currentUser) {
+    if (restCompat && currentUser) {
       const limited = await checkRestRateLimit(currentUser.userId, 'read')
       if (limited) return limited
     }
@@ -80,9 +98,16 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
+    let restCompat = false
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
+      } catch {
+      }
+    }
 
     let userId: number
-    if (currentUser) {
+    if (restCompat && currentUser) {
       userId = currentUser.userId
     } else {
       const userCookie = (await cookies()).get('nookies_user')
@@ -92,18 +117,29 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       userId = user.id
     }
 
-    if (currentUser) {
+    if (restCompat && currentUser) {
       const limited = await checkRestRateLimit(currentUser.userId, 'write')
       if (limited) return limited
     }
 
     let parsedBody: unknown
-    const result = await readJsonBody<Record<string, unknown>>(request, {
-      invalidJson: () => NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 }),
-      invalidObject: () => NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 }),
-    })
-    if (!result.ok) return result.response
-    parsedBody = result.body
+    if (restCompat) {
+      const result = await readJsonBody<Record<string, unknown>>(request, {
+        invalidJson: () => NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 }),
+        invalidObject: () => NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 }),
+      })
+      if (!result.ok) return result.response
+      parsedBody = result.body
+    } else {
+      try {
+        parsedBody = await request.json()
+      } catch {
+        return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 })
+      }
+      if (!isRequestBody(parsedBody)) {
+        return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
+      }
+    }
     const body = parsedBody as UpdatePageBody
 
     const hasTitle = body.title !== undefined
@@ -142,7 +178,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     let ifVersion: number | undefined
     if (hasContent && body.if_version !== undefined) {
-      const parsedVersion = typeof body.if_version === 'number' ? parsePositiveInt(body.if_version, { safe: false, max: Infinity }) : null
+      const parsedVersion = restCompat
+        ? (typeof body.if_version === 'number' ? parsePositiveInt(body.if_version, { safe: false, max: Infinity }) : null)
+        : positiveInteger(body.if_version)
       if (parsedVersion === null) {
         return NextResponse.json(
           { error: 'if_version must be a positive integer' },

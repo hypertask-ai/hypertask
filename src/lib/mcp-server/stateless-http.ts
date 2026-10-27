@@ -32,9 +32,6 @@ export type PortableTool = {
   parameters: z.ZodObject<z.ZodRawShape>
   annotations?: ToolAnnotations
   inputSchema?: Record<string, unknown>
-  normalizeArguments?: (args: unknown) => unknown
-  errorHints?: { ticketNumberShape?: boolean; renamedField?: boolean }
-  documentedFields?: readonly string[]
   outputSchema?: Record<string, unknown>
   input_examples?: unknown[]
   hidden?: boolean
@@ -269,7 +266,7 @@ async function dispatchMethod(
           ...(options.clientName ? { clientName: options.clientName } : {}),
         }))
       }
-      const parsed = tool.parameters.safeParse(tool.normalizeArguments ? tool.normalizeArguments(rawArgs) : rawArgs)
+      const parsed = tool.parameters.safeParse(rawArgs)
       if (!parsed.success) {
         return jsonRpcError(id, -32602, 'Invalid tool arguments', parsed.error.flatten())
       }

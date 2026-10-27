@@ -104,6 +104,7 @@ function loadMessageRoute({
     userChannel: (userId) => `user-${userId}`,
   });
   stubModule("src/lib/flags.ts", {
+    AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
     isFeatureEnabled: async (key) => {
       assert.notEqual(key, "htpr-6322-agent-chat-parked-reply");
       return false;

@@ -1,5 +1,4 @@
 name: App Smoke
-run-name: ${{ github.event_name == 'workflow_run' && format('App Smoke request {0} for {1}:{2}', github.event.workflow_run.run_number, github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) || 'App Smoke production cache' }}
 
 # This file runs from production. Pull-request code cannot change its checks,
 # permissions, or the dependency cache created by production pushes.
@@ -13,7 +12,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}
+  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || github.event.workflow_run.conclusion == 'cancelled' && format('app-smoke-cancelled-request-{0}', github.run_id) || format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
   cancel-in-progress: true
 
 jobs:
@@ -66,18 +65,15 @@ jobs:
     name: validate app-smoke request
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 2
     permissions:
-      actions: write
-      contents: read
       pull-requests: read
       statuses: write
     outputs:
       head-repository: ${{ steps.request.outputs.head-repository }}
       head-sha: ${{ steps.request.outputs.head-sha }}
       pr: ${{ steps.request.outputs.pr }}
-      superseded: ${{ steps.request.outputs.superseded == 'true' || steps.current-request.outputs.superseded == 'true' }}
-      docs-only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
+      superseded: ${{ steps.request.outputs.superseded }}
     steps:
       - name: Validate the exact pull-request revision
         id: request
@@ -135,89 +131,17 @@ jobs:
             echo "head-repository=$head_repository"
             echo "head-sha=$head_sha"
             echo "pr=$REQUEST_PR"
-            echo "base-sha=$(jq -r '.base.sha' <<<"$pr_json")"
           } >>"$GITHUB_OUTPUT"
-          post_status() {
-            for attempt in $(seq 1 20); do
-              gh api --method POST "$@" && return 0
-              echo "::warning::Status publish failed (attempt $attempt of 20); GitHub API rate limit may be the cause. Retrying in 180s."
-              sleep 180
-            done
-            echo "### GitHub API rate limit, not a test failure" >>"$GITHUB_STEP_SUMMARY"
-            echo "The app-smoke status could not be published after 20 tries over 60 minutes." >>"$GITHUB_STEP_SUMMARY"
-            return 1
-          }
-          post_status "repos/$REPO/statuses/$head_sha" \
+          gh api --method POST "repos/$REPO/statuses/$head_sha" \
             -f state=pending \
             -f context=app-smoke \
             -f description='Building and testing the real app'
-
-      - name: Check out the trusted scope detector
-        if: steps.request.outputs.superseded != 'true'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Determine heavy smoke scope
-        id: scope
-        if: steps.request.outputs.superseded != 'true'
-        env:
-          SCOPE_EVENT_NAME: pull_request
-          BASE_SHA: ${{ steps.request.outputs.base-sha }}
-          HEAD_SHA: ${{ steps.request.outputs.head-sha }}
-        run: |
-          if ! node .github/scripts/ci-change-scope.cjs; then
-            echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Recheck the head and cancel only older requests
-        id: current-request
-        if: steps.request.outputs.superseded != 'true'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
-        env:
-          PR: ${{ steps.request.outputs.pr }}
-          HEAD_SHA: ${{ steps.request.outputs.head-sha }}
-        with:
-          script: |
-            const request = context.payload.workflow_run;
-            const currentHead = async () => {
-              const { data: pr } = await github.rest.pulls.get({
-                ...context.repo, pull_number: Number(process.env.PR),
-              });
-              if (pr.state === 'open' && pr.head.sha === process.env.HEAD_SHA) return true;
-              core.setOutput('superseded', 'true');
-              core.info('The pull request was closed or pushed again; its newest head has its own request.');
-              return false;
-            };
-            if (!await currentHead()) return;
-            const runs = (await Promise.all(['queued', 'in_progress', 'waiting', 'pending', 'requested'].map(status =>
-              github.paginate(github.rest.actions.listWorkflowRuns, {
-                ...context.repo, workflow_id: 'app-smoke.yml', event: 'workflow_run', status, per_page: 100,
-              }),
-            ))).flat();
-            for (const run of runs) {
-              if (run.id === context.runId || run.status === 'completed') continue;
-              const match = /^App Smoke request ([0-9]+) for /.exec(run.display_title);
-              if (!match) continue;
-              const requestNumber = Number(match[1]);
-              const title = `App Smoke request ${requestNumber} for ${request.head_repository.full_name}:${request.head_branch}`;
-              if (run.display_title !== title) continue;
-              if (!(requestNumber < request.run_number || (requestNumber === request.run_number && run.run_number < context.runNumber))) continue;
-              if (!await currentHead()) return;
-              try {
-                await github.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: run.id });
-              } catch (error) {
-                if (error.status !== 409) throw error;
-                core.info(`App Smoke run ${run.id} already finished cancelling or completed.`);
-              }
-            }
-            await currentHead();
 
   app-smoke:
     name: run app-smoke
     needs: validate
     runs-on: ubuntu-latest
-    if: needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'
+    if: needs.validate.outputs.superseded != 'true'
     timeout-minutes: 15
     permissions:
       contents: read
@@ -278,14 +202,13 @@ jobs:
 
   report:
     name: report app-smoke result
-    if: always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'
+    if: always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'
     needs: [validate, app-smoke]
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 1
     permissions:
       actions: write
       contents: read
-      pull-requests: read
       statuses: write
     steps:
       - name: Publish the required status on the tested revision
@@ -296,43 +219,16 @@ jobs:
           HEAD_SHA: ${{ needs.validate.outputs.head-sha || github.event.workflow_run.head_sha }}
           VALIDATION_RESULT: ${{ needs.validate.result }}
           SMOKE_RESULT: ${{ needs.app-smoke.result }}
-          DOCS_ONLY: ${{ needs.validate.outputs.docs-only }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$SMOKE_RESULT" = "cancelled" ]; then
-            echo "::notice::Cancelled app-smoke work does not publish a failing required status."
-            exit 0
-          fi
-          if [ -n "$PR" ]; then
-            pr_json=$(gh api "repos/$REPO/pulls/$PR")
-            if ! jq -e --arg sha "$HEAD_SHA" '.state == "open" and .head.sha == $sha' <<<"$pr_json" >/dev/null; then
-              echo "::notice::The pull request was closed or pushed again; no stale app-smoke status will be published."
-              exit 0
-            fi
-          fi
           state=failure
           description='App smoke failed'
           if [ "$VALIDATION_RESULT" = "success" ] && [ "$SMOKE_RESULT" = "success" ]; then
             state=success
             description='Real build and eight core actions passed'
           fi
-          if [ "$VALIDATION_RESULT" = "success" ] && [ "$DOCS_ONLY" = "true" ]; then
-            state=success
-            description='docs-only change, skipped'
-            echo "$description"
-          fi
-          post_status() {
-            for attempt in $(seq 1 20); do
-              gh api --method POST "$@" && return 0
-              echo "::warning::Status publish failed (attempt $attempt of 20); GitHub API rate limit may be the cause. Retrying in 180s."
-              sleep 180
-            done
-            echo "### GitHub API rate limit, not a test failure" >>"$GITHUB_STEP_SUMMARY"
-            echo "The app-smoke status could not be published after 20 tries over 60 minutes." >>"$GITHUB_STEP_SUMMARY"
-            return 1
-          }
-          post_status "repos/$REPO/statuses/$HEAD_SHA" \
+          gh api --method POST "repos/$REPO/statuses/$HEAD_SHA" \
             -f state="$state" \
             -f context=app-smoke \
             -f description="$description"

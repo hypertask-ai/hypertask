@@ -107,7 +107,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       f.prisma.agentWebhookSubscription = { findUnique: async () => null };
       f.prisma.$queryRaw = async (strings, ...values) => {
         if (String(strings).includes('FROM "Agent"')) return [{ id: f.agent.id }];
-        const scope = values.find(value => value && typeof value === 'object' && 'sql' in value && /^(?:AND session\.id IN\b|AND FALSE\b|$)/.test(value.sql.trim()));
+        const scope = values.find(value => value && typeof value === 'object' && 'sql' in value);
         assert.ok(scope);
         const selected = messages.filter(message => actor === 'unbound' || scope.values.includes(message.sessionId));
         if (actor === 'bound') assert.ok(!scope.values.includes('b'));

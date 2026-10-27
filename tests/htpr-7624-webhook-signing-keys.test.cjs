@@ -144,8 +144,6 @@ for (const model of ['board', 'agent']) {
         './delivery': h,
         '@/lib/mcp/webhooks/delivery': h,
         '@/lib/flags': { isFeatureEnabled: async () => true },
-        '@/lib/webhooks/signingKeyStore': { openWebhookSigningKey: value => value },
-        '@/lib/flags/definitions/htpr-7905-agent-webhook-auth-header': { AGENT_WEBHOOK_AUTH_HEADER_FLAG: 'fixture-auth-header' },
         './queue': { queueBoardWebhookDelivery: async (...args) => queued.push(args), queueAgentWebhookDelivery: async (...args) => queued.push(args) },
       });
       const result = await (model === 'board' ? worker.deliverBoardWebhook : worker.deliverAgentWebhook)('delivery');

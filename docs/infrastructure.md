@@ -69,7 +69,7 @@ key must therefore be the percent-decoded path with `+` left literal. Cloudflare
 2. Push. A Vercel preview builds automatically and the bot comments the URL on the PR.
 3. Open a PR with base `production`. The required checks include GitHub AI Review (`ai-review`, or legacy `claude-review` during the transition), `next-public-secrets`,
    `secret-scan` and `pr-title`; CI Tests and App Smoke run on normal non-draft PR lifecycle/code events,
-   without waiting for a label.
+   without waiting for a label. Preview smoke runs only when an opt-in preview exists.
 4. Merge to `production` -> production deploys in ~3 min.
 
 Rollback: promote the previous production deployment in Vercel, or `git revert` on `production`.
@@ -102,6 +102,10 @@ AI review and `claude-mention` are also self-hosted. A validated local broker di
 between its configured backends (the reviewer repository owns the provider order and models). Its
 job checks out only the trusted `production` reviewer implementation and never executes PR code.
 `claude-mention` still uses `CLAUDE_CODE_OAUTH_TOKEN`. External/fork PRs are excluded from review.
+
+Deliberately still GitHub-hosted: **preview-smoke** (bot-challenge risk on preview URLs,
+and it is tiny). If the Contabo box is down, PR checks queue until it returns; revert the
+`runs-on` lines to `ubuntu-latest` to fall back to paid hosted runners.
 
 ### Database migrations are NOT applied by the deploy
 

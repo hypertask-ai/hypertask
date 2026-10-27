@@ -2,7 +2,6 @@ import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getBoardHygiene } from '@/utils/controllers/projects/hygiene'
 import { columnRoleFor } from '@/lib/mcp/boards/columnRole'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -81,9 +80,6 @@ export async function GET(
       success: true,
       projectId: project.id,
       boardTitle: project.title || '',
-      ...(request.nextUrl.searchParams.get('include') === 'hygiene' ? {
-        report: await getBoardHygiene(projectId, ctx.user.id, ctx.agentId, ctx.teamScope),
-      } : {}),
       columns: project.section.map((section) => ({
         id: section.id,
         title: section.section_title,

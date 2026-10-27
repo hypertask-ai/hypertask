@@ -19,10 +19,6 @@ const agentWebhookInputObjectSchema = z.object({
   events: z.array(agentWebhookEvents).min(1).optional(),
   active: z.boolean().optional(),
   delivery_id: z.string().uuid().optional(),
-  auth_header_name: z.string().trim().min(1).max(64).optional(),
-  auth_header_value: z.string().min(1).max(2000).optional(),
-  bearer_secret: z.string().trim().min(1).max(1990).optional(),
-  clear_auth_header: z.boolean().optional(),
 }).strict();
 
 export function getAgentWebhookInputSchema() {

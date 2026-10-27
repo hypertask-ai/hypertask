@@ -18,31 +18,6 @@ Valentin types `/setup-runner` or `/setup-runner 5` in a fresh session in `~/pro
 
 5. Once per runner, after the number is settled, run `.claude/skills/ship/scripts/runner-pickup install <n>`. It enables `runner-pickup@<n>.timer` and registers the inbox hooks in this checkout's local Claude settings file, so tickets assigned to this runner's agent on the board reach it like chat messages do. Details: the "Tickets assigned to a runner on the board" section of `.claude/skills/ship/SKILL.md`.
 
-## Standing Codex runners
-
-Install from the merged production checkout:
-
-```sh
-.claude/skills/ship/scripts/ht-hax-runner install
-.claude/skills/ship/scripts/user-unit-check --first-run ht-hax-runner-keeper.service
-ht-hax-runner status
-```
-
-The five-minute keeper launches missing `RUNNER 6+` sessions.
-Only CPU, RAM and explicit pauses block launches.
-It never reads subscription quota or presses resets.
-Existing sessions keep running during installation.
-
-State lives in `~/.local/state/ht-hax-runners/`.
-`target` defaults to 10; `max` defaults to 20.
-Both must satisfy `1 <= target <= max <= 20`.
-Green load permits two starts per keeper tick.
-Fifteen minutes without starts permits one target increase.
-Current load must also be green.
-`PAUSED` pauses all new work; `stop-<n>` pauses one.
-Create those files to pause; remove to resume.
-A pause never interrupts the current ticket.
-
 ## Codex execution only
 
 Valentin, 2026-10-03: all delegated execution goes to Codex so we use the Codex account's tokens. Coding, tests, research and big-file reading run in background helpers with `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`. Never use the Agent tool or Claude subagents for delegated work. The runner's Claude session only plans, judges, reviews and talks to Valentin, apart from the setup and /ship coordination commands above. Give each helper an unlazy ledger and reverify its gates as /ship requires.

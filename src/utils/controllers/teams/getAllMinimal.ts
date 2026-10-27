@@ -28,10 +28,7 @@ const getAllTeamsMinimal = async (userId:number) => {
                 },
                
             })
-            console.log("🚀 ~ getAllTeamsMinimal ~ owned_teams:", owned_teams.map(team => ({
-                teamId: team.id,
-                hasCustomer: Boolean(team.stripe_customer_id)
-            })))
+            console.log("🚀 ~ getAllTeamsMinimal ~ owned_teams:", owned_teams)
             const participating_teams = await prisma.member_Team.findMany({
                 
                 where: {
@@ -41,10 +38,7 @@ const getAllTeamsMinimal = async (userId:number) => {
                     team:true
                 }
             })
-            console.log("🚀 ~ getAllTeamsMinimal ~ participating_teams:", participating_teams.map(({ team }) => ({
-                teamId: team.id,
-                hasCustomer: Boolean(team.stripe_customer_id)
-            })))
+            console.log("🚀 ~ getAllTeamsMinimal ~ participating_teams:", participating_teams)
 
             return ({
                 status:200,

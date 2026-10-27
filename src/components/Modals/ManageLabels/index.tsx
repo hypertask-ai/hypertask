@@ -4,9 +4,7 @@ import {  useRef, useState } from "react";
 import { Filter, Search, Settings, Sparkles } from "lucide-react";
 import { ModalBody, ModalFooter } from "reactstrap";
 import { useRecoilState } from "@/lib/state";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
-import type { BoardHygieneReport } from "@/lib/boardHygiene";
+import { useQueryClient } from "@tanstack/react-query";
 import { projectLabelsPrefix, useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import EditSingleLabel from "./EditSingleLabel";
 import useFilters from "@/hooks/Homepage/Filters/useFilters";
@@ -34,13 +32,6 @@ const ManageLabels = ({onClose}: Props) => {
     const [sortMode, setSortMode] = useState<"alphabetical" | "most" | "fewest">("alphabetical");
     const searchInputRef = useRef<HTMLInputElement>(null);
     const {data:labelsFromTQ} = useGetAllProjectLabels(currentProject?.id)
-    const { data: hygiene, isPending: hygienePending, isError: hygieneError } = useQuery({
-      queryKey: ["boardHygiene", currentProject?.id, labelsFromTQ, currentProject?.project_view?.allViews],
-      enabled: !!currentProject?.id,
-      queryFn: async () => (await axios.get<{ report: BoardHygieneReport }>("/api/projects/hygiene", {
-        params: { projectId: currentProject?.id },
-      })).data.report,
-    });
     const labels: ILabel[] = Array.isArray(labelsFromTQ) ? labelsFromTQ : [];
     const projectSavedViews = currentProject?.project_view?.allViews;
     const savedViewsMetadataReady = Array.isArray(projectSavedViews);
@@ -186,32 +177,7 @@ const ManageLabels = ({onClose}: Props) => {
                     className="block h-[44px] w-full rounded-sm bg-hoverCardBackground py-2 pl-10 pr-3 text-content font-normal leading-5 placeholder:text-text-light-gray outline-none"
                   />
                 </div>
-                <div className="max-h-[364px] overflow-y-scroll" style={{ height: Math.min(364, filteredLabels.length ? 36 * (filteredLabels.length + 1) : 56) }}>
-                  <details className="px-3 py-2 text-dense text-text-light-gray" data-testid="board-hygiene">
-                    <summary className="cursor-pointer font-medium text-white-black">Board hygiene</summary>
-                    {hygienePending && <p role="status">Checking tags and views…</p>}
-                    {hygieneError && <p role="alert">Could not check this board. Reopen to retry.</p>}
-                    {hygiene && <div className="flex flex-col gap-2 py-2">
-                      <p>{hygiene.untaggedOpenTickets} open tickets without tags</p>
-                      <p>{hygiene.duplicateGroups.length} possible duplicate groups</p>
-                      <ul>{hygiene.duplicateGroups.map(group => <li key={group.canonical.id}>
-                        {group.labels.map(label => label.name).join(" / ")}
-                      </li>)}</ul>
-                      <p>{hygiene.missingViews.length} tags without a shared view</p>
-                      <ul>{hygiene.missingViews.map(label => <li key={label.id}>{label.name}</li>)}</ul>
-                      <p>{hygiene.titleCaseChanges.length} tags need Title Case</p>
-                      <ul>{hygiene.titleCaseChanges.map(label => <li key={label.id}>{label.name} → {label.suggestedName}</li>)}</ul>
-                      <p>{hygiene.unusedTags.length} unused tags</p>
-                      <ul>{hygiene.unusedTags.map(label => <li key={label.id}>{label.name}</li>)}</ul>
-                      <p>Open tickets / idle over {hygiene.staleAfterDays} days</p>
-                      <ul>{hygiene.columns.map(column => <li key={column.id}>
-                        {column.title}: {column.openTickets} / {column.staleTickets}
-                      </li>)}</ul>
-                      <p>Column work limits are not configured.</p>
-                      <p>All board tags checked. Shared views only.</p>
-                      <p>Report only. Nothing changed.</p>
-                    </div>}
-                  </details>
+                <div className="max-h-[364px] overflow-y-scroll">
                   <div className="mx-1.5 flex h-[36px] items-center justify-between gap-3 rounded-sm px-3 text-dense text-text-light-gray">
                     <label className="flex cursor-pointer items-center gap-3">
                       <input

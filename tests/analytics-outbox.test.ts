@@ -426,13 +426,12 @@ for (const reason of ["flag", "eligibility"]) {
     const h = harness((h) => {
       const isFeatureEnabled = h.mocks["@/lib/flags"].isFeatureEnabled;
       h.mocks["@/lib/flags"].isFeatureEnabled = async (key: string, userId: number) =>
-        !(paused && userId === 123 && reason === "flag" && key === flag) && await isFeatureEnabled(key, userId);
+        !(paused && userId === 123 && key === (reason === "flag" ? flag : "htpr-7034-activation-analytics")) && await isFeatureEnabled(key, userId);
     });
     h.setFailure("capture");
     await h.capture();
     h.setFailure(null);
     paused = true;
-    if (reason === "eligibility") h.users.get(123).uid = "guest_local";
     const original = { ...h.rows[0], nextAttemptAt: new Date(0) };
     h.rows.splice(0);
     for (let i = 0; i < 101; i++) h.rows.push({ ...original, id: `paused-${i}`, key: `paused-${i}`, uuid: `paused-${i}` });

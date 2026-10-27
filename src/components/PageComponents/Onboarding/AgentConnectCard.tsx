@@ -2,12 +2,16 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
 
 const ConnectAIOnboardingScreen = dynamic(() => import("./Screens/ConnectAIOnboardingScreen").then((module) => module.ConnectAIOnboardingScreen), { ssr: false });
 
 export function AgentConnectCard({ projectId, userId }: { projectId: number; userId: number }) {
+  const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
   const identity = `${userId}:${projectId}`;
-  const [state, setState] = useState<{ identity: string; show: boolean } | null>(null);
+  const [state, setState] = useState<{ identity: string; eligible: boolean; show: boolean } | null>(null);
+  const serverEligible = state?.identity === identity && state.eligible;
   const show = state?.identity === identity && state.show;
 
   useEffect(() => {
@@ -15,12 +19,12 @@ export function AgentConnectCard({ projectId, userId }: { projectId: number; use
     const load = () => void fetch("/api/users/ai-connection-status?mode=first", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
-          if (!controller.signal.aborted) setState({ identity, show: false });
+          if (!controller.signal.aborted) setState({ identity, eligible: false, show: false });
           return;
         }
         const data = await response.json();
         if (!controller.signal.aborted) {
-          setState({ identity, show: !data.connected && !data.dismissed && data.boardId === projectId });
+          setState({ identity, eligible: data.eligible === true, show: !data.connected && !data.dismissed && data.boardId === projectId });
         }
       }).catch(() => undefined);
     load();
@@ -29,14 +33,14 @@ export function AgentConnectCard({ projectId, userId }: { projectId: number; use
       controller.abort();
       clearInterval(intervalId);
     };
-  }, [identity, projectId]);
+  }, [identity, projectId, flagEnabled]);
 
-  return show
-    ? <EligibleAgentConnectCard key={identity} />
+  return (flagEnabled ? true : serverEligible) && show
+    ? <EligibleAgentConnectCard key={identity} serverEligible={serverEligible} />
     : null;
 }
 
-function EligibleAgentConnectCard() {
+function EligibleAgentConnectCard({ serverEligible }: { serverEligible: boolean }) {
   const [eligible, setEligible] = useState(true);
   const [visible, setVisible] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -82,7 +86,7 @@ function EligibleAgentConnectCard() {
           Dismiss
         </button>
       </div>
-      <ConnectAIOnboardingScreen compact visible={visible} onNextScreen={() => void dismiss()} />
+      <ConnectAIOnboardingScreen compact visible={visible} serverEligible={serverEligible} onNextScreen={() => void dismiss()} />
       {error && <p role="alert" className="mt-2 text-meta text-text-light-gray">{error}</p>}
     </section>
   );

@@ -1410,7 +1410,7 @@ test("price tiers two and three are premium while tier one stays included", () =
   const { isPremiumAiModelKey } = loadTs("src/lib/aiModelOptions.ts");
   assert.equal(isPremiumAiModelKey("gemini-3.5-flash-lite"), false);
   assert.equal(isPremiumAiModelKey("gpt-6-luna"), true);
-  assert.equal(isPremiumAiModelKey("gpt-6.1-terra"), true);
+  assert.equal(isPremiumAiModelKey("gpt-5.6-terra"), true);
   assert.equal(isPremiumAiModelKey("gpt-6.1-sol"), true);
 });
 

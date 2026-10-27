@@ -3,7 +3,6 @@ import { tool } from "ai";
 import { z } from "zod";
 import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
 import prisma from "@/lib/prisma";
-import { getBoardHygiene } from "@/utils/controllers/projects/hygiene";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { parseBoardPlaybook } from "@/lib/mcp/boards/playbook";
 import { Prisma } from "@prisma/client";
@@ -18,11 +17,10 @@ export function createBoardConfigTool(context: ToolContext) {
   return {
     hypertask_board_config: tool({
       description:
-        "Read or set BOARD-WIDE AI instructions and playbook for an explicit board/project. Use get_hygiene for a read-only board health report, or get_playbook, set_playbook, get_instructions, or set_instructions. Setting either affects every user and agent on that board.",
+        "Read or set BOARD-WIDE AI instructions and playbook for an explicit board/project. Use get_playbook, set_playbook, get_instructions, or set_instructions. Setting either affects every user and agent on that board.",
       inputSchema: z
         .object({
           action: z.enum([
-            "get_hygiene",
             "get_playbook",
             "set_playbook",
             "get_instructions",
@@ -45,13 +43,6 @@ export function createBoardConfigTool(context: ToolContext) {
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_board_config");
         await assertProjectAccess(user.id, input.project_id);
-
-        if (input.action === "get_hygiene") {
-          const report = await getBoardHygiene(input.project_id, user.id, context.actingAgentId, context.teamScope);
-          return report
-            ? { success: true, projectId: input.project_id, report }
-            : { success: false, error: "Project not found or access denied" };
-        }
 
         if (input.action === "get_playbook") {
           const project = await prisma.project.findFirst({

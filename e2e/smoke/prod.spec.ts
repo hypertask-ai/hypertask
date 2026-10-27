@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { z } from 'zod'
 import { errorPageHeading } from './lib/errorPage'
 import { withRealtime } from './lib/realtime'
 import { tieredId } from './lib/tier'
@@ -133,6 +132,7 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
   }))
   // Exercise unreleased flags without changing the seed's production-mode snapshot.
   await page.route('**/api/flags', (route) => route.fulfill({ json: { flags: {
+    'htpr-6421-my-tasks-shortcuts-width': true,
     'htpr-6455-my-tasks-time-group': true,
     'htpr-6458-my-tasks-live-updates': true,
   } } }))
@@ -213,21 +213,16 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
 })
 }
 
-test.describe('docked board scope', () => {
-  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
-  test.use({ storageState: async ({}, applyState, info) => {
-    const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
-    await applyState(path.join(path.dirname(stateFile), `board-scope-${info.project.name}-state.json`))
-  } })
-
 test('docked AI chat follows the viewed board and keeps hand picks board-local', { tag: ['@id:chat-follows-board'] }, async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
   const mobile = testInfo.project.name === 'Mobile'
   await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 })
-  const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
-  const boards = z.array(z.object({ path: z.string(), id: z.number().int().positive(), title: z.string() })).length(2)
-    .parse(JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'board-scope-fixture.json'), 'utf8')))
+  const boards = [process.env.SMOKE_BOARD_PATH!, process.env.SMOKE_DEMO_BOARD_PATH!].map((boardPath, index) => ({
+    path: boardPath,
+    id: Number(new URL(boardPath, 'http://localhost').searchParams.get('id')),
+    title: index === 0 ? 'Browser smoke board' : 'Browser smoke demo board',
+  }))
   const [a, b] = boards
-  for (const board of boards) expect(Number(new URL(board.path, 'http://localhost').searchParams.get('id'))).toBe(board.id)
   expect(a.id).toBeGreaterThan(0)
   expect(b.id).toBeGreaterThan(0)
   expect(a.id).not.toBe(b.id)
@@ -237,10 +232,11 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   }, b.id)
   const sidebar = page.getByTestId('ai-sidebar')
   const chip = sidebar.locator('[data-ai-chat-scope]:visible > button').first()
+  const opener = page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true })
   const assertScope = async (title: string) => {
     await expect(page.locator('.kanban-column-title').first()).toBeVisible()
-    await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
-    await expect(sidebar).toBeVisible()
+    await expect(page.locator('[data-testid="ai-sidebar"]:visible').or(opener).first()).toBeVisible()
+    if (!(await sidebar.isVisible())) await opener.click()
     await expect(chip).toBeVisible()
     await expect(chip).toHaveAttribute('title', title)
     await expect(chip).toContainText(title)
@@ -268,7 +264,7 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   await switchBoard(b)
   await assertScope(b.title)
   await chip.click()
-  await page.locator('#option-picker').getByText(a.title, { exact: true }).click()
+  await sidebar.getByRole('menuitemradio', { name: a.title, exact: true }).click()
   await expect(chip).toHaveAttribute('title', a.title)
   await expect(chip).toContainText(a.title)
   await switchBoard(a)
@@ -276,7 +272,6 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   await switchBoard(b)
   await assertScope(b.title)
   expect(documentRequests, 'board switches must preserve client state rather than reload it').toBe(0)
-})
 })
 
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
@@ -529,90 +524,3 @@ for (const view of VIEWS) {
     expect(pageErrors, `${view.path} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
 }
-
-test.describe('Pages fixtures', () => {
-  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
-  test.use({ storageState: async ({}, applyState, info) => {
-    const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
-    await applyState(path.join(path.dirname(stateFile), `pages-${info.project.name}-state.json`))
-  } })
-
-test('Pages list creates a document, links a ticket, persists, unlinks and separates archived pages', async ({ page }, testInfo) => {
-  test.skip(!process.env.BROWSER_SMOKE_PR, 'Writes only to disposable PR fixtures')
-  const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
-  const fixture = JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'card-fixture.json'), 'utf8'))
-  test.skip(!fixture.flags['htpr-7298-standalone-pages'] || !fixture.flags['htpr-7309-pages-screens'], 'Pages screens are off in this flag mode')
-  const pageFixture = fixture.pages[testInfo.project.name]
-  const boardId = pageFixture.projectId
-  const title = `Pages smoke ${testInfo.project.name} ${Date.now()}`
-  await page.goto(withRealtime(`/project?id=${boardId}&surface=board`))
-  await page.goto(withRealtime(`/pages?project_id=${boardId}`))
-  await expect(page.getByRole('main', { name: 'Pages', exact: true })).toBeVisible()
-  await page.keyboard.press('Control+k')
-  const commandInput = page.getByPlaceholder('Type a command or search...')
-  await expect(commandInput).toHaveCount(1)
-  await commandInput.fill('New page')
-  await page.getByRole('dialog').getByText('New page', { exact: true }).click()
-  await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toBeVisible()
-  const publicId = new URL(page.url()).pathname.split('/').pop()!
-  console.log(`[pages] created ${publicId}`)
-  try {
-    const created = await page.request.get(`/api/pages/${publicId}`)
-    expect((await created.json()).page.projectId).toBe(boardId)
-    await page.getByRole('textbox', { name: 'Page title', exact: true }).fill(title)
-    await expect(page.getByText('Saved', { exact: true })).toBeVisible()
-    await page.reload()
-    await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toHaveValue(title)
-    await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
-    console.log('[pages] title saved and reloaded')
-    const linked = await page.request.post(`/api/pages/${publicId}/links`, { data: { task_id: pageFixture.taskId } })
-    expect(linked.ok()).toBe(true)
-    await page.reload()
-    await expect(page.getByText('Linked tickets (1)', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Back to task', exact: true })).toBeVisible()
-    console.log('[pages] ticket linked')
-    await page.getByRole('textbox', { name: 'Page title', exact: true }).fill(`${title} pending`)
-    await page.getByRole('region', { name: 'Linked tickets', exact: true }).getByRole('link').click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe(pageFixture.detailPath)
-    await page.goto(`/page/${publicId}`)
-    await expect(page.getByRole('textbox', { name: 'Page title', exact: true })).toHaveValue(`${title} pending`)
-    await page.getByRole('textbox', { name: 'Page title', exact: true }).fill(title)
-    await expect(page.getByText('Saved', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: /^Unlink / }).click()
-    await expect(page.getByText('Linked tickets (0)', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Back to Pages', exact: true })).toBeVisible()
-    console.log('[pages] pending save persisted and ticket unlinked')
-    await page.goto(pageFixture.detailPath)
-    await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
-    const linkPageCommand = page.getByRole('dialog').getByText('Link page', { exact: true })
-    await page.keyboard.press('Control+k')
-    await page.getByPlaceholder('Type a command or search...').fill('Link page')
-    await expect(linkPageCommand).toBeVisible({ timeout: 15_000 })
-    await linkPageCommand.click()
-    await page.locator('#option-picker input').fill(title)
-    await page.locator('#option-picker').getByText(title, { exact: true }).click()
-    await expect(page.locator(`a[href="/page/${publicId}"]`)).toBeVisible()
-    const unlinked = await page.request.delete(`/api/pages/${publicId}/links`, { data: { task_id: pageFixture.taskId } })
-    expect(unlinked.ok()).toBe(true)
-    await page.goto(`/page/${publicId}`)
-    await page.getByRole('button', { name: 'Back to Pages', exact: true }).click()
-    await page.getByRole('textbox', { name: 'Search pages' }).fill(title)
-    await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
-    console.log('[pages] task-context Link page and list search verified')
-    const archived = await page.request.post(`/api/pages/${publicId}/archive`)
-    expect(archived.ok()).toBe(true)
-    await page.reload()
-    await page.getByRole('textbox', { name: 'Search pages' }).fill(title)
-    await expect(page.getByText('No pages found.', { exact: true })).toBeVisible()
-    await page.getByRole('tab', { name: /^Archived pages/ }).click()
-    await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
-  } catch (error) {
-    console.error(`[pages] failed on ${page.url()}: ${error}`)
-    console.error(`[pages] dialog text: ${(await page.getByRole('dialog').allInnerTexts().catch(() => [])).join(' | ').slice(0, 600)}`)
-    throw error
-  } finally {
-    await page.request.post(`/api/pages/${publicId}/archive`, { timeout: 5000 }).catch(() => {})
-  }
-})
-
-})

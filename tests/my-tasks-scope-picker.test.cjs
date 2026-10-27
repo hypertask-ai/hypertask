@@ -47,7 +47,7 @@ stub("src/hooks/MultiPages/useGetMembersForAssignees.ts", { useGetAllMembersForA
 } });
 stub("src/hooks/Task Detail/useAssignTaskUser.ts", { useAssignTaskUser: () => noop });
 stub("src/components/Common/UserAvatar.tsx", { default: () => React.createElement("img", { alt: "person" }) });
-stub("next/navigation", { useRouter: () => ({ push() {} }), usePathname: () => pathname });
+stub("next/navigation", { usePathname: () => pathname });
 stub("src/hooks/RecoilRoot/useHypertasksRecoilStates.ts", { default: () => ({ resetShowCommands: noop }) });
 stub("src/lib/contexts/TourContext.tsx", { useTourContext: () => ({ endTour: noop }) });
 stub("src/hooks/MultiPages/useGetAllProjectsMinimal.ts", { useGetAllProjectsMinimal: () => ({ data: [{ id: 1, title: "Alpha" }] }) });

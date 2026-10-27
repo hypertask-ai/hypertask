@@ -8,7 +8,6 @@ import { createCommentService } from '@/utils/controllers/comments/createComment
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
-import { filedRecently, quietFixableReports } from './callerFixable'
 
 export { aiFeedbackEnabled } from './enabled'
 
@@ -62,15 +61,6 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   if (code === 'route not found' || code === 'not found' && /\/api\//i.test(input.error ?? '')) return false
   const refusal = `${code} ${input.error ?? ''}`
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
-}
-
-const INPUT_REFUSAL_CODES = new Set([
-  'unrecognized_keys', 'invalid_type', 'invalid_literal', 'invalid_union', 'invalid_enum_value',
-  'invalid_string', 'invalid_date', 'invalid_key', 'too_small', 'too_big', 'not_multiple_of', 'unrecognized', 'custom',
-])
-
-function inputRefusal(input: AiFeedbackInput): boolean {
-  return input.status === 400 && INPUT_REFUSAL_CODES.has((input.errorCode ?? '').toLowerCase())
 }
 
 export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
@@ -168,10 +158,6 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
         }
-        if (reporter.origin === 'automatic' && inputRefusal(input) && !existing) {
-          console.info('AI feedback not filed: tool input refusal', { surface: input.surface, tool: input.tool, errorCode: input.errorCode, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
-          return { success: false as const, filed: false as const, reason: 'input_refused' as const, error: 'Tool input refusal; no new ticket was filed.' }
-        }
         if (!await reserveFeedbackQuota(userId, Boolean(existing))) {
           throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
         }
@@ -195,21 +181,6 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           }
           changedTaskId = existing.id
           return receipt(existing, true, count, project.uniqueIdentifier)
-        }
-        const quietFixable = reporter.origin === 'automatic' ? await quietFixableReports(userId) : false
-        const recentlyClosed = quietFixable
-          ? await tx.task.findFirst({
-            where: {
-              projectId: PROJECT_ID, status: 'Normal',
-              OR: [{ sectionId: { in: doneSections.map((item) => item.id) } }, { section: { in: doneSections.map((item) => item.section_title) } }],
-              description_: { is: { content: { contains: marker } } },
-            },
-            orderBy: { id: 'desc' }, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true, createdAt: true },
-          })
-          : null
-        if (filedRecently(recentlyClosed)) {
-          console.info('AI feedback not filed: the same fingerprint was filed in the last day', { fingerprint: `ai-fb-${fingerprint.slice(0, 12)}`, ticket: recentlyClosed.ticketNumber })
-          return receipt(recentlyClosed, true, 0, project.uniqueIdentifier)
         }
         let label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
         if (!label) {

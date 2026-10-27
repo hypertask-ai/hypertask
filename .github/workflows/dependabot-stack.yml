@@ -11,7 +11,7 @@ name: Dependabot Stack Updates
 #   major (or unparseable) -> label `major-upgrade`, never auto-merge. A ticket
 #                             is opened by `dependabot-major-ticket.yml`.
 #
-# `pull_request_target` on purpose, copying `pr-guards-trusted.yml`: a `pull_request` run
+# `pull_request_target` on purpose, copying `pr-size.yml`: a `pull_request` run
 # on a Dependabot PR gets a read-only token and NO repository secrets, so it
 # could neither label nor enable auto-merge. This job never checks out or runs
 # PR code, it only reads PR metadata through the API, so holding a write token

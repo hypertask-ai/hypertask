@@ -43,16 +43,7 @@ export async function readProductionIssue(fetchImpl, apiKey, issueId, { wait = s
   const issue = await jsonRequest(fetchImpl, `${POSTHOG}/api/projects/${PROJECT}/error_tracking/issues/${issueId}/`, { headers });
   if (issue.id !== issueId) throw new Error("PostHog returned a different issue");
   const readStats = async (query) => {
-    const stats = await jsonRequest(async (url, options) => {
-      let response = await fetchImpl(url, options);
-      for (const delay of [1000, 2000]) {
-        if (![502, 503, 504].includes(response.status)) break;
-        await response.body?.cancel();
-        await wait(delay);
-        response = await fetchImpl(url, options);
-      }
-      return response;
-    }, `${POSTHOG}/api/projects/${PROJECT}/query/`, {
+    const stats = await jsonRequest(fetchImpl, `${POSTHOG}/api/projects/${PROJECT}/query/`, {
       method: "POST", headers, body: JSON.stringify({ query: { kind: "HogQLQuery", query }, refresh: "force_blocking" }),
     });
     if (!Array.isArray(stats.results) || stats.results.length !== 1 || stats.hasMore || stats.error) {

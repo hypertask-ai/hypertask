@@ -10,7 +10,6 @@ import {
   resolveTeamCustomEndpoint,
 } from "@/app/api/ai/_lib/byokKeys";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
-import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { buildComposerConfig, providersRequiringByokCheck } from "./config";
 
 function error(message: string, status: number) {
@@ -79,9 +78,6 @@ async function getComposer(request: NextRequest) {
         defaultContext.byok.provider === "openrouter" ? "openrouter" : "anthropic",
       );
     }
-    const grokGemini4Enabled = await import("@/lib/flags")
-      .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7939_GROK_GEMINI4_MODELS_FLAG, ctx.user.id))
-      .catch(() => false);
     return NextResponse.json({
       success: true,
       projectId: project.id,
@@ -91,7 +87,6 @@ async function getComposer(request: NextRequest) {
         storePlanId,
         providersWithByok,
         haiku55Enabled: defaultContext.haiku55Enabled,
-        grokGemini4Enabled,
         haikuDefaultEnabled: defaultContext.haikuDefaultEnabled,
         defaultContext,
       }),

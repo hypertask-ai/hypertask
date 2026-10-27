@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process'
+// YPER4-673: one verify-qa feature-map journey against the seeded PR build.
+// Report-only. A failing journey still exits 0 when VERIFY_QA_REPORT_ONLY=1.
 import { createRequire } from 'node:module'
 import { access, appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -6,9 +7,11 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const FEATURE_MAP_DIR = '.claude/skills/verify-qa/reference/feature-map'
+export const DEFAULT_PAGE = 'inbox.md'
+export const DEFAULT_JOURNEY = 'inbox-cycle'
 
 export const FEATURE_MAP_CATALOG = [
-  { page: 'inbox.md', journey: ['inbox-cycle'], prefixes: [
+  { page: 'inbox.md', journey: 'inbox-cycle', prefixes: [
     'src/app/inbox/',
     'src/pages/api/notifications/',
     'src/pages/api/queues/inboxQueue.ts',
@@ -16,13 +19,13 @@ export const FEATURE_MAP_CATALOG = [
     'e2e/smoke/inbox-cycle.spec.ts',
     '.claude/skills/verify-qa/scripts/inbox-cycle-live.mjs',
   ]},
-  { page: 'login.md', journey: ['login'], prefixes: ['src/proxy.ts', 'src/lib/auth/'] },
-  { page: 'boards-and-views.md', journey: ['open-board', 'switch-boards', 'drag-card'], prefixes: ['src/components/PageComponents/Kanban/'] },
-  { page: 'task-detail-and-description.md', journey: ['open-task', 'edit-description'], prefixes: ['src/components/PageComponents/TaskDetail/'] },
-  { page: 'comments-and-mentions.md', journey: ['add-comment'], prefixes: ['src/pages/api/comments/'] },
-  { page: 'create-task-attachments.md', journey: ['create-task'], prefixes: ['src/components/RTE/TiptapCreateTaskModal.tsx'] },
-  { page: 'quick-entry-cards.md', journey: ['create-task'], prefixes: ['src/components/Common/newTask.tsx'] },
-  { page: 'ai-chat.md', journey: ['ai-chat'], prefixes: ['src/app/api/ai/', 'src/lib/aiModelOptions.ts'] },
+  { page: 'login.md', journey: null, prefixes: ['src/proxy.ts', 'src/lib/auth/'] },
+  { page: 'boards-and-views.md', journey: null, prefixes: ['src/components/PageComponents/Kanban/'] },
+  { page: 'task-detail-and-description.md', journey: null, prefixes: ['src/components/PageComponents/TaskDetail/'] },
+  { page: 'comments-and-mentions.md', journey: null, prefixes: ['src/pages/api/comments/'] },
+  { page: 'create-task-attachments.md', journey: null, prefixes: ['src/components/RTE/TiptapCreateTaskModal.tsx'] },
+  { page: 'quick-entry-cards.md', journey: null, prefixes: ['src/components/Common/newTask.tsx'] },
+  { page: 'ai-chat.md', journey: null, prefixes: ['src/app/api/ai/', 'src/lib/aiModelOptions.ts'] },
   { page: 'board-invites.md', journey: null, prefixes: [
     'src/components/Modals/commands/inviteMember.tsx',
     'src/hooks/MultiPages/useInviteCallbackHandlers.ts',
@@ -40,7 +43,6 @@ export const FEATURE_MAP_CATALOG = [
   { page: 'cli-install.md', journey: null, prefixes: ['src/lib/onboarding/installCommands.ts'] },
   { page: 'task-share-links.md', journey: null, prefixes: ['src/pages/api/share/'] },
   { page: 'search-and-filters.md', journey: null, prefixes: ['src/pages/api/search/'] },
-  { page: 'billing-and-plans.md', journey: ['plan-check'], prefixes: ['src/components/Modals/Settings/BillingSection.tsx', 'src/app/settings/billing/'] },
   { page: 'my-tasks.md', journey: null, prefixes: ['src/app/my-tasks/'] },
 ]
 
@@ -69,16 +71,20 @@ export function selectJourney(files, catalog = FEATURE_MAP_CATALOG) {
   const tied = leaders.length > 1
   const matched = !tied && leaders.length === 1 ? leaders[0] : null
   const matchedEntry = catalog.find((entry) => entry.page === matched)
-  const journey = matchedEntry?.journey || null
+  const hasDriver = Boolean(matchedEntry?.journey)
+  const journey = hasDriver ? matchedEntry.journey : DEFAULT_JOURNEY
+  const ranPage = hasDriver ? matched : DEFAULT_PAGE
   let reason = 'matched'
   if (ranked.length === 0) reason = 'no feature-map page matched the diff'
   else if (tied) reason = `tie: ${leaders.join(', ')}`
-  else if (!journey) reason = `no premerge driver for ${matched}`
+  else if (!hasDriver) reason = `no premerge driver for ${matched}`
   return {
     matchedPage: matched,
+    ranPage,
     journey,
+    fallback: !hasDriver,
     reason,
-    featureMap: matched ? `${FEATURE_MAP_DIR}/${matched}` : null,
+    featureMap: `${FEATURE_MAP_DIR}/${ranPage}`,
     counts: Object.fromEntries(ranked),
   }
 }
@@ -118,7 +124,7 @@ async function writeEvidence(outDir, result) {
     `Feature map: ${result.featureMap}`,
     `Journey: ${result.journey}`,
     `Matched page: ${result.matchedPage || 'none'}`,
-    `Selection: ${result.selectionReason}`,
+    `Fallback: ${result.fallback ? 'yes' : 'no'} (${result.selectionReason})`,
     `Verdict: ${result.verdict}`,
     result.failure ? `Failure: ${result.failure}` : null,
     `Base: ${result.base}`,
@@ -153,7 +159,7 @@ async function writeEvidence(outDir, result) {
 
 function finish(result) {
   const failed = result.verdict !== 'PASS'
-  console.log(failed ? `::warning::verify-qa ${result.verdict}: ${result.failure || result.selectionReason}` : 'verify-qa ok')
+  console.log(failed ? `verify-qa FAIL: ${result.failure || result.selectionReason}` : 'verify-qa ok')
   process.exitCode = reportOnly() || !failed ? 0 : 1
 }
 
@@ -361,66 +367,16 @@ async function loadInboxFixture(fixturePath) {
   return items
 }
 
-export async function runTaggedJourneys({ base, journey, outDir }, execute = spawnSync) {
-  const reportFile = path.join(outDir, 'journeys.json')
-  const run = execute(process.execPath, [
-    path.join(root, 'node_modules/@playwright/test/cli.js'),
-    'test', '-c', 'playwright.config.smoke.ts', '--project=journeys',
-    '--grep', `@id:(${journey.join('|')})(\\s|$)`,
-    '--workers=1', '--retries=0', '--global-timeout=140000', '--reporter=json',
-    `--output=${path.join(outDir, 'test-results')}`,
-  ], {
-    cwd: root,
-    env: {
-      ...process.env,
-      BASE_URL: base,
-      SMOKE_BASE_URL: base,
-      HT_QA_JOURNEYS: '1',
-      HT_QA_TIER: '',
-      HT_QA_EXPECTED_PLAN: 'Free',
-      PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,
-    },
-    encoding: 'utf8',
-    timeout: 150_000,
-  })
-  if (run.error) throw new Error(`journey runner: ${run.error.message}`)
-  const report = JSON.parse(await readFile(reportFile, 'utf8'))
-  const specs = []
-  function collect(suite) {
-    specs.push(...(suite.specs || []))
-    for (const child of suite.suites || []) collect(child)
-  }
-  collect(report)
-  const steps = journey.map((id) => {
-    const spec = specs.find((entry) => entry.tags?.includes(`id:${id}`))
-    const tests = spec?.tests || []
-    const statuses = tests.flatMap((entry) => (entry.results || []).map((result) => result.status))
-    const pass = statuses.length > 0 && statuses.every((status) => status === 'passed')
-    return { name: id, pass, detail: { statuses, unreachable: !statuses.length || statuses.every((status) => status === 'skipped') } }
-  })
-  const failed = steps.filter((step) => !step.pass)
-  let verdict = 'PASS'
-  if (failed.length) verdict = failed.every((step) => step.detail.unreachable) ? 'UNREACHABLE' : 'FAIL'
-  if (run.status !== 0 && verdict === 'PASS') verdict = 'FAIL'
-  return {
-    steps,
-    screenshots: specs.flatMap((spec) => (spec.tests || []).flatMap((entry) => (entry.results || []).flatMap((result) =>
-      (result.attachments || []).filter((attachment) => attachment.contentType === 'image/png' && attachment.path)
-        .map((attachment) => path.relative(outDir, attachment.path))))),
-    verdict,
-    failure: verdict === 'PASS' ? null : `journey runner ${verdict}: ${failed.map((step) => step.name).join(', ') || `exit ${run.status}`}`,
-  }
-}
-
 async function main() {
   const outDir = path.resolve(process.env.VERIFY_QA_OUT || 'verify-qa-premerge')
   const choice = selectJourney(await readChangedFiles(process.env.VERIFY_QA_CHANGED_FILES))
   const baseRaw = process.env.VERIFY_QA_BASE || process.env.BASE_URL || ''
   const result = {
-    ticket: 'https://app.hypertask.ai/detail/project-4060/695',
+    ticket: 'https://app.hypertask.ai/detail/project-4060/673',
     featureMap: choice.featureMap,
     matchedPage: choice.matchedPage,
     journey: choice.journey,
+    fallback: choice.fallback,
     selectionReason: choice.reason,
     counts: choice.counts,
     base: baseRaw,
@@ -431,21 +387,8 @@ async function main() {
     cleanup: 'Disposable browser-smoke database is discarded with the job. Evidence in this directory is kept.',
   }
   try {
-    await mkdir(outDir, { recursive: true })
-    if (!choice.journey) {
-      result.verdict = 'UNREACHABLE'
-      result.failure = `no driver: ${choice.reason}`
-      await writeEvidence(outDir, result)
-      finish(result)
-      return
-    }
     result.base = assertLoopback(baseRaw)
-    if (!choice.journey.includes('inbox-cycle')) {
-      Object.assign(result, await runTaggedJourneys({ base: result.base, journey: choice.journey, outDir }))
-      await writeEvidence(outDir, result)
-      finish(result)
-      return
-    }
+    if (choice.journey !== DEFAULT_JOURNEY) throw new Error(`no premerge runner for ${choice.journey}`)
     const stateFile = process.env.VERIFY_QA_STATE_FILE
     const fixturePath = process.env.VERIFY_QA_FIXTURE
     if (!stateFile || !fixturePath) throw new Error('VERIFY_QA_STATE_FILE and VERIFY_QA_FIXTURE are required')

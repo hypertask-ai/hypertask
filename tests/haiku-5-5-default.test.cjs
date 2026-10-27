@@ -53,16 +53,16 @@ test("plan-aware defaults keep Luna on Free and choose Haiku for paid or compati
   assert.equal(catalog.pickReplacementAiModelOption("claude-haiku-4.5", visible, true).id, haiku.id);
 });
 
-test("flag-off plan defaults stay unchanged and the catalog contains only Haiku 5.5", () => {
+test("flag-off plan defaults and display catalog retain production behavior", () => {
   for (const plan of ["Free", "Pro", "AI", "BYOK", null]) {
     const expected = ["Free", "Pro", "AI"].includes(plan) ? "gpt-6-luna" : "gemini-3.5-flash-lite";
     assert.equal(catalog.getDefaultAiModelOptionForPlan(plan, false, false).id, expected);
   }
   assert.equal(catalog.getDefaultAiModelOptionForPlan("Free", false, false).id, "gpt-6-luna");
   const visible = catalog.aiModelOptions.filter((option) => catalog.isAiModelOptionVisible(option, false));
-  assert.equal(visible.some((option) => option.modelKey === "claude-haiku-4.5"), false);
-  assert.ok(visible.includes(haiku));
-  assert.equal(catalog.getAiModelOptionById("claude-haiku-4.5", false).id, "claude-haiku-5-5");
+  assert.ok(visible.some((option) => option.modelKey === "claude-haiku-4.5"));
+  assert.equal(visible.includes(haiku), false);
+  assert.equal(catalog.getAiModelOptionById("claude-haiku-4.5", false).id, "claude-haiku-4.5");
   assert.equal(ladder.getSystemModelsForFeature("summaries", false)[0].model, "google/gemini-3.5-flash-lite");
 });
 
@@ -76,10 +76,10 @@ test("personal, team, board, agent and raw saved Haiku aliases resolve at read t
     const original = JSON.stringify(settings);
     assert.equal(ladder.resolveUserFacingModelOption("aiChat", settings, null, { haiku55Enabled: true }).id, haiku.id);
     assert.equal(JSON.stringify(settings), original);
-    assert.equal(catalog.resolveHaikuModelId(saved, false), saved.includes("/") ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5");
+    assert.equal(catalog.resolveHaikuModelId(saved, false), saved);
   }
-  assert.equal(catalog.resolveAiModelMention("Haiku 4.5", true), undefined);
-  assert.equal(catalog.resolveAiModelMention("Haiku 4.5", false), undefined);
+  assert.equal(catalog.resolveAiModelMention("Haiku 4.5", true).modelOption.id, haiku.id);
+  assert.equal(catalog.resolveAiModelMention("Haiku 4.5", false).modelOption.id, "claude-haiku-4.5");
   assert.equal(catalog.resolveAiModelOption(["gpt-6-luna"], planDefault, true).id, "gpt-6-luna");
 });
 
@@ -95,8 +95,8 @@ test("Android access and defaults follow plan and BYOK while saved Haiku upgrade
         assert.ok(on.models.some((option) => option.id === haiku.id));
         assert.equal(on.models.some((option) => option.id === "claude-haiku-4.5"), false);
         const off = composer.buildComposerConfig({ ...input, haiku55Enabled: false });
-        assert.equal(off.models.some((option) => option.id === haiku.id), true);
-        assert.equal(off.models.some((option) => option.id === "claude-haiku-4.5"), false);
+        assert.equal(off.models.some((option) => option.id === haiku.id), false);
+        assert.ok(off.models.some((option) => option.id === "claude-haiku-4.5"));
       }
     }
   }
@@ -114,12 +114,12 @@ test("plan-aware ladder upgrades saved Haiku but preserves Free production defau
       assert.equal(ladder.resolveSystemModel(feature, {}, false, context).model, "google/gemini-3.5-flash-lite");
     }
     assert.deepEqual(ladder.getSystemModelsForFeature(feature, true, { plan: "Free" }).map((entry) => entry.provider), ladder.getSystemModelsForFeature(feature, false).map((entry) => entry.provider));
-    assert.equal(ladder.resolveSystemModel(feature, settings, false).model, "anthropic/claude-haiku-5.5");
+    assert.equal(ladder.resolveSystemModel(feature, settings, false).model, "anthropic/claude-haiku-4.5");
     assert.ok(ladder.isAiFeatureModelAllowed(feature, "anthropic/claude-haiku-5.5", true));
     assert.ok(ladder.isAiFeatureModelEnabled(feature, "anthropic/claude-haiku-5.5", {}, true, true));
-    assert.equal(ladder.isAiFeatureModelAllowed(feature, "anthropic/claude-haiku-5.5", false), true);
+    assert.equal(ladder.isAiFeatureModelAllowed(feature, "anthropic/claude-haiku-5.5", false), false);
   }
-  assert.deepEqual(ladder.SYSTEM_MODEL_LADDERS.fast.filter((option) => option.provider === "anthropic").map((option) => option.model), ["anthropic/claude-haiku-5.5"]);
+  assert.ok(ladder.SYSTEM_MODEL_LADDERS.fast.some((option) => option.model === "anthropic/claude-haiku-4.5"));
   const onlyOpenAi = { providers: { anthropic: false } };
   assert.notEqual(ladder.resolveUserFacingModelOption("aiChat", onlyOpenAi, null, { haiku55Enabled: true, plan: "Pro" })?.id, "claude-haiku-4.5");
 });
@@ -169,7 +169,7 @@ test("BYOK probes use Haiku for Anthropic and gateway accounts while retaining O
     const on = probe.buildByokTestRequest(provider, "fixture", undefined, true);
     const off = probe.buildByokTestRequest(provider, "fixture", undefined, false);
     assert.ok(catalog.isHaiku55Model(JSON.parse(on.init.body).model));
-    assert.equal(catalog.isHaiku55Model(JSON.parse(off.init.body).model), provider === "claude");
+    assert.equal(catalog.isHaiku55Model(JSON.parse(off.init.body).model), false);
   }
   assert.equal(JSON.parse(probe.buildByokTestRequest("openai", "fixture", undefined, true).init.body).model, "gpt-6-luna");
 });
@@ -185,7 +185,7 @@ test("title callback dependencies refresh the model when the flag changes while 
   }
   visit(ast);
   assert.ok(callback);
-  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["autoTitleRecoveryEnabled", "haiku55Enabled", "haikuDefaultEnabled", "defaultModelOption", "defaultContext", "_currentProject?.teamId"]);
+  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["haiku55Enabled", "haikuDefaultEnabled", "defaultModelOption", "defaultContext", "_currentProject?.teamId"]);
   const code = ts.transpileModule(`module.exports = ${callback.getText(ast)}`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -204,7 +204,7 @@ test("title callback dependencies refresh the model when the flag changes while 
     formValuesRef.current.currentProject = { teamId: "fixture-team", billing: { storePlanId: plan, byokProviderFlags: provider ? [{ provider, enabled: true }] : [] } };
     const loaded = { exports: {} };
     vm.runInNewContext(code, {
-      module: loaded, useCallback, haiku55Enabled, haikuDefaultEnabled, autoTitleRecoveryEnabled: false, defaultContext: undefined, _currentProject: null,
+      module: loaded, useCallback, haiku55Enabled, haikuDefaultEnabled, defaultContext: undefined, _currentProject: null,
       getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags,
       defaultModelOption: haiku55Enabled ? haiku : catalog.defaultAiModelOption,
       formValuesRef, aiModelPreferencesRef: { current: {} },
@@ -219,16 +219,20 @@ test("title callback dependencies refresh the model when the flag changes while 
   }
 });
 
-test("Haiku 5.5 keeps the free price tier and stays visible on every plan without its flag", async () => {
-  const definition = catalog.getAiModelDefinition(haiku.modelKey);
-  assert.equal(definition.priceTier, 1);
-  assert.equal(Boolean(definition.premium), false);
-  for (const freePlan of [false, true]) assert.equal(catalog.isPremiumAiModelDefinition(definition, freePlan), false);
+test("Haiku access, price tier and premium status match production 4.5 on every plan", async () => {
+  const productionSource = require("node:child_process").execFileSync("git", ["show", "origin/production:src/lib/aiModelOptions.ts"], { cwd: root, encoding: "utf8" });
+  const productionModule = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(productionSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module: productionModule, exports: productionModule.exports });
+  const production = productionModule.exports;
+  const oldDefinition = production.getAiModelDefinition("claude-haiku-4.5");
+  const newDefinition = catalog.getAiModelDefinition(haiku.modelKey);
+  assert.equal(newDefinition.priceTier, oldDefinition.priceTier);
+  assert.equal(Boolean(newDefinition.premium), Boolean(oldDefinition.premium));
+  for (const freePlan of [false, true]) assert.equal(catalog.isPremiumAiModelDefinition(newDefinition, freePlan), production.isPremiumAiModelDefinition(oldDefinition, freePlan));
   for (const plan of ["Free", "BYOK", "Pro", "AI"]) {
     const off = composer.buildComposerConfig({ settings: {}, storePlanId: plan, providersWithByok: new Set(), customEndpointConfigured: false, haiku55Enabled: false });
     const on = composer.buildComposerConfig({ settings: {}, storePlanId: plan, providersWithByok: new Set(), customEndpointConfigured: false, haiku55Enabled: true });
-    assert.equal(off.models.some((entry) => entry.id === haiku.id), true);
-    assert.equal(on.models.some((entry) => entry.id === haiku.id), true);
+    assert.equal(on.models.some((entry) => entry.id === haiku.id), off.models.some((entry) => entry.id === "claude-haiku-4.5"));
   }
 });
 
@@ -376,7 +380,6 @@ test("Android maps BYOK sources to catalog provider keys and preserves Free-plan
         let input;
         const api = stubbedModule("src/app/api/android/ai/composer/route.ts", {
           "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
-          "@/lib/flags/keys": { HTPR_7939_GROK_GEMINI4_MODELS_FLAG: "htpr-7939-grok-gemini4-models" },
           "next/server": { NextResponse: { json: (value) => value } },
           "@/lib/prisma": { project: { findFirst: async () => ({ id: 15, teamId: "fixture-team" }) } },
           "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 985 } }) },

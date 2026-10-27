@@ -13,12 +13,7 @@ import {
 import { convertHtmlToText } from "@/app/api/ai/_lib/taskContent";
 import { resolveSystemModel } from "@/app/api/ai/_lib/systemModelLadder";
 import prisma from "@/lib/prisma";
-import {
-  HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG,
-  HTPR_7728_COMMENT_SUMMARY_REFUSAL_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
-import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
+import { HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 export const OPEN_QUESTION_SUMMARY_RULES = `
 - Keep open questions open: a question the comment asks but does not answer stays a question in the TL;DR, for example "Open: what evidence would show the check passed?". Never answer it.
@@ -96,7 +91,6 @@ export async function generateAndStoreCommentSummary(commentId: number) {
       agentId: comment.agentId,
       provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "summary",
-      reasoningFeature: "tldr",
     });
     const openQuestionRules = await isFeatureEnabled(HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG, comment.creatorId ?? comment.task.userId);
     const result = await generateText({
@@ -131,9 +125,6 @@ TL;DR:`,
 
     return stored.count > 0 ? summary : null;
   } catch (error) {
-    if (findSharedAiAllowanceError(error) && await isFeatureEnabled(HTPR_7728_COMMENT_SUMMARY_REFUSAL_FLAG, 0).catch(() => false)) {
-      return null;
-    }
     console.error("[commentSummaries] failed to generate summary:", error);
     return null;
   }

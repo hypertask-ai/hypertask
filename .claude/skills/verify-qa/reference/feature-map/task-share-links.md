@@ -20,10 +20,6 @@ A board member opens a task and copies its share link (`POST /api/share/createSh
 
 Checklist written before QA; the no-login response (status and body); the signed-in response and the board's member list showing only the signed-in account was added; a screenshot of the share page. Record account ids, never credentials.
 
-### Automated evidence
-
-`node --test tests/htpr-7178-share-join-session-user.test.cjs` exercises the share-join route: signed-out calls add nobody, and signed-in calls ignore a different userId in the body.
-
 ## Cleanup
 
 Remove any QA account that joined board 7283 only for this run, and delete the share link if the app allows it.

@@ -35,7 +35,6 @@ function mount() {
     PlanLimitRefusal: class PlanLimitRefusal extends Error {},
     isRecording: false, uploadInProgress: false, canSave: undefined,
     createSubmissionRef: { current: false },
-    appliedRawWriterPromptsRef: { current: new Set() },
     pendingAttachmentUploadsRef: { current: new Map() }, createTaskAttachmentsRef: { current: [] },
     attachmentComposerEpochRef: { current: 0 }, attachmentComposerEpoch: 0,
     aiPromptRef: { current: undefined }, setAttachmentComposerEpoch: () => {},

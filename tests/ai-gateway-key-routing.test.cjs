@@ -23,7 +23,6 @@ const stubbedModulePaths = [
   "src/app/api/ai/_lib/planGate.ts",
   "src/app/api/ai/_lib/planAllowancePolicy.ts",
   "src/app/api/ai/_lib/providerGate.ts",
-  "src/lib/ai/chatStream/models.ts",
   "src/lib/crypto/byokCipher.ts",
   "src/lib/flags.ts",
   "src/lib/net/fetchWithoutBrotli.ts",
@@ -752,10 +751,6 @@ test("task writer option ids map to provider options and legacy model strings fa
     taskWriteAccessWhere: () => ({}),
   });
 
-  let grokGemini4FlagOn = false;
-  stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async (key) => grokGemini4FlagOn && key === "htpr-7939-grok-gemini4-models",
-  });
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   const { defaultAiModelOption, preferredAiModelOption } = loadTs(
     "src/lib/aiModelOptions.ts",
@@ -803,17 +798,17 @@ test("task writer option ids map to provider options and legacy model strings fa
     reasoningEffort: "medium",
   });
 
-  for (const modelId of ["gpt-5.6-terra", "gpt-6.1-terra"]) {
-    const terra = await selectTaskWriterModel({
+  for (const modelId of ["gpt-5.6-terra"]) {
+    const gpt56 = await selectTaskWriterModel({
       sourceSelected: "openai",
       modelSelected: modelId,
       byokProviderFlags: [],
       projectId,
       teamContext,
     });
-    assert.equal(terra.provider, "openai");
-    assert.equal(terra.modelId, "gpt-6.1-terra");
-    assert.deepEqual(terra.providerOptions?.openai, {
+    assert.equal(gpt56.provider, "openai");
+    assert.equal(gpt56.modelId, modelId);
+    assert.deepEqual(gpt56.providerOptions?.openai, {
       reasoningEffort: "medium",
     });
   }
@@ -836,32 +831,6 @@ test("task writer option ids map to provider options and legacy model strings fa
     teamContext: { teamId: "team_pro", settings: {} },
   });
   assert.equal(paidTeamGemini.modelId, "google/gemini-3.8-flash");
-
-  for (const modelKey of ["gemini-4-argon", "grok-4.7"]) {
-    const flagOff = await selectTaskWriterModel({
-      sourceSelected: "gateway",
-      modelSelected: modelKey,
-      modelOptionId: modelKey,
-      byokProviderFlags: [],
-      teamContext: { teamId: "team_pro", settings: {} },
-    });
-    assert.notEqual(flagOff.modelId, modelKey === "grok-4.7" ? "spacexai/grok-4.7" : "google/gemini-4-argon");
-  }
-  grokGemini4FlagOn = true;
-  for (const [modelKey, modelId] of [
-    ["gemini-4-argon", "google/gemini-4-argon"],
-    ["grok-4.7", "spacexai/grok-4.7"],
-  ]) {
-    const paidTeam = await selectTaskWriterModel({
-      sourceSelected: "gateway",
-      modelSelected: modelKey,
-      modelOptionId: modelKey,
-      byokProviderFlags: [],
-      teamContext: { teamId: "team_pro", settings: {} },
-    });
-    assert.equal(paidTeam.modelId, modelId);
-  }
-  grokGemini4FlagOn = false;
 
   await assert.rejects(
     selectTaskWriterModel({
@@ -932,13 +901,13 @@ async function selectFreeTeamDefault() {
 
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   return selectTaskWriterModel({
-    aiFeature: "writeWithAi",
+    aiFeature: "taskWriter",
     teamContext: { teamId, settings: {}, userId: 1000 },
     userId: 1000,
   });
 }
 
-test("a Free editor request defaults to Luna and may use it", async () => {
+test("a Free team defaults to Luna and may use it", async () => {
   const selected = await selectFreeTeamDefault();
   assert.equal(selected.provider, "openai");
   assert.equal(selected.modelId, "gpt-6-luna");
@@ -976,7 +945,6 @@ test("retired model options keep their saved variant and price tier", () => {
   const { getAiModelOptionById, getAiModelDefinition } = loadTs("src/lib/aiModelOptions.ts");
   for (const [oldBase, newBase, suffixes] of [
     ["gpt-5.6-luna", "gpt-6-luna", ["", "-light", "-high"]],
-    ["gpt-5.6-terra", "gpt-6.1-terra", ["", "-light", "-high"]],
     ["gpt-5.6-sol", "gpt-6.1-sol", ["", "-light", "-high"]],
     ["gpt-6-sol", "gpt-6.1-sol", ["", "-light", "-high"]],
     ["claude-opus-5", "claude-opus-5-5", ["-instant", "-thinking"]],
@@ -993,7 +961,6 @@ test("retired model options keep their saved variant and price tier", () => {
   assert.equal(getAiModelOptionById("gpt-5.5-thinking")?.id, "gpt-6.1-sol-high");
   assert.equal(getAiModelOptionById("kimi-k2.6")?.id, "kimi-k3");
   assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 2);
-  assert.equal(getAiModelDefinition("gpt-6.1-terra").priceTier, 2);
   assert.equal(getAiModelDefinition("gpt-6.1-sol").priceTier, 3);
   assert.equal(getAiModelDefinition("claude-opus-5-5").priceTier, 3);
 });
@@ -1034,9 +1001,9 @@ test("model and effort dimensions resolve every supported provider configuration
     ["gpt-6-luna", "light", openAiReasoning("low")],
     ["gpt-6-luna", "standard", openAiReasoning("medium")],
     ["gpt-6-luna", "high", openAiReasoning("high")],
-    ["gpt-6.1-terra", "light", openAiReasoning("low")],
-    ["gpt-6.1-terra", "standard", openAiReasoning("medium")],
-    ["gpt-6.1-terra", "high", openAiReasoning("high")],
+    ["gpt-5.6-terra", "light", openAiReasoning("low")],
+    ["gpt-5.6-terra", "standard", openAiReasoning("medium")],
+    ["gpt-5.6-terra", "high", openAiReasoning("high")],
     ["gpt-6.1-sol", "light", openAiReasoning("low")],
     ["gpt-6.1-sol", "standard", openAiReasoning("medium")],
     ["gpt-6.1-sol", "high", openAiReasoning("high")],
@@ -1053,8 +1020,7 @@ test("model and effort dimensions resolve every supported provider configuration
     ["glm-5.3-flash", undefined, undefined],
     ["gemini-3.5-flash-lite", undefined, undefined],
     ["gemini-3.8-flash", undefined, undefined],
-    ["gemini-4-argon", undefined, undefined],
-    ["grok-4.7", undefined, undefined],
+    ["claude-haiku-4.5", undefined, undefined],
     ["claude-haiku-5-5", undefined, claudeThinking("adaptive", "medium")],
     ["custom", undefined, undefined],
   ];
@@ -1069,8 +1035,7 @@ test("model and effort dimensions resolve every supported provider configuration
     "gpt-5.5-instant": ["gpt-6.1-sol", "light"],
     "gpt-5.5-thinking": ["gpt-6.1-sol", "high"],
     "gpt-6-luna": ["gpt-6-luna", "standard"],
-    "gpt-5.6-terra": ["gpt-6.1-terra", "standard"],
-    "gpt-6.1-terra": ["gpt-6.1-terra", "standard"],
+    "gpt-5.6-terra": ["gpt-5.6-terra", "standard"],
     "gpt-6-sol": ["gpt-6.1-sol", "standard"],
     "gpt-6.1-sol": ["gpt-6.1-sol", "standard"],
     "gpt-6-luna": ["gpt-6-luna", "standard"],
@@ -1092,14 +1057,12 @@ test("model and effort dimensions resolve every supported provider configuration
     "gemini-3.1-flash-lite": ["gemini-3.5-flash-lite", undefined],
     "gemini-3.5-flash": ["gemini-3.8-flash", undefined],
     "gemini-3.6-flash": ["gemini-3.8-flash", undefined],
-    "gemini-4-argon": ["gemini-4-argon", undefined],
-    "grok-4.7": ["grok-4.7", undefined],
     "grok-4.1-fast-instant": ["gpt-6-luna", "standard"],
     "grok-4.1-fast-thinking": ["gpt-6-luna", "standard"],
     "grok-4.20-instant": ["gpt-6-luna", "standard"],
     "grok-4.20-thinking": ["gpt-6-luna", "standard"],
     "grok-4.5": ["gpt-6-luna", "standard"],
-    "claude-haiku-4.5": ["claude-haiku-5-5", undefined],
+    "claude-haiku-4.5": ["claude-haiku-4.5", undefined],
     "claude-haiku-5-5": ["claude-haiku-5-5", undefined],
     custom: ["custom", undefined],
   };
@@ -1110,7 +1073,6 @@ test("model and effort dimensions resolve every supported provider configuration
     assert.deepEqual([option.modelKey, option.effort], dimensions);
   }
 
-  assert.equal(getAiModelOption("claude-haiku-4.5"), undefined);
   assert.equal(aiModelOptions.length, expected.length);
 });
 
@@ -1225,7 +1187,6 @@ test("provider defaults and explicit team settings resolve consistently", () => 
     "openai",
     "anthropic",
     "google",
-    "xai",
   ]);
   assert.equal(resolveTeamProviderEnabled(undefined, "deepseek"), false);
   assert.equal(
@@ -1262,7 +1223,7 @@ test("provider defaults and explicit team settings resolve consistently", () => 
       gdprSafeMode: true,
       providers: { openai: true, deepseek: true, moonshot: true },
     }),
-    ["openai", "anthropic", "google", "xai"],
+    ["openai", "anthropic", "google"],
   );
 
   const { shouldBlockAiDueToByokProvider } = loadTs(
@@ -1348,9 +1309,7 @@ test("disabled provider selections fall back and gateway-only models keep full s
     userId: 1000,
   });
   assert.equal(fallback.provider, "claude");
-  assert.equal(fallback.modelId, "claude-haiku-5.5");
-  assert.equal(fallback.model.modelId, "anthropic/claude-haiku-5.5");
-  assert.equal(fallback.model.config.provider, "gateway");
+  assert.equal(fallback.modelId, "claude-haiku-4.5");
 
   settings = {
     providers: { openai: false, anthropic: false, google: false, xai: false },
@@ -1502,8 +1461,8 @@ test("task writer key lookup ignores caller teamId when project lookup resolves 
 
   const selected = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelSelected: "gpt-6.1-terra",
-    modelOptionId: "gpt-6.1-terra",
+    modelSelected: "gpt-5.6-terra",
+    modelOptionId: "gpt-5.6-terra",
     byokProviderFlags: [],
     teamId: callerTeamId,
     projectId,
@@ -1624,17 +1583,13 @@ test("custom instruction upload uses the authenticated project team over caller 
   assert.notEqual(upsertedRows[0].teamId, callerTeamId);
 });
 
-for (const [currentModel, previousModel] of [
-  ["gpt-6-luna", "gpt-5.6-luna"],
-  ["gpt-6.1-terra", "gpt-5.6-terra"],
-]) {
-test(`editor models retry unavailable ${currentModel} once before output, but not after output`, async () => {
+test("editor models retry unavailable Luna once before output, but not after output", async () => {
   resetModules();
   stubPlan();
   const calls = [];
   let emitBeforeError = false;
   const retryError = { name: "RetryError", lastError: { status: 404 } };
-  stubModule("src/lib/prisma.ts", { default: { userSetting: { findUnique: async () => ({ aiModelPreferences: { improveWriting: currentModel } }) } } });
+  stubModule("src/lib/prisma.ts", { default: { userSetting: { findUnique: async () => null } } });
   stubModule("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {});
   const usageContexts = [];
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
@@ -1659,7 +1614,7 @@ test(`editor models retry unavailable ${currentModel} once before output, but no
       supportedUrls: {},
       doGenerate: async () => {
         calls.push(modelId);
-        if (modelId === currentModel) throw retryError;
+        if (modelId === "gpt-6-luna") throw retryError;
         return { content: [{ type: "text", text: "OK" }], usage: { inputTokens: { total: 1 }, outputTokens: { total: 2 } } };
       },
       doStream: async () => ({
@@ -1668,7 +1623,7 @@ test(`editor models retry unavailable ${currentModel} once before output, but no
             calls.push(modelId);
             controller.enqueue({ type: "stream-start", warnings: [] });
             controller.enqueue({ type: "response-metadata", id: modelId });
-            if (modelId === currentModel) {
+            if (modelId === "gpt-6-luna") {
               if (emitBeforeError) controller.enqueue({ type: "text-delta", id: "1", text: "partial" });
               controller.enqueue({ type: "error", error: retryError });
             } else {
@@ -1681,16 +1636,8 @@ test(`editor models retry unavailable ${currentModel} once before output, but no
     }),
   });
   const { selectTaskWriterModel, selectTiptapModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
-  const { selectModel } = loadTs("src/lib/ai/chatStream/models.ts");
-  const { previousModelForFailedStream } = loadTs("src/app/api/ai/chat/stream/modelFallback.ts");
-  const previous = previousModelForFailedStream(currentModel, retryError, false, false);
-  const chatFallback = selectModel("openai", previous.model, "vck_test");
-  assert.equal(chatFallback.resolvedModelId, previousModel);
-  assert.equal((await chatFallback.model.doGenerate({ prompt: [] })).content[0].text, "OK");
-  assert.deepEqual(calls, [previousModel]);
-  calls.length = 0;
   const options = {
-    modelOptionId: currentModel,
+    modelOptionId: "gpt-6-luna",
     projectId: 1,
     userId: 1,
     teamContext: { teamId: "test-team", settings: {} },
@@ -1701,25 +1648,25 @@ test(`editor models retry unavailable ${currentModel} once before output, but no
   console.warn = (message) => warnings.push(message);
   try {
     assert.equal((await selected.model.doGenerate({ prompt: [] })).content[0].text, "OK");
-    assert.deepEqual(calls, [currentModel, previousModel]);
-    assert.equal(selected.modelId, previousModel);
-    assert.equal(warnings[0], `[ai-model-fallback] ${currentModel} -> ${previousModel}: 404`);
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.equal(selected.modelId, "gpt-5.6-luna");
+    assert.match(warnings[0], /^\[ai-model-fallback\] gpt-6-luna -> gpt-5.6-luna: 404$/);
     calls.length = 0;
     const editor = await selectTiptapModel(options);
     await editor.model.doGenerate({ prompt: [] });
-    assert.deepEqual(calls, [currentModel, previousModel]);
-    assert.equal(editor.modelId, previousModel);
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.equal(editor.modelId, "gpt-5.6-luna");
     assert.equal(usageContexts.at(-1).feature, "editor");
     calls.length = 0;
     const streaming = await selectTaskWriterModel(options);
     const { stream } = await streaming.model.doStream({ prompt: [] });
     const chunks = [];
     for await (const chunk of stream) chunks.push(chunk);
-    assert.deepEqual(calls, [currentModel, previousModel]);
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
     assert.deepEqual(chunks.map((chunk) => chunk.type), ["stream-start", "response-metadata", "text-delta"]);
     assert.equal(chunks.filter((chunk) => chunk.type === "stream-start").length, 1);
-    assert.equal(chunks.find((chunk) => chunk.type === "response-metadata").id, previousModel);
-    assert.equal(streaming.modelId, previousModel);
+    assert.equal(chunks.find((chunk) => chunk.type === "response-metadata").id, "gpt-5.6-luna");
+    assert.equal(streaming.modelId, "gpt-5.6-luna");
     calls.length = 0;
     emitBeforeError = true;
     const partial = await selectTaskWriterModel(options);
@@ -1727,10 +1674,9 @@ test(`editor models retry unavailable ${currentModel} once before output, but no
     for await (const chunk of (await partial.model.doStream({ prompt: [] })).stream) {
       partialChunks.push(chunk);
     }
-    assert.deepEqual(calls, [currentModel]);
+    assert.deepEqual(calls, ["gpt-6-luna"]);
     assert.deepEqual(partialChunks.map((chunk) => chunk.type), ["stream-start", "response-metadata", "text-delta", "error"]);
   } finally {
     console.warn = originalWarn;
   }
 });
-}

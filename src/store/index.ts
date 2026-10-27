@@ -340,12 +340,6 @@ export const isAiChatSidebarModeAtom = atom<boolean>({
     effects_UNSTABLE: [persistAtom],
 });
 
-export const aiChatSidebarPreferredWidthsAtom = atom<Record<number, number> | null>({
-    key: "aiChatSidebarPreferredWidths",
-    default: null,
-    effects_UNSTABLE: [persistAtom],
-});
-
 export const aiChatSidebarWidthPxAtom = atom<number>({
     key: "aiChatSidebarWidthPx",
     default: AI_CHAT_SIDEBAR_DEFAULT_PX,
