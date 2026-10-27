@@ -178,6 +178,7 @@ test("reconstructed progressive completion saves its generated patch, not the or
     z: require("zod").z,
     input: { project_id: PROJECT_ID, brief: "Original brief" },
     earlyTask: { id: TASK_ID, projectId: PROJECT_ID, title: "Original brief" },
+    initialTitle: "Original brief",
     title: "Generated title",
     description: content,
     priorityIndex: 2,
@@ -194,7 +195,7 @@ test("reconstructed progressive completion saves its generated patch, not the or
   };
   const declaration = findNode((node) =>
     ts.isVariableDeclaration(node) && node.name.getText(route) === "update" &&
-    node.initializer?.getText(route).includes("expectedTitle: earlyTask.title"),
+    node.initializer?.getText(route).includes("expectedDescription: \"\""),
   );
   const javascript = ts.transpileModule(
     `async function run() { return ${declaration.initializer.getText(route)}; }`,

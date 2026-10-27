@@ -185,6 +185,7 @@ export function createCreateTaskTool(context: ToolContext) {
           }
 
           let earlyTask: Awaited<ReturnType<typeof createTask>> | undefined;
+          let initialTitle = "";
           let earlyTaskPublished = false;
           const savedLink = (task: Awaited<ReturnType<typeof createTask>>) => `<p><a href="${escapeHtml(buildMcpTaskUrl(task.projectId, task.uniqueIndex))}">${escapeHtml(task.ticketNumber || task.title)}</a></p>`;
           const savedResult = (task: Awaited<ReturnType<typeof createTask>>, warning?: string) => sanitizeForJson({
@@ -227,7 +228,7 @@ export function createCreateTaskTool(context: ToolContext) {
               const createBeforeWriting = await isFeatureEnabled(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, user.id);
               const publishTicket = async () => {
                 abortSignal?.throwIfAborted();
-                const initialTitle = taskTitleFromBrief(input.brief);
+                initialTitle = taskTitleFromBrief(input.brief);
                 if (!initialTitle) throw new Error("Provide a task brief with a usable title.");
                 earlyTask = await save(initialTitle, undefined, true);
                 send("task_created", { content: savedLink(earlyTask) });
@@ -267,11 +268,11 @@ export function createCreateTaskTool(context: ToolContext) {
                 image_urls: input.image_urls,
                 inline_images: input.inline_images,
               }, {
-                expectedTitle: earlyTask.title,
+                expectedTitle: initialTitle,
                 expectedDescription: "",
-                expectedProjectId: earlyTask.projectId,
+                expectedProjectId: input.project_id,
                 expectedStatus: "Normal",
-              })({ task_id: earlyTask.id, project_id: earlyTask.projectId });
+              })({ task_id: earlyTask.id, project_id: input.project_id });
               if (!update.success) throw new Error("error" in update ? update.error : "Failed to finish the description");
               task = earlyTask;
               updatedResult = update;

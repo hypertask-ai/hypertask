@@ -24,7 +24,7 @@ function harness(options = {}) {
         if (options.saveDenied) throw new Error("Save refused");
         const task = { ...input, id: saved.length + 1, uniqueIndex: saved.length + 1, ticketNumber: `QA-${saved.length + 1}` };
         saved.push(task);
-        return task;
+        return { ...task, ...options.readBack };
       },
     },
     "@/utils/controllers/getMemberAndOwnerForBoard": { default: async () => [985] },
@@ -87,6 +87,18 @@ test("the tool saves one usable title and emits its link before the writer compl
   assert.equal(result.task.estimate, draft.estimate);
   assert.equal(h.writerCalls[0][0].PROMPT, "Fix export failures");
   assert.deepEqual(h.events.at(-1), { event: "task_updated", data: { taskId: 1 } });
+});
+
+test("completion guards retain the original write values when the creation read sees a concurrent edit or move", async () => {
+  const h = harness({ readBack: { title: "Human edit", projectId: 9999 } });
+  const pending = h.execute();
+  await started(h);
+  h.release();
+  assert.equal((await pending).success, true);
+  assert.deepEqual(h.updates[0].expected, {
+    expectedTitle: "Fix export failures", expectedDescription: "", expectedProjectId: 7049, expectedStatus: "Normal",
+  });
+  assert.deepEqual(h.updates[0].identifier, { task_id: 1, project_id: 7049 });
 });
 
 for (const options of [
