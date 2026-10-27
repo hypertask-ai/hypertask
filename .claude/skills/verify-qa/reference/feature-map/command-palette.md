@@ -67,6 +67,9 @@ left sidebar has a primary plus button. Hover shows New Task and Ctrl+J
 opens the same New Task compose tab as the shortcut, without changing routes.
 Check a board, task, Inbox, My Tasks, Calendar and Search; cancel with Escape,
 then reopen with Ctrl+J. Check both sidebar widths and all four themes.
+The primary button uses the same inverted foreground and background as
+Sign up for free: light fill in dark themes, dark fill in light themes.
+Its size, position, plus icon and tooltip must remain unchanged.
 The button must not appear at 390x844, or when its flag is off. Existing
 navigation must still work, and the main content must not move horizontally.
 

@@ -335,7 +335,7 @@ const AppShellRail = ({
             type="button"
             aria-label="New Task"
             onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
-            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] bg-shadcn-primary text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
+            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] bg-white-black text-white-black-inverted hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
               wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
             }`}
           >

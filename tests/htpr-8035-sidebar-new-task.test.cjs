@@ -83,7 +83,8 @@ for (const wide of [false, true]) {
     assert.deepEqual(rail.updates, [{ atom: "commands", value: { show: true, mode: CommandMode.Command, paletteTab: "compose" } }]);
     assert.deepEqual(rail.navigation, []);
     assert.match(buttons[0].props.className, /hidden.*md:flex/);
-    assert.match(buttons[0].props.className, /bg-shadcn-primary/);
+    assert.ok(buttons[0].props.className.split(/\s+/).includes("bg-white-black"));
+    assert.ok(buttons[0].props.className.split(/\s+/).includes("text-white-black-inverted"));
     assert.match(rail.html, /CTRL\+J/);
     const position = (label) => rail.nodes.findIndex((node) => node.props["aria-label"] === label);
     assert.ok(position("New Task") > position("Search"));
