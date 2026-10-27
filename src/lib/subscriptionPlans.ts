@@ -248,8 +248,17 @@ function withFreeLimits(plan: ISubscriptionPlan, flags: FreePlanLimitFlags): ISu
   return { ...plan, perks };
 }
 
-export function subscriptionPlansFor(flags: FreePlanLimitFlags): ISubscriptionPlan[] {
-  return subscriptionPlanTemplates.map((plan) => withFreeLimits(plan, flags));
+export function subscriptionPlansFor(flags: FreePlanLimitFlags, percentageAllowance = false): ISubscriptionPlan[] {
+  return subscriptionPlanTemplates.map((plan) => {
+    const limitedPlan = withFreeLimits(plan, flags);
+    if (!percentageAllowance || limitedPlan.id !== "Pro") return limitedPlan;
+    return {
+      ...limitedPlan,
+      perks: limitedPlan.perks.map((perk) => perk.title === "LLM billing"
+        ? { ...perk, amount: "Included AI; add your own key for more" }
+        : perk),
+    };
+  });
 }
 
 export const storeSubscriptionPlans = subscriptionPlansFor(legacyFreePlan);

@@ -1,6 +1,8 @@
 "use client";
 
 import axios from "axios";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7919_ALLOWANCE_PERCENT_FLAG } from "@/lib/flags/definitions/htpr-7919-allowance-percent";
 import { useEffect, useState } from "react";
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
@@ -41,6 +43,7 @@ type AiUsageData = {
 };
 
 const AiUsageSection = () => {
+  const percentageAllowance = useFlag(HTPR_7919_ALLOWANCE_PERCENT_FLAG);
   const { teamId, project } = useSettingsTeam();
   const { setSettingsSection } = useSettingsNavigation();
   const [data, setData] = useState<AiUsageData | null>(null);
@@ -181,9 +184,11 @@ const AiUsageSection = () => {
             </div>
 
             <div className="flex flex-col gap-1">
-              <p className="text-dense font-medium text-text-light-gray">
-                {`$${data.allowance.usedUsd.toFixed(2)} used · $${data.allowance.remainingUsd.toFixed(2)} remaining of $${data.allowance.budgetUsd.toFixed(2)}`}
-              </p>
+              {!percentageAllowance ? (
+                <p className="text-dense font-medium text-text-light-gray">
+                  {`$${data.allowance.usedUsd.toFixed(2)} used · $${data.allowance.remainingUsd.toFixed(2)} remaining of $${data.allowance.budgetUsd.toFixed(2)}`}
+                </p>
+              ) : null}
               <p className="text-dense font-medium text-text-light-gray">
                 Resets on {formatResetDate(data.allowance.resetsOn)}
                 {data.allowance.projectedPct !== null
@@ -192,7 +197,9 @@ const AiUsageSection = () => {
               </p>
               {data.includedWithHypertask ? (
                 <p className="text-dense font-medium text-text-light-gray">
-                  {`$${data.includedWithHypertask.usedUsd.toFixed(2)} Included with Hypertask · automatic features do not reduce your allowance`}
+                  {percentageAllowance
+                    ? "Included with Hypertask · automatic features do not reduce your allowance"
+                    : `$${data.includedWithHypertask.usedUsd.toFixed(2)} Included with Hypertask · automatic features do not reduce your allowance`}
                 </p>
               ) : null}
             </div>
