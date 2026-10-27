@@ -599,7 +599,7 @@ test("a run with no prompt binding is still ended", async () => {
   assert.equal(pressed.db.messages.filter((message) => message.replyToMessageId === "human-1").length, 1);
 });
 
-test("activity behavior requires the parent and ticket feature flags", async () => {
+test("activity behavior still requires its independent feature flag", async () => {
   const activityFlagDisabled = loadService({
     featureEnabled: (key) => key !== model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   });
@@ -609,7 +609,6 @@ test("activity behavior requires the parent and ticket feature flags", async () 
     false,
   );
   assert.deepEqual(activityFlagDisabled.flagChecks, [
-    model.AGENT_RUN_FEATURE_FLAG,
     model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   ]);
 
@@ -619,18 +618,8 @@ test("activity behavior requires the parent and ticket feature flags", async () 
     true,
   );
   assert.deepEqual(typescriptSdk.flagChecks, [
-    model.AGENT_RUN_FEATURE_FLAG,
     model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   ]);
-
-  const parentFlagDisabled = loadService({
-    featureEnabled: (key) => key !== model.AGENT_RUN_FEATURE_FLAG,
-  });
-  assert.equal(
-    await parentFlagDisabled.service.agentRunActivitiesEnabledFor(agentPrincipal),
-    false,
-  );
-  assert.deepEqual(parentFlagDisabled.flagChecks, [model.AGENT_RUN_FEATURE_FLAG]);
 });
 
 test("only the owner browser and matching agent can list run activities", async () => {

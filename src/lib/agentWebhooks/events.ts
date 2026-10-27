@@ -278,28 +278,6 @@ export type AgentWebhookPayload = AgentWebhookEventInput & {
   occurredAt: string;
 };
 
-export function availableAgentWebhookEvents(
-  agentRunsEnabled: boolean,
-): AgentWebhookEventType[] {
-  return agentRunsEnabled
-    ? [...AGENT_WEBHOOK_EVENTS]
-    : AGENT_WEBHOOK_EVENTS.filter(
-        (event) =>
-          !(AGENT_RUN_WEBHOOK_EVENTS as readonly string[]).includes(event),
-      );
-}
-
-export function availableAgentWebhookEventDefinitions(
-  agentRunsEnabled: boolean,
-): Partial<typeof AGENT_WEBHOOK_EVENT_DEFINITIONS> {
-  const available = new Set(availableAgentWebhookEvents(agentRunsEnabled));
-  return Object.fromEntries(
-    Object.entries(AGENT_WEBHOOK_EVENT_DEFINITIONS).filter(
-      ([event]) => event === "webhook.test" || available.has(event as AgentWebhookEventType),
-    ),
-  ) as Partial<typeof AGENT_WEBHOOK_EVENT_DEFINITIONS>;
-}
-
 export function parseAgentWebhookEvents(
   value: unknown,
   availableEvents: readonly AgentWebhookEventType[] = AGENT_WEBHOOK_EVENTS,

@@ -53,7 +53,6 @@ function loadStopRoute({
   stopRun = async () => null,
 } = {}) {
   stub("src/lib/agentRuns/service.ts", {
-    agentRunsEnabledFor: async () => true,
     authenticateAgentRunRequest: async () => principal,
     browserMutationIsSameOrigin: () => true,
     runtimeAgentRunsEnabledFor: async () => runtimeEnabled,
