@@ -96,7 +96,7 @@ function loader(stubs = {}) {
   function load(file) {
     const full = path.isAbsolute(file) ? file : path.join(root, file);
     if (cache.has(full)) return cache.get(full).exports;
-    const module = { exports: {} }; cache.set(full, module);
+    const loaded = { exports: {} }; cache.set(full, loaded);
     const code = compiled.get(full) ?? ts.transpileModule(fs.readFileSync(full, 'utf8'), { fileName: full, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, esModuleInterop: true }, reportDiagnostics: true });
     compiled.set(full, code);
     assert.deepEqual(code.diagnostics.filter(d => d.category === ts.DiagnosticCategory.Error), [], full);
@@ -113,8 +113,8 @@ function loader(stubs = {}) {
       if (name.startsWith('node:') || ['crypto', 'zod', 'next/server', 'react', 'react-dom/server'].includes(name)) return require(name);
       throw Error(`Unstubbed dependency (offline test): ${name} from ${full}`);
     };
-    vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${code.outputText}\n})`, { filename: full })(requireLocal, module, module.exports, full, path.dirname(full));
-    return module.exports;
+    vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${code.outputText}\n})`, { filename: full })(requireLocal, loaded, loaded.exports, full, path.dirname(full));
+    return loaded.exports;
   }
   return load;
 }
