@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { mkdtemp, readFile, rm } = require("node:fs/promises");
 const { tmpdir } = require("node:os");
+const { setImmediate } = require("node:timers/promises");
 const { pathToFileURL } = require("node:url");
 
 const scriptUrl = pathToFileURL(
@@ -15,6 +16,14 @@ function response(status, body) {
     status,
     text: async () => (body === undefined ? "" : JSON.stringify(body)),
   };
+}
+
+async function finishRetries(t, pending) {
+  await setImmediate();
+  t.mock.timers.tick(1000);
+  await setImmediate();
+  t.mock.timers.tick(2000);
+  return pending;
 }
 
 function isTelegramUrl(value) {
@@ -157,12 +166,19 @@ test("incident failures remain pending and retry original evidence on recovery w
   assert.equal(JSON.parse(JSON.parse(next.calls.at(-1).options.body).value).streak, 0);
 });
 
-test("failed streak reservation fails closed without rollback or Telegram", async () => {
+test("failed streak reservation fails closed without rollback or Telegram", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const { handleSmokeResult } = await import(scriptUrl);
   const directory = await mkdtemp(path.join(tmpdir(), "alarm-"));
   try {
     const output = path.join(directory, "output");
-    await assert.rejects(handleSmokeResult(config({ githubOutput: output }), async () => response(503)), /streak update/);
+    const calls = [];
+    await finishRetries(t, assert.rejects(handleSmokeResult(config({ githubOutput: output }), async (url, options) => {
+      calls.push({ url, options });
+      return response(503);
+    }), /streak update/));
+    assert.equal(calls.length, 3);
+    assert.ok(calls.every(({ options }) => options.body === calls[0].options.body));
     await assert.rejects(readFile(output), { code: "ENOENT" });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -175,4 +191,76 @@ test("unversioned numeric streaks cannot trigger rollback on the first actual fa
     assert.equal(first.streak, 1);
     assert.equal(first.action, "none");
   }
+});
+
+test("green smoke survives a transient GitHub streak write failure", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { handleSmokeResult } = await import(scriptUrl);
+  const calls = [];
+  const result = await finishRetries(t, handleSmokeResult(config({ outcome: "green" }), async (url, options) => {
+    calls.push({ url, options });
+    return response(calls.length === 1 ? 500 : 204);
+  }));
+  assert.equal(result.streak, 0);
+  assert.equal(result.action, "none");
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].options.body, calls[1].options.body);
+  assert.ok(calls.every(({ url, options }) => url.endsWith("/PROD_SMOKE_STREAK") && options.method === "PATCH"));
+});
+
+test("transient creation response retries the idempotent patch, not a duplicate create", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { handleSmokeResult } = await import(scriptUrl);
+  const calls = [];
+  const result = await finishRetries(t, handleSmokeResult(config({ outcome: "green" }), async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) return response(404);
+    return response(calls.length === 2 ? 503 : 204);
+  }));
+  assert.equal(result.streak, 0);
+  assert.deepEqual(calls.map(({ options }) => options.method), ["PATCH", "POST", "PATCH", "PATCH"]);
+  assert.ok(calls.every(({ options }) => options.body === calls[0].options.body));
+});
+
+test("GitHub transport failure retries the same streak without hiding confirmed reds", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { handleSmokeResult } = await import(scriptUrl);
+  const { fetchImpl, calls } = alarmFetch();
+  let attempts = 0;
+  const result = await finishRetries(t, handleSmokeResult(config(), async (url, options) => {
+    if (++attempts === 1) throw new TypeError("fetch failed");
+    return fetchImpl(url, options);
+  }));
+  assert.equal(result.action, "alarm");
+  assert.equal(result.streak, 2);
+  assert.equal(calls.filter(({ url }) => url.endsWith("/tasks/create")).length, 1);
+});
+
+test("permanent GitHub refusals are not retried", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  for (const status of [401, 403, 422]) {
+    let calls = 0;
+    await assert.rejects(handleSmokeResult(config(), async () => {
+      calls++;
+      return response(status);
+    }), new RegExp(`streak update failed with HTTP ${status}`));
+    assert.equal(calls, 1);
+  }
+});
+
+
+test("persistent transport failure stays bounded without authorizing rollback", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { handleSmokeResult } = await import(scriptUrl);
+  const directory = await mkdtemp(path.join(tmpdir(), "alarm-"));
+  try {
+    const output = path.join(directory, "output");
+    let calls = 0;
+    await finishRetries(t, assert.rejects(handleSmokeResult(config({ githubOutput: output }), async () => {
+      calls++;
+      throw new TypeError("fetch failed");
+    }), /fetch failed/));
+    assert.equal(calls, 3);
+    await assert.rejects(readFile(output), { code: "ENOENT" });
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
