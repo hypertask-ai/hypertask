@@ -92,7 +92,8 @@ test('portable tools execute through service POST/GET with same calling token', 
   });
   const tools = load('src/lib/mcp-server/tools/board-access-request.tool.ts');
   await tools.requestBoardAccessTool.execute({ project_id: 15, reason: 'Request' }, token);
-  await tools.getBoardAccessRequestTool.execute({ request_id: ID }, token);
+  const receipts = load('src/lib/mcp-server/tools/get-board-access-request.tool.ts');
+  await receipts.getBoardAccessRequestTool.execute({ request_id: ID }, token);
   assert.equal(calls[0].path, '/mcp/agents/board-access-requests'); assert.equal(calls[0].options.method, 'POST');
   assert.deepEqual(JSON.parse(calls[0].options.body), { project_id: 15, reason: 'Request' });
   assert.equal(calls[1].path, '/mcp/agents/board-access-requests/' + ID); assert.equal(calls[1].options.method, 'GET');

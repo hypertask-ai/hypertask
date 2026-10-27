@@ -1,4 +1,5 @@
-import { requestBoardAccessTool, getBoardAccessRequestTool } from "./board-access-request.tool";
+import { requestBoardAccessTool } from "./board-access-request.tool";
+import { getBoardAccessRequestTool } from "./get-board-access-request.tool";
 
 import { reportFeedbackTool } from './report-feedback.tool';
 import { helloTool } from './hello.tool';
