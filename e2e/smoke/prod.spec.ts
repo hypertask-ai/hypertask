@@ -615,12 +615,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
   }
 })
 
-<<<<<<< HEAD
-
-test('floating chat shares the command palette shadow without changing the phone sheet', async ({ page }, testInfo) => {
-=======
 test('floating chat elevation supports shared styling and rollback without changing the phone sheet', async ({ page }, testInfo) => {
->>>>>>> bafa13da4 (HTPR-8055 Avoid Bootstrap border override and test flag rollback)
   test.skip(testInfo.project.name !== 'Desktop', 'covers desktop and phone in one session')
   test.setTimeout(90_000)
   const flag = 'htpr-8055-floating-elevation'
@@ -685,36 +680,6 @@ test('floating chat elevation supports shared styling and rollback without chang
     await expect(page.locator('[data-ai-chat-mobile-header]')).toBeVisible()
     await expect(chat).toHaveCSS('box-shadow', 'none')
   }
-<<<<<<< HEAD
-  await expect(chat).toBeVisible()
-  const desktopBounds = await chat.boundingBox()
-  await page.keyboard.press('Control+j')
-  const palette = page.locator('#htc .modal-content')
-  await expect(palette).toBeVisible()
-  const shadow = await chat.evaluate(element => getComputedStyle(element).boxShadow)
-  expect(shadow).not.toBe('none')
-  await expect(palette).toHaveCSS('box-shadow', shadow)
-  await expect(page.locator('#htc')).toHaveCSS('box-shadow', 'none')
-  const border = await chat.evaluate(element => getComputedStyle(element).borderTopColor)
-  await expect(palette).toHaveCSS('border-top-color', border)
-  await page.evaluate(() => document.documentElement.style.setProperty('--elevation-floating-border', 'rgb(4, 5, 6)'))
-  await expect(chat).toHaveCSS('border-top-color', 'rgb(4, 5, 6)')
-  await expect(palette).toHaveCSS('border-top-color', 'rgb(4, 5, 6)')
-  await page.evaluate(() => document.documentElement.style.removeProperty('--elevation-floating-border'))
-  await page.evaluate(() => document.documentElement.style.setProperty('--elevation-floating-shadow', 'rgb(1, 2, 3) 1px 2px 3px 4px'))
-  const changedShadow = await chat.evaluate(element => getComputedStyle(element).boxShadow)
-  expect(changedShadow).not.toBe(shadow)
-  expect(changedShadow).toContain('rgb(1, 2, 3) 1px 2px 3px 4px')
-  await expect(palette).toHaveCSS('box-shadow', changedShadow)
-  await page.evaluate(() => document.documentElement.style.removeProperty('--elevation-floating-shadow'))
-  await expect(chat).toHaveCSS('box-shadow', shadow)
-  expect(await chat.boundingBox()).toEqual(desktopBounds)
-  await page.keyboard.press('Escape')
-  await expect(palette).toBeHidden()
-  await page.setViewportSize({ width: 390, height: 844 })
-  await expect(page.locator('[data-ai-chat-mobile-header]')).toBeVisible()
-  await expect(chat).toHaveCSS('box-shadow', 'none')
+})
 
-=======
->>>>>>> bafa13da4 (HTPR-8055 Avoid Bootstrap border override and test flag rollback)
 })
