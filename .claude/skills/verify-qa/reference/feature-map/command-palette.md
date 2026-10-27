@@ -86,3 +86,20 @@ and after. Repeat the picker, confirmation and Undo at 1440x900 and
 390x844, in all four themes. Check an empty column and single-ticket
 archive too. With the flag off, the command must be absent. Archive only
 your created fixtures after the check.
+
+## New Task board order
+
+With `htpr-8014-compose-board-order` on, Ctrl+J then Ctrl+Shift+B opens the
+existing board picker with recently visited boards first. It reuses the
+persisted navigation history from the sidebar and board shortcuts. Equal
+history values, including boards never visited, sort alphabetically.
+
+Navigate between two QA boards through the sidebar, then return to My Tasks.
+Open the picker and compare the visible order with the saved navigation
+history. Filter by a board name, press Enter, and verify the composer chip
+names that same board. Repeat by clicking a row. Escape must leave the
+composer destination unchanged; reload must preserve the history. Check an
+empty search and clear it. No task needs creating. Repeat at 1440x900 and
+390x844 in all four themes. Compare picker bounds against the before capture.
+Flag Off preserves API order; the move-existing-task picker stays unchanged
+in either mode. Do not modify shared QA history outside your browser context.
