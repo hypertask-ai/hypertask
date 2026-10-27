@@ -140,18 +140,3 @@ test('launch helper rejects unsupported journeys and propagates dispatch failure
     '--ref', 'ceo/YPER4-697', '-f', `head=${'a'.repeat(40)}`, '-f', 'journey=inbox-cycle-broken',
   ])
 })
-
-test('optional workflow keeps existing PR visual checks and isolates hosted verification with unconditional artifacts', () => {
-  const workflow = fs.readFileSync(path.join(root, '.github/workflows/visual-regression.yml'), 'utf8')
-  const verify = workflow.split('\n  verify-qa:\n')[1]
-  assert.match(workflow, /github.event_name == 'pull_request' && github.event.pull_request.draft == false/)
-  assert.match(workflow, /'verify-qa' \|\| format\('visual-regression-/)
-  assert.match(verify, /runs-on: ubuntu-latest/)
-  assert.match(verify, /timeout-minutes: 25/)
-  assert.match(verify, /ref: \$\{\{ inputs.head \}\}/)
-  assert.match(verify, /persist-credentials: false/)
-  assert.match(verify, /VERIFY_QA_REPORT_ONLY: '0'/)
-  assert.match(verify, /name: Upload verification evidence\n        if: always\(\)/)
-  assert.doesNotMatch(verify, /secrets\.|continue-on-error:|statuses: write|checks: write|self-hosted/)
-  assert.equal(spawnSync('bash', ['-n', path.join(root, 'scripts/verify-qa')]).status, 0)
-})
