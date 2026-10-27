@@ -18,7 +18,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | update-ai-models | Model-watch tickets or catalog refresh: automatic existing-class OpenAI/Anthropic updates, new-class approval and premium holds | .claude/skills/update-ai-models/SKILL.md |
 | setup-runner | `/setup-runner [number]` in a fresh session: set up its runner login and identity, then follow /ship without a ticket | .claude/skills/setup-runner/SKILL.md |
 | clean-up | After Done (from /ship), or by hand with `/clean-up`: removes this session's own finished worktrees and branches | .claude/skills/clean-up/SKILL.md |
-| reflect | Last /ship step, once after the last ticket's Clean up: three reviewers and a synthesizer turn this session's lessons into proposed repo skill edits for HT Product Lead to approve (pstack by Lauren Tan, MIT) | .claude/skills/reflect/SKILL.md |
+| reflect | Last /ship step, once after the last ticket's Clean up: three reviewers and a synthesizer turn this session's lessons into proposed repo skill edits for runner-owned tickets and normal PR review (pstack by Lauren Tan, MIT) | .claude/skills/reflect/SKILL.md |
 | drain-board | `/drain-board <board>`: works every open ticket on a board until each is Done or waiting on Valentin, one ledger gate per ticket | .claude/skills/drain-board/SKILL.md |
 | vcc | Claim, board writes, merge, deploy watch, report | .claude/skills/vcc/SKILL.md |
 | wireframe | New or changed visible UI, except a `[BUGFIX]` restoring intended behaviour, before code: full-app base kit on hypertask.app, clickable link and PNGs, one Question, UX Sign-off, Valentin's yes (Valentin, 2026-10-10) | .claude/skills/wireframe/SKILL.md |

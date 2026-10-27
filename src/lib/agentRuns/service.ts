@@ -16,6 +16,8 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   persistAgentRunStoppedWebhook,
   persistAgentWebhookEvent,
+  persistAgentRunTriggerWebhooks,
+  resolveAgentWebhookActor,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
 import {
@@ -493,6 +495,8 @@ type ActivityRunWithContext = AgentRun & {
     id: number;
     userId: number;
     projectId: number;
+    ticketNumber: string | null;
+    title: string;
   } | null;
   chatSession: {
     id: string;
@@ -524,7 +528,7 @@ async function findActivityRun(
           },
         },
       },
-      task: { select: { id: true, userId: true, projectId: true } },
+      task: { select: { id: true, userId: true, projectId: true, ticketNumber: true, title: true } },
       chatSession: { select: { id: true, userId: true } },
     },
   }) as Promise<ActivityRunWithContext | null>;
@@ -585,6 +589,9 @@ async function replayCreatedActivity(
         notificationsCompletedAt: activity.commentNotificationsCompletedAt,
       },
     });
+  }
+  if (activity.type === "THOUGHT" && activity.commentAgentWebhookDeliveryIds.length > 0) {
+    await publishAgentWebhookDeliveries(activity.commentAgentWebhookDeliveryIds);
   }
   return { activity: serializeAgentRunActivity(activity), duplicate: true };
 }
@@ -661,6 +668,7 @@ export async function createAgentRunActivity(
   input: AgentRunActivityInput,
   idempotencyKey: string | null,
   now = new Date(),
+  logCommentHtml?: string,
 ) {
   if (!principal.agentId) return null;
   const run = await findActivityRun(principal, id);
@@ -739,9 +747,34 @@ export async function createAgentRunActivity(
         return stored;
       });
     } else {
-      activity = await prisma.$transaction((tx) =>
-        persistAgentRunActivity(tx, persistenceInput),
-      );
+      activity = await prisma.$transaction(async (tx) => {
+        const stored = await persistAgentRunActivity(tx, persistenceInput);
+        if (input.type !== "THOUGHT" || !run.task || !logCommentHtml) return stored;
+        const { getMentionedAgentIdsFromCommentText } = await import(
+          "@/utils/controllers/comments/processMentions"
+        );
+        const agentIds = getMentionedAgentIdsFromCommentText(logCommentHtml)
+          .filter((agentId) => agentId !== run.agentId);
+        if (agentIds.length === 0) return stored;
+        const actor = await resolveAgentWebhookActor(tx, principal);
+        const deliveryIds: Array<string | null> = [];
+        for (const agentId of agentIds) {
+          deliveryIds.push(...await persistAgentRunTriggerWebhooks(tx, {
+            event: "comment.mention",
+            agentId,
+            projectId: run.task.projectId,
+            taskId: run.task.id,
+            ticketNumber: run.task.ticketNumber,
+            taskTitle: run.task.title,
+            commentHtml: logCommentHtml,
+            actor,
+          }));
+        }
+        return tx.agentRunActivity.update({
+          where: { id: stored.id },
+          data: { commentAgentWebhookDeliveryIds: deliveryIds.filter((id): id is string => id !== null) },
+        });
+      });
     }
   } catch (error) {
     if (idempotencyKey !== null && isUniqueConstraintError(error)) {
@@ -758,6 +791,9 @@ export async function createAgentRunActivity(
     where: { id: persistenceInput.id },
   });
   if (!activity) throw new Error("Agent run activity was not persisted");
+  if (activity.type === "THOUGHT" && activity.commentAgentWebhookDeliveryIds.length > 0) {
+    await publishAgentWebhookDeliveries(activity.commentAgentWebhookDeliveryIds);
+  }
   if (!run.task || input.type !== "RESPONSE") {
     await broadcastActivityChange(run, principal.userId);
   }
