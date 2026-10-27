@@ -20,6 +20,7 @@ function fixture(rowCount) {
   const db = {
     notification: {
       findFirst: async ({ where }) => rows.find(row => matches(row, where)) ?? null,
+      findMany: async ({ where }) => rows.filter(row => matches(row, where)),
       updateMany: async ({ where, data }) => {
         const found = rows.filter(row => matches(row, where));
         found.forEach(row => Object.assign(row, data));
@@ -30,6 +31,10 @@ function fixture(rowCount) {
     $transaction: async callback => callback(db),
   };
   const mocks = {
+    "@/lib/agents/boardAccessRequests/service": {
+      BoardAccessError: class BoardAccessError extends Error {},
+      mutateBoardAccessNotification: async () => assert.fail("Task notifications must not use board access decisions"),
+    },
     "@/lib/prisma": { default: db },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/realtime/server": { socketIdFromHeader: () => null, broadcastInboxChange: async () => {} },

@@ -82,7 +82,14 @@ test('authorized owner decline remains allowed without granting or changing role
 });
 test('portable tools execute through service POST/GET with same calling token', async () => {
   const calls = []; const token = 'offline-agent-caller';
-  const load = loader({ '@/utils/controllers/reports/reportService': { REPORT_CAPABILITIES: 'offline' }, '@/lib/mcp/inProcessClient': { createInProcessMcpClient: async value => { assert.equal(value, token); return { auth: ctx(), client: { makeRequest: async (path, options, correlationId) => { calls.push({ path, options, correlationId }); return { success: true }; } } }; } } });
+  const load = loader({
+    '@/utils/controllers/reports/reportService': { REPORT_CAPABILITIES: 'offline' },
+    '@/lib/mcp/auth': { validateMcpAuth: async request => { assert.equal(request.headers.get('Authorization'), `Bearer ${token}`); return ctx(); } },
+    '@/lib/mcp/directOperationClient': { createDirectOperationClient: value => {
+      assert.equal(value, token);
+      return { makeRequest: async (path, options, correlationId) => { calls.push({ path, options, correlationId }); return { success: true }; } };
+    } },
+  });
   const tools = load('src/lib/mcp-server/tools/board-access-request.tool.ts');
   await tools.requestBoardAccessTool.execute({ project_id: 15, reason: 'Request' }, token);
   await tools.getBoardAccessRequestTool.execute({ request_id: ID }, token);

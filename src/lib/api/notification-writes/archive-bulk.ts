@@ -37,13 +37,15 @@ const route = taskWriteRoute({
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
-    const accessIds = new Set<number>();
+    const accessRows = await prisma.notification.findMany({
+      where: { id: { in: validEntries.map(({ notificationId }) => Number(notificationId)) }, type: "AgentBoardAccessRequest" },
+      select: { id: true },
+    });
+    const accessIds = new Set(accessRows.map(({ id }) => id));
     for (const entry of validEntries) {
-      const candidate = await prisma.notification.findUnique({ where: { id: Number(entry.notificationId) }, select: { type: true } });
-      if (candidate?.type !== "AgentBoardAccessRequest") continue;
+      if (!accessIds.has(Number(entry.notificationId))) continue;
       if (archiveStatus !== "Normal" && archiveStatus !== "Archive") return NextResponse.json({ message: "Invalid status" }, { status: 400 });
       if (session.agentId || session.source === "cli-bearer" || entry.taskId != null) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-      accessIds.add(Number(entry.notificationId));
     }
     for (const id of accessIds) {
       try {
