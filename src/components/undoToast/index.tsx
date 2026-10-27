@@ -64,6 +64,31 @@ export const UndoToastContent = ({
   const isMbl = useContext(MobileViewContext);
   const compactMobileUndo = useFlag(HTPR_8097_MOBILE_UNDO_TOAST_FLAG) && isMbl;
 
+  const actions = (
+    <>
+      <button
+        type="button"
+        aria-label="Undo"
+        className={compactMobileUndo
+          ? `${MOBILE_TARGET} cursor-pointer text-text-light-gray hover:text-white-black`
+          : `shrink-0 cursor-pointer font-normal text-text-light-gray hover:text-white-black hover:underline ${isMbl ? MOBILE_TARGET : ""}`}
+        onClick={() => onUndo(t.id)}
+      >
+        Undo
+      </button>
+      <button
+        type="button"
+        aria-label="Dismiss"
+        className={compactMobileUndo
+          ? `${MOBILE_TARGET} flex cursor-pointer items-center justify-center text-text-light-gray`
+          : `flex shrink-0 cursor-pointer items-center justify-center text-text-light-gray hover:text-white-black ${isMbl ? MOBILE_TARGET : ""}`}
+        onClick={() => toast.dismiss(t.id, SINGLE_UNDO_TOASTER_ID)}
+      >
+        <X size={14} />
+      </button>
+    </>
+  );
+
   if (compactMobileUndo) {
     return (
       <div
@@ -71,24 +96,7 @@ export const UndoToastContent = ({
         style={{ opacity: t.visible ? 1 : 0, transition: "opacity 200ms ease-in-out" }}
       >
         <span className="min-w-0 break-words leading-tight">{toastText}</span>
-        <div className="flex items-center">
-          <button
-            type="button"
-            aria-label="Undo"
-            className={`${MOBILE_TARGET} cursor-pointer text-text-light-gray hover:text-white-black`}
-            onClick={() => onUndo(t.id)}
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            className={`${MOBILE_TARGET} flex cursor-pointer items-center justify-center text-text-light-gray`}
-            onClick={() => toast.dismiss(t.id, SINGLE_UNDO_TOASTER_ID)}
-          >
-            <X size={14} />
-          </button>
-        </div>
+        <div className="flex items-center">{actions}</div>
       </div>
     );
   }
@@ -99,22 +107,7 @@ export const UndoToastContent = ({
       style={{ opacity: t.visible ? 1 : 0, transition: "opacity 200ms ease-in-out" }}
     >
       <span className="min-w-0 break-words">{toastText}</span>
-      <button
-        type="button"
-        aria-label="Undo"
-        className={`shrink-0 cursor-pointer font-normal text-text-light-gray hover:text-white-black hover:underline ${isMbl ? MOBILE_TARGET : ""}`}
-        onClick={() => onUndo(t.id)}
-      >
-        Undo
-      </button>
-      <button
-        type="button"
-        aria-label="Dismiss"
-        className={`flex shrink-0 cursor-pointer items-center justify-center text-text-light-gray hover:text-white-black ${isMbl ? MOBILE_TARGET : ""}`}
-        onClick={() => toast.dismiss(t.id, SINGLE_UNDO_TOASTER_ID)}
-      >
-        <X size={14} />
-      </button>
+      {actions}
     </div>
   );
 };
