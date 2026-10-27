@@ -60,12 +60,21 @@ export async function ghApi(args, { exec = spawnSync, sleep = (ms) => new Promis
     if (arg.startsWith('--method=')) return arg.slice(9).toUpperCase() !== 'GET';
     return /^(--input(?:=|$)|--(?:raw-)?field(?:=|$)|-[fF])/.test(arg);
   });
+  // YPER4-881: reads go through the hypertask-ci App's own API pool when the
+  // workflow minted one; any failure on it retries once on GH_TOKEN.
+  let readToken = readOnly ? env.GH_READ_TOKEN || '' : '';
   for (;;) {
     const response = exec('gh', ['api', '--include', ...args], {
       encoding: 'utf8', timeout: 30000, maxBuffer: 32 * 1024 * 1024,
+      ...(readToken ? { env: { ...process.env, GH_TOKEN: readToken } } : {}),
     });
     const parsed = parseGhResponse(response.stdout || '');
     if (response.status === 0) return parsed.body;
+    if (readToken) {
+      readToken = '';
+      log('hypertask-ci read token failed; retrying with GH_TOKEN');
+      continue;
+    }
     const status = parsed.status || Number(/HTTP (\d{3})/.exec(response.stderr || '')?.[1]);
     const wait = rateLimitWait(status, parsed.headers, parsed.body + (response.stderr || ''), now());
     if (wait == null) throw new Error(`GitHub API returned HTTP ${status || 'unknown'}`);

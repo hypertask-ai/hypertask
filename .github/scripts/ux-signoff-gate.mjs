@@ -667,24 +667,33 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
         },
       }));
     }
+    // YPER4-881: reads use the hypertask-ci App's own API pool when minted;
+    // any failure on it retries once on GH_TOKEN. Writes always use GH_TOKEN.
+    let readToken = readOnly ? env.GH_READ_TOKEN || '' : '';
     for (let attempt = 0; ;) {
       let response;
       try {
         response = await fetchImpl(`https://api.github.com/${path}`, {
           method,
           headers: {
-            Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${readToken || env.GH_TOKEN}`, Accept: 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json',
           },
           body: body ? JSON.stringify(body) : undefined,
           signal: AbortSignal.timeout(30000),
         });
       } catch (error) {
+        if (readToken) { readToken = ''; continue; }
         if (!readOnly || noWait || attempt >= 2) throw error;
         await sleep(attempt++ === 0 ? 1000 : 3000);
         continue;
       }
       if (response.ok) return response.json();
+      if (readToken) {
+        readToken = '';
+        log(`hypertask-ci read token got HTTP ${response.status}; retrying with GH_TOKEN`);
+        continue;
+      }
       const wait = rateLimitWait(response.status, response.headers, await response.text(), now());
       if (wait != null) {
         if (!readOnly || noWait) throw new GithubRateLimit(new Date(now() + wait).toISOString());

@@ -74,21 +74,43 @@ jobs:
       # Never build a commit whose review already failed (owner, 2026-08-26).
       # This does NOT wait: a pending or absent verdict builds in parallel as
       # normal; only an existing red verdict stops the build before it starts.
+      # YPER4-881: GitHub reads and cancels use the hypertask-ci App's own
+      # API pool, not the GITHUB_TOKEN pool every workflow shares. Status
+      # posts stay on github.token (the ruleset pins required checks to
+      # GitHub Actions). No secret (Dependabot, forks) or a failed mint falls
+      # back to github.token.
+      - name: Mint the hypertask-ci read token
+        id: ci-token
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          permission-statuses: read
+          skip-token-revoke: true
       - name: Skip the build when the review is already red
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_READ_TOKEN: ${{ steps.ci-token.outputs.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if ! STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '
+          read_status() { gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '
             [.statuses[] | select(.context == "ai-review" or .context == "claude-review") | {context, state}]
             | group_by(.context) | map(.[0])
             | if any(.[]; .state == "success") then "success"
-              elif any(.[]; .state == "failure") then "failure" else "none" end'); then
+              elif any(.[]; .state == "failure") then "failure" else "none" end'; }
+          if ! STATE=$( { [ -n "$GH_READ_TOKEN" ] && GH_TOKEN="$GH_READ_TOKEN" read_status; } || read_status); then
             echo "::warning::Review precheck unavailable; running tests. Required AI review still blocks merging."
           else
             [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
           fi
+      - name: Revoke the hypertask-ci read token
+        if: always() && steps.ci-token.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.ci-token.outputs.token }}
+        run: gh api --method DELETE /installation/token
       - name: Runner admission, dispatcher and selfupdate fixtures
         run: |
           python3 .claude/skills/ship/scripts/session-policy-guard.test.py

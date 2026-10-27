@@ -1484,6 +1484,20 @@ test('GitHub uses bearer REST or gh api fallback without executing PR code', asy
   await assert.rejects(createGithub({ env, fetchImpl: async () => response({}, 401) })('repos/fixture/repo/pulls/1'), /HTTP 401/);
 });
 
+test('YPER4-881: GitHub reads use GH_READ_TOKEN and fall back once; writes keep GH_TOKEN', async () => {
+  const { createGithub } = await gate;
+  const auth = [];
+  const statuses = [401, 200, 200];
+  const github = createGithub({ env: { ...env, GH_READ_TOKEN: 'ci-app' }, log: () => {}, fetchImpl: async (_, init) => {
+    auth.push(init.headers.Authorization);
+    const status = statuses.shift();
+    return response({ ok: true }, status);
+  } });
+  await github('repos/fixture/repo/pulls/1');
+  await github('repos/fixture/repo/statuses/sha', { method: 'POST', body: { state: 'success' } });
+  assert.deepEqual(auth, ['Bearer ci-app', 'Bearer github-fixture', 'Bearer github-fixture']);
+});
+
 test('GitHub GET retries transient HTTP failures then succeeds', async () => {
   const { createGithub } = await gate;
   for (const status of [502, 429]) {
