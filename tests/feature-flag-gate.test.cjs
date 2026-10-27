@@ -1764,6 +1764,20 @@ test("new catch-all route files do not parse Git revision output as source", asy
   }
 });
 
+test("deleted catch-all route files do not parse Git revision output as source", async (t) => {
+  for (const folder of ["[...slug]", "[[...slug]]"]) {
+    const { dir, git } = makeRepo(t);
+    const file = `src/app/detail/${folder}/Restorer.tsx`;
+    writeFile(dir, file, 'export const Restorer = () => <div>Restored</div>;\n');
+    const base = commit(git, "base route restorer");
+    fs.unlinkSync(path.join(dir, file));
+    const head = commit(git, "delete route restorer");
+    const result = await evaluate("HTPR-7680 [BUGFIX] remove restorer", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    assert.equal(result.ownerReview, "exempt-ui");
+  }
+});
+
 test("catch-all route files still reject wider exposure and invalid syntax", async (t) => {
   const { dir, git } = makeRepo(t);
   const file = "src/app/detail/[...slug]/Providers.tsx";
