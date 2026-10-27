@@ -23,6 +23,7 @@ function fixture() {
   const { GET } = load('src/lib/mcp/operations/projects/operation.ts', {
     '@/lib/auth/agentScope': { recordAgentBoardScopeMiss() {} },
     '@/lib/flags': { isFeatureEnabled: async () => false },
+    '@/lib/flags/keys': { HTPR_8018_PROJECT_PAGE_SIZE_FLAG: 'htpr-8018-project-page-size' },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash() {} },
     '@/lib/mcp/routeWrapper': {
       wrapMcpRoute: handler => handler,
