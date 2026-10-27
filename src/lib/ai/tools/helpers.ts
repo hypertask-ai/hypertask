@@ -141,7 +141,8 @@ export async function applyPriorityUpdate(
   taskId: number,
   priorityValue: string,
   userId: number,
-  activityUser: IUser
+  activityUser: IUser,
+  options: { onlyIfMissing?: boolean } = {},
 ): Promise<{ error: string | null }> {
   const constant = PriorityConstants.find((p) => p.Priority_Value === priorityValue);
   if (!constant) return { error: `Invalid priority "${priorityValue}"` };
@@ -151,6 +152,23 @@ export async function applyPriorityUpdate(
     include: { priority: true },
   });
   if (!task) return { error: "Task not found" };
+
+  if (options.onlyIfMissing) {
+    if (constant.priority_index === 0) return { error: null };
+    await prisma.priority.upsert({
+      where: { taskId },
+      create: {
+        taskId,
+        sectionId: task.sectionId ?? -1,
+        projectId: task.projectId,
+        addedByUserId: userId,
+        priority_index: constant.priority_index,
+        Priority_Value: constant.Priority_Value,
+      },
+      update: {},
+    });
+    return { error: null };
+  }
 
   if (constant.priority_index === 0) {
     if (task.priority) {
@@ -219,7 +237,8 @@ export async function applyEstimateUpdate(
   taskId: number,
   estimateIndex: number,
   userId: number,
-  activityUser: IUser
+  activityUser: IUser,
+  options: { onlyIfMissing?: boolean } = {},
 ): Promise<{ error: string | null }> {
   const constant = EstimateConstants.find(
     (estimate) => estimate.estimate_index === estimateIndex
@@ -231,6 +250,23 @@ export async function applyEstimateUpdate(
     include: { estimate: true },
   });
   if (!task) return { error: "Task not found" };
+
+  if (options.onlyIfMissing) {
+    if (constant.estimate_index === 0) return { error: null };
+    await prisma.estimate.upsert({
+      where: { taskId },
+      create: {
+        taskId,
+        sectionId: task.sectionId ?? -1,
+        projectId: task.projectId,
+        addedByUserId: userId,
+        estimate_index: constant.estimate_index,
+        estimate_value: constant.estimate_value,
+      },
+      update: {},
+    });
+    return { error: null };
+  }
 
   if (constant.estimate_index === 0) {
     if (task.estimate) await prisma.estimate.deleteMany({ where: { taskId } });

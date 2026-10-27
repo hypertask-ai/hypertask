@@ -13,7 +13,6 @@ import { HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG } from "@/lib/flags/definitions/
 import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 import { createTaskUpdater } from "./updateOneTask";
-import { updateTaskSchema } from "./updateTaskSchema";
 import { PriorityConstants } from "@/lib/constants/constants";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
@@ -256,15 +255,15 @@ export function createCreateTaskTool(context: ToolContext) {
             let task;
             let updatedResult;
             if (earlyTask) {
-              const update = await createTaskUpdater(context, updateTaskSchema.parse({
+              const update = await createTaskUpdater(context, {
                 title,
                 description,
-                priority: PriorityConstants.find((p) => p.priority_index === priorityIndex)?.Priority_Value,
+                priority: z.enum(["No Priority", "Urgent", "High", "Medium", "Low"]).parse(PriorityConstants.find((p) => p.priority_index === priorityIndex)?.Priority_Value ?? "No Priority"),
                 estimate: estimateIndex,
                 ...(labels.length ? { add_labels: labels } : {}),
                 image_urls: input.image_urls,
                 inline_images: input.inline_images,
-              }), {
+              }, {
                 expectedTitle: earlyTask.title,
                 expectedDescription: "",
                 expectedProjectId: earlyTask.projectId,

@@ -205,24 +205,26 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
       }
     }
 
-    if (input.priority !== undefined && (!expected || !task.priority)) {
+    if (input.priority !== undefined) {
       const priorityResult = await applyPriorityUpdate(
         task.id,
         input.priority,
         user.id,
-        activityUser
+        activityUser,
+        { onlyIfMissing: expected !== undefined },
       );
       if (priorityResult.error) {
         return { success: false, error: priorityResult.error };
       }
     }
 
-    if (input.estimate !== undefined && (!expected || !task.estimate)) {
+    if (input.estimate !== undefined) {
       const estimateResult = await applyEstimateUpdate(
         task.id,
         input.estimate,
         user.id,
-        activityUser
+        activityUser,
+        { onlyIfMissing: expected !== undefined },
       );
       if (estimateResult.error) {
         return { success: false, error: estimateResult.error };

@@ -129,7 +129,6 @@ function harness(options = {}) {
     "@/lib/flags/definitions/htpr-7758-progressive-chat-create": { HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG: "htpr-7758-progressive-chat-create" },
     "@/lib/ai/taskWriterDuplicateGuard": duplicateGuard,
     "@/utils/helperFunctions/escapeHtml": load(path.join(root, "src/utils/helperFunctions/escapeHtml.ts")),
-    "./updateTaskSchema": { updateTaskSchema: {} },
     "./updateOneTask": { createTaskUpdater: () => { throw new Error("Legacy creation must not update another ticket"); } },
     "@/lib/flags/keys": keys,
     "@/lib/flags": { isFeatureEnabled: async () => false },

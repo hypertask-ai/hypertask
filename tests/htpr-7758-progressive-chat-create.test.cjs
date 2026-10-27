@@ -49,7 +49,7 @@ function harness(options = {}) {
   });
   const tool = createCreateTaskTool({
     user: { id: 985 }, actingAgentId: options.agent ? "agent" : null,
-    body: {}, chatTaskWriterEnabled: true, sendStatus() {},
+    body: {}, chatTaskWriterEnabled: true, inlineAgentImagesEnabled: options.inlineImages, sendStatus() {},
     confirmationSessionId: "session", bulkPreviewsIssued: new Set(),
     send: (event, data) => { events.push({ event, data }); return true; },
     abortSignal: options.signal,
@@ -192,9 +192,54 @@ test("a rejected body update leaves properties untouched", async () => {
   assert.equal(h.estimates.length, 0);
 });
 
-test("a person can choose priority and size before writing finishes", async () => {
+test("background properties use atomic insert-only writes, not stale snapshots", async () => {
   const h = updaterHarness({ editedProperties: true });
   assert.equal((await h.execute()).success, true);
-  assert.equal(h.priorities.length, 0);
-  assert.equal(h.estimates.length, 0);
+  assert.deepEqual(h.priorities[0][4], { onlyIfMissing: true });
+  assert.deepEqual(h.estimates[0][4], { onlyIfMissing: true });
 });
+
+
+test("the writer retains long descriptions and explicit image settings", async () => {
+  const html = `<p>${"Long output. ".repeat(2000)}</p>`;
+  const h = harness({ inlineImages: true, draft: { ...draft, html } });
+  const pending = h.execute({ project_id: 7049, brief: "Preserve images", image_urls: ["https://example.test/image.png"], inline_images: false });
+  await started(h);
+  h.release();
+  const result = await pending;
+  assert.equal(result.success, true);
+  assert.equal(h.updates[0].input.description, html);
+  assert.deepEqual(h.updates[0].input.image_urls, ["https://example.test/image.png"]);
+  assert.equal(h.updates[0].input.inline_images, false);
+});
+
+for (const existing of [false, true]) {
+  test(`insert-only properties preserve choices even after stale reads: existing=${existing}`, async () => {
+    const rows = existing ? { priority: { priority_index: 4 }, estimate: { estimate_index: 6 } } : {};
+    const upsert = (name) => async ({ create, update }) => {
+      assert.deepEqual(update, {});
+      rows[name] ??= create;
+      return rows[name];
+    };
+    const empty = {};
+    const { applyPriorityUpdate, applyEstimateUpdate } = load("src/lib/ai/tools/helpers.ts", {
+      "@/lib/prisma": { default: {
+        task: { findUnique: async () => ({ id: 1, projectId: 7049, sectionId: 7, priority: null, estimate: null }) },
+        priority: { upsert: upsert("priority") }, estimate: { upsert: upsert("estimate") },
+      } },
+      "@/lib/mcp/agents": empty, "@/lib/auth/agentTeamScope": empty,
+      "@/utils/controllers/projects/getAllIncludes": empty,
+      "@/utils/controllers/activities/CreatePriorityActivity": empty,
+      "@/utils/controllers/activities/createEstimateActivity": empty,
+      "@/lib/mcp/tasks/mappers": empty, "@/lib/agents/publicAgent": empty,
+      "@/utils/controllers/getMemberAndOwnerForBoard": empty,
+      "@/lib/mcp/attachments/constants": empty,
+      "@/utils/controllers/projects/views/viewsHelperAPIfunctions": empty,
+      "@/utils/helperFunctions/Views/BoardFilterSanitizer": empty,
+    });
+    assert.deepEqual(await applyPriorityUpdate(1, "High", 985, { id: 985 }, { onlyIfMissing: true }), { error: null });
+    assert.deepEqual(await applyEstimateUpdate(1, 3, 985, { id: 985 }, { onlyIfMissing: true }), { error: null });
+    assert.equal(rows.priority.priority_index, existing ? 4 : 2);
+    assert.equal(rows.estimate.estimate_index, existing ? 6 : 3);
+  });
+}
