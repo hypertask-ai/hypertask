@@ -104,7 +104,7 @@
     "autoprefixer": "10.6.1",
     "aws-sdk": "^2.1435.0",
     "axios": "^1.20.0",
-    "better-auth": "~1.6.33",
+    "better-auth": "~1.7.14",
     "bootstrap": "^5.3.3",
     "clsx": "^2.1.1",
     "csv-parser": "^3.2.0",
