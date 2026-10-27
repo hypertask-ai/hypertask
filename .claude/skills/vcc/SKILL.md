@@ -24,7 +24,7 @@ Push the branch and require targeted checks in CI. Never run tests or builds on 
 ## Merge and deploy
 
 1. Read the PR merge state. Resolve conflicts before investigating checks. Read fresh ticket comments and reactions before merging; later corrections still apply.
-2. Mint a runner App token for GitHub commands. Stop if minting fails; never fall back to Valentin's saved login. Use one watcher, at least five minutes between polls, and stop it within thirty minutes. Refresh an expired token rather than starting duplicate watchers.
+2. Mint a runner App token for GitHub commands. Stop if minting fails; never fall back to Valentin's saved login. Wait with `~/.local/lib/hypertask/runner-pickup/ci-wait <PR> --repo hypertask-ai/hypertask --timeout 1800` using the runner App token. GitHub notifications trigger fresh reads; the fallback is ten minutes. Never use `gh pr checks --watch` or `gh run watch`. Refresh an expired token rather than starting duplicate watchers.
 3. Require all required checks on the current PR head and the latest completed production App Smoke health check to pass. A skipped required test is not a pass. Run `ship-check guard` explicitly in hookless sessions. Do not bypass branch protection or approvals.
 4. Merge only self-mergeable work. Protected Agent Kit changes go to HT Product Lead on the ticket for review and merge. Money, access, security, irreversible changes, and release changes retain their required decision/review path. A guard block names work to finish, not a check to evade.
 5. Require Production deployment `success` for the merge SHA. Use headless deployment status, never browser reloads. Record merge and deployment evidence in agent activity. A merged PR is not proof that production changed.
