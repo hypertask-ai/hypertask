@@ -58,6 +58,28 @@ https://app.hypertask.ai/detail/project-15/7263 adds phone selection behind `htp
 None if you only viewed and switched. If you changed a saved filter or view
 on the account's own board, revert it to the account's default state.
 
+## Column limits and card age
+
+https://app.hypertask.ai/detail/project-15/7975 is controlled by
+`htpr-7975-column-work-limits`, default Everyone. Off hides the limit
+editor and count denominator, refuses limit writes on the server, and
+restores stale-only ages without deleting saved limits.
+
+Open Commands, Manage board columns, then a column's settings. Set **Work
+limit** to a positive whole number, leave the field, and reload the board.
+The existing column count shows active tasks / limit. Above the limit it
+turns red; its accessible label says **over limit**. It remains advisory:
+creating or moving a task is never blocked. Archived and deleted tasks do
+not count. A saved view or filter must not hide the board's total workload.
+Clear the field to remove the limit; reload to prove it stayed cleared.
+
+Settings → Board → Staleness controls the board's age display, warning
+and hot thresholds, and stale reminders. With Staleness enabled, cards
+show days on board and in column, including fresh cards in muted text;
+warning and hot cards retain their existing amber and red treatment.
+Check both desktop and phone in all four themes. Restore the QA board's
+original limit and staleness settings after the run.
+
 ## Board hygiene report
 
 On a board, Ctrl+K → Manage tags → Board hygiene. Check the report on
@@ -72,8 +94,9 @@ stored. Only a public view filtering solely one tag covers that tag.
 Private views and views with extra filters never hide missing shared views.
 Open means Normal tickets outside done/deleted columns; null-column
 tickets count toward untagged. Idle means no ticket update for seven days.
-Work limits remain unconfigured until the board supports storing them;
-`null` is unknown, not zero. Confirm other boards return 404 for outsiders.
+With `htpr-7975-column-work-limits` on, the report uses saved column
+limits and counts how many columns exceed them. Off retains unknown
+limits; `null` is unknown, not zero. Confirm other boards return 404 for outsiders.
 
 Use a QA-owned scratch board for known labels and tickets. Compare label
 and view lists before and after reading. This report never repairs data.
@@ -156,24 +179,3 @@ save their filter. Expected label refusals log warnings; unexpected storage
 failures must still log errors. Local behavior coverage:
 `node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
 
-## Column limits and card age
-
-https://app.hypertask.ai/detail/project-15/7975 is controlled by
-`htpr-7975-column-work-limits`, default Everyone. Off hides the limit
-editor and count denominator, refuses limit writes on the server, and
-restores stale-only ages without deleting saved limits.
-
-Open Commands, Manage board columns, then a column's settings. Set **Work
-limit** to a positive whole number, leave the field, and reload the board.
-The existing column count shows active tasks / limit. Above the limit it
-turns red; its accessible label says **over limit**. It remains advisory:
-creating or moving a task is never blocked. Archived and deleted tasks do
-not count. A saved view or filter must not hide the board's total workload.
-Clear the field to remove the limit; reload to prove it stayed cleared.
-
-Settings → Board → Staleness controls the board's age display, warning
-and hot thresholds, and stale reminders. With Staleness enabled, cards
-show days on board and in column, including fresh cards in muted text;
-warning and hot cards retain their existing amber and red treatment.
-Check both desktop and phone in all four themes. Restore the QA board's
-original limit and staleness settings after the run.

@@ -259,10 +259,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       } else if (saveMode === "LIMIT") {
         const wipLimit = overrides?.wipLimit ?? null;
         sendUpdateSection = { ...section, wipLimit };
-        typedWrite ? await typedWrite({
-          sectionId: section.id,
-          newSection: { wipLimit },
-        }) : await axios.post("/api/section/update", {
+        await writeSection({
           sectionId: section.id,
           newSection: { wipLimit },
         });
