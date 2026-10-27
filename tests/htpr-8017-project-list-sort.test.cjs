@@ -22,6 +22,7 @@ function fixture() {
   const scope = { teamId: 'allowed-team' };
   const { GET } = load('src/lib/mcp/operations/projects/operation.ts', {
     '@/lib/auth/agentScope': { recordAgentBoardScopeMiss() {} },
+    '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash() {} },
     '@/lib/mcp/routeWrapper': {
       wrapMcpRoute: handler => handler,
