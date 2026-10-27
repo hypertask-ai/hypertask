@@ -5,7 +5,7 @@ description: "Last /ship step: three parallel reviewers read this session's tran
 
 # Reflect
 
-Source: pstack 0.15.9 by Lauren Tan, https://github.com/cursor/plugins/tree/main/pstack, `skills/reflect/SKILL.md` and `references/`. MIT License, Copyright (c) 2026 Lauren Tan. Changed for Claude Code and Hypertask runners (YPER4-599): transcript paths, helpers through the token ladder, repo-only edits through a PR, approval by HT Product Lead, backlog on board 4060.
+Source: pstack 0.15.9 by Lauren Tan, https://github.com/cursor/plugins/tree/main/pstack, `skills/reflect/SKILL.md` and `references/`. MIT License, Copyright (c) 2026 Lauren Tan. Changed for Claude Code and Hypertask runners (YPER4-599): transcript paths, helpers through the token ladder, repo-only edits through a PR, runner-owned follow-up tickets and normal PR review, backlog on board 4060.
 
 Mine the current session for durable learnings, then route them into skill edits.
 
@@ -41,17 +41,18 @@ One more helper the same way, with `references/synthesizer.md` and each reviewer
 
 For any Accepted row a lint rule, script, hook, test or `ship-check` would enforce more reliably, move it to Backlog with that mechanism named. Prose is for what mechanisms cannot enforce.
 
-### 5. Approval, then apply
+### 5. Own the follow-up, preserve protected review
 
-- Send the full Accepted / Rejected / Backlog list to HT Product Lead with SendMessage and wait for its answer. It picks rows and may change routings. Never auto-apply: a skill edit changes every future runner.
+- Record the full Accepted / Rejected / Backlog list in the current ticket agent activity. Judge the findings yourself; do not send a session message or wait for a lead response. Accepted findings become their own tickets and normal reviewed PRs, never unreviewed edits to the live skills.
+- Keep protected safety changes protected under `/ship`: request their review through an explicit ticket agent @mention. Decisions only Valentin can make use a ticket Question addressed to him. Do not fold follow-up implementation into a one-ticket run.
 - Edit only skills in this repo under `.claude/skills/` (and `.claude/agents/`). Never global files (`~/.claude`, `~/.agents`, another repo); name those as Backlog instead.
-- Approved rows ship like any other change: one YPER4 ticket on board 4060 via `vcc`, then /ship from Claim to Clean up, one PR. Do not reflect again on that ticket.
+- Accepted rows ship like any other change: one YPER4 ticket on board 4060 via `vcc`, then /ship from Claim to Clean up, one PR. Do not reflect again on that ticket.
 - A new skill or a skill description change follows the same PR, with its row in `.claude/skills/INDEX.md`.
 - Backlog: one YPER4 ticket per item via `vcc`, after a title search shows no open ticket for it. Do not start work on it.
 
 ### 6. Report
 
-One agent activity line on the last ticket of the run, and a short reply in chat:
+One agent activity entry on the last ticket of the run; no session message or direct runner chat to Valentin:
 
 - Edits proposed or shipped: skill path, one line each, plus the PR link.
 - Backlog tickets filed: full ticket URL, one line each.

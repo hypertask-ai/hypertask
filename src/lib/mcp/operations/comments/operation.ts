@@ -943,7 +943,7 @@ export async function POST(request: NextRequest) {
           const { parseAgentRunActivityInput } = await import('@/lib/agentRuns/model')
           const run = await createRuntimeAgentRun(agentLogEntry.principal, { taskId: task.id, title: null, source: 'runtime' })
           const result = run
-            ? await createAgentRunActivity(agentLogEntry.principal, run.id, parseAgentRunActivityInput({ type: 'thought', text: agentLogEntry.text }), clientIdempotencyKey)
+            ? await createAgentRunActivity(agentLogEntry.principal, run.id, parseAgentRunActivityInput({ type: 'thought', text: agentLogEntry.text }), clientIdempotencyKey, undefined, sanitizedText)
             : null
           if (result) {
             const { id, runId, type, text, createdAt } = result.activity
