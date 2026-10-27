@@ -44,6 +44,7 @@ function fixture(t, options = {}) {
     "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Pro" },
     "@/app/api/ai/_lib/sharedAllowance": { billedCostEnabled: async () => false },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+      if (key === "htpr-8008-gateway-key-errors") return options.customerKeyErrors ?? false;
       flagCalls.push({ key, userId });
       if (flag instanceof Error) throw flag;
       return flag;
@@ -145,4 +146,12 @@ test("customer report auth failure never substitutes a platform credential", asy
   assert.equal((await response.json()).fundingSource, "customer");
   assert.equal(f.requests.length, 3);
   assert.ok(f.requests.every(({ init }) => init.headers.Authorization === `Bearer ${credential}`));
+});
+
+test("customer-specific key guidance survives when both fixes are enabled", async (t) => {
+  const f = fixture(t, { source: "customer", customerKeyErrors: true });
+  const response = await f.read();
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).usageMessage, /key was rejected/);
+  assert.deepEqual(f.warnings, []);
 });

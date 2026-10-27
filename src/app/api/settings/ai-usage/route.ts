@@ -383,8 +383,22 @@ export async function GET(request: Request) {
         gatewayGet(`/report?${modelReportParams.toString()}`, funding.apiKey),
         gatewayGet(`/report?${tagReportParams.toString()}`, funding.apiKey),
       ]);
-    const reportAuthFailed = [dailyReportResponse, modelReportResponse, tagReportResponse]
-      .some((response) => response.status === 401 || response.status === 403);
+    const reportStatuses = [dailyReportResponse, modelReportResponse, tagReportResponse]
+      .map((response) => response.status);
+    const reportAuthFailed = reportStatuses.some((status) => status === 401 || status === 403);
+    if (
+      funding.source === "customer" &&
+      reportAuthFailed &&
+      await isFeatureEnabled(HTPR_8008_GATEWAY_KEY_ERRORS_FLAG, user.id)
+    ) {
+      const usageMessage = reportStatuses.includes(401)
+        ? "Your team's AI Gateway key was rejected. Check it in Settings > Bring your own key."
+        : "Your team's AI Gateway key cannot read usage reports. Check its permissions with your provider.";
+      return NextResponse.json(
+        { message: "Could not load AI Gateway usage", usageMessage },
+        { status: 502 },
+      );
+    }
     if (
       reportAuthFailed &&
       await isFeatureEnabled(HTPR_7743_AI_USAGE_AUTH_FLAG, user.id).catch(() => false)
@@ -413,21 +427,6 @@ export async function GET(request: Request) {
       !modelReportResponse.ok ||
       !tagReportResponse.ok
     ) {
-      const reportStatuses = [dailyReportResponse, modelReportResponse, tagReportResponse]
-        .map((response) => response.status);
-      if (
-        funding.source === "customer" &&
-        reportStatuses.some((status) => status === 401 || status === 403) &&
-        await isFeatureEnabled(HTPR_8008_GATEWAY_KEY_ERRORS_FLAG, user.id)
-      ) {
-        const usageMessage = reportStatuses.includes(401)
-          ? "Your team's AI Gateway key was rejected. Check it in Settings > Bring your own key."
-          : "Your team's AI Gateway key cannot read usage reports. Check its permissions with your provider.";
-        return NextResponse.json(
-          { message: "Could not load AI Gateway usage", usageMessage },
-          { status: 502 },
-        );
-      }
       throw new Error(
         `AI Gateway report returned ${dailyReportResponse.status}/${modelReportResponse.status}/${tagReportResponse.status}`,
       );
