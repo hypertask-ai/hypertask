@@ -133,7 +133,6 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
   }))
   // Exercise unreleased flags without changing the seed's production-mode snapshot.
   await page.route('**/api/flags', (route) => route.fulfill({ json: { flags: {
-    'htpr-6421-my-tasks-shortcuts-width': true,
     'htpr-6455-my-tasks-time-group': true,
     'htpr-6458-my-tasks-live-updates': true,
   } } }))
