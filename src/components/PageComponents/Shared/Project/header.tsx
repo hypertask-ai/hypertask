@@ -77,7 +77,7 @@ const ReadOnlyHeader = ({
                       <UserAvatar
                         key={member.id}
                         agentId={member.agent?.id}
-                        className="w-[30px] h-[30px] border-[var(--border-board-avatar)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden"
+                        className="w-[30px] h-[30px] border-[var(--border-board-avatar)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden "
                         alt={member.agent?.displayName ?? member.user?.displayName ?? "Board member"}
                         name={member.agent?.displayName ?? member.user?.displayName ?? member.user?.email}
                         photoURL={member.agent?.photoURL ?? member.user?.photoURL}

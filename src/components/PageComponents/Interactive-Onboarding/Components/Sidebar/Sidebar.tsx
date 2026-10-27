@@ -130,7 +130,7 @@ const SidebarContainer = ({ children }: Props) => {
                               </>
                               <div className="flex-grow justify-end mr-4 flex gap-1  text-meta font-bold text-white-black">
                                 <kbd
-                                  className={`py-[1px] mx-[1.5px] h-fit rounded-[2px] bg-[#555B64] border-[var(--border-keycap)]`}
+                                  className={` py-[1px] mx-[1.5px] h-fit rounded-[2px] bg-[#555B64] border-[var(--border-keycap)]`}
                                 >
                                   {isApple ? "CMD" : "CTRL"}
                                 </kbd>

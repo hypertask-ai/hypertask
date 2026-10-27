@@ -219,12 +219,12 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
                 className="text-center text-meta text-gray-500"
                 >
                 <kbd
-                  className="ml-[1] text-white-black p-1 px-2 bg-taskDetailPage border-[1px] [border-style:var(--style-editor-key-border)] border-icon-hover-gray"
+                  className="ml-[1] text-white-black p-1 px-2 bg-taskDetailPage border-[1px] [border-style:var(--style-editor-key-border)] border-icon-hover-gray "
                     
                     >↑
                 </kbd>
                 <kbd
-                  className="mx-[1px] p-1 px-2 text-white-black rounded font-medium bg-taskDetailPage border-[1px] [border-style:var(--style-editor-key-border)] border-icon-hover-gray"
+                  className="mx-[1px] p-1 px-2 text-white-black rounded font-medium bg-taskDetailPage border-[1px] [border-style:var(--style-editor-key-border)] border-icon-hover-gray "
                     
                     >↓
                 </kbd>

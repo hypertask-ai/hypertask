@@ -70,7 +70,7 @@ const ReactTooltipContent = ({
     data-hover-tooltip-content={topLayer || undefined}
     style={style}
     className={cn(
-      `bg-[var(--bg-help-tooltip)] hidden sm:flex sm:flex-col gap-2 items-center${topLayer ? "" : "z-[9999]"} absolute text-wrap text-white-black
+      `bg-[var(--bg-help-tooltip)] hidden sm:flex sm:flex-col gap-2 items-center ${topLayer ? "" : "z-[9999]"} absolute text-wrap text-white-black
       sm:w-[200px] text-center text-dense py-3 px-2 rounded-md cursor-pointer
       shadow-lg ${topLayer ? "scale-100" : `scale-0 group-hover${groupHoverId}:scale-100`} transition-transform duration-100
       ${showAbove

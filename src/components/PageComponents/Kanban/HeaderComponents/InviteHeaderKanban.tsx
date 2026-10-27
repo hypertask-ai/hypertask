@@ -41,7 +41,7 @@ const InviteNewMembers: React.FC<{ currentProject: IProject }> = ({
         {hyperAI && (
           <UserAvatar
             key={hyperAI.id}
-            className="board-header-avatar border-[var(--border-board-avatar)] border-[2px] ml-[-8px]"
+            className="board-header-avatar border-[var(--border-board-avatar)] border-[2px] ml-[-8px] "
             alt={hyperAI.displayName || "Hypertask AI"}
             name={hyperAI.displayName || "Hypertask AI"}
             photoURL={hyperAI.photoURL}
@@ -56,7 +56,7 @@ const InviteNewMembers: React.FC<{ currentProject: IProject }> = ({
                   <UserAvatar
                     key={member.id}
                     agentId={member.agent?.id}
-                    className="board-header-avatar w-[30px] h-[30px] border-[var(--border-board-avatar)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden"
+                    className="board-header-avatar w-[30px] h-[30px] border-[var(--border-board-avatar)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden "
                     alt={member.agent?.displayName ?? member.user?.displayName ?? "Board member"}
                     name={member.agent?.displayName ?? member.user?.displayName ?? member.user?.email}
                     photoURL={member.agent?.photoURL ?? member.user?.photoURL}
