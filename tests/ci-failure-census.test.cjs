@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { readFileSync, mkdtempSync, writeFileSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
@@ -128,5 +129,46 @@ test('CLI documents usage and rejects invalid limits before making GitHub calls'
     const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /positive integer|Usage:/);
+  }
+});
+
+test('CLI dispatches read-only requests and prints the complete three-run census', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'ci-census-cli-'));
+  try {
+    writeFileSync(path.join(directory, 'gh'), `#!/usr/bin/env node
+const assert = require('node:assert/strict');
+const fixture = ${JSON.stringify(fixture)};
+const args = process.argv.slice(2);
+if (args[0] === 'repo') {
+  console.log('example/repo');
+} else {
+  assert.equal(args[0], 'api');
+  assert.equal(args[args.indexOf('--method') + 1], 'GET');
+  const endpoint = args.at(-1).replace(/^repos\\/example\\/repo/, '');
+  if (endpoint.startsWith('/actions/workflows/')) console.log(JSON.stringify({ workflow_runs: fixture.runs }));
+  else if (endpoint.startsWith('/contents/')) console.log(fixture.workflow);
+  else {
+    const jobs = endpoint.match(/^\\/actions\\/runs\\/(\\d+)\\/attempts\\/(\\d+)\\/jobs\\?/);
+    const log = endpoint.match(/^\\/actions\\/jobs\\/(\\d+)\\/logs$/);
+    if (jobs) {
+      assert.equal(Number(jobs[2]), fixture.runs.find(run => run.id === Number(jobs[1])).run_attempt);
+      console.log(JSON.stringify({ jobs: fixture.jobs[jobs[1]] }));
+    } else if (log) console.log(fixture.logs[log[1]]);
+    else throw new Error('Unexpected request: ' + endpoint);
+  }
+}
+`, { mode: 0o700 });
+    const result = spawnSync(process.execPath, [path.join(__dirname, '../scripts/ci-failure-census.mjs'), '--workflow', 'ci-tests.yml', '--limit', '3'], {
+      encoding: 'utf8', env: { ...process.env, PATH: directory + path.delimiter + process.env.PATH },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /example\/repo: ci-tests.yml/);
+    assert.match(result.stdout, /Scanned 3 runs; 3 failing runs; 4 failing steps\./);
+    assert.match(result.stdout, /mcp-cli-api-contract \(cascade\)/);
+    assert.match(result.stdout, /\| Test \| 2 \| 0 \|/);
+    assert.match(result.stdout, /\| Publish result \| 1 \| 1 \|/);
+    assert.match(result.stdout, /Unavailable job logs: 0/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
