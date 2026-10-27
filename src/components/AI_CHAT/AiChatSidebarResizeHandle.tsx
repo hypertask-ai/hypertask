@@ -19,7 +19,7 @@ export function AiChatSidebarResizeHandle() {
   const userId = useRecoilValue(currentUserAtom)?.id;
   const [preferredWidths, setPreferredWidths] = useRecoilState(aiChatSidebarPreferredWidthsAtom);
   const savedWidth = userId === undefined ? undefined : preferredWidths?.[userId];
-  const fallbackWidth = preferredWidths === null ? widthPx : AI_CHAT_SIDEBAR_DEFAULT_PX;
+  const fallbackWidth = preferredWidths === null ? undefined : AI_CHAT_SIDEBAR_DEFAULT_PX;
   const preferredWidth = typeof savedWidth === "number" && Number.isFinite(savedWidth)
     ? savedWidth : fallbackWidth;
   const [isHovered, setIsHovered] = useState(false);
@@ -30,7 +30,7 @@ export function AiChatSidebarResizeHandle() {
   useEffect(() => {
     const onResize = () => {
       setWidthPx((w) => clampAiChatSidebarWidthPx(
-        rememberWidth && userId !== undefined ? preferredWidth : w, window.innerWidth
+        rememberWidth && userId !== undefined ? preferredWidth ?? w : w, window.innerWidth
       ));
     };
     onResize();

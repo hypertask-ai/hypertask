@@ -3,7 +3,8 @@ import type { ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agen
 import { useOptionalAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/chatContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilState } from "@/lib/state";
-import { showQuickTipsAtom } from "@/store";
+import { aiChatSidebarWidthPxAtom, showQuickTipsAtom } from "@/store";
+import { clampAiChatSidebarWidthPx } from "@/lib/configs/style.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
@@ -69,6 +70,12 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
   const idempotentChatOpen = useFlag(HTPR_8030_CHAT_OPEN_RACE_FLAG);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const { openAIChatInterface, toggleAIChatInterface } = useGlobalUIState();
+  const [, setSidebarWidth] = useRecoilState(aiChatSidebarWidthPxAtom);
+
+  useEffect(() => {
+    if (!isMbl || !showAiChatInterface || !isSidebarMode) return;
+    setSidebarWidth(width => clampAiChatSidebarWidthPx(width, window.innerWidth));
+  }, [isMbl, showAiChatInterface, isSidebarMode, setSidebarWidth]);
 
   const togglePopoverRef = useRef(togglePopover);
   togglePopoverRef.current = togglePopover;
