@@ -32,6 +32,28 @@ jobs:
           persist-credentials: false
       - name: Install the trusted workflow parser
         run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
+      - name: Mark title recheck pending
+        if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const { retryGithubRequest } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/github-rate-limit.mjs`);
+            const eventPr = context.payload.pull_request;
+            await retryGithubRequest(async () => {
+              const { data: current } = await github.rest.pulls.get({
+                ...context.repo, pull_number: eventPr.number,
+              });
+              if (current.state !== 'open' || current.base.ref !== 'production' ||
+                  current.head.sha !== eventPr.head.sha || current.title !== eventPr.title) {
+                core.info('Skipping stale title recheck; a newer event owns it.');
+                return;
+              }
+              await github.rest.repos.createCommitStatus({
+                ...context.repo, sha: current.head.sha, context: 'pr-title',
+                state: 'pending', description: 'Trusted guards are evaluating this pull request',
+                target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              });
+            }, { log: core.warning });
       - name: Read guard metadata once
         id: metadata
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
@@ -175,7 +197,7 @@ jobs:
                 ...context.repo, pull_number: eventPr.number,
               });
               if (current.state !== 'open' || current.base.ref !== 'production' ||
-                  current.head.sha !== eventPr.head.sha ||
+                  current.head.sha !== eventPr.head.sha || current.title !== eventPr.title ||
                   current.title !== (results.title?.outputs?.title ?? eventPr.title)) {
                 core.info('Skipping stale guard result; a newer event owns it.');
                 return;

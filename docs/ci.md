@@ -457,8 +457,11 @@ summary job replaces the old status publisher and trusted completion workflow.
 
 The trusted workflow reads PR metadata once for outside, size and title
 checks. It publishes only the existing required `pr-title` status, combining
-outside and title outcomes. Size remains advisory. Publication rereads the
-open PR, production base, exact head and evaluated title. A rate-limit refusal
+outside and title outcomes. Size remains advisory. A fresh pending status
+invalidates an earlier same-head success before metadata reevaluation, so an
+invalid title cannot keep its prior approval during later quota retries.
+Publication rereads the open PR, production base, exact head, event title
+and evaluated title. A rate-limit refusal
 waits until the supplied reset and retries that whole fresh-read/publication
 operation. Ordinary authorization errors remain failures. The retry wait is
 bounded to one hour; an unavailable required result never becomes green.
@@ -467,8 +470,8 @@ No required ruleset context changes.
 `node tests/guard-quota.test.cjs` executes the saved production scripts and
 candidate workflow entry points with isolated GitHub responses. For a small,
 same-repository PR without an existing size comment, the two guard workflows
-use 22 explicit GitHub REST calls before and four after; writes fall from ten
-to one. These are instrumented fixture counts, not network telemetry or
+use 22 explicit GitHub REST calls before and six after; writes fall from ten
+to two. These are instrumented fixture counts, not network telemetry or
 whole-fleet savings. Checkout, Actions internals, ticket binding, other
 workflows and exceptional comment writes are excluded. The immutable fixture
 records its production source SHA. Ten simulated pushes recover both a read

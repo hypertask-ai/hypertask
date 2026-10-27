@@ -17,32 +17,39 @@ const pr = {
 const limited = (headers = { 'retry-after': '1' }) => Object.assign(
   new Error('API rate limit exceeded for installation'), { status: 403, response: { headers } });
 
-async function run({ limitedRead = false, limitedPost = false, current = {}, outcomes = {}, evaluated = {}, baseline = false } = {}) {
+async function run({ limitedRead = false, limitedPost = false, limitedMetadataRead = false, event = {}, current = {}, outcomes = {}, evaluated = {}, baseline = false } = {}) {
   const { retryGithubRequest } = await gate;
   const calls = [];
   const waits = [];
   const posts = [];
   const failures = [];
   const results = {};
+  const eventPr = { ...pr, ...event };
+  const visibleWhileWaiting = [];
+  let visibleStatus = 'success';
   let clock = 1000000;
   const retry = request => retryGithubRequest(request, {
-    now: () => clock, sleep: async ms => { waits.push(ms); clock += ms; }, log() {},
+    now: () => clock, sleep: async ms => { waits.push(ms); visibleWhileWaiting.push(visibleStatus); clock += ms; }, log() {},
   });
   const context = {
     repo: { owner: 'fixture', repo: 'repo' }, eventName: 'pull_request_target',
-    actor: 'runner', payload: { pull_request: pr }, serverUrl: 'https://github.com', runId: 1,
+    actor: 'runner', payload: { pull_request: eventPr }, serverUrl: 'https://github.com', runId: 1,
   };
   const github = {
     rest: {
       pulls: { get: async () => {
         calls.push('pulls.get');
         if (limitedRead) { limitedRead = false; throw limited(); }
-        return { data: { ...pr, ...(typeof current === 'function' ? current(calls) : current) } };
+        if (limitedMetadataRead && posts.some(post => post.state === 'pending')) {
+          limitedMetadataRead = false; throw limited();
+        }
+        return { data: { ...eventPr, ...(typeof current === 'function' ? current(calls) : current) } };
       } },
       repos: { createCommitStatus: async post => {
         calls.push('repos.createCommitStatus');
-        if (limitedPost) { limitedPost = false; throw limited(); }
+        if (limitedPost && (baseline || post.state !== 'pending')) { limitedPost = false; throw limited(); }
         posts.push(post);
+        visibleStatus = post.state;
       } },
       issues: { listComments() {} },
     },
@@ -82,7 +89,7 @@ async function run({ limitedRead = false, limitedPost = false, current = {}, out
       };
     }
       }
-    return { calls, waits, posts, failures };
+    return { calls, waits, posts, failures, visibleWhileWaiting };
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
@@ -90,7 +97,7 @@ async function run({ limitedRead = false, limitedPost = false, current = {}, out
   }
 }
 
-test('executed production workflow baseline spends 22 calls versus four for the candidate', async () => {
+test('executed production workflow baseline spends 22 calls versus six for the candidate', async () => {
   const old = process.env.HYPERTASK_MCP_TOKEN;
   process.env.HYPERTASK_MCP_TOKEN = 'isolated-fixture';
   try {
@@ -98,8 +105,8 @@ test('executed production workflow baseline spends 22 calls versus four for the 
     assert.equal(before.calls.length, 22);
     assert.equal(before.posts.length, 10);
     const after = await run();
-    assert.equal(after.calls.length, 4);
-    assert.equal(after.posts.length, 1);
+    assert.equal(after.calls.length, 6);
+    assert.equal(after.posts.length, 2);
     assert.deepEqual(before.failures, []);
     assert.deepEqual(after.failures, []);
     await assert.rejects(run({ baseline: true, limitedRead: true }), /rate limit exceeded for installation/);
@@ -114,16 +121,17 @@ test('ten workflow push replays recover read and status quota refusals with fres
   try {
     for (let push = 0; push < 10; push++) {
       const normal = await run();
-      assert.deepEqual(normal.calls, ['pulls.get', 'issues.listComments', 'pulls.get', 'repos.createCommitStatus']);
+      assert.deepEqual(normal.calls, ['pulls.get', 'repos.createCommitStatus', 'pulls.get', 'issues.listComments', 'pulls.get', 'repos.createCommitStatus']);
       assert.deepEqual(normal.posts.map(({ context, state, sha: head }) => ({ context, state, head })), [
+        { context: 'pr-title', state: 'pending', head: sha },
         { context: 'pr-title', state: 'success', head: sha },
       ]);
       const recovered = await run({ limitedRead: true, limitedPost: true });
       assert.deepEqual(recovered.failures, []);
       assert.deepEqual(recovered.waits, [1000, 1000]);
-      assert.equal(recovered.calls.length, 7);
-      assert.equal(recovered.posts.length, 1);
-      assert.equal(recovered.posts[0].state, 'success');
+      assert.equal(recovered.calls.length, 9);
+      assert.equal(recovered.posts.length, 2);
+      assert.equal(recovered.posts.at(-1).state, 'success');
     }
   } finally {
     if (old === undefined) delete process.env.HYPERTASK_MCP_TOKEN; else process.env.HYPERTASK_MCP_TOKEN = old;
@@ -137,11 +145,11 @@ test('combined guard cannot pass missing, failed or unevaluated outside/title re
     for (const id of ['outside', 'title']) {
       for (const outcome of ['failure', 'skipped', 'cancelled']) {
         const result = await run({ outcomes: { [id]: outcome } });
-        assert.equal(result.posts[0].state, 'failure');
+        assert.equal(result.posts.at(-1).state, 'failure');
         assert.equal(result.failures.length, 1);
       }
       const unevaluated = await run({ evaluated: { [id]: { sha: '' } } });
-      assert.equal(unevaluated.posts[0].state, 'failure');
+      assert.equal(unevaluated.posts.at(-1).state, 'failure');
     }
   } finally {
     if (old === undefined) delete process.env.HYPERTASK_MCP_TOKEN; else process.env.HYPERTASK_MCP_TOKEN = old;
@@ -155,9 +163,9 @@ test('a delayed status retry rechecks changed head, title, base and open state b
     for (const changed of [{ head: { ...pr.head, sha: 'b'.repeat(40) } }, { title: 'Edited title' },
       { base: { ...pr.base, ref: 'main' } }, { state: 'closed' }]) {
       const result = await run({ limitedPost: true, current: calls =>
-        calls.filter(call => call === 'pulls.get').length >= 3 ? changed : {} });
+        calls.filter(call => call === 'pulls.get').length >= 4 ? changed : {} });
       assert.deepEqual(result.waits, [1000]);
-      assert.deepEqual(result.posts, []);
+      assert.deepEqual(result.posts.map(post => post.state), ['pending']);
       assert.deepEqual(result.failures, []);
     }
   } finally {
@@ -183,5 +191,30 @@ test('retry refuses ordinary API failures and an over-budget reset without prete
   for (const step of steps.filter(step => /retryGithubRequest/.test(step.with?.script ?? ''))) {
     const url = pathToFileURL(resolve('.github/scripts/github-rate-limit.mjs')).href;
     assert.equal(typeof (await import(url)).retryGithubRequest, 'function');
+  }
+});
+
+test('same-head invalid title clears an earlier success before quota-limited metadata reevaluation', async () => {
+  const result = await run({ event: { title: 'Invalid title' }, limitedMetadataRead: true });
+  assert.deepEqual(result.visibleWhileWaiting, ['pending']);
+  assert.deepEqual(result.posts.map(({ context, state, sha: head }) => ({ context, state, head })), [
+    { context: 'pr-title', state: 'pending', head: sha },
+    { context: 'pr-title', state: 'failure', head: sha },
+  ]);
+});
+
+test('stale title rechecks cannot invalidate a newer result', async () => {
+  const old = process.env.HYPERTASK_MCP_TOKEN;
+  process.env.HYPERTASK_MCP_TOKEN = 'isolated-fixture';
+  try {
+    for (const changed of [{ title: 'Newer title' }, { head: { ...pr.head, sha: 'b'.repeat(40) } },
+      { base: { ...pr.base, ref: 'main' } }, { state: 'closed' }]) {
+      const result = await run({ current: changed });
+      assert.deepEqual(result.posts, []);
+    }
+    const current = await run({ event: { title: 'Invalid title' } });
+    assert.deepEqual(current.posts.map(post => post.state), ['pending', 'failure']);
+  } finally {
+    if (old === undefined) delete process.env.HYPERTASK_MCP_TOKEN; else process.env.HYPERTASK_MCP_TOKEN = old;
   }
 });

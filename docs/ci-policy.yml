@@ -60,7 +60,8 @@ pr_job_budget:
     jobs: 1
     published_statuses: [pr-title]
     metadata_reads: 1
-    publication_freshness_reads: 1
+    publication_freshness_reads: 2
+    status_writes: 2
     checkout: production_only
     candidate_code_execution: false
   serialized_reconciliation_guards:
