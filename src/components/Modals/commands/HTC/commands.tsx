@@ -641,7 +641,6 @@ const Commands = (props: Props) => {
   }, []);
     
     function updateCommandFrequency(command: ICommandList) {
-      if (!columnArchiveEnabled && command.commandMode === CommandMode.ArchiveColumn) return;
       if (writing) return;
       if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()
@@ -821,7 +820,9 @@ const Commands = (props: Props) => {
       handleMouseLeave={handleMouseLeave}
       handleMouseEnter={handleMouseEnter}
       commandRef={commandRef}
-      onClickHandler={updateCommandFrequency}
+      onClickHandler={columnArchiveEnabled ? updateCommandFrequency : (command) => {
+        if (command.commandMode !== CommandMode.ArchiveColumn) updateCommandFrequency(command);
+      }}
       isMobile={isMobile}
     />
   );
