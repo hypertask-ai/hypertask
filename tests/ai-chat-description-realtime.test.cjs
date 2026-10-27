@@ -170,6 +170,44 @@ for (const [name, toolName, input] of cases) {
   });
 }
 
+test("reconstructed progressive completion saves its generated patch, not the original brief", async () => {
+  const { task, dependencies } = fixture();
+  const writes = [];
+  const bindings = {
+    ...dependencies,
+    z: require("zod").z,
+    input: { project_id: PROJECT_ID, brief: "Original brief" },
+    earlyTask: { id: TASK_ID, projectId: PROJECT_ID, title: "Original brief" },
+    title: "Generated title",
+    description: content,
+    priorityIndex: 2,
+    estimateIndex: 3,
+    labels: [],
+    PriorityConstants: [{ priority_index: 2, Priority_Value: "High" }],
+    buildActivityUser: (value) => value,
+    updateTaskSingle: async (patch, _user, _agent, expected) => {
+      writes.push({ patch, expected });
+      return { status: 200, json: task };
+    },
+    applyPriorityUpdate: async () => ({ error: null }),
+    applyEstimateUpdate: async () => ({ error: null }),
+  };
+  const declaration = findNode((node) =>
+    ts.isVariableDeclaration(node) && node.name.getText(route) === "update" &&
+    node.initializer?.getText(route).includes("expectedTitle: earlyTask.title"),
+  );
+  const javascript = ts.transpileModule(
+    `async function run() { return ${declaration.initializer.getText(route)}; }`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2020 } },
+  ).outputText;
+  const result = await new Function(...Object.keys(bindings), `${javascript}\nreturn run();`)(...Object.values(bindings));
+  assert.equal(result.success, true);
+  assert.deepEqual(writes, [{
+    patch: { id: TASK_ID, title: "Generated title", description: content },
+    expected: { expectedTitle: "Original brief", expectedDescription: "", expectedProjectId: PROJECT_ID, expectedStatus: "Normal" },
+  }]);
+});
+
 test("AI draft publication does not notify or save another user's draft", async () => {
   const { calls, draft, dependencies } = fixture();
   draft.userId = 8;
