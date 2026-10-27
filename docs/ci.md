@@ -341,10 +341,16 @@ Before a PR exists, push a branch and run:
 ```bash
 scripts/verify-qa <branch> inbox-cycle
 # Direct equivalent (helper resolves the pushed branch to an immutable SHA):
-gh workflow run visual-regression.yml -f head=<branch-or-sha> -f journey=inbox-cycle
-gh run watch <run-id> --exit-status --interval 30
-gh run download <run-id> --dir <evidence-dir>
+token=$(gh-app-token) && test -n "$token" || exit 1
+GH_TOKEN="$token" gh workflow run visual-regression.yml -f head=<branch-or-sha> -f journey=inbox-cycle
+GH_TOKEN="$token" gh run watch <run-id> --exit-status --interval 300
+GH_TOKEN="$token" gh run download <run-id> --dir <evidence-dir>
 ```
+
+The helper requires a freshly minted Runner App token. Failed or empty token
+responses stop dispatch; saved human logins are never a fallback. Refresh the
+App token before later status/download commands. Keep one watcher per run and
+stop it within 30 minutes.
 
 This reuses the existing Visual Regression dispatch, selecting its independent
 `verify-qa` job instead of the two-build visual comparison. Omitting `journey`

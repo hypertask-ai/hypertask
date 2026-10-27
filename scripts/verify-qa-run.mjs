@@ -87,6 +87,7 @@ async function summarize(out) {
     }
   }
   run.journey ??= process.env.VERIFY_QA_JOURNEY
+  run = JSON.parse(sanitizeLog(JSON.stringify(run), secrets))
   await writeFile(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`)
   const summary = [
     '## On-demand verify-qa', '', `Verdict: **${run.verdict}**`,

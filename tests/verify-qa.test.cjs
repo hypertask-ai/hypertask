@@ -51,12 +51,35 @@ test('artifact logs redact credentials, cookies, bearer tokens, and JWTs but kee
   assert.equal(sanitizeLog('HTTP 200 ready', []), 'HTTP 200 ready')
 })
 
+test('summary entry point never restores credential-bearing failures into uploaded evidence', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-qa-summary-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const out = path.join(dir, 'verify-qa')
+  fs.mkdirSync(out)
+  fs.writeFileSync(path.join(out, 'run.json'), JSON.stringify({ verdict: 'FAIL', failure: 'HTTP 500 fixture-session-secret' }))
+  const summary = path.join(dir, 'step-summary.md')
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts/verify-qa-run.mjs'), '--summary'], {
+    cwd: dir, encoding: 'utf8', env: { ...process.env, SESSION_SECRET: 'fixture-session-secret',
+      VERIFY_QA_JOB_STATUS: 'success', VERIFY_QA_JOURNEY: 'inbox-cycle', GITHUB_STEP_SUMMARY: summary },
+  })
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'run.json'), 'utf8')), {
+    verdict: 'FAIL', failure: 'HTTP 500 [REDACTED]', journey: 'inbox-cycle',
+  })
+  for (const file of [path.join(out, 'summary.md'), summary]) {
+    const text = fs.readFileSync(file, 'utf8')
+    assert.match(text, /Failure: HTTP 500 \[REDACTED\]/)
+    assert.doesNotMatch(text, /fixture-session-secret/)
+  }
+})
+
 function helperFixture(t, ghStatus = 0) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-qa-helper-'))
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
   const sha = 'a'.repeat(40)
   fs.writeFileSync(path.join(dir, 'git'), `#!/usr/bin/env bash\ncase "$1" in\ncheck-ref-format) exit 0 ;;\nls-remote) printf '%s\\trefs/heads/feature/test\\n' '${sha}' ;;\n*) exit 99 ;;\nesac\n`, { mode: 0o755 })
-  fs.writeFileSync(path.join(dir, 'gh'), `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify(process.argv.slice(2))); console.log('https://github.com/hypertask-ai/hypertask/actions/runs/123'); process.exit(${ghStatus})\n`, { mode: 0o755 })
+  fs.writeFileSync(path.join(dir, 'gh-app-token'), '#!/bin/sh\nprintf fixture-runner-app-token\n', { mode: 0o755 })
+  fs.writeFileSync(path.join(dir, 'gh'), `#!/usr/bin/env node\nif (process.env.GH_TOKEN !== 'fixture-runner-app-token') process.exit(99); require('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify(process.argv.slice(2))); console.log('https://github.com/hypertask-ai/hypertask/actions/runs/123'); process.exit(${ghStatus})\n`, { mode: 0o755 })
   const capture = path.join(dir, 'args.json')
   return { dir, sha, capture, env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CAPTURE: capture } }
 }
@@ -70,6 +93,19 @@ test('launch helper dispatches the pushed SHA, prints the run URL, and never sta
     'workflow', 'run', 'visual-regression.yml', '--repo', 'hypertask-ai/hypertask', '--ref', 'production',
     '-f', `head=${sha}`, '-f', 'journey=inbox-cycle',
   ])
+})
+
+test('launch helper refuses failed or empty App tokens without falling back to a saved login', t => {
+  const { dir, env, capture } = helperFixture(t)
+  for (const tokenCommand of ['exit 17', 'exit 0']) {
+    fs.writeFileSync(path.join(dir, 'gh-app-token'), `#!/bin/sh\n${tokenCommand}\n`, { mode: 0o755 })
+    const result = spawnSync('bash', [path.join(root, 'scripts/verify-qa'), 'feature/test'], {
+      env: { ...env, GH_TOKEN: 'saved-human-login' }, encoding: 'utf8',
+    })
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /Runner App token unavailable/)
+    assert.equal(fs.existsSync(capture), false)
+  }
 })
 
 test('launch helper rejects unsupported journeys and propagates dispatch failures', t => {

@@ -14,5 +14,9 @@ if [[ ! $sha =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 printf 'Candidate: %s @ %s; journey: %s\n' "$ref" "$sha" "$journey"
-gh workflow run visual-regression.yml --repo hypertask-ai/hypertask --ref "$workflow_ref" -f "head=$sha" -f "journey=$journey"
-printf '%s\n' 'Use the returned run URL: gh run watch <run-id> --exit-status --interval 30; gh run download <run-id> --dir <evidence-dir>'
+if ! token=$(gh-app-token) || [ -z "$token" ]; then
+  echo 'Runner App token unavailable; verification was not dispatched.' >&2
+  exit 1
+fi
+GH_TOKEN="$token" gh workflow run visual-regression.yml --repo hypertask-ai/hypertask --ref "$workflow_ref" -f "head=$sha" -f "journey=$journey"
+printf '%s\n' 'Use a fresh Runner App token: gh run watch <run-id> --exit-status --interval 300; gh run download <run-id> --dir <evidence-dir>. Stop watching within 30 minutes.'
