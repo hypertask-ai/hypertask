@@ -1,9 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-
-const root = path.resolve(__dirname, "..");
-let entry = 0;
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 function loadDispatch({ enabled = true } = {}) {
   const notifications = [];
@@ -12,32 +9,24 @@ function loadDispatch({ enabled = true } = {}) {
   const flagReads = [];
   const task = { id: 99, projectId: 7049, userId: 985, title: "Fixture", section: "Todo", uniqueIndex: 1 };
   const stubs = {
-    "src/lib/prisma.ts": { default: {
+    "@/lib/prisma": { default: {
       task: { findUnique: async () => task },
       notification: { findMany: async () => [] },
       comment: { findMany: async () => [] },
       subscribedDevices: { findMany: async () => [] },
     } },
-    "src/lib/flags.ts": { isFeatureEnabled: async (key, userId) => { flagReads.push({ key, userId }); return typeof enabled === "function" ? enabled(userId) : enabled; } },
-    "src/utils/controllers/notifications/IdsToSendNotificationsTo.ts": { default: async () => [985, 4037] },
-    "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts": { default: async (_user, _project, _task, payload) => {
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { flagReads.push({ key, userId }); return typeof enabled === "function" ? enabled(userId) : enabled; } },
+    "../IdsToSendNotificationsTo": { default: async () => [985, 4037] },
+    "./check-reminder_create-notification": { default: async (_user, _project, _task, payload) => {
       notifications.push(payload);
       return { ...payload, fromUser: { displayName: "Actor" }, user: { email: "qa@example.test" } };
     } },
-    "src/utils/controllers/FCM/index.ts": { sendDataNewCommentFCM: async (body) => pushes.push(body) },
-    "src/utils/controllers/notifications/sendNotification.ts": { sendEmailNotification: async (...args) => emails.push(args) },
-    "src/utils/controllers/notifications/shouldNotify.ts": { shouldNotify: async () => true },
+    "../../FCM": { sendDataNewCommentFCM: async (body) => pushes.push(body) },
+    "../sendNotification": { sendEmailNotification: async (...args) => emails.push(args) },
+    "../shouldNotify": { shouldNotify: async () => true },
   };
-  for (const [relative, exports] of Object.entries(stubs)) {
-    const filename = path.join(root, relative);
-    require.cache[filename] = { id: filename, filename, loaded: true, exports };
-  }
-  delete require.cache[path.join(root, "src/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove.ts")];
-  const jiti = require("jiti")(path.join(root, `tests/quiet-updates-${++entry}.cjs`), {
-    interopDefault: true, alias: { "@": path.join(root, "src") }, cache: false,
-  });
-  const module = jiti(path.join(root, "src/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove.ts"));
-  return { dispatch: module.default ?? module, notifications, pushes, emails, flagReads };
+  const { default: dispatch } = loadModule("src/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove.ts", stubs);
+  return { dispatch, notifications, pushes, emails, flagReads };
 }
 
 for (const type of ["TaskMoved", "TaskUpdateDescription"]) {
@@ -87,9 +76,7 @@ for (const type of ["TaskArchived", "TaskDueDate"]) {
 }
 
 test("flag limits changed delivery to reviewed accounts", () => {
-  const jiti = require("jiti")(__filename, { interopDefault: true });
-  const module = jiti(path.join(root, "src/lib/flags/definitions/htpr-8143-quiet-agent-updates.ts"));
-  const flag = module.default ?? module;
+  const { default: flag } = loadModule("src/lib/flags/definitions/htpr-8143-quiet-agent-updates.ts");
   assert.equal(flag.key, "htpr-8143-quiet-agent-updates");
   assert.equal(flag.defaultMode, "OWNER_AND_QA");
   assert.equal(flag.kind, "bugfix");
