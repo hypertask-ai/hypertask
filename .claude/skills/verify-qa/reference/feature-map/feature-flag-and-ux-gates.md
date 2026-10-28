@@ -30,6 +30,21 @@ Save a post-merge PR run showing target success and fleet skip, plus two schedul
 `node --test tests/feature-flag-reconcile-workflow.test.cjs` exercises unchanged-PR skipping, metadata invalidation, rate-limit handling and genuine API failures with workflow fixtures.
 `node --test tests/ux-signoff-gate.test.cjs` exercises UX verdicts and reconciliation, including rate-limit skips without stale approval and refusal of ordinary API failures.
 
+## Imported formatter gates
+
+The evaluator entry point is `evaluate` in `.github/scripts/feature-flag-gate.mjs`.
+After deployment, read the trusted feature-flag check on a production PR that passes its ticket flag through an imported formatter (for example, https://github.com/hypertask-ai/hypertask/pull/2237).
+Require the check's `ffg=` stamp to identify production containing the repair; an older passing status is not live proof.
+Do not change that PR, its flag, or its ticket during verification.
+
+Hosted `tests/feature-flag-gate.test.cjs` must prove all four formatter groups: aliased parameters, explicit live return branches, rendered consumers and return truthiness.
+These fixtures exercise the real `evaluate` entry point with committed repositories, not copied helpers.
+The allowed controls include relative and `@/` imports, top-level early returns and boolean negation.
+Refused controls include ignored or overwritten parameters, nested contradictory guards, exception overrides, invariant comparisons and discarded output.
+Save the tested head SHA, hosted run URL and successful group lines.
+A local AST reproduction supplements those results; it does not replace evaluator or trusted-workflow proof.
+No app output changes, so theme screenshots and customer-data writes are unnecessary.
+
 ## Cleanup
 
 None. Nothing is created.
