@@ -149,3 +149,22 @@ test('raw inline geometry and shadow suffixes fail, conditional token styles pas
   assert.equal(fallback.length, 1);
   assert.equal(fallback[0].ruleId, 'local/no-raw-design-colours');
 });
+
+test('semantic colour functions pass while literal channels and fallbacks fail', async () => {
+  assert.deepEqual(await lint('const style = { color: "hsl(var(--shadcn-primary))" }; const x = "bg-[hsl(var(--shadcn-primary))]";'), []);
+  const messages = await lint('const style = { color: "hsl(120 40% 50%)", backgroundColor: "hsl(var(--primary,#fff))" };');
+  assert.equal(messages.filter(m => m.ruleId === 'local/no-raw-design-colours').length, 2);
+});
+
+test('unrelated class names do not count as theme selectors', async () => {
+  assert.deepEqual(await lint('const x = "[.dialog_&]:border-white [.dia-extra_&]:border-white";'), []);
+  const messages = await lint('const x = "[.dia_&]:border-white [.amoled:hover_&]:border-white";');
+  assert.equal(messages.filter(m => m.ruleId === 'local/no-raw-design-theme-selectors').length, 2);
+});
+
+test('destructured token names do not define inline style values', async () => {
+  assert.deepEqual(await lint('const { zIndex, fontSize, boxShadow, borderRadius } = tokens;'), []);
+  const messages = await lint('const style = { zIndex: 123 };');
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].ruleId, 'local/no-raw-design-layers');
+});

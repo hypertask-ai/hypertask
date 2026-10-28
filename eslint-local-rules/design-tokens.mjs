@@ -14,10 +14,11 @@ const utilities = {
   corners: /(?:^|:)!?rounded(?:-[trblse]{1,2})?-\[([^\]]+)\]/g,
   "text-sizes": /(?:^|:)!?text-\[(\d+(?:\.\d+)?px)\]/g,
   colours: /(?:^|:)!?(?:bg|text|border(?:-[trblxyse])?|divide|outline|ring(?:-offset)?|fill|stroke|from|via|to|decoration|placeholder|accent|caret|shadow)-\[([^\]]+)\]/g,
-  "theme-selectors": /\[(\.(?:amoled|porcelain|graphite|dia)[^\]]*&)\]/gi,
+  "theme-selectors": /\[(\.(?:amoled|porcelain|graphite|dia)(?![a-z\d-])[^\]]*&)\]/gi,
 };
 const colorProperty = /(?:color|background|border|fill|stroke|shadow)/i;
 const colorLiteral = /#[\da-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|color)\(/i;
+const tokenColorFunction = /\b(?:rgba?|hsla?|oklch|oklab)\(\s*var\(--[\w-]+\)\s*\)/gi;
 
 function tokenStyleValue(node) {
   if (node.type === "ConditionalExpression") return tokenStyleValue(node.consequent) && tokenStyleValue(node.alternate);
@@ -58,7 +59,7 @@ export function designTokenRules(allowances = baseline) {
           for (const token of value.split(/\s+/)) {
             utility.lastIndex = 0;
             for (const match of token.matchAll(utility)) {
-              if (family === "colours" && !colorLiteral.test(match[1])) continue;
+              if (family === "colours" && !colorLiteral.test(match[1].replace(tokenColorFunction, ""))) continue;
               if (!tokenValue.test(match[1])) matches.push({ node, value: match[0] });
             }
           }
@@ -71,6 +72,7 @@ export function designTokenRules(allowances = baseline) {
             inspect(node, node.value.cooked ?? node.value.raw);
           },
           Property(node) {
+            if (node.parent.type !== "ObjectExpression") return;
             const key = node.key.name ?? node.key.value;
             const value = context.sourceCode.getText(node.value);
             let styleFamily = { boxShadow: "shadows", zIndex: "layers", fontSize: "text-sizes" }[key];
@@ -78,7 +80,7 @@ export function designTokenRules(allowances = baseline) {
             if (family === styleFamily && !tokenStyleValue(node.value)) {
               matches.push({ node, value: String(key) });
             }
-            if (family === "colours" && colorProperty.test(key ?? "") && colorLiteral.test(value)) {
+            if (family === "colours" && colorProperty.test(key ?? "") && colorLiteral.test(value.replace(tokenColorFunction, ""))) {
               matches.push({ node, value: String(key) });
             }
           },
