@@ -1031,9 +1031,12 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
     if (typescript.isArrowFunction(parent) && child === parent.body) return !earlyOnly || conditionalOutput;
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
         typescript.isTypeAssertionExpression(parent) || typescript.isNonNullExpression(parent) ||
-        typescript.isSatisfiesExpression(parent) || typescript.isAwaitExpression(parent) ||
-        (typescript.isPrefixUnaryExpression(parent) &&
-         parent.operator === typescript.SyntaxKind.ExclamationToken)) continue;
+        typescript.isSatisfiesExpression(parent) || typescript.isAwaitExpression(parent)) continue;
+    if (typescript.isPrefixUnaryExpression(parent) &&
+        parent.operator === typescript.SyntaxKind.ExclamationToken) {
+      if (earlyOnly && conditionalOutput) return false;
+      continue;
+    }
     if (typescript.isBinaryExpression(parent)) {
       if (parent.operatorToken.kind === typescript.SyntaxKind.CommaToken) return false;
       if (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
@@ -1110,7 +1113,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
   return false;
 }
 
-function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex, independentArguments, argumentBoolean) {
+function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex, argumentCount, independentArguments, argumentBoolean) {
   const targetPath = resolveLocalModule(ref, sourcePath, imported.module);
   if (!targetPath) return false;
   const source = git(["show", `${ref}:${targetPath}`]);
@@ -1158,7 +1161,9 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
       typescript.forEachChild(node, visitDefault);
     }
     if (item.initializer) visitDefault(item.initializer);
-    return independentArguments.has(index) && typescript.isIdentifier(item.name) && !dependentDefault &&
+    const independent = independentArguments.has(index) ||
+      (index >= argumentCount && item.initializer && staticBoolean(item.initializer, true) !== null);
+    return independent && typescript.isIdentifier(item.name) && !dependentDefault &&
       !written.has(checker.getSymbolAtLocation(item.name)) ? [item.name.text] : [];
   }));
   const parameterBoolean = (expression) => {
@@ -1284,7 +1289,7 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
     const value = call.arguments[index] ?? defaultValue;
     return value ? resolve(value, properties) : null;
   };
-  if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, independentArguments, argumentBoolean)) return false;
+  if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, call.arguments.length, independentArguments, argumentBoolean)) return false;
   const sourceFile = node.getSourceFile();
   const live = collectLiveFunctions(sourceFile, checker);
   if (!renderFunctions.has(enclosingFunctionLike(call)) && !controlsRuntimeBranch(call, false)) return false;

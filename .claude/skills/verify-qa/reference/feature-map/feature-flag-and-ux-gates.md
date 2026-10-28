@@ -37,7 +37,7 @@ After deployment, read the trusted feature-flag check on a production PR that pa
 Require the check's `ffg=` stamp to identify production containing the repair; an older passing status is not live proof.
 Do not change that PR, its flag, or its ticket during verification.
 
-Hosted `tests/feature-flag-gate.test.cjs` must prove all eight formatter groups: aliased parameters, explicit live return branches, rendered consumers, return truthiness, invariant guards, independent boolean inputs, formatter dependency/render consumption and async server consumers.
+Hosted `tests/feature-flag-gate.test.cjs` must prove all nine formatter groups: aliased parameters, explicit live return branches, rendered consumers, return truthiness, invariant guards, independent boolean inputs, formatter dependency/render consumption async server consumers and render coercion/omitted defaults.
 These fixtures exercise the real `evaluate` entry point with committed repositories, not copied helpers.
 The allowed controls include relative and `@/` imports, top-level early returns, direct conditional rendering, independent caller boolean conjunctions and boolean negation.
 Refused controls include ignored or overwritten parameters, nested contradictory guards, exception overrides, invariant comparisons, conditional guards with unknown or constant truthiness, correlated parameters, dependent parameter defaults, truthy masks and discarded output.
@@ -50,6 +50,8 @@ Resolve explicit undefined arguments using the formatter's constant parameter de
 Unsupported compound operands fail closed; only constants and proven-independent parameter paths may participate in formatter conditions.
 Object parameter defaults referencing another parameter cannot establish independence.
 Empty fragments (including nested fragments) and boolean-only render branches cannot prove visible output.
+Boolean coercion after choosing JSX cannot prove visible output; negating the condition before choosing JSX remains supported.
+Omitted independent constant defaults remain supported for both import styles; masking or correlated defaults remain refused.
 Async server-component consumers of synchronous formatters remain supported; async formatters still cannot prove a truthiness gate.
 Consumed logical and nested conditional JSX render paths pass; discarded or comma-masked JSX fails.
 Save the tested head SHA, hosted run URL and successful group lines.
