@@ -2816,8 +2816,8 @@ test('formatter consumers reject invisible nullish children and unreachable logi
   }
 });
 
-test("new money flags must start Off while existing flags keep their modes", async (t) => {
-  for (const mode of ["OFF", "OWNER_AND_QA", "OWNER_ONLY"]) {
+test("new money flags must start Owner and QA while existing flags keep their modes", async (t) => {
+  for (const mode of ["OFF", "OWNER_AND_QA", "OWNER_ONLY", "EVERYONE"]) {
     const { dir, git } = makeRepo(t);
     perFlagLayout(dir);
     const existing = "src/lib/flags/definitions/htpr-1-other.ts";
@@ -2829,7 +2829,7 @@ export default { key: OTHER_FLAG, kind: "bugfix", defaultMode: "OWNER_AND_QA", s
 export default { key: NEW_FLAG, kind: "bugfix", defaultMode: "${mode}", shippedOn: "2026-10-28", description: "New money flag", releaseRisk: { risk: "small", reason: "Paid reporting", highRisk: "money" } } as const;`);
     const head = commit(git, "new money flag");
     const result = await evaluate("HTPR-2 [BUGFIX] money fixture", base, head, dir);
-    assert.equal(result.pass, mode === "OFF", result.reason);
-    if (mode !== "OFF") assert.match(result.reason, /new money flag htpr-2-new must set defaultMode: "OFF"/);
+    assert.equal(result.pass, mode === "OWNER_AND_QA", result.reason);
+    if (mode !== "OWNER_AND_QA") assert.match(result.reason, /new money flag htpr-2-new must set defaultMode: "OWNER_AND_QA"/);
   }
 });

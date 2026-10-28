@@ -1892,8 +1892,8 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
       const baseFiles = new Set(flagDefinitionPaths(mergeBase));
       for (const path of flagDefinitionPaths(headSha)) {
         const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
-        if (added.has(definition.key) && definition.releaseRisk?.highRisk === "money" && definition.defaultMode !== "OFF") {
-          throw new Error(`new money flag ${definition.key} must set defaultMode: "OFF"; Valentin approves release`);
+        if (added.has(definition.key) && definition.releaseRisk?.highRisk === "money" && definition.defaultMode !== "OWNER_AND_QA") {
+          throw new Error(`new money flag ${definition.key} must set defaultMode: "OWNER_AND_QA"; Valentin approves release`);
         }
         if (baseFiles.has(path)) continue;
         if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&

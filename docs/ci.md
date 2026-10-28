@@ -661,6 +661,6 @@ additional copies are. Parse and Git failures stop the check. No paid request
 is made by this check, and no new required status is added.
 
 New flags declaring `releaseRisk.highRisk: "money"` must explicitly default
-to `OFF`; Valentin approves release through the existing flag-switch path.
+to `OWNER_AND_QA`; Valentin approves release through the existing flag-switch path.
 Existing flag definitions and live modes are unchanged. Other high-risk
 classes retain their existing default rules.
