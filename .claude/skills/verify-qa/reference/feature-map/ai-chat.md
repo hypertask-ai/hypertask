@@ -12,8 +12,10 @@ Shared conversations are permanent after HTPR-8115. On `/agents/chat`, open
 an existing accessible agent and reload its history. The create-session entry
 point is `POST /api/ai-chat/create-session` with `agentId`; history and private
 drafts use `/api/agent-chat/<sessionId>` and its `/participant` route. Preserve
-the existing `sharedConversationEnabled: true` response, participants, history
-pagination and each user's draft. Restore any draft changed during QA.
+the existing `sharedConversationEnabled: true` response for ordinary shared
+conversations, participants, history pagination and each user's draft. Marked
+cross-team conversations stay owner-only, with `participants: null` and
+`sharedConversationEnabled: false`. Restore any draft changed during QA.
 Authorized teammates must reach the same owner-keyed conversation; private,
 revoked, unrelated-team and removed-board access must still be refused. Never
 send a message merely to test retirement: that can wake an external runtime.
