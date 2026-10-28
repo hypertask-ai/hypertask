@@ -141,6 +141,14 @@ def read_comments(boards, cache=None, *, full_refresh=False, reads=None):
             else:
                 entries[key] = {"updatedAt": updated, "commentCount": count, "comments": listed}
             comments[ticket] = [c for c in listed if c.get("type") != "activity"]
+            activity = json.loads(command("ht", "GET", f"/mcp/tasks/{ticket}/agent-activity?limit=100"))
+            if (activity.get("success") is not True or not isinstance(activity.get("activities"), list)
+                    or not all(isinstance(a, dict) and isinstance(a.get("text"), str)
+                               and isinstance(a.get("createdAt"), str) and isinstance(a.get("agentName"), str)
+                               for a in activity["activities"])):
+                raise ValueError(f"Invalid agent activity for {ticket}")
+            comments[ticket].extend(dict(a, type="activity", agent={"displayName": a["agentName"]})
+                                    for a in activity["activities"])
     if cache is not None:
         cache.clear()
         cache.update(entries)
@@ -332,7 +340,8 @@ def session_metrics(row, home=None):
                         words = []
                     comment = (name == "Bash" and len(words) >= 4
                                and words[:3] in (["vcc", "comment", "add"],
-                                                ["hypertask", "comment", "add"])
+                                                ["hypertask", "comment", "add"],
+                                                ["vcc", "activity", "add"])
                                and not operators)
                     if comment:
                         comment_tools.add(block.get("id"))
@@ -349,7 +358,7 @@ def session_metrics(row, home=None):
 
 def current_checkpoint(ticket, runner, comments, since):
     # Explicit fields are a conservative proxy for recoverable state, not a claim or ledger mtime.
-    candidates = [c for c in comments.get(ticket, []) if c.get("type") != "activity"
+    candidates = [c for c in comments.get(ticket, []) if c.get("type") == "activity"
                   and (c.get("agent") or {}).get("displayName", "").casefold() == runner.casefold()]
     if not candidates:
         return False
@@ -517,7 +526,7 @@ def maintain_runner(row, holding, comments, now, *, loop, state, allow_clear=Tru
     # Tool activity must also be unchanged since checkpoint evaluation.
     if not live_claude(row) or session_metrics(row) != metrics:
         return False
-    resume = "resume: read your held tickets' latest comments: " + (", ".join(holding) or "none")
+    resume = "resume: read your held tickets' latest comments and agent log: " + (", ".join(holding) or "none")
     command("tmux", "send-keys", "-t", row["pane"], "-l", "/clear")
     command("tmux", "send-keys", "-t", row["pane"], "Enter")
     record.update(last_clear=now, reason=trigger, context=None, usage_at=0)

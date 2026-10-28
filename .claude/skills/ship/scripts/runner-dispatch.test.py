@@ -105,7 +105,7 @@ class DispatchTests(unittest.TestCase):
             ticket = task["ticketNumber"]
             at = m.datetime.fromtimestamp(self.now - 10, m.timezone.utc).isoformat()
             note = "Next: finish QA\nHelpers: helper-123\nBranch/PR: yper4-448 / PR 123\nOutputs: /tmp/helper-123.txt"
-            self.comments[ticket] = [claim(runner), claim(runner, at, note)]
+            self.comments[ticket] = [claim(runner), dict(claim(runner, at, note), type="activity")]
         self.metrics.return_value = dict(session="session-1", context=context, activity=self.now - 20,
                                          usage_at=self.now - 15, cleared=0, started=self.now - 60)
         self.ready_go([row])
@@ -121,7 +121,7 @@ class DispatchTests(unittest.TestCase):
         row = self.safe_runner()
         with contextlib.redirect_stderr(io.StringIO()) as log:
             result = self.dispatch([row], go=True)
-        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, HTPR-2, HTPR-3"])
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments and agent log: HTPR-1, HTPR-2, HTPR-3"])
         self.assertEqual(result[0]["action"], "cleared")
         self.assertEqual(self.clear_records()[row["runner"]]["last_clear"], self.now)
         self.assertEqual(log.getvalue().count("cleared RUNNER 8 reason=context_80k context=90000"), 1)
@@ -139,14 +139,14 @@ class DispatchTests(unittest.TestCase):
                 self.assertEqual(self.sent_texts(), [])
                 self.comments[ticket].append(checkpoint)
         self.dispatch([row], go=True)
-        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, HTPR-2"])
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments and agent log: HTPR-1, HTPR-2"])
 
     def test_active_and_waiting_holdings_all_appear_in_resume(self):
         row = self.safe_runner()
         self.boards[15][1]["section"] = "Valentin Review"
         self.boards[15][2]["section"] = "UX Sign-off"
         self.dispatch([row], go=True)
-        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, HTPR-2, HTPR-3"])
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments and agent log: HTPR-1, HTPR-2, HTPR-3"])
 
     def test_all_clearable_states_require_context_above_80k(self):
         for state in ("idle", "waiting_bg", "done", "waiting_valentin"):
@@ -350,10 +350,16 @@ class DispatchTests(unittest.TestCase):
                                for line in good["text"].splitlines())
         comments = {"HTPR-1": [good]}
         self.assertTrue(m.current_checkpoint("HTPR-1", row["runner"], comments, self.now - 20))
-        later = claim(row["runner"], m.datetime.fromtimestamp(self.now - 5, m.timezone.utc).isoformat(),
-                      "Helper output was lost; state above is no longer current")
+        later = dict(claim(row["runner"], m.datetime.fromtimestamp(self.now - 5, m.timezone.utc).isoformat(),
+                      "Helper output was lost; state above is no longer current"), type="activity")
         comments["HTPR-1"].append(later)
         self.assertFalse(m.current_checkpoint("HTPR-1", row["runner"], comments, self.now - 20))
+
+    def test_people_comment_cannot_act_as_checkpoint(self):
+        row = self.safe_runner()
+        good = self.comments["HTPR-1"][-1]
+        self.assertFalse(m.current_checkpoint("HTPR-1", row["runner"],
+                         {"HTPR-1": [dict(good, type="comment")]}, self.now - 20))
 
     def test_changed_tool_activity_or_busy_pane_prevents_clear(self):
         row = self.safe_runner()
@@ -438,9 +444,9 @@ class DispatchTests(unittest.TestCase):
         checkpoint = self.comments["HTPR-1"][-1]["text"]
         events = [self.event(-40, content=[dict(type="tool_use", name="Write", id="work", input={})]),
                   self.event(-39, "user", [dict(type="tool_result", tool_use_id="work")])]
-        for n, executable in enumerate(("vcc", "hypertask")):
+        for n, executable in enumerate(("vcc activity add", "vcc comment add")):
             events.extend([self.event(-12 + n * 4, content=[dict(type="tool_use", name="Bash", id=f"c{n}",
-                           input=dict(command=f'{executable} comment add HTPR-1 --text "{checkpoint}\nQA; ready & waiting | review"'))]),
+                           input=dict(command=f'{executable} HTPR-1 "{checkpoint}\nQA; ready & waiting | review"'))]),
                            self.event(-9 + n * 4, "user", [dict(type="tool_result", tool_use_id=f"c{n}")])])
         events[-2]["message"]["usage"] = dict(input_tokens=90_000)
         home, path = self.transcript_fixture(events)
@@ -1154,6 +1160,8 @@ class DispatchTests(unittest.TestCase):
     def test_paginated_reads_and_comment_scope_cache(self):
         calls = []
         def api(*args):
+            if args[:2] == ("ht", "GET"):
+                return json.dumps({"success": True, "activities": []})
             calls.append(args)
             self.assertEqual(args[0], "hypertask")
             if args[1:3] == ("tasks", "list"):

@@ -94,7 +94,14 @@ inspect_ticket() {
     || fail "cannot read comments for $t"
   jq -e '.success == true and (.comments | type == "array")' "$work/$t.comments" >/dev/null \
     || fail "invalid comments for $t"
-  comments="$work/$t.comments"
+  ht GET "/mcp/tasks/$t/agent-activity?limit=100" > "$work/$t.log" \
+    || fail "cannot read agent log for $t"
+  jq -e '.success == true and (.activities | type == "array")' "$work/$t.log" >/dev/null \
+    || fail "invalid agent log for $t"
+  jq -s '.[0] + {comments: (.[0].comments + [.[1].activities[] |
+    {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}}])}' \
+    "$work/$t.comments" "$work/$t.log" > "$work/$t.combined"
+  comments="$work/$t.combined"
   claim=$(jq -c '[.comments[] | select(.agent.id != null or (.agent_display_name // "") != "")
     | select((.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed."))]
     | sort_by(.createdAt) | last // null' "$comments")
@@ -103,7 +110,7 @@ inspect_ticket() {
   fi
   claim_id=$(jq -r '.agent.id // ""' <<< "$claim")
   has_resume=$(jq '(.text // .commentText // "") | gsub("<[^>]*>"; " ")
-    | test("(claude[[:space:]]+--resume|codex[[:space:]]+resume)[[:space:]]+[^[:space:]]+")' <<< "$claim")
+    | test("(claude[[:space:]]+--resume|codex[[:space:]]+resume|hax[[:space:]]+--resume|tmux[[:space:]]+attach)[[:space:]]+[^[:space:]]+")' <<< "$claim")
   last_commit=$(seconds "$(commit_time "$t")")
   stamp=$(seconds "$(jq -r '[.comments[].createdAt] | max // ""' "$comments")")
   [ "$last_commit" -le "$stamp" ] || stamp=$last_commit

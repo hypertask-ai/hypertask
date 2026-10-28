@@ -205,9 +205,10 @@ if [[ $T == HTPR-* ]]; then
   [ "$rc" = 0 ] || exit "$rc"
 fi
 
-"$VCC" comment add "$T" --text "<p><strong>Claimed.</strong> Session working it now.</p><p>Next: I examine and fix it. Requested by Valentin in a Claude session, $(date +%F). Resume this Claude session: $RESUME</p>" >/dev/null \
-  || { echo "ship-claim: claim comment failed" >&2; exit 2; }
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
+"$VCC" activity add "$T" "Claimed. Session working it now.
+Next: I examine and fix it. Resume: $RESUME" >/dev/null \
+  || { echo "ship-claim: claim activity failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
 
 W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); LOG=$(mktemp); MERGED=$(mktemp); trap 'rm -f "$W" "$IDLE" "$ASG" "$LOG" "$MERGED"' EXIT
@@ -273,7 +274,8 @@ case "$res" in
     else
       "$VCC" task unassign "$T" --self >/dev/null || echo "ship-claim: unassign failed, remove yourself by hand" >&2
     fi
-    "$VCC" comment add "$T" --text "<p><strong>Stepping back: $other claimed this first.</strong></p><p>Next: $other carries on; nothing for you to do. Requested by Valentin in a Claude session, $(date +%F). Resume this Claude session: $RESUME</p>" >/dev/null \
+    "$VCC" activity add "$T" "Stepping back: $other claimed this first.
+Next: $other carries on. Resume: $RESUME" >/dev/null \
       || echo "ship-claim: step-back comment failed" >&2
     echo "ship-claim: STEP BACK, $other claimed $T first. Do NOT start work; pick another ticket."
     exit 3 ;;

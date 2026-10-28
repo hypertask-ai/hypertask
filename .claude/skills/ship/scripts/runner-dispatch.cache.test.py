@@ -45,6 +45,7 @@ class CacheTests(unittest.TestCase):
                     "updatedAt": "v1", "commentCount": 1}],
         }
         self.comments = {"HTPR-1": [comment()], "HTPR-2": [], "YPER4-1": [comment()]}
+        self.activities = {}
         self.rows = [{"runner": "HAX ht-hax-runner-13", "pane": "%13", "state": "busy"}]
         self.calls = []
         self.replies = {}
@@ -83,6 +84,10 @@ class CacheTests(unittest.TestCase):
             override = self.replies.get(("comments", ticket, cursor))
             data = override if override is not None else {
                 "success": True, "comments": self.comments[ticket], "total": len(self.comments[ticket])}
+        elif args[:2] == ("ht", "GET"):
+            match = re.fullmatch(r"/mcp/tasks/([A-Z0-9]+-\d+)/agent-activity\?limit=100", args[2])
+            self.assertIsNotNone(match)
+            data = self.activities.get(match[1], {"success": True, "activities": []})
         elif args == ("tmux", "capture-pane", "-p", "-t", "%1"):
             return "status save 10k"
         elif args in [("tmux", "send-keys", "-t", "%1", "-l", text)
@@ -165,14 +170,14 @@ class CacheTests(unittest.TestCase):
         self.run_dispatch()
         self.assertNotIn("0 runner panes found", self.stderr.getvalue())
         self.assertFalse((self.state / "runner-inbox/infra-manager.events.jsonl").exists())
-        self.assertTrue(all(c[0] == "hypertask" for c in self.calls))
+        self.assertTrue(all(c[0] in ("hypertask", "ht") for c in self.calls))
 
     def test_warm_unchanged_only_task_lists(self):
         self.run_dispatch()
         self.assertEqual(self.summary, ("2", "3", "0", "true", "false", "0"))
         self.run_dispatch()
         self.assertEqual(self.fetched(), [])
-        self.assertTrue(all(c[:3] == ("hypertask", "tasks", "list") for c in self.calls))
+        self.assertTrue(all(c[:3] == ("hypertask", "tasks", "list") or c[:2] == ("ht", "GET") for c in self.calls))
         self.assertEqual(self.summary, ("2", "0", "3", "false", "false", "0"))
         self.assertEqual(self.cache()["runs"], 2)
         self.assertEqual(set(self.cache()), {"schema", "runs", "entries"})
@@ -265,7 +270,7 @@ class CacheTests(unittest.TestCase):
     def test_exact_load_twelve_runs(self):
         self.load = 12
         self.run_dispatch()
-        self.assertEqual(len(self.calls), 5)
+        self.assertEqual(len(self.calls), 8)
         self.assertEqual(self.cache()["runs"], 1)
         self.assertEqual(self.summary[4], "false")
 
@@ -393,6 +398,23 @@ class CacheTests(unittest.TestCase):
                 self.assertEqual(dispatch.call_args.args[2]["HTPR-1"], listed)
                 self.assertNotIn("15:HTPR-1", self.cache()["entries"])
                 self.assertEqual(self.summary[5], "1")
+
+    def test_agent_log_claim_is_fetched_even_when_people_comments_are_cached(self):
+        self.run_dispatch()
+        self.activities["HTPR-1"] = {"success": True, "activities": [{
+            "id": "claim-log", "agentName": "RUNNER 1", "text": "Claimed.",
+            "createdAt": "2026-10-21T10:01:00Z"}]}
+        self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "done"}]
+        self.run_dispatch(go=False)
+        self.assertNotIn("planned=HTPR-1", self.stdout.getvalue())
+        self.assertEqual(self.fetched(), [])
+
+    def test_agent_log_read_failure_prevents_dispatch(self):
+        self.activities["HTPR-1"] = {"success": False, "error": "unavailable"}
+        self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "done"}]
+        with self.assertRaisesRegex(ValueError, "Invalid agent activity"):
+            self.run_dispatch()
+        self.assertFalse(self.claim_dir.exists())
 
     def test_dispatch_source_has_no_unsupported_activity_flag(self):
         unsupported = "--include-" + "activity"

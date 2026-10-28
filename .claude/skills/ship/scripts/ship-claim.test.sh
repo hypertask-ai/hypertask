@@ -92,7 +92,8 @@ eq "someone else's hand-over does not cancel A's claim" "$(dec)" "$(printf 'LOSE
 cat > "$D/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_LOG"
-if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
+if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
+if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "activity last" ]; then
   [ -z "${FAKE_ACTIVITY_FAIL:-}" ] || exit 1
   [ -z "${FAKE_ACTIVITY:-}" ] || printf '%s\tx\n' "$FAKE_ACTIVITY"
@@ -120,8 +121,8 @@ eq "flow step back exit code" "$rc" 3
 [[ $out == *"Do NOT start work"* ]] && ok "flow step back message" || bad "message: $out"
 grep -q '^task unassign YPER4-999 --self' "$D/log" && ok "flow unassigns self" || bad "no unassign"
 grep -q 'Stepping back: RUNNER 7 claimed this first' "$D/log" && ok "flow posts step-back note" || bad "no note"
-grep -q '^comment add YPER4-999 .*Claimed\.' "$D/log" && grep -q '^task assign YPER4-999 --self' "$D/log" && grep -q '^task move YPER4-999 --section In Progress' "$D/log" \
-  && ok "flow claims first (comment, assign, move)" || bad "claim writes missing"
+grep -q '^activity add YPER4-999 Claimed\.' "$D/log" && grep -q '^task assign YPER4-999 --self' "$D/log" && grep -q '^task move YPER4-999 --section In Progress' "$D/log" \
+  && ok "flow claims in the agent log (assign, activity, move)" || bad "claim writes missing"
 
 mk
 jq -n --arg text "$(claim "$ME")" '{success:true,activities:[{id:"bbbb-uuid",createdAt:"2026-10-11T10:00:09.000Z",agentId:"a2",agentName:"RUNNER 3",text:$text}]}' > "$D/activities.json"
@@ -133,6 +134,12 @@ FAKE_AGENT_LOG=$D/tie.json ./ship-claim YPER4-999 >/dev/null; eq "flow: UUID tie
 jq '.activities += [{id:"cccc-uuid",createdAt:"2026-10-11T10:00:05.000Z",agentId:"a1",agentName:"RUNNER 7",text:"Handed over: RUNNER 7 released this ticket."}]' "$D/earlier.json" > "$D/released.json"
 FAKE_AGENT_LOG=$D/released.json ./ship-claim YPER4-999 >/dev/null; eq "flow: earlier log claim released in the log -> proceed" "$?" 0
 if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
+
+# Failed membership must not publish any claim or move.
+: > "$D/log"
+out=$(FAKE_ASSIGN_FAIL=1 ./ship-claim YPER4-999 2>&1); rc=$?
+eq "assignment failure stops the claim" "$rc" 2
+if grep -qE '^(comment|activity) add |^task move ' "$D/log"; then bad "failed assignment published a claim"; else ok "failed assignment leaves comments and log untouched"; fi
 
 # Hand-over replay through the full flow (task read via the stub).
 cp fixtures/ship-claim-y243-comments.json "$D/c.json"
@@ -149,7 +156,7 @@ eq "takeover with existing question succeeds" "$rc" 0
   && ok "takeover shows original question and link" || bad "takeover omitted existing question: $out"
 grep -q '^activity add YPER4-999 Takeover:.*comment-11' "$D/log" \
   && ok "takeover records question handoff in agent lane" || bad "takeover handoff missing"
-eq "takeover creates only its claim comment" "$(grep -c '^comment add ' "$D/log")" 1
+eq "takeover creates no people comments" "$(grep -c '^comment add ' "$D/log")" 0
 grep -q 'comment update\|--kind question' "$D/log" && bad "takeover changed or repeated the question" || ok "takeover leaves original question unchanged"
 out=$(FAKE_HANDOFF_FAIL=1 ./ship-claim YPER4-999 2>&1); rc=$?
 eq "failed takeover handoff stops work" "$rc" 2

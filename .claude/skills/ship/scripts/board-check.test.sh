@@ -40,6 +40,10 @@ if name == 'ship-identity':
     print('RUNNER 12\t'+os.environ['RUNNER_TOKEN_FILE'])
 elif name == 'ht':
     assert os.environ.get('HT_TOKEN') == 'runner-fixture-token'
+    if '/agent-activity?' in args[1]:
+        ticket = args[1].split('/')[3]
+        print(json.dumps(dict(success=True, activities=f.get('logs', {}).get(ticket, []))))
+        sys.exit(0)
     assert args[:1] == ['GET'] and args[1].startswith('/mcp/tasks?ticket_number=')
     tickets = args[1].split('ticket_number=')[1].split('&')[0].split(',')
     rows = [t for t in f['tasks'] if t['ticketNumber'] in tickets]
@@ -137,6 +141,14 @@ assert all(c[:3] in (['hypertask','tasks','list'],['hypertask','tasks','get'],
                     ['hypertask','sections','list'],['hypertask','comment','list'])
            for c in calls if c[0]=='hypertask')
 print('ok claimed-agent identity, newest claim, resume, boundary, no activity, output, ordering and call bounds')
+log_fixture = dict(f, comments={**f['comments'], 'HTPR-11': []}, logs={'HTPR-11': [dict(
+    id='claim-log', text='Claimed. Resume: tmux attach -t ht-hax-runner-8',
+    createdAt=iso(1), agentId='Agent One', agentName='Agent One')]})
+logged, _ = run(log_fixture)
+assert logged.returncode == 0, logged.stderr
+assert '\tHTPR-11\t' not in logged.stdout
+print('ok direct agent-log tmux claim stays taken')
+
 
 # Only the unavailable route activates fallback; comments alone cannot keep deployed claims alive.
 f['activity_error'] = 4
@@ -198,7 +210,7 @@ f = dict(tasks=[task(1, 'Backlog'), task(2, 'Backlog')],
          prs=[pr(n,f'HTPR-{n}',8) for n in [1,2]])
 r, calls = run(f)
 assert r.returncode == 0, r.stderr
-assert sum(c[0] == 'ht' for c in calls) == 1, calls
+assert sum(c[0] == 'ht' and c[2].startswith('/mcp/tasks?') for c in calls) == 1, calls
 assert not any(c[:3] == ['hypertask','tasks','get'] for c in calls), calls
 assert len(r.stdout.splitlines()) == 2, r.stdout
 f = dict(tasks=[task(n, 'Backlog') for n in range(1,102)],
@@ -206,7 +218,7 @@ f = dict(tasks=[task(n, 'Backlog') for n in range(1,102)],
          prs=[pr(n,f'HTPR-{n}',8) for n in range(1,102)])
 r, calls = run(f)
 assert r.returncode == 0, r.stderr
-assert sum(c[0] == 'ht' for c in calls) == 2, calls
+assert sum(c[0] == 'ht' and c[2].startswith('/mcp/tasks?') for c in calls) == 2, calls
 assert len(r.stdout.splitlines()) == 101, r.stdout
 f['batch_missing'] = True
 r, _ = run(f)
