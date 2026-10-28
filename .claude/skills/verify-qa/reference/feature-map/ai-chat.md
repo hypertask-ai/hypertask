@@ -316,3 +316,18 @@ without rematching names or retaining tool-only receipts. `archived_count` must 
 Inbox change. Changed targets or new siblings after preview require a fresh
 approval; nothing else may disappear. An expired or another chat's list token
 must refuse the archive. Never archive pre-existing QA inbox messages.
+
+## Direct Anthropic prompt caching
+
+With `htpr-7855-direct-prompt-cache` in Owner + QA, use QA 985 on
+an approved direct-Anthropic team. Send two harmless turns without writes.
+Verify the recorded transport is direct Anthropic, not gateway, and the
+second completed request records cache reads in the approved AI usage
+surface. Keep the system instructions and tool definitions unchanged.
+Changing the user, current ticket or clock must not move that live context
+inside the system cache boundary. An uncached first request is expected;
+cache reads depend on the provider's model-specific minimum and expiry.
+With the flag off, preserve the existing direct request and prompt order.
+Do not make paid model calls without the run's authorization. Offline
+transport coverage uses fixture credentials and an intercepted SDK fetch
+in `tests/htpr-7855-direct-prompt-cache.test.cjs`; it does not prove live hits.

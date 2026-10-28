@@ -315,6 +315,7 @@ type ModelUsageContext = Partial<Pick<AiUsageRecord,
   initiatingUserId?: number | null;
   trustedChatSessionId?: string | null;
   promptCachingEnabled?: Promise<boolean>;
+  directPromptCachingEnabled?: Promise<boolean>;
   reasoningFeature?: string | null;
   reasoningEffort?: ReasoningEffort | null;
 };
@@ -347,9 +348,16 @@ export function inheritAiModelUsage(model: LanguageModel, source: LanguageModel)
 }
 
 export async function aiPromptCachingEnabled(model: LanguageModel): Promise<boolean> {
-  if (typeof model === "string" || model.provider !== "gateway") return false;
+  if (typeof model === "string") return false;
   const context = modelUsageContexts.get(model);
   if (!context?.initiatingUserId) return false;
+  if (model.provider === "anthropic.messages" && context.feature === "chat") {
+    return context.directPromptCachingEnabled ??= import("@/lib/flags/definitions/htpr-7855-direct-prompt-cache")
+      .then(({ HTPR_7855_DIRECT_PROMPT_CACHE_FLAG }) => import("@/lib/flags")
+        .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7855_DIRECT_PROMPT_CACHE_FLAG, context.initiatingUserId!)))
+      .catch(() => false);
+  }
+  if (model.provider !== "gateway") return false;
   return context.promptCachingEnabled ??= import("@/lib/flags/definitions/htpr-7689-prompt-caching")
     .then(({ HTPR_7689_PROMPT_CACHING_FLAG }) => import("@/lib/flags")
       .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, context.initiatingUserId!)))
@@ -360,6 +368,21 @@ function createPromptCachingMiddleware(model: LanguageModel, context: ModelUsage
   return {
     specificationVersion: "v4",
     transformParams: async ({ params }) => {
+      if (typeof model !== "string" && model.provider === "anthropic.messages" && context.feature === "chat" && await enabled()) {
+        const lastSystemIndex = params.prompt.findLastIndex((message) => message.role === "system");
+        return {
+          ...params,
+          prompt: params.prompt.map((message, index) => index === lastSystemIndex
+            ? {
+              ...message,
+              providerOptions: {
+                ...message.providerOptions,
+                anthropic: { ...message.providerOptions?.anthropic, cacheControl: { type: "ephemeral" } },
+              },
+            }
+            : message),
+        };
+      }
       if (typeof model === "string" || model.provider !== "gateway" ||
         (!model.modelId.startsWith("anthropic/") && !model.modelId.startsWith("openai/")) ||
         !await enabled()) return params;
