@@ -517,7 +517,7 @@ for (const mode of ['WATCH', 'ENFORCE']) {
           assert.equal(Boolean(event), miss, `miss for ${board}`);
           if (event) assert.deepEqual(event, { distinctId: '6', event: 'agent_board_scope_miss', properties: { agentId: f.agent.id, ownerUserId: f.user.id, projectId: board, route: action === 'write' ? '/api/priority/setPriority' : action === 'comment' ? '/api/mcp/comments' : `/api/mcp/tasks${action === 'search' ? '/search' : ''}`, action: ['write', 'comment'].includes(action) ? 'write' : 'read', zeroBoard: kind === 'zero' || kind === 'pending' } });
         }
-        assert.equal(f.state.grantReads, mode === 'WATCH' && kind !== 'human' ? 2 : 0);
+        assert.equal(f.state.grantReads, mode === 'WATCH' && !['human', 'revoked', 'other-owner'].includes(kind) ? 2 : 0);
       });
     }
   }

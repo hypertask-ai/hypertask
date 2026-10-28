@@ -163,7 +163,26 @@ const baseline = {
               "taskId": 50,
               "messages": {
                 "some": {}
-              }
+              },
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             "select": {
               "id": true,
@@ -206,7 +225,26 @@ const baseline = {
           {
             "where": {
               "id": "session-1",
-              "userId": 985
+              "userId": 985,
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             "select": {
               "id": true
@@ -257,7 +295,26 @@ const baseline = {
           {
             "where": {
               "id": "session-1",
-              "userId": 985
+              "userId": 985,
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             "select": {
               "id": true,
@@ -370,7 +427,26 @@ const baseline = {
           {
             "where": {
               "userId": 985,
-              "id": "session-1"
+              "id": "session-1",
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             "select": {
               "id": true
@@ -428,7 +504,26 @@ const baseline = {
                 "in": [
                   "session-1"
                 ]
-              }
+              },
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             }
           }
         ]
@@ -1974,6 +2069,25 @@ const baseline = {
                       "not": "EXTERNAL"
                     }
                   }
+                }
+              ],
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
                 }
               ]
             },

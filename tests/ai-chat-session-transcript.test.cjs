@@ -35,3 +35,22 @@ test('detail parameter is ignored without opt-in', async () => {
   assert.equal(body.session, undefined);
   assert.ok(body.sessions[0].messages[0].attachments);
 });
+
+for (const [name, agent, visible] of [
+  ['foreign cross-team agent', { userId: 7, crossTeamHomeTeamId: 'home' }, false],
+  ['owned cross-team agent', { userId: 6, crossTeamHomeTeamId: 'home' }, true],
+  ['legacy shared agent', { userId: 7, crossTeamHomeTeamId: null }, true],
+]) test(`list and transcript enforce audience for ${name}`, async () => {
+  const row = session(1, { agentId: id(2), agent: { id: id(2), runtimeType: 'NATIVE', ...agent } });
+  const f = fixture({ rows: [row] });
+  const list = await f.get('compat=htpr-6924&taskId=91');
+  assert.equal(list.status, 200);
+  assert.deepEqual((await list.json()).sessions, []);
+  row.taskId = 91;
+  const matchingList = await f.get('compat=htpr-6924&taskId=91');
+  assert.equal(matchingList.status, 200);
+  assert.deepEqual((await matchingList.json()).sessions.map(item => item.id), visible ? [id(1)] : []);
+  const detail = await f.get('compat=htpr-6924&sessionId=' + id(1));
+  assert.equal(detail.status, visible ? 200 : 404);
+  assert.equal(f.writes.length, 0);
+});

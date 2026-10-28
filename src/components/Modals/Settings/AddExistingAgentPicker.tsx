@@ -19,6 +19,8 @@ import { addExistingAgentGroups, type OwnedAgentForBoard } from "@/lib/agents/ad
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8084_CROSS_TEAM_AGENTS_FLAG } from "@/lib/flags/definitions/htpr-8084-cross-team-agents";
 
 type Props = {
   projectId: number;
@@ -29,6 +31,7 @@ type Props = {
 
 const AddExistingAgentPicker = ({ projectId, boardName, boardTeamId, onClose }: Props) => {
   const currentUser = useRecoilValue(currentUserAtom);
+  const crossTeamEnabled = useFlag(HTPR_8084_CROSS_TEAM_AGENTS_FLAG);
   const queryClient = useQueryClient();
   const router = useRouter();
   const { addAgentToBoard } = useAgents({ projectId, teamId: boardTeamId });
@@ -37,19 +40,30 @@ const AddExistingAgentPicker = ({ projectId, boardName, boardTeamId, onClose }: 
   const [selectedAgent, setSelectedAgent] = useState<OwnedAgentForBoard | null>(null);
   const submitting = useRef(false);
   const { data: ownedAgents = [], isLoading, error } = useQuery({
-    queryKey: ["htpr-7577-owned-agents", currentUser?.id],
+    queryKey: ["htpr-7577-owned-agents", currentUser?.id, boardTeamId, crossTeamEnabled],
     queryFn: async (): Promise<OwnedAgentForBoard[]> => {
       const response = await fetch("/api/agents/owned");
       const data = await response.json();
       if (!response.ok || !data.success || !Array.isArray(data.agents)) {
         throw new Error(data.error ?? "Could not load agents");
       }
+      if (crossTeamEnabled && boardTeamId) {
+        const eligibleResponse = await fetch(`/api/agents?${new URLSearchParams({ teamId: boardTeamId })}`);
+        const eligibleData = await eligibleResponse.json();
+        if (!eligibleResponse.ok || !eligibleData.success || !Array.isArray(eligibleData.agents)) {
+          throw new Error(eligibleData.error ?? "Could not load eligible agents");
+        }
+        const eligibleIds = new Set(eligibleData.agents.map((agent: OwnedAgentForBoard) => agent.id));
+        return data.agents.filter((agent: OwnedAgentForBoard) => eligibleIds.has(agent.id));
+      }
       return data.agents;
     },
     enabled: Boolean(currentUser?.id),
     refetchOnWindowFocus: false,
   });
-  const groups = addExistingAgentGroups(ownedAgents, projectId, boardTeamId, keyword);
+  const groups = crossTeamEnabled
+    ? addExistingAgentGroups(ownedAgents, projectId, boardTeamId, keyword, true)
+    : addExistingAgentGroups(ownedAgents, projectId, boardTeamId, keyword, false);
   const enabledAgents = [...groups.onThisTeam, ...groups.notOnAnyBoard];
 
   const pickAgent = (agent: OwnedAgentForBoard) => {
@@ -163,7 +177,7 @@ const AddExistingAgentPicker = ({ projectId, boardName, boardTeamId, onClose }: 
           ) : (
             <ModalListContainer id="addExistingAgentList" className="max-h-[364px] pb-2">
               {[
-                { title: "ON THIS TEAM", agents: groups.onThisTeam },
+                { title: crossTeamEnabled ? "AVAILABLE AGENTS" : "ON THIS TEAM", agents: groups.onThisTeam },
                 { title: "NOT ON ANY BOARD", agents: groups.notOnAnyBoard },
               ].filter((group) => group.agents.length > 0).map((group) => (
                 <Fragment key={group.title}>

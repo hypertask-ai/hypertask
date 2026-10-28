@@ -7,6 +7,9 @@ const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
 const ts = require("typescript");
+const { load: loadSource } = require("./task-route-loader.cjs");
+const { matches } = require("./helpers/agent-board-scope.cjs");
+const audience = loadSource("src/lib/agents/chatContentScope.ts", { "@/lib/prisma": {}, "@/utils/controllers/projects/getAllIncludes": {} });
 
 const root = path.resolve(__dirname, "..");
 const flag = "htpr-7318-ticket-chat-reminder";
@@ -39,6 +42,7 @@ function load(file, mocks = {}) {
 function route({ viewer = 985, sessions = fixture } = {}) {
   const queries = [];
   const { GET } = load("src/app/api/ai-chat/task-sessions/route.ts", {
+    "@/lib/agents/chatContentScope": audience,
     "@/lib/api/rateLimit": { checkRestRateLimit: async () => null },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => viewer === null ? null : ({ userId: viewer, user: { id: viewer } }) },
     "@/utils/edgeHelpers": { isValidUser: () => ({ isValid: viewer !== null, user: viewer === null ? null : { id: viewer } }) },
@@ -46,10 +50,7 @@ function route({ viewer = 985, sessions = fixture } = {}) {
     "next/server": { NextResponse: { json: Response.json } },
     "@/lib/prisma": { default: { chatSession: { findMany: async (query) => {
       queries.push(query);
-      return sessions.filter(session => Object.entries(query.where).every(([key, value]) => {
-        if (key === "messages") return value.some && session.messages.length > 0;
-        return session[key] === value;
-      })).sort((a, b) => query.orderBy.updatedAt === "desc" ? Date.parse(b.updatedAt) - Date.parse(a.updatedAt) : Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
+      return sessions.filter(session => matches({ ...session, agentId: null }, query.where)).sort((a, b) => query.orderBy.updatedAt === "desc" ? Date.parse(b.updatedAt) - Date.parse(a.updatedAt) : Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
         .slice(0, query.take).map(session => Object.fromEntries(Object.keys(query.select).filter(key => query.select[key]).map(key => [key, session[key]])));
     } } } },
   });
@@ -63,7 +64,7 @@ test("server still allows the viewer's three newest nonempty ticket chats, inclu
   const { sessions } = await response.json();
   assert.deepEqual(sessions.map(session => session.id), ["newest", "second", "old"]);
   assert.deepEqual(api.queries[0], {
-    where: { userId: 985, taskId: 43, messages: { some: {} } },
+    where: { userId: 985, taskId: 43, messages: { some: {} }, AND: [{ OR: [{ agentId: null }, { agent: { crossTeamHomeTeamId: null } }, { agent: { userId: 985 } }] }] },
     select: { id: true, title: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 3,
   });
   assert.deepEqual(Object.keys(sessions[0]).sort(), ["id", "title", "updatedAt"]);

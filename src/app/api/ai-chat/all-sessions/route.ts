@@ -1,3 +1,4 @@
+import { chatAudienceWhere } from "@/lib/agents/chatContentScope";
 import { loadSidebarChatRequest, sidebarChatProjectId } from "@/lib/agents/chatAccess";
 import { randomUUID } from "node:crypto";
 import { getRedis } from "@/lib/redis";
@@ -20,10 +21,11 @@ const transcriptInclude = {
 };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function pagedSessions(request: NextRequest, userId: number) {
+async function pagedSessions(request: NextRequest, userId: number, agentId?: string) {
   const params = new URL(request.url).searchParams;
   const visible = {
     userId,
+    ...chatAudienceWhere({ userId, agentId }),
     OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" as const } } }],
   };
   const invalid = () => NextResponse.json(
@@ -138,13 +140,14 @@ export async function GET(request: NextRequest) {
     if (limited) return limited;
 
     if (new URL(request.url).searchParams.get("compat") === "htpr-6924") {
-      return await pagedSessions(request, userId);
+      return await pagedSessions(request, userId, currentUser?.agentId);
     }
 
     const sessions = await prisma.chatSession.findMany({
       relationLoadStrategy: "join",
       where: {
         userId,
+        ...chatAudienceWhere({ userId, agentId: currentUser?.agentId }),
         OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" } } }],
       },
       include: {

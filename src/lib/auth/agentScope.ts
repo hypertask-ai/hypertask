@@ -1,3 +1,4 @@
+import { withCrossTeamContext, setCrossTeamRequestFence, crossTeamRequestFence } from "@/lib/auth/crossTeamContext";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { HTPR_7146_AGENT_SCOPE_ENFORCE_FLAG } from "@/lib/flags/keys";
 import { recordServerCapture } from "@/lib/telemetry/signupAnalytics";
@@ -21,7 +22,7 @@ export function withAgentScopeRequest<T>(
   if (scopes.getStore()) return run();
   const route = new URL(request.url || "/", "http://localhost").pathname;
   const action = !request.method || /^(GET|HEAD|OPTIONS)$/i.test(request.method) ? "read" : "write";
-  return scopes.run({ route, action }, run);
+  return withCrossTeamContext(() => scopes.run({ route, action }, run));
 }
 
 export function agentScopeMode(ownerUserId: number): Promise<"WATCH" | "ENFORCE"> {
@@ -42,7 +43,9 @@ export async function prepareAgentScope(ownerUserId: number, agentId?: string | 
   const scope = scopes.getStore();
   if (!scope || !agentId) return;
   await (scope.prepared ??= (async () => {
-    scope.enforced = await agentScopeMode(ownerUserId) === "ENFORCE";
+    const { crossTeamProjectFence } = await import("@/lib/agents/crossTeam");
+    setCrossTeamRequestFence(await crossTeamProjectFence(agentId, ownerUserId));
+    scope.enforced = crossTeamRequestFence() !== null || await agentScopeMode(ownerUserId) === "ENFORCE";
     if (scope.enforced) return;
     const { default: prisma } = await import("@/lib/prisma");
     const members = await prisma.member.findMany({

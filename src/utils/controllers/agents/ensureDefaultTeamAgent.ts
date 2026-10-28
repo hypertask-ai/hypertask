@@ -123,6 +123,7 @@ export async function ensureDefaultTeamAgent(
             displayName: DEFAULT_SEEDED_AGENT_NAME,
             userId,
             runtimeType: "NATIVE",
+            boardHomeTeamId: teamId,
           },
           select: { id: true },
         });
@@ -149,6 +150,7 @@ export async function ensureDefaultTeamAgent(
         displayName: DEFAULT_SEEDED_AGENT_NAME,
         userId,
         runtimeType: "NATIVE",
+        boardHomeTeamId: teamId,
       },
       select: { id: true },
     });

@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
 const agentScope = require('./task-route-loader.cjs').load('src/lib/auth/agentScope.ts', {
+  '@/lib/prisma': { default: { agent: { findFirst: async ({ where }) => ({ id: where.id, userId: where.userId, crossTeamHomeTeamId: null }) } } },
   '@/lib/flags': { isFeatureEnabled: async () => true },
   '@/lib/telemetry/signupAnalytics': { recordServerCapture: () => {} },
 })

@@ -69,7 +69,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       f.prisma.taskPullRequest = f.model([f.tasks[0], f.tasks[3]].map(task => ({ id: task.id, lifecycle: 'open', task: { ...task, deletedAt: null, assignees: [{ agentId: f.agent.id, user: f.user }] }, number: task.id, title: `${task.projectId === 15 ? 'A' : 'B'}-PR`, url: `https://example.invalid/pr/${task.id}`, repositoryOwner: 'fixture', repositoryName: 'repo', checkState: 'passing' })), 'pull-request');
       const comments = [f.tasks[0], f.tasks[3]].map(task => ({ id: task.id, agentId: f.agent.id, taskId: task.id, task: { ...task, deletedAt: null }, commentText: `${task.projectId === 15 ? 'A' : 'B'}-comment`, text: '', createdAt: new Date('2026-01-01') }));
       f.prisma.comment = f.model(comments, 'comment');
-      const sessions = [{ id: 'own-chat', agentId: f.agent.id, userId: f.user.id, projectId: null, taskId: null, teamId: null }];
+      const sessions = [{ id: 'own-chat', agent: f.agent, agentId: f.agent.id, userId: f.user.id, projectId: null, taskId: null, teamId: null }];
       f.prisma.chatSession = f.model(sessions, 'session');
       const briefModule = f.load('src/lib/agents/chatBrief.ts', {
         '@/lib/mcp/boards/links': { buildMcpTaskUrl: (projectId, uniqueIndex) => `https://app.hypertask.ai/detail/project-${projectId}/${uniqueIndex}` },

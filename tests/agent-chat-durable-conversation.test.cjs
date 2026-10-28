@@ -87,16 +87,14 @@ let participants = [];
 function agentMatches(agent, where) {
   if (!where) return true;
   if (where.revokedAt === null && agent.revokedAt !== null) return false;
-  // Stands in for accessibleAgentWhere: the requester must still share a board
-  // with the agent, which is how this codebase draws the team boundary.
-  // Fail closed, so dropping that clause from the real rule fails here rather
-  // than quietly widening access.
-  assert.notEqual(
-    where.__visibleTo,
-    undefined,
-    "the rule must still narrow the agent to one the requester can see",
-  );
-  return agent.sharedWith.includes(where.__visibleTo);
+  if (where.AND && !where.AND.every((clause) => agentMatches(agent, clause))) return false;
+  if (where.OR && !where.OR.some((clause) => agentMatches(agent, clause))) return false;
+  if (where.userId !== undefined && agent.ownerId !== where.userId) return false;
+  if (where.crossTeamHomeTeamId !== undefined) {
+    const marker = agent.crossTeamHomeTeamId ?? null;
+    if (where.crossTeamHomeTeamId === null ? marker !== null : marker === null) return false;
+  }
+  return where.__visibleTo === undefined || agent.sharedWith.includes(where.__visibleTo);
 }
 
 function sessionMatches(session, where) {
@@ -118,12 +116,15 @@ function sessionMatches(session, where) {
   // real rule fails here instead of quietly handing an old team's transcript to
   // a new one. An agent's own token is the other side of the conversation and
   // is scoped by its identity instead, so it has no agent clause and no scope.
-  if (where.agent !== undefined) {
+  if (where.agent?.revokedAt === null) {
+    assert.notEqual(where.agent.__visibleTo, undefined, "the rule must keep agent visibility checks");
     assert.ok(where.OR, "the rule must still scope a thread to its own team");
   }
   if (where.OR && !where.OR.some((branch) => sessionMatches(session, branch))) {
     return false;
   }
+  if (where.AND && !where.AND.every((branch) => sessionMatches(session, branch))) return false;
+  if (where.agentId === null && session.agentId !== null) return false;
   if (where.agentId?.not === null && session.agentId === null) return false;
   if (where.agent) {
     const agent = AGENTS[session.agentId];
@@ -998,7 +999,7 @@ test("the authorized fan-out list is resolved before the response, not after it"
   );
   // A serverless runtime can freeze once the response is flushed, so the
   // participant lookup has to be awaited rather than started and abandoned.
-  assert.match(source, /await chatParticipantUserIds\(sessionId\)/);
+  assert.match(source, /await chatParticipantUserIds\(sessionId, alsoUserIds\)/);
 });
 
 // ---------------------------------------------------------------------------

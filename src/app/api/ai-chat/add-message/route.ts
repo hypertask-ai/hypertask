@@ -1,3 +1,4 @@
+import { chatAudienceWhere } from "@/lib/agents/chatContentScope";
 import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: sessionId,
         userId: user.id,
+        ...chatAudienceWhere({ userId: user.id, agentId: currentUser?.agentId }),
       },
       select: {
         id: true,

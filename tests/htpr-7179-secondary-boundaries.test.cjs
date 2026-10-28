@@ -81,7 +81,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
     test(`${mode} ${actor}: chat reply replay reauthorizes stored proposal targets`, async () => {
       for (const projectId of [15, 25]) {
         const f = teamFixture(mode, actor);
-        const session = { id: 'own-chat', userId: f.user.id, user: f.user, agentId: f.agent.id, projectId: null, taskId: null, teamId: null };
+        const session = { id: 'own-chat', userId: f.user.id, user: f.user, agentId: f.agent.id, agent: f.agent, projectId: null, taskId: null, teamId: null };
         const proposal = { id: 'proposal', targetProjectId: projectId, targetProjectTitle: `${projectId === 15 ? 'A' : 'B'}-proposal-title`, targetSectionTitle: 'Todo', targetSectionId: projectId, ticketTitle: 'Fixture', outcome: 'Fixture', status: 'PENDING', failureMessage: null, taskId: null, task: null };
         const messages = [{ id: 'human', sessionId: session.id, role: 'human', content: 'Question', createdAt: new Date('2026-01-01') }, { id: 'answer', sessionId: session.id, role: 'assistant', content: 'Response', createdAt: new Date('2026-01-01'), replyToMessageId: 'human', isDelivered: true, ticketProposal: proposal }];
         f.prisma.chatSession = f.model([session], 'chat');
@@ -101,7 +101,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         { id: 'a', agentId: f.agent.id, userId: f.user.id, projectId: 15, taskId: 150, teamId: 'team-a' },
         { id: 'b', agentId: f.agent.id, userId: f.user.id, projectId: null, taskId: 250, teamId: null },
         { id: 'own', agentId: f.agent.id, userId: f.user.id, projectId: null, taskId: null, teamId: null },
-      ];
+      ].map(session => ({ ...session, agent: f.agent }));
       const messages = sessions.map(session => ({ id: `message-${session.id}`, sessionId: session.id, text: `${session.id}-text`, delivered: false }));
       f.prisma.chatSession = f.model(sessions, 'chat');
       f.prisma.agentWebhookSubscription = { findUnique: async () => null };

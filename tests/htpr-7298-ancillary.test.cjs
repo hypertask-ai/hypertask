@@ -28,6 +28,7 @@ function load(file, mocks = {}, runtime = {}) {
 
 const access = load("src/utils/controllers/projects/getAllIncludes.ts", {
   "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+  "@/lib/auth/crossTeamContext": require("./task-route-loader.cjs").load("src/lib/auth/crossTeamContext.ts", {}),
   "@/utils/controllers/notifications/visibleInboxScope": {},
 });
 const boards = [

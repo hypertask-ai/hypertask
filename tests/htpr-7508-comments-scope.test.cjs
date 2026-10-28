@@ -111,7 +111,7 @@ for (const area of ["reaction", "save"]) {
   for (const grant of ["invited", "revoked", "wrong-owner", "wrong-agent"]) {
     test(`${area}: ${grant} grant refused in ENFORCE`, async () => {
       const h = harness(area, { grant });
-      assert.equal((await h.request()).statusCode, 404);
+      assert.equal((await h.request()).statusCode, area === "reaction" && ["revoked", "wrong-owner"].includes(grant) ? 403 : 404);
       assert.deepEqual(h.writes, []);
     });
   }

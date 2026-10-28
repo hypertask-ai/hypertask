@@ -435,7 +435,7 @@ async function reconcileAgentChatTurn(
   });
 
   if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
-  if (result?.changed) void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, { sessionId }).catch(console.warn);
+  if (result?.changed) await broadcastChatSession(sessionId, [principal.userId]);
   return result;
 }
 

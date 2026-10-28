@@ -27,6 +27,8 @@ function load(relativePath, mocks = {}) {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (specifier === "zod") return { z };
     if (specifier === "next/server") return nextServer;
+    if (specifier === "@/lib/auth/crossTeamContext") return { crossTeamRequestFence: () => null };
+    if (specifier === "@/lib/agents/crossTeam") return { crossTeamAgentsEnabled: async () => false };
     throw new Error(`Unexpected import in ${relativePath}: ${specifier}`);
   };
   loaded._compile(javascript, filename);
@@ -61,7 +63,7 @@ function delegation(role, actingBoards = [15], enforce = false) {
   const database = { $transaction: async (run, options) => {
     assert.equal(options.isolationLevel, "Serializable");
     return run({
-      agent: { findFirst: async ({ where }) => {
+      agent: { update: async () => ({}), findFirst: async ({ where }) => {
         assert.equal(where.userId, 6);
         return where.id === "other" ? { id: "other", userId: 6, members: [] } : null;
       } },
@@ -250,6 +252,7 @@ function candidates(rows, access = true, flagOn = true) {
   const prismaModule = { __esModule: true, default: prisma };
   const visibility = load("src/lib/agents/visibility.ts", { "@/lib/prisma": prismaModule });
   const route = load("src/app/api/agents/route.ts", {
+    "@/lib/agents/crossTeam": { crossTeamAgentsEnabled: async () => false },
     "@/lib/prisma": prismaModule,
     "@/lib/agents/maskAgentProviderKey": { maskAgentProviderKey: () => null },
     "@/lib/mcp/auth": {},

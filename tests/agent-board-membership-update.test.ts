@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import {
-  AgentBoardUpdateError,
-  parseAgentBoardUpdateBody,
-  updateOwnedAgentBoards,
-  type AgentBoardUpdateDatabase,
-  type AgentBoardUpdateInput,
+import type {
+  AgentBoardUpdateDatabase,
+  AgentBoardUpdateInput,
 } from '../src/lib/mcp/agents/updateBoards'
+
+const { AgentBoardUpdateError, parseAgentBoardUpdateBody, updateOwnedAgentBoards }:
+  typeof import('../src/lib/mcp/agents/updateBoards') = require('./task-route-loader.cjs').load(
+    'src/lib/mcp/agents/updateBoards.ts', {
+      '@/lib/agents/crossTeam': { crossTeamAgentsEnabled: async () => false },
+      '@/lib/auth/agentScope': require('./helpers/agent-board-scope.cjs').enforcedScope,
+    },
+  )
 
 type Membership = { projectId: number; project: { teamId: string | null } }
 
@@ -15,6 +20,16 @@ function fakeDatabase(
   serializationFailures = 0,
   actingAgentProjects: number[] = []
 ) {
+  const storedAgent = agent && {
+    revokedAt: null,
+    archivedAt: null,
+    credentialTeamId: null,
+    credentialTeamAccessBinding: null,
+    boardHomeTeamId: null,
+    crossTeamHomeTeamId: null,
+    crossTeamAccessGranted: false,
+    ...agent,
+  }
   const created: Array<Record<string, unknown>> = []
   const removed: number[] = []
   const isolationLevels: string[] = []
@@ -25,7 +40,13 @@ function fakeDatabase(
       isolationLevels.push(options.isolationLevel)
       if (transactionAttempts <= serializationFailures) throw { code: 'P2034' }
       return run({
-        agent: { findFirst: async () => agent },
+        agent: {
+          findFirst: async () => storedAgent,
+          update: async ({ data }) => {
+            assert.ok(storedAgent)
+            Object.assign(storedAgent, data)
+          },
+        },
         project: { findFirst: () => { throw new Error('Unexpected project delegate access') } },
         member: {
           findMany: async ({ where }) =>

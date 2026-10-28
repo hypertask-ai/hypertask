@@ -97,7 +97,7 @@ test('activity replay refuses a scoped principal without an agent and retains th
   }
   assert.equal(calls.length, 0);
   await authorizeIdempotencyReplay(result, { userId: user.id, agentId: 'agent', teamScope });
-  assert.deepEqual(calls[0].where.run, { agentId: 'agent', task: { project: { teamId: teamScope.teamId } } });
+  assert.deepEqual(calls[0].where.run, { agentId: 'agent', task: { project: { AND: [{ teamId: teamScope.teamId }] } } });
   await assert.rejects(authorizeIdempotencyReplay(result, { userId: user.id, agentId: 'other', teamScope }), IdempotencyAccessError);
   await authorizeIdempotencyReplay(result, { userId: user.id, agentId: null, teamScope: null });
   assert.equal(calls.length, 2);

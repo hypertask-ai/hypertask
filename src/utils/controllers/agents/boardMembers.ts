@@ -9,6 +9,7 @@ import {
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
+import { crossTeamAgentsEnabled, ownerTeamWhere } from "@/lib/agents/crossTeam";
 
 export async function getAccessibleAgentBoard(
   projectId: number,
@@ -128,13 +129,15 @@ export type AddAgentToBoardResult =
   | { ok: true; member: BoardAgentMemberRow }
   | { ok: false; status: number; message: string };
 
-export async function addAgentToBoard(
+async function addAgentToBoardTransaction(
+  database: Prisma.TransactionClient,
   projectId: number,
   agentId: string,
   requestingUserId: number,
   actingAgentId?: string | null,
 ): Promise<AddAgentToBoardResult> {
-  const project = await prisma.project.findFirst({
+  const enabled = await crossTeamAgentsEnabled(requestingUserId);
+  const project = await database.project.findFirst({
     where: { id: projectId, status: "Normal" },
     select: { id: true, ownerId: true, teamId: true },
   });
@@ -144,7 +147,7 @@ export async function addAgentToBoard(
 
   const hasHumanAccess =
     project.ownerId === requestingUserId ||
-    (await prisma.member.findFirst({
+    (await database.member.findFirst({
       where: {
         projectId,
         userId: requestingUserId,
@@ -160,16 +163,24 @@ export async function addAgentToBoard(
     };
   }
 
-  const agent = await prisma.agent.findFirst({
+  const agent = await database.agent.findFirst({
     where: {
       id: agentId,
       userId: requestingUserId,
       revokedAt: null,
+      ...(enabled ? { archivedAt: null } : {}),
     },
     select: {
       id: true,
       userId: true,
+      archivedAt: true,
+      crossTeamHomeTeamId: true,
+      crossTeamAccessGranted: true,
+      boardHomeTeamId: true,
+      credentialTeamId: true,
+      credentialTeamAccessBinding: true,
       members: {
+        orderBy: { id: "asc" },
         select: { project: { select: { teamId: true } } },
       },
     },
@@ -190,26 +201,55 @@ export async function addAgentToBoard(
     };
   }
 
-  const belongsToTargetTeam = canAttachAgentToTeam(
-    agent.members.map(({ project: agentProject }) => agentProject.teamId),
-    project.teamId,
-  );
-  if (!belongsToTargetTeam) {
-    return {
-      ok: false,
-      status: 403,
-      message: "This agent belongs to another team",
-    };
+  const homeTeamId = agent.crossTeamHomeTeamId ?? agent.boardHomeTeamId ??
+    agent.members.find(({ project }) => project.teamId)?.project.teamId ?? project.teamId;
+  const belongsToTargetTeam = agent.crossTeamAccessGranted
+    ? project.teamId === agent.crossTeamHomeTeamId
+    : canAttachAgentToTeam(
+        agent.members.map(({ project }) => project.teamId),
+        project.teamId,
+      );
+  if (
+    (agent.credentialTeamId && agent.credentialTeamId !== project.teamId) ||
+    (agent.credentialTeamAccessBinding && !agent.credentialTeamId) ||
+    (!enabled && !belongsToTargetTeam)
+  ) {
+    return { ok: false, status: 403, message: "This agent belongs to another team" };
+  }
+  if (enabled || agent.crossTeamAccessGranted) {
+    const ownerTeamBoard = await database.project.findFirst({
+      where: { id: projectId, status: "Normal", team: ownerTeamWhere(requestingUserId) },
+      select: { id: true },
+    });
+    if (!ownerTeamBoard || agent.archivedAt) {
+      return { ok: false, status: 403, message: "You do not have permission to add this agent to this team" };
+    }
   }
 
-  const existing = await prisma.member.findFirst({
+  const existing = await database.member.findFirst({
     where: { projectId, agentId },
   });
   if (existing) {
     return { ok: false, status: 400, message: "Agent is already on this board" };
   }
 
-  const createMember = (database: Pick<Prisma.TransactionClient, "member">) => database.member.create({
+  if (actingAgentId) {
+    await assertAgentBoardInviteScope(database.member, projectId, requestingUserId, actingAgentId);
+  }
+  const expandsTeams = homeTeamId !== project.teamId || !belongsToTargetTeam;
+  const markExpanded = !agent.crossTeamHomeTeamId && expandsTeams;
+  const grantCrossTeamAccess = enabled && expandsTeams && !agent.crossTeamAccessGranted;
+  if (!agent.boardHomeTeamId || markExpanded || grantCrossTeamAccess) {
+    await database.agent.update({
+      where: { id: agent.id },
+      data: {
+        ...(!agent.boardHomeTeamId ? { boardHomeTeamId: homeTeamId } : {}),
+        ...(markExpanded ? { crossTeamHomeTeamId: homeTeamId } : {}),
+        ...(grantCrossTeamAccess ? { crossTeamAccessGranted: true } : {}),
+      },
+    });
+  }
+  const member = await database.member.create({
     data: {
       projectId,
       userId: agent.userId,
@@ -220,12 +260,6 @@ export async function addAgentToBoard(
       user: true,
     },
   });
-  const member = actingAgentId
-    ? await prisma.$transaction(async (tx) => {
-        await assertAgentBoardInviteScope(tx.member, projectId, requestingUserId, actingAgentId);
-        return createMember(tx);
-      }, { isolationLevel: "Serializable" })
-    : await createMember(prisma);
 
   if (!member.agent) {
     return { ok: false, status: 500, message: "Failed to add agent to board" };
@@ -234,13 +268,34 @@ export async function addAgentToBoard(
   return { ok: true, member: member as BoardAgentMemberRow };
 }
 
+export async function addAgentToBoard(
+  projectId: number,
+  agentId: string,
+  requestingUserId: number,
+  actingAgentId?: string | null,
+): Promise<AddAgentToBoardResult> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await prisma.$transaction(
+        (tx) => addAgentToBoardTransaction(tx, projectId, agentId, requestingUserId, actingAgentId),
+        { isolationLevel: "Serializable" },
+      );
+    } catch (error) {
+      const serializationConflict =
+        typeof error === "object" && error !== null &&
+        "code" in error && error.code === "P2034";
+      if (attempt >= 2 || !serializationConflict) throw error;
+    }
+  }
+}
+
 export type RemoveAgentFromBoardResult =
   | { ok: true }
   | { ok: false; status: number; message: string };
 
 type RemoveAgentDatabase = Pick<
   Prisma.TransactionClient,
-  "project" | "member" | "taskLease"
+  "project" | "member" | "taskLease" | "agent"
 >;
 
 async function removeAgentFromBoardTransaction(
@@ -272,7 +327,15 @@ async function removeAgentFromBoardTransaction(
 
   const member = await database.member.findFirst({
     where: { projectId, agentId },
-    include: { agent: { select: publicAgentSelect } },
+    include: { agent: { select: {
+      userId: true,
+      boardHomeTeamId: true,
+      crossTeamHomeTeamId: true,
+      members: {
+        orderBy: { id: "asc" },
+        select: { project: { select: { teamId: true } } },
+      },
+    } } },
   });
   if (!member) {
     return {
@@ -308,6 +371,16 @@ async function removeAgentFromBoardTransaction(
     };
   }
 
+  if (member.agent && !member.agent.boardHomeTeamId) {
+    const homeTeamId = member.agent.crossTeamHomeTeamId ??
+      member.agent.members.find(({ project }) => project.teamId)?.project.teamId;
+    if (homeTeamId) {
+      await database.agent.update({
+        where: { id: agentId },
+        data: { boardHomeTeamId: homeTeamId },
+      });
+    }
+  }
   await database.member.delete({ where: { id: member.id } });
   return { ok: true };
 }

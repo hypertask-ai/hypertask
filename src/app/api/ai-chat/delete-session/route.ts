@@ -1,3 +1,4 @@
+import { chatAudienceWhere } from "@/lib/agents/chatContentScope";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import prisma from "@/lib/prisma";
@@ -56,6 +57,7 @@ export async function DELETE(req: NextRequest) {
     const sessions = await prisma.chatSession.findMany({
       where: {
         userId: user.id,
+        ...chatAudienceWhere({ userId: user.id, agentId: currentUser?.agentId }),
         ...(toDelete === "ALL" ? {} : { id: toDelete }),
       },
       select: { id: true },
@@ -98,7 +100,7 @@ export async function DELETE(req: NextRequest) {
         });
       }
       await tx.chatSession.deleteMany({
-        where: { userId: user.id, id: { in: sessionIds } },
+        where: { userId: user.id, id: { in: sessionIds }, ...chatAudienceWhere({ userId: user.id, agentId: currentUser?.agentId }) },
       });
     });
 

@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     return createSseErrorResponse(requestErrorMessage(error, "validation"));
   }
 
-  const sidebarAccess = await loadSidebarChatRequest(request, body.session_id ?? "");
+  const sidebarAccess = await loadSidebarChatRequest(request, body.session_id ?? "", { userId: requestUser.id });
   if (!sidebarAccess.ok) return createSseErrorResponse(sidebarAccess.error, sidebarAccess.status);
 
   const heartbeatExecutionId = request.headers.get(

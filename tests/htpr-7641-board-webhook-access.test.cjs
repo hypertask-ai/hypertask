@@ -214,8 +214,13 @@ for (const retry of [false, true]) {
     if (retry) ids = await h.enqueue();
     h.state.agent.revokedAt = new Date();
     assert.equal(h.canRead(), false);
-    if (!retry) ids = await h.enqueue();
-    if (retry) Object.assign(h.state.deliveries[0], { status: "retrying", attemptCount: 1 });
+    if (!retry) {
+      assert.deepEqual(await h.enqueue(), []);
+      assert.deepEqual(h.state.deliveries, []);
+      assert.deepEqual(h.calls.posts, []);
+      return;
+    }
+    Object.assign(h.state.deliveries[0], { status: "retrying", attemptCount: 1 });
     await assertCancelled(h, ids[0]);
   });
 
