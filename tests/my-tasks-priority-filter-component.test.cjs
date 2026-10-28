@@ -100,6 +100,7 @@ stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {
 });
 stubSourceModule("src/styles/search.module.scss", {
   links_modal: "",
+  phone_layout: "phone_layout",
 });
 stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
   cn: (...args) => args.filter(Boolean).join(" "),
@@ -381,3 +382,25 @@ test("live updates stay active without a feature flag", () => {
     delete global.IS_REACT_ACT_ENVIRONMENT;
   }
 });
+
+for (const enabled of [false, true]) {
+  test(`phone layout styles follow their flag (${enabled}) without changing tasks`, () => {
+    const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    flagValues["htpr-8144-phone-my-tasks"] = enabled;
+    const reactRoot = renderMyTasks(dom);
+    try {
+      assert.equal(dom.window.document.querySelector('[data-testid="my-tasks-panel"]').classList.contains("phone_layout"), enabled);
+      assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
+    } finally {
+      act(() => { reactRoot.unmount(); });
+      dom.window.close();
+      flagValues["htpr-8144-phone-my-tasks"] = false;
+      delete global.window;
+      delete global.document;
+      delete global.IS_REACT_ACT_ENVIRONMENT;
+    }
+  });
+}

@@ -25,6 +25,11 @@ the available page width beside the app rail.
 - Ctrl+E not archiving the focused row
   ([HTPR-6445](https://app.hypertask.ai/detail/project-15/6445)).
 
+Phone bulk selection keeps its hidden checkbox grid slot, so ticket IDs and
+titles stay in separate columns. Scroll to the final task and confirm it
+clears the floating Back button. Controls sit together below the heading;
+desktop placement stays unchanged. Check all four themes at 390x844.
+
 ## What proof to collect
 
 Screenshot `/my-tasks` signed in, desktop and phone width, with both

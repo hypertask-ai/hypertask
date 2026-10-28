@@ -3,7 +3,14 @@
     "flag": "htpr-6899-stable-layout",
     "ticket": "https://app.hypertask.ai/detail/project-15/6899",
     "screen": "ticket/Mobile",
-    "landmarks": ["title", "description", "first-comment", "last-comment", "composer", "properties"],
+    "landmarks": [
+      "title",
+      "description",
+      "first-comment",
+      "last-comment",
+      "composer",
+      "properties"
+    ],
     "reason": "The ticket asks instantly opened tickets to stop scrolling after load. Cached phone opens now remain at the top instead of automatically scrolling properties above the title and moving comments past the fixed composer; direct opens and flag-off retain production positioning. Independent composer and title hit-target invariants still apply."
   },
   {
@@ -39,5 +46,15 @@
       "properties"
     ],
     "reason": "Valentin asks to 'collapse the properties and the title' so the user 'focuses only on the task description'. The title and properties disappear and the description moves up into their space."
+  },
+  {
+    "flag": "htpr-8144-phone-my-tasks",
+    "ticket": "https://app.hypertask.ai/detail/project-15/8144",
+    "screen": "my-tasks/Mobile",
+    "landmarks": [
+      "toolbar",
+      "list"
+    ],
+    "reason": "Requested: \"IDs and titles get their own space\" and \"Back button no longer covers rows\". Phone header controls get a full row below the heading, and the task scroller reserves Back clearance. Desktop landmarks remain unchanged."
   }
 ]
