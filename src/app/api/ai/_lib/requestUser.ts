@@ -23,16 +23,18 @@ export async function getAiRequestUser(
 ): Promise<AiRequestUser | null> {
   const cookieUser = await getCurrentUserFromCookies();
   if (cookieUser && Number.isInteger(cookieUser.id) && Number(cookieUser.id) > 0) {
-    if (cookieUser.source === "cli-bearer" &&
-        !await isFeatureEnabled(HTPR_7699_DESKTOP_CLI_TOKEN_FLAG, cookieUser.id).catch(() => false)) {
-      return null;
-    }
-    return {
+    const user: AiRequestUser = {
       ...(cookieUser.source === "cli-bearer" ? { source: cookieUser.source } : {}),
       id: Number(cookieUser?.id),
       email: cookieUser?.email,
       displayName: cookieUser?.displayName,
     };
+    if (cookieUser.source !== "cli-bearer") return user;
+    try {
+      return await isFeatureEnabled(HTPR_7699_DESKTOP_CLI_TOKEN_FLAG, user.id) ? user : null;
+    } catch {
+      return null;
+    }
   }
 
   const authorization = request.headers.get("Authorization");
