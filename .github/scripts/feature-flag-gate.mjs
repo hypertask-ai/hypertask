@@ -478,6 +478,21 @@ function branchIsNullishOrEmpty(node, renderOnly = false) {
          expression.operatorToken.kind <= typescript.SyntaxKind.ExclamationEqualsEqualsToken) ||
         expression.operatorToken.kind === typescript.SyntaxKind.InKeyword ||
         expression.operatorToken.kind === typescript.SyntaxKind.InstanceOfKeyword)))) return true;
+  if (renderOnly && typescript.isConditionalExpression(expression)) {
+    const condition = staticBoolean(expression.condition, true);
+    if (condition !== null) return branchIsNullishOrEmpty(condition ? expression.whenTrue : expression.whenFalse, true);
+    return branchIsNullishOrEmpty(expression.whenTrue, true) && branchIsNullishOrEmpty(expression.whenFalse, true);
+  }
+  if (renderOnly && typescript.isBinaryExpression(expression) &&
+      (expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
+       expression.operatorToken.kind === typescript.SyntaxKind.BarBarToken)) {
+    const left = staticBoolean(expression.left, true);
+    if (left !== null) {
+      const returnsLeft = expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ? !left : left;
+      return branchIsNullishOrEmpty(returnsLeft ? expression.left : expression.right, true);
+    }
+    return branchIsNullishOrEmpty(expression.left, true) && branchIsNullishOrEmpty(expression.right, true);
+  }
   if (renderOnly && typescript.isSpreadElement(expression)) {
     const operand = unwrapExpr(expression.expression);
     return (!typescript.isArrayLiteralExpression(operand) && !typescript.isStringLiteral(operand)) ||
@@ -741,7 +756,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = 
   // Export recognition remains intact for the ungated-sibling check, but a
   // rebound binding cannot prove which implementation runs. No flow analysis.
   const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) &&
-    (!renderOnly || functionContainsJsx(fn)) &&
+    (!renderOnly || functionContainsJsx(fn) || /\.[jt]sx$/.test(sourceFile.fileName)) &&
     (entries ? entries.has(fn) : isExportedUiEntry(fn, identifierExports))));
   const functionBySymbol = new Map();
   for (const fn of functions) {
@@ -917,7 +932,7 @@ function controlsRuntimeBranch(node, pureReturns = true) {
       let branch = parent.thenStatement;
       if (typescript.isBlock(branch) && branch.statements.length === 1) branch = branch.statements[0];
       if (!pureReturns && !parent.elseStatement && typescript.isReturnStatement(branch) &&
-          typescript.isBlock(parent.parent) && typescript.isFunctionLike(parent.parent.parent)) {
+          typescript.isBlock(parent.parent)) {
         const following = parent.parent.statements.slice(parent.parent.statements.indexOf(parent) + 1);
         controlsOutput ||= following.some(hasBehavior);
       }
@@ -1115,7 +1130,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
           branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression) ||
           (earlyOnly && branchIsNullishOrEmpty(whenTrue, true) && branchIsNullishOrEmpty(whenFalse, true))) return false;
       const a = staticBoolean(whenTrue.expression, true), b = staticBoolean(whenFalse.expression, true);
-      return a !== null && b !== null && a !== b;
+      return a !== null && b !== null && (earlyOnly || a !== b);
     }
     if (earlyOnly && conditionalOutput && typescript.isJsxExpression(parent) && checker && live) {
       return jsxResultIsConsumed(parent, checker, live, new Set(), false);
@@ -1126,7 +1141,9 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
         if (earlyOnly && branchIsNullishOrEmpty(parent.whenTrue, true) && branchIsNullishOrEmpty(parent.whenFalse, true)) return false;
         const whenTrue = staticBoolean(parent.whenTrue, true);
         const whenFalse = staticBoolean(parent.whenFalse, true);
-        if (whenTrue === null || whenFalse === null || whenTrue === whenFalse) return false;
+        if (whenTrue === null || whenFalse === null ||
+            (!earlyOnly && whenTrue === whenFalse) ||
+            (earlyOnly && branchesStaticallyEquivalent(parent.whenTrue, parent.whenFalse))) return false;
         conditionalOutput = true;
       } else {
         return false;

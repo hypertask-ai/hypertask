@@ -62,7 +62,9 @@ JSX returned only by an event handler cannot prove rendering; a binding returned
 Unrelated component parameter defaults do not constrain formatter proof; formatter defaults retain their own validation.
 Compound value expressions cannot borrow the boolean parameter comparison proof; direct boolean and negated-boolean comparisons remain supported.
 Boolean-producing operators and void expressions remain invisible inside React arrays; visible siblings still work.
-Early exits in live action handlers must control a reachable effect; pure ignored handler returns and unreachable effects remain refused.
+Early exits in live action handlers must control a reachable effect, including nested blocks; pure ignored handler returns and unreachable effects remain refused.
+Exported TSX/JSX consumers returning text or arrays need no JSX node to establish render liveness.
+Logical and conditional boolean-only children remain invisible, including statically masked text; zero remains visible React output.
 Save the tested head SHA, hosted run URL and successful group lines.
 A local AST reproduction supplements those results; it does not replace evaluator or trusted-workflow proof.
 No app output changes, so theme screenshots and customer-data writes are unnecessary.
