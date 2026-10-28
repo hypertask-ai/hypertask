@@ -5,7 +5,7 @@ import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import { hasOAuthAccessTokenClaims } from "@/lib/mcp/oauthTokenContract";
 import { JWT_ISSUER, JWT_MCP_AUDIENCE } from "@/lib/mcp/auth/verifyJwt";
-import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7699_DESKTOP_CLI_TOKEN_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 export type AiRequestUser = {
   source?: "cli-bearer";
@@ -23,6 +23,10 @@ export async function getAiRequestUser(
 ): Promise<AiRequestUser | null> {
   const cookieUser = await getCurrentUserFromCookies();
   if (cookieUser && Number.isInteger(cookieUser.id) && Number(cookieUser.id) > 0) {
+    if (cookieUser.source === "cli-bearer" &&
+        !await isFeatureEnabled(HTPR_7699_DESKTOP_CLI_TOKEN_FLAG, cookieUser.id).catch(() => false)) {
+      return null;
+    }
     return {
       ...(cookieUser.source === "cli-bearer" ? { source: cookieUser.source } : {}),
       id: Number(cookieUser?.id),
