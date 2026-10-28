@@ -335,7 +335,7 @@ fi
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, start_new_session=True)
         try:
-            process.communicate(timeout=10)
+            process.communicate(timeout=30)
         finally:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
