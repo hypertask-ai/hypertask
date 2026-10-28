@@ -6,6 +6,19 @@ The AI chat panel on a board or task (native chat, `src/app/api/ai/`), and
 the mobile Agent Chat surface. Non-demo chat uses `/api/ai/chat/stream`
 without a native-chat flag; demo chat uses `/api/demo/chat/stream`.
 
+## Following another ticket
+
+With `htpr-7736-chat-follows-task` enabled, pin the sidebar open on a QA
+account's ticket. Send a unique marker, then use Next task or a ticket link
+in the reply. The same conversation and marker must remain visible. Send
+again and inspect `/api/ai/chat/stream`: `session_id` must stay the same,
+while `default_context.task_id` names the newly opened ticket.
+**New chat** must create a separate conversation on the current ticket.
+Creating a ticket through Ctrl+J must still open its own introduction and
+conversation. Switching accounts must never show the previous account's chat.
+Flag off keeps the existing separate conversations per ticket. Compare sidebar
+bounds and composer placement before and after; no controls or layout change.
+
 ## How to drive it
 
 Use `agent-browser` headless for the request/reply check. On production,
@@ -222,6 +235,7 @@ empty rosters, denied board access, desktop and phone, all four themes.
 The default conversation used by agent notifications must keep its original
 session ID after separate sessions have been created. With the flag Off,
 keep the original conversation picker and reject new-session requests.
+
 ## Desktop chat keyboard
 
 With `htpr-7766-chat-shortcuts` enabled, focus `/chat`, the docked sidebar,

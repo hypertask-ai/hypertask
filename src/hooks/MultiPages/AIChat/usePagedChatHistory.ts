@@ -15,14 +15,14 @@ const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSumma
 };
 const staleTime = 1000 * 60 * 3;
 
-export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>) {
+export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined }) {
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
   const queryClient = useQueryClient();
   const summaryKey = ["chat-session-summaries", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, "history"];
   const transcriptPrefix = ["aiChatTranscript", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG];
   const transcriptKey = (id: string | null) => [...transcriptPrefix, id];
-  const identity = `${user?.uid}:${user?.id}:${taskId}:${enabled}`;
+  const identity = `${user?.uid}:${user?.id}:${selectionScope.key}:${enabled}`;
   const identityRef = useRef(identity);
   identityRef.current = identity;
   const [selection, setSelection] = useState<{ identity: string; id: string | null }>({ identity, id: null });
@@ -214,7 +214,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
         setCreating(false);
       }
     }
-  }, [identity, ready, queryClient]);
+  }, [identity, ready, queryClient, taskId]);
 
   const selectSession = useCallback(async (sessionId: string) => {
     if (!ready) return;
@@ -230,24 +230,25 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
 
   useEffect(() => {
     if (!ready || !summaryQuery.isSuccess || activeSession || newChatRef.current || initializationError || (isTaskScoped && taskId === undefined)) return;
+    const initialTaskId = selectionScope.initialTaskId ?? (historySessions.length === 0 ? taskId : undefined);
     let cancelled = false;
     setInitializationError(false);
     const initialize = async () => {
-      if (taskId === undefined) {
+      if (initialTaskId === undefined) {
         setActiveSession(historySessions[0]?.id ?? null);
         return;
       }
       if (taskInitRef.current?.identity !== identity) {
         const promise = (async () => {
           const page = await queryClient.fetchQuery({
-            queryKey: [...summaryKey, "task", taskId],
-            queryFn: ({ signal }) => AI_Chat_API.getSessionPage({ taskId, limit: 1 }, signal), staleTime: 0,
+            queryKey: [...summaryKey, "task", initialTaskId],
+            queryFn: ({ signal }) => AI_Chat_API.getSessionPage({ taskId: initialTaskId, limit: 1 }, signal), staleTime: 0,
           });
           if (!page.data.success) throw new Error("Could not resolve task chat");
-          const id = page.data.sessions.find((session) => session.taskId === taskId)?.id;
+          const id = page.data.sessions.find((session) => session.taskId === initialTaskId)?.id;
           if (id) return id;
           if (identityRef.current !== identity || activeRef.current || newChatRef.current) return;
-          const response = await AI_Chat_API.createSessionNext(taskId, nameBoardRef.current);
+          const response = await AI_Chat_API.createSessionNext(initialTaskId, nameBoardRef.current);
           if (!response.data.success || !response.data.session?.id) throw new Error("Could not create task chat");
           return response.data.session;
         })();
@@ -268,7 +269,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       }
     });
     return () => { cancelled = true; };
-  }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt]);
+  }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt, taskId, isTaskScoped, selectionScope.initialTaskId]);
 
   const addMessageToSessionQuery = useCallback((sessionId: string, message: IChatMessage, queryOnly = false, updateLastMessage = false, projectId?: number) => {
     if (!ready || !queryClient.getQueryData<Transcript>(transcriptKey(sessionId))) return false;
