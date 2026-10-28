@@ -205,11 +205,11 @@ test("waiting-on age shares server time across a minute boundary, then advances 
 
 test("column and comment counts share server time across midnight and the hot threshold", async t => {
   await hydration(t, { Component: () => React.createElement(Rail, { currentTask: { ...task, waitingOnUserId: null } }), before: /19d in column/, advance: 200,
-    after: /20d in column · 20d since last comment/, afterHtml: /text-red-600 dark:text-red-400/, tick: { advance: 86_400_000, after: /21d in column · 21d since last comment/ } });
+    after: /20d in column · 20d since last comment/, afterHtml: /text-\[var\(--color-task-age-hot\)\]/, tick: { advance: 86_400_000, after: /21d in column · 21d since last comment/ } });
 });
 
 test("a stale row that becomes visible at midnight waits until hydration finishes", async t => {
   const currentTask = { ...task, waitingOnUserId: null, createdAt: "2026-01-14T00:00:00.000Z", sectionChangedAt: "2026-01-14T00:00:00.000Z", lastCommentAt: null };
   await hydration(t, { Component: () => React.createElement(Rail, { currentTask }), before: /Status/, beforeNot: /in column/,
-    advance: 200, afterHtml: /text-amber-600 dark:text-amber-500/, after: /7d in column · no comments yet/ });
+    advance: 200, afterHtml: /text-\[var\(--color-task-age-warn\)\]/, after: /7d in column · no comments yet/ });
 });

@@ -266,7 +266,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
                   className={cn(
                     "shrink-0",
                     waitingOnIsOverdue
-                      ? "text-red-600 dark:text-red-400"
+                      ? "text-[var(--color-task-age-hot)]"
                       : "text-text-light-gray"
                   )}
                 >
@@ -733,8 +733,8 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           className={cn(
             "flex w-full shrink-0 items-center gap-1.5 text-dense font-medium",
             staleLevel === "hot"
-              ? "text-red-600 dark:text-red-400"
-              : "text-amber-600 dark:text-amber-500"
+              ? "text-[var(--color-task-age-hot)]"
+              : "text-[var(--color-task-age-warn)]"
           )}
         >
           <TriangleAlert size={12} className="shrink-0" />

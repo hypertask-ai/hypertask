@@ -118,7 +118,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
           away: !nearBottom && (movedUp || Boolean(saved?.away)) });
         handleMessageListScroll(element);
       }}
-      className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto p-2 max-h-full scrollbar-thin  hover:scrollbar-thumb-gray-500  scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
+      className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto p-2 max-h-full scrollbar-thin hover:scrollbar-thumb-list-scroll-hover scrollbar-thumb-list-scroll scrollbar-track-kanban-column-scrollbar"
     >
       <div ref={messagesContentRef} className="space-y-2">
         {messages.map((message) => (

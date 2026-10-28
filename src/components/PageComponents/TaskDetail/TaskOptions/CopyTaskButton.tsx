@@ -44,7 +44,7 @@ const CopyTaskButton = ({
       <button tabIndex={-1} onClick={handleCopyTask}>
         <Link
           color={"#696b6e"}
-          className={`transition-colors stroke-[4px] dark:stroke-[2px] duration-75 hover:text-[#8E9093]`}
+          className={`transition-colors stroke-[length:var(--stroke-task-link)] duration-75 hover:text-[var(--color-task-link-hover)]`}
           size={20}
          strokeWidth={1.75}/>
       </button>

@@ -17,7 +17,9 @@ function windowView({ enabled = true, mobile = false, minimized = false } = {}) 
     "./WelcomeScreen": { WelcomeScreen: () => React.createElement("p", null, "Welcome") },
     "./ChatHeader": { ChatHeader: () => React.createElement("header", null, "Saved conversation") },
     "./AI_Tiptap_Container": { AI_Tiptap_Container: () => React.createElement("textarea", { "aria-label": "Message" }) },
-    "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
+    "@/lib/constants/APIRouteConstants": {},
+    "@/lib/realtime/client": {},
+    "../api/global": {},
   });
   const { ChatWindow } = load("src/components/AI_CHAT/ChatWindow.tsx");
   const view = mount();
@@ -31,9 +33,9 @@ for (const enabled of [false, true]) {
     try {
       const panel = view.container.querySelector(".chatwindow");
       assert.ok(panel);
-      assert.equal(panel.classList.contains("[.amoled_&]:outline-1"), enabled);
-      assert.equal(panel.classList.contains("[.amoled_&]:outline-[var(--border-light-gray-thin)]"), enabled);
-      assert.equal(panel.classList.contains("[.amoled_&]:[--bs-border-radius:5px]"), enabled);
+      assert.equal(panel.classList.contains("[outline:var(--outline-floating-panel)]"), enabled);
+      assert.equal(panel.classList.contains("[outline-offset:var(--offset-floating-panel-outline)]"), enabled);
+      assert.equal(panel.classList.contains("[--bs-border-radius:var(--radius-chat-window)]"), enabled);
       assert.ok(panel.classList.contains("h-[70svh]"));
       assert.ok(panel.classList.contains("w-[30vw]"));
       assert.equal(view.container.querySelector("header").textContent, "Saved conversation");
@@ -48,7 +50,7 @@ test("phone content keeps its sizing; the surrounding sheet owns its outline", (
     const panel = view.container.querySelector(".chatwindow");
     assert.ok(panel.classList.contains("rounded-none"));
     assert.ok(panel.classList.contains("h-full"));
-    assert.equal(panel.classList.contains("[.amoled_&]:outline-1"), false);
+    assert.equal(panel.classList.contains("[outline:var(--outline-floating-panel)]"), false);
   } finally { view.close(); }
 });
 

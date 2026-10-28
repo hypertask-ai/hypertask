@@ -255,3 +255,10 @@ html.amoled {
 .amoled .search-input {
   background-color: var(--bg-pageBackground);
 }
+
+.amoled {
+  --outline-floating-panel: 1px solid var(--border-light-gray-thin);
+  --offset-floating-panel-outline: -1px;
+  --radius-chat-window: 5px;
+  --radius-chat-sheet: 5px;
+}

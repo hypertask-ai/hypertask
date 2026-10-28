@@ -1740,7 +1740,7 @@ for (const modeOutline of [false, true]) for (const mobile of [false, true]) {
     await withPalette(t, { newWindow: true, modeOutline, mobile }, async ({ press, input, values }) => {
       const tabs = document.querySelector('[aria-label="Commands mode"]');
       assert.ok(tabs);
-      for (const token of ['[.amoled_&]:outline-solid', '[.amoled_&]:outline-1', '[.amoled_&]:outline-[var(--border-light-gray-thin)]']) {
+      for (const token of ['[outline:var(--outline-floating-panel)]']) {
         assert.equal(tabs.classList.contains(token), modeOutline);
       }
       await React.act(async () => [...tabs.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.startsWith('New Task')).click());

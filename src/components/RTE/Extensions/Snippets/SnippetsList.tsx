@@ -59,7 +59,7 @@ const SnippetsList = forwardRef<SnippetsListRef, SuggestionProps>(
     if (!items.length) return null;
 
     return (
-      <div className="rounded-md shadow-xl dark:bg-[#333B47] bg-[#ffffff] flex flex-col p-2 gap-2 min-w-[280px] max-w-[420px]">
+      <div className="rounded-md shadow-xl bg-[var(--bg-editor-menu)] flex flex-col p-2 gap-2 min-w-[280px] max-w-[420px]">
         <ul className="max-h-72 no-scrollbar scrollbar-none overflow-y-auto gap-1">
           {items.map((item, index) => (
             <li
@@ -72,7 +72,7 @@ const SnippetsList = forwardRef<SnippetsListRef, SuggestionProps>(
               }}
               className={`cursor-pointer text-content p-2 ${
                 index === selectedIndex
-                  ? "bg-[#ececec] dark:bg-[#4f5766]"
+                  ? "bg-[var(--bg-editor-option-selected)]"
                   : "transparent"
               } rounded-md py-1`}
             >
@@ -90,16 +90,16 @@ const SnippetsList = forwardRef<SnippetsListRef, SuggestionProps>(
 
         <div className="flex justify-between text-white-black">
           <span className="text-center text-meta text-gray-500">
-            <kbd className="ml-[1] text-white-black p-1 px-2 bg-taskDetailPage border-[1px] dark:border-none border-icon-hover-gray">
+            <kbd className="ml-[1] text-white-black p-1 px-2 bg-taskDetailPage border-[1px] [border-style:var(--style-editor-key-border)] border-icon-hover-gray">
               ↑
             </kbd>
-            <kbd className="mx-[1px] p-1 px-2 text-white-black rounded font-medium bg-taskDetailPage border-[1px] dark:border-none border-icon-hover-gray">
+            <kbd className="mx-[1px] p-1 px-2 text-white-black rounded font-medium bg-taskDetailPage border-[1px] [border-style:var(--style-editor-key-border)] border-icon-hover-gray">
               ↓
             </kbd>
             to navigate
           </span>
           <span className="text-right text-meta">
-            <kbd className="rounded bg-taskDetailPage border-[1px] border-icon-hover-gray dark:border-none text-white-black p-1 mr-[1px] px-[1.5px]">
+            <kbd className="rounded bg-taskDetailPage border-[1px] border-icon-hover-gray [border-style:var(--style-editor-key-border)] text-white-black p-1 mr-[1px] px-[1.5px]">
               Enter
             </kbd>
             to select

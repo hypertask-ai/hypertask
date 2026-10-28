@@ -168,7 +168,7 @@ export function createTableRowRenderer(context: Context) {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
           });
-          const colorClass = level === "hot" ? "text-red-600 dark:text-red-400/70" : level === "warn" ? "text-amber-600 dark:text-amber-400/70" : "text-text-light-gray";
+          const colorClass = level === "hot" ? "text-[var(--color-card-age-hot)]" : level === "warn" ? "text-[var(--color-card-age-warn)]" : "text-text-light-gray";
           return (
             <span key="inColumn" title={stalenessTooltip} className="min-w-0 flex items-center">
               {days !== null && (
@@ -186,7 +186,7 @@ export function createTableRowRenderer(context: Context) {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
           });
-          const colorClass = level === "hot" ? "text-red-600 dark:text-red-400/70" : level === "warn" ? "text-amber-600 dark:text-amber-400/70" : "text-text-light-gray";
+          const colorClass = level === "hot" ? "text-[var(--color-card-age-hot)]" : level === "warn" ? "text-[var(--color-card-age-warn)]" : "text-text-light-gray";
           return (
             <span key="noComment" title={stalenessTooltip} className="min-w-0 flex items-center">
               {days !== null && (
@@ -204,7 +204,7 @@ export function createTableRowRenderer(context: Context) {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
           });
-          const colorClass = level === "hot" ? "text-red-600 dark:text-red-400/70" : level === "warn" ? "text-amber-600 dark:text-amber-400/70" : "text-text-light-gray";
+          const colorClass = level === "hot" ? "text-[var(--color-card-age-hot)]" : level === "warn" ? "text-[var(--color-card-age-warn)]" : "text-text-light-gray";
           return (
             <span key="onBoard" title={stalenessTooltip} className="min-w-0 flex items-center">
               {days !== null && (
