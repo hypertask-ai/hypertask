@@ -30,7 +30,6 @@ async function demo() {
   const originalRevokedTokenFindFirst = prismaMock.revokedToken.findFirst
   const originalLogsCreate = prismaMock.logs.create
   const originalMemberFindMany = prismaMock.member.findMany
-  const savedFlagFindUnique = prismaMock.featureFlag.findUnique
   const originalFeatureFlagFindUnique = prismaMock.featureFlag?.findUnique
   const globalWithRedis = globalThis as typeof globalThis & {
     redis?: {
@@ -83,7 +82,6 @@ async function demo() {
     prismaMock.revokedToken.findFirst = async () => null
     prismaMock.logs.create = async () => ({ id: 1 })
     prismaMock.member.findMany = async () => []
-    prismaMock.featureFlag.findUnique = async () => ({ mode: 'OFF' })
     prismaMock.featureFlag = prismaMock.featureFlag ?? {}
     prismaMock.featureFlag.findUnique = async () => null
     prismaMock.agent.findFirst = async ({ where }: Record<string, any>) => {
@@ -121,14 +119,12 @@ async function demo() {
       agentBody.error,
       'Agents cannot list managed agent identities'
     )
-
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst = originalRevokedTokenFindFirst
     prismaMock.logs.create = originalLogsCreate
     prismaMock.member.findMany = originalMemberFindMany
-    prismaMock.featureFlag.findUnique = savedFlagFindUnique
     if (prismaMock.featureFlag) {
       prismaMock.featureFlag.findUnique = originalFeatureFlagFindUnique
     }
