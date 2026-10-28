@@ -1007,6 +1007,16 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
   for (let parent = node.parent; parent && !typescript.isFunctionLike(parent); parent = parent.parent) {
     if (typescript.isTryStatement(parent)) return false;
   }
+  const localBindings = new Set();
+  (function visit(item) {
+    if (typescript.isVariableDeclaration(item)) {
+      (function binding(name) {
+        if (typescript.isIdentifier(name)) localBindings.add(name.text);
+        else typescript.forEachChild(name, binding);
+      })(item.name);
+    }
+    if (!typescript.isFunctionLike(item)) typescript.forEachChild(item, visit);
+  })(fn?.body ?? node);
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     if (typescript.isReturnStatement(parent) && child === parent.expression) return !earlyOnly;
@@ -1023,7 +1033,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
         const other = child === parent.left ? parent.right : parent.left;
         let repeated = false;
         (function visit(item) {
-          if (typescript.isIdentifier(item) && item.text === node.text) repeated = true;
+          if (typescript.isIdentifier(item) && (item.text === node.text || localBindings.has(item.text))) repeated = true;
           if (!repeated) typescript.forEachChild(item, visit);
         })(other);
         if (repeated) return false;
