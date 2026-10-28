@@ -5,15 +5,12 @@ import {
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import {
   taskDescriptionRestoreRoute,
-  taskDescriptionVersionsRoute,
 } from "@/lib/constants/APIRouteConstants";
 import axios from "axios";
 import { History, RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6967_TYPED_TASK_READS_FLAG } from "@/lib/flags/keys";
 import { getDescriptionVersions } from "@/lib/api/typedClient";
 
 type DescriptionVersion = {
@@ -43,9 +40,6 @@ const DescriptionPreview = ({ content }: { content: string }) => (
 );
 
 const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => {
-  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
-  let descriptionReader: typeof getDescriptionVersions | undefined;
-  if (typedClient) descriptionReader = getDescriptionVersions;
   const [data, setData] = useState<VersionResponse | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,16 +53,7 @@ const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => 
     setLoading(true);
     const loadVersions = async () => {
       try {
-        let response: VersionResponse;
-        if (descriptionReader) {
-          response = (await descriptionReader(taskId, controller.signal)).data;
-        } else {
-          const { data } = await axios.get<VersionResponse>(
-            taskDescriptionVersionsRoute(String(taskId)),
-            { signal: controller.signal },
-          );
-          response = data;
-        }
+        const response = (await getDescriptionVersions(taskId, controller.signal)).data;
         if (controller.signal.aborted) return;
         setData(response);
         setSelectedId(response.versions[0]?.id ?? null);
@@ -80,7 +65,7 @@ const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => 
     };
     void loadVersions();
     return () => controller.abort();
-  }, [taskId, typedClient]);
+  }, [taskId]);
 
   const selected = useMemo(
     () => data?.versions.find((version) => version.id === selectedId) ?? null,

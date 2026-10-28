@@ -83,6 +83,9 @@ const AIModelDropDownList = ({
   visibleModelOptions,
   haiku55Enabled,
   haikuDefaultEnabled,
+  keyboardNavigation = false,
+  onKeyboardClose,
+  shortcutHint,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -98,6 +101,9 @@ const AIModelDropDownList = ({
   visibleModelOptions: TAiModelOption[];
   haiku55Enabled: boolean;
   haikuDefaultEnabled: boolean;
+  keyboardNavigation?: boolean;
+  onKeyboardClose?: () => void;
+  shortcutHint?: string;
 }) => {
   const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
   const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
@@ -269,7 +275,8 @@ const AIModelDropDownList = ({
       event.stopPropagation();
       setIsOpen(false);
       setSubmenu(null);
-      triggerRef.current?.focus();
+      if (keyboardNavigation) onKeyboardClose?.();
+      else triggerRef.current?.focus();
     };
 
     document.addEventListener("mousedown", closeOnOutsideClick);
@@ -278,7 +285,7 @@ const AIModelDropDownList = ({
       document.removeEventListener("mousedown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape, true);
     };
-  }, [isOpen]);
+  }, [isOpen, keyboardNavigation, onKeyboardClose]);
 
   useEffect(() => {
     if (!mobileQuickPicker || !isOpen) return;
@@ -335,6 +342,48 @@ const AIModelDropDownList = ({
     optionCallback(nextOption);
     setSubmenu(null);
   };
+
+  const keyboardProps = keyboardNavigation ? {
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      if (!isOpen) {
+        setIsOpen(true);
+        requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus());
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        if (target.getAttribute("aria-expanded") === "false") target.click();
+        else return;
+      }
+      requestAnimationFrame(() => {
+        const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
+        const index = buttons.indexOf(target);
+        const direction = event.key === "ArrowUp" ? -1 : 1;
+        buttons[(index + direction + buttons.length) % buttons.length]?.focus();
+      });
+    },
+    onClickCapture: (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target instanceof Element ? event.target.closest("button") : null;
+      if (!target || event.detail !== 0) return;
+      if (target === triggerRef.current || target.hasAttribute("aria-expanded")) {
+        requestAnimationFrame(() => {
+          const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
+          const index = buttons.indexOf(target);
+          buttons[index + 1]?.focus();
+        });
+      } else {
+        requestAnimationFrame(() => {
+          setIsOpen(false);
+          setSubmenu(null);
+          onKeyboardClose?.();
+        });
+      }
+    },
+  } : {};
 
   const submenuPositionClass = {
     right: "left-[calc(100%+6px)] top-0",
@@ -479,7 +528,7 @@ const AIModelDropDownList = ({
   }
 
   return (
-    <div ref={rootRef} className="relative inline-block min-w-0 max-w-full text-left">
+    <div ref={rootRef} {...keyboardProps} data-ai-chat-model={keyboardNavigation || undefined} className="relative inline-block min-w-0 max-w-full text-left">
       <button
         ref={triggerRef}
         type="button"
@@ -487,7 +536,7 @@ const AIModelDropDownList = ({
         title={
           isByokPlan && !anyListedModelEnabled
             ? "Add team API keys to enable AI models"
-            : undefined
+            : shortcutHint
         }
         className={cn(
           "inline-flex w-full min-w-0 items-center rounded-[4px] px-2 py-1 text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active",

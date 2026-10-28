@@ -46,8 +46,8 @@ test("archive Undo restores Todo after detail unmounts despite a warm archived b
     IS_REACT_ACT_ENVIRONMENT: true,
   });
   const user = { id: 985 };
-  const task = { id: 6646, projectId: 6646, sectionId: 10, title: "Undo fixture", status: "Normal", ranking: "a", subTasks: [], assignees: [{ userId: user.id }] };
-  const project = { id: task.projectId, title: "Undo board", section: [{ id: 10, section_title: "Todo", visibility: true }] };
+  const task = { id: 6646, projectId: 6646, sectionId: 10, uniqueIndex: 1, section: "Todo", parentTask: null, title: "Undo fixture", status: "Normal", ranking: "a", subTasks: [], assignees: [{ userId: user.id }] };
+  const project = { id: task.projectId, title: "Undo board", sections: ["Todo"], section: [{ id: 10, section_title: "Todo", visibility: true }] };
   const requests = [];
   const api = {
     post: async (url, body) => {
@@ -81,7 +81,8 @@ test("archive Undo restores Todo after detail unmounts despite a warm archived b
     "react-hot-toast": toast,
     "./undoWindow": require("../src/hooks/General/undoWindow.ts"),
   });
-  const boards = loadModule("src/hooks/Homepage/useGetBoards.ts", { "@/utils/api/Homepage": homepage });
+  const typedClient = loadModule("src/lib/api/typedClient.ts", { axios: api });
+  const boards = loadModule("src/hooks/Homepage/useGetBoards.ts", { "@/utils/api/Homepage": homepage, "@/lib/api/typedClient": typedClient });
   const reconcile = loadModule("src/lib/boardSync/reconcileActiveBoardQuery.ts", { "@/utils/api/Homepage": homepage });
   const store = require("../src/store");
   const redirects = [];

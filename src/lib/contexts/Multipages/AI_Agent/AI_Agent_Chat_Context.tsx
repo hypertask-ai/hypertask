@@ -145,6 +145,7 @@ export const ChatRuntime = memo(function ChatRuntime({
   useEffect(() => {
     const handleLayoutKeydownCapture = (event: KeyboardEvent) => {
       if (!isControlQFocusShortcut(event)) return;
+      if (event.target instanceof HTMLElement && event.target.closest("[data-ai-chat-surface]")) return;
 
       layoutKeydownRef.current(event);
       if (event.defaultPrevented) event.stopPropagation();

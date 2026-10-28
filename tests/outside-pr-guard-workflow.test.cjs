@@ -120,9 +120,8 @@ function apiError(status) {
 
 test("workflow has safe triggers, permissions, concurrency and a pinned metadata-only job", async () => {
   const workflow = await loadWorkflow();
-  assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request_target", "workflow_dispatch", "workflow_run"]);
+  assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request_target", "workflow_dispatch"]);
   assert.ok(workflow.on.pull_request_target.types.includes("synchronize"));
-  assert.deepEqual(workflow.on.workflow_run, { workflows: ["PR Guards"], types: ["completed"] });
   const dispatch = yaml.load(await readFile(dispatchPath, "utf8"));
   assert.deepEqual(Object.keys(dispatch.on), ["workflow_dispatch"]);
   const inputs = dispatch.on.workflow_dispatch.inputs;
@@ -143,8 +142,8 @@ test("workflow has safe triggers, permissions, concurrency and a pinned metadata
   const dispatchJob = dispatch.jobs["outside-pr-guard"];
   const dispatchStep = dispatchJob.steps.find(step => step.uses?.startsWith("actions/github-script"));
   assertSafeSteps([dispatchStep]);
-  assert.equal(step.with.script, dispatchStep.with.script);
-  assert.equal(step.with.script.trim(), "await require('./.github/scripts/outside-pr-guard.cjs')({ github, context, core });");
+  assert.equal(dispatchStep.with.script.trim(), "await require('./.github/scripts/outside-pr-guard.cjs')({ github, context, core });");
+  assert.equal(step.env.PR_METADATA, "${{ steps.metadata.outputs.pr }}");
   for (const guardJob of [job, dispatchJob]) {
     const checkouts = guardJob.steps.filter(step => step.uses?.startsWith("actions/checkout"));
     assert.equal(checkouts.length, 1);

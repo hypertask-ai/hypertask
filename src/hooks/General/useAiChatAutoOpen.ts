@@ -1,18 +1,24 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatAutoOpenPageAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatExplicitOpenAtAtom, aiChatEmbeddedTicketPathAtom, aiChatNewTicketPathAtom, currentUserAtom, showAIChatInterfaceAtom } from "@/store";
 import { aiChatAutoOpenPage } from "@/lib/aiChat/autoOpenPreferences";
 import { useAiChatOpenPreferences, useSyncAiChatOpenPreferences } from "./useAiChatOpenPreferences";
 
-function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | null, pageKey: string) {
+function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | null, pageKey: string, stableDefaultView: boolean) {
   const neverRecorded = previous === null && lastSaved === null;
+  if (stableDefaultView && /^\d+:\/(project|demo):/.test(pageKey)) {
+    return !neverRecorded && (previous ?? lastSaved)?.replace(/:default$/, ":") !== pageKey.replace(/:default$/, ":");
+  }
   return !neverRecorded && (previous ?? lastSaved) !== pageKey;
 }
 
 export function useAiChatAutoOpen(mobile: boolean) {
+  const stableDefaultView = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
   useSyncAiChatOpenPreferences();
   const { enabled, ready, flagReady, values } = useAiChatOpenPreferences();
   const user = useRecoilValue(currentUserAtom);
@@ -39,7 +45,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       previousPage.current = null;
       return;
     }
-    const changed = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey);
+    const changed = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);
     if (lastPage !== pageKey) setLastPage(pageKey);
     previousPage.current = pageKey;
     if (pathname === newTicketPath) visitedNewTicket.current = true;
@@ -50,7 +56,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
     if (!page || manualOpen) return;
     if (changed) setSuppressed(false);
     if ((suppressed && !changed) || !allowed) {
-      const savedOffAfterAutoOpen = !allowed && autoOpenedPage.current === pageKey;
+      const savedOffAfterAutoOpen = !allowed && autoOpenedPage.current !== null && !pageChangedSinceLastVisit(autoOpenedPage.current, null, pageKey, stableDefaultView);
       if (changed || savedOffAfterAutoOpen) setOpen(false);
       autoOpenedPage.current = null;
       return;
@@ -58,10 +64,10 @@ export function useAiChatAutoOpen(mobile: boolean) {
     autoOpenedPage.current = pageKey;
     setExplicitOpenAt(null);
     setOpen(true);
-  }, [enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
+  }, [enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, stableDefaultView, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
 
   const active = enabled || !flagReady;
-  const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey);
+  const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);
   const reserve = active && !mobile && allowed && !(suppressed && !pageChanged);
   return { reserve };
 }

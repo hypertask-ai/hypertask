@@ -812,6 +812,7 @@ export const AudioButton = ({
           </div>
           <button
             type="button"
+            data-ai-chat-recording-cancel={isAiChat || undefined}
             onClick={closeHandler}
             aria-label="Cancel"
             className={cn(
@@ -823,6 +824,7 @@ export const AudioButton = ({
           </button>
           <button
             type="button"
+            data-ai-chat-recording-submit={isAiChat || undefined}
             onClick={() => stopRecording(true)}
             aria-label="Send"
             className={cn(

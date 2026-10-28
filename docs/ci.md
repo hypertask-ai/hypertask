@@ -34,19 +34,19 @@ without printing them and performs no GitHub writes.
 ## PR job budget (YPER4-663)
 
 The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jobs.
-Small guards share runners, not verdicts:
+Small guards share scanner work and trusted metadata:
 
 - `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
 - `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code.
-- Dependabot/fork scans use a trusted completion pass to publish statuses because their PR tokens are read-only. It reads GitHub step conclusions only; it never checks out candidate code. Ordinary same-repo PRs need no extra runner.
-- Each folded guard context is still published through commit statuses. Independent steps continue after a failure; the original context and aggregate job both fail. Trusted publishers skip cancellation, re-read the current head before each status, and also compare the evaluated title for `pr-title`.
+- Scanner checks are native job conclusions for all PRs, including Dependabot and forks. Their read-only tokens need no trusted status-publication pass.
+- The trusted guard publishes one existing required `pr-title` context for outside and title results. Size stays advisory. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - Feature-flag evaluation and all-open reconciliation stay in the original two-job `feature-flag-gate.yml`, globally serialized by `feature-flag-gate-production` with cancellation off. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group. Their original semantic statuses and flag fingerprints are unchanged.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
-Static normal non-draft app PR budget: **16 jobs** per synchronize and opening event
-(YPER4-555 adds one parallel static-check job to the previous 15-job budget). Path-specific evals,
-visual checks, preview deployments and external review are extra. Docs-only PRs start 14 jobs; Dependabot/fork app PRs add one trusted scan-publication job (17 total). Snapshot actual
+Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
+(YPER4-721 adds one tiny native scanner summary job). Path-specific evals,
+visual checks, preview deployments and external review are extra. Docs-only PRs start 15 jobs; Dependabot/fork PRs no longer add a trusted scan-publication job. Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
 runs stay attached to their old commit; record both snapshots for comparison.
@@ -142,6 +142,9 @@ the monitor; this is not a required PR context. Detection can lag until the next
 hourly run, plus GitHub scheduling and any rate-limit wait.
 
 CI Tests no longer reads repository settings on PRs or production pushes.
+Its optional review precheck reads commit statuses once. Read failures warn
+and let tests run; an observed failed review still stops tests. Independent
+required review contexts continue to block merging without approval.
 Previously every production push and CI-policy PR made three settings API calls.
 The hourly monitor makes three on a successful first attempt: repository
 metadata, ruleset list, and one full ruleset read. Retries add calls.
@@ -481,6 +484,45 @@ The offline replay binds the complete corpus hash and recomputes every score.
 `ship-scripts-tests` runs the collector's supported offline runner and claim
 checks: four Vercel reports join the original MCP report with five activities.
 Different roots/routes stay separate. All board commands are private fakes.
+
+## Guard API budget (YPER4-721)
+
+The scanner workflow reports GitHub-native `secret-scan` and
+`next-public-secrets` jobs. It makes no commit-status API calls, including
+for fork and Dependabot PRs. Both scanners remain mandatory; the public-secret
+summary fails unless its scan step explicitly succeeded. One additional tiny
+summary job replaces the old status publisher and trusted completion workflow.
+
+The trusted workflow reads PR metadata once for outside, size and title
+checks. It publishes only the existing required `pr-title` status, combining
+outside and title outcomes. Size remains advisory. A fresh pending status
+invalidates an earlier same-head success before metadata reevaluation, so an
+invalid title cannot keep its prior approval during later quota retries.
+Publication rereads the open PR, production base, exact head, event title
+and evaluated title. A rate-limit refusal
+waits until the supplied reset and retries that whole fresh-read/publication
+operation. Ordinary authorization errors remain failures. The retry wait is
+bounded to one hour; an unavailable required result never becomes green.
+No required ruleset context changes.
+
+Trusted guard concurrency includes the workflow run ID.
+Older event reruns cannot cancel newer evaluations.
+Reruns still share their original event's group.
+
+`node tests/guard-quota.test.cjs` executes the saved production scripts and
+candidate workflow entry points with isolated GitHub responses. For a small,
+same-repository PR without an existing size comment, the two guard workflows
+use 22 explicit GitHub REST calls before and six after; writes fall from ten
+to two. These are instrumented fixture counts, not network telemetry or
+whole-fleet savings. Checkout, Actions internals, ticket binding, other
+workflows and exceptional comment writes are excluded. The immutable fixture
+records its production source SHA. Ten simulated pushes recover both a read
+and publication 403 each; a real ten-push burst still requires separate logs.
+
+App-smoke discovery uses the same reset-aware callback retry. Each replay
+starts by rechecking the live head before cancelling older runs. This covers
+the observed discovery-step refusal; the workflow's separate initial shell
+lookups and final report remain separate API consumers.
 
 ## Provider-neutral Done enforcement
 

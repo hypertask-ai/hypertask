@@ -35,7 +35,8 @@ function firstPaint(saved, { viewport = 1440, pathname = "/detail/project-8190/2
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => false },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => false, useFlagReady: () => true },
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/lib/flags/keys": {},
   });
   const html = renderToString(React.createElement(Frame, { onOpenAIChat: noop, sidebarWidthPx: 420 },

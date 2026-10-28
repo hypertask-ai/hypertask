@@ -9,7 +9,7 @@ const { loader } = require("./helpers/htpr-7260-ui.cjs");
 test("chat readiness waits for hydration and a working Open callback", async () => {
   const load = loader({
     "next/navigation": { usePathname: () => "/project" },
-    "@/hooks/useFlag": { useFlag: () => false },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
     "@/lib/flags/keys": { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "overlay" },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },

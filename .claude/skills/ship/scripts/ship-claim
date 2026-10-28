@@ -2,9 +2,9 @@
 # ship-claim: the whole claim step, with a race check (YPER4-264).
 #   ship-claim <TICKET> ["<resume command>"]            claim, re-read the comments, step back if another runner claimed first
 #   ship-claim decide <RESUME_ID> <comments.json> [idle-ids-file]   pure decision from a saved comments read (tests use this)
-#   ship-claim hold <TICKET>                            read-only: would the open-PR hold refuse this claim?
+#   ship-claim hold <TICKET>                            read-only: would unfinished work refuse this claim?
 # Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error,
-#   4 HOLD (this RUNNER n still has an open PR on its own branch: finish that PR, claim nothing new).
+#   4 HOLD (this RUNNER n has open PRs or unfinished merged work: finish it, claim nothing new).
 # Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id, then log ids.
 # Ownership is the session resume id in the comment text, not the agent name. Assignment is never
 # consulted (a claimer may have posted but not assigned yet). A competing claim older than 6 h
@@ -58,24 +58,72 @@ decide() {
       end' "$2"
 }
 
-# Open-PR hold (Valentin, 2026-10-27: "stay on the PR until they are unblocked to actually ship it and not pick up new stuff").
-# Only for SHIP_SESSION_NAME "RUNNER n". Its PRs are open hypertask PRs whose branch names it (runner<n> or runner-<n>
-# as a whole word). Claiming the ticket of one of those PRs is allowed; anything else is refused. A failed read refuses.
 hold_check() {
-  local t=$1 rn open
+  local t=$1 rn open board page total offset count expected_total candidates ticket project number merged matches seen unfinished=''
   [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
   rn=${BASH_REMATCH[1]}
   open=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title) \
     || { echo "ship-claim: HOLD. Cannot read open PRs, so no new claim for RUNNER $rn. Retry later." >&2; return 4; }
+  jq -e 'type == "array" and length < 300 and all(.[];
+    (.number | type == "number") and (.headRefName | type == "string") and (.title | type == "string"))' <<<"$open" >/dev/null \
+    || { echo "ship-claim: HOLD. Open PR read is malformed or incomplete for RUNNER $rn." >&2; return 4; }
   HELD=$(jq -r --arg n "$rn" --arg t "$t" '
     [.[] | select(.headRefName | test("(^|[/_-])runner-?" + $n + "($|[/_-])"; "i"))] as $m
     | if any($m[]; (.title | ascii_upcase | startswith($t + " ")) or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])")))
-      then "" else ($m | map("https://github.com/hypertask-ai/hypertask/pull/\(.number)") | join(" ")) end' <<<"$open") \
+      then "RESUME" else ($m | map("https://github.com/hypertask-ai/hypertask/pull/\(.number)") | join(" ")) end' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
-  [ -z "$HELD" ] && return 0
-  echo "ship-claim: HOLD. RUNNER $rn still has open PRs: $HELD"
-  echo "ship-claim: do NOT claim $t or any other ticket. Drive one of these PRs to merged, live and Done first."
-  return 4
+  [ "$HELD" != RESUME ] || return 0
+  for board in 15 4060; do
+    offset=0; expected_total=''; seen=''
+    while :; do
+      page=$(${SHIP_CLAIM_HYPERTASK:-hypertask} tasks list --project "$board" --status Normal --limit 100 --offset "$offset" --json) \
+        || { echo "ship-claim: HOLD. Cannot read board $board; finish existing work before claiming." >&2; return 4; }
+      jq -e '.success == true and (.total | type == "number" and . >= 0 and floor == .)
+        and (.tasks | type == "array") and all(.tasks[];
+          (.ticketNumber | type == "string") and (.section | type == "string") and (.assignees | type == "array"))' <<<"$page" >/dev/null \
+        || { echo "ship-claim: HOLD. Cannot parse board $board." >&2; return 4; }
+      total=$(jq .total <<<"$page"); count=$(jq '.tasks | length' <<<"$page")
+      [ -n "$expected_total" ] || expected_total=$total
+      if [ "$total" != "$expected_total" ] || [ "$((offset + count))" -gt "$total" ] || { [ "$count" = 0 ] && [ "$offset" -lt "$total" ]; }; then
+        echo "ship-claim: HOLD. Board $board read is incomplete or changed while paging." >&2; return 4
+      fi
+      seen+=$(jq -r '.tasks[].ticketNumber' <<<"$page"); seen+=$'\n'
+      if [ "$(printf '%s' "$seen" | sed '/^$/d' | sort -u | wc -l)" -ne "$((offset + count))" ]; then
+        echo "ship-claim: HOLD. Board $board repeated a ticket while paging." >&2; return 4
+      fi
+      candidates=$(jq -r --arg runner "runner $rn" '.tasks[]
+        | select(.section | IN("In Progress", "QA", "AI Review"))
+        | select(any(.assignees[]; (.agent.displayName // "" | ascii_downcase) == $runner))
+        | [.ticketNumber, .projectId, .uniqueIndex] | @tsv' <<<"$page") \
+        || { echo "ship-claim: HOLD. Cannot read RUNNER $rn assignments." >&2; return 4; }
+      while IFS=$'\t' read -r ticket project number; do
+        [ -n "$ticket" ] || continue
+        [[ $ticket =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ && $project =~ ^[1-9][0-9]*$ && $number =~ ^[1-9][0-9]*$ ]] \
+          || { echo "ship-claim: HOLD. Invalid assigned ticket on board $board." >&2; return 4; }
+        merged=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state merged --base production --search "$ticket in:title" --limit 100 --json number,title) \
+          || { echo "ship-claim: HOLD. Cannot read merged PRs for $ticket." >&2; return 4; }
+        jq -e 'type == "array" and length < 100 and all(.[]; (.number | type == "number") and (.title | type == "string"))' <<<"$merged" >/dev/null \
+          || { echo "ship-claim: HOLD. Merged PR read is malformed or incomplete for $ticket." >&2; return 4; }
+        matches=$(jq --arg t "$ticket" '[.[] | select(.title | ascii_upcase | startswith($t + " "))] | length' <<<"$merged")
+        [ "$matches" = 0 ] && continue
+        [ "$ticket" != "$t" ] || return 0
+        [ -n "$unfinished" ] || unfinished="https://app.hypertask.ai/detail/project-$project/$number ($ticket)"
+      done <<<"$candidates"
+      offset=$((offset + count))
+      [ "$offset" -lt "$total" ] || break
+    done
+  done
+  if [ -n "$HELD" ]; then
+    echo "ship-claim: HOLD. RUNNER $rn still has open PRs: $HELD"
+    echo "ship-claim: do NOT claim $t or any other ticket. Drive one of these PRs to merged, live and Done first."
+    return 4
+  fi
+  if [ -n "$unfinished" ]; then
+    echo "ship-claim: HOLD. RUNNER $rn has unfinished merged work: $unfinished."
+    echo "ship-claim: finish live QA, verify its flag, then move it to Done before claiming $t. Resume the unfinished ticket instead."
+    return 4
+  fi
+  return 0
 }
 
 if [ "${1:-}" = hold ]; then

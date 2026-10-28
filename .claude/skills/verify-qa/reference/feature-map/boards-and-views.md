@@ -131,3 +131,16 @@ On production, use only invalid IDs or an inaccessible board to verify the
 refused path, and reload an accessible board to prove it remains available.
 Do not delete or archive shared production boards. Successful destructive
 deletion is covered locally, not claimed as live verification.
+## Blocked by me
+
+Every board includes the built-in **Blocked by me** view, including an empty
+board. Select it from the existing desktop tabs or phone view picker. It matches
+`waitingOnUserId` to the signed-in viewer, not the task assignee or the
+board owner. Tickets blocked by another person, unblocked tickets, and
+blocking-task dependencies alone stay out. Set, clear, and reassign a
+blocker on QA-owned fixtures; check the view and count after each change,
+then reload and switch boards. Check a second account sees its own blockers.
+Capture desktop and phone in all themes. With `htpr-7804-blocked-by-me`
+Off, the view disappears and any active selection returns to the saved
+view; resetting view order must not bring it back. Delete only the fixtures
+created for this check.

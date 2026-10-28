@@ -22,7 +22,8 @@ const moduleMocks = {
   "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
   "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
   "@/lib/contexts/Multipages/AI_Agent/chatContext": chatContextModule.exports,
-  "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
+  "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true, useFlagReady: () => true },
+  "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
   "@/lib/flags/keys": { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket" },
 };
 

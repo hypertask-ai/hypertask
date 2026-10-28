@@ -122,6 +122,7 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
   const MobileViewContext = React.createContext(mobile);
   const Frame = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
     react: React,
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "next/navigation": { usePathname: () => pathname },

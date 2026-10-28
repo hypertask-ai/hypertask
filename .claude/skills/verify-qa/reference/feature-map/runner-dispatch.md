@@ -12,6 +12,10 @@ For a runner takeover, `ship-claim` first resolves the claim race, then shows ex
 
 Verify takeover changes with `bash .claude/skills/ship/scripts/ship-claim.test.sh` from the installed production copy. The full-flow replay must keep the original question, show its link, and write an agent-lane handoff without another question. Read the original incident's comments through the CLI to confirm their links and replies remain available. Never claim another runner's real ticket for QA.
 
+For completion holds, run `ship-claim hold <ticket>` from the installed production copy, with your own `SHIP_SESSION_NAME` and runner App GitHub authentication. This is read-only: never run a real claim as a test. A runner's other assigned In Progress, QA or AI Review ticket with a merged production PR must print `HOLD`, its full ticket URL, the live-QA/flag/Done next step, and exit 4. Resuming recognized unfinished work remains allowed, even with another open PR or unfinished merged ticket. Done and flag columns do not create completion holds.
+
+Replay `ship-claim.test.sh` for permitted claims and failed, malformed or incomplete reads, including both boards and later pages. Save the actual command output and exit status. A live fleet-cap claim additionally needs twenty-four hours of open-PR counts at or below the configured runner count; a single snapshot is not that proof.
+
 The installed `~/.local/bin/session-policy-guard` runs first, even for a
 read-only plan. It audits active subscription settings and refuses fast or
 router drift before any board read or work delivery. The private company pack
