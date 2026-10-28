@@ -358,6 +358,13 @@ jobs:
           path: .cache/tsc
           key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
 
+      - name: Paid API cost notes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node .github/scripts/paid-api-cost-notes.mjs "$BASE_SHA" "$HEAD_SHA"
+
       - name: Changed style tokens
         if: github.event_name == 'pull_request'
         env:

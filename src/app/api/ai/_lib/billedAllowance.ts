@@ -1,3 +1,4 @@
+import { gatewayReport } from "@/lib/ai/gatewayReport";
 import { randomUUID } from "node:crypto";
 import type { AllowanceDriftContext } from "./sharedAllowance";
 import { getRedis } from "@/lib/redis";
@@ -42,11 +43,7 @@ export async function gatewaySpendBreakdownMicroUsd(
     group_by: "tag",
     tags: `team:${teamId}`,
   });
-  const response = await fetch(`${GATEWAY_BASE_URL}/report?${params}`, {
-    signal,
-    cache: "no-store",
-    headers: { Authorization: `Bearer ${gatewayApiKey}` },
-  });
+  const response = await gatewayReport(gatewayApiKey, params, signal);
   if (!response.ok) {
     throw Object.assign(new Error("AI Gateway allowance report failed"), { status: response.status });
   }
@@ -369,9 +366,7 @@ export async function reserveBilledScopes(args: {
 
 export async function demoGatewaySpendMicroUsd(gatewayApiKey: string, month: { startDate: string; endDate: string }, signal?: AbortSignal) {
   const params = new URLSearchParams({ start_date: month.startDate, end_date: month.endDate, group_by: "day" });
-  const response = await fetch(`${GATEWAY_BASE_URL}/report?${params}`, {
-    signal, cache: "no-store", headers: { Authorization: `Bearer ${gatewayApiKey}` },
-  });
+  const response = await gatewayReport(gatewayApiKey, params, signal);
   if (!response.ok) throw Object.assign(new Error("AI Gateway demo allowance report failed"), { status: response.status });
   const payload = await response.json() as { results?: Array<{ total_cost?: unknown }> };
   if (!Array.isArray(payload.results)) throw new Error("AI Gateway demo allowance report is invalid");

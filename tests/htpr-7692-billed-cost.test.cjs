@@ -23,6 +23,8 @@ const stub = (file, exports) => {
   const filename = fs.realpathSync(path.join(root, file));
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
+stub("src/lib/ai/gatewayReport.ts", { gatewayReport: (apiKey, params, signal) => fetch(`https://ai-gateway.vercel.sh/v1/report?${params}`, { signal, cache: "no-store", headers: { Authorization: `Bearer ${apiKey}` } }) });
+stub("src/lib/ai/dailyGatewaySpend.ts", { checkDailyGatewaySpend: async () => {} });
 stub("src/lib/redis.ts", { getRedis: async () => redis });
 stub("src/lib/flags.ts", { featureFlagCandidateUserIds: async (key) => {
   assert.equal(key, FLAG); return enabled ? restricted ? [6, 985] : null : [];
@@ -300,7 +302,7 @@ for (const backend of ["fake", "real Redis"]) {
       failReport = false; reportHook = null; evalHook = null;
       console.info = (line) => logs.push(JSON.parse(line));
       process.env.DEMO_AI_GATEWAY_API_KEY = "fixture-private-demo-credential";
-      const originalEval = backend === "fake" ? redis.eval.bind(redis) : connection.constructor.prototype.eval.bind(redis);
+      const originalEval = backend === "fake" ? redis.eval.bind(redis) : Object.getPrototypeOf(connection).eval.bind(redis);
       redis.eval = async (script, ...args) => {
         const entry = { script, args }; evals.push(entry);
         if (evalHook) await evalHook(script, ...args);

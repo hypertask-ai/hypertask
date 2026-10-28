@@ -2815,3 +2815,21 @@ test('formatter consumers reject invisible nullish children and unreachable logi
     assert.equal((await evaluate('HTPR-1 [FEATURE] reachable formatter output', base, commit(git, name), dir)).pass, expected, name);
   }
 });
+
+test("new money flags must start Off while existing flags keep their modes", async (t) => {
+  for (const mode of ["OFF", "OWNER_AND_QA", "OWNER_ONLY"]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const existing = "src/lib/flags/definitions/htpr-1-other.ts";
+    writeFile(dir, existing, `export const OTHER_FLAG = "htpr-1-other";
+export default { key: OTHER_FLAG, kind: "bugfix", defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-11", description: "Existing money flag", releaseRisk: { risk: "small", reason: "Existing billing behavior", highRisk: "money" } } as const;`);
+    writeFile(dir, "src/lib/flags/keys.ts", `export { OTHER_FLAG } from "./definitions/htpr-1-other";`);
+    const base = commit(git, "existing money flag");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "bugfix", defaultMode: "${mode}", shippedOn: "2026-10-28", description: "New money flag", releaseRisk: { risk: "small", reason: "Paid reporting", highRisk: "money" } } as const;`);
+    const head = commit(git, "new money flag");
+    const result = await evaluate("HTPR-2 [BUGFIX] money fixture", base, head, dir);
+    assert.equal(result.pass, mode === "OFF", result.reason);
+    if (mode !== "OFF") assert.match(result.reason, /new money flag htpr-2-new must set defaultMode: "OFF"/);
+  }
+});

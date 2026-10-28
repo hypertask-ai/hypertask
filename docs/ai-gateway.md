@@ -255,3 +255,27 @@ team by title, only by teamId or owner email.
 **Business model context:** there is NO free tier. Users get a 14-day trial,
 then must be Premium or BYOK. Trial expiry is currently enforced only by a
 root-route redirect; server-side AI entitlement is HTPR-4130.
+
+## Automatic report budget and daily spend alarm
+
+Automatic allowance reporting shares one rolling-hour Redis reservation across
+the billed snapshot, demo snapshot and hourly drift transports. It is reserved
+before the paid `/v1/report` request, across all workers and credentials. A failed
+request still consumes that hour; unavailable Redis refuses the request. No
+report cache pretends an old response is newly fetched. The existing billed
+snapshot age limit and estimate-accounting fallback are unchanged.
+
+This budget covers automatic reporting only. The existing Settings usage page
+still makes its three explicit, on-demand reports; putting that three-request
+page behind a one-request budget would make it permanently unavailable.
+
+The production allowance cron also reads `/v1/credits` metadata at most hourly,
+even while both allowance flags are Off. Its response follows the installed SDK metadata schema. An
+observed increase above $5 in the UTC day's cumulative used credits creates an
+alert through the existing error-ticket pipeline, with a day-specific dedupe key.
+The initial baseline starts at the first successful daily check, so the first
+partial hour/day is not a complete daily-spend measurement. Top-ups do not mask
+spend because the alarm compares cumulative usage, not remaining balance.
+
+No flag is switched by this work. Verify the no-top-up requirement with actual
+credit history over 24 hours; a test or a single balance snapshot cannot prove it.
