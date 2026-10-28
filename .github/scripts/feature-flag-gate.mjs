@@ -452,28 +452,32 @@ function isLiveCallSite(node, live, allowModuleScope = true) {
   return enclosing ? live.has(enclosing) : allowModuleScope;
 }
 
-function branchIsNullishOrEmpty(node) {
+function branchIsNullishOrEmpty(node, renderOnly = false) {
   if (!node) return true;
   if (typescript.isBlock(node)) {
     if (node.statements.length === 0) return true;
-    if (node.statements.length === 1) return branchIsNullishOrEmpty(node.statements[0]);
+    if (node.statements.length === 1) return branchIsNullishOrEmpty(node.statements[0], renderOnly);
     return false;
   }
-  if (typescript.isReturnStatement(node)) return branchIsNullishOrEmpty(node.expression);
+  if (typescript.isReturnStatement(node)) return branchIsNullishOrEmpty(node.expression, renderOnly);
   const expression = unwrapExpr(node);
   if (!expression) return true;
   if (expression.kind === typescript.SyntaxKind.NullKeyword ||
       expression.kind === typescript.SyntaxKind.UndefinedKeyword ||
       expression.kind === typescript.SyntaxKind.FalseKeyword ||
-      expression.kind === typescript.SyntaxKind.TrueKeyword) {
+      (renderOnly && expression.kind === typescript.SyntaxKind.TrueKeyword)) {
     return true;
   }
   if (typescript.isIdentifier(expression) && expression.text === "undefined") return true;
   if (typescript.isStringLiteral(expression) && expression.text === "") return true;
-  if (typescript.isJsxExpression(expression)) return branchIsNullishOrEmpty(expression.expression);
+  if (typescript.isJsxExpression(expression)) return branchIsNullishOrEmpty(expression.expression, renderOnly);
+  if (renderOnly && typescript.isOmittedExpression(expression)) return true;
+  if (renderOnly && typescript.isArrayLiteralExpression(expression)) {
+    return expression.elements.every((element) => branchIsNullishOrEmpty(element, true));
+  }
   if (typescript.isJsxFragment(expression)) {
     return expression.children.every((child) =>
-      typescript.isJsxText(child) ? child.getText().trim() === "" : branchIsNullishOrEmpty(child));
+      typescript.isJsxText(child) ? child.getText().trim() === "" : branchIsNullishOrEmpty(child, renderOnly));
   }
   return false;
 }
@@ -1051,7 +1055,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
                 !independentParameters.has(item.text)))) repeated = true;
           if (!repeated) typescript.forEachChild(item, visit);
         })(other);
-        if (repeated || (earlyOnly && branchIsNullishOrEmpty(other))) return false;
+        if (repeated || (earlyOnly && branchIsNullishOrEmpty(other, true))) return false;
         const value = staticBoolean(other, true) ?? parameterBoolean(other);
         if (value === undefined) return false;
         if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
@@ -1088,7 +1092,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
       if (!typescript.isReturnStatement(whenTrue) || !whenFalse || !typescript.isReturnStatement(whenFalse) ||
           !whenTrue.expression || !whenFalse.expression ||
           branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression) ||
-          (earlyOnly && branchIsNullishOrEmpty(whenTrue) && branchIsNullishOrEmpty(whenFalse))) return false;
+          (earlyOnly && branchIsNullishOrEmpty(whenTrue, true) && branchIsNullishOrEmpty(whenFalse, true))) return false;
       const a = staticBoolean(whenTrue.expression, true), b = staticBoolean(whenFalse.expression, true);
       return a !== null && b !== null && a !== b;
     }
@@ -1098,7 +1102,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
     if (typescript.isConditionalExpression(parent)) {
       conditionalGuard = true;
       if (child === parent.condition) {
-        if (earlyOnly && branchIsNullishOrEmpty(parent.whenTrue) && branchIsNullishOrEmpty(parent.whenFalse)) return false;
+        if (earlyOnly && branchIsNullishOrEmpty(parent.whenTrue, true) && branchIsNullishOrEmpty(parent.whenFalse, true)) return false;
         const whenTrue = staticBoolean(parent.whenTrue, true);
         const whenFalse = staticBoolean(parent.whenFalse, true);
         if (whenTrue === null || whenFalse === null || whenTrue === whenFalse) return false;
@@ -1162,7 +1166,7 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
     }
     if (item.initializer) visitDefault(item.initializer);
     const independent = independentArguments.has(index) ||
-      (index >= argumentCount && item.initializer && staticBoolean(item.initializer, true) !== null);
+      (index >= argumentCount && (!item.initializer || staticBoolean(item.initializer, true) !== null));
     return independent && typescript.isIdentifier(item.name) && !dependentDefault &&
       !written.has(checker.getSymbolAtLocation(item.name)) ? [item.name.text] : [];
   }));
@@ -1287,7 +1291,8 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
       return resolve(matches[0].initializer, fields.slice(1), false);
     }
     const value = call.arguments[index] ?? defaultValue;
-    return value ? resolve(value, properties) : null;
+    if (!value) return properties.length === 0 ? false : undefined;
+    return resolve(value, properties);
   };
   if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, call.arguments.length, independentArguments, argumentBoolean)) return false;
   const sourceFile = node.getSourceFile();

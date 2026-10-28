@@ -2650,6 +2650,15 @@ test('async server consumers preserve synchronous formatter gates', async (t) =>
 
 test('formatter render coercion and omitted defaults preserve real gates', async (t) => {
   const cases = [
+    ['empty array assigned', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label ? [] : null}</div>;', false],
+    ['empty array direct', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [] : null;', false],
+    ['nested empty array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [[], false, null, <></>] : null;', false],
+    ['sparse empty array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [, , []] : null;', false],
+    ['empty array logical', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label && []}</div>;', false],
+    ['rendered array control', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label ? [<p key="age">Age</p>] : null}</div>;', true],
+    ['omitted optional relative', '../lib/formatter', 'enabled: boolean, ready?: boolean', 'return enabled || ready;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['omitted optional alias', '@/lib/formatter', 'enabled: boolean, ready?: boolean', 'return ready || enabled;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['omitted optional mask', '@/lib/formatter', 'enabled: boolean, ready?: boolean', 'return enabled && ready;', 'return format(enabled) ? <p>Age</p> : null;', false],
     ['boolean coerced conditional', '@/lib/formatter', 'enabled', 'return enabled;', 'return !!(format(enabled) ? <p>Age</p> : null);', false],
     ['negated conditional', '@/lib/formatter', 'enabled', 'return enabled;', 'return !(format(enabled) ? <p>Age</p> : null);', false],
     ['boolean coerced conjunction', '@/lib/formatter', 'enabled', 'return enabled;', 'return !!(format(enabled) && <p>Age</p>);', false],
@@ -2667,5 +2676,18 @@ test('formatter render coercion and omitted defaults preserve real gates', async
     writeFile(dir, 'src/lib/formatter.ts', `export function format(${parameters}) { ${helper} }`);
     writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ${consumer} }`);
     assert.equal((await evaluate('HTPR-1 [FEATURE] formatter rendering', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('server boolean responses remain effective gates', async (t) => {
+  const cases = [
+    ['distinct boolean values', 'enabled ? true : false', true],
+    ['identical boolean values', 'enabled ? true : true', false],
+  ];
+  for (const [name, response, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/components/Widget.tsx', 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+    writeFile(dir, 'src/app/api/widget/route.ts', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `export async function GET() { const enabled = await isFeatureEnabled(OTHER_FLAG, 6); return Response.json(${response}); }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] server boolean gate', base, commit(git, name), dir)).pass, expected, name);
   }
 });

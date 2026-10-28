@@ -51,7 +51,9 @@ Unsupported compound operands fail closed; only constants and proven-independent
 Object parameter defaults referencing another parameter cannot establish independence.
 Empty fragments (including nested fragments) and boolean-only render branches cannot prove visible output.
 Boolean coercion after choosing JSX cannot prove visible output; negating the condition before choosing JSX remains supported.
-Omitted independent constant defaults remain supported for both import styles; masking or correlated defaults remain refused.
+Omitted independent constant defaults and optional parameters remain supported for both import styles; masking or correlated defaults remain refused.
+Empty arrays, nested empty arrays and sparse arrays cannot certify visible output; arrays containing rendered elements remain supported.
+Boolean invisibility applies only to React output; distinct JSON boolean responses remain valid server gates.
 Async server-component consumers of synchronous formatters remain supported; async formatters still cannot prove a truthiness gate.
 Consumed logical and nested conditional JSX render paths pass; discarded or comma-masked JSX fails.
 Save the tested head SHA, hosted run URL and successful group lines.
