@@ -4,6 +4,8 @@ const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
 const { createJiti } = require("jiti");
+const { tmpdir } = require("node:os");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const load = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
@@ -26,10 +28,14 @@ function productionNode(predicate) {
 }
 
 function evaluate(text, bindings) {
-  const js = ts.transpileModule(`const actual = (${text});`, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-  }).outputText;
-  return new Function(...Object.keys(bindings), `${js}; return actual;`)(...Object.values(bindings));
+  const dir = fs.mkdtempSync(path.join(tmpdir(), "triage-boundary-"));
+  const file = path.join(dir, "boundary.ts");
+  try {
+    fs.writeFileSync(file, `const { ${Object.keys(bindings).join(", ")} } = require("triage-bindings"); module.exports = (${text});`);
+    return loadModule(file, { "triage-bindings": bindings });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 const rows = enabled => getAllCommands({ context: "Others", triageInboxEnabled: enabled }).flatMap(group => group.commandLists);
