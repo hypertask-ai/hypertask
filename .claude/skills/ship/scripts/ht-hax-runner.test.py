@@ -221,6 +221,9 @@ exec /bin/sleep 0.01
 """)
         session_ids = set()
         for final_line, cooldown in [
+            ('RUNNER DONE YPER4-1 Done', 30),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done', 30),
+            ('RUNNER DONE YPER4-1 Agent Blocked', 30),
             ('RUNNER DONE YPER4-776 Done', 30),
             ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30),
             ('• RUNNER IDLE no free tickets', 900),
@@ -258,8 +261,14 @@ exec /bin/sleep 0.01
                 self.assertNotIn(session_id, session_ids)
                 session_ids.add(session_id)
                 self.assertIn('recovery drain 8', events)
-                self.assertIn('recovery ack 8 YPER4-1', events)
-                self.assertLess(events.index('final-phase'), events.index('recovery ack 8 YPER4-1'))
+                if final_line in [
+                    'RUNNER DONE YPER4-1 Done',
+                    'RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done',
+                ]:
+                    self.assertIn('recovery ack 8 YPER4-1', events)
+                    self.assertLess(events.index('final-phase'), events.index('recovery ack 8 YPER4-1'))
+                else:
+                    self.assertNotIn('recovery ack 8 YPER4-1', events)
                 self.assertIn('Recovery: Resume YPER4-1: stale freeze block cleared', (self.home / 'brief').read_text())
                 self.assertLess(events.index('recovery drain 8'), events.index('brief'))
                 self.assertLess(events.index('brief'), events.index('submitted'))

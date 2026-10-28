@@ -222,8 +222,9 @@ the intent without a move. A ready handoff stays durable until the keeper sees
 the launched session complete and acknowledges that exact ticket; failed startup
 and timeout do not acknowledge it. Recovery accepts only an
 unambiguous freeze-only or GitHub-limit-only block, never mixed failures.
-Fresh blocks, explicit blocker comments, questions, human blocks and unrelated
-failures remain untouched. Incomplete reads cannot authorize a clear.
+The blocked-section entry must also predate the lift; unknown entry age
+refuses recovery. Fresh blocks, explicit blocker comments, questions, human
+blocks and unrelated failures remain untouched. Incomplete reads cannot authorize a clear.
 Install the merged pickup version before the keeper version; existing runner
 processes are not restarted. Targeted offline recovery fixtures run as
 `runner-pickup.recovery.test.py` in `ship-scripts-tests`.

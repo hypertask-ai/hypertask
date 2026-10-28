@@ -20,6 +20,7 @@ class RecoveryTests(unittest.TestCase):
             'section': 'Agent Blocked', 'title': 'Fixture',
             'sectionId': 20, 'status': 'Normal', 'blockerCommentId': None, 'createdAt': '2026-10-27T10:00:00Z',
             'updatedAt': '2026-10-28T10:00:00.000Z',
+            'staleness': {'sectionChangedAt': '2026-10-27T10:00:00.000Z'},
             'assignees': [{'agent': {'displayName': 'Runner 6'}}],
         }]}
         self.comments = {'success': True, 'comments': [{
@@ -130,6 +131,21 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
                 result = self.run_command('drain', '6')
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout, '')
+        self.assertFalse(any(c[:2] == ['raw', 'POST'] for c in self.calls()))
+
+    def test_new_blocked_entry_and_missing_section_age_are_preserved(self):
+        for staleness in [
+            {'sectionChangedAt': '2026-10-28T12:00:00.000Z'},
+            {'sectionChangedAt': '2026-10-28T11:00:00.000Z'},
+            {'sectionChangedAt': None}, {},
+        ]:
+            with self.subTest(staleness=staleness):
+                self.tasks['tasks'][0]['staleness'] = staleness
+                result = self.run_command('drain', '6')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, '')
+                self.assertEqual(self.run_command('run', '6').returncode, 0)
+                self.assertEqual(json.loads((self.state / 'runner-6.json').read_text())['items'], [])
         self.assertFalse(any(c[:2] == ['raw', 'POST'] for c in self.calls()))
 
     def test_missing_invalid_future_epoch_and_partial_reads_never_clear(self):

@@ -254,11 +254,13 @@ recover_blocks() {
     finish_recovery "$n" "$pending"
     return $?
   fi
-  candidates=$(jq -r --arg name "Runner $n" '.tasks[]
+  candidates=$(jq -r --arg name "Runner $n" --argjson lift "$lift" '.tasks[]
     | select(.projectId == 15 or .projectId == 4060)
     | select(any(.assignees[]?; .agent.displayName == $name))
     | select(.section | test("^(Agent Blocked( \\(Infra\\))?|Blocked)$"))
     | select(.blockerCommentId == null)
+    | select(((.staleness.sectionChangedAt // .sectionChangedAt // "")
+      | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601?) < $lift)
     | .ticketNumber' <<<"$resp") || return 1
   while IFS= read -r ticket; do
     [ -n "$ticket" ] || continue

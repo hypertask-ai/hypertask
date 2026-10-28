@@ -126,7 +126,7 @@ case "${1:-}" in
         result=TIMEOUT
         for _ in $(seq 1 480); do
           sleep 30
-          if completed=$(python3 - "$$" "$REPO" <<'PYTHON'
+          if completed=$(python3 - "$$" "$REPO" "$recovery_ticket" <<'PYTHON'
 import json
 import os
 from pathlib import Path
@@ -156,16 +156,23 @@ try:
                         last = item
                 if tail and tail.get('kind') == 'turn_usage' and last and last.get('kind') == 'assistant' and not last.get('origin'):
                     final = last.get('text', '').strip().splitlines()
-                    if final and re.fullmatch(r'(?:[•*-] )?RUNNER (?:DONE (?:(?:HTPR|YPER4|HYFA)-[0-9]+|https://\S+) .+|IDLE .+)', final[-1]):
-                        print('IDLE' if 'RUNNER IDLE ' in final[-1] else 'DONE')
+                    match = re.fullmatch(r'(?:[•*-] )?RUNNER (?:DONE (?P<ticket>(?:HTPR|YPER4|HYFA)-[0-9]+|https://\S+) (?P<state>.+)|IDLE .+)', final[-1]) if final else None
+                    if match:
+                        ticket = sys.argv[3]
+                        project = {'HTPR': '15', 'YPER4': '4060'}.get(ticket.split('-')[0])
+                        url = f'https://app.hypertask.ai/detail/project-{project}/{ticket.split("-")[-1]}'
+                        if ticket and match['ticket'] in (ticket, url) and match['state'] == 'Done':
+                            print('DONE_MATCH')
+                        else:
+                            print('IDLE' if match['ticket'] is None else 'DONE')
                         sys.exit(0)
 except (OSError, ValueError, StopIteration):
     pass
 sys.exit(1)
 PYTHON
           ); then
-            result=$completed
-            if [ -n "$recovery_brief" ]; then
+            result=${completed%_MATCH}
+            if [ "$completed" = DONE_MATCH ]; then
               "$recovery" ack "$n" "$recovery_ticket" || log "RUNNER $n: recovery acknowledgement failed"
             fi
             break

@@ -80,6 +80,9 @@ Offline: `python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py`
 exercises missing epochs, fresh/human/decision blocks, complete pagination,
 one-ticket recovery, pickup invalidation, failed moves, failed-readback replay,
 conditional-write races, reassignment, mixed blockers and repeat drains.
+A newer blocked-section entry without a new comment must remain blocked.
+Keeper completion must name the recovered ticket and Done state; IDLE,
+unrelated completion and blocked completion retain its handoff.
 The dispatch path is `vcc raw POST /mcp/tasks/update` → MCP section update →
 `/api/tasks/moveTask` → `updateTaskSingle` with section/revision preconditions.
 A post-read concurrent hold must return 409 and remain untouched.
