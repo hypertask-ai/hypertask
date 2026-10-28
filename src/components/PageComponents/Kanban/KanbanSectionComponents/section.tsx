@@ -1,3 +1,4 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 
@@ -40,6 +41,7 @@ import {
   TBoardSubtaskSetting,
 } from "@/models/Views/model";
 import { CommandMode } from "@/models/enums";
+import { getManageColumnRows } from "@/components/Modals/commands/manageColumnTaskCounts";
 import ProgressiveTaskPlaceholder from "../KanbanTaskComponents/ProgressiveTaskPlaceholder";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import {
@@ -122,6 +124,7 @@ export const Section = ({
   const [loadedTask] = useState(() => (seeded || !hydrated ? null : firstDrawTask));
   const TaskRenderer = seeded ? SeededTask : loadedTask?.default ?? Task;
   const currentProject = project;
+  const workLimits = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
   const setActiveSection = useSetRecoilState(activeSectionAtom);
@@ -460,6 +463,8 @@ export const Section = ({
             >
               <TitleAndTasks
                 itemLen={section.items?.length ?? 0}
+                wipLimit={workLimits ? section.wipLimit : null}
+                wipCount={!workLimits || section.wipLimit == null ? 0 : getManageColumnRows([section], currentProject.tasks)[0].taskCount}
                 title={section.section_title}
                 id={section.sectionId!}
               />
@@ -612,10 +617,14 @@ export const Section = ({
 
 const TitleAndTasks = ({
   itemLen,
+  wipLimit,
+  wipCount,
   title,
   id,
 }: {
   itemLen: number;
+  wipLimit?: number | null;
+  wipCount: number;
   title: string;
   id: number;
 }) => {
@@ -633,8 +642,12 @@ const TitleAndTasks = ({
         >
           {title}
         </p>
-        <p className="kanban-column-count text-meta font-medium self-center text-text-light-gray mt-[2px]">
-          {itemLen > 0 ? itemLen : null}
+        <p
+          className={`kanban-column-count text-meta font-medium self-center mt-[2px] ${wipLimit != null && wipCount > wipLimit ? "!text-destructive" : "text-text-light-gray"}`}
+          title={wipLimit == null ? undefined : `${wipCount} active tasks; limit ${wipLimit}${wipCount > wipLimit ? "; over limit" : ""}`}
+          aria-label={wipLimit == null ? undefined : `${wipCount} active tasks; limit ${wipLimit}${wipCount > wipLimit ? "; over limit" : ""}`}
+        >
+          {wipLimit == null ? (itemLen > 0 ? itemLen : null) : `${wipCount} / ${wipLimit}`}
         </p>
       </div>
     </>

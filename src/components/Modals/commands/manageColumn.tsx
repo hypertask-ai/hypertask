@@ -1,3 +1,4 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
@@ -51,6 +52,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void }) => {
   const queryClient = useQueryClient();
+  const workLimits = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   const lastColumnDeleteMessage = useFlag(HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG);
   const noEmptyBoardFlash = useFlag(HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG);
   const isMobile = useContext(MobileViewContext);
@@ -63,6 +65,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   const [editMode, setEditMode] = useState<boolean>(false);
   const [editSection, setEditSection] = useState<ISection | null>(null);
   const [ticketsFinished, setTicketsFinished] = useState(false);
+  const [wipLimitDraft, setWipLimitDraft] = useState("");
   const [deleteModal, setDeleteModal] = useState<boolean>(false);
   const [assignOpen, setAssignOpen] = useState<boolean>(false);
   const currentUser = useRecoilValue(currentUserAtom);
@@ -224,12 +227,12 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     section: ISection,
     saveMode?: string,
     updatedRank?: string,
-    overrides?: { section_title?: string; isDone?: boolean },
+    overrides?: { section_title?: string; isDone?: boolean; wipLimit?: number | null },
     rollbackDelete?: () => void
   ) => {
     try {
       var updatedSections = [...sections];
-      if (!section || (updating && !rollbackDelete)) return;
+      if (!section || (updating && !rollbackDelete && saveMode !== "RENAME" && saveMode !== "LIMIT")) return;
       if (saveMode === "DELETE" && noEmptyBoardFlash && refuseLastColumnDelete(
         section,
         queryClient.getQueryData<IProjectsAll>(["projectsAll"])
@@ -253,6 +256,13 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         ];
         queryClient.setQueryData(queryKey, updatedSections);
         return queryClient.refetchQueries({ queryKey: ["projectsAll"] });
+      } else if (saveMode === "LIMIT") {
+        const wipLimit = overrides?.wipLimit ?? null;
+        sendUpdateSection = { ...section, wipLimit };
+        await writeSection({
+          sectionId: section.id,
+          newSection: { wipLimit },
+        });
       } else if (saveMode === "RENAME") {
         const nextTitle = overrides?.section_title ?? title;
         const nextIsDone = overrides?.isDone ?? ticketsFinished;
@@ -272,13 +282,24 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       } else {
         sendUpdateSection = { ...section, visibility: !section.visibility };
       }
-      updatedSections = updateSection(sections, sendUpdateSection, "Others");
-      updateCache(updatedSections, saveMode !== "RENAME");
-      if (saveMode === "RENAME" && currentProject) {
+      let patch: Partial<ISection> = sendUpdateSection;
+      if (saveMode === "LIMIT") patch = { wipLimit: sendUpdateSection.wipLimit };
+      else if (saveMode === "RENAME") {
+        patch = { section_title: sendUpdateSection.section_title, isDone: sendUpdateSection.isDone };
+      }
+      const latestSections: ISection[] = queryClient.getQueryData<ISection[]>([
+        globalConstants.GetAllManageColumnsPrefixKey,
+        currentProject?.id,
+        currentUser.id,
+      ]) ?? sections;
+      const latestSection = latestSections.find((candidate) => candidate.id === section.id) ?? section;
+      updatedSections = updateSection(latestSections, { ...latestSection, ...patch }, "Others");
+      updateCache(updatedSections, saveMode !== "RENAME" && saveMode !== "LIMIT");
+      if ((saveMode === "RENAME" || saveMode === "LIMIT") && currentProject) {
         const updateSections = (projectSections?: ISection[]) =>
           projectSections?.map((candidate) =>
             (candidate.id ?? candidate.sectionId) === section.id
-              ? { ...candidate, ...sendUpdateSection }
+              ? { ...candidate, ...patch }
               : candidate
           );
         const updateProject = (project: IProject) =>
@@ -292,7 +313,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
               }
             : project;
 
-        setCurrentProject(updateProject(currentProject));
+        setCurrentProject((project) => project ? updateProject(project) : project);
         queryClient.setQueryData<IProjectsAll>(["projectsAll"], (cached) =>
           cached
             ? {
@@ -305,7 +326,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           cached?.map(updateProject)
         );
         setEditSection((prev) =>
-          prev && prev.id === section.id ? { ...prev, ...sendUpdateSection } : prev
+          prev && prev.id === section.id ? { ...prev, ...patch } : prev
         );
         void queryClient.invalidateQueries({ queryKey: ["projectsAllMinimal"] });
       }
@@ -321,6 +342,8 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         typeof error.response.data.message === "string"
       ) {
         toast.error(error.response.data.message);
+      } else if (saveMode === "LIMIT") {
+        toast.error("Column limit could not be saved");
       } else if (rollbackDelete) {
         toast.error("Column could not be deleted");
       }
@@ -406,6 +429,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   const openEditView = (section: ISection) => {
     toggleEdit(section);
     setTitle(section.section_title);
+    setWipLimitDraft(section.wipLimit == null ? "" : String(section.wipLimit));
     setTicketsFinished(
       section.isDone ?? isDoneByName(section.section_title)
     );
@@ -423,6 +447,25 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     void queueSave(() =>
       handleSectionUpdateVis(editSection, "RENAME", undefined, { isDone: next })
     );
+  };
+
+  const saveWipLimit = () => {
+    if (!editSection) return;
+    const wipLimit = wipLimitDraft.trim() === "" ? null : Number(wipLimitDraft);
+    if (wipLimit !== null && (!Number.isInteger(wipLimit) || wipLimit <= 0 || wipLimit > 2147483647)) {
+      setWipLimitDraft(editSection.wipLimit == null ? "" : String(editSection.wipLimit));
+      toast.error("Work limit must be a positive whole number");
+      return;
+    }
+    void queueSave(async () => {
+      const latestSection = queryClient.getQueryData<ISection[]>([
+        globalConstants.GetAllManageColumnsPrefixKey,
+        currentProject?.id,
+        currentUser.id,
+      ])?.find((section) => section.id === editSection.id) ?? editSection;
+      if (wipLimit === (latestSection.wipLimit ?? null)) return;
+      await handleSectionUpdateVis(latestSection, "LIMIT", undefined, { wipLimit });
+    });
   };
 
   const saveTitleOnBlur = () => {
@@ -782,7 +825,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
               >
                 {(provided) => (
                   <div {...provided.droppableProps} ref={provided.innerRef}>
-                    {columnRows.map(({ section, taskCount }, _index) => (
+                    {columnRows.map(({ section, taskCount, overLimit }, _index) => (
                         <Draggable
                           key={`section-${_index}`}
                           draggableId={`section-${_index}`}
@@ -804,9 +847,10 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                                   aria-label={`${taskCount} ${
                                     taskCount === 1 ? "task" : "tasks"
                                   }`}
-                                  className="manage-column-task-count shrink-0 text-meta font-medium tabular-nums text-text-light-gray"
+                                  className={`manage-column-task-count shrink-0 text-meta font-medium tabular-nums ${workLimits && overLimit ? "text-destructive" : "text-text-light-gray"}`}
+                                  title={!workLimits || section.wipLimit == null ? undefined : `${taskCount} active tasks; limit ${section.wipLimit}${overLimit ? "; over limit" : ""}`}
                                 >
-                                  {taskCount}
+                                  {taskCount}{!workLimits || section.wipLimit == null ? "" : ` / ${section.wipLimit}`}
                                 </span>
                               </div>
                               <div className="flex shrink-0 gap-4 items-center">
@@ -866,6 +910,28 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                 }}
               />
             </div>
+
+            {workLimits && <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
+              <label htmlFor="edit-column-wip-limit" className="shrink-0 text-dense font-semibold text-white-black">
+                Work limit
+              </label>
+              <input
+                id="edit-column-wip-limit"
+                className="h-8 w-20 border-0 bg-transparent px-2 text-right text-dense font-medium text-white-black outline-none placeholder:text-text-light-gray focus:bg-active-modal-element"
+                type="number"
+                min={1}
+                max={2147483647}
+                step={1}
+                placeholder="No limit"
+                value={wipLimitDraft}
+                disabled={updating}
+                onChange={(event) => setWipLimitDraft(event.target.value)}
+                onBlur={saveWipLimit}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+              />
+            </div>}
 
             <div className="border-b border-light-black-border-1 px-2 py-1">
               <SettingsToggle

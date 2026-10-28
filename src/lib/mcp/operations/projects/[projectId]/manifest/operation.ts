@@ -1,3 +1,5 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
+import { isFeatureEnabled } from "@/lib/flags";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -59,6 +61,7 @@ export async function GET(
             section_title: true,
             isDone: true,
             ranking: true,
+            wipLimit: true,
           },
           orderBy: {
             ranking: 'asc',
@@ -77,6 +80,7 @@ export async function GET(
       )
     }
 
+    const workLimits = await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, ctx.user.id);
     return NextResponse.json({
       success: true,
       projectId: project.id,
@@ -89,7 +93,7 @@ export async function GET(
         title: section.section_title,
         position: section.ranking,
         role: columnRoleFor(section),
-        wipLimit: null,
+        wipLimit: workLimits ? section.wipLimit : null,
       })),
       transitions: 'any',
     })

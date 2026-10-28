@@ -131,7 +131,7 @@ test("the Kanban age line includes time on board before column age", () => {
   );
 });
 
-test("the Kanban age line stays hidden for fresh tasks", () => {
+test("the Kanban age line shows time in column for fresh tasks", () => {
   const s = taskStaleness({
     createdAt: daysAgo(3),
     sectionChangedAt: daysAgo(1),
@@ -141,8 +141,8 @@ test("the Kanban age line stays hidden for fresh tasks", () => {
     formatKanbanStalenessLine({
       ...s,
       commentLevel: stalenessLevel(s.daysSinceLastComment),
-    }),
-    null,
+    }, true),
+    "3d on board · 1d in column",
   );
 });
 

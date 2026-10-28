@@ -72,6 +72,7 @@ export function extraMinimalProjectInclude(
         isDone: true,
         autoAssignUserId: true,
         autoAssignAgentId: true,
+        wipLimit: true,
       },
     },
   };
@@ -142,6 +143,7 @@ const getAllMinimal = async (
               isDone: true,
               autoAssignUserId: true,
               autoAssignAgentId: true,
+              wipLimit: true,
             },
             where: { deleted: false },
             orderBy: { ranking: "asc" },

@@ -278,7 +278,7 @@ export const getCurrentProject = (_currentProject:IProject) => {
          
 
           if (itemsToSort.length>0 && focusontask===null) focusontask=itemsToSort[0];
-            _sections.push({ section_title: section.section_title,sectionId:section.id, visibility:section.visibility?section.visibility:true, items: itemsToSort, id: section.id })
+            _sections.push({ wipLimit: section.wipLimit, section_title: section.section_title,sectionId:section.id, visibility:section.visibility?section.visibility:true, items: itemsToSort, id: section.id })
           }
         }
         return {_sections: _sections, firstTask:focusontask}

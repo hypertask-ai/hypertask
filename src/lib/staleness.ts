@@ -45,8 +45,9 @@ export function formatKanbanStalenessLine(
     TaskStaleness,
     "daysOnBoard" | "daysInColumn" | "daysSinceLastComment" | "level"
   > & { commentLevel: StalenessLevel },
+  showFresh = false,
 ): string | null {
-  if (staleness.level === "none" || staleness.daysInColumn === null) {
+  if ((!showFresh && staleness.level === "none") || staleness.daysInColumn === null) {
     return null;
   }
 

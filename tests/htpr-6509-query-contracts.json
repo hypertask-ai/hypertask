@@ -559,7 +559,8 @@
             "ranking": null,
             "isDone": null,
             "autoAssignUserId": null,
-            "autoAssignAgentId": null
+            "autoAssignAgentId": null,
+            "wipLimit": null
           }
         ],
         "owner": {

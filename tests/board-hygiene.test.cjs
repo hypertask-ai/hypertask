@@ -62,7 +62,7 @@ test("board scope is checked before counts, only public views are loaded, and th
   const project = {
     id: 15,
     section: [
-      { id: 1, section_title: "Todo", isDone: null },
+      { id: 1, section_title: "Todo", isDone: null, wipLimit: 4 },
       { id: 2, section_title: "Done", isDone: null },
       { id: 3, section_title: "Released", isDone: true },
       { id: 4, section_title: "Done", isDone: false },
@@ -71,7 +71,9 @@ test("board scope is checked before counts, only public views are loaded, and th
     project_view: { allViews: [] },
   };
   let accessible = true;
+  let workLimits = true;
   const { getBoardHygiene } = load("src/utils/controllers/projects/hygiene.ts", {
+    "@/lib/flags": { isFeatureEnabled: async () => workLimits },
     "@/lib/prisma": { default: {
       project: { findFirst: async args => { calls.push(args); return accessible ? project : null; } },
       task: { count: async args => { calls.push(args); return 10; }, groupBy: async args => [{ sectionId: 1, _count: { _all: args.where.updatedAt ? 3 : 10 } }] },
@@ -80,7 +82,7 @@ test("board scope is checked before counts, only public views are loaded, and th
   });
   const report = await getBoardHygiene(15, 985, "agent-id", scope);
   assert.equal(report.untaggedOpenTickets, 10);
-  assert.deepEqual(report.columns[0], { id: 1, title: "Todo", openTickets: 10, staleTickets: 3, wipLimit: null, overLimit: null });
+  assert.deepEqual(report.columns[0], { id: 1, title: "Todo", openTickets: 10, staleTickets: 3, wipLimit: 4, overLimit: 6 });
   assert.deepEqual(report.titleCaseChanges, [{ id: "a", name: "alpha", suggestedName: "Alpha" }]);
   assert.deepEqual(calls[0].where, { id: 15, status: "Normal", ownerId: 985 });
   assert.deepEqual(calls[0].select.project_view.select.allViews.where, { visibility: "Public" });
@@ -88,6 +90,8 @@ test("board scope is checked before counts, only public views are loaded, and th
   assert.deepEqual(calls[0].select.section.orderBy, { ranking: "asc" });
   assert.deepEqual(calls[0].select.labels.select._count.select.task.where, { task: { status: "Normal" } });
   assert.deepEqual(calls[1].where, { projectId: 15, status: "Normal", OR: [{ sectionId: { in: [1, 4] } }, { sectionId: null }], taskLabels: { none: {} } });
+  workLimits = false;
+  assert.deepEqual((await getBoardHygiene(15, 985, "agent-id", scope)).columns[0], { id: 1, title: "Todo", openTickets: 10, staleTickets: 3, wipLimit: null, overLimit: null });
   accessible = false;
   calls.length = 0;
   assert.equal(await getBoardHygiene(15, 985, "agent-id", scope), null);
@@ -116,6 +120,7 @@ test("manifest report is opt-in and retains existing board access checks", async
   let accessible = true;
   let reportReads = 0;
   const { GET } = load("src/lib/mcp/operations/projects/[projectId]/manifest/operation.ts", {
+    "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/lib/mcp/routeWrapper": { wrapMcpRoute: handler => handler, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => auth },
     "@/lib/prisma": { default: { project: { findFirst: async () => accessible ? { id: 15, title: "Board", section: [] } : null } } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({ ownerId: 985 }) },

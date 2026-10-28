@@ -1,6 +1,9 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
+import { isFeatureEnabled } from '@/lib/flags'
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
+import { wipLimitSchema } from '@/lib/api/contracts/sectionWrites'
 import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notifications/agentFirstTaskEmail'
 import { enqueueAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
 import { getProjectWhere, savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -105,6 +108,7 @@ export interface UpdateSectionInput {
   deleted?: boolean
   visibility?: boolean
   isDone?: boolean | null
+  wipLimit?: number | null
   autoAssignUserId?: number | null
   autoAssignAgentId?: string | null
   moveAfterSectionId?: number
@@ -115,7 +119,7 @@ export interface UpdateSectionInput {
 }
 
 export type UpdateSectionResult =
-  | { status: 200 | 204; json: { id: number; section_title: string; projectId: number; visibility: boolean; deleted: boolean; ranking: string; isDone: boolean | null; autoAssignUserId: number | null; autoAssignAgentId: string | null } }
+  | { status: 200 | 204; json: { id: number; section_title: string; projectId: number; visibility: boolean; deleted: boolean; ranking: string; isDone: boolean | null; wipLimit: number | null; autoAssignUserId: number | null; autoAssignAgentId: string | null } }
   | { status: 400 | 403 | 404 | 500; json: { message: string } | unknown }
 
 async function canAccessProject(
@@ -137,7 +141,11 @@ async function canAccessProject(
 }
 
 export async function updateSection(input: UpdateSectionInput): Promise<UpdateSectionResult> {
-  const { sectionId, section_title, ranking, deleted, visibility, isDone, autoAssignUserId, autoAssignAgentId, moveAfterSectionId, projectId, userId, agentId, teamScope } = input
+  const { sectionId, section_title, ranking, deleted, visibility, isDone, wipLimit, autoAssignUserId, autoAssignAgentId, moveAfterSectionId, projectId, userId, agentId, teamScope } = input
+
+  if (!wipLimitSchema.optional().safeParse(wipLimit).success) {
+    return { status: 400, json: { message: "Work limit must be a positive whole number or null" } }
+  }
 
   try {
     const existing = await prisma.section.findUnique({
@@ -157,6 +165,10 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
     const hasAccess = await canAccessProject(existing.projectId, userId, agentId, teamScope)
     if (!hasAccess) {
       return { status: 403, json: { message: 'User does not have permission to update this section' } }
+    }
+
+    if (wipLimit !== undefined && wipLimit !== existing.wipLimit && !(await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, userId))) {
+      return { status: 403, json: { message: 'Column work limits are not enabled' } }
     }
 
     let resolvedRanking = ranking
@@ -185,6 +197,7 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
           ...(deleted != null && { deleted }),
           ...(visibility != null && { visibility }),
           ...(isDone !== undefined && { isDone }),
+          ...(wipLimit !== undefined && { wipLimit }),
           ...(autoAssignUserId !== undefined && { autoAssignUserId }),
           ...(autoAssignAgentId !== undefined && { autoAssignAgentId })
         }
@@ -238,6 +251,7 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
         deleted: toUpdate.deleted,
         ranking: toUpdate.ranking,
         isDone: toUpdate.isDone,
+        wipLimit: toUpdate.wipLimit,
         autoAssignUserId: toUpdate.autoAssignUserId,
         autoAssignAgentId: toUpdate.autoAssignAgentId
       }
