@@ -280,7 +280,9 @@ feature_flag_gate:
   parser_path_env: FEATURE_FLAG_TYPESCRIPT_PATH
   missing_parser_exit_code: 2
   required_for_ui_changes: true
-  api_only_changes: outside_ui_gate_scope
+  server_change_paths: [src/lib/mcp, src/lib/mcp-server, src/lib/api, src/app/api, src/pages/api, src/utils/controllers]
+  server_gate: changed_ticket_specific_isFeatureEnabled_controlling_runtime_behavior
+  server_owner_review_routing: feature-gated-ui
   owner_merge_for_flagged_ui: true
   owner_merge_for_exempt_ui: true
   exemptions: [BUGFIX, INFRA, AI_CHAT, verified_auto_revert, REFACTOR]
