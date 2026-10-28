@@ -153,6 +153,24 @@ jobs:
           path: node_modules
           key: ${{ steps.restore-node-modules.outputs.cache-primary-key }}
 
+      - name: Stress cold-board query fixtures
+        if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/changed-files.txt"
+          if ! grep -Eq '^tests/(htpr-7305-board-from-text|htpr-7652-ctrlj-enter-queue|compose-task-palette|search-board-loading)\.test\.cjs$' "$RUNNER_TEMP/changed-files.txt"; then
+            echo "Cold-board fixtures unchanged; no stress run needed."
+            exit 0
+          fi
+          npm run flags:generate
+          for iteration in {1..50}; do
+            echo "Cold-board fixture stress $iteration/50"
+            node --test --test-concurrency=1 tests/htpr-7305-board-from-text.test.cjs tests/htpr-7652-ctrlj-enter-queue.test.cjs tests/search-board-loading.test.cjs
+          done
+          echo "Cold-board fixture stress: 50/50 passed"
+
       # Every PR body claims "npm test N passed" and nothing checked it, so a
       # broken suite sat green on production for days (HTPR-5161).
       # HT_REQUIRE_PG_TESTS turns the real-PostgreSQL suites' "docker missing"

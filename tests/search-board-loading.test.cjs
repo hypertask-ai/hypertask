@@ -3,7 +3,7 @@ const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
 const { JSDOM } = require("jsdom");
-const { QueryClient, QueryClientProvider, useQuery } = require("@tanstack/react-query");
+const { QueryClient, QueryClientProvider, useQuery, notifyManager, defaultScheduler } = require("@tanstack/react-query");
 
 const root = path.resolve(__dirname, "..");
 
@@ -16,7 +16,10 @@ for (const scenario of [
   { name: "boards query fails", width: 1440, error: true },
   { name: "newer submission while waiting", width: 390, newer: true },
 ]) {
-  test(`early Enter waits for boards: ${scenario.name}`, async () => {
+  test(`early Enter waits for boards: ${scenario.name}`, async (t) => {
+    const notifications = [];
+    notifyManager.setScheduler((callback) => notifications.push(callback));
+    t.after(() => notifyManager.setScheduler(defaultScheduler));
     const dom = new JSDOM('<div id="root"></div>', { url: "https://example.test/search" });
     Object.defineProperty(dom.window, "innerWidth", { value: scenario.width });
     const globals = ["window", "document", "navigator", "HTMLElement", "localStorage", "IS_REACT_ACT_ENVIRONMENT"];
@@ -97,8 +100,8 @@ for (const scenario of [
       await React.act(async () => {
         if (scenario.error) rejectBoards(new Error("Boards unavailable"));
         else resolveBoards(scenario.empty ? [] : projects);
-        await boardsPromise.catch(() => {});
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await client.refetchQueries({ queryKey: ["projectsAllMinimal"] }, { cancelRefetch: false });
+        for (const notify of notifications.splice(0)) notify();
       });
       if (scenario.empty || scenario.error) {
         assert.equal(requests.length, 0, "no boards or failed loading must not send an invalid request");
