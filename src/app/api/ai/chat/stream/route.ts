@@ -1,3 +1,5 @@
+import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
+import { hydrateChatTicketMessages } from "@/lib/ai/chatStream/ticketGroups";
 import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { loadTurnModel } from "@/lib/ai/chatStream/turnModel";
 import { createChatStream } from "@/lib/ai/chatStream/stream";
@@ -152,11 +154,15 @@ export async function POST(request: NextRequest) {
         );
       }
       if (replay.status === "completed") {
+        const hydrated = await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id)
+          ? await hydrateChatTicketMessages({ id: body.session_id, messages: [replay] }, dbUser.id, true)
+          : { messages: [{ content: replay.content }] };
         return new Response(
           sseFrame("content", { content: replay.content }) +
           sseFrame("done", {
             status: "complete",
             replayed: true,
+            ...("ticketGroups" in hydrated.messages[0] ? { ticketGroups: hydrated.messages[0].ticketGroups } : {}),
             user_message_persisted: userMessagePersisted,
             assistant_persisted: true,
           }),

@@ -13,3 +13,6 @@ Ticket: https://app.hypertask.ai/detail/project-15/6971
 ## Skills from ticket comments
 
 With `htpr-7800-skill-runs-in-sidebar` on (Everyone by default), picking a slash skill in a new or edited ticket comment opens the existing AI chat sidebar, docked on desktop, and runs it in a fresh conversation. The run includes the current comment draft and the ticket description and existing comments; the result appears in chat, without posting or replacing the comment draft. Turning the flag off restores the previous skill writer window.
+## Ticket rows in answers
+
+With `htpr-7683-ai-chat-ticket-rows` enabled (Everyone by default), ticket answers can show compact rows grouped under headings such as Done or New. Each row opens the ticket and shows its current status, assignee avatars and priority. Five rows appear per group; choose “+N more” to see the rest. Reopened conversations refresh the rows and omit tickets you can no longer access. Turning the flag off keeps the existing text-only answers.

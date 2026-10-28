@@ -123,9 +123,11 @@ test("Board and Table wire blocker chips into the title and blocked-card paths",
   assert.match(boardTaskTagsSource, /task\.blockingTasks\?\.map/);
   assert.match(boardTaskTagsSource, /<BlockerTaskChip/);
   assert.match(boardTaskCardSource, /task\.blockingTasks\?\.length/);
-  assert.match(tableTitleCell, /task\.blockingTasks\?\.map/);
-  assert.match(tableTitleCell, /<BlockerTaskChip/);
-  assert.match(tableTitleCell, /overflow-hidden/);
+  assert.match(tableTitleCell, /<TableTitleCell [^>]*task=\{task\}/);
+  const sharedTitleCell = boardTableSource.slice(boardTableSource.indexOf("export function TableTitleCell"), boardTableSource.indexOf("export function TableStatusCell"));
+  assert.match(sharedTitleCell, /task\.blockingTasks\?\.map/);
+  assert.match(sharedTitleCell, /<BlockerTaskChip/);
+  assert.match(sharedTitleCell, /overflow-hidden/);
 });
 
 test("Board/Table label projection keeps every rendered label field", () => {
