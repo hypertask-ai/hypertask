@@ -207,6 +207,28 @@ test("board keys, other inputs, other windows, composition, repeats, phone and r
   }
 });
 
+for (const surface of ["fullscreen", "sidebar", "floating"]) {
+  for (const outcome of ["success", "failure", "superseded"]) {
+    test(`${surface}: ${outcome} creation never reclaims workspace focus`, async () => {
+      const f = fixture(surface);
+      try {
+        let resolve, reject;
+        f.context.startNewSession = () => new Promise((done, fail) => { resolve = done; reject = fail; });
+        f.press("o", { ctrlKey: true, shiftKey: true });
+        await new Promise((done) => setImmediate(done));
+        const board = document.getElementById("board");
+        board.focus();
+        if (outcome === "failure") reject(new Error("Unavailable"));
+        else resolve(outcome === "success" ? { id: "new" } : undefined);
+        await new Promise((done) => setImmediate(done));
+        f.flush();
+        assert.equal(document.activeElement === board, true, "completion must leave workspace focus untouched");
+        assert.equal(f.actions.includes("Couldn’t start a new chat. Try again."), outcome === "failure");
+      } finally { f.close(); }
+    });
+  }
+}
+
 test("session navigation respects order and boundaries without wrapping", () => {
   assert.equal(registry.adjacentChatSession(["a", "b"], "b", "next"), undefined);
   assert.equal(registry.adjacentChatSession(["a", "b"], "a", "previous"), undefined);

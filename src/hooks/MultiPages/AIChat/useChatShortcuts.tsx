@@ -63,11 +63,11 @@ export function useChatShortcuts(options: {
         if (starting.current) return true;
         starting.current = true;
         chat.restoreChat();
+        focusComposer();
         void Promise.resolve().then(() => (options.onNewChat ?? chat.startNewSession)()).catch(() => {
           toast.error("Couldn’t start a new chat. Try again.");
         }).finally(() => {
           starting.current = false;
-          focusComposer();
         });
         return true;
       case "next":
