@@ -9,7 +9,7 @@ import { createContext, FC, ReactNode, useContext } from "react";
 import toast from "react-hot-toast";
 import { useRecoilState } from "@/lib/state";
 
-const CustomAIPromptContext = createContext<TCustomPromptContextType | undefined>(undefined);
+export const CustomAIPromptContext = createContext<TCustomPromptContextType | undefined>(undefined);
 
 export const CustomAiProvider: FC<TCustomAIProviderProps> = ({ children, projectId, closeHandler }) => {
   const { uploadInProgress, uploadingFiles, setUploadingFiles } = useFileUploadingStates(

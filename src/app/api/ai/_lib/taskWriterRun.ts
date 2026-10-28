@@ -2,7 +2,7 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
-import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -214,8 +214,10 @@ export async function prepareTaskWriterRun(
   const loadBoardFormat = async () => {
     const enabled = body.aiMode === "AiTaskWriter" &&
       await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId);
+    const taskTemplatesEnabled = body.aiMode === "AiTaskWriter" &&
+      await isFeatureEnabled(HTPR_7472_TASK_TEMPLATES_FLAG, userId);
     const [customInstructions, customFieldDefinitions] = await Promise.all([
-      enabled && !body.customInstructions.trim()
+      (enabled || taskTemplatesEnabled) && !body.customInstructions.trim()
         ? import("@/app/api/ai/_lib/customInstructions").then((mod) => mod.loadCustomInstructionText(body.projectId))
         : body.customInstructions,
       enabled
@@ -227,9 +229,9 @@ export async function prepareTaskWriterRun(
           }) as Promise<TaskWriterCustomFieldDefinition[]>
         : undefined,
     ]);
-    return { boardFormatEnabled: enabled, customInstructions, customFieldDefinitions };
+    return { boardFormatEnabled: enabled, taskTemplatesEnabled, customInstructions, customFieldDefinitions };
   };
-  const [boardLabels, { boardFormatEnabled, customInstructions, customFieldDefinitions }, skillResolution] = await Promise.all([
+  const [boardLabels, { boardFormatEnabled, taskTemplatesEnabled, customInstructions, customFieldDefinitions }, skillResolution] = await Promise.all([
     loadBoardLabels(),
     loadBoardFormat(),
     resolveSkills(body.PROMPT, {
@@ -349,8 +351,8 @@ export async function prepareTaskWriterRun(
   });
   const webWriting = await isFeatureEnabled(HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG, userId);
   const oldStructure = await isFeatureEnabled(HTPR_7500_WRITER_OLD_STRUCTURE_FLAG, userId);
-  const authoringStyle = boardFormatEnabled || oldStructure
-    ? createTaskAuthoringStyle(webWriting, boardFormatEnabled, oldStructure)
+  const authoringStyle = boardFormatEnabled || oldStructure || taskTemplatesEnabled
+    ? createTaskAuthoringStyle(webWriting, boardFormatEnabled, oldStructure, taskTemplatesEnabled)
     : webWriting ? TASK_AUTHORING_WEB_STYLE : TASK_AUTHORING_STYLE;
   const boardResearchRules = webWriting
     ? oldStructure
