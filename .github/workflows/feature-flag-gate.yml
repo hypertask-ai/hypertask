@@ -6,15 +6,15 @@ on:
   # base branch keep reconciliation correct when a PR leaves production.
   pull_request_target:
     types: [opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled, closed]
-  push:
-    branches: [production]
+  schedule:
+    - cron: "*/15 * * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  # Every event reconciles all open PRs, so replacing an older pending run is safe.
   group: feature-flag-gate-production
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -244,7 +244,7 @@ jobs:
           exit "$result"
 
   reconcile-open-pull-requests:
-    if: github.event_name == 'push' || github.event_name == 'pull_request_target'
+    if: github.event_name == 'schedule'
     name: reconcile-feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -69,6 +69,7 @@ pr_job_budget:
       jobs: 2
       published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
       concurrency_group: feature-flag-gate-production
+      queue: max
       cancel_in_progress: false
     - workflow: .github/workflows/ux-signoff-gate.yml
       jobs: 1
@@ -299,7 +300,8 @@ feature_flag_gate:
   bugfix_flag_exemptions: [saved_data, security, crashes]
   # BUGFIX remains only a mechanical exemption; review enforces bugfix flags.
   # Bugfix flags share ticket naming. /api/cron/feature-flag-removals files cleanup after 7 days on Everyone; money, access and data-deletion stay at 14 days.
-  open_pull_request_reconciliation: production_push_and_all_pull_request_events
+  open_pull_request_reconciliation: scheduled_every_15_minutes
+  pull_request_event_evaluation: changed_pr_only
 
 policies:
   previews:

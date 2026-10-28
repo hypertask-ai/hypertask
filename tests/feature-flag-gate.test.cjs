@@ -1152,13 +1152,13 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled, closed\]/);
   assert.doesNotMatch(workflow, /pull_request_target:\s+branches: \[production\]/);
   assert.match(workflow, /github\.event\.pull_request\.base\.ref == 'production'/);
-  assert.match(workflow, /push:\s+branches: \[production\]/);
+  assert.doesNotMatch(workflow, /push:/);
+  assert.match(workflow, /cron: "\*\/15 \* \* \* \*"/);
   assert.doesNotMatch(workflow, /workflow_dispatch:/);
   assert.match(workflow, /github\.event\.action != 'closed'/);
-  assert.match(workflow, /if: github\.event_name == 'push' \|\| github\.event_name == 'pull_request_target'/);
+  assert.match(workflow, /if: github\.event_name == 'schedule'/);
   assert.match(workflow, /timeout-minutes: 5/);
-  assert.match(workflow, /Every event reconciles all open PRs/);
-  assert.match(workflow, /group: feature-flag-gate-production/);
+  assert.ok(workflow.includes("group: feature-flag-gate-production"));
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal((workflow.match(/cache: npm/g) || []).length, 2);
   assert.equal((workflow.match(/cache-dependency-path: \.github\/scripts\/feature-flag-parser\/package-lock\.json/g) || []).length, 2);
