@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const flag = "htpr-7858-comment-summary-reuse";
 const digest = (text) => createHash("sha256").update(text).digest("hex");

@@ -1,0 +1,23 @@
+function loadChatComponent(file, mocks) {
+  const ts = require("typescript");
+  const compiled = ts.transpileModule(read(file), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
+    fileName: file,
+  }).outputText;
+  const exports = {};
+  new Function("require", "exports", compiled)((specifier) => {
+    if (specifier === "react/jsx-runtime") return require(specifier);
+    assert.ok(Object.hasOwn(mocks, specifier), `unexpected component dependency: ${specifier}`);
+    return { __esModule: true, ...mocks[specifier] };
+  }, exports);
+  return exports;
+}
+
+function findElement(element, type) {
+  if (!element || typeof element !== "object") return undefined;
+  if (element.type === type) return element;
+  for (const child of [element.props?.children].flat(Infinity)) {
+    const found = findElement(child, type);
+    if (found) return found;
+  }
+}

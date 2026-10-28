@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const React = require('react');
 const { JSDOM } = require('jsdom');
-const { load } = require('./helpers/agent-connection.cjs');
+const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const boards = Object.freeze([
   { id: 1, title: 'Zulu' },

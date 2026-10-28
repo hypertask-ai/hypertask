@@ -20,7 +20,7 @@ const loaders = {
   "task-route load": load,
   "refactored module require": (file, stubs) => require("./refactored-module-require.cjs")
     .createRefactoredModuleRequire(root, stubs)(`./${file}`),
-  "agent-connection load": (file, stubs) => require("./helpers/agent-connection.cjs").load(file, stubs),
+  "shared loadModule": (file, stubs) => require("./helpers/loadModule.cjs").loadModule(file, stubs),
   "create-view-context load": (file, stubs) => require("./helpers/create-view-context.cjs").load(file, stubs),
   "board-rename loadTs": (file, stubs) => require("./helpers/board-rename.cjs").loadTs(file, stubs),
   "UI loader": (file, stubs) => require("./helpers/htpr-7260-ui.cjs").loader(stubs)(file),

@@ -4,7 +4,7 @@ const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const test = require("node:test");
 const { createJiti } = require("jiti");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, {

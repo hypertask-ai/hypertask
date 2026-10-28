@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { NextRequest } = require('next/server');
-const { load } = require('./helpers/agent-connection.cjs');
+const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const listQuery = load('src/lib/mcp/listQuery.ts');
 const { withListQueryDescription } = load('src/lib/mcp-server/listQueryDescriptions.ts', {

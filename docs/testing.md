@@ -103,3 +103,20 @@ Every behavioral PR records:
 - remaining risk that requires browser or production verification.
 
 Required CI remains authoritative for the complete suite. Automated review should challenge missing behavioral coverage in critical domains even when the current suite is green.
+
+## Shared test harness
+
+Use `loadModule(file, stubs)` from `tests/helpers/loadModule.cjs` for isolated
+TypeScript/TSX imports. Paths start at the repository root. Each load gets its
+own module cache; dependency maps also apply to local transitive imports.
+Use `stubModule(t, specifier, exports)` only for tests using native `require`;
+test cleanup restores the prior cached module. Those cache stubs are process-wide,
+so do not use them in concurrent tests. `findElement(tree, type)` searches React
+element children, including nested arrays.
+
+The `hypertask-tests/no-new-harness` lint rule rejects new inline transpilers,
+module-loader hooks, cache writes and element-search copies. Existing debt is
+recorded in `eslint-local-rules/test-harness-baseline.json`. Reduce the matching
+count whenever migrating a file; never increase an allowance. The historical
+PR 1993 fixture and `tests/test-harness.test.cjs` check the refused and supported
+paths.

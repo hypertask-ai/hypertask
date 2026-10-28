@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 const definition = load("src/lib/flags/definitions/htpr-7549-first-task-pointer.ts");
 const key = "htpr-7549-first-task-pointer";
 

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { load, root } = require("./helpers/agent-connection.cjs");
+const { loadModule: load, root } = require("./helpers/loadModule.cjs");
 const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true });
 const usage = jiti(path.join(root, "src/app/api/settings/ai-usage/gatewayUsage.ts"));
 let enabled, source, statuses, user, allowed;

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { load } = require('./helpers/agent-connection.cjs');
+const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 test('mobile writer repair is an Everyone bugfix with a ticket-specific rollback switch', () => {
   const { default: definition, HTPR_8028_MOBILE_WRITER_SAVE_FLAG: key } = load('src/lib/flags/definitions/htpr-8028-mobile-writer-save.ts');

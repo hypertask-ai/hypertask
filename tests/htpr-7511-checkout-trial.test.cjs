@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const { harness } = require("./helpers/start-plan-checkout.cjs");
 const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
