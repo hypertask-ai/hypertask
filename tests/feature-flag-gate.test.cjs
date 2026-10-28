@@ -211,6 +211,20 @@ test("server coverage cannot excuse unrelated UI or use a client gate", async (t
   assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
 });
 
+test("server flags in invoked MCP route wrappers count, but discarded and shadowed wrappers do not", async (t) => {
+  for (const [source, expected] of [
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async (request) => { if (!(await isFeatureEnabled("htpr-1-other", request.userId))) return "off"; return "on"; })(request); }\n', true],
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; }); return "ungated"; }\n', false],
+    ['function wrap(callback) { return () => "ungated"; }\nexport async function POST(request) { return wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; })(request); }\n', false],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/mcp/operations/widget.ts", 'import { isFeatureEnabled } from "@/lib/flags";\n' + source);
+    const head = commit(git, "wrapped server handler");
+    assert.equal((await evaluate("HTPR-1 [FEATURE] wrapped operation", base, head, dir)).pass, expected);
+  }
+});
+
 test("server-only changes preserve existing exemptions and deletion behavior", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/lib/mcp/operation.ts", 'export const oldValue = "old";\n');
@@ -288,12 +302,12 @@ test("memo-wrapped exported JSX entries still require a ticket gate", async (t) 
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", parenWrappedBase, parenWrappedHead, parenWrapped.dir)).pass, false);
 });
 
-test("App Router API changes do not need a flag", async (t) => {
+test("App Router API changes require a server flag", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
   writeFile(dir, "src/app/api/example/route.ts", "export function GET() { return new Response(); }\n");
   const head = commit(git, "backend");
-  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, false);
 });
 
 test("server-side ticket gates cover related UI changes", async (t) => {

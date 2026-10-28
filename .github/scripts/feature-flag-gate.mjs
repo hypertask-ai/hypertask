@@ -766,6 +766,22 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
       changed = true;
     }
     for (const fn of functions) {
+      if (live.has(fn) || !typescript.isCallExpression(fn.parent) ||
+          fn.parent.arguments.length !== 1 || fn.parent.arguments[0] !== fn ||
+          !typescript.isIdentifier(fn.parent.expression)) continue;
+      const call = fn.parent;
+      const binding = checker.getSymbolAtLocation(call.expression)?.declarations?.[0];
+      if (!binding || !typescript.isImportSpecifier(binding) ||
+          (binding.propertyName ?? binding.name).text !== "wrapMcpRoute") continue;
+      const declaration = binding.parent.parent.parent;
+      if (!typescript.isImportDeclaration(declaration) ||
+          declaration.moduleSpecifier.text !== "@/lib/mcp/routeWrapper" ||
+          !typescript.isCallExpression(call.parent) || call.parent.expression !== call ||
+          !isLiveCallSite(call.parent, live, !entries)) continue;
+      live.add(fn);
+      changed = true;
+    }
+    for (const fn of functions) {
       if (live.has(fn) || reboundFunctions.has(fn)) continue;
       const name = functionBindingName(fn, checker);
       if (!name) continue;
