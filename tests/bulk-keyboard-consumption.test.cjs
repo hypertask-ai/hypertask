@@ -33,7 +33,7 @@ function load(file, names, env) {
   return new Function(...Object.keys(env), `${compiled}\nreturn {${names.join(",")}};`)(...Object.values(env));
 }
 
-function fixture({ selected = true, rowShortcutsEnabled = true, isApple = false } = {}) {
+function fixture({ selected = true, isApple = false } = {}) {
   const dom = new JSDOM('<body><div id="task-1" tabindex="0"></div><div id="task-2" tabindex="0"></div><div id="task-3" tabindex="0"></div><button id="actions">Actions</button></body>');
   const { document, KeyboardEvent } = dom.window;
   const cards = [1, 2, 3].map(id => document.getElementById(`task-${id}`));
@@ -68,7 +68,7 @@ function fixture({ selected = true, rowShortcutsEnabled = true, isApple = false 
       updateActiveItemAndItemInView() {},
     } };
     const cardEnv = {
-      ...env, task: tasks[index], taskRef, latestRef, rowShortcutsEnabled, getTaskShortcutAction,
+      ...env, task: tasks[index], taskRef, latestRef, getTaskShortcutAction,
       lastgPress: { current: null }, lastM_APress: { current: null },
       shouldRunArchiveShortcut: event => !event.repeat,
       matchesShortcut: () => false, keyboard_shortcuts: { dueDateModal: { default: "d" } },
@@ -98,37 +98,35 @@ function fixture({ selected = true, rowShortcutsEnabled = true, isApple = false 
     bulkDocumentHandler, send, documentDispatches: () => documentDispatches };
 }
 
-for (const rowShortcutsEnabled of [false, true]) {
-  for (const isApple of [false, true]) {
-    const mode = `${rowShortcutsEnabled ? "row" : "legacy"}/${isApple ? "Cmd" : "Ctrl"}`;
-    test(`two selected, focused card: ${mode}+E archives only the selection`, async () => {
-      const f = fixture({ rowShortcutsEnabled, isApple });
-      try {
-        const event = await f.send(KeyCodes.E, isApple ? { metaKey: true } : { ctrlKey: true });
-        assert.deepEqual(f.archives.sort(), [1, 2], "only selected tickets may archive; unselected ticket 3 must stay Normal");
-        assert.equal(event.defaultPrevented, true);
-        assert.equal(f.documentDispatches(), 0, "consumed bulk event must not be forwarded after focus advances");
-      } finally { f.dom.window.close(); }
-    });
-    test(`no selection: ${mode}+E still archives the focused card`, async () => {
-      const f = fixture({ selected: false, rowShortcutsEnabled, isApple });
-      try {
-        await f.send(KeyCodes.E, isApple ? { metaKey: true } : { ctrlKey: true });
-        assert.deepEqual(f.archives, [2]);
-      } finally { f.dom.window.close(); }
-    });
-  }
-  for (const [keyCode, action] of [[65, "assign"], [77, "move"], [84, "label"]]) {
-    test(`bulk ${action} consumes the event without a single-card fallback (row=${rowShortcutsEnabled})`, async () => {
-      const f = fixture({ rowShortcutsEnabled });
-      try {
-        await f.send(keyCode);
-        assert.deepEqual(f.bulkCommands, [action]);
-        assert.deepEqual(f.singleActions, []);
-        assert.equal(f.documentDispatches(), 0);
-      } finally { f.dom.window.close(); }
-    });
-  }
+for (const isApple of [false, true]) {
+  const mode = `${isApple ? "Cmd" : "Ctrl"}`;
+  test(`two selected, focused card: ${mode}+E archives only the selection`, async () => {
+    const f = fixture({ isApple });
+    try {
+      const event = await f.send(KeyCodes.E, isApple ? { metaKey: true } : { ctrlKey: true });
+      assert.deepEqual(f.archives.sort(), [1, 2], "only selected tickets may archive; unselected ticket 3 must stay Normal");
+      assert.equal(event.defaultPrevented, true);
+      assert.equal(f.documentDispatches(), 0, "consumed bulk event must not be forwarded after focus advances");
+    } finally { f.dom.window.close(); }
+  });
+  test(`no selection: ${mode}+E still archives the focused card`, async () => {
+    const f = fixture({ selected: false, isApple });
+    try {
+      await f.send(KeyCodes.E, isApple ? { metaKey: true } : { ctrlKey: true });
+      assert.deepEqual(f.archives, [2]);
+    } finally { f.dom.window.close(); }
+  });
+}
+for (const [keyCode, action] of [[65, "assign"], [77, "move"], [84, "label"]]) {
+  test(`bulk ${action} consumes the event without a single-card fallback`, async () => {
+    const f = fixture();
+    try {
+      await f.send(keyCode);
+      assert.deepEqual(f.bulkCommands, [action]);
+      assert.deepEqual(f.singleActions, []);
+      assert.equal(f.documentDispatches(), 0);
+    } finally { f.dom.window.close(); }
+  });
 }
 
 test("already consumed document event cannot fall through to single-card archive", async () => {

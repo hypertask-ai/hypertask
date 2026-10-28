@@ -78,7 +78,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
-  queryClient, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
+  queryClient, myTasksViewsEnabled, myTasksTableColumnsEnabled,
   myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
@@ -195,7 +195,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   }, [commandMode, resetShowCommands, showCommands.show]);
 
   if (!showCommands.show) return null;
-  if (rowShortcutsEnabled && isRowTaskProjectFallback && isTaskProjectLoading)
+  if (isRowTaskProjectFallback && isTaskProjectLoading)
     return <span className="hidden" />;
 
   return (

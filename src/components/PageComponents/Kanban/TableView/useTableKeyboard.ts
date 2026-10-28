@@ -14,14 +14,14 @@ import { isTaskRow } from "./tableViewShared";
 
 type Context = Pick<TableViewProps, "_currentProject" | "handleBoardChange" | "_sections" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableRows>, "rows" | "focusTo" | "expandSection"> &
-  Pick<ReturnType<typeof useTableState>, "selectedIndex" | "sections" | "toggleCreateTaskGlobally" | "setShowCommands" | "isApple" | "lastGAt" | "rowShortcutsEnabled" | "showCommands" | "assignTask" | "myTasksBulk" | "timerToggling" | "changeBoardLayout"> &
+  Pick<ReturnType<typeof useTableState>, "selectedIndex" | "sections" | "toggleCreateTaskGlobally" | "setShowCommands" | "isApple" | "lastGAt" | "showCommands" | "assignTask" | "myTasksBulk" | "timerToggling" | "changeBoardLayout"> &
   Pick<ReturnType<typeof useTableActions>, "runTaskShortcut" | "archiveTaskFromTable" | "toggleSelectedTaskTimer" | "openTask">;
 
 export function useTableKeyboard(context: Context) {
   const {
   _currentProject, rows, selectedIndex, sections, toggleCreateTaskGlobally,
   setShowCommands, isApple, handleBoardChange, _sections, lastGAt,
-  rowShortcutsEnabled, showCommands, assignTask, runTaskShortcut, enableMyTasksBulkSelection,
+  showCommands, assignTask, runTaskShortcut, enableMyTasksBulkSelection,
   myTasksBulk, archiveTaskFromTable, timerToggling, toggleSelectedTaskTimer, changeBoardLayout,
   focusTo, openTask, expandSection,
   } = context;
@@ -83,8 +83,7 @@ export function useTableKeyboard(context: Context) {
         lastGAt.current = Date.now();
       }
       if (
-        (rowShortcutsEnabled &&
-          shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null)) ||
+        shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
         returnIfModalOrInputActive() ||
         showCommands.show ||
         assignTask
@@ -165,7 +164,7 @@ export function useTableKeyboard(context: Context) {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, enableMyTasksBulkSelection, expandSection, focusTo, handleBoardChange, myTasksBulk, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
+  }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, enableMyTasksBulkSelection, expandSection, focusTo, handleBoardChange, myTasksBulk, openTask, rows, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
   const registerQuickAdd = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (

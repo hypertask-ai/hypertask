@@ -37,10 +37,6 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import { getTaskShortcutAction } from "@/lib/keyboard/taskShortcuts";
-import {
-  keyboard_shortcuts,
-  matchesShortcut,
-} from "@/lib/utils/keyboardShortcuts";
 import { usePrefetchTaskDetail } from "@/hooks/Task Detail/usePrefetchTaskDetail";
 import { useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
 import KanbanTaskCard from "./KanbanTaskCard";
@@ -50,7 +46,7 @@ import type { BlockerUser } from "./BlockerChip";
 import { splitAssignees } from "@/lib/assignees";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, HTPR_7263_PHONE_HOLD_SELECT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7263_PHONE_HOLD_SELECT_FLAG } from "@/lib/flags/keys";
 import type {
   DraggableProvided,
   DraggableStateSnapshot,
@@ -77,7 +73,7 @@ interface IProps {
   dragSnapshot?: DraggableStateSnapshot;
 }
 
-type TaskContentProps = IProps & { rowShortcutsEnabled: boolean; phoneHoldSelect: boolean; hasDraft: boolean };
+type TaskContentProps = IProps & { phoneHoldSelect: boolean; hasDraft: boolean };
 
 const TaskContent = ({
   task,
@@ -98,7 +94,6 @@ const TaskContent = ({
   blockingUser,
   dragProvided,
   dragSnapshot,
-  rowShortcutsEnabled,
   phoneHoldSelect,
   hasDraft,
 }: TaskContentProps) => {
@@ -341,9 +336,7 @@ const TaskContent = ({
       return;
 
     let cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    const taskShortcutAction = rowShortcutsEnabled
-      ? getTaskShortcutAction(e, isApple)
-      : null;
+    const taskShortcutAction = getTaskShortcutAction(e, isApple);
     if (returnIfModalOrInputActive()) return;
 
     if (
@@ -355,15 +348,7 @@ const TaskContent = ({
     )
       return;
 
-    if (
-      taskShortcutAction === "select" ||
-      (!rowShortcutsEnabled &&
-        e.keyCode === KeyCodes.X &&
-        !e.shiftKey &&
-        !e.altKey &&
-        !cmdControl &&
-        !e.repeat)
-    ) {
+    if (taskShortcutAction === "select") {
       updateActiveItemAndItemInView(task);
     }
 
@@ -382,10 +367,7 @@ const TaskContent = ({
     if (e.keyCode === KeyCodes.TAB) {
       e.preventDefault();
     }
-    if (
-      taskShortcutAction === "delete" ||
-      (!rowShortcutsEnabled && e.shiftKey && e.keyCode === KeyCodes.THREE)
-    ) {
+    if (taskShortcutAction === "delete") {
       return toggleDeleteModal(true, {
         id: task.id,
         section: task.section,
@@ -393,24 +375,13 @@ const TaskContent = ({
       });
     }
 
-    if (
-      taskShortcutAction === "archive" ||
-      (!rowShortcutsEnabled && e.keyCode === KeyCodes.E && cmdControl)
-    ) {
+    if (taskShortcutAction === "archive") {
       e.preventDefault();
       if (!shouldRunArchiveShortcut(e)) return;
       markAsDone(task.section, task.id, task.parentTask);
     }
 
-    if (
-      (taskShortcutAction === "size" ||
-        (!rowShortcutsEnabled &&
-          e.keyCode === KeyCodes.S &&
-          !e.shiftKey &&
-          !cmdControl &&
-          !e.altKey)) &&
-      !lastgPress.current
-    ) {
+    if (taskShortcutAction === "size" && !lastgPress.current) {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -418,14 +389,7 @@ const TaskContent = ({
       });
     }
 
-    if (
-      (taskShortcutAction === "priority" ||
-        (!rowShortcutsEnabled &&
-          e.keyCode === KeyCodes.P &&
-          !cmdControl &&
-          !e.altKey)) &&
-      !lastgPress.current
-    ) {
+    if (taskShortcutAction === "priority" && !lastgPress.current) {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -433,17 +397,9 @@ const TaskContent = ({
       });
     }
 
-    if (
-      taskShortcutAction === "edit" ||
-      (!rowShortcutsEnabled && e.keyCode === KeyCodes.E && !cmdControl)
-    )
-      eHandler();
+    if (taskShortcutAction === "edit") eHandler();
 
-    if (
-      (taskShortcutAction === "assignee" ||
-        (!rowShortcutsEnabled && e.keyCode === KeyCodes.A)) &&
-      !lastgPress.current
-    ) {
+    if (taskShortcutAction === "assignee" && !lastgPress.current) {
       const now = new Date().getTime();
       if (lastM_APress.current && now - lastM_APress.current < 500) {
         lastM_APress.current = null;
@@ -486,16 +442,7 @@ const TaskContent = ({
       }
     }
 
-    if (
-      !lastgPress.current &&
-      (taskShortcutAction === "dueDate" ||
-        (!rowShortcutsEnabled &&
-          matchesShortcut(
-            e,
-            keyboard_shortcuts.dueDateModal.default,
-            isApple,
-          )))
-    ) {
+    if (!lastgPress.current && taskShortcutAction === "dueDate") {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -539,10 +486,7 @@ const TaskContent = ({
       setMovingItem(false);
     }
 
-    if (
-      taskShortcutAction === "label" ||
-      (!rowShortcutsEnabled && e.keyCode === KeyCodes.T && !e.shiftKey)
-    ) {
+    if (taskShortcutAction === "label") {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -574,10 +518,7 @@ const TaskContent = ({
       }
     }
 
-    if (
-      taskShortcutAction === "share" ||
-      (!rowShortcutsEnabled && e.keyCode === KeyCodes.S && cmdControl)
-    ) {
+    if (taskShortcutAction === "share") {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -586,11 +527,7 @@ const TaskContent = ({
     }
 
     if (
-      (taskShortcutAction === "moveColumn" ||
-        (!rowShortcutsEnabled &&
-          e.keyCode === KeyCodes.M &&
-          !cmdControl &&
-          !e.shiftKey)) &&
+      taskShortcutAction === "moveColumn" &&
       (!lastgPress.current ||
         new Date().getTime() - lastgPress.current >=
           globalConstants.gThenKeyDelay)
@@ -608,13 +545,7 @@ const TaskContent = ({
         mode: CommandMode.MoveToColumn,
       });
     }
-    if (
-      taskShortcutAction === "moveBoard" ||
-      (!rowShortcutsEnabled &&
-        e.keyCode === KeyCodes.M &&
-        e.shiftKey &&
-        !cmdControl)
-    ) {
+    if (taskShortcutAction === "moveBoard") {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -622,11 +553,7 @@ const TaskContent = ({
       });
     }
 
-    if (
-      (taskShortcutAction === "open" ||
-        (!rowShortcutsEnabled && e.keyCode === KeyCodes.ENTER)) &&
-      !showCommands.show
-    ) {
+    if (taskShortcutAction === "open" && !showCommands.show) {
       console.time("EnterPressOnTask");
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
@@ -731,13 +658,7 @@ const TaskContent = ({
       });
     }
 
-    if (
-      taskShortcutAction === "star" ||
-      (!rowShortcutsEnabled &&
-        e.keyCode === KeyCodes.S &&
-        e.altKey &&
-        !e.shiftKey)
-    ) {
+    if (taskShortcutAction === "star") {
       e.preventDefault();
       return handleStarTask();
     }
@@ -758,16 +679,13 @@ const TaskContent = ({
       navigateToTask(task.projectId, task.uniqueIndex, "push", `?audio=true`, task);
     }
 
-    if (
-      taskShortcutAction === "rename" ||
-      (!rowShortcutsEnabled && e.keyCode === KeyCodes.F2)
-    ) {
+    if (taskShortcutAction === "rename") {
       return setShowCommands({
         show: true,
         mode: CommandMode.RenameTask,
       });
     }
-  }, [handleBulkKeyDown, rowShortcutsEnabled, task.id]);
+  }, [handleBulkKeyDown, task.id]);
 
   async function addFollowerHandler() {
     return await addFollowerKanban(task.id);
@@ -1047,11 +965,10 @@ const TaskContentWithOwnDrafts = React.memo(function TaskContentWithOwnDrafts(pr
 });
 
 export default function Task(props: IProps) {
-  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const phoneHoldSelect = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG);
   const boardCardDataOnce = useFlag(HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG);
   const boardCardData = useBoardCardData(props.task.projectId);
-  const contentProps = { ...props, rowShortcutsEnabled, phoneHoldSelect: Boolean(phoneHoldSelect) };
+  const contentProps = { ...props, phoneHoldSelect: Boolean(phoneHoldSelect) };
   return boardCardDataOnce && boardCardData ? (
     <MemoizedTaskContent {...contentProps} hasDraft={boardCardData.draftTaskIds.has(props.task.id)} />
   ) : (
