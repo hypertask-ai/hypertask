@@ -1003,7 +1003,8 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
 function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
-  if (fn?.asteriskToken || fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword)) return false;
+  if (fn?.asteriskToken || fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
+      fn?.parameters.some((parameter) => parameter.initializer)) return false;
   for (let parent = node.parent; parent && !typescript.isFunctionLike(parent); parent = parent.parent) {
     if (typescript.isTryStatement(parent)) return false;
   }
@@ -1017,6 +1018,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
     }
     if (!typescript.isFunctionLike(item)) typescript.forEachChild(item, visit);
   })(fn?.body ?? node);
+  let conditionalGuard = false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     if (typescript.isReturnStatement(parent) && child === parent.expression) return !earlyOnly;
@@ -1051,7 +1053,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
       return false;
     }
     if (typescript.isIfStatement(parent) && child === parent.expression) {
-      if (!typescript.isBlock(parent.parent) || !typescript.isFunctionLike(parent.parent.parent)) return false;
+      if (conditionalGuard || !typescript.isBlock(parent.parent) || !typescript.isFunctionLike(parent.parent.parent)) return false;
       const statements = parent.parent.statements;
       const index = statements.indexOf(parent);
       if (after) {
@@ -1074,6 +1076,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
       return a !== null && b !== null && a !== b;
     }
     if (typescript.isConditionalExpression(parent)) {
+      conditionalGuard = true;
       if (child === parent.condition) {
         const whenTrue = staticBoolean(parent.whenTrue);
         const whenFalse = staticBoolean(parent.whenFalse);

@@ -2513,3 +2513,19 @@ test('early-return formatter truthiness refuses always-visible branches', async 
     assert.equal((await evaluate('HTPR-1 [FEATURE] formatter truthiness', base, commit(git, name), dir)).pass, expected, name);
   }
 });
+
+test('invariant formatter guards cannot prove an early-return gate', async (t) => {
+  const cases = [
+    ['invariant ternary helper', 'enabled', 'if (enabled ? !enabled : false) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['invariant alternate ternary helper', 'enabled', 'if (enabled ? false : enabled) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['default parameter contradiction', 'enabled, inverse = !enabled', 'if (enabled && inverse) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['default parameter tautology', 'enabled, inverse = !enabled', 'if (enabled || inverse) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['invariant ternary consumer', 'enabled', 'if (!enabled) return null; return "Age";', 'const label = format(enabled); if (label ? !label : false) return null; return <p>Age</p>;'],
+  ];
+  for (const [name, parameters, helper, consumer] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(${parameters}) { ${helper} }\n`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + consumer + ' }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter guard', base, commit(git, name), dir)).pass, false, name);
+  }
+});
