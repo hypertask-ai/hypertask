@@ -154,10 +154,9 @@ export async function POST(request: NextRequest) {
         );
       }
       if (replay.status === "completed") {
-        const hydrated = await hydrateChatTicketMessages(
-          { id: body.session_id, messages: [replay] }, dbUser.id,
-          await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id),
-        );
+        const hydrated = await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id)
+          ? await hydrateChatTicketMessages({ id: body.session_id, messages: [replay] }, dbUser.id, true)
+          : { messages: [{ content: replay.content }] };
         return new Response(
           sseFrame("content", { content: replay.content }) +
           sseFrame("done", {
