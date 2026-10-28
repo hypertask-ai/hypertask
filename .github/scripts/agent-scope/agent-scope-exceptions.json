@@ -3,17 +3,17 @@
     "path": "src/lib/mcp/operations/comments/operation.ts",
     "call": "prisma.comment.count({ where: commentWhere })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/8070",
-    "sha256": "b69c563dfdf71b916ec03d13d7c3d03db630caa86c91d65e558f5f6bd2f53591",
-    "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it."
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/8114",
+    "sha256": "560ff99c4379a124c9aabd970ed00cf36429a3820e91e491e8ddd056b6d0ba0e",
+    "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it. HTPR-8114 re-review: only rollout attribution reads and their arguments were removed; authentication, identifier authorization, commentWhere construction and both scoped query calls are unchanged. Team-content and agent-scope route tests exercise permitted callers and denied cross-board reads."
   },
   {
     "path": "src/lib/mcp/operations/comments/operation.ts",
     "call": "prisma.comment.findMany({ where: commentWhere, include: commentInclude(user.id, task.projectId), orderBy: [ { [sortField]: effectiveSortOrder }, { id: effectiveSortOrder }, ], take: pageLimit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/8070",
-    "sha256": "b69c563dfdf71b916ec03d13d7c3d03db630caa86c91d65e558f5f6bd2f53591",
-    "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it."
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/8114",
+    "sha256": "560ff99c4379a124c9aabd970ed00cf36429a3820e91e491e8ddd056b6d0ba0e",
+    "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it. HTPR-8114 re-review: only rollout attribution reads and their arguments were removed; authentication, identifier authorization, commentWhere construction and both scoped query calls are unchanged. Team-content and agent-scope route tests exercise permitted callers and denied cross-board reads."
   },
   {
     "path": "src/lib/mcp/operations/tasks/operation.ts",
