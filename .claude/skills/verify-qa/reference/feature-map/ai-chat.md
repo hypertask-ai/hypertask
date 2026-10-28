@@ -137,6 +137,18 @@ its schema, and the following step executes the original tool. Those tests
 also verify per-conversation isolation and the full original flag-off catalog.
 Do not request writes, token minting or revocation for this check.
 
+## Malformed chat requests
+
+As QA 985, POST raw malformed JSON (for example `{`) to
+`/api/ai/chat/stream`. Preserve HTTP 200, the safe request-body error SSE
+frame and the final `done` error frame. An empty message remains a separate
+validation refusal. Neither path may call a model or create chat content.
+Run `tests/htpr-8107-chat-request-validation.test.cjs` for real POST parsing,
+valid-request authorization and genuine read/provider error controls.
+When production runtime logs are readable, require an info-level invalid-JSON
+refusal without request content or a server-error incident. Otherwise record
+that log check as UNREACHABLE, not proven by the unchanged response.
+
 ## What usually breaks
 
 - Provider/gateway slug drift breaking a specific model entirely: Grok chat
