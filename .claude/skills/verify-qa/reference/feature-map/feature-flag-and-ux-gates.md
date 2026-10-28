@@ -30,6 +30,49 @@ Save a post-merge PR run showing target success and fleet skip, plus two schedul
 `node --test tests/feature-flag-reconcile-workflow.test.cjs` exercises unchanged-PR skipping, metadata invalidation, rate-limit handling and genuine API failures with workflow fixtures.
 `node --test tests/ux-signoff-gate.test.cjs` exercises UX verdicts and reconciliation, including rate-limit skips without stale approval and refusal of ordinary API failures.
 
+## Imported formatter gates
+
+The evaluator entry point is `evaluate` in `.github/scripts/feature-flag-gate.mjs`.
+After deployment, read the trusted feature-flag check on a production PR that passes its ticket flag through an imported formatter (for example, https://github.com/hypertask-ai/hypertask/pull/2237).
+Require the check's `ffg=` stamp to identify production containing the repair; an older passing status is not live proof.
+Do not change that PR, its flag, or its ticket during verification.
+
+Hosted `tests/feature-flag-gate.test.cjs` must prove the formatter groups: aliased parameters, explicit live return branches, rendered consumers, return truthiness, invariant guards, independent boolean inputs, formatter dependency/render consumption async server consumers and render coercion/omitted defaults.
+These fixtures exercise the real `evaluate` entry point with committed repositories, not copied helpers.
+The allowed controls include relative and `@/` imports, top-level early returns, direct conditional rendering, independent caller boolean conjunctions and boolean negation.
+Refused controls include ignored or overwritten parameters, nested contradictory guards, exception overrides, invariant comparisons, conditional guards with unknown or constant truthiness, correlated parameters, dependent parameter defaults, truthy masks and discarded output.
+Constant defaults remain supported; direct formatter calls use the same consumer proof as assigned results.
+Dependency controls include correlated object fields and shorthand values, independent component props and immutable aliases.
+Caller-bound literal fields, nested objects and constant aliases must reject invariant conditions while preserving true conjunction and false disjunction controls.
+A property named `enabled` is not a reference to the flag parameter; independent fields with that name remain supported.
+Missing, inherited, ambiguous and prototype-setter properties are unsupported static lookups, not falsy own values; own-field overrides still work.
+Resolve explicit undefined arguments using the formatter's constant parameter defaults, and reject writes to secondary parameters.
+Unsupported compound operands fail closed; only constants and proven-independent parameter paths may participate in formatter conditions.
+Object parameter defaults referencing another parameter cannot establish independence.
+Empty fragments (including nested fragments) and boolean-only render branches cannot prove visible output.
+Boolean coercion after choosing JSX cannot prove visible output; negating the condition before choosing JSX remains supported.
+Omitted independent constant defaults and optional parameters remain supported for both import styles; masking or correlated defaults remain refused.
+Empty arrays, nested empty arrays and sparse arrays cannot certify visible output; arrays containing rendered elements remain supported.
+Spread array and string literals follow the same visibility rule, including nested spreads; unknown spread operands alone cannot prove visible output.
+Visible spread elements and visible siblings of unknown spreads remain supported.
+Boolean invisibility applies only to React output; distinct JSON boolean responses remain valid server gates.
+Imported server formatters follow that same response rule for direct calls and immutable assigned results; ignored calls and identical responses remain refused.
+Interpolated template children need known nonempty literal text to prove visibility; empty or unknown interpolation-only children remain refused.
+Async server-component consumers of synchronous formatters remain supported; async formatters still cannot prove a truthiness gate.
+Consumed logical and nested conditional JSX render paths pass; discarded or comma-masked JSX fails.
+JSX returned only by an event handler cannot prove rendering; a binding returned by the rendered component still can.
+Unrelated component parameter defaults do not constrain formatter proof; formatter defaults retain their own validation.
+Compound value expressions cannot borrow the boolean parameter comparison proof; direct boolean and negated-boolean comparisons remain supported.
+Boolean-producing operators and void expressions remain invisible inside React arrays; visible siblings still work.
+Early exits in live action handlers must control a reachable effect, including nested blocks; pure ignored handler returns and unreachable effects remain refused.
+Exported capitalized component bindings returning text or arrays need no JSX node to establish render liveness, including JavaScript files. Lowercase exported actions retain effect-based analysis regardless of their file extension.
+Logical and conditional boolean-only children remain invisible, including statically masked text; zero remains visible React output. Consumer branches must differ in visibility, not just syntax; equivalent text arrays and strings cannot prove an effective switch.
+Save the tested head SHA, hosted run URL and successful group lines.
+A local AST reproduction supplements those results; it does not replace evaluator or trusted-workflow proof.
+No app output changes, so theme screenshots and customer-data writes are unnecessary.
+
 ## Cleanup
 
 None. Nothing is created.
+
+Nullish render children select the actually returned operand: null-to-boolean stays invisible, null-to-text and zero remain visible. Logical render reachability resolves immutable constant aliases, including truthy arrays and objects; masked JSX cannot prove a formatter gate. Keep reachable conjunction and disjunction controls beside those refusals.
