@@ -63,6 +63,10 @@ async function withHistory(config, check) {
       observe(target) { this.target = target; } disconnect() { this.disconnected = true; }
     };
     const mocks = {
+      '@/hooks/MultiPages/AIChat/useChatShortcuts': { useChatShortcuts: () => ({ enabled: false }) },
+      '@/lib/aiChat/chatShortcuts': { chatShortcutHint: () => '' },
+      '@/components/Modals/OptionPicker': { default: () => null },
+      '@/lib/flags/definitions/htpr-7766-chat-shortcuts': { HTPR_7766_CHAT_SHORTCUTS_FLAG: 'htpr-7766-chat-shortcuts' },
       '@/components/AI_CHAT/AI_Tiptap_Container': { AI_Tiptap_Container: () => null },
       '@/components/AI_CHAT/MessageList': { MessageList: () => null },
       '@/components/AI_CHAT/WelcomeScreen': { WelcomeScreen: () => null },

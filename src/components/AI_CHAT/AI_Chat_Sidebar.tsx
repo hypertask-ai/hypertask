@@ -1,6 +1,9 @@
 "use client";
 
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
+import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
+
+import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
@@ -35,6 +38,7 @@ export const AI_Chat_Sidebar = ({
 }: {
   inOffcanvas?: boolean;
 }) => {
+  const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const chat = useAiChatContext();
   const { showWelcomeScreen, minimized } = chat;
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
@@ -127,7 +131,7 @@ export const AI_Chat_Sidebar = ({
     } finally { loadingAgentPages.current.delete(agent.id); }
   };
 
-  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, options?: { sessionId?: string; newSession?: boolean; getMentionDraft?: () => { html: string; text: string } }) => {
+  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, options?: { createFallbackSession?: boolean; sessionId?: string; newSession?: boolean; getMentionDraft?: () => { html: string; text: string } }) => {
     const intent = ++intentRef.current;
     if (next.kind !== "ai" && !sidebarEnabled) return;
     let nativeSessionId: string | null = null;
@@ -154,7 +158,7 @@ export const AI_Chat_Sidebar = ({
         if (agentSessionsEnabled) toast.error(message);
         return;
       }
-    } else if (target.kind === "native-agent" && !aiSessionRef.current && !aiSessionId) {
+    } else if (options?.createFallbackSession !== false && target.kind === "native-agent" && !aiSessionRef.current && !aiSessionId) {
       setNativeSidebarChat(null);
       await chat.startNewSession();
     }
@@ -232,6 +236,20 @@ export const AI_Chat_Sidebar = ({
     window.addEventListener("ht-sidebar-agent-selected", choose);
     return () => window.removeEventListener("ht-sidebar-agent-selected", choose);
   }, [agentSessionsEnabled, sidebarEnabled, agents]);
+  const shortcuts = useChatShortcuts({
+    enabled: sharedShortcutsEnabled,
+    active: target.kind !== "external-agent",
+    onNewChat: async () => {
+      resolvingGeneralChat.current = true;
+      try {
+        await selectTarget({ kind: "ai" }, undefined, { createFallbackSession: false });
+        await chat.startNewSession();
+      } finally {
+        resolvingGeneralChat.current = false;
+      }
+    },
+    onSelectSession: (id) => { void selectTarget({ kind: "ai" }, id); },
+  });
   const selectTargetRef = useRef(selectTarget);
   selectTargetRef.current = selectTarget;
 
@@ -331,6 +349,9 @@ export const AI_Chat_Sidebar = ({
   return (
     <div
       data-ai-chat-panel
+      ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "sidebar" : undefined}
+      onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined}
+      tabIndex={shortcuts.enabled ? -1 : undefined}
       data-testid="ai-sidebar"
       className={cn(
         "ai-chat-sidebar bg-ai-chat flex sticky top-0 min-h-0 min-w-0 text-white-black shadow-md",
@@ -343,6 +364,7 @@ export const AI_Chat_Sidebar = ({
       )}
       style={desktopWidthStyle}
     >
+      {shortcuts.modal}
       <AiChatSidebarResizeHandle />
 
       <div

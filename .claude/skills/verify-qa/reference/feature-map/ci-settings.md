@@ -43,7 +43,23 @@ Short samples are not fleet-wide hourly measurements.
 It covers scheduled verification and rejected settings drift.
 It does not prove production scheduling or quota recovery.
 
+`node --test tests/ci-review-precheck.test.cjs` executes the CI review
+precheck with isolated GitHub responses. Ten consecutive rate-limit refusals
+must allow tests to start, with one read each. A known failed review must
+still stop tests. This does not prove other workflow reads survive quota
+exhaustion; required status publication still needs GitHub availability.
+
 ## Cleanup
 
 No production settings or board fixtures are changed.
 Keep evidence outside the worktree before removal.
+
+### Guard quota proof
+
+`node tests/guard-quota.test.cjs` exercises the trusted workflow scripts,
+including metadata reuse, one combined status and reset-aware retries.
+`node tests/pr-guards-workflow.test.cjs` checks native scanner job names and
+executes the public-secret summary with success, failure and missing results.
+No required check is removed. Capture a real guard run after deployment;
+confirm both native scanner jobs and the combined trusted status succeed.
+Record live ten-push evidence separately: isolated fixtures are not live proof.

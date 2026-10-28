@@ -110,6 +110,8 @@ for (const [status, data, expected] of [
         },
         useEffect: fn => { effect = fn; },
       },
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/flags/definitions/htpr-7919-allowance-percent": { HTPR_7919_ALLOWANCE_PERCENT_FLAG: "htpr-7919-allowance-percent" },
       axios: { __esModule: true, default: {
         get: async () => { throw { response: { status, data } }; },
         isAxiosError: () => true,

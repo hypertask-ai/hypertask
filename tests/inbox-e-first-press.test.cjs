@@ -444,7 +444,8 @@ test("phone route commit: early E survives the real workspace frame route change
   const frameMocks = {
     "next/navigation": { usePathname: () => pathname },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(true) },
-    "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => true },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => true, useFlagReady: () => true },
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
     "@/components/Common/Tooltip": { __esModule: true, default: () => null },
     "@/lib/flags/keys": {},

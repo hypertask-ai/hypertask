@@ -21,7 +21,8 @@ function frame(flags) {
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, "htpr-7055-chat-overlays-ticket"); return flags[key] === true; } },
+    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-8038-chat-opener-ready") return false; assert.equal(key, "htpr-7055-chat-overlays-ticket"); return flags[key] === true; }, useFlagReady: () => true },
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/lib/flags/keys": { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket" },
   };
   const source = fs.readFileSync(path.join(root, "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8");

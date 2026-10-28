@@ -653,7 +653,9 @@ is_done_section() {
   sections=$(hypertask section list --project "$board" --json 2>/dev/null) || return 3
   is_done=$(jq -r --arg title "$title" '
     [.sections[] | select(.section_title == $title or (.id | tostring) == $title)] as $matches |
-    if ($matches | length) != 1 or ($matches[0].isDone | type) != "boolean" then "unknown" else ($matches[0].isDone | tostring) end
+    if ($matches | length) != 1 then "unknown"
+    elif $matches[0].isDone == null then ($matches[0].section_title | test("^(done|shipped|live|released)$"; "i") | tostring)
+    else ($matches[0].isDone == true | tostring) end
   ' <<<"$sections") || return 3
   [ -n "$is_done" ] || return 3
   [ "$is_done" != unknown ] || return 3

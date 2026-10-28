@@ -17,6 +17,7 @@ function load(file, mocks = {}) {
   new Function("require", "module", "exports", "window", js)((name) => {
     if (Object.hasOwn(mocks, name)) return mocks[name];
     if (name === flagFile) return { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag };
+    if (name === "@/lib/flags/definitions/htpr-8038-chat-opener-ready") return { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" };
     if (name === policyFile) return policy;
     assert.ok(name.startsWith("react"), `Unexpected dependency ${name} in ${file}`);
     return require(name);
@@ -75,6 +76,7 @@ function pageHarness(values = defaults, options = {}) {
   let pathname = "/detail/project-15/1", query = "", mobile = false, enabled = options.enabled ?? true;
   const { useAiChatAutoOpen } = load("src/hooks/General/useAiChatAutoOpen.ts", {
     react: h.react, "@/lib/state": s.state, "@/store": atoms,
+    "@/hooks/useFlag": { useFlag: () => options.stabilize !== false },
     "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(query) },
     "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, ready: true, flagReady: true, values }), useSyncAiChatOpenPreferences() {} },
   });
@@ -140,6 +142,54 @@ test("an opened chat the user opened by hand is not closed by an account choice 
   values = { ...allOff }; h.render();
   assert.equal(h.values.showAIChatInterfaceAtom, true);
 });
+test("publishing the default board view preserves a manual Open during startup", () => {
+  for (const phone of [false, true]) {
+    const h = pageHarness(allOff);
+    h.navigate("/project?id=15", phone);
+    h.manualOpen();
+    assert.equal(h.values.showAIChatInterfaceAtom, true);
+    h.navigate("/project?id=15&view=default", phone);
+    assert.equal(h.values.showAIChatInterfaceAtom, true, "the same board acquiring its default-view URL must not undo Open");
+  }
+});
+
+test("an account choice of off closes auto-opened chat when the default view arrives together", () => {
+  for (const phone of [false, true]) {
+    let values = { ...allOff, aiChatOpenBoards: true };
+    const h = pageHarness(new Proxy({}, { get: (_target, key) => values[key] }));
+    h.navigate("/project?id=15", phone);
+    assert.equal(h.values.showAIChatInterfaceAtom, true);
+    values = allOff;
+    h.navigate("/project?id=15&view=default", phone);
+    assert.equal(h.values.showAIChatInterfaceAtom, false);
+  }
+});
+
+test("known flag Off retains the legacy default-view close", () => {
+  const h = pageHarness(allOff, { stabilize: false });
+  h.navigate("/project?id=15"); h.manualOpen();
+  h.navigate("/project?id=15&view=default");
+  assert.equal(h.values.showAIChatInterfaceAtom, false);
+});
+
+test("normalizing a saved default-view URL preserves a closed chat on reload", () => {
+  for (const url of ["/project?id=15", "/project?id=15&view=default"]) {
+    const h = pageHarness(allOff, { state: { aiChatAutoOpenPageAtom: "7:/project:15:default", aiChatAutoOpenSuppressedAtom: true } });
+    h.navigate(url);
+    assert.equal(h.values.aiChatAutoOpenSuppressedAtom, true);
+    assert.equal(h.values.showAIChatInterfaceAtom, false);
+  }
+});
+
+test("changing boards or choosing another view still follows the existing off switch", () => {
+  for (const url of ["/project?id=16&view=default", "/project?id=15&view=custom"]) {
+    const h = pageHarness(allOff);
+    h.navigate("/project?id=15"); h.manualOpen();
+    h.navigate(url);
+    assert.equal(h.values.showAIChatInterfaceAtom, false);
+  }
+});
+
 test("board switch also covers demo, My Tasks, inbox and calendar; unrelated pages do not auto-open", () => {
   for (const url of ["/demo", "/my-tasks", "/inbox", "/calendar", "/settings"]) {
     const h = pageHarness({ ...allOff, aiChatOpenBoards: true });

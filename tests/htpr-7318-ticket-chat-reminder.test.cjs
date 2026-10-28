@@ -110,6 +110,8 @@ async function withReminder(options, check) {
   if (chat) chat = runtime();
   const mocks = {
     "@/hooks/useFlag": { useFlag: key => key === "htpr-8048-agent-sessions" ? false : key === skillFlag ? skillEnabled : key === flag ? enabled : true },
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: flag },
     "@/lib/contexts/Multipages/AI_Agent/chatContext": { useOptionalAiChatContext: () => chat },

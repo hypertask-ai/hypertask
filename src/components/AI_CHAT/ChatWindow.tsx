@@ -1,3 +1,5 @@
+import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
+import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
 import { useContext } from "react";
 import { MessageList } from "./MessageList";
 import { WelcomeScreen } from "./WelcomeScreen";
@@ -11,6 +13,8 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 
 export const ChatWindow = () => {
+  const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const shortcuts = useChatShortcuts({ enabled: sharedShortcutsEnabled });
   const isMbl = useContext(MobileViewContext);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover } =
@@ -18,8 +22,12 @@ export const ChatWindow = () => {
 
   if (minimized)
     return (
+      <>
+      {shortcuts.modal}
       <button
         type="button"
+        ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "floating" : undefined}
+        onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined}
         onClick={restoreChat}
         className="group flex items-center gap-2 rounded-t-lg border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-[0_-8px_30px_rgba(0,0,0,0.45)]"
       >
@@ -39,10 +47,14 @@ export const ChatWindow = () => {
           <X size={14} strokeWidth={1.75} />
         </span>
       </button>
+      </>
     );
 
   return (
     <div
+      ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "floating" : undefined}
+      onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined}
+      tabIndex={shortcuts.enabled ? -1 : undefined}
       className={cn(
         "bg-ai-chat text-meta flex flex-col overflow-hidden chatwindow",
         amoledChatBorder && !isMbl && "[.amoled_&]:outline-solid [.amoled_&]:outline-1 [.amoled_&]:-outline-offset-1 [.amoled_&]:outline-[var(--border-light-gray-thin)] [.amoled_&]:[--bs-border-radius:5px]",
@@ -56,6 +68,7 @@ export const ChatWindow = () => {
           : "0 0px 75px 45px rgb(0 0 0 / 0.5), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)",
       }}
     >
+      {shortcuts.modal}
       <ChatHeader />
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}

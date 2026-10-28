@@ -15,7 +15,7 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6967_TYPED_TASK_READS_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
 import { getBoardDetail } from "@/lib/api/typedClient";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
 import { useHydrated } from "@/hooks/General/useHydrated";
@@ -295,10 +295,7 @@ export const useGetAllBoards = (
     onCriticalBoardRequestSettled?: () => void;
   }
 ) => {
-  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
   const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
-  let boardReader: typeof getBoardDetail | undefined;
-  if (typedClient) boardReader = getBoardDetail;
   const hydrated = useHydrated();
   const queryClient = useQueryClient();
   const accountIdRef = useRef(user.id);
@@ -387,7 +384,7 @@ export const useGetAllBoards = (
                 requestProjectId,
                 requestAccountId,
                 signal,
-                boardReader,
+                getBoardDetail,
               )
             : queryClient.fetchQuery({
                 queryKey: BOARD_TASKS_KEY(
@@ -399,7 +396,7 @@ export const useGetAllBoards = (
                     requestProjectId,
                     requestAccountId,
                     boardSignal,
-                    boardReader,
+                    getBoardDetail,
                   ),
                 staleTime: BOARD_TASKS_STALE_TIME_MS,
               })
@@ -647,9 +644,6 @@ export const useWarmProjectsAllQuery = ({
   projectId?: number | string | null;
   enabled?: boolean;
 }) => {
-  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
-  let boardReader: typeof getBoardDetail | undefined;
-  if (typedClient) boardReader = getBoardDetail;
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -659,9 +653,9 @@ export const useWarmProjectsAllQuery = ({
       .prefetchQuery({
         queryKey: BOARD_TASKS_KEY(Number(projectId), user.id),
         queryFn: ({ signal }) =>
-          fetchBoardTasks(Number(projectId), user.id, signal, boardReader),
+          fetchBoardTasks(Number(projectId), user.id, signal, getBoardDetail),
         staleTime: BOARD_TASKS_STALE_TIME_MS,
       })
       .catch(() => undefined);
-  }, [enabled, projectId, queryClient, user, typedClient]);
+  }, [enabled, projectId, queryClient, user]);
 };

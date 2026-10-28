@@ -9,7 +9,9 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { useHydrated } from "@/hooks/General/useHydrated";
+import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { HTPR_8030_CHAT_OPEN_RACE_FLAG } from "@/lib/flags/definitions/htpr-8030-chat-open-race";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 import {
@@ -69,6 +71,10 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
   } = chat;
   const idempotentChatOpen = useFlag(HTPR_8030_CHAT_OPEN_RACE_FLAG);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
+  const deferChatOpen = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
+  const chatOpenFlagReady = useFlagReady(HTPR_8038_CHAT_OPENER_READY_FLAG);
+  const hydrated = useHydrated();
+  const openerDisabled = !hydrated && (!chatOpenFlagReady || deferChatOpen);
   const { openAIChatInterface, toggleAIChatInterface } = useGlobalUIState();
   const [, setSidebarWidth] = useRecoilState(aiChatSidebarWidthPxAtom);
 
@@ -111,8 +117,10 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
         <button
           tabIndex={-1}
           onClick={idempotentChatOpen ? openAIChatInterface : toggleAIChatInterface}
+          disabled={openerDisabled}
+          aria-busy={openerDisabled || undefined}
           aria-label="Open AI chat"
-          className="group fixed right-1 top-2 z-[60] flex h-[20px] items-center justify-center text-text-light-gray hover:text-white-black"
+          className="group fixed right-1 top-2 z-[60] flex h-[20px] items-center justify-center text-text-light-gray hover:text-white-black disabled:cursor-wait"
         >
           <ChevronLeft size={16} strokeWidth={1.75} />
           <Tooltip left={-120} bottom={-8} text="AI chat" keyCombination={["5"]} />

@@ -289,6 +289,7 @@ for (const runtimeType of ["NATIVE", "EXTERNAL"]) {
     const source = loader({
       "react-hot-toast": { default: { error: message => errors.push(message) } },
       "@/hooks/useFlag": { useFlag: key => [FLAG, "htpr-7518-agent-sidebar-chats"].includes(key) },
+      "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
       "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
       "@/app/agents/chat/AgentChatClient": { default: props => { embedded = props.embedded; return null; } },
       "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: (...args) => writes.push(args) },

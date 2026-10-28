@@ -392,6 +392,8 @@ completion_refused() {
   [[ $(< "$VCC_TEST_TRACE") != *'hypertask task move'* && $(< "$VCC_TEST_TRACE") != *'hypertask tasks update'* ]] || fail 'refused move reached CLI'
 }
 completion_refused bash "$vcc" task move YPER4-864 --section Done
+completion_refused env VCC_TEST_SECTIONS='{"sections":[{"id":10413,"section_title":"Shipped"}]}' bash "$vcc" task move YPER4-864 --section=10413
+allowed env VCC_TEST_SECTIONS='{"sections":[{"id":10411,"section_title":"In Progress"}]}' bash "$vcc" task move YPER4-864 --section=10411
 mkdir -p "$VCC_EVIDENCE_DIR/YPER4-864"
 printf '1\n' > "$VCC_EVIDENCE_DIR/YPER4-864/pr"
 completion_refused env VCC_TEST_PR_STATE=OPEN bash "$vcc" task move YPER4-864 --section Done
@@ -406,7 +408,6 @@ allowed bash "$vcc" task move YPER4-864 --section Done --section 'In Progress'
 allowed bash "$vcc" --json task move YPER4-864 --section Done
 allowed bash "$vcc" task move YPER4-864 --section 'In Progress'
 completion_refused env VCC_TEST_SECTIONS=broken bash "$vcc" task move YPER4-864 --section=10413
-completion_refused env VCC_TEST_SECTIONS='{"sections":[{"id":10413,"section_title":"Shipped"}]}' bash "$vcc" task move YPER4-864 --section=10413
 mkdir -p "$VCC_EVIDENCE_DIR/HTPR-999"
 printf '1\n' > "$VCC_EVIDENCE_DIR/HTPR-999/pr"
 completion_refused env VCC_TEST_TICKET=HTPR-999 bash "$vcc" task move HTPR-999 --section Done

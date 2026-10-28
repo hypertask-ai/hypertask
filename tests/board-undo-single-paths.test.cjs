@@ -20,6 +20,7 @@ new Function("require", "module", "exports", compile(read("src/components/undoTo
     "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
     "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px]" },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8097-mobile-undo-toast": { HTPR_8097_MOBILE_UNDO_TOAST_FLAG: "htpr-8097-mobile-undo-toast" },
     "@/lib/flags/keys": { HTPR_7657_ONE_TOAST_FLAG: "htpr-7657-one-toast" },
     "@/lib/toastIdsToDismiss": { toastIdsToDismiss: () => [] },
     "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "48px" },

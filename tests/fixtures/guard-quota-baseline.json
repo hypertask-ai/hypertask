@@ -1,0 +1,78 @@
+{
+  "source": "a5a767b3dc638ca0a10fe61f6b3ef68f0b0b9bdf",
+  "paths": [
+    ".github/workflows/pr-guards.yml",
+    ".github/workflows/pr-guards-trusted.yml"
+  ],
+  "groups": [
+    [
+      {
+        "name": "Mark original guard contexts pending",
+        "if": "github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' && github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository",
+        "uses": "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+        "with": {
+          "script": "for (const name of [\"secret-scan\", \"next-public-secrets\"]) {\n  await github.rest.repos.createCommitStatus({\n    ...context.repo, sha: context.payload.pull_request.head.sha,\n    context: name, state: 'pending', description: `${name} is evaluating this pull request`,\n  });\n}\n"
+        }
+      },
+      {
+        "name": "Publish original guard contexts",
+        "if": "${{ !cancelled() }}",
+        "uses": "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+        "env": {
+          "RESULTS": "${{ toJSON(steps) }}"
+        },
+        "with": {
+          "script": "const results = JSON.parse(process.env.RESULTS);\nconst pr = context.payload.pull_request;\nconst sha = pr.head.sha;\nconst canPublish = context.actor !== 'dependabot[bot]' && pr.user.login !== 'dependabot[bot]' &&\n  pr.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`;\nconst guards = [[\"secret-scan\", \"gitleaks\"], [\"next-public-secrets\", \"public-secrets\"]];\nlet failed = false;\nfor (const [name, id] of guards) {\n  const passed = results[id]?.outcome === 'success' &&\n    (name !== 'secret-scan' || results.trufflehog?.outcome === 'success');\n  failed ||= !passed;\n  if (!canPublish) continue;\n  const { data: current } = await github.rest.pulls.get({\n    ...context.repo, pull_number: pr.number,\n  });\n  if (current.head.sha !== sha) continue;\n  await github.rest.repos.createCommitStatus({\n    ...context.repo, sha,\n    context: name, state: passed ? 'success' : 'failure',\n    description: passed ? `${name} passed` : `${name} failed or did not run`,\n    target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,\n  });\n}\nif (failed) core.setFailed('One or more guards failed.');\n"
+        }
+      }
+    ],
+    [
+      {
+        "name": "Mark original guard contexts pending",
+        "if": "${{ !cancelled() }}",
+        "uses": "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+        "with": {
+          "script": "const eventPr = context.payload.pull_request;\nfor (const name of [\"outside-pr-guard\", \"pr-size\", \"pr-title\"]) {\n  if (eventPr.base.ref !== 'production' && name !== 'outside-pr-guard') continue;\n  const { data: current } = await github.rest.pulls.get({\n    ...context.repo, pull_number: eventPr.number,\n  });\n  if (current.head.sha !== eventPr.head.sha ||\n      (name === 'pr-title' && current.title !== eventPr.title)) continue;\n  await github.rest.repos.createCommitStatus({\n    ...context.repo, sha: eventPr.head.sha,\n    context: name, state: 'pending', description: `${name} is evaluating this pull request`,\n  });\n}\n"
+        }
+      },
+      {
+        "uses": "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+        "id": "outside",
+        "if": "${{ !cancelled() }}",
+        "with": {
+          "script": "await require('./.github/scripts/outside-pr-guard.cjs')({ github, context, core });\n"
+        }
+      },
+      {
+        "uses": "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+        "id": "size",
+        "if": "${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}",
+        "with": {
+          "script": "const marker = '<!-- pr-size-warning -->';\nconst cap = 400;\nconst botLogin = 'github-actions[bot]';\n\nasync function run() {\n  const prNumber = context.payload.pull_request?.number;\n  if (!prNumber) {\n    core.info('No pull_request payload; skipping pr-size check.');\n    return;\n  }\n\n  // Fetch fresh from the API rather than trust the webhook payload.\n  const { data: pr } = await github.rest.pulls.get({\n    ...context.repo,\n    pull_number: prNumber,\n  });\n\n  core.setOutput('sha', pr.head.sha);\n\n  // This repo has no fork contributors; skip explicitly and visibly rather\n  // than silently commenting on a fork PR we don't intend to support.\n  if (pr.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {\n    core.info(`PR #${pr.number} is from a fork (${pr.head.repo.full_name}); skipping pr-size comment.`);\n    return;\n  }\n\n  const total = (pr.additions || 0) + (pr.deletions || 0);\n  const over = total > cap;\n\n  let body;\n  if (over) {\n    body = `${marker}\\n\\n:warning: **PR size warning** — this PR is **${total}** changed lines (additions + deletions), over the ~${cap}-line cap in AGENTS.md. Consider splitting it into a stack of small PRs: each builds green and is safe to merge alone, landed in order. The cap is advisory — this comment never blocks merging.`;\n  } else {\n    body = `${marker}\\n\\n:white_check_mark: This PR is now **${total}** changed lines (additions + deletions), within the ~${cap}-line cap in AGENTS.md.`;\n  }\n\n  const comments = await github.paginate(github.rest.issues.listComments, {\n    ...context.repo,\n    issue_number: pr.number,\n  });\n  const existing = comments.find((c) => c.user?.login === botLogin && (c.body || '').includes(marker));\n\n  if (over) {\n    if (existing) {\n      if (existing.body !== body) {\n        await github.rest.issues.updateComment({\n          ...context.repo,\n          comment_id: existing.id,\n          body,\n        });\n        core.info(`Updated size comment for PR #${pr.number}.`);\n      } else {\n        core.info(`Size comment for PR #${pr.number} is already up to date.`);\n      }\n    } else {\n      await github.rest.issues.createComment({\n        ...context.repo,\n        issue_number: pr.number,\n        body,\n      });\n      core.info(`Created size comment for PR #${pr.number}.`);\n    }\n  } else if (existing) {\n    await github.rest.issues.updateComment({\n      ...context.repo,\n      comment_id: existing.id,\n      body,\n    });\n    core.info(`Updated size comment to within-cap for PR #${pr.number}.`);\n  } else {\n    core.info(`PR #${pr.number} is within the cap and has no size comment; nothing to do.`);\n  }\n}\n\ntry {\n  await run();\n} catch (err) {\n  core.warning(`pr-size check failed but will not block the PR: ${err.message}`);\n}\n"
+        }
+      },
+      {
+        "uses": "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+        "id": "title",
+        "if": "${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}",
+        "env": {
+          "HYPERTASK_MCP_TOKEN": "${{ secrets.HYPERTASK_MCP_TOKEN }}"
+        },
+        "with": {
+          "script": "await require('./.github/scripts/pr-title.cjs')({ github, context, core });\n"
+        }
+      },
+      {
+        "name": "Publish original guard contexts",
+        "if": "${{ !cancelled() }}",
+        "uses": "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+        "env": {
+          "RESULTS": "${{ toJSON(steps) }}"
+        },
+        "with": {
+          "script": "const results = JSON.parse(process.env.RESULTS);\nconst eventPr = context.payload.pull_request;\nconst guards = [[\"outside-pr-guard\", \"outside\"], [\"pr-size\", \"size\"], [\"pr-title\", \"title\"]];\nlet failed = false;\nfor (const [name, id] of guards) {\n  if (eventPr.base.ref !== 'production' && id !== 'outside') continue;\n  const result = results[id];\n  const sha = result?.outputs?.sha || eventPr.head.sha;\n  const title = result?.outputs?.title ?? eventPr.title;\n  const { data: current } = await github.rest.pulls.get({\n    ...context.repo, pull_number: eventPr.number,\n  });\n  if (current.head.sha !== eventPr.head.sha || current.head.sha !== sha ||\n      (id === 'title' && current.title !== title)) {\n    core.info(`Skipping stale ${name} verdict; a newer run owns it.`);\n    continue;\n  }\n  const passed = result?.outcome === 'success' && Boolean(result.outputs?.sha);\n  failed ||= !passed;\n  await github.rest.repos.createCommitStatus({\n    ...context.repo, sha,\n    context: name, state: passed ? 'success' : 'failure',\n    description: passed ? `${name} passed` : `${name} failed or did not run`,\n    target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,\n  });\n}\nif (failed) core.setFailed('One or more guards failed.');\n"
+        }
+      }
+    ]
+  ]
+}
