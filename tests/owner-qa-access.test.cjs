@@ -42,6 +42,7 @@ const db = {
   featureFlag: { findUnique: async () => ({ mode: "OWNER_AND_QA" }) },
   agent: { findMany: async () => [] },
   project: { findFirst: async () => ({ id: 15 }) },
+  team: { findFirst: async () => ({ id: "test-team" }) },
   $queryRaw: async () => [],
 };
 const flags = load("src/lib/flags.ts", {
@@ -56,6 +57,7 @@ const aliases = {
   "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => false },
   "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
   "@/lib/agents/working": { workingOnByAgent: async () => new Map() },
+  "@/lib/agents/crossTeam": require("./task-route-loader.cjs").load("src/lib/agents/crossTeam.ts", { "@/lib/prisma": { default: db }, "@/lib/flags": flags }),
   "@/lib/agents/ownedSlugs": { ownedAgentSlugs: async () => new Map() },
   "@/lib/agents/maskAgentProviderKey": {},
   "@/lib/aiAllowancePolicy": {},

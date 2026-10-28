@@ -357,3 +357,16 @@ test("run service remaining direct broadcasts expose agent identity only", () =>
   visit(source);
   assert.deepEqual(payloads, [["agentId"], ["agentId"]]);
 });
+
+
+test("a new headerless chat needs no saved-session lookup", async () => {
+  const calls = [];
+  const { loadSidebarChatRequest } = load("src/lib/agents/chatAccess.ts", {
+    "@/lib/prisma": { default: { chatSession: { findFirst: async args => { calls.push(args); throw new Error("new chat has no saved session"); } } } },
+    "@/utils/controllers/projects/getAllIncludes": {},
+    "@/lib/agents/visibility": {},
+    "@/lib/flags": {},
+  });
+  assert.deepEqual(await loadSidebarChatRequest({ headers: new Headers() }, "", { userId: 6 }), { ok: true });
+  assert.deepEqual(calls, []);
+});

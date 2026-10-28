@@ -14,6 +14,25 @@
               }
             }
           }
+        ],
+        "AND": [
+          {
+            "OR": [
+              {
+                "agentId": null
+              },
+              {
+                "agent": {
+                  "crossTeamHomeTeamId": null
+                }
+              },
+              {
+                "agent": {
+                  "userId": 7
+                }
+              }
+            ]
+          }
         ]
       },
       "include": {

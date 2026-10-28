@@ -243,7 +243,7 @@ test("server projection scopes queries before limits and emits safe chronologica
             chatSessionId: "session-1",
             taskId: null,
             chatSession: {
-              is: { userId: 6, agentId: "agent-1" },
+              is: { userId: 6, agentId: "agent-1", AND: [{ OR: [{ agentId: null }, { agent: { crossTeamHomeTeamId: null } }, { agent: { userId: 6, id: "agent-1" } }] }] },
             },
           },
           { task: { is: { project: projectWhere } } },

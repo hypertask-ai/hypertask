@@ -262,6 +262,7 @@ export async function loadSidebarChatRequest(
 ) {
   const projectId = sidebarChatProjectId(request.headers);
   if (projectId === undefined) {
+    if (!sessionId) return { ok: true as const };
     const privateSession = await findChatSession(
       { id: sessionId, agent: { crossTeamHomeTeamId: { not: null } } },
       {},

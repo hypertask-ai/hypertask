@@ -257,37 +257,37 @@ test("the agent page reads and writes the key through the owner-only route", () 
   assert.match(detail, /"Team key"/);
 });
 
-test("the agents list exposes only a masked key, and only to the owner", () => {
-  const fs = require("./refactored-module-source.cjs");
-  const listRoute = fs.readFileSync(
-    path.join(root, "src/app/api/agents/route.ts"),
-    "utf8",
-  );
-
-  const ownedRoute = fs.readFileSync(
-    path.join(root, "src/app/api/agents/owned/route.ts"),
-    "utf8",
-  );
-  // The register reads /api/agents/owned, so the masked tail has to come from
-  // there too, through the same shared mapping, and never from a disabled row.
-  assert.match(ownedRoute, /maskAgentProviderKey\(byokApiKeys\)/);
-  assert.match(ownedRoute, /where: \{ enabled: true \}/);
-  const shared = fs.readFileSync(
-    path.join(root, "src/lib/agents/maskAgentProviderKey.ts"),
-    "utf8",
-  );
-  assert.match(shared, /if \(row\.enabled === false\) continue;/);
-  assert.match(shared, /maskByokSecret\(decryptByokSecret\(ciphertext\)\)/);
-  const detail = readAgentDetailSource();
-  assert.match(detail, /k\.enabled !== false/);
-
-  assert.match(listRoute, /byokApiKeys,\s*\.\.\.a\s*\}/);
-  assert.match(
-    listRoute,
-    /providerKey:\s*\n?\s*a\.userId === currentUserId \? maskAgentProviderKey\(byokApiKeys\) : null/,
-  );
-  assert.match(listRoute, /maskAgentProviderKey\(byokApiKeys\)/);
-  assert.doesNotMatch(listRoute, /ciphertext: row\.ciphertext,/);
+test("the agents list exposes only a masked key, and only to the owner", async () => {
+  const { load } = require("./task-route-loader.cjs");
+  const rows = [6, 7].map(userId => ({
+    id: `agent-${userId}`, userId, displayName: "Runner", createdAt: new Date("2026-10-01"),
+    revokedAt: null, heartbeatAt: null, mcpTokenJti: "private-token-id", mcpTokenExpiresAt: null,
+    permissions: {}, byokApiKeys: [{ provider: "openrouter", ciphertext: "fixture-key-1234" }],
+    crossTeamHomeTeamId: "team", crossTeamAccessGranted: false,
+    members: [{ project: { id: 15, teamId: "team", name: "Board" } }],
+  }));
+  const queries = [];
+  const route = load("src/app/api/agents/route.ts", {
+    "@/lib/prisma": { default: {
+      agent: { findMany: async query => { queries.push(query); return rows; } },
+      comment: { groupBy: async () => [] }, oAuthAuthorizationCode: { findMany: async () => [] },
+    } },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
+    "@/lib/flags": { isOwnerOrQaUserId: async () => false, isFeatureEnabled: async () => false },
+    "@/lib/agents/crossTeam": { crossTeamAgentsEnabled: async () => false },
+    "@/lib/crypto/byokCipher": { decryptByokSecret: value => value },
+    "@/lib/mcp/auth": {},
+    "@/utils/controllers/agents/boardMembers": {},
+    "@/utils/controllers/agents/ensureDefaultTeamAgent": {},
+    "@/utils/controllers/teams/hasTeamMembershipAccess": { hasTeamMembershipAccess: async () => true },
+    "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}) },
+  });
+  const response = await route.GET({ headers: new Headers(), url: "https://fixture.invalid/api/agents?teamId=team" });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(queries[0].select.byokApiKeys.where, { enabled: true });
+  assert.deepEqual(body.agents.map(agent => agent.providerKey), [{ provider: "openrouter", maskedKey: "••••••••1234" }, null]);
+  assert.doesNotMatch(JSON.stringify(body), /fixture-key|ciphertext|byokApiKeys|private-token-id|crossTeamHomeTeamId|crossTeamAccessGranted/);
 });
 
 test("a team in GDPR safe mode blocks a restricted agent key", async () => {

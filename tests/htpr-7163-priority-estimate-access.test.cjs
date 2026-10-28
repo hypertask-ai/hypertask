@@ -38,7 +38,7 @@ function loadSetter(file, field) {
   };
   const scope = load('src/lib/auth/agentScope.ts', {
     '@/lib/flags': { isFeatureEnabled: async () => false },
-    '@/lib/prisma': { default: { member: { findMany: async () => [] } } },
+    '@/lib/prisma': { default: { agent: { findFirst: async () => ({ crossTeamHomeTeamId: null }) }, member: { findMany: async () => [] } } },
     '@/lib/telemetry/signupAnalytics': { recordServerCapture: () => {} },
   });
   const filename = path.join(root, file);

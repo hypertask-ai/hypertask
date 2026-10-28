@@ -205,13 +205,14 @@ test('reads session history without requiring a database transaction', async () 
     assert.equal(history.total, 1)
     assert.equal(history.session.id, SESSION_ID)
     assert.equal(history.session.messages[0].content, 'Show my history')
-    assert.deepEqual(calls.sessionFindMany[0].where, { userId: 6 })
-    assert.deepEqual(calls.sessionFindFirst[0].where, { userId: 6, id: SESSION_ID })
+    const audience = { AND: [{ OR: [{ agentId: null }, { agent: { crossTeamHomeTeamId: null } }, { agent: { userId: 6 } }] }] }
+    assert.deepEqual(calls.sessionFindMany[0].where, { userId: 6, ...audience })
+    assert.deepEqual(calls.sessionFindFirst[0].where, { userId: 6, id: SESSION_ID, ...audience })
     assert.equal(calls.messageFindMany[0].take, 40)
     assert.equal(calls.messageFindMany[0].skip, 80)
     assert.deepEqual(calls.messageFindMany[0].where, {
       sessionId: SESSION_ID,
-      session: { userId: 6, id: SESSION_ID },
+      session: { userId: 6, id: SESSION_ID, ...audience },
     })
   } finally {
     restore()
