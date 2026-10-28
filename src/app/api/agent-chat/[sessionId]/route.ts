@@ -99,10 +99,7 @@ export async function GET(
       }
     }
 
-    const activityRowsEnabled = sidebarChatProjectId(request.headers) === undefined && await isFeatureEnabled(
-      "htpr-6094-agent-activity-rows",
-      userId,
-    );
+    const activityRowsEnabled = sidebarChatProjectId(request.headers) === undefined;
     const contextEnabled = await isFeatureEnabled(
       HTPR_7734_AGENT_CHAT_CONTEXT_FLAG,
       userId,
