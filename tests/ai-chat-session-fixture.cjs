@@ -14,8 +14,14 @@ function matches(row, where) {
   for (const [key, value] of Object.entries(where)) {
     if (key === 'AND' || key === 'OR') continue;
     if (key === 'messages') { if (value.none && row.messages.length) return false; continue; }
-    if (key === 'agent') { if (row.runtimeType === value.runtimeType.not) return false; continue; }
+    if (key === 'agent') {
+      if (!row.agentId || !matches(row.agent ?? {
+        id: row.agentId, userId: row.userId, runtimeType: row.runtimeType, crossTeamHomeTeamId: null,
+      }, value)) return false;
+      continue;
+    }
     if (value && typeof value === 'object' && !(value instanceof Date)) {
+      if ('not' in value && row[key] === value.not) return false;
       if ('lt' in value && !(row[key] < value.lt)) return false;
       if ('in' in value && !value.in.includes(row[key])) return false;
     } else if (value instanceof Date ? +row[key] !== +value : row[key] !== value) return false;
