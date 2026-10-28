@@ -44,6 +44,7 @@ function pagesSmoke() {
     if (name === "./lib/errorPage") return {};
     if (name === "./lib/realtime") return { withRealtime: value => value };
     if (name === "./lib/tier") return { tieredId: value => value };
+    if (name === "../../src/lib/firstScreen/boardDisplay") return require("./task-route-loader.cjs").load("src/lib/firstScreen/boardDisplay.ts", {});
     assert.fail(`Unexpected dependency ${name}`);
   }, loaded, path.join(root, "e2e/smoke"), { log() {}, error() {} });
   assert.equal(typeof run, "function");

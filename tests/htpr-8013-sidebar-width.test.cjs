@@ -74,7 +74,7 @@ async function fixture(t, enabled = true, mobileSidebar = false, pendingPanel = 
     "@/lib/state": state,
     "@/store": atoms,
     "@/lib/configs/style.config": config,
-    "@/hooks/useFlag": { useFlag: () => enabled },
+    "@/hooks/useFlag": { useFlag: () => enabled, useFlagReady: () => true },
     "@/lib/contexts/mobileContext": { MobileViewContext: Mobile },
     "@/lib/contexts/Multipages/AI_Agent/chatContext": { useOptionalAiChatContext: () => ({ isSidebarMode: true, showAiChatInterface: true, togglePopover: noop }) },
     "@/components/ProviderGlobal/useGlobalUIState": { useGlobalUIState: () => ({}) },
