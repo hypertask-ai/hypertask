@@ -2383,6 +2383,12 @@ test('aliased formatter parameters gate real output, not ignored or overwritten 
     ['exception control flow is unsupported', '@/lib/formatter', 'try { if (!enabled) return null; return "Age"; } catch { return "Age"; }', false],
     ['nested contradictory guard', '@/lib/formatter', 'if (enabled) { if (!enabled) return null; return "Age"; } return "Age";', false],
     ['nested loop guard', '@/lib/formatter', 'while (enabled) { if (!enabled) return null; return "Age"; } return "Age";', false],
+    ['async formatter', '@/lib/formatter', 'if (!enabled) return null; return "Age";', false, 'async function'],
+    ['generator formatter', '@/lib/formatter', 'if (!enabled) return null; return "Age";', false, 'function*'],
+    ['async generator formatter', '@/lib/formatter', 'if (!enabled) return null; return "Age";', false, 'async function*'],
+    ['contradictory compound guard', '@/lib/formatter', 'if (enabled && !enabled) return null; return "Age";', false],
+    ['tautological compound guard', '@/lib/formatter', 'if (enabled || !enabled) return null; return "Age";', false],
+    ['contradictory conditional', '@/lib/formatter', 'return enabled && !enabled ? null : "Age";', false],
     ['ignored parameter', '@/lib/formatter', 'if (enabled) log(); return "Age";', false],
     ['invariant repeated guards', '@/lib/formatter', 'if (!enabled) return \"Age\"; if (enabled) return \"Age\"; return null;', false],
     ['invariant prior guard with else', '@/lib/formatter', 'if (!enabled) return \"Age\"; if (enabled) return \"Age\"; else return null;', false],
@@ -2395,9 +2401,9 @@ test('aliased formatter parameters gate real output, not ignored or overwritten 
     ['external module', 'formatter', 'if (!enabled) return null; return "Age";', false],
     ['outside source alias', '@/../formatter', 'if (!enabled) return null; return "Age";', false],
   ];
-  for (const [name, moduleName, body, expected] of cases) {
+  for (const [name, moduleName, body, expected, declaration = 'function'] of cases) {
     const { dir, git } = makeRepo(t), base = commit(git, 'base');
-    const helper = `export function format(data, enabled) { ${body} }\n`;
+    const helper = `export ${declaration} format(data, enabled) { ${body} }\n`;
     const helperPath = moduleName === './formatter' ? 'src/components/formatter.ts' : 'src/lib/formatter.ts';
     writeFile(dir, helperPath, helper);
     writeFile(dir, 'src/components/Widget.tsx', `import {useFlag} from "@/hooks/useFlag";
@@ -2419,6 +2425,8 @@ test('formatter gate proof requires an explicit live return branch', async (t) =
     ['unsupported direct JSX output', 'return <p>{format(enabled)}</p>;', false],
     ['unsupported assigned JSX output', 'const label = format(enabled); return <p>{label}</p>;', false],
     ['assigned early-return output', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['earlier rendering return', 'const always = true; if (always) return <p>Age</p>; const label = format(enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['contradictory consumer', 'const label = format(enabled); if (label && !label) return null; return <p>Age</p>;', false],
     ['undefined comparison never matches', 'const label = format(enabled); if (label === undefined) return null; return <p>Age</p>;', false],
     ['false comparison never matches', 'const label = format(enabled); if (label === false) return null; return <p>Age</p>;', false],
     ['inequality always matches', 'const label = format(enabled); if (label !== undefined) return <p>Age</p>; return null;', false],

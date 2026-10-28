@@ -1002,6 +1002,8 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
 
 function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
+  const fn = enclosingFunctionLike(node);
+  if (fn?.asteriskToken || fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword)) return false;
   for (let parent = node.parent; parent && !typescript.isFunctionLike(parent); parent = parent.parent) {
     if (typescript.isTryStatement(parent)) return false;
   }
@@ -1019,6 +1021,12 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
       if (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
           parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken) {
         const other = child === parent.left ? parent.right : parent.left;
+        let repeated = false;
+        (function visit(item) {
+          if (typescript.isIdentifier(item) && item.text === node.text) repeated = true;
+          if (!repeated) typescript.forEachChild(item, visit);
+        })(other);
+        if (repeated) return false;
         const value = staticBoolean(other);
         if ((child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
             (child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
@@ -1036,15 +1044,14 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
       if (!typescript.isBlock(parent.parent) || !typescript.isFunctionLike(parent.parent.parent)) return false;
       const statements = parent.parent.statements;
       const index = statements.indexOf(parent);
-      let start = 0;
       if (after) {
         let declaration = after;
         while (declaration.parent && declaration.parent !== parent.parent) declaration = declaration.parent;
-        start = statements.indexOf(declaration) + 1;
-        if (start === 0 || start > index) return false;
+        const declarationIndex = statements.indexOf(declaration);
+        if (declarationIndex === -1 || declarationIndex >= index) return false;
       }
       const straightLine = (statement) => typescript.isVariableStatement(statement) || typescript.isEmptyStatement(statement);
-      if (!statements.slice(start, index).every(straightLine)) return false;
+      if (!statements.slice(0, index).every(straightLine)) return false;
       let whenTrue = parent.thenStatement;
       const following = statements.slice(index + 1).find((statement) => !straightLine(statement));
       let whenFalse = parent.elseStatement ?? following;
