@@ -89,7 +89,11 @@ export function requestErrorMessage(
   error: unknown,
   stage: "body" | "validation",
 ) {
-  console.error(`[ai/chat/stream] request-${stage} user-facing error`, error);
+  if (stage === "validation" && error instanceof z.ZodError) {
+    console.info("[ai/chat/stream] request-validation refused: invalid request");
+  } else {
+    console.error(`[ai/chat/stream] request-${stage} user-facing error`, error);
+  }
   if (stage === "body") {
     return "Invalid request: the request body could not be read.";
   }
