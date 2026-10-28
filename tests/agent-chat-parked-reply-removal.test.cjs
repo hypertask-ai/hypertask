@@ -356,9 +356,7 @@ function loadHistoryRoute({
     getSessionUser: async () => ({ userId: 6 }),
   });
   stubModule("src/lib/flags.ts", {
-      SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
     isFeatureEnabled: async (key) => {
-      if (key === "htpr-6002-shared-agent-chat") return true;
       assert.notEqual(key, "htpr-6322-agent-chat-parked-reply");
       return false;
     },

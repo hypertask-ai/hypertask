@@ -5,7 +5,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const FLAG = "htpr-7518-agent-sidebar-chats";
-let viewer, enabled, shared, agent, board, session, writes, messages, participants, activityReads;
+let viewer, enabled, agent, board, session, writes, messages, participants, activityReads;
 const stub = (file, exports) => {
   const id = path.join(root, file);
   require.cache[id] = { id, filename: id, loaded: true, exports };
@@ -68,8 +68,7 @@ stub("src/lib/agents/runtimeState.ts", {
 stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => viewer });
 stub("src/lib/flags.ts", {
-  SHARED_AGENT_CHAT_FLAG: "shared",
-  isFeatureEnabled: async (key) => key === FLAG ? enabled : key === "shared" ? shared : false,
+  isFeatureEnabled: async (key) => key === FLAG ? enabled : false,
 });
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: (userId) => ({ __visibleTo: userId }) });
 stub("src/utils/controllers/projects/getAllIncludes.ts", {
@@ -110,7 +109,7 @@ const routes = {
   stop: load("src/app/api/agent-chat/[sessionId]/stop/route.ts"),
 };
 function reset() {
-  viewer = { userId: 6, source: "legacy" }; enabled = true; shared = true; writes = []; messages = []; participants = {}; activityReads = 0;
+  viewer = { userId: 6, source: "legacy" }; enabled = true; writes = []; messages = []; participants = {}; activityReads = 0;
   board = { id: 15, ownerId: 6, teamId: "team-a", status: "Normal", members: [{ userId: 7, agentId: null, status: "Accepted" }] };
   agent = { id: "agent-1", userId: 6, displayName: "Runner", photoURL: null, visibility: "TEAM", runtimeType: "EXTERNAL", revokedAt: null, archivedAt: null, crossTeamHomeTeamId: null,
     heartbeatAt: new Date(), agentWebhookSubscription: null, members: [{ projectId: 15, status: "Accepted", project: board }] };
@@ -137,8 +136,8 @@ for (const name of operations) {
       assert.equal(activityReads, 0);
     }
   });
-  test(`${name}: still allowed PRIVATE owner with all parked flags Off`, async () => {
-    reset(); agent.visibility = "PRIVATE"; shared = false;
+  test(`${name}: still allowed PRIVATE owner`, async () => {
+    reset(); agent.visibility = "PRIVATE";
     assert.equal((await operation(name)).status, 200);
   });
   const denied = {
@@ -157,7 +156,6 @@ for (const name of operations) {
     "agent bearer without human session": () => { viewer = null; },
     "flag Off": () => { enabled = false; },
     "canonical team mismatch": () => { viewer.userId = 7; session.teamId = "team-old"; },
-    "shared conversation policy Off": () => { viewer.userId = 7; shared = false; },
   };
   for (const [scenario, change] of Object.entries(denied)) test(`${name}: now refused ${scenario}`, async () => {
     reset(); change();

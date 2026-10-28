@@ -269,7 +269,7 @@ function roster(enabled) {
     "@/lib/agents/chatService": { openAgentChat: noop }, "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}) },
     "@/lib/agents/chatAvailability": availability,
     "@/utils/controllers/agents/boardMembers": { getAgentTeamIds: async () => new Map() },
-    "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return key === "htpr-8048-agent-sessions" ? false : enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return key === "htpr-8048-agent-sessions" ? false : enabled; } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag, "@/lib/agentStatus/chip": chip,
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/lib/api/rateLimit": { checkRestRateLimit: noop }, "@/lib/agentRuns/service": { browserMutationIsSameOrigin: noop },

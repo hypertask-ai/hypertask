@@ -145,7 +145,7 @@ export async function GET(
             participant.lastReadAt ?? participant.joinedAt,
           )
         : null,
-      before || !access.sharedConversationEnabled
+      before
         ? null
         : prisma.chatSessionParticipant.findMany({
             where: { sessionId: session.id },
@@ -196,7 +196,7 @@ export async function GET(
             participant.user.displayName || participant.user.email,
           joinedAt: participant.joinedAt,
         })) ?? null,
-      sharedConversationEnabled: access.sharedConversationEnabled === true,
+      sharedConversationEnabled: true,
       chatEnabled: deliveryMode !== null,
       deliveryMode,
     });

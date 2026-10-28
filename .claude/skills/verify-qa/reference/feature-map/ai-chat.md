@@ -6,6 +6,20 @@ The AI chat panel on a board or task (native chat, `src/app/api/ai/`), and
 the mobile Agent Chat surface. Non-demo chat uses `/api/ai/chat/stream`
 without a native-chat flag; demo chat uses `/api/demo/chat/stream`.
 
+## Shared agent conversations
+
+Shared conversations are permanent after HTPR-8115. On `/agents/chat`, open
+an existing accessible agent and reload its history. The create-session entry
+point is `POST /api/ai-chat/create-session` with `agentId`; history and private
+drafts use `/api/agent-chat/<sessionId>` and its `/participant` route. Preserve
+the existing `sharedConversationEnabled: true` response, participants, history
+pagination and each user's draft. Restore any draft changed during QA.
+Authorized teammates must reach the same owner-keyed conversation; private,
+revoked, unrelated-team and removed-board access must still be refused. Never
+send a message merely to test retirement: that can wake an external runtime.
+Use an existing QA conversation and record inaccessible teammate fixtures as
+UNREACHABLE, alongside the closest live owner read and route-entry tests.
+
 ## Following another ticket
 
 With `htpr-7736-chat-follows-task` enabled, pin the sidebar open on a QA
