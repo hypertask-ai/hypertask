@@ -148,6 +148,18 @@ logged, _ = run(log_fixture)
 assert logged.returncode == 0, logged.stderr
 assert '\tHTPR-11\t' not in logged.stdout
 print('ok direct agent-log tmux claim stays taken')
+split_history = dict(tasks=[task(1)], prs=[], activities={},
+    comments={'HTPR-1': [comment(agent=None, text='Human update')]*50},
+    logs={'HTPR-1': [dict(id=f'log-{i}', text='Agent heartbeat', createdAt=iso(8),
+                         agentId='Agent One', agentName='Agent One') for i in range(50)]})
+checked, _ = run(split_history)
+assert checked.returncode == 0, checked.stderr
+assert '\tHTPR-1\t' in checked.stdout
+split_history['logs']['HTPR-1'] *= 2
+checked, _ = run(split_history)
+assert checked.returncode != 0 and 'outside the bounded' in checked.stderr
+print('ok completeness limits apply separately to comments and agent activity')
+
 
 
 # Only the unavailable route activates fallback; comments alone cannot keep deployed claims alive.

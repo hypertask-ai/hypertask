@@ -169,7 +169,8 @@ def held_tickets(boards, comments, sections=ACTIVE):
                 continue
             claimed = claims(comments[ticket])
             if claimed:
-                newest = max(claimed, key=lambda c: (c["createdAt"], c.get("id", 0)))
+                newest = max(claimed, key=lambda c: (c["createdAt"],
+                    (0, c["id"]) if type(c.get("id")) is int else (1, str(c.get("id", "")))))
                 name = (newest.get("agent") or {}).get("displayName", "").casefold()
                 held.setdefault(name, []).append(ticket)
     return held

@@ -105,8 +105,9 @@ inspect_ticket() {
   claim=$(jq -c '[.comments[] | select(.agent.id != null or (.agent_display_name // "") != "")
     | select((.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed."))]
     | sort_by(.createdAt) | last // null' "$comments")
-  if [ "$claim" = null ] && [ "$(jq '.comments | length' "$comments")" -ge 100 ]; then
-    fail "latest claim for $t may be outside the bounded comment read"
+  if [ "$claim" = null ] && { [ "$(jq '.comments | length' "$work/$t.comments")" -ge 100 ] ||
+    [ "$(jq '.activities | length' "$work/$t.log")" -ge 100 ]; }; then
+    fail "latest claim for $t may be outside the bounded comment read or agent-log read"
   fi
   claim_id=$(jq -r '.agent.id // ""' <<< "$claim")
   has_resume=$(jq '(.text // .commentText // "") | gsub("<[^>]*>"; " ")

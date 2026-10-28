@@ -577,6 +577,17 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(self.dispatch()[0]["ticket"], "HTPR-1")
         self.assertIsNone(self.dispatch()[1]["ticket"])
 
+    def test_equal_time_numeric_and_activity_claim_ids_have_stable_order(self):
+        self.boards[15][0]["section"] = "In Progress"
+        legacy = dict(claim("RUNNER 1"), id=10)
+        logged = dict(claim("RUNNER 2"), id="activity-uuid", type="activity")
+        for rows in ([legacy, logged], [logged, legacy]):
+            held = m.held_tickets({15: [self.boards[15][0]]}, {"HTPR-1": rows})
+            self.assertEqual(held, {"runner 2": ["HTPR-1"]})
+        held = m.held_tickets({15: [self.boards[15][0]]},
+                              {"HTPR-1": [dict(legacy, id=9), dict(claim("RUNNER 2"), id=10)]})
+        self.assertEqual(held, {"runner 2": ["HTPR-1"]})
+
     def test_done_runner_with_stale_holds_still_dispatched(self):
         self.comments["HTPR-4"] = [claim("RUNNER 1")]
         result = self.dispatch()
