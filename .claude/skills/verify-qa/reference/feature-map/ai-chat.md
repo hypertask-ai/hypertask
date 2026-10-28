@@ -347,3 +347,22 @@ With the flag off, preserve the existing direct request and prompt order.
 Do not make paid model calls without the run's authorization. Offline
 transport coverage uses fixture credentials and an intercepted SDK fetch
 in `tests/htpr-7855-direct-prompt-cache.test.cjs`; it does not prove live hits.
+
+## Idle native-agent heartbeat
+
+The scheduled entry point is `GET /api/cron/native-agent-heartbeat`. An
+unchanged inbox already advances the scan watermark without opening a chat
+stream. Keep that behavior with the database probe both enabled and disabled.
+Use `node --test tests/htpr-7846-idle-heartbeat.test.cjs` for an isolated day
+of 96 idle ticks, one new inbox item, replay, scan boundaries, probe failure,
+active execution recovery, and rejected cron authorization. External persistence
+and the chat stream are intercepted; those counters are not live usage totals.
+
+Production checks are read-only: inspect permitted agents and
+`/api/mcp/ai/usage?project_id=<board>&group_by=agent&since=<ISO-date>`.
+The usage API groups requests by agent, not heartbeat execution; heartbeat
+model usage is recorded under `chat`, alongside interactive agent chats.
+Do not call those counts heartbeat-only rows or claim measured savings from
+a test-only change. Do not trigger the global cron or create paid model turns
+just for this check. Record an unavailable heartbeat-only daily baseline as
+UNREACHABLE, with the actual scoped usage response as closest evidence.
