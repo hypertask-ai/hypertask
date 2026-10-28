@@ -79,21 +79,9 @@ function loadRoute(comments) {
           ? { id: agent.id, displayName: agent.displayName }
           : undefined,
     },
-    "@/lib/agents/publicAgent": {
-      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
-        if (hasAgentRow && !visibleAgent) return "Private agent";
-        if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
-        const stored = storedDisplayName && String(storedDisplayName).trim();
-        if (stored) return stored;
-        const live =
-          visibleAgent &&
-          visibleAgent.displayName &&
-          String(visibleAgent.displayName).trim();
-        return live || null;
-      },
-    },
+    "@/lib/agents/publicAgent": require("./task-route-loader.cjs").load("src/lib/agents/publicAgent.ts", {}),
     "@/lib/flags": {
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+
       isFeatureEnabled: async () => false,
     },
     "@/utils/controllers/projects/getAllIncludes": {
@@ -123,7 +111,7 @@ function comment(overrides) {
   };
 }
 
-test("task context redacts deleted, private, and unshared team agent names", async () => {
+test("task context preserves deleted agents while redacting private and unshared team agents", async () => {
   const privateAgent = {
     id: "private-agent",
     displayName: "Private helper",
@@ -167,7 +155,7 @@ test("task context redacts deleted, private, and unshared team agent names", asy
   assert.equal(response.status, 200);
   assert.deepEqual(
     response.body.comments.map(({ author }) => author),
-    ["Human", "Shared helper", "Private agent", "Private agent", "Private agent"],
+    ["Human", "Shared helper", "Private agent", "Private agent", "Deleted helper"],
   );
   assert.deepEqual(route.getCommentQuery().select.agent.select, {
     viewerId: 6,

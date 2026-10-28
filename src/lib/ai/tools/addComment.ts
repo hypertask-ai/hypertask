@@ -12,8 +12,6 @@ import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRef
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { buildMcpImageUrls, persistUrlsForComment } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { broadcastTaskComment } from "@/lib/realtime/server";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { COMMENT_TASK_LINK_RULE } from "@/lib/ai/chatStream/prompt";
 import { TOOL_TASK_ID_DESCRIPTION, MAX_BULK_TOOL_TARGETS, bulkTaskTargetCount } from "@/lib/ai/tools/constants";
 import { withToolErrors, resolveTaskForTool } from "@/lib/ai/tools/execution";
@@ -230,8 +228,7 @@ export function createAddCommentTool(context: ToolContext) {
               createdCommentPayload.comment,
               commentWithAttachments,
               user.id,
-              taskWithOwner.projectId,
-              await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+              taskWithOwner.projectId
             );
           }
           return sanitizeForJson(createdCommentPayload);

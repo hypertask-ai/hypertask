@@ -432,14 +432,12 @@ export function applyDurableCommentAttribution<T extends object>(
   mapped: T,
   comment: any,
   userId: number,
-  projectId: number,
-  attributionEnabled: boolean
+  projectId: number
 ): T {
   return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
     visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
     storedDisplayName: comment.agentDisplayName,
-    attributionEnabled,
   });
 }
 

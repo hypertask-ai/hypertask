@@ -6,8 +6,6 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 import { taskMcpGetInclude } from "@/lib/mcp/tasks/mappers";
 import { mcpVisibleAgentSelect, mapVisibleMcpAgent } from "@/lib/mcp/agents";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { resolvePublicAgentDisplayName } from "@/lib/agents/publicAgent";
 import { extractPrLinks } from "@/lib/mcp/tasks/extractPrLinks";
 import { TOOL_TASK_ID_DESCRIPTION } from "@/lib/ai/tools/constants";
@@ -119,10 +117,6 @@ export function createTaskContextTool(context: ToolContext) {
         }
 
         const mappedTask = mapTaskToMcpGetResponse(task, user.id);
-        const attributionEnabled = await isFeatureEnabled(
-          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-          user.id
-        );
         const comments = recentComments.reverse().map((comment) => {
           const agent = mapVisibleMcpAgent(
             comment.agent,
@@ -133,25 +127,14 @@ export function createTaskContextTool(context: ToolContext) {
             hasAgentRow: Boolean(comment.agent),
             visibleAgent: agent,
             storedDisplayName: comment.agentDisplayName,
-            attributionEnabled,
           });
           return {
             id: comment.id,
             author:
-              agent?.displayName ||
-              (comment.agent || comment.agentDisplayName ? "Private agent" : undefined) ||
+              agentDisplayName ||
               comment.creator?.displayName ||
               comment.creator?.email ||
               "Unknown",
-            ...(attributionEnabled
-              ? {
-                author:
-                  agentDisplayName ||
-                  comment.creator?.displayName ||
-                  comment.creator?.email ||
-                  "Unknown",
-              }
-              : {}),
             text: stripInlineDataUris(comment.text),
             createdAt: comment.createdAt.toISOString(),
           };

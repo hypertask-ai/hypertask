@@ -207,36 +207,7 @@ function loadCommentsRoute({
           : undefined,
       mcpVisibleAgentSelect: () => ({}),
     },
-    '@/lib/agents/publicAgent': {
-      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
-        if (hasAgentRow && !visibleAgent) return 'Private agent'
-        if (!attributionEnabled && !hasAgentRow && storedDisplayName) return 'Private agent'
-        const stored = storedDisplayName && String(storedDisplayName).trim()
-        if (stored) return stored
-        const live =
-          visibleAgent &&
-          visibleAgent.displayName &&
-          String(visibleAgent.displayName).trim()
-        return live || null
-      },
-      overlayDurableAgentDisplayName(mapped, opts) {
-        if (!opts.attributionEnabled) return mapped
-        const name = (function resolve({ hasAgentRow, visibleAgent, storedDisplayName }) {
-          if (hasAgentRow && !visibleAgent) return 'Private agent'
-          const stored = storedDisplayName && String(storedDisplayName).trim()
-          if (stored) return stored
-          const live =
-            visibleAgent &&
-            visibleAgent.displayName &&
-            String(visibleAgent.displayName).trim()
-          return live || null
-        })(opts)
-        const next = { ...mapped }
-        if (name) next.agent_display_name = name
-        else delete next.agent_display_name
-        return next
-      },
-    },
+    "@/lib/agents/publicAgent": require("./task-route-loader.cjs").load("src/lib/agents/publicAgent.ts", {}),
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/lib/mcp/tasks/resolveTask': {
       findTaskByIdentifier: async (...args) => { resolverCalls.push(args); return resolveTask(...args) },
@@ -276,11 +247,11 @@ function loadCommentsRoute({
       readJsonBody: async (request) => ({ ok: true, body: request.body }),
     },
     '@/lib/flags': {
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG: 'htpr-6516-agent-attribution',
+
       isFeatureEnabled: async () => false,
     },
     '@/lib/flags/keys': {
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG: 'htpr-6516-agent-attribution',
+
     },
     '@/lib/mcp/listQuery': {
       parseNumericCursor: () => null,
@@ -389,7 +360,7 @@ test('MCP comments response includes mapped active reactions', async () => {
     false
   )
   assert.equal(response.body.comments[0].agent, undefined)
-  assert.equal(response.body.comments[0].agent_display_name, 'Private agent')
+  assert.equal(response.body.comments[0].agent_display_name, 'Deleted helper')
   assert.deepEqual(response.body.comments[1].reactions, [{
     id: 'reaction-7002',
     createdAt: '2026-08-21T01:00:00.000Z',

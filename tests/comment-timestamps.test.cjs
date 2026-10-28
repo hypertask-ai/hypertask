@@ -118,7 +118,7 @@ test(`MCP PATCH editor visibility records and serializes the ${agentId || 'human
       assert.equal(projectId, 15)
       return new Map([['agent-editor', 'Visible editor']])
     } },
-    '@/lib/agents/publicAgent': {},
+    '@/lib/agents/publicAgent': require('./task-route-loader.cjs').load('src/lib/agents/publicAgent.ts', {}),
     '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/lib/prisma': { default: fixture.prisma, __esModule: true },
     '@/utils/controllers/comments/processMentions': {},
