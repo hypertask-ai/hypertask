@@ -61,7 +61,9 @@ const AddExistingAgentPicker = ({ projectId, boardName, boardTeamId, onClose }: 
     enabled: Boolean(currentUser?.id),
     refetchOnWindowFocus: false,
   });
-  const groups = addExistingAgentGroups(ownedAgents, projectId, boardTeamId, keyword, crossTeamEnabled);
+  const groups = crossTeamEnabled
+    ? addExistingAgentGroups(ownedAgents, projectId, boardTeamId, keyword, true)
+    : addExistingAgentGroups(ownedAgents, projectId, boardTeamId, keyword);
   const enabledAgents = [...groups.onThisTeam, ...groups.notOnAnyBoard];
 
   const pickAgent = (agent: OwnedAgentForBoard) => {
