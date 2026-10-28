@@ -45,11 +45,11 @@ export async function GET(request: NextRequest) {
   const provenance = !crossTeamEnabled && boardAgentRows.length > 0
     ? await prisma.agent.findMany({
         where: { id: { in: boardAgentRows.map((row) => row.agent.id) } },
-        select: { id: true, crossTeamHomeTeamId: true },
+        select: { id: true, crossTeamHomeTeamId: true, crossTeamAccessGranted: true },
       })
     : [];
   for (const agent of provenance) {
-    if (agent.crossTeamHomeTeamId) teamIdByAgentId?.set(agent.id, agent.crossTeamHomeTeamId);
+    if (agent.crossTeamAccessGranted && agent.crossTeamHomeTeamId) teamIdByAgentId?.set(agent.id, agent.crossTeamHomeTeamId);
   }
   const agents = boardAgentRows
     .filter((row) => crossTeamEnabled

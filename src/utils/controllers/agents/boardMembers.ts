@@ -175,6 +175,7 @@ async function addAgentToBoardTransaction(
       userId: true,
       archivedAt: true,
       crossTeamHomeTeamId: true,
+      crossTeamAccessGranted: true,
       boardHomeTeamId: true,
       credentialTeamId: true,
       credentialTeamAccessBinding: true,
@@ -202,7 +203,7 @@ async function addAgentToBoardTransaction(
 
   const homeTeamId = agent.crossTeamHomeTeamId ?? agent.boardHomeTeamId ??
     agent.members.find(({ project }) => project.teamId)?.project.teamId ?? project.teamId;
-  const belongsToTargetTeam = agent.crossTeamHomeTeamId
+  const belongsToTargetTeam = agent.crossTeamAccessGranted
     ? project.teamId === agent.crossTeamHomeTeamId
     : canAttachAgentToTeam(
         agent.members.map(({ project }) => project.teamId),
@@ -236,13 +237,15 @@ async function addAgentToBoardTransaction(
     await assertAgentBoardInviteScope(database.member, projectId, requestingUserId, actingAgentId);
   }
   const expandsTeams = homeTeamId !== project.teamId || !belongsToTargetTeam;
-  const markExpanded = enabled && !agent.crossTeamHomeTeamId && expandsTeams;
-  if (!agent.boardHomeTeamId || markExpanded) {
+  const markExpanded = !agent.crossTeamHomeTeamId && expandsTeams;
+  const grantCrossTeamAccess = enabled && expandsTeams && !agent.crossTeamAccessGranted;
+  if (!agent.boardHomeTeamId || markExpanded || grantCrossTeamAccess) {
     await database.agent.update({
       where: { id: agent.id },
       data: {
         ...(!agent.boardHomeTeamId ? { boardHomeTeamId: homeTeamId } : {}),
         ...(markExpanded ? { crossTeamHomeTeamId: homeTeamId } : {}),
+        ...(grantCrossTeamAccess ? { crossTeamAccessGranted: true } : {}),
       },
     });
   }

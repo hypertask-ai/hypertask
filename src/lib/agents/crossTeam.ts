@@ -21,13 +21,13 @@ export async function crossTeamProjectFence(
 ): Promise<Prisma.ProjectWhereInput | null> {
   const agent = await database.agent.findFirst({
     where: { id: agentId, userId, revokedAt: null },
-    select: { crossTeamHomeTeamId: true },
+    select: { crossTeamHomeTeamId: true, crossTeamAccessGranted: true },
   });
   if (!agent) return { id: { in: [] } };
   if (!agent.crossTeamHomeTeamId) return null;
   const enabled = await crossTeamAgentsEnabled(userId);
   return {
-    ...(enabled ? {} : { teamId: agent.crossTeamHomeTeamId }),
+    ...(enabled || !agent.crossTeamAccessGranted ? {} : { teamId: agent.crossTeamHomeTeamId }),
     team: ownerTeamWhere(userId),
     members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null, archivedAt: null } } },
   };

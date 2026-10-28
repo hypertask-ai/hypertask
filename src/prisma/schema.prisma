@@ -2655,6 +2655,7 @@ model Agent {
   mcpTokenExpiresAt         DateTime?
   boardHomeTeamId             String?
   crossTeamHomeTeamId         String?
+  crossTeamAccessGranted      Boolean  @default(false)
   credentialTeamId            String?
   credentialTeamAccessBinding String?
   // Monotonic credential/runtime generation. Heartbeats from a destroyed or

@@ -3,10 +3,10 @@ const assert = require("node:assert/strict");
 const { load } = require("./task-route-loader.cjs");
 const { matches, hydrate } = require("./helpers/agent-board-scope.cjs");
 
-function fixture({ enabled = true, expanded = true, watch = false } = {}) {
+function fixture({ enabled = true, expanded = true, privateHistory = expanded, watch = false } = {}) {
   const ownerId = 42;
   const agent = { id: "cross-team-agent", userId: ownerId, revokedAt: null, archivedAt: null,
-    credentialTeamId: null, credentialTeamAccessBinding: null, crossTeamHomeTeamId: expanded ? "home" : null };
+    credentialTeamId: null, credentialTeamAccessBinding: null, crossTeamHomeTeamId: privateHistory ? "home" : null, crossTeamAccessGranted: expanded };
   const teams = ["home", "second", "foreign"].map(id => ({ id, googleAccount: { userId: id === "foreign" ? 99 : ownerId }, members: [] }));
   const projects = teams.map((team, index) => ({ id: index + 1, teamId: team.id, team, status: "Normal", ownerId,
     members: [{ agentId: agent.id, userId: ownerId, status: "Accepted", agent }] }));
@@ -148,3 +148,20 @@ for (const failure of ['database', 'flag']) {
     assert.equal(writes, 0);
   });
 }
+
+
+test("legacy Off transfer keeps real task dispatch usable while retaining permanent chat privacy provenance", async () => {
+  const f = fixture({ enabled: false, expanded: false, privateHistory: true });
+  f.projects[0].members = [];
+  await f.run(async () => {
+    assert.deepEqual(await f.resolve(2), { id: 20, projectId: 2 });
+    assert.equal(await f.resolve(1), null);
+    assert.equal(await f.resolve(3), null);
+    assert.equal(await f.resolve(4), null);
+  });
+  f.agent.crossTeamAccessGranted = true;
+  await f.run(async () => assert.equal(await f.resolve(2), null));
+  f.agent.crossTeamAccessGranted = false;
+  f.teams[1].googleAccount.userId = 99;
+  await f.run(async () => assert.equal(await f.resolve(2), null));
+});

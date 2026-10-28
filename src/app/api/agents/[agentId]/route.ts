@@ -93,6 +93,7 @@ async function getAgentDetails(
       credentialTeamId: true,
       credentialTeamAccessBinding: true,
       crossTeamHomeTeamId: true,
+      crossTeamAccessGranted: true,
       members: {
         where: {
           status: "Accepted",
@@ -183,6 +184,7 @@ async function getAgentDetails(
     credentialTeamId: _credentialTeamId,
     credentialTeamAccessBinding: _credentialTeamAccessBinding,
     crossTeamHomeTeamId: _crossTeamHomeTeamId,
+    crossTeamAccessGranted: _crossTeamAccessGranted,
     ...agentFields
   } = agent;
   const storedRuntimeSnapshot = await readAgentRuntimeSnapshot(
@@ -382,7 +384,7 @@ async function getAgentDetails(
           teamName: project.team?.title ?? null,
         })),
         boardIds,
-        agent.crossTeamHomeTeamId
+        agent.crossTeamAccessGranted && agent.crossTeamHomeTeamId
           ? [agent.crossTeamHomeTeamId]
           : allMemberships.map(({ project }) => project.teamId),
       ).map((board) => crossTeamEnabled && !board.member ? {

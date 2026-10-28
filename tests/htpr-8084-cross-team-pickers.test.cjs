@@ -11,7 +11,7 @@ function agent(id = "mini-boss", changes = {}) {
   return {
     id, displayName: "Mini Boss", userId: 6, visibility: "PRIVATE", createdAt,
     revokedAt: null, archivedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null,
-    crossTeamHomeTeamId: null, permissions: {}, members: [membership(original)], byokApiKeys: [],
+    crossTeamHomeTeamId: null, crossTeamAccessGranted: false, permissions: {}, members: [membership(original)], byokApiKeys: [],
     heartbeatAt: null, mcpTokenJti: null, mcpTokenExpiresAt: null, prompt: null,
     ...changes,
   };
@@ -285,7 +285,7 @@ test("picker refuses to offer candidates when server eligibility fails", async (
 
 test("flag Off uses durable home after original board removal, never the new first membership", async () => {
   const h = harness({ enabled: false, rows: [agent("mini-boss", {
-    crossTeamHomeTeamId: "factory", members: [membership(target, 2)],
+    crossTeamHomeTeamId: "factory", crossTeamAccessGranted: true, members: [membership(target, 2)],
   })] });
   assert.deepEqual((await (await h.team()).json()).agents, []);
   assert.deepEqual((await (await h.board()).json()).agents, []);
@@ -293,7 +293,7 @@ test("flag Off uses durable home after original board removal, never the new fir
 
 test("flag Off keeps original-home grants even when another membership comes first", async () => {
   const h = harness({ enabled: false, rows: [agent("mini-boss", {
-    crossTeamHomeTeamId: "hypertask", members: [membership(original), membership(target, 2)],
+    crossTeamHomeTeamId: "hypertask", crossTeamAccessGranted: true, members: [membership(original), membership(target, 2)],
   })] });
   const { agents } = await (await h.team()).json();
   assert.deepEqual(agents.map(row => row.id), ["mini-boss"]);
@@ -368,7 +368,7 @@ for (const enabled of [false, true]) {
     assert.equal(targetBoard.unavailableReason, enabled ? null : "Agent belongs to another team");
     assert.deepEqual(result.boards.map(board => board.id), [2128]);
     assert.equal(result.boardAccess.find(board => board.id === 2128).canChange, true);
-    for (const key of ["credentialTeamId", "credentialTeamAccessBinding", "crossTeamHomeTeamId"]) {
+    for (const key of ["credentialTeamId", "credentialTeamAccessBinding", "crossTeamHomeTeamId", "crossTeamAccessGranted"]) {
       assert.equal(Object.hasOwn(result, key), false);
     }
     assert.ok(h.flags.some(flag => flag.key === "htpr-8084-cross-team-agents" && flag.userId === 6));
@@ -400,7 +400,7 @@ for (const [name, changes, allowed] of [
 
 test("direct Board access uses durable original team with flag Off after its last board was removed", async () => {
   const h = detailHarness({ enabled: false, changes: {
-    crossTeamHomeTeamId: "factory",
+    crossTeamHomeTeamId: "factory", crossTeamAccessGranted: true,
     members: [membership({ ...target, team: { id: "hypertask", title: "Hypertask" } })],
   } });
   const { agent: result } = await (await h.get()).json();
@@ -408,4 +408,26 @@ test("direct Board access uses durable original team with flag Off after its las
   assert.equal(originalBoard.member, false);
   assert.equal(originalBoard.canChange, true);
   assert.equal(result.boardAccess.find(board => board.id === 4060).member, true);
+});
+
+
+test("flag Off still lists a legacy transferred identity with private history on its current team", async () => {
+  const h = harness({ enabled: false, rows: [agent("mini-boss", {
+    crossTeamHomeTeamId: "factory", crossTeamAccessGranted: false, members: [membership(target, 2)],
+  })] });
+  const team = await (await h.team()).json();
+  assert.deepEqual(team.agents.map(row => row.id), ["mini-boss"]);
+  assert.equal(Object.hasOwn(team.agents[0], "crossTeamAccessGranted"), false);
+  assert.deepEqual((await (await h.board()).json()).agents.map(row => row.id), ["mini-boss"]);
+});
+
+test("direct Board access uses current team for legacy Off transfers, not private chat origin", async () => {
+  const h = detailHarness({ enabled: false, changes: {
+    crossTeamHomeTeamId: "factory", crossTeamAccessGranted: false,
+    members: [membership({ ...target, team: { id: "hypertask", title: "Hypertask" } })],
+  } });
+  const { agent: result } = await (await h.get()).json();
+  assert.equal(result.boardAccess.find(board => board.id === 2128).canChange, false);
+  assert.equal(result.boardAccess.find(board => board.id === 4060).member, true);
+  assert.equal(Object.hasOwn(result, "crossTeamAccessGranted"), false);
 });

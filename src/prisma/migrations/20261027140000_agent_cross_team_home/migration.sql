@@ -1,6 +1,7 @@
 ALTER TABLE "Agent"
   ADD COLUMN "boardHomeTeamId" TEXT,
-  ADD COLUMN "crossTeamHomeTeamId" TEXT;
+  ADD COLUMN "crossTeamHomeTeamId" TEXT,
+  ADD COLUMN "crossTeamAccessGranted" BOOLEAN NOT NULL DEFAULT false;
 
 UPDATE "Agent" AS a
 SET "boardHomeTeamId" = COALESCE(

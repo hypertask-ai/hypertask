@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
       createdAt: true,
       revokedAt: true,
       crossTeamHomeTeamId: true,
+      crossTeamAccessGranted: true,
       userId: true,
       mcpTokenJti: true,
       mcpTokenExpiresAt: true,
@@ -136,7 +137,7 @@ export async function GET(request: NextRequest) {
   const scopedAgents = agents.filter(
     (agent) =>
       crossTeamEnabled ||
-      (agent.crossTeamHomeTeamId
+      (agent.crossTeamAccessGranted && agent.crossTeamHomeTeamId
         ? agent.crossTeamHomeTeamId === teamId
         : (includeOwnedUnattached && agent.userId === currentUserId && agent.members.length === 0) ||
           getAgentTeamId(
@@ -190,7 +191,7 @@ export async function GET(request: NextRequest) {
     currentUserId,
   );
   const agentsWithOAuth = scopedAgents.map(
-    ({ members, permissions, mcpTokenJti, mcpTokenExpiresAt, byokApiKeys, crossTeamHomeTeamId: _crossTeamHomeTeamId, ...a }) => ({
+    ({ members, permissions, mcpTokenJti, mcpTokenExpiresAt, byokApiKeys, crossTeamHomeTeamId: _crossTeamHomeTeamId, crossTeamAccessGranted: _crossTeamAccessGranted, ...a }) => ({
       ...a,
       ...(agentRolesEnabled
         ? { role: (permissions as AgentScopes | null)?.role ?? "write" }

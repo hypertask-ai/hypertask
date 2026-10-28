@@ -39,6 +39,7 @@ type AgentRead = {
       credentialTeamAccessBinding: true
       boardHomeTeamId: true
       crossTeamHomeTeamId: true
+      crossTeamAccessGranted: true
       members: {
         orderBy: { id: 'asc' }
         select: {
@@ -56,6 +57,7 @@ type AgentRead = {
     credentialTeamAccessBinding: string | null
     boardHomeTeamId: string | null
     crossTeamHomeTeamId: string | null
+    crossTeamAccessGranted: boolean
     members: Membership[]
   } | null>
 }
@@ -173,6 +175,7 @@ export async function updateOwnedAgentBoards(
               credentialTeamAccessBinding: true,
               boardHomeTeamId: true,
               crossTeamHomeTeamId: true,
+              crossTeamAccessGranted: true,
               members: {
                 orderBy: { id: 'asc' },
                 select: { projectId: true, project: { select: { teamId: true } } },
@@ -272,8 +275,8 @@ export async function updateOwnedAgentBoards(
                 .map((membership) => membership.project.teamId),
               ...additions.map((project) => project.teamId),
             ]
-            const invalidTeam = agent.crossTeamHomeTeamId
-              ? additions.some((project) => project.teamId !== agent.crossTeamHomeTeamId)
+            const invalidTeam = agent.crossTeamAccessGranted
+              ? additions.some((project) => project.teamId !== homeTeamId)
               : finalTeams.includes(null) || new Set(finalTeams).size > 1
             if (invalidTeam) {
               throw new AgentBoardUpdateError(
@@ -283,13 +286,15 @@ export async function updateOwnedAgentBoards(
               )
             }
           }
-          const markExpanded = enabled && additions.length > 0 && expandsTeams && !agent.crossTeamHomeTeamId
-          if (homeTeamId && ((!agent.boardHomeTeamId && (toAdd.length || toRemove.length)) || markExpanded)) {
+          const markExpanded = additions.length > 0 && expandsTeams && !agent.crossTeamHomeTeamId
+          const grantCrossTeamAccess = enabled && additions.length > 0 && expandsTeams && !agent.crossTeamAccessGranted
+          if (homeTeamId && ((!agent.boardHomeTeamId && (toAdd.length || toRemove.length)) || markExpanded || grantCrossTeamAccess)) {
             await agentStore.update({
               where: { id: agent.id },
               data: {
                 ...(!agent.boardHomeTeamId ? { boardHomeTeamId: homeTeamId } : {}),
                 ...(markExpanded ? { crossTeamHomeTeamId: homeTeamId } : {}),
+                ...(grantCrossTeamAccess ? { crossTeamAccessGranted: true } : {}),
               },
             })
           }

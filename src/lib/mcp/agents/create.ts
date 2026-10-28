@@ -259,7 +259,7 @@ export async function createAgentForUser(
         permissions: { role },
         boardHomeTeamId: targetTeamId,
         ...(new Set(memberTeamIds).size > 1
-          ? { crossTeamHomeTeamId: targetTeamId }
+          ? { crossTeamHomeTeamId: targetTeamId, crossTeamAccessGranted: true }
           : {}),
       },
       select: {

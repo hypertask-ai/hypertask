@@ -33,6 +33,7 @@ function harness(options = {}) {
     agents: [{
       id: 'agent', userId: options.agentOwner ?? 42, revokedAt: options.revokedAt ?? null,
       archivedAt: options.archivedAt ?? null, boardHomeTeamId: options.boardHome ?? null, crossTeamHomeTeamId: options.home ?? null,
+      crossTeamAccessGranted: options.crossTeamAccessGranted ?? options.home != null,
       credentialTeamId: options.credentialTeamId ?? null,
       credentialTeamAccessBinding: options.credentialTeamAccessBinding ?? null,
     }],
@@ -85,7 +86,7 @@ function harness(options = {}) {
       },
       create: async ({ data }) => {
         write()
-        const row = { id: 'created-agent', photoURL: null, revokedAt: null, archivedAt: null, crossTeamHomeTeamId: null, ...data }
+        const row = { id: 'created-agent', photoURL: null, revokedAt: null, archivedAt: null, crossTeamHomeTeamId: null, crossTeamAccessGranted: false, ...data }
         state.agents.push(row)
         return row
       },
@@ -274,7 +275,8 @@ test('MCP: rollout-off legacy replacement stays usable; enabled replacement beco
   const off = harness({ enabled: false })
   assert.equal((await off.update([2], [1])).status, 200)
   assert.deepEqual(off.state.members.map((row) => row.projectId), [2])
-  assert.equal(off.state.agents[0].crossTeamHomeTeamId, null)
+  assert.equal(off.state.agents[0].crossTeamHomeTeamId, 'a')
+  assert.equal(off.state.agents[0].crossTeamAccessGranted, false)
   assert.equal((await off.update([4], [2])).status, 200)
   assert.deepEqual(off.state.members.map((row) => row.projectId), [4])
   const on = harness()
@@ -471,11 +473,13 @@ test('legacy replacement never reassigns lifetime home across later admissions',
   const h = harness({ enabled: false, boardHome: 'a' })
   assert.equal((await h.update([2], [1])).status, 200)
   assert.equal(h.state.agents[0].boardHomeTeamId, 'a')
-  assert.equal(h.state.agents[0].crossTeamHomeTeamId, null)
+  assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
+  assert.equal(h.state.agents[0].crossTeamAccessGranted, false)
   assert.deepEqual(h.state.members.map((row) => row.projectId), [2])
   h.state.enabled = true
   assert.equal((await h.update([5])).status, 200)
   assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
+  assert.equal(h.state.agents[0].crossTeamAccessGranted, true)
   assert.equal(h.state.agents[0].boardHomeTeamId, 'a')
 })
 
@@ -550,17 +554,28 @@ for (const entry of ['cookie', 'update']) {
       assert.equal(added.statusCode ?? added.status, expanded ? (entry === 'cookie' ? 403 : 400) : 200)
       assert.deepEqual(h.state.members.map((row) => row.projectId), expanded ? [] : [2])
       assert.equal(h.state.agents[0].boardHomeTeamId, 'a')
-      assert.equal(h.state.agents[0].crossTeamHomeTeamId, expanded ? 'a' : null)
+      assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
+      assert.equal(h.state.agents[0].crossTeamAccessGranted, expanded)
       const { crossTeamProjectFence } = load('src/lib/agents/crossTeam.ts', {
         '@/lib/prisma': { default: { agent: { findFirst: async () => h.state.agents[0] } } },
         '@/lib/flags': { isFeatureEnabled: async () => false },
       })
       const fence = await crossTeamProjectFence('agent', 42)
-      assert.equal(fence?.teamId ?? null, expanded ? 'a' : null)
+      assert.ok(fence)
+      assert.equal(fence.teamId ?? null, expanded ? 'a' : null)
       if (!expanded) {
         const anotherTeam = await h[entry](entry === 'cookie' ? 4 : [4])
         assert.equal(anotherTeam.statusCode ?? anotherTeam.status, entry === 'cookie' ? 403 : 400)
         assert.deepEqual(h.state.members.map((row) => row.projectId), [2])
+        h.state.enabled = true
+        const expandedGrant = await h[entry](entry === 'cookie' ? 5 : [5])
+        assert.equal(expandedGrant.statusCode ?? expandedGrant.status, 200)
+        assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
+        assert.equal(h.state.agents[0].crossTeamAccessGranted, true)
+        h.state.enabled = false
+        assert.equal((await h.remove(5)).ok, true)
+        const laterTeam = await h[entry](entry === 'cookie' ? 5 : [5])
+        assert.equal(laterTeam.statusCode ?? laterTeam.status, entry === 'cookie' ? 403 : 400)
       }
     })
   }
