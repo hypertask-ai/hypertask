@@ -65,7 +65,6 @@ type Props = { embedded?: boolean; active?: boolean } & Pick<
   | "isDictationProcessing"
   | "setIsRecording"
   | "setIsDictationProcessing"
-  | "mobileFullscreenFlag"
   | "isRecording"
 > &
   Pick<
@@ -115,7 +114,7 @@ export function AgentChatPane({
   mentionLoading, mentionLoadError, mentionResults, mentionQuery, setMentionIndex, pickMention,
   mentionIndex, draft, composerRef, composerEditorRef, handleComposerChange, handleComposerKeyDown,
   composerLocked, isDictationProcessing, setIsRecording, setIsDictationProcessing, insertDictation,
-  mobileFullscreenFlag, dictationProjectId, isRecording, handleSend,
+  dictationProjectId, isRecording, handleSend,
 }: Props) {
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const contextEnabled = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
@@ -350,13 +349,8 @@ export function AgentChatPane({
                     onProcessingChange: setIsDictationProcessing,
                     onDictation: insertDictation,
                     dictationDisabled:
-                      sending ||
-                      ((mobileLayoutEnabled || mobileFullscreenFlag) &&
-                        dictationProjectId === null),
-                    projectId:
-                      embedded || mobileLayoutEnabled || mobileFullscreenFlag
-                        ? dictationProjectId
-                        : undefined,
+                      sending || dictationProjectId === null,
+                    projectId: dictationProjectId,
                     sendDisabled:
                       !draft.trim() ||
                       sending ||
