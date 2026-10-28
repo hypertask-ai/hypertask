@@ -89,7 +89,9 @@ export function requestErrorMessage(
   error: unknown,
   stage: "body" | "validation",
 ) {
-  if (stage === "validation" && error instanceof z.ZodError) {
+  if (stage === "body" && error instanceof SyntaxError) {
+    console.info("[ai/chat/stream] request-body refused: invalid JSON");
+  } else if (stage === "validation" && error instanceof z.ZodError) {
     console.info("[ai/chat/stream] request-validation refused: invalid request");
   } else {
     console.error(`[ai/chat/stream] request-${stage} user-facing error`, error);

@@ -24,7 +24,7 @@ function load(relativePath, dependencies, logger) {
     module: loaded,
     exports: loaded.exports,
     require: (id) => dependencies[id] ?? {},
-    Response, console: logger, Error,
+    Response, console: logger, Error, SyntaxError,
   }, { filename });
   return loaded.exports;
 }
@@ -98,4 +98,33 @@ test("unexpected validation failures remain visible as server errors", () => {
   assert.equal(logs.error.length, 1);
   assert.equal(logs.error[0][1], failure);
   assert.equal(logs.info.length, 0);
+});
+
+for (const body of ["{", '{"message":', ""]) {
+  test(`POST refuses malformed JSON without server errors: ${JSON.stringify(body)}`, async () => {
+    const { route, logs, sidebarCalls } = harness();
+    const response = await route.POST(new Request("https://example.test/api/ai/chat/stream", {
+      method: "POST", body,
+    }));
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /text\/event-stream/);
+    assert.equal(await response.text(),
+      'event: error\ndata: {"content":"Invalid request: the request body could not be read."}\n\n' +
+      'event: done\ndata: {"status":"error"}\n\n');
+    assert.equal(sidebarCalls(), 0);
+    assert.deepEqual(logs.error, []);
+    assert.deepEqual(logs.info, [["[ai/chat/stream] request-body refused: invalid JSON"]]);
+  });
+}
+
+test("unexpected body read failures remain visible as server errors", async () => {
+  const { route, logs, sidebarCalls } = harness();
+  const failure = new Error("private body reader failure");
+  const response = await route.POST({ json: async () => { throw failure; } });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Invalid request: the request body could not be read\./);
+  assert.equal(sidebarCalls(), 0);
+  assert.equal(logs.error.length, 1);
+  assert.equal(logs.error[0][1], failure);
+  assert.deepEqual(logs.info, []);
 });
