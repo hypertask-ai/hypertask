@@ -7,9 +7,9 @@ export default {
   kind: "bugfix",
   shippedOn: "2026-10-28",
   defaultMode: "EVERYONE",
-  description: "Keeps the Inbox select-all checkbox inside the open tab. Bulk archive changes only selected notifications, not other messages on the same ticket.",
+  description: "Keeps the Inbox select-all checkbox inside the open tab, matching Ctrl+A. Explicit Ctrl+Shift+A still selects every tab.",
   releaseRisk: {
     risk: "small",
-    reason: "Narrows reversible Inbox archive to selected rows. Explicit global selection and Undo stay available; no tickets or comments are deleted.",
+    reason: "Scopes the existing checkbox to the open tab. Archive, Undo, and explicit global selection keep their existing behavior.",
   },
 } as const satisfies FeatureFlagDefinition;

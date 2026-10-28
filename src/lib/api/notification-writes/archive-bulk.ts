@@ -1,5 +1,3 @@
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
@@ -39,7 +37,6 @@ const route = taskWriteRoute({
     }
 
     const restoreInbox = archiveStatus === "Normal";
-    const tabScopedSelection = await isFeatureEnabled(HTPR_8148_INBOX_TAB_SELECTION_FLAG, session.userId);
 
     const notificationIdList = validEntries.map(({ notificationId }) => notificationId);
     const taskIds = [...new Set(validEntries.map(({ taskId }) => taskId).filter(Boolean))];
@@ -57,7 +54,7 @@ const route = taskWriteRoute({
           archivedAt,
         },
       });
-      const siblings = !tabScopedSelection && !restoreInbox && taskIds.length > 0
+      const siblings = !restoreInbox && taskIds.length > 0
         ? await tx.notification.updateMany({
           where: {
             taskId: { in: taskIds },

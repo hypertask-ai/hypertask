@@ -123,6 +123,5 @@ splits, select one row, then click the existing group-header checkbox.
 The selected count must equal the open split, not All. Click again to clear.
 Repeat with Ctrl+A (Cmd+A on Mac). Ctrl+Shift+A remains explicitly global.
 Archive the selected split, reload, and verify every unselected message remains.
-Include two notifications on the same ticket across different splits: bulk
-archive must not archive the unselected sibling. Undo restores selected rows.
-Flag off retains the previous global checkbox and sibling archive behavior.
+Existing ticket-wide archive and Undo behavior stays unchanged.
+Flag off retains the previous global checkbox behavior.

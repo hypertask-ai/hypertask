@@ -103,7 +103,6 @@ async function loadMarkAsDone({ row }) {
 }
 
 async function loadArchiveBulk() {
-  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
   const calls = { updateMany: [], transaction: null };
   const notification = {
     findFirst: async () => null,
