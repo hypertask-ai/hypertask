@@ -39,7 +39,7 @@ export function TableTitleCell({ task, compact = false, className = "", style }:
 }
 
 export function TableStatusCell({ section }: { section: string }) {
-  return <span className="min-w-0 flex items-center text-[11px] text-text-light-gray truncate">{section}</span>;
+  return <span className="min-w-0 flex items-center text-micro text-text-light-gray truncate">{section}</span>;
 }
 
 type Context = { snapshot?: FirstScreenSnapshot | null } & Pick<TableViewProps, "_currentProject" | "enableMyTasksBulkSelection"> &
