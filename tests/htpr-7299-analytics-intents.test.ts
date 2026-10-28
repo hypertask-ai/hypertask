@@ -62,6 +62,7 @@ function signupController(h: Harness) {
   h.mocks["@/lib/configs/auth.config"] = { default: { onboarding: {} } };
   h.mocks["@/utils/controllers/users/findUserByEmail"] = { findUserByEmail: async () => null };
   h.mocks["@/utils/controllers/users/provisionNewUser"] = { provisionNewUser: async () => h.users.get(123) };
+  h.mocks["@/utils/controllers/users/resumeIncompleteSignup"] = { resumeIncompleteSignup: async () => false };
   h.mocks["@/lib/telemetry/signupIdentityLink"] = { recordSignupIdentityLink: async () => signupInput().decision };
   h.prisma.user.create = async () => h.users.get(123);
   return h.load("src/utils/controllers/users/update_or_create_user.ts").default;
