@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { designTokenRules, designTokenVersion } from "./design-tokens.mjs";
 
 const checkJsTags = /^\/\*\*[\s\S]*?@(param|returns|property|callback)\b/;
 
@@ -63,16 +64,16 @@ const noComments = {
 export const noCommentsPlugin = {
   meta: {
     name: "hypertask-no-comments",
-    version: createHash("sha256").update(readFileSync(new URL(import.meta.url))).digest("hex"),
+    version: createHash("sha256").update(readFileSync(new URL(import.meta.url))).update(designTokenVersion).digest("hex"),
   },
-  rules: { "no-comments": noComments },
+  rules: { "no-comments": noComments, ...designTokenRules() },
 };
 
 export const noCommentsLintConfig = {
   files: ["src/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
   ignores: ["**/*.generated.ts"],
   plugins: { local: noCommentsPlugin },
-  rules: { "local/no-comments": "error" },
+  rules: Object.fromEntries(Object.keys(noCommentsPlugin.rules).map((rule) => [`local/${rule}`, "error"])),
   linterOptions: { reportUnusedDisableDirectives: "error" },
 };
 

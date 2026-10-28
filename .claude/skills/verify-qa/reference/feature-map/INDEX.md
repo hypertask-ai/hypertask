@@ -17,6 +17,7 @@ each ticket only needs the one or two areas it touches.
 | CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | live repository visibility, trusted workflow rejection, title binding |
 | CI tests and parallel checks | [ci-tests.md](ci-tests.md) | hosted job overlap, fail-closed summary, shard execution proof |
 | Server feature-flag check | [ci-server-feature-flags.md](ci-server-feature-flags.md) | historical first/final CLI replay, server helper and owner-review routing |
+| Design-token lint ratchet | [design-token-lint.md](design-token-lint.md) | configured ESLint and CLI cache fixtures; live app health only |
 | CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
 | Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
