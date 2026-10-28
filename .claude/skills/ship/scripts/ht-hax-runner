@@ -106,6 +106,12 @@ case "${1:-}" in
       unset CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID
       CODEX_SESSION_ID=$(cat /proc/sys/kernel/random/uuid) || exit 1
       export CODEX_SESSION_ID
+      recovery=$HOME/.local/lib/hypertask/runner-pickup/runner-pickup
+      recovery_brief=''
+      if [ -x "$recovery" ]; then
+        recovery_brief=$("$recovery" drain "$n") || { log "RUNNER $n: freeze recovery failed"; exit 1; }
+      fi
+      run_brief="$brief${recovery_brief:+ Recovery: $recovery_brief}"
       echo "$(date -u +%FT%TZ) start" >> "$rlog"
       clear; tmux clear-history -t "$TMUX_PANE"
       tmux select-pane -t "$TMUX_PANE" -T "RUNNER $n hax"
@@ -113,7 +119,7 @@ case "${1:-}" in
       : > "$STATE/runner-$n.result"
       (
         sleep 15
-        tmux send-keys -t "$TMUX_PANE" -l "$brief"
+        tmux send-keys -t "$TMUX_PANE" -l "$run_brief"
         sleep 1
         tmux send-keys -t "$TMUX_PANE" C-m
         result=TIMEOUT

@@ -174,6 +174,10 @@ esac''')
         self.env['CLAUDE_CODE_SESSION_ID'] = 'inherited-claude-session'
         self.env['CODEX_SESSION_ID'] = 'inherited-codex-session'
         self.env['CODEX_THREAD_ID'] = 'inherited-codex-thread'
+        recovery = self.home / '.local/lib/hypertask/runner-pickup/runner-pickup'
+        recovery.parent.mkdir(parents=True)
+        recovery.write_text('#!/bin/sh\necho "recovery $*" >> "$HOME/events"\necho "Resume YPER4-1: stale freeze block cleared"\n')
+        recovery.chmod(0o755)
         self.command('clear', 'exit 0')
         self.command('hax', """
 printf 'hax %s depth=%s identity=%s\\n' "$*" "${HAX_SUBAGENT_DEPTH-unset}" "$SHIP_SESSION_NAME" >> "$HOME/events"
@@ -189,7 +193,7 @@ case "$1" in
   select-pane|clear-history) : ;;
   send-keys)
     case "$*" in
-      *' -l '*) echo brief >> "$HOME/events" ;;
+      *' -l '*) echo brief >> "$HOME/events"; printf '%s' "$*" > "$HOME/brief" ;;
       *C-m) echo submitted >> "$HOME/events" ;;
       *C-d) echo closed >> "$HOME/events"; touch "$HOME/closed" ;;
     esac ;;
@@ -253,6 +257,9 @@ exec /bin/sleep 0.01
                 session_id = session.split()[0]
                 self.assertNotIn(session_id, session_ids)
                 session_ids.add(session_id)
+                self.assertIn('recovery drain 8', events)
+                self.assertIn('Recovery: Resume YPER4-1: stale freeze block cleared', (self.home / 'brief').read_text())
+                self.assertLess(events.index('recovery drain 8'), events.index('brief'))
                 self.assertLess(events.index('brief'), events.index('submitted'))
                 self.assertLess(events.index('tool-phase'), events.index('final-phase'))
                 self.assertLess(events.index('final-phase'), events.index('capture'))

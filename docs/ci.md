@@ -198,6 +198,26 @@ The `premerge-evidence.timer` reconciles all open production PRs every two minut
 
 Light gate jobs without a root repository install must install their own non-builtin dependencies. `tests/light-gate-dependencies.test.cjs` parses workflow jobs and follows relative script imports (including parity and the offline workflow tests); the Node version guard runs it with only its pinned `js-yaml` and TypeScript parser installs, independently of app CI's scope selection. The visual runner installs full dependencies itself; private scheduled speed measurements are not a PR gate. A missing-install negative control covers both feature-flag jobs and a new light gate. The feature-flag registry requires an explicit `FEATURE_FLAG_TYPESCRIPT_PATH`: an unset or unloadable parser prints one diagnostic and exits 2 (infrastructure error), never 0 (pass) or 1 (policy refusal). Auto-merge refuses an error; the feature-flag workflow publishes an error status. Local tests explicitly resolve the repo's TypeScript, and the repo-local flag generator and snapshot runner set that path before importing the registry.
 
+## Resuming runners after a freeze
+
+After verifying recovery, clear `MERGE_FREEZE` and record the lift together:
+
+```bash
+gh variable delete MERGE_FREEZE --repo hypertask-ai/hypertask && ~/.local/lib/hypertask/runner-pickup/runner-pickup record-lift
+```
+
+`record-lift` records the current epoch in `~/.local/state/runner-inbox/freeze-lift`.
+Do not run it for an old release or merely green checks.
+Without that record, blocked tickets remain blocked.
+Pickup queues an older same-runner freeze or GitHub-limit block.
+Before starting hax, the keeper drains one eligible ticket: records an agent
+activity, moves it to In Progress, reads it back, and names it in the brief.
+Fresh blocks, explicit blocker comments, questions, human blocks and unrelated
+failures remain untouched. Incomplete reads cannot authorize a clear.
+Install the merged pickup version before the keeper version; existing runner
+processes are not restarted. Targeted offline recovery fixtures run as
+`runner-pickup.recovery.test.py` in `ship-scripts-tests`.
+
 ## Daily AI model watch
 
 [AI model watch](../.github/workflows/ai-model-watch.yml) runs at 05:43 UTC daily,
