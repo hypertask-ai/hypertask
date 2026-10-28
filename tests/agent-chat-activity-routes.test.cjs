@@ -8,7 +8,6 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const chatClientSource = readAgentChatSource();
 let loadId = 0;
-let flagEnabled = true;
 let activityCalls = [];
 let activityRows = [];
 let messageRows = [];
@@ -41,7 +40,10 @@ const prisma = {
       ...(select.user ? { user: { displayName: "Valentin" } } : {}),
     }),
   },
+  project: { findFirst: async () => ({ id: 15 }) },
+  agent: { findFirst: async () => ({ id: "agent-1", userId: 6 }) },
   chatMessage: {
+    findFirst: async () => ({ id: "message-2" }),
     findMany: async () => messageRows,
     count: async () => 0,
   },
@@ -73,8 +75,8 @@ stub("src/lib/flags.ts", {
     // Chat context is a separate feature; keep it off so these routes keep
     // their plain transcript shape.
     if (key === "htpr-7734-agent-chat-context") return false;
-    assert.equal(key, "htpr-6094-agent-activity-rows");
-    return flagEnabled;
+    if (key === "htpr-7518-agent-sidebar-chats") return true;
+    assert.fail(`Unexpected flag: ${key}`);
   },
 });
 stub("src/lib/agents/agentChatActivity.ts", {
@@ -91,6 +93,20 @@ stub("src/lib/mcp/auth.ts", {
     user: { id: 6, displayName: "Agent" },
   }),
 });
+stub("src/utils/controllers/projects/getAllIncludes.ts", {
+  getProjectWhere: () => ({}),
+  projectContentAccessWhere: () => ({}),
+});
+stub("src/lib/mcp/tasks/services.ts", {});
+stub("src/lib/mcp/routeWrapper.ts", {
+  wrapMcpRoute: (handler) => handler,
+  checkMcpRouteRateLimit: async () => null,
+  validateMcpRouteAuth: async () => ({
+    agentId: "agent-1",
+    teamScope: null,
+    user: { id: 6, displayName: "Agent" },
+  }),
+});
 stub("src/lib/realtime/server.ts", {
   AGENT_CHAT_EVENT: "agent-chat:changed",
   broadcast: async () => null,
@@ -102,8 +118,10 @@ const mcpRoute = load(
   "src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts",
 );
 
-function browserRequest() {
-  return new Request("https://app.hypertask.ai/api/agent-chat/session-1");
+function browserRequest({ sidebar = false, before = false } = {}) {
+  return new Request(`https://app.hypertask.ai/api/agent-chat/session-1${before ? "?before=message-2" : ""}`, {
+    headers: sidebar ? { "x-hypertask-sidebar-project": "15" } : {},
+  });
 }
 
 function mcpRequest() {
@@ -143,7 +161,6 @@ function activity(index, type = "action") {
 }
 
 test("browser history keeps normal messages intact and returns activity separately", async () => {
-  flagEnabled = true;
   activityCalls = [];
   activityRows = [activity(1)];
   messageRows = [chatMessage(2), chatMessage(1)];
@@ -163,22 +180,37 @@ test("browser history keeps normal messages intact and returns activity separate
   ]);
 });
 
-test("browser history does not query or expose activity while the server flag is off", async () => {
-  flagEnabled = false;
+test("embedded sidebar history does not query or expose standalone activity", async () => {
   activityCalls = [];
   activityRows = [activity(1)];
   messageRows = [chatMessage(1)];
 
-  const response = await browserRoute.GET(browserRequest(), routeContext());
+  const response = await browserRoute.GET(browserRequest({ sidebar: true }), routeContext());
   const body = await response.json();
 
+  assert.equal(response.status, 200);
+  assert.equal(body.messages[0].content, "message-1");
   assert.deepEqual(body.activity, []);
   assert.equal(body.awaiting, true);
   assert.deepEqual(activityCalls, []);
 });
 
+test("older browser history pages keep messages without reloading activity", async () => {
+  activityCalls = [];
+  activityRows = [activity(1)];
+  messageRows = [chatMessage(1)];
+
+  const response = await browserRoute.GET(browserRequest({ before: true }), routeContext());
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.messages[0].content, "message-1");
+  assert.equal(body.activity, null);
+  assert.equal(body.awaiting, null);
+  assert.deepEqual(activityCalls, []);
+});
+
 test("MCP adds at most ten activity facts only for an explicit activity question", async () => {
-  flagEnabled = true;
   activityCalls = [];
   activityRows = Array.from({ length: 12 }, (_, index) => activity(index));
   activityRows[11].createdAt = "2026-09-04T14:00:00.000Z";
@@ -215,7 +247,6 @@ test("MCP adds at most ten activity facts only for an explicit activity question
 });
 
 test("ordinary MCP transcript reads preserve all normal messages without activity work", async () => {
-  flagEnabled = true;
   activityCalls = [];
   activityRows = [activity(1)];
   messageRows = [chatMessage(1, "Please review HTPR-42")];

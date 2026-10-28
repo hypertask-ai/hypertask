@@ -95,8 +95,7 @@ export async function GET(
     let transcript: Array<Record<string, unknown>> = normalMessages
     if (
       latestMessage?.role === 'human' &&
-      asksForAgentActivity(latestMessage.content) &&
-      (await isFeatureEnabled('htpr-6094-agent-activity-rows', session.userId))
+      asksForAgentActivity(latestMessage.content)
     ) {
       const activity = await listAgentChatActivity({
         agentId: tokenAgentId,

@@ -5,7 +5,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const FLAG = "htpr-7518-agent-sidebar-chats";
-let viewer, enabled, shared, agent, board, session, writes, messages, participants;
+let viewer, enabled, shared, agent, board, session, writes, messages, participants, activityReads;
 const stub = (file, exports) => {
   const id = path.join(root, file);
   require.cache[id] = { id, filename: id, loaded: true, exports };
@@ -96,7 +96,7 @@ stub("src/lib/agentRuns/service.ts", {
 });
 stub("src/lib/agents/chatBroadcast.ts", { broadcastChatSession: async () => null });
 stub("src/lib/agents/chatBrief.ts", { buildAgentChatBrief: async () => null });
-stub("src/lib/agents/agentChatActivity.ts", { listAgentChatActivity: async () => { throw new Error("No activity in embedded messages"); } });
+stub("src/lib/agents/agentChatActivity.ts", { listAgentChatActivity: async () => { activityReads++; return [{ id: "activity-1", kind: "event", text: "Fixture activity" }]; } });
 stub("src/lib/agentWebhooks/outbox.ts", {
   persistAgentRunTriggerWebhooks: async () => [], publishAgentWebhookDeliveries: async () => null,
 });
@@ -110,7 +110,7 @@ const routes = {
   stop: load("src/app/api/agent-chat/[sessionId]/stop/route.ts"),
 };
 function reset() {
-  viewer = { userId: 6, source: "legacy" }; enabled = true; shared = true; writes = []; messages = []; participants = {};
+  viewer = { userId: 6, source: "legacy" }; enabled = true; shared = true; writes = []; messages = []; participants = {}; activityReads = 0;
   board = { id: 15, ownerId: 6, teamId: "team-a", status: "Normal", members: [{ userId: 7, agentId: null, status: "Accepted" }] };
   agent = { id: "agent-1", userId: 6, displayName: "Runner", photoURL: null, visibility: "TEAM", runtimeType: "EXTERNAL", revokedAt: null, archivedAt: null,
     heartbeatAt: new Date(), agentWebhookSubscription: null, members: [{ projectId: 15, status: "Accepted", project: board }] };
@@ -130,7 +130,12 @@ for (const name of operations) {
   for (const userId of [6, 7]) test(`${name}: still allowed ${userId === 6 ? "owner" : "authorized TEAM participant"}`, async () => {
     reset(); viewer.userId = userId;
     const response = await operation(name);
-    assert.equal(response.status, 200, JSON.stringify(await response.json()));
+    const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    if (name === "read") {
+      assert.deepEqual(body.activity, []);
+      assert.equal(activityReads, 0);
+    }
   });
   test(`${name}: still allowed PRIVATE owner with all parked flags Off`, async () => {
     reset(); agent.visibility = "PRIVATE"; shared = false;
@@ -164,7 +169,12 @@ for (const name of operations) {
 }
 for (const name of ["read", "send", "stop", "draft"]) test(`${name}: flag Off preserves legacy owner calls without sidebar context`, async () => {
   reset(); enabled = false;
-  assert.equal((await operation(name, false)).status, 200);
+  const response = await operation(name, false);
+  assert.equal(response.status, 200);
+  if (name === "read") {
+    assert.deepEqual((await response.json()).activity, [{ id: "activity-1", kind: "event", text: "Fixture activity" }]);
+    assert.equal(activityReads, 1);
+  }
 });
 test("an own agent token still reads its thread and refuses another agent's thread", async () => {
   reset();

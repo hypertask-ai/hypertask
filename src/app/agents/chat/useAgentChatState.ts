@@ -22,8 +22,7 @@ export function useAgentChatState(props: IProp) {
   const isMbl = useContext(MobileViewContext);
   const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
   const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
-  const activityRowsFlag = useFlag("htpr-6094-agent-activity-rows");
-  const activityRowsEnabled = !embedded && activityRowsFlag;
+  const activityRowsEnabled = !embedded;
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   const [rosterNow, setRosterNow] = useState(() => Date.now());
   useEffect(() => {
