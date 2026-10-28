@@ -30,6 +30,8 @@ const stubSourceModule = (relativePath, exports) =>
 
 const flagValues = { "htpr-6312-my-tasks-priority-filter": true };
 const tableViewProps = [];
+const realtimeSubscriptions = [];
+let reconcileRequests = 0;
 let backCalls = 0;
 
 stubSourceModule("src/hooks/useFlag.tsx", {
@@ -81,13 +83,13 @@ stubSourceModule("src/app/my-tasks/MyTasksKanbanFilterModal.tsx", {
 });
 // HTPR-6458: realtime client is not available under jsdom/jiti component tests.
 stubSourceModule("src/hooks/realtime/useMyTasksRealtime.ts", {
-  useMyTasksRealtime: () => {},
+  useMyTasksRealtime: (...args) => realtimeSubscriptions.push(args),
   createMyTasksRealtimeEventHandler: () => () => {},
 });
 stubSourceModule("src/lib/myTasks/reconcileMyTasks.ts", {
   buildMyTasksListUrl: () => "/api/my-tasks",
   createMyTasksReconcileRunner: () => ({
-    request: () => {},
+    request: () => { reconcileRequests += 1; },
     flush: async () => null,
     cancel: () => {},
   }),
@@ -344,3 +346,25 @@ for (const viewsEnabled of [false, true]) {
     }
   });
 }
+
+
+test("live updates stay active without a feature flag", () => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  const before = reconcileRequests;
+  const reactRoot = renderMyTasks(dom);
+  try {
+    assert.equal(realtimeSubscriptions.at(-1)[2], true);
+    assert.equal(reconcileRequests, before + 1);
+    assert.ok(dom.window.document.body.textContent.includes("Live list updates on"));
+    assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
+  } finally {
+    act(() => { reactRoot.unmount(); });
+    dom.window.close();
+    delete global.window;
+    delete global.document;
+    delete global.IS_REACT_ACT_ENVIRONMENT;
+  }
+});

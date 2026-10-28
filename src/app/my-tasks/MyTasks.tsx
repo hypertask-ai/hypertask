@@ -10,7 +10,6 @@ import { useFlag } from "@/hooks/useFlag";
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
-  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
@@ -31,7 +30,6 @@ import MyTasksBulkActionBar from "@/components/PageComponents/MyTasks/MyTasksBul
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
-  myTasksAPIRoute,
   myTasksOverdueCountsAPIRoute,
   myTasksViewAPIRoute,
   myTasksViewsAPIRoute,
@@ -162,7 +160,6 @@ const MyTasks = ({
   const [nearestSnoozeUntil, setNearestSnoozeUntil] = useState<string | null>(
     initialNearestSnoozeUntil,
   );
-  const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const [activeSplit, setActiveSplitState] = useState(() =>
     getMyTasksSplitIndex(initialSections, boardParam)
   );
@@ -221,8 +218,6 @@ const MyTasks = ({
   const filterRef = useRef<HTMLDivElement>(null);
   const saveRequestToken = useRef(0);
   const observedViewParam = useRef<string | null | undefined>(undefined);
-  const scopesFetchToken = useRef(0);
-  const lastFetchedScopesKey = useRef<string | null>(null);
   const updateViewConfig = useCallback(
     (next: MyTasksViewConfig | ((current: MyTasksViewConfig) => MyTasksViewConfig)) => {
       saveRequestToken.current += 1;
@@ -293,13 +288,12 @@ const MyTasks = ({
   useMyTasksRealtime(
     currentUser.id,
     accessibleProjectIds,
-    liveUpdatesEnabled,
+    true,
     onMyTasksReconcile,
   );
   useEffect(() => {
-    if (!liveUpdatesEnabled) return;
     reconcileRunner.request();
-  }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
+  }, [reconcileRunner, reconcileScopes.join(",")]);
 
   useEffect(() => {
     const onSnoozeChanged = () => reconcileRunner.request();
@@ -350,92 +344,6 @@ const MyTasks = ({
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [myTasksSnoozeEnabled, nearestSnoozeUntil, reconcileRunner]);
-
-  const scopesKey = JSON.stringify(
-    effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
-  );
-
-  useEffect(() => {
-    if (liveUpdatesEnabled) return;
-    if (lastFetchedScopesKey.current !== null) return;
-    setSections(initialSections);
-    setTabs(initialTabs);
-    setBoards(initialBoards);
-    setAccessibleProjectIds(initialAccessibleProjectIds);
-  }, [initialAccessibleProjectIds, initialBoards, initialSections, initialTabs, liveUpdatesEnabled]);
-
-  useEffect(() => {
-    const token = ++scopesFetchToken.current;
-    if (liveUpdatesEnabled) {
-      return;
-    }
-    if (!myTasksScopesFlag || !scopesEnabled) {
-      lastFetchedScopesKey.current = null;
-      setSections(initialSections);
-      setTabs(initialTabs);
-      setBoards(initialBoards);
-      setAccessibleProjectIds(initialAccessibleProjectIds);
-      return;
-    }
-    if (lastFetchedScopesKey.current === null) {
-      lastFetchedScopesKey.current = scopesKey;
-      return;
-    }
-    if (lastFetchedScopesKey.current === scopesKey) return;
-    const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
-    if (showSnoozed) {
-      scopes.push("__showSnoozed" as (typeof scopes)[number]);
-    }
-    void (async () => {
-      try {
-        const response = await fetch(
-          `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`,
-        );
-        if (token !== scopesFetchToken.current) return;
-        if (!response.ok) {
-          toast.error("Unable to refresh My Tasks");
-          return;
-        }
-        const body = (await response.json()) as {
-          sections?: ISection[];
-          tabs?: string[];
-          boards?: MyTasksBoardMetadata[];
-          accessibleProjectIds?: number[];
-          nearestSnoozeUntil?: string | null;
-        };
-        if (token !== scopesFetchToken.current) return;
-        if (!Array.isArray(body.sections)) return;
-        lastFetchedScopesKey.current = scopesKey;
-        setSections(body.sections);
-        if (Array.isArray(body.tabs)) setTabs(body.tabs);
-        if (Array.isArray(body.boards)) setBoards(body.boards);
-        if (Array.isArray(body.accessibleProjectIds)) {
-          setAccessibleProjectIds(
-            body.accessibleProjectIds.filter((id): id is number => typeof id === "number"),
-          );
-        }
-        if (body.nearestSnoozeUntil !== undefined) {
-          setNearestSnoozeUntil(body.nearestSnoozeUntil ?? null);
-        }
-      } catch {
-        if (token === scopesFetchToken.current) {
-          toast.error("Unable to refresh My Tasks");
-        }
-      }
-    })();
-  }, [
-    initialAccessibleProjectIds,
-    initialBoards,
-    initialSections,
-    initialTabs,
-    liveUpdatesEnabled,
-    myTasksScopesFlag,
-    reconcileRunner,
-    scopesEnabled,
-    scopesKey,
-    showSnoozed,
-    viewConfig.scopes,
-  ]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled) return;
@@ -1141,9 +1049,7 @@ const boardTabCounts = useMemo(() => {
           <span className="text-content font-normal text-text-light-gray">
             {totalCount}
           </span>
-          {liveUpdatesEnabled ? (
-            <span className="sr-only">Live list updates on</span>
-          ) : null}
+          <span className="sr-only">Live list updates on</span>
           {myTasksTimeGroupFlag ? (
             <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
           ) : null}

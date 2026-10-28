@@ -6,7 +6,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
@@ -66,10 +65,6 @@ export default async function Page({
   ]);
   const snoozeEnabled = await isFeatureEnabled(
     MY_TASKS_SNOOZE_FLAG,
-    sessionUser.userId,
-  );
-  const liveUpdatesEnabled = await isFeatureEnabled(
-    MY_TASKS_LIVE_UPDATES_FLAG,
     sessionUser.userId,
   );
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
@@ -136,15 +131,12 @@ export default async function Page({
     }
   }
 
-  let accessibleProjectIds: number[] = [];
-  if (liveUpdatesEnabled) {
-    const { json: projects } = await getAllMinimal(
-      sessionUser.userId,
-      "Calendar",
-      false,
-    );
-    accessibleProjectIds = projects.map((project) => project.id);
-  }
+  const { json: projects } = await getAllMinimal(
+    sessionUser.userId,
+    "Calendar",
+    false,
+  );
+  const accessibleProjectIds = projects.map((project) => project.id);
 
   return (
     <Suspense fallback={<>Loading...</>}>

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -55,12 +54,8 @@ export async function GET(request: NextRequest) {
       snoozeEnabled,
       showSnoozed,
     });
-    const liveUpdatesEnabled = await isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, userId);
-    let accessibleProjectIds: number[] = [];
-    if (liveUpdatesEnabled) {
-      const { json: projects } = await getAllMinimal(userId, "Calendar", false);
-      accessibleProjectIds = projects.map((project) => project.id);
-    }
+    const { json: projects } = await getAllMinimal(userId, "Calendar", false);
+    const accessibleProjectIds = projects.map((project) => project.id);
     Object.assign(myTasks, { accessibleProjectIds });
     return NextResponse.json(myTasks, {
       headers: {
