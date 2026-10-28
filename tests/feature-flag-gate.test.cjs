@@ -2715,3 +2715,28 @@ test('formatter consumer defaults do not constrain independent rendering', async
     assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer defaults', base, commit(git, name), dir)).pass, expected, name);
   }
 });
+
+test('formatter comparisons, boolean children and action exits require observable behavior', async (t) => {
+  const cases = [
+    ['compound strict comparison', 'if ((enabled && "Age") === true) return "Age"; return null;', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['compound loose comparison', 'return (enabled && "Age") == true;', 'return format(enabled) ? <p>Age</p> : null;', false],
+    ['boolean comparison control', 'return enabled === true;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['negated comparison control', 'return !enabled === false;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['boolean negation child', 'return enabled;', 'const label = format(enabled); return <div>{label ? [!true] : null}</div>;', false],
+    ['boolean comparison child', 'return enabled;', 'return format(enabled) ? [1 === 1] : null;', false],
+    ['void child', 'return enabled;', 'return format(enabled) ? [void 0] : null;', false],
+    ['visible boolean sibling', 'return enabled;', 'return format(enabled) ? [!true, <p key="age">Age</p>] : null;', true],
+    ['direct action exit', 'return enabled;', 'const send = () => { if (!format(enabled)) return "disabled"; doWork(); }; return <button onClick={send}/>;', true],
+    ['assigned action exit', 'return enabled;', 'const send = () => { const label = format(enabled); if (!label) return; doWork(); }; return <button onClick={send}/>;', true],
+    ['action null exit', 'return enabled;', 'const send = () => { if (!format(enabled)) return null; doWork(); }; return <button onClick={send}/>;', true],
+    ['ignored action return', 'return enabled;', 'const send = () => { const label = format(enabled); if (!label) return null; return <p>Age</p>; }; return <button onClick={send}/>;', false],
+    ['unreachable action effect', 'return enabled;', 'const send = () => { if (!format(enabled)) return null; return; doWork(); }; return <button onClick={send}/>;', false],
+    ['ignored formatter', 'return enabled;', 'format(enabled); return <p>Age</p>;', false],
+  ];
+  for (const [name, helper, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(enabled) { ${helper} }`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] observable formatter gate', base, commit(git, name), dir)).pass, expected, name);
+  }
+});

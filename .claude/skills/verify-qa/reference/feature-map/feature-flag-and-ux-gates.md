@@ -37,7 +37,7 @@ After deployment, read the trusted feature-flag check on a production PR that pa
 Require the check's `ffg=` stamp to identify production containing the repair; an older passing status is not live proof.
 Do not change that PR, its flag, or its ticket during verification.
 
-Hosted `tests/feature-flag-gate.test.cjs` must prove all nine formatter groups: aliased parameters, explicit live return branches, rendered consumers, return truthiness, invariant guards, independent boolean inputs, formatter dependency/render consumption async server consumers and render coercion/omitted defaults.
+Hosted `tests/feature-flag-gate.test.cjs` must prove the formatter groups: aliased parameters, explicit live return branches, rendered consumers, return truthiness, invariant guards, independent boolean inputs, formatter dependency/render consumption async server consumers and render coercion/omitted defaults.
 These fixtures exercise the real `evaluate` entry point with committed repositories, not copied helpers.
 The allowed controls include relative and `@/` imports, top-level early returns, direct conditional rendering, independent caller boolean conjunctions and boolean negation.
 Refused controls include ignored or overwritten parameters, nested contradictory guards, exception overrides, invariant comparisons, conditional guards with unknown or constant truthiness, correlated parameters, dependent parameter defaults, truthy masks and discarded output.
@@ -60,6 +60,9 @@ Async server-component consumers of synchronous formatters remain supported; asy
 Consumed logical and nested conditional JSX render paths pass; discarded or comma-masked JSX fails.
 JSX returned only by an event handler cannot prove rendering; a binding returned by the rendered component still can.
 Unrelated component parameter defaults do not constrain formatter proof; formatter defaults retain their own validation.
+Compound value expressions cannot borrow the boolean parameter comparison proof; direct boolean and negated-boolean comparisons remain supported.
+Boolean-producing operators and void expressions remain invisible inside React arrays; visible siblings still work.
+Early exits in live action handlers must control a reachable effect; pure ignored handler returns and unreachable effects remain refused.
 Save the tested head SHA, hosted run URL and successful group lines.
 A local AST reproduction supplements those results; it does not replace evaluator or trusted-workflow proof.
 No app output changes, so theme screenshots and customer-data writes are unnecessary.

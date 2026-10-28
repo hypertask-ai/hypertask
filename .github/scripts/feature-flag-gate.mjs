@@ -471,7 +471,13 @@ function branchIsNullishOrEmpty(node, renderOnly = false) {
   if (typescript.isIdentifier(expression) && expression.text === "undefined") return true;
   if (typescript.isStringLiteral(expression) && expression.text === "") return true;
   if (typescript.isJsxExpression(expression)) return branchIsNullishOrEmpty(expression.expression, renderOnly);
-  if (renderOnly && typescript.isOmittedExpression(expression)) return true;
+  if (renderOnly && (typescript.isOmittedExpression(expression) || typescript.isVoidExpression(expression) ||
+      (typescript.isPrefixUnaryExpression(expression) && expression.operator === typescript.SyntaxKind.ExclamationToken) ||
+      (typescript.isBinaryExpression(expression) &&
+       ((expression.operatorToken.kind >= typescript.SyntaxKind.LessThanToken &&
+         expression.operatorToken.kind <= typescript.SyntaxKind.ExclamationEqualsEqualsToken) ||
+        expression.operatorToken.kind === typescript.SyntaxKind.InKeyword ||
+        expression.operatorToken.kind === typescript.SyntaxKind.InstanceOfKeyword)))) return true;
   if (renderOnly && typescript.isSpreadElement(expression)) {
     const operand = unwrapExpr(expression.expression);
     return (!typescript.isArrayLiteralExpression(operand) && !typescript.isStringLiteral(operand)) ||
@@ -908,6 +914,13 @@ function controlsRuntimeBranch(node, pureReturns = true) {
       } else {
         controlsOutput = hasBehavior(parent.thenStatement) || hasBehavior(parent.elseStatement);
       }
+      let branch = parent.thenStatement;
+      if (typescript.isBlock(branch) && branch.statements.length === 1) branch = branch.statements[0];
+      if (!pureReturns && !parent.elseStatement && typescript.isReturnStatement(branch) &&
+          typescript.isBlock(parent.parent) && typescript.isFunctionLike(parent.parent.parent)) {
+        const following = parent.parent.statements.slice(parent.parent.statements.indexOf(parent) + 1);
+        controlsOutput ||= following.some(hasBehavior);
+      }
       continue;
     }
     if ((typescript.isWhileStatement(parent) && child === parent.expression) ||
@@ -1074,7 +1087,10 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
            parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsEqualsToken) &&
           [typescript.SyntaxKind.TrueKeyword, typescript.SyntaxKind.FalseKeyword]
-            .includes(unwrapArgumentExpression(other).kind)) continue;
+            .includes(unwrapArgumentExpression(other).kind) &&
+          (unwrapArgumentExpression(child) === node ||
+           (typescript.isPrefixUnaryExpression(unwrapArgumentExpression(child)) &&
+            unwrapArgumentExpression(child).operator === typescript.SyntaxKind.ExclamationToken))) continue;
       return false;
     }
     if (typescript.isIfStatement(parent) && child === parent.expression) {
@@ -1302,10 +1318,10 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, call.arguments.length, independentArguments, argumentBoolean)) return false;
   const sourceFile = node.getSourceFile();
   const live = collectLiveFunctions(sourceFile, checker);
-  if (!renderFunctions.has(enclosingFunctionLike(call)) && !controlsRuntimeBranch(call, false)) return false;
   return gatesRuntimeBehavior(call, checker, sourceFile,
-    (reference) => renderFunctions.has(enclosingFunctionLike(reference)) &&
-      controlsReturnedValue(reference, { earlyOnly: true, after: call, checker, live: renderFunctions }), live,
+    (reference) => renderFunctions.has(enclosingFunctionLike(reference))
+      ? controlsReturnedValue(reference, { earlyOnly: true, after: call, checker, live: renderFunctions })
+      : controlsRuntimeBranch(reference, false), live,
     (value) => renderFunctions.has(enclosingFunctionLike(value))
       ? controlsReturnedValue(value, { earlyOnly: true, checker, live: renderFunctions }) : controlsRuntimeBranch(value, false));
 }
