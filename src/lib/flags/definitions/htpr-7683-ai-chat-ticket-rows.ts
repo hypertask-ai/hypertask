@@ -6,7 +6,7 @@ export default {
   key: HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG,
   kind: "feature",
   defaultMode: "EVERYONE",
-  shippedOn: "2026-10-23",
+  shippedOn: "2026-10-28",
   description: "Shows compact, grouped ticket rows in AI chat answers, with current status, assignees and priority.",
   releaseRisk: {
     risk: "small",

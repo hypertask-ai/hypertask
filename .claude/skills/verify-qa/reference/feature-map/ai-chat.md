@@ -165,6 +165,20 @@ When production runtime logs are readable, require an info-level invalid-JSON
 refusal without request content or a server-error incident. Otherwise record
 that log check as UNREACHABLE, not proven by the unchanged response.
 
+## Clickable ticket answers
+
+Ask chat for seven accessible tickets in one group. The streamed reply
+must include five rows and a **+2 more** control. Expand the group, then
+open a row and confirm the ticket URL matches its number. Repeat in the
+sidebar and phone view. Reload the conversation: rows keep their order,
+refresh current details, and omit tickets no longer accessible.
+
+Capture all four themes at desktop 1440x900 and phone 390x844. Check the
+message and composer stay inside the viewport, and ordinary text replies
+still render. With `htpr-7683-ai-chat-ticket-rows` off, replies and history
+must remain text-only. The server entry points are
+`POST /api/ai/chat/stream` and `GET /api/ai-chat/all-sessions`.
+
 ## What usually breaks
 
 - Provider/gateway slug drift breaking a specific model entirely: Grok chat
