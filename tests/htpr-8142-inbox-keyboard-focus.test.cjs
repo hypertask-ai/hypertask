@@ -1,7 +1,8 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const vm = require("node:vm");
+const os = require("node:os");
+const { loadModule } = require("./helpers/loadModule.cjs");
 const test = require("node:test");
 const ts = require("typescript");
 const { createJiti } = require("jiti");
@@ -28,6 +29,9 @@ const handler = name => {
   return attribute?.initializer?.expression?.getText(tree) ?? "() => {}";
 };
 
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "htpr-8142-"));
+test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+
 function fixture(count, enabled = true) {
   const keys = Array.from({ length: count }, (_, i) => `notification-${i % Math.ceil(count / 5) === 0 ? "-" : ""}${i + 1}`);
   const keyboardRows = keys.map((key, notificationIndex) => ({ key, domId: key, item: { kind: "notification", notificationIndex } }));
@@ -50,9 +54,26 @@ function fixture(count, enabled = true) {
     prefetchHoverTimeout: { current: null }, setTimeout: () => 1,
     prefetchInboxTaskDetail: () => {}, debounceTimeout: { current: null },
   };
-  const script = `${declaration("focusKeyboardRow")}\n${declaration("handleMouseEnter")}\n${declaration("handleKeyDown")}\nglobalThis.enter = ${handler("onMouseEnter")};\nglobalThis.move = ${handler("onMouseMove")};\nglobalThis.press = handleKeyDown;`;
-  vm.runInNewContext(ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
-  return { context, keys, async press(keyCode) { await context.press({ keyCode, preventDefault() {} }); }, scrollUnderPointer(index) { context.globalIndex = index; context.enter(); context.move({ movementX: 0, movementY: 0 }); } };
+  const script = `module.exports = ({${Object.keys(context).join(",")}}) => {
+    ${declaration("focusKeyboardRow")}
+    ${declaration("handleMouseEnter")}
+    ${declaration("handleKeyDown")}
+    return { enter: ${handler("onMouseEnter")}, move: ${handler("onMouseMove")}, press: handleKeyDown, nestedEnter: handleMouseEnter };
+  };`;
+  const file = path.join(scratch, `dispatch-${count}-${enabled}.ts`);
+  fs.writeFileSync(file, script);
+  const render = loadModule(file);
+  context.move = event => render(context).move(event);
+  return {
+    context, keys,
+    async press(keyCode) { await render(context).press({ keyCode, preventDefault() {} }); },
+    scrollUnderPointer(index) {
+      context.globalIndex = index;
+      render(context).enter();
+      render(context).nestedEnter(index);
+      context.move({ movementX: 0, movementY: 0 });
+    },
+  };
 }
 
 for (const count of [10, 200]) {

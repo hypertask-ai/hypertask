@@ -735,7 +735,15 @@ const InboxSplit = ({
     prefetchHoverTimeout.current = null;
   }, []);
 
-  const handleMouseEnter = (index: number) => {
+  const handleMouseEnter = (
+    index: number,
+    pointerMovement?: { movementX: number; movementY: number },
+  ) => {
+    if (
+      inboxKeyboardFocus &&
+      (!pointerMovement ||
+        (pointerMovement.movementX === 0 && pointerMovement.movementY === 0))
+    ) return;
     currentHoveredDiv.current = index;
     const hoveredRow = keyboardRows.find(
       (row) =>
@@ -1076,16 +1084,9 @@ const InboxSplit = ({
                                   !selected && !isBulkSelected,
                               },
                             )}
-                            onMouseEnter={() => {
-                              if (!inboxKeyboardFocus) handleMouseEnter(globalIndex);
-                            }}
+                            onMouseEnter={() => handleMouseEnter(globalIndex)}
                             onMouseMove={(event) => {
-                              if (
-                                inboxKeyboardFocus &&
-                                (event.movementX !== 0 || event.movementY !== 0)
-                              ) {
-                                handleMouseEnter(globalIndex);
-                              }
+                              if (inboxKeyboardFocus) handleMouseEnter(globalIndex, event);
                             }}
                             onMouseLeave={handleMouseLeave}
                             onTouchStart={() => handleTouchStart(globalIndex)}
