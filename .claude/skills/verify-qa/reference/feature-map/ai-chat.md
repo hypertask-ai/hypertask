@@ -204,3 +204,37 @@ the global cron merely for testing: it wakes other owners' agents. If no
 isolated heartbeat trigger and execution-step telemetry are available through
 approved product surfaces, record the live four-step case as UNREACHABLE;
 do not substitute mocked SDK results for a live heartbeat.
+
+## Desktop chat keyboard
+
+With `htpr-7766-chat-shortcuts` enabled, focus `/chat`, the docked sidebar,
+or a floating chat. `Alt+/` opens the same searchable shortcut list on all
+three; `?` also opens it outside editable text. Verify every listed action.
+
+- `Ctrl+Shift+O`: create a chat; await creation, then type immediately.
+- `Ctrl+Tab` / `Ctrl+Shift+Tab`: next / previous loaded chat, without wrapping.
+  Browsers may reserve these; `Alt+Down` / `Alt+Up` are equivalent fallbacks.
+- `Ctrl+Shift+B`: search board scope, arrows and Enter choose; Escape cancels.
+- `Ctrl+Shift+F`: search chats; on `/chat`, use the rail search and arrows /
+  Enter. Sidebar and floating chat use the shared searchable picker.
+  Search for an older, unloaded chat and choose **Load more** with Enter
+  until its page appears. The query stays intact and selecting it restores
+  composer focus. A pending page cannot be requested twice.
+- `Ctrl+Q`: refocus this chat's composer. Outside chat, the existing
+  workspace/chat focus toggle keeps its behavior.
+- `Ctrl+Shift+M`: model / effort menu. Arrows navigate; Enter or Right opens
+  a group, Enter selects, Escape closes. Selection and cancel restore focus.
+- `Ctrl+U`: attach a file. Canceling the system dialog keeps composer focus.
+- `Ctrl+Shift+D`: start or submit dictation; Escape cancels a recording.
+- `Alt+2` or typing `@`: mention a task or board.
+- `Enter` / `Ctrl+Enter`: send; `Shift+Enter`: newline; Escape stops a reply.
+  An open mention, skill or model picker handles its own keys first.
+- `Ctrl+Shift+P`: pin / unpin the current session.
+- `Ctrl+Shift+Backspace`: delete only after the existing confirmation.
+
+On Apple keyboards, Cmd replaces Ctrl except for Ctrl+Q and Ctrl+Tab.
+Check collapsed chat headers, no focus steal on initial load, and no handler
+left after closing a floating chat. With sidebar open but workspace focused,
+`c`, `j`, `k`, `/`, Ctrl+K, Ctrl+Shift+J and Ctrl+Q retain their normal behavior.
+Use only chats created for this run when verifying deletion. With the flag
+disabled in an isolated browser, the prior keyboard behavior remains.

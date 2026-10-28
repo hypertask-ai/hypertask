@@ -1,3 +1,4 @@
+import { matchChatShortcut } from "@/lib/aiChat/chatShortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
 import { IChatMessage } from "@/models/model";
@@ -13,7 +14,8 @@ type Context = Pick<ReturnType<typeof useAiChatState>, "setAiChatExplicitOpenAt"
   Pick<ReturnType<typeof useAiChatSessions>, "isApple" | "isByokBlocked" | "fileUpload" | "startNewSession"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
 
-export function createAiChatKeyboard(context: Context) {
+export function createAiChatKeyboard(context: Context, options?: { focusedShortcuts: true }) {
+  const sharedShortcutsEnabled = options?.focusedShortcuts === true;
   const {
   setAiChatExplicitOpenAt, setIsSidebarMode, editor, setAiChatAutoOpenSuppressed, setAiChatPinned,
   setShowAIChat, setMinimized, setChatMounted, currentSession, handleSendMessage,
@@ -62,7 +64,12 @@ export function createAiChatKeyboard(context: Context) {
 
   function tiptapKeydown(e: any) {
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    if (e.keyCode === KeyCodes.ENTER && !e.shiftKey) {
+    if (sharedShortcutsEnabled && (e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229)) return;
+    const sendShortcut = sharedShortcutsEnabled
+      ? matchChatShortcut(e, true) === "send"
+      : e.keyCode === KeyCodes.ENTER && !e.shiftKey;
+    if (sendShortcut) {
+      if (sharedShortcutsEnabled && (!(e.target instanceof HTMLElement) || !e.target.closest(".ProseMirror[contenteditable='true']") || e.target.closest("[data-agent-chat-ai-composer]"))) return;
       const mentionListElement = document.getElementById(
         DIV_ID_CONSTANTS.aiMentionList
       );
@@ -126,6 +133,7 @@ export function createAiChatKeyboard(context: Context) {
   }
 
   function layoutKeydown(e: any) {
+    if (sharedShortcutsEnabled && (e.defaultPrevented || e.isComposing)) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
     if (e.keyCode === KeyCodes.FORWARD_SLASH && cmdControl && e.shiftKey) {

@@ -26,6 +26,8 @@ interface Props {
   emptyMessage?: string;
   onSelect: (option: PickerOption) => void;
   onClose: () => void;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 const OptionPickerModal: React.FC<Props> = ({
@@ -35,6 +37,8 @@ const OptionPickerModal: React.FC<Props> = ({
   emptyMessage = "Nothing here yet",
   onSelect,
   onClose,
+  onLoadMore,
+  isLoadingMore = false,
 }) => {
   const checkedIcon = <Check size={16} strokeWidth={1.75} />;
   const [keyword, setKeyword] = useState("");
@@ -56,15 +60,20 @@ const OptionPickerModal: React.FC<Props> = ({
   };
 
   const selectAt = (index: number) => {
+    if (index === filtered.length && onLoadMore) {
+      if (!isLoadingMore) onLoadMore();
+      return;
+    }
     const option = filtered[index];
     if (!option) return;
     setTimeout(() => onSelect(option), 1);
   };
 
   const move = (delta: number) => {
-    if (filtered.length === 0) return;
+    const count = filtered.length + (onLoadMore ? 1 : 0);
+    if (count === 0) return;
     const next = selectedIndex + delta;
-    if (next < 0 || next > filtered.length - 1) return;
+    if (next < 0 || next >= count) return;
     setSelectedIndex(next);
     document
       .getElementById(`option-picker-${next}`)
@@ -92,7 +101,7 @@ const OptionPickerModal: React.FC<Props> = ({
     document.addEventListener("keydown", handleKeyDown, { capture: true });
     return () =>
       document.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [selectedIndex, filtered]);
+  }, [selectedIndex, filtered, onLoadMore, isLoadingMore]);
 
   return (
     <ModalContainerCustom
@@ -138,6 +147,19 @@ const OptionPickerModal: React.FC<Props> = ({
                 {option.checked && checkedIcon}
               </ModalRowElementContainer>
             ))
+          )}
+          {onLoadMore && (
+            <ModalRowElementContainer
+              onMouseEnter={() => handleMouseEnter(filtered.length)}
+              handleMouseLeave={handleMouseLeave}
+              onClick={() => selectAt(filtered.length)}
+              id={`option-picker-${filtered.length}`}
+              index={filtered.length}
+              commandRef={elRef}
+              isSelected={selectedIndex === filtered.length}
+            >
+              <span>{isLoadingMore ? "Loading…" : "Load more"}</span>
+            </ModalRowElementContainer>
           )}
         </ModalListContainer>
       </ModalBody>

@@ -159,6 +159,7 @@ function editModeCleanup({ enabled = true, open = true, taskId = 123, messages =
     "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/lib/state": { useRecoilState: () => [123, (value) => cleared.push(value)] },
     "@/store": { aiChatEditTaskIdAtom: "edit" },
     "./useAiChatState": { useAiChatState: () => ({ showAiChatInterface: open, taskId, currentSession: { messages } }) },

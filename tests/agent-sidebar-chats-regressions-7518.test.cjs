@@ -461,6 +461,8 @@ test("native switching snapshots the latest draft and attachments after open, tr
     startNewSession: assert.fail,
   };
   const mocks = {
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     react: { ...react, default: react },
     "@/hooks/useFlag": { useFlag: key => key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
@@ -894,6 +896,8 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
   };
   const { AI_Tiptap_Container } = loadChatComponent("src/components/AI_CHAT/AI_Tiptap_Container.tsx", {
     ...composerMocks,
+    "@/lib/aiChat/chatShortcuts": load("src/lib/aiChat/chatShortcuts.ts", {}),
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": load("src/lib/flags/definitions/htpr-7766-chat-shortcuts.ts", {}),
     "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "@/hooks/MultiPages/AIChat/dockedChatScope": load("src/hooks/MultiPages/AIChat/dockedChatScope.ts", {}),
     react: { ...hooks, useContext: () => false, useMemo: (callback) => callback(), useState: (value) => [value, noop], useId: () => "general" },
