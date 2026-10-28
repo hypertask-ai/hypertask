@@ -207,6 +207,9 @@ three; `?` also opens it outside editable text. Verify every listed action.
 - `Ctrl+Shift+B`: search board scope, arrows and Enter choose; Escape cancels.
 - `Ctrl+Shift+F`: search chats; on `/chat`, use the rail search and arrows /
   Enter. Sidebar and floating chat use the shared searchable picker.
+  Search for an older, unloaded chat and choose **Load more** with Enter
+  until its page appears. The query stays intact and selecting it restores
+  composer focus. A pending page cannot be requested twice.
 - `Ctrl+Q`: refocus this chat's composer. Outside chat, the existing
   workspace/chat focus toggle keeps its behavior.
 - `Ctrl+Shift+M`: model / effort menu. Arrows navigate; Enter or Right opens

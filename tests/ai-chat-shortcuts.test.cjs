@@ -229,6 +229,30 @@ for (const surface of ["fullscreen", "sidebar", "floating"]) {
   }
 }
 
+for (const surface of ["sidebar", "floating"]) {
+  test(`${surface}: keyboard search can load and select older history pages`, async () => {
+    const f = fixture(surface);
+    try {
+      f.context.hasMoreSessions = true;
+      f.context.loadMoreSessions = async () => {
+        f.context.historySessions = [...f.context.historySessions, { id: "older", title: "Older chat", updatedAt: "2026-01-01" }];
+        f.context.hasMoreSessions = false;
+      };
+      f.press("f", { ctrlKey: true, shiftKey: true });
+      let modal = f.render().modal;
+      assert.equal(typeof modal.props.onLoadMore, "function");
+      await modal.props.onLoadMore();
+      modal = f.render().modal;
+      assert.equal(modal.props.onLoadMore, undefined);
+      assert.deepEqual(modal.props.options.map((option) => option.id), ["a", "b", "c", "older"]);
+      modal.props.onSelect({ id: "older" });
+      f.flush();
+      assert.equal(f.actions.at(-1), "select:older");
+      assert.equal(document.activeElement === f.composer, true);
+    } finally { f.close(); }
+  });
+}
+
 test("session navigation respects order and boundaries without wrapping", () => {
   assert.equal(registry.adjacentChatSession(["a", "b"], "b", "next"), undefined);
   assert.equal(registry.adjacentChatSession(["a", "b"], "a", "previous"), undefined);

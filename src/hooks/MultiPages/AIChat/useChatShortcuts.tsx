@@ -150,6 +150,8 @@ export function useChatShortcuts(options: {
       ? CHAT_SHORTCUTS.map((shortcut) => ({ id: shortcut.id, label: shortcut.label, hint: chatShortcutHint(shortcut.id, isApple) }))
       : sessions.map((session) => ({ id: session.id, label: session.title, checked: session.id === chat.currentSession?.id }))}
     onClose={closePicker}
+    onLoadMore={picker === "search" && chat.sessionPagingEnabled && chat.hasMoreSessions ? () => { void chat.loadMoreSessions(); } : undefined}
+    isLoadingMore={chat.isLoadingMoreSessions}
     onSelect={({ id }) => {
       closePicker();
       if (typeof id !== "string") return;
