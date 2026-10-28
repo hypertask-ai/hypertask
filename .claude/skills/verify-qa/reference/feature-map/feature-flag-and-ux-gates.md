@@ -63,8 +63,8 @@ Unrelated component parameter defaults do not constrain formatter proof; formatt
 Compound value expressions cannot borrow the boolean parameter comparison proof; direct boolean and negated-boolean comparisons remain supported.
 Boolean-producing operators and void expressions remain invisible inside React arrays; visible siblings still work.
 Early exits in live action handlers must control a reachable effect, including nested blocks; pure ignored handler returns and unreachable effects remain refused.
-Exported TSX/JSX consumers returning text or arrays need no JSX node to establish render liveness.
-Logical and conditional boolean-only children remain invisible, including statically masked text; zero remains visible React output.
+Exported capitalized component bindings returning text or arrays need no JSX node to establish render liveness, including JavaScript files. Lowercase exported actions retain effect-based analysis regardless of their file extension.
+Logical and conditional boolean-only children remain invisible, including statically masked text; zero remains visible React output. Consumer branches must differ in visibility, not just syntax; equivalent text arrays and strings cannot prove an effective switch.
 Save the tested head SHA, hosted run URL and successful group lines.
 A local AST reproduction supplements those results; it does not replace evaluator or trusted-workflow proof.
 No app output changes, so theme screenshots and customer-data writes are unnecessary.

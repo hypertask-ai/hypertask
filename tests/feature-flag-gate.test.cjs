@@ -2749,3 +2749,21 @@ test('formatter comparisons, boolean children and action exits require observabl
     assert.equal((await evaluate('HTPR-1 [FEATURE] observable formatter gate', base, commit(git, name), dir)).pass, expected, name);
   }
 });
+
+
+test('formatter consumer boundaries preserve action and JavaScript rendering gates', async (t) => {
+  const cases = [
+    ['equivalent text rendering', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : "Age"; }', false],
+    ['equivalent early text rendering', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); if (format(enabled)) return ["Age"]; return "Age"; }', false],
+    ['JavaScript text component', 'js', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; }', true],
+    ['JavaScript arrow component', 'js', 'export const Widget = () => { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; };', true],
+    ['exported TSX action', 'tsx', 'export async function send() { const enabled = useFlag(OTHER_FLAG); if (format(enabled)) await doWork(); }', true],
+    ['discarded action text', 'tsx', 'export function send() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; }', false],
+  ];
+  for (const [name, extension, source, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
+    writeFile(dir, `src/components/Widget.${extension}`, 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + source);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer boundary', base, commit(git, name), dir)).pass, expected, name);
+  }
+});

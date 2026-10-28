@@ -756,7 +756,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = 
   // Export recognition remains intact for the ungated-sibling check, but a
   // rebound binding cannot prove which implementation runs. No flow analysis.
   const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) &&
-    (!renderOnly || functionContainsJsx(fn) || /\.[jt]sx$/.test(sourceFile.fileName)) &&
+    (!renderOnly || functionContainsJsx(fn) || /^[A-Z]/.test(functionBindingName(fn, checker)?.text ?? "")) &&
     (entries ? entries.has(fn) : isExportedUiEntry(fn, identifierExports))));
   const functionBySymbol = new Map();
   for (const fn of functions) {
@@ -1128,7 +1128,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
       if (!typescript.isReturnStatement(whenTrue) || !whenFalse || !typescript.isReturnStatement(whenFalse) ||
           !whenTrue.expression || !whenFalse.expression ||
           branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression) ||
-          (earlyOnly && branchIsNullishOrEmpty(whenTrue, true) && branchIsNullishOrEmpty(whenFalse, true))) return false;
+          (earlyOnly && branchIsNullishOrEmpty(whenTrue, true) === branchIsNullishOrEmpty(whenFalse, true))) return false;
       const a = staticBoolean(whenTrue.expression, true), b = staticBoolean(whenFalse.expression, true);
       return a !== null && b !== null && (earlyOnly || a !== b);
     }
@@ -1138,7 +1138,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
     if (typescript.isConditionalExpression(parent)) {
       conditionalGuard = true;
       if (child === parent.condition) {
-        if (earlyOnly && branchIsNullishOrEmpty(parent.whenTrue, true) && branchIsNullishOrEmpty(parent.whenFalse, true)) return false;
+        if (earlyOnly && branchIsNullishOrEmpty(parent.whenTrue, true) === branchIsNullishOrEmpty(parent.whenFalse, true)) return false;
         const whenTrue = staticBoolean(parent.whenTrue, true);
         const whenFalse = staticBoolean(parent.whenFalse, true);
         if (whenTrue === null || whenFalse === null ||
