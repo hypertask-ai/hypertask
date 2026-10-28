@@ -216,6 +216,7 @@ test("server flags in invoked MCP route wrappers count, but discarded and shadow
     ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async (request) => { if (!(await isFeatureEnabled("htpr-1-other", request.userId))) return "off"; return "on"; })(request); }\n', true],
     ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; }); return "ungated"; }\n', false],
     ['function wrap(callback) { return () => "ungated"; }\nexport async function POST(request) { return wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; })(request); }\n', false],
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async function* () { if (await isFeatureEnabled("htpr-1-other", 6)) yield "on"; })(request); }\n', false],
   ]) {
     const { dir, git } = makeRepo(t);
     const base = commit(git, "base");

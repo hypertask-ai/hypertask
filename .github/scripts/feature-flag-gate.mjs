@@ -766,7 +766,7 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
       changed = true;
     }
     for (const fn of functions) {
-      if (live.has(fn) || !typescript.isCallExpression(fn.parent) ||
+      if (live.has(fn) || fn.asteriskToken || !typescript.isCallExpression(fn.parent) ||
           fn.parent.arguments.length !== 1 || fn.parent.arguments[0] !== fn ||
           !typescript.isIdentifier(fn.parent.expression)) continue;
       const call = fn.parent;
