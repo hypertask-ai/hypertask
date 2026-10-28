@@ -12,18 +12,20 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 
 import type { ToolContext } from "./context";
 
+const inboxArchiveSchema = z.object({
+  notification_ids: z.array(z.coerce.number().int().positive()).min(1).optional(),
+  list_tokens: z.array(z.string().uuid()).optional(),
+  confirmed: z.boolean().optional(),
+});
+
 export function createInboxArchiveTool(context: ToolContext) {
   const { sendStatus, user } = context;
   return {
     hypertask_inbox_archive: tool({
       description:
         "Archive inbox notifications. When inbox_list supplies list_tokens, archive a listed batch: first call with notification_ids, list_tokens from inbox_list, and confirmed=false. Show every previewed ticket, including sibling notifications, then ask once. After the user says yes in a NEW message, call confirmed=true with notification_ids omitted to replay the exact server-saved preview; do not re-list or rematch ticket names. A changed batch is refused with a fresh preview. Report every archived ticket and the exact archived_count from the result.",
-      inputSchema: z.object({
-        notification_ids: z.array(z.coerce.number().int().positive()).min(1).optional(),
-        list_tokens: z.array(z.string().uuid()).optional(),
-        confirmed: z.boolean().optional(),
-      }),
-      execute: withToolErrors(async (input) => {
+      inputSchema: inboxArchiveSchema,
+      execute: withToolErrors(async (input: z.infer<typeof inboxArchiveSchema>) => {
         sendStatus("hypertask_inbox_archive");
         if (await isFeatureEnabled(HTPR_8045_INBOX_BATCHES_FLAG, user.id)) {
           const pending = input.confirmed ? await readPendingInboxArchive(user.id, context.confirmationSessionId) : null;
