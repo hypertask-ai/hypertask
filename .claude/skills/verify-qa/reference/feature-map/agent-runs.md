@@ -50,3 +50,17 @@ runtime-title flag.
 Read-only checks create nothing. Remove only recorded disposable fixtures
 created by this run, through approved product routes. Never revoke shared
 QA credentials or change existing subscriptions.
+
+## Scheduled manager chat activity
+
+`POST /api/mcp/chat/activity` records a manager's cycle in its owner's
+Agent Chat. This route has no rollout flag. Use an isolated QA-owned
+agent token, not a human token or a standing runner's chat, for writes.
+Post a unique `clientMessageId`, read the owner's transcript, and replay
+that same request: one delivered assistant message must remain, attributed
+to that agent, and the replay must return `duplicate: true`.
+A human token remains refused with 403; an anonymous request gets 401.
+Empty text or an invalid client ID gets 400 without writing.
+Delete only the disposable conversation created by this run. If an
+isolated agent credential is unavailable, record the successful write as
+UNREACHABLE; exercise authenticated refusal and discovery instead.
