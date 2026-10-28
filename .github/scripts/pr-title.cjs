@@ -1,4 +1,4 @@
-module.exports = async ({ github, context, core, fetchImpl = fetch }) => {
+module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
   const PREFIXES = ['HTPR', 'HYFA', 'YPER4'];
   const TAGS = [
     'BUGFIX', 'FEATURE', 'IMPROVE', 'CLI/MCP/AI', 'SPEED', 'FEEDBACK',
@@ -17,10 +17,10 @@ module.exports = async ({ github, context, core, fetchImpl = fetch }) => {
     return;
   }
 
-  const { data: pr } = await github.rest.pulls.get({
+  if (!pr) ({ data: pr } = await github.rest.pulls.get({
     ...context.repo,
     pull_number: Number(prNumber),
-  });
+  }));
 
   core.setOutput('sha', pr.head.sha);
   core.setOutput('title', pr.title);

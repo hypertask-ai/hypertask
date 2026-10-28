@@ -44,20 +44,24 @@ runner_policy:
 pr_job_budget:
   parallel_job_limit: 20
   normal_synchronize_before: 17
-  normal_synchronize_after: 16
+  normal_synchronize_after: 17
   opened_before: 18
-  opened_after: 16
+  opened_after: 17
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
     workflow: .github/workflows/pr-guards.yml
-    jobs: 1
-    published_statuses: [secret-scan, next-public-secrets]
-    read_only_pr_tokens: trusted_workflow_run_status_only_pass
+    jobs: 2
+    native_checks: [secret-scan, next-public-secrets]
+    github_status_api_calls: 0
+    read_only_pr_tokens: native_job_checks
   trusted_pull_request_guards:
     workflow: .github/workflows/pr-guards-trusted.yml
     jobs: 1
-    published_statuses: [outside-pr-guard, pr-size, pr-title]
+    published_statuses: [pr-title]
+    metadata_reads: 1
+    publication_freshness_reads: 2
+    status_writes: 2
     checkout: production_only
     candidate_code_execution: false
   serialized_reconciliation_guards:
@@ -71,7 +75,7 @@ pr_job_budget:
       published_statuses: [ux-signoff-gate, ux-signoff]
       concurrency_group: ux-signoff-gate
       cancel_in_progress: false
-  context_publication: commit_status_per_guard_and_fail_closed_aggregate_job
+  context_publication: native_scanner_checks_and_combined_trusted_commit_status
   isolated_guards:
     node_version: vercel_secret_runner_separate_from_candidate_scripts
     parity_contract: candidate_data_checkout_keeps_read_only_token_and_no_mcp_secret
@@ -283,6 +287,7 @@ policies:
     repository_creation_setting: enabled
   concurrency:
     cancel_superseded_pull_request_runs: true
+    trusted_guard_event_isolation: github.run_id
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch

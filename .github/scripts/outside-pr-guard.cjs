@@ -1,4 +1,4 @@
-module.exports = async ({ github, context, core }) => {
+module.exports = async ({ github, context, core, pr }) => {
   const marker = '<!-- outside-pr-guard -->';
 
   async function run() {
@@ -6,7 +6,6 @@ module.exports = async ({ github, context, core }) => {
     const base = `${owner}/${repo}`;
     const dispatch = context.eventName === 'workflow_dispatch';
     const inputs = context.payload.inputs || {};
-    let pr;
 
     if (dispatch && inputs.simulate_author) {
       const author = inputs.simulate_author;
@@ -23,8 +22,7 @@ module.exports = async ({ github, context, core }) => {
         core.setFailed('Provide pr_number or simulate_author to inspect a PR.');
         return;
       }
-      // Read fresh metadata, not the potentially stale webhook payload.
-      ({ data: pr } = await github.rest.pulls.get({
+      if (!pr) ({ data: pr } = await github.rest.pulls.get({
         owner, repo, pull_number: Number(prNumber),
       }));
     }

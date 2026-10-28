@@ -6,6 +6,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const yaml = require('js-yaml');
 const { evaluate, workflowDigest, checkPullRequest } = require('../.github/scripts/ci-runner-policy.cjs');
+const rateLimit = import('../.github/scripts/github-rate-limit.mjs');
 const publicRepo = { full_name: 'fixture/app', private: false, visibility: 'public' };
 const privateRepo = { ...publicRepo, private: true, visibility: 'private' };
 const policy = { topology: { compute: 'github-hosted-ubuntu-latest' } };
@@ -58,7 +59,8 @@ test('trusted PR title execution scans candidate Git data and publishes failure 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-runner-policy-'));
   const originalPath = process.env.PATH;
   const originalToken = process.env.GH_TOKEN;
-  t.after(() => { process.chdir(root); process.env.PATH = originalPath; if (originalToken === undefined) delete process.env.GH_TOKEN; else process.env.GH_TOKEN = originalToken; fs.rmSync(dir, { recursive: true, force: true }); });
+  const originalMetadata = process.env.PR_METADATA;
+  t.after(() => { process.chdir(root); process.env.PATH = originalPath; if (originalToken === undefined) delete process.env.GH_TOKEN; else process.env.GH_TOKEN = originalToken; if (originalMetadata === undefined) delete process.env.PR_METADATA; else process.env.PR_METADATA = originalMetadata; fs.rmSync(dir, { recursive: true, force: true }); });
   const git = (...args) => {
     const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
@@ -87,13 +89,15 @@ test('trusted PR title execution scans candidate Git data and publishes failure 
   const workflow = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/pr-guards-trusted.yml'), 'utf8'));
   const job = workflow.jobs['pr-guards-trusted'];
   const runner = job.steps.find(step => step.id === 'runner-policy').with.script;
-  const publish = job.steps.find(step => step.name === 'Publish original guard contexts').with.script;
+  const publish = job.steps.find(step => step.name === 'Publish combined guard result').with.script.replace(/^.*const \{ retryGithubRequest \} = await import.*\n/m, '');
+  const { retryGithubRequest } = await rateLimit;
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   process.chdir(dir); process.env.PATH = `${dir}/bin:${originalPath}`; delete process.env.GH_TOKEN;
   for (const [sha, state, brokenApi] of [[good, 'success', false], [bad, 'failure', false], [good, 'failure', true]]) {
     git('update-ref', 'refs/pull/844/head', sha);
     if (brokenApi) fs.writeFileSync(gh, `#!${process.execPath}\nprocess.exit(1);\n`, { mode: 0o755 });
-    const pr = { number: 844, title: 'YPER4-844 [INFRA] Enforce runner policy', user: { login: 'fixture' }, base: { ref: 'production', repo: { full_name: 'fixture/app' } }, head: { sha } };
+    const pr = { state: 'open', number: 844, title: 'YPER4-844 [INFRA] Enforce runner policy', user: { login: 'fixture' }, base: { ref: 'production', repo: { full_name: 'fixture/app' } }, head: { sha } };
+    process.env.PR_METADATA = JSON.stringify(pr);
     const outputs = {};
     const posts = [];
     const github = { rest: { pulls: { get: async () => ({ data: pr }) }, repos: { createCommitStatus: async value => posts.push(value) } } };
@@ -104,7 +108,7 @@ test('trusted PR title execution scans candidate Git data and publishes failure 
     catch (error) { outcome = 'failure'; assert.doesNotMatch(error.message, /Candidate code executed/); }
     const previous = process.env.RESULTS;
     process.env.RESULTS = JSON.stringify({ outside: { outcome: 'success', outputs: { sha } }, size: { outcome: 'success', outputs: { sha } }, title: { outcome: 'success', outputs: { sha, title: pr.title } }, 'runner-policy': { outcome, outputs } });
-    try { await new AsyncFunction('github', 'context', 'core', publish)(github, context, { ...core, setFailed() {} }); }
+    try { await new AsyncFunction('github', 'context', 'core', 'retryGithubRequest', publish)(github, context, { ...core, setFailed() {} }, retryGithubRequest); }
     finally { if (previous === undefined) delete process.env.RESULTS; else process.env.RESULTS = previous; }
     assert.equal(posts.find(post => post.context === 'pr-title').state, state);
     assert.equal(posts.find(post => post.context === 'pr-title').sha, sha);

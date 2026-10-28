@@ -179,39 +179,42 @@ jobs:
           HEAD_SHA: ${{ steps.request.outputs.head-sha }}
         with:
           script: |
-            const request = context.payload.workflow_run;
-            const currentHead = async () => {
-              const { data: pr } = await github.rest.pulls.get({
-                ...context.repo, pull_number: Number(process.env.PR),
-              });
-              if (pr.state === 'open' && pr.head.sha === process.env.HEAD_SHA) return true;
-              core.setOutput('superseded', 'true');
-              core.info('The pull request was closed or pushed again; its newest head has its own request.');
-              return false;
-            };
-            if (!await currentHead()) return;
-            const runs = (await Promise.all(['queued', 'in_progress', 'waiting', 'pending', 'requested'].map(status =>
-              github.paginate(github.rest.actions.listWorkflowRuns, {
-                ...context.repo, workflow_id: 'app-smoke.yml', event: 'workflow_run', status, per_page: 100,
-              }),
-            ))).flat();
-            for (const run of runs) {
-              if (run.id === context.runId || run.status === 'completed') continue;
-              const match = /^App Smoke request ([0-9]+) for /.exec(run.display_title);
-              if (!match) continue;
-              const requestNumber = Number(match[1]);
-              const title = `App Smoke request ${requestNumber} for ${request.head_repository.full_name}:${request.head_branch}`;
-              if (run.display_title !== title) continue;
-              if (!(requestNumber < request.run_number || (requestNumber === request.run_number && run.run_number < context.runNumber))) continue;
+            const { retryGithubRequest } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/github-rate-limit.mjs`);
+            await retryGithubRequest(async () => {
+              const request = context.payload.workflow_run;
+              const currentHead = async () => {
+                const { data: pr } = await github.rest.pulls.get({
+                  ...context.repo, pull_number: Number(process.env.PR),
+                });
+                if (pr.state === 'open' && pr.head.sha === process.env.HEAD_SHA) return true;
+                core.setOutput('superseded', 'true');
+                core.info('The pull request was closed or pushed again; its newest head has its own request.');
+                return false;
+              };
               if (!await currentHead()) return;
-              try {
-                await github.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: run.id });
-              } catch (error) {
-                if (error.status !== 409) throw error;
-                core.info(`App Smoke run ${run.id} already finished cancelling or completed.`);
+              const runs = (await Promise.all(['queued', 'in_progress', 'waiting', 'pending', 'requested'].map(status =>
+                github.paginate(github.rest.actions.listWorkflowRuns, {
+                  ...context.repo, workflow_id: 'app-smoke.yml', event: 'workflow_run', status, per_page: 100,
+                }),
+              ))).flat();
+              for (const run of runs) {
+                if (run.id === context.runId || run.status === 'completed') continue;
+                const match = /^App Smoke request ([0-9]+) for /.exec(run.display_title);
+                if (!match) continue;
+                const requestNumber = Number(match[1]);
+                const title = `App Smoke request ${requestNumber} for ${request.head_repository.full_name}:${request.head_branch}`;
+                if (run.display_title !== title) continue;
+                if (!(requestNumber < request.run_number || (requestNumber === request.run_number && run.run_number < context.runNumber))) continue;
+                if (!await currentHead()) return;
+                try {
+                  await github.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: run.id });
+                } catch (error) {
+                  if (error.status !== 409) throw error;
+                  core.info(`App Smoke run ${run.id} already finished cancelling or completed.`);
+                }
               }
-            }
-            await currentHead();
+              await currentHead();
+            }, { log: core.warning });
 
   app-smoke:
     name: run app-smoke

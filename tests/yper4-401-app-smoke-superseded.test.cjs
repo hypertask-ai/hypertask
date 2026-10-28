@@ -128,21 +128,30 @@ function smokeRun({ id = 500, runNumber = id, requestNumber = 100, repository = 
   return { id, run_number: runNumber, status, display_title: `App Smoke request ${requestNumber} for ${repository}:${branch}` };
 }
 
-async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId, pulls = [pr()], runs = [], cancelError } = {}) {
+async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId, pulls = [pr()], runs = [], cancelError, limitedRead = false } = {}) {
   const calls = [];
   const cancelled = [];
+  const waits = [];
   const outputs = {};
   const previous = { PR: process.env.PR, HEAD_SHA: process.env.HEAD_SHA };
   process.env.PR = "1517";
   process.env.HEAD_SHA = SHA;
   let reads = 0;
   try {
-    await new AsyncFunction("github", "context", "core", cancellationStep.with.script)(
+    const { retryGithubRequest } = await import('../.github/scripts/github-rate-limit.mjs');
+    const script = cancellationStep.with.script.replace(/^.*const \{ retryGithubRequest \} = await import.*\n/m, '');
+    await new AsyncFunction("github", "context", "core", "retryGithubRequest", script)(
       {
         rest: {
           pulls: { get: async (params) => {
             assert.equal(params.pull_number, 1517);
             calls.push("head");
+            if (limitedRead) {
+              limitedRead = false;
+              throw Object.assign(new Error('API rate limit exceeded for installation'), {
+                status: 403, response: { headers: { 'retry-after': '1' } },
+              });
+            }
             return { data: pulls[Math.min(reads++, pulls.length - 1)] };
           } },
           actions: {
@@ -166,7 +175,8 @@ async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId
         repo: { owner: "hypertask-ai", repo: "hypertask" }, runId, runNumber,
         payload: { workflow_run: { run_number: requestNumber, head_repository: { full_name: REPOSITORY }, head_branch: BRANCH } },
       },
-      { setOutput: (name, value) => { outputs[name] = value; }, info() {} },
+      { setOutput: (name, value) => { outputs[name] = value; }, info() {}, warning() {} },
+      request => retryGithubRequest(request, { sleep: async ms => { waits.push(ms); }, log() {} }),
     );
   } finally {
     for (const [key, value] of Object.entries(previous)) {
@@ -174,7 +184,7 @@ async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId
       else process.env[key] = value;
     }
   }
-  return { calls, cancelled, outputs };
+  return { calls, cancelled, outputs, waits };
 }
 
 test("the post-scope request recheck runs before any order-aware cancellation", () => {
@@ -269,4 +279,18 @@ test("all active run states are eligible for ordered cancellation", async () => 
   const statuses = ["queued", "in_progress", "waiting", "pending", "requested"];
   const result = await cancelOlder({ runs: statuses.map((status, index) => smokeRun({ id: 500 + index, status })) });
   assert.deepEqual(result.cancelled, [500, 501, 502, 503, 504]);
+});
+
+test("ten smoke discovery replays wait after quota refusal then recheck the live head", async () => {
+  for (let push = 0; push < 10; push++) {
+    const result = await cancelOlder({ limitedRead: true, runs: [smokeRun()] });
+    assert.deepEqual(result.waits, [1000]);
+    assert.deepEqual(result.cancelled, [500]);
+    assert.deepEqual(result.calls.slice(0, 2), ['head', 'head']);
+    assert.equal(result.outputs.superseded, undefined);
+    const stale = await cancelOlder({ limitedRead: true, pulls: [pr({ sha: 'f'.repeat(40) })], runs: [smokeRun()] });
+    assert.deepEqual(stale.waits, [1000]);
+    assert.deepEqual(stale.cancelled, []);
+    assert.equal(stale.outputs.superseded, 'true');
+  }
 });
