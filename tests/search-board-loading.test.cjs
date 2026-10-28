@@ -17,7 +17,8 @@ for (const scenario of [
   { name: "newer submission while waiting", width: 390, newer: true },
 ]) {
   test(`early Enter waits for boards: ${scenario.name}`, async (t) => {
-    notifyManager.setScheduler(queueMicrotask);
+    const notifications = [];
+    notifyManager.setScheduler((callback) => notifications.push(callback));
     t.after(() => notifyManager.setScheduler(defaultScheduler));
     const dom = new JSDOM('<div id="root"></div>', { url: "https://example.test/search" });
     Object.defineProperty(dom.window, "innerWidth", { value: scenario.width });
@@ -99,7 +100,8 @@ for (const scenario of [
       await React.act(async () => {
         if (scenario.error) rejectBoards(new Error("Boards unavailable"));
         else resolveBoards(scenario.empty ? [] : projects);
-        await boardsPromise.catch(() => {});
+        await client.refetchQueries({ queryKey: ["projectsAllMinimal"] }, { cancelRefetch: false });
+        for (const notify of notifications.splice(0)) notify();
       });
       if (scenario.empty || scenario.error) {
         assert.equal(requests.length, 0, "no boards or failed loading must not send an invalid request");
