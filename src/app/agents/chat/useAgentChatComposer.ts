@@ -1,5 +1,7 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import { IProject, ITask } from "@/models/model";
 import axios from "axios";
@@ -10,6 +12,7 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "composerEditorRef"
   | "setDraft"
   | "composerRef"
@@ -41,11 +44,12 @@ type Props = Pick<
 >;
 
 export function useAgentChatComposer({
-  composerEditorRef, setDraft, composerRef, draftRef, mentionOpen, dismissMention, setMentionStart,
+  embedded, composerEditorRef, setDraft, composerRef, draftRef, mentionOpen, dismissMention, setMentionStart,
   setMentionResults, setMentionIndex, setMentionLoading, setMentionLoadError, setMentionQuery,
   mentionQuery, mentionSearchGenRef, mentionProjects, mentionProjectsLoading,
   mentionProjectsLoadError, draft, mentionStart, mentionResults, mentionIndex, handleSend,
 }: Props) {
+  const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const insertDictation = useCallback((transcript: string) => {
     const editor = composerEditorRef.current;
     if (editor) {
@@ -60,6 +64,10 @@ export function useAgentChatComposer({
   const handleComposerChange = (value: string, cursor: number) => {
     setDraft(value);
     draftRef.current = value;
+    if (agentSessionsEnabled && embedded) {
+      if (mentionOpen) dismissMention();
+      return;
+    }
     const beforeCursor = value.slice(0, cursor);
     const match = beforeCursor.match(/(?:^|\s)@([^\s@]*)$/);
     if (!match) {

@@ -50,6 +50,7 @@ for (const mobile of [false, true]) {
       "@/hooks/useFlag": { useFlag: (key) => key === flag.HTPR_7773_CHAT_HEADER_NAME_FLAG && enabled },
       "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "htpr-6971-chat-history-paging" },
       "@/lib/flags/definitions/htpr-7773-chat-header-name": flag,
+      "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
       "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: "htpr-7575-phone-chat-delete" },
       "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => state },
       "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },

@@ -109,9 +109,9 @@ async function withReminder(options, check) {
   });
   if (chat) chat = runtime();
   const mocks = {
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-8048-agent-sessions" ? false : key === skillFlag ? skillEnabled : key === flag ? enabled : true },
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
-    "@/hooks/useFlag": { useFlag: key => key === skillFlag ? skillEnabled : key === flag ? enabled : true },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: flag },
     "@/lib/contexts/Multipages/AI_Agent/chatContext": { useOptionalAiChatContext: () => chat },
@@ -133,6 +133,7 @@ async function withReminder(options, check) {
   if (options.sidebar) {
     Sidebar = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
       ...mocks,
+      "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
       "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: skillFlag },
       "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "past-chats" },
       "@/app/agents/chat/AgentChatClient": { default: () => React.createElement("div", { "data-external-chat": true }) },

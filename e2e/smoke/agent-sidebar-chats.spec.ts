@@ -431,7 +431,7 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
 
 test('open error retries the same selected agent; outside click and native transport preserve the board', async ({ page }, info) => {
   const [a, , native] = fixture.lanes[info.project.name]
-  await open(page, info.project.name)
+  const flags = await open(page, info.project.name)
   await choose(page, 'AI chat', undefined, fixture.personalChats.find(chat => chat.lane === info.project.name)!.title)
   const aiDraft = `General draft ${randomUUID()}`
   await page.locator('#ai-chat-tiptap-editor .ProseMirror:visible').fill(aiDraft)
@@ -469,6 +469,10 @@ test('open error retries the same selected agent; outside click and native trans
   await expect(page.getByTestId('ai-sidebar')).toBeHidden()
   if (info.project.name === 'Desktop') await page.getByRole('button', { name: 'Open AI chat', exact: true }).click()
   else await page.getByRole('button', { name: 'AI', exact: true }).click()
+  if (flags['htpr-8048-agent-sessions'] && info.project.name === 'Mobile') {
+    await expect(page.getByRole('textbox', { name: `Message ${a.name}`, exact: true })).toBeVisible()
+    await choose(page, 'AI chat', undefined, fixture.personalChats.find(chat => chat.lane === info.project.name)!.title)
+  }
   await expect(page.locator('#ai-chat-tiptap-editor .ProseMirror:visible')).toHaveText(aiDraft)
 })
 

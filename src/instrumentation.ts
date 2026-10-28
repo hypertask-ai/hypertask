@@ -14,8 +14,12 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
   if (!shouldAutoEnsureSweepSchedule()) return;
 
-  const { ensureSweepSchedule } = await import("./lib/qstashSweepSchedule");
-  await ensureSweepSchedule();
+  try {
+    const { ensureSweepSchedule } = await import("./lib/qstashSweepSchedule");
+    await ensureSweepSchedule();
+  } catch (error) {
+    console.error("[instrumentation] sweep schedule registration failed", error);
+  }
 }
 
 export const onRequestError: Instrumentation.onRequestError = async (

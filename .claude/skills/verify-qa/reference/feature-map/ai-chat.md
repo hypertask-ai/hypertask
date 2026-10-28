@@ -6,6 +6,19 @@ The AI chat panel on a board or task (native chat, `src/app/api/ai/`), and
 the mobile Agent Chat surface. Non-demo chat uses `/api/ai/chat/stream`
 without a native-chat flag; demo chat uses `/api/demo/chat/stream`.
 
+## Following another ticket
+
+With `htpr-7736-chat-follows-task` enabled, pin the sidebar open on a QA
+account's ticket. Send a unique marker, then use Next task or a ticket link
+in the reply. The same conversation and marker must remain visible. Send
+again and inspect `/api/ai/chat/stream`: `session_id` must stay the same,
+while `default_context.task_id` names the newly opened ticket.
+**New chat** must create a separate conversation on the current ticket.
+Creating a ticket through Ctrl+J must still open its own introduction and
+conversation. Switching accounts must never show the previous account's chat.
+Flag off keeps the existing separate conversations per ticket. Compare sidebar
+bounds and composer placement before and after; no controls or layout change.
+
 ## How to drive it
 
 Use `agent-browser` headless for the request/reply check. On production,
@@ -205,18 +218,23 @@ isolated heartbeat trigger and execution-step telemetry are available through
 approved product surfaces, record the live four-step case as UNREACHABLE;
 do not substitute mocked SDK results for a live heartbeat.
 
-## Following another ticket
+## Agent sessions in the sidebar
 
-With `htpr-7736-chat-follows-task` enabled, pin the sidebar open on a QA
-account's ticket. Send a unique marker, then use Next task or a ticket link
-in the reply. The same conversation and marker must remain visible. Send
-again and inspect `/api/ai/chat/stream`: `session_id` must stay the same,
-while `default_context.task_id` names the newly opened ticket.
-**New chat** must create a separate conversation on the current ticket.
-Creating a ticket through Ctrl+J must still open its own introduction and
-conversation. Switching accounts must never show the previous account's chat.
-Flag off keeps the existing separate conversations per ticket. Compare sidebar
-bounds and composer placement before and after; no controls or layout change.
+On a board with an agent, open AI chat. With `htpr-8048-agent-sessions`
+enabled, the Bot button beside History lists the board's available agents.
+Expand an agent, start a new session, then reopen the list and resume its
+saved session. History mixes those sessions with personal chats and labels
+agent rows with the agent's name. Selecting an agent row must keep its agent
+as the destination, rather than sending to general AI chat.
+
+Type `@` in either sidebar composer, pick a board agent, and check the
+agent chip and destination. Remove the chip to return to AI chat. Preserve
+unsent drafts when switching between two sessions and after reloading the
+same browser tab. Check both native agents and connected external agents,
+empty rosters, denied board access, desktop and phone, all four themes.
+The default conversation used by agent notifications must keep its original
+session ID after separate sessions have been created. With the flag Off,
+keep the original conversation picker and reject new-session requests.
 
 ## Desktop chat keyboard
 
@@ -251,3 +269,16 @@ left after closing a floating chat. With sidebar open but workspace focused,
 `c`, `j`, `k`, `/`, Ctrl+K, Ctrl+Shift+J and Ctrl+Q retain their normal behavior.
 Use only chats created for this run when verifying deletion. With the flag
 disabled in an isolated browser, the prior keyboard behavior remains.
+
+## Whole-inbox triage
+
+Ask chat to read at least 500 Inbox messages. Inspect `hypertask_inbox_list`
+results: use `continue=true` across turns or pass `next_cursor` unchanged
+until null, without repeated notification IDs
+or read confirmations. Compact rows retain ticket names and short comments.
+Archive a small batch of this run's QA fixtures only. The preview must name
+all affected tickets and sibling messages. Confirm in a later message; the tool replays its server-saved preview
+without rematching names or retaining tool-only receipts. `archived_count` must equal the returned notification list and the persisted
+Inbox change. Changed targets or new siblings after preview require a fresh
+approval; nothing else may disappear. An expired or another chat's list token
+must refuse the archive. Never archive pre-existing QA inbox messages.

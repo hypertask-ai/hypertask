@@ -59,7 +59,7 @@ test("Off keeps the legacy header and composer and mounts no agent projection", 
   const source = read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx");
   assert.match(source, /sidebarChats=\{enabled && sidebarEnabled \?[^]*: undefined\}/);
   assert.match(source, /sidebarEnabled && !minimized && currentUser && embeddedAgents\.map/);
-  assert.match(source, /<AI_Tiptap_Container disabled=\{generalChatPending\} active=\{!sidebarEnabled \|\| target\.kind !== "external-agent"\} \/>/);
+  assert.match(source, /<AI_Tiptap_Container sidebarAgent=\{agentSessionsEnabled && target\.kind === "native-agent" \? target\.agent\.displayName : undefined\} disabled=\{generalChatPending\} active=\{!sidebarEnabled \|\| target\.kind !== "external-agent"\} \/>/);
   assert.match(source, /if \(!enabled \|\| !projectId\) return/);
   assert.match(read("src/components/AI_CHAT/ChatHeader.tsx"), /if \(sidebarChats\) \{ setIsDropdownOpen\(false\); setConversationsOpen/);
 });
@@ -94,7 +94,7 @@ test("AI history and destructive AI actions cannot target a different hidden con
   assert.match(header, /const aiSessionActionsAvailable = !sidebarChats \|\| sidebarChats\.target\.kind === "ai"/);
   assert.match(header, /filter\(\(session\) => !filterAgentSessions \|\| !session\.agentId\)/);
   assert.match(header, /aiSessionActionsAvailable && <button[^]*<Trash2/);
-  assert.match(read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx"), /writeDraft\(currentUser\.id, selected\.agent\.id/);
+  assert.match(read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx"), /writeDraft\(currentUser\.id, selected\.agent\.draftKey \?\? selected\.agent\.id/);
 });
 
 

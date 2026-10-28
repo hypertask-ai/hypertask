@@ -464,9 +464,11 @@ test("native switching snapshots the latest draft and attachments after open, tr
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     react: { ...react, default: react },
-    "@/hooks/useFlag": { useFlag: key => key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
+    "react-hot-toast": { default: { error: assert.fail } },
+    "@/hooks/useFlag": { useFlag: key => key !== "htpr-8048-agent-sessions" && key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
+    "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
     "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
@@ -771,6 +773,7 @@ test("switching away cancels the recorder and clears retained recording state be
       React.createElement("button", { "aria-label": "Send message", disabled: controlledComposer.sendDisabled }, "Send"));
   }
   const { AgentChatPane } = loadChatComponent("src/app/agents/chat/AgentChatPane.tsx", {
+    "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
     react: React,
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
@@ -895,6 +898,7 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     audioTiptapCallback: (text) => transcripts.push(text), toggleRecording: (value) => recordingStates.push(value),
   };
   const { AI_Tiptap_Container } = loadChatComponent("src/components/AI_CHAT/AI_Tiptap_Container.tsx", {
+    "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
     ...composerMocks,
     "@/lib/aiChat/chatShortcuts": load("src/lib/aiChat/chatShortcuts.ts", {}),
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": load("src/lib/flags/definitions/htpr-7766-chat-shortcuts.ts", {}),

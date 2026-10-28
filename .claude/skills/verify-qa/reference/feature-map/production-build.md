@@ -23,6 +23,17 @@ Merge to `production`, then read the commit's `Vercel` status (`gh api repos/hyp
 
 `node --test tests/build-memory-config.test.cjs` checks the build worker, memory optimizations and single-CPU settings with smoke and PostHog on and off; it does not run a production build or prove deployment success.
 
+## Sweep schedule registration at startup
+
+Next's `register` entry point attempts the existing sweep schedule in production.
+A QStash outage must emit a registration error without rejecting app startup.
+The standalone registration script still reports failure to its operator.
+
+Run `bash scripts/heavy-job.sh node --test tests/htpr-8129-startup-schedule.test.cjs tests/yper4-600-node-runtime-log.test.cjs` for the failed-provider boundary, subsequent recovery, successful schedule payload, environment exclusions, and runtime logging.
+After deployment, verify authenticated MCP reads and the core inbox cycle.
+Read production registration errors when permitted. Never induce a provider outage
+on production; record that outage path as unreachable in live QA.
+
 ## Cleanup
 
 None.

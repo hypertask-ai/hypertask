@@ -22,7 +22,7 @@ export async function deliverManagerAlert(db: PrismaClient, delivery: AlertDeliv
     const agents = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Agent" WHERE "id" = ${manager.id} AND "revokedAt" IS NULL FOR UPDATE`;
     if (!agents.length) throw new Error("AI Chat alert Manager is unavailable");
     const session = await tx.chatSession.upsert({
-      where: { userId_agentId: { userId: manager.userId, agentId: manager.id } },
+      where: { userId_agentId: { userId: manager.userId, agentId: manager.id, agentSessionKey: "default" } },
       create: { userId: manager.userId, agentId: manager.id },
       update: {},
       select: { id: true },
