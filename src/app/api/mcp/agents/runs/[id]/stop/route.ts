@@ -40,6 +40,7 @@ export async function POST(
     }
     if (
       principal.source === "browser" &&
+      principal.credentialSource !== "cli-bearer" &&
       !browserMutationIsSameOrigin(request)
     ) {
       return noStore({ success: false, error: "Cross-origin request rejected" }, 403);

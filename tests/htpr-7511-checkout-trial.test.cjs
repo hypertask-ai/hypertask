@@ -593,7 +593,8 @@ test("agent and cross-origin requests are refused at the signed-session boundary
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); assert.equal(id, 6); return h.enabled; } },
     "@/lib/flags/keys": flag,
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
-    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => session ? { ...session, userId: session.id, source: "legacy" } : null },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
     "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (_id, body) => h.checkout(body) },
   }).default;
   const invoke = async (origin) => {
@@ -661,7 +662,8 @@ test("a canceled completed trial offers monthly checkout, and a stale non-entitl
 test("unsigned and guest requests remain refused while a signed non-guest owner remains allowed", async () => {
   const h = harness(); let session = null; let guest = false;
   const route = load("src/pages/api/stripe/session/checkout.ts", {
-    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => session ? { ...session, userId: session.id, source: "legacy" } : null },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); assert.equal(id, 6); return h.enabled; } },
     "@/lib/flags/keys": flag,
     "@/lib/demo/guestGuard": { GUEST_FORBIDDEN_MESSAGE: "Guests cannot buy plans", isGuestRequest: async () => guest },
@@ -703,7 +705,8 @@ for (const pastTrial of [false, true]) {
     h.timeoutAfterCreate = true; h.hidden = true;
     let session = { id: 6 }, guest = false;
     const route = load("src/pages/api/stripe/session/checkout.ts", {
-      "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session },
+      "@/lib/auth/getSessionUser": { getSessionUser: async () => session ? { ...session, userId: session.id, source: "legacy" } : null },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
       "@/lib/demo/guestGuard": { GUEST_FORBIDDEN_MESSAGE: "Guests cannot buy plans", isGuestRequest: async () => guest },
       "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (id, body) => h.checkout(body, id) },
     }).default;
@@ -742,7 +745,8 @@ test("route refuses fresh signup with flag OFF while production legacy checkout 
   const h = harness(); h.enabled = false;
   let forwarded = 0;
   const route = load("src/pages/api/stripe/session/checkout.ts", {
-    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 6 }) },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6, source: "legacy" }) },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => {
       assert.equal(key, "htpr-7551-start-plan-checkout"); assert.equal(id, 6); return h.enabled;
     } },
@@ -771,7 +775,8 @@ test("an unreadable flag warns and refuses fresh signup without lock or Stripe b
   const warning = t.mock.method(console, "warn", () => {});
   const h = harness(); h.flagFailure = true;
   const route = load("src/pages/api/stripe/session/checkout.ts", {
-    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 6 }) },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6, source: "legacy" }) },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
     "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (id, body) => h.checkout(body, id) },
   }).default;

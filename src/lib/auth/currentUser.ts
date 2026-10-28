@@ -1,10 +1,10 @@
 import { cookies } from 'next/headers'
 import type { IUser } from '@/models/model'
-import { getSessionUser } from '@/lib/auth/getSessionUser'
+import { getSessionUser, type SessionUser } from '@/lib/auth/getSessionUser'
 import { isValidUser } from '@/utils/edgeHelpers'
 import prisma from '@/lib/prisma'
 
-type CurrentUser = { userId: number; agentId?: string }
+type CurrentUser = Pick<SessionUser, 'userId' | 'agentId' | 'source'>
 type CurrentUserWithProfile = CurrentUser & { user: IUser }
 
 export function loadCurrentUser(headers: Headers, legacyProfile: true): Promise<CurrentUserWithProfile | null>
@@ -15,7 +15,7 @@ export async function loadCurrentUser(
 ): Promise<CurrentUserWithProfile | CurrentUser | null> {
   const session = await getSessionUser(headers)
   if (!session) return null
-  const currentUser = { userId: session.userId, ...(session.agentId ? { agentId: session.agentId } : {}) }
+  const currentUser = { source: session.source, userId: session.userId, ...(session.agentId ? { agentId: session.agentId } : {}) }
 
   if (legacyProfile) {
     const cookie = (await cookies()).get('nookies_user')
@@ -30,7 +30,7 @@ export async function loadCurrentUser(
   return currentUser
 }
 
-async function loadProfileFromSession(userId: number): Promise<CurrentUserWithProfile | null> {
+async function loadProfileFromSession(userId: number): Promise<Pick<CurrentUserWithProfile, "userId" | "user"> | null> {
   try {
     const row = await prisma.user.findUnique({
       where: { id: userId },

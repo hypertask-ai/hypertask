@@ -79,7 +79,10 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
 export async function legacyTaskWriteSession(request: TaskWriteRequest, allowSessionFallback = false): Promise<SessionUser | null> {
   const token = request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE);
   const signed = verifySession(token);
-  if (!signed) return allowSessionFallback ? getSessionUser(request.headers) : null;
+  if (!signed) {
+    const session = await getSessionUser(request.headers);
+    return allowSessionFallback || session?.source === "cli-bearer" ? session : null;
+  }
   if (signed.agentId) {
     return getSessionUser(new Headers({ Cookie: `${SESSION_COOKIE}=${token}` }));
   }
@@ -90,7 +93,7 @@ type TaskWriteRouteLoader = () => Promise<TaskWriteRoute>;
 
 export function taskWriteHandler(
   routes: Partial<Record<string, TaskWriteRouteLoader>>,
-  options: { fallback?: NextApiHandler; methodNotAllowed?: unknown; authenticate?: (headers: Headers) => Promise<SessionUser | null> } = {},
+  options: { fallback?: NextApiHandler; methodNotAllowed?: unknown; authorizationEndpoint?: "mention-search" | "task-write"; authenticate?: (headers: Headers) => Promise<SessionUser | null> } = {},
 ): NextApiHandler {
   return async (req, res) => {
     const loadRoute = routes[req.method ?? ""] ?? routes["*"];
@@ -117,7 +120,7 @@ export function taskWriteHandler(
     } finally {
       if (session?.source === "cli-bearer") {
         const { logDesktopCliAuthorization } = await import("@/lib/auth/desktopCliTokenUser");
-        logDesktopCliAuthorization(session, "mention-search", status);
+        logDesktopCliAuthorization(session, options.authorizationEndpoint ?? "task-write", status, { url: req.url, method: req.method });
       }
     }
   };

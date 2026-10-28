@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -27,21 +27,28 @@ export async function getServerCookieUser(): Promise<IUser | null> {
   const cookieStore = await cookies();
   const userCookie = cookieStore.get(authConfig.cookies.user);
 
+  let userId: number;
   if (!userCookie?.value) {
-    return null;
-  }
+    const requestHeaders = await headers();
+    if (!requestHeaders.get("authorization")?.startsWith("Bearer ")) return null;
+    const { getSessionUser } = await import("@/lib/auth/getSessionUser");
+    const session = await getSessionUser(requestHeaders);
+    if (session?.source !== "cli-bearer") return null;
+    userId = session.userId;
+  } else {
+    const claimedId = parseUserCookieId(userCookie.value);
+    const token = cookieStore.get(SESSION_COOKIE)?.value;
+    const session = verifySession(token);
+    if (claimedId === null || !session || session.id !== claimedId) {
+      return null;
+    }
 
-  const claimedId = parseUserCookieId(userCookie.value);
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
-  const session = verifySession(token);
-  if (claimedId === null || !session || session.id !== claimedId) {
-    return null;
+    if (await isSessionTokenRevoked(token, { failClosed: false })) return null;
+    userId = session.id;
   }
-
-  if (await isSessionTokenRevoked(token, { failClosed: false })) return null;
 
   const user = await prisma.user.findUnique({
-    where: { id: session.id },
+    where: { id: userId },
     select: {
       id: true,
       uid: true,

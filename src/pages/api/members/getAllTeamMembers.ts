@@ -1,5 +1,6 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import type { NextApiHandler } from "next";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
@@ -8,7 +9,8 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const session = verifySession(req.cookies[SESSION_COOKIE]);
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
   if (!session) {
     return res
       .status(401)
@@ -20,7 +22,7 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(400).json({ message: "teamId required" });
   }
 
-  if (!(await hasTeamMembershipAccess(session.id, teamId))) {
+  if (!(await hasTeamMembershipAccess(session.userId, teamId))) {
     return res.status(403).json({ message: "Team access denied" });
   }
 

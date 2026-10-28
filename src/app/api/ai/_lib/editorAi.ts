@@ -3,7 +3,7 @@ import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
 export { NVC_STYLE_RULE, HOUSE_OUTPUT_STYLE, TASK_AUTHORING_STYLE, TASK_AUTHORING_WEB_STYLE, createTaskAuthoringStyle, createPromptForTiptapForwardSlash, createKanbanSystemPrompt, createTaskAndModelContext, createUploadedDocumentsContext, createTaskWriterPromptParts } from "./editorAiPrompts";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
@@ -39,6 +39,7 @@ export type ProviderId =
   "claude" | "openai" | "openrouter" | "gateway" | "custom";
 
 export type CookieUser = {
+  source?: "cli-bearer";
   id?: number;
   email?: string;
   displayName?: string;
@@ -104,7 +105,16 @@ export async function getCurrentUserFromCookies(): Promise<CookieUser | null> {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
-    if (!userCookie?.value) return null;
+    if (!userCookie?.value) {
+      const { getSessionUser } = await import("@/lib/auth/getSessionUser");
+      const session = await getSessionUser(await headers());
+      if (session?.source !== "cli-bearer") return null;
+      const user = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { id: true, email: true, displayName: true },
+      });
+      return user ? { id: user.id, email: user.email, displayName: user.displayName ?? undefined, source: "cli-bearer" } : null;
+    }
     return JSON.parse(userCookie.value) as CookieUser;
   } catch (error) {
     console.log("getCurrentUserFromCookies error:", error);

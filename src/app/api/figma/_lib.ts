@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import {
   FIGMA_CONNECTION_VERSION_COOKIE,
@@ -14,7 +14,7 @@ import {
 } from "@/lib/figma/oauth";
 
 export type FigmaAuthenticatedUser =
-  | { status: "allowed"; userId: number }
+  | { status: "allowed"; userId: number; source: SessionUser["source"] }
   | { status: "error" }
   | { status: "unauthorized" };
 
@@ -24,7 +24,7 @@ export async function getFigmaAuthenticatedUser(
   try {
     const session = await getSessionUser(request.headers);
     return session
-      ? { status: "allowed", userId: session.userId }
+      ? { status: "allowed", userId: session.userId, source: session.source }
       : { status: "unauthorized" };
   } catch {
     return { status: "error" };

@@ -42,13 +42,12 @@ function loadRoute({ sessionUserId = null, ownerUserId = 6, transferAfterRead = 
     },
   };
   const stubs = {
-    "@/lib/auth/session": {
-      SESSION_COOKIE: "ht_session",
-      verifySession: (token) =>
-        token === "valid-session" && sessionUserId !== null
-          ? { id: sessionUserId }
-          : null,
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async headers => headers.get("cookie") === "ht_session=valid-session" && sessionUserId !== null
+        ? { userId: sessionUserId, source: "legacy" }
+        : null,
     },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
   };
   const loadedModule = { exports: {} };
@@ -85,6 +84,7 @@ async function request(handler, { sessionToken = "valid-session", method = "POST
       method,
       body: body ?? { teamId: "team-1", updatedTitle: " Renamed team " },
       cookies: sessionToken ? { ht_session: sessionToken } : {},
+      headers: sessionToken ? { cookie: `ht_session=${sessionToken}` } : {},
     },
     response,
   );

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { googleCalendarEnabledFor } from "@/lib/googleCalendar/connection";
 import {
@@ -10,7 +10,7 @@ import {
 import { GOOGLE_CALENDAR_OAUTH_CALLBACK_PATH } from "@/lib/googleCalendar/paths";
 
 export type GoogleCalendarPrincipal =
-  | { status: "allowed"; userId: number }
+  | { status: "allowed"; userId: number; source: SessionUser["source"] }
   | { status: "error" }
   | { status: "unauthorized" };
 
@@ -20,7 +20,7 @@ export async function getGoogleCalendarPrincipal(
   try {
     const session = await getSessionUser(request.headers);
     return session
-      ? { status: "allowed", userId: session.userId }
+      ? { status: "allowed", userId: session.userId, source: session.source }
       : { status: "unauthorized" };
   } catch (error) {
     console.error("Google Calendar session lookup failed", error);

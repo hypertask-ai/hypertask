@@ -23,7 +23,7 @@ async function principal(request: NextRequest) {
     return {
       response: noStore({ error: "Google Calendar is unavailable" }, 503),
     };
-  return { userId: result.userId };
+  return { userId: result.userId, source: result.source };
 }
 
 export async function GET(request: NextRequest) {
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await principal(request);
   if ("response" in auth) return auth.response;
-  if (!trustedMutationOrigin(request))
+  if (auth.source !== "cli-bearer" && !trustedMutationOrigin(request))
     return noStore({ error: "Forbidden" }, 403);
   let body: unknown;
   try {
@@ -76,7 +76,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = await principal(request);
   if ("response" in auth) return auth.response;
-  if (!trustedMutationOrigin(request))
+  if (auth.source !== "cli-bearer" && !trustedMutationOrigin(request))
     return noStore({ error: "Forbidden" }, 403);
   try {
     await requestGoogleCalendarDisconnect(auth.userId);

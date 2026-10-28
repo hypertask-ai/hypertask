@@ -12,7 +12,7 @@ import {
   type Prisma,
 } from "@prisma/client";
 import type { NextRequest } from "next/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import {
   persistAgentRunStoppedWebhook,
   persistAgentWebhookEvent,
@@ -64,6 +64,7 @@ export type AgentRunPrincipal = {
   teamScope?: AgentTokenTeamScope | null;
   displayName: string;
   source: "agent" | "browser";
+  credentialSource?: SessionUser["source"];
   sdk?: "typescript";
 };
 
@@ -76,7 +77,8 @@ export async function authenticateAgentRunRequest(
     request.headers.get("X-Hypertask-Agent-SDK") === "typescript"
       ? ("typescript" as const)
       : undefined;
-  if (request.headers.has("Authorization")) {
+  const session = await getSessionUser(request.headers);
+  if (request.headers.has("Authorization") && session?.source !== "cli-bearer") {
     const context = await validateMcpAuth(request);
     if (!context?.agentId) return null;
     return {
@@ -89,7 +91,6 @@ export async function authenticateAgentRunRequest(
     };
   }
 
-  const session = await getSessionUser(request.headers);
   if (!session) return null;
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -101,6 +102,7 @@ export async function authenticateAgentRunRequest(
     agentId: null,
     displayName: user.displayName?.trim() || "Hypertask user",
     source: "browser",
+    credentialSource: session.source,
     ...(sdk ? { sdk } : {}),
   };
 }

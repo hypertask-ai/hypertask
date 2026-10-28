@@ -1,6 +1,7 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import { NextApiRequest, NextApiResponse } from "next";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { createAuthorizedCheckoutSession } from "@/utils/controllers/stripe/createAuthorizedCheckoutSession";
 
 export default async function checkoutsSessionHandler(
@@ -12,7 +13,8 @@ export default async function checkoutsSessionHandler(
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const session = verifySession(req.cookies[SESSION_COOKIE]);
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
   if (!session) {
     return res
       .status(401)
@@ -23,7 +25,7 @@ export default async function checkoutsSessionHandler(
     return res.status(403).json({ message: "Only human team owners can update billing" });
   }
 
-  if (req.body?.intent === "signup-straight-to-board") {
+  if (req.body?.intent === "signup-straight-to-board" && session.source !== "cli-bearer") {
     const baseUrl = process.env.NEXT_PUBLIC_BASEURL || process.env.NEXT_PUBLIC_APP_URL;
     let appOrigin: string;
     try {
@@ -41,7 +43,7 @@ export default async function checkoutsSessionHandler(
   }
 
   try {
-    const result = await createAuthorizedCheckoutSession(session.id, req.body);
+    const result = await createAuthorizedCheckoutSession(session.userId, req.body);
     return res.status(result.status).json(result.body);
   } catch (e) {
     console.error(e, `Stripe Checkout error`);

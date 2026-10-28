@@ -13,7 +13,7 @@ export async function POST(
     if (rateLimited) return rateLimited;
     const principal = await authenticateAgentRunRequest(request);
     if (!principal || principal.source !== "browser") return respond({ success: false, error: "Unauthorized" }, 401);
-    if (!browserMutationIsSameOrigin(request)) return respond({ success: false, error: "Cross-origin request rejected" }, 403);
+    if (principal.credentialSource !== "cli-bearer" && !browserMutationIsSameOrigin(request)) return respond({ success: false, error: "Cross-origin request rejected" }, 403);
     const sessionId = (await params).sessionId.trim();
     const access = await loadSidebarChatRequest(request, sessionId, principal);
     if (!access.ok) return respond({ success: false, error: access.error }, access.status);

@@ -144,7 +144,7 @@ test("Act 5 captures a safe return board and chooses an unused column title", ()
   assert.match(learnPage, /decodeURIComponent\(encodedPreviousBoard\)/);
   assert.match(learnPage, /catch \{[\s\S]*return null/);
   assert.match(learnPage, /\{ returnBoardId \}/);
-  assert.match(route, /getProjectWhere\(session\.id\)/);
+  assert.match(route, /getProjectWhere\(session\.userId\)/);
   assert.match(route, /requestedReturnBoardId !== projectId/);
   assert.match(route, /TUTORIAL_COLUMN_TITLE = "Ready to ship"/);
   assert.match(route, /nextTutorialColumnTitle/);

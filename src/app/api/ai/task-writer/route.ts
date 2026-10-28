@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   const cliSession = existingUser ? null : await getDesktopCliTokenUser(request.headers, "task-writer");
   const requestUser = existingUser ?? cliSession?.user;
   const respond = <T extends Response>(response: T): T => {
-    logDesktopCliAuthorization(cliSession, "task-writer", response.status);
+    logDesktopCliAuthorization(cliSession ?? (existingUser?.source === "cli-bearer" ? { source: "cli-bearer", userId: existingUser.id } : null), "task-writer", response.status);
     return response;
   };
   if (!requestUser?.id) {

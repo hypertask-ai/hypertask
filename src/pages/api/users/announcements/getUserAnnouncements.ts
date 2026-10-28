@@ -1,8 +1,9 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
 import prisma from "@/lib/prisma";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getUserAnnouncements } from "@/utils/controllers/users/getAnnouncements";
 
 
@@ -11,14 +12,15 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         return res.status(405).json({ message: "Method not allowed" });
     }
 
-    const session = verifySession(req.cookies[SESSION_COOKIE])
+    const session = await getSessionUser(new Headers(req.headers as Record<string, string>))
+        logDesktopCliResponse(session, req, res)
     if (!session) {
         return res.status(401).json({ error: "Unauthorized", code: "SESSION_REQUIRED" })
     }
 
     if (req.method === "GET") {
         try {
-            const announcements = await getUserAnnouncements(session.id)
+            const announcements = await getUserAnnouncements(session.userId)
             if (!announcements) return res.status(404).json(null)
             return res.status(200).json(announcements)
         } catch (error) {
@@ -33,7 +35,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
         const user_announcements = await prisma.userAnnouncement.updateMany({
             where:{
-                userId:session.id,
+                userId:session.userId,
                 announcementId:{in:announcementIds}
             },
             data:{
