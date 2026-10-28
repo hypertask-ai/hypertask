@@ -214,7 +214,6 @@
     "tests/query-indexeddb-persister.test.cjs",
     "tests/quoted-reply-enter.test.cjs",
     "tests/rest-compat-flag.test.cjs",
-    "tests/revoke-all-survives-page-token-6995.test.cjs",
     "tests/rounded-theme.test.cjs",
     "tests/saved-work-analytics.test.ts",
     "tests/schema-drift-check.test.cjs",
@@ -275,5 +274,5 @@
     "tests/yper4-600-node-runtime-log.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 274
+  "count": 273
 }
