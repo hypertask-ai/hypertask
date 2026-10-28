@@ -177,7 +177,8 @@ function loadResume({ user, enabled = true, provisionError = null, commitError =
   const load = loader({
     '@/lib/prisma': prisma,
     '@/lib/flags': { isFeatureEnabled: async (key) => key === 'htpr-7289-resume-signup-provisioning' && enabled },
-    '@/lib/telemetry/signupCompleted': { recordSignupCompleted: (input) => calls.signups.push(input) },
+    '@/lib/telemetry/analyticsIntents': { enqueueOutsideSaveAndProcessSoon: async (work) => work() },
+    '@/lib/telemetry/signupCompleted': { enqueueSignupCompleted: async (db, input) => { assert.equal(db, prisma); calls.signups.push(input); return 'signup-intent' } },
     './provisionNewUser': { provisionNewUser: async (input) => {
       calls.provision.push(input)
       if (provisionError) throw provisionError
@@ -265,7 +266,8 @@ test('the legacy sign-in resumes an existing account before its usual updates', 
     },
     '@/lib/configs/auth.config': { onboarding: { shouldSkipInteractive: false, skipOnboarding: false } },
     '@/lib/configs/general.config': { generalConfig: { defaultPhotoURL: 'photo' } },
-    '@/lib/telemetry/signupCompleted': { recordSignupCompleted: () => {} },
+    '@/lib/telemetry/analyticsIntents': { enqueueOutsideSaveAndProcessSoon: async (work) => work() },
+    '@/lib/telemetry/signupCompleted': { enqueueSignupCompleted: async () => 'signup-intent' },
     './provisionNewUser': { provisionNewUser: async () => user, updateUserProfilePicture: async () => {} },
     './findUserByEmail': { findUserByEmail: async () => user },
     './resumeIncompleteSignup': { resumeIncompleteSignup: async (input) => { resumed.push(input); return true } },

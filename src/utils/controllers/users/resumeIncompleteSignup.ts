@@ -4,7 +4,8 @@ import { isGuestUser } from "@/lib/demo/guest";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7289_RESUME_SIGNUP_PROVISIONING_FLAG } from "@/lib/flags/definitions/htpr-7289-resume-signup-provisioning";
 import type { SignupAttribution } from "@/lib/telemetry/signupAnalytics";
-import { recordSignupCompleted } from "@/lib/telemetry/signupCompleted";
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueSignupCompleted } from "@/lib/telemetry/signupCompleted";
 import { provisionNewUser } from "./provisionNewUser";
 
 export const SIGNUP_RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -55,7 +56,11 @@ export async function resumeIncompleteSignup(input: {
       ? "Resumed signup provisioning finished but its lock transaction failed to commit"
       : "CRITICAL: resuming incomplete signup provisioning failed; the account stays incomplete", { userId, error });
   }
-  if (provisioned) recordSignupCompleted({ decision: null, cookieHeader, userId, ...signupAttribution });
+  if (provisioned) {
+    await enqueueOutsideSaveAndProcessSoon(() => enqueueSignupCompleted(prisma, {
+      decision: null, cookieHeader, userId, ...signupAttribution,
+    }));
+  }
   return provisioned;
 }
 
