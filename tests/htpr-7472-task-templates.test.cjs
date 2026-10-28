@@ -426,6 +426,13 @@ test("rich editor shows a read-only note and preserves its HTML when other field
   await mutations[0].mutationFn(template);
   assert.equal(writes[0][1].descriptionHtml, template.descriptionHtml);
 });
+test("Cancel stays muted while the existing instructions action retains its normal tone", () => {
+  const cancel = renderToStaticMarkup(React.createElement(actionButton, { secondary: true, onClick() {} }, "Cancel"));
+  const save = renderToStaticMarkup(React.createElement(actionButton, { onClick() {} }));
+  assert.match(cancel, /text-text-light-gray hover:text-white-black focus-visible:text-white-black/);
+  assert.match(save, />Save instructions<\/button>/);
+  assert.match(save, / text-white-black"/);
+});
 test("shared instruction textarea retains context defaults, fillHeight and controlled empty values", () => {
   const render = (props, context) => renderToStaticMarkup(React.createElement(promptContext.Provider, { value: context }, React.createElement(promptInput, props)));
   const defaultHtml = render({}, { value: "Existing instructions", handleChange() {} });
