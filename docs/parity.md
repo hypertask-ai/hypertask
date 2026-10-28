@@ -4,7 +4,7 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 176, mcp: 77, cli: 156, ai_chat: 84, hyperai: 77. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 176, mcp: 77, cli: 156, ai_chat: 85, hyperai: 77. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|

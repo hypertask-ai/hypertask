@@ -12,19 +12,7 @@ const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, in
 const { persistAssistantMessage } = jiti(path.join(root, "src/app/api/ai/chat/stream/persistAssistantMessage.ts"));
 const { findNativeAssistantReplay } = jiti(path.join(root, "src/app/api/ai/chat/stream/ensureNativeChatTurn.ts"));
 
-function load(file, mocks) {
-  const loadedModule = { exports: {} };
-  const source = fs.readFileSync(path.join(root, file), "utf8");
-  const compiled = ts.transpileModule(source, { fileName: file, compilerOptions: {
-    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
-  } }).outputText;
-  new Function("require", "module", "exports", compiled)((name) => {
-    if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
-    if (!name.startsWith(".") && !name.startsWith("@/")) return require(name);
-    throw new Error(`Unmocked dependency: ${name}`);
-  }, loadedModule, loadedModule.exports);
-  return loadedModule.exports;
-}
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 function hydration({ visible = [2, 1], agent = null } = {}) {
   const queries = [], principals = [], preparations = [];
@@ -185,7 +173,7 @@ function modelTurn(enabled, { persisted = true, failed = false, stateless = fals
     "@/lib/ai/tools/metadata": { writeToolNames: new Set() },
     "@/lib/ai/chatStream/title": {},
     "@/lib/ai/tools": { buildTools: (...args) => {
-      const options = args[11];
+      const options = args[13];
       return { hypertask_get_tasks: {}, hypertask_show_ticket_rows: d.rowsTool([{ name: "hypertask_get_tasks", result: { success: true, tasks: [{ id: 1 }] } }], options?.setGroups ?? (() => undefined)) };
     } },
     "./modelReply": { generateModelReply: async (_, inputs) => {
@@ -297,7 +285,7 @@ test("actual tool registration always lists display for the parity catalog and a
   const { buildTools } = load("src/lib/ai/tools/index.ts", mocks);
   const off = buildTools({ id: 985 }, {}, () => {}, () => {});
   assert.equal(typeof off.hypertask_show_ticket_rows.execute, "function");
-  const on = buildTools({ id: 985 }, {}, () => {}, () => {}, null, undefined, undefined, false, undefined, false, null, { executions: [], setGroups() {} });
+  const on = buildTools({ id: 985 }, {}, () => {}, () => {}, null, undefined, undefined, false, undefined, false, null, false, false, { executions: [], setGroups() {} });
   assert.equal(typeof on.hypertask_show_ticket_rows.execute, "function");
   assert.deepEqual(Object.keys(on), Object.keys(off));
   const { isNativeReadOnlyCall } = load("src/lib/ai/tools/readAgentGate.ts", { "@/lib/mcp/agents/readRoleGuard": {} });
@@ -312,6 +300,7 @@ test("legacy, paged and sidebar history routes hydrate rows, and flag Off strips
     const { GET } = load("src/app/api/ai-chat/all-sessions/route.ts", {
       "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": flagModule,
       "@/lib/ai/chatStream/ticketGroups": h,
+      "@/lib/agents/chatContentScope": { chatAudienceWhere: () => ({}) },
       "@/lib/agents/chatAccess": { sidebarChatProjectId: () => mode === "sidebar" ? 15 : undefined, loadSidebarChatRequest: async () => ({ ok: true }) },
       "@/lib/redis": {},
       "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "compat", isFeatureEnabled: async (key) => key === flag ? mode !== "off" : mode === "paged" },
@@ -353,6 +342,7 @@ test("client caches ticket rows from durable done only with the flag On, not fai
   const { consumeAiChatStream } = load("src/hooks/MultiPages/AIChat/aiChatStream.ts", {
     "@/lib/realtime/taskCommentsRefresh": {}, "@/lib/realtime/shared": {},
     "@/hooks/Inbox/useGetNotifications": { INBOX_QUERY_KEY: ["inbox"] },
+    "@/lib/skills/slashSkills": { appendChatSkillDrafts: (content) => content },
     "./aiChatShared": { parseAiStreamErrorContent: (v) => v },
   });
   for (const [persisted, status, enabled] of [[false, "complete", true], [true, "complete", true], [true, "error", true], [true, "complete", false]]) {
