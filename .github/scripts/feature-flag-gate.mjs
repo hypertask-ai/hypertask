@@ -472,6 +472,11 @@ function branchIsNullishOrEmpty(node, renderOnly = false) {
   if (typescript.isStringLiteral(expression) && expression.text === "") return true;
   if (typescript.isJsxExpression(expression)) return branchIsNullishOrEmpty(expression.expression, renderOnly);
   if (renderOnly && typescript.isOmittedExpression(expression)) return true;
+  if (renderOnly && typescript.isSpreadElement(expression)) {
+    const operand = unwrapExpr(expression.expression);
+    return (!typescript.isArrayLiteralExpression(operand) && !typescript.isStringLiteral(operand)) ||
+      branchIsNullishOrEmpty(operand, true);
+  }
   if (renderOnly && typescript.isArrayLiteralExpression(expression)) {
     return expression.elements.every((element) => branchIsNullishOrEmpty(element, true));
   }
@@ -1009,8 +1014,8 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
 function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), parameterBoolean = () => undefined, checker = null, live = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
-  if (fn?.asteriskToken || (!earlyOnly && fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword)) ||
-      fn?.parameters.some((parameter) => parameter.initializer && staticBoolean(parameter.initializer, true) === null)) return false;
+  if (fn?.asteriskToken || (!earlyOnly && (fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
+      fn?.parameters.some((parameter) => parameter.initializer && staticBoolean(parameter.initializer, true) === null)))) return false;
   for (let child = node, parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
     if (typescript.isTryStatement(parent) ||
         (typescript.isIfStatement(parent) && child !== parent.expression)) return false;
@@ -1300,9 +1305,9 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   if (!renderFunctions.has(enclosingFunctionLike(call)) && !controlsRuntimeBranch(call, false)) return false;
   return gatesRuntimeBehavior(call, checker, sourceFile,
     (reference) => renderFunctions.has(enclosingFunctionLike(reference)) &&
-      controlsReturnedValue(reference, { earlyOnly: true, after: call, checker, live }), live,
+      controlsReturnedValue(reference, { earlyOnly: true, after: call, checker, live: renderFunctions }), live,
     (value) => renderFunctions.has(enclosingFunctionLike(value))
-      ? controlsReturnedValue(value, { earlyOnly: true, checker, live }) : controlsRuntimeBranch(value, false));
+      ? controlsReturnedValue(value, { earlyOnly: true, checker, live: renderFunctions }) : controlsRuntimeBranch(value, false));
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null,

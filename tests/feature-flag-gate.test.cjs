@@ -2456,6 +2456,8 @@ test('formatter gate proof requires an explicit live return branch', async (t) =
     ['ignored call argument', 'const ignore = () => {}; ignore(format(enabled)); return <p>Always</p>;', false],
     ['ignored assigned argument', 'const ignore = () => {}; const label = format(enabled); ignore(label); return <p>Always</p>;', false],
     ['discarded JSX result', 'const unused = <p>{format(enabled)}</p>; return <p>Always</p>;', false],
+    ['event handler JSX return', 'const label = format(enabled); const row = <div>{label && <p>Age</p>}</div>; const send = () => row; return <button onClick={send}/>;', false],
+    ['rendered JSX binding control', 'const label = format(enabled); const row = <div>{label && <p>Age</p>}</div>; return row;', true],
     ['dead direct output', 'return <>{false && <p>{format(enabled)}</p>}</>;', false],
     ['discarded result', 'format(enabled); return <p>Always</p>;', false],
     ['unused assignment', 'const unused = format(enabled); return <p>Always</p>;', false],
@@ -2655,6 +2657,13 @@ test('formatter render coercion and omitted defaults preserve real gates', async
     ['nested empty array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [[], false, null, <></>] : null;', false],
     ['sparse empty array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [, , []] : null;', false],
     ['empty array logical', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label && []}</div>;', false],
+    ['empty spread array', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label ? [...[]] : null}</div>;', false],
+    ['nested empty spread array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...[[], false, null, <></>]] : null;', false],
+    ['empty spread string', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...""] : null;', false],
+    ['unknown spread cannot prove visibility', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...window.items] : null;', false],
+    ['rendered spread array control', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...[<p key="age">Age</p>]] : null;', true],
+    ['rendered spread string control', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [..."Age"] : null;', true],
+    ['rendered sibling of unknown spread', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...window.items, <p key="age">Age</p>] : null;', true],
     ['rendered array control', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label ? [<p key="age">Age</p>] : null}</div>;', true],
     ['omitted optional relative', '../lib/formatter', 'enabled: boolean, ready?: boolean', 'return enabled || ready;', 'return format(enabled) ? <p>Age</p> : null;', true],
     ['omitted optional alias', '@/lib/formatter', 'enabled: boolean, ready?: boolean', 'return ready || enabled;', 'return format(enabled) ? <p>Age</p> : null;', true],
@@ -2689,5 +2698,20 @@ test('server boolean responses remain effective gates', async (t) => {
     writeFile(dir, 'src/components/Widget.tsx', 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
     writeFile(dir, 'src/app/api/widget/route.ts', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `export async function GET() { const enabled = await isFeatureEnabled(OTHER_FLAG, 6); return Response.json(${response}); }`);
     assert.equal((await evaluate('HTPR-1 [FEATURE] server boolean gate', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('formatter consumer defaults do not constrain independent rendering', async (t) => {
+  const cases = [
+    ['relative direct conditional', '../lib/formatter', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['alias direct conditional', '@/lib/formatter', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['assigned early return', '@/lib/formatter', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['ignored formatter remains refused', '@/lib/formatter', 'format(enabled); return <p>Age</p>;', false],
+  ];
+  for (const [name, moduleName, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nconst defaults = {};\nexport function Widget(props = defaults) { const enabled = useFlag(OTHER_FLAG); ${body} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer defaults', base, commit(git, name), dir)).pass, expected, name);
   }
 });

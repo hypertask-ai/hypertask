@@ -53,9 +53,13 @@ Empty fragments (including nested fragments) and boolean-only render branches ca
 Boolean coercion after choosing JSX cannot prove visible output; negating the condition before choosing JSX remains supported.
 Omitted independent constant defaults and optional parameters remain supported for both import styles; masking or correlated defaults remain refused.
 Empty arrays, nested empty arrays and sparse arrays cannot certify visible output; arrays containing rendered elements remain supported.
+Spread array and string literals follow the same visibility rule, including nested spreads; unknown spread operands alone cannot prove visible output.
+Visible spread elements and visible siblings of unknown spreads remain supported.
 Boolean invisibility applies only to React output; distinct JSON boolean responses remain valid server gates.
 Async server-component consumers of synchronous formatters remain supported; async formatters still cannot prove a truthiness gate.
 Consumed logical and nested conditional JSX render paths pass; discarded or comma-masked JSX fails.
+JSX returned only by an event handler cannot prove rendering; a binding returned by the rendered component still can.
+Unrelated component parameter defaults do not constrain formatter proof; formatter defaults retain their own validation.
 Save the tested head SHA, hosted run URL and successful group lines.
 A local AST reproduction supplements those results; it does not replace evaluator or trusted-workflow proof.
 No app output changes, so theme screenshots and customer-data writes are unnecessary.
