@@ -36,25 +36,20 @@ export async function resumeIncompleteSignup(input: {
   if (!(await isFeatureEnabled(HTPR_7289_RESUME_SIGNUP_PROVISIONING_FLAG, userId))) return false;
   let provisioned = false;
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(7289::int, ${userId}::int)`;
-      const user = await findRecoverableUser(tx, userId);
-      if (!user) return;
-      await provisionNewUser({
-        userId,
-        email: user.email,
-        ...provisioning,
-        displayName: provisioning.displayName ?? user.displayName,
-        photoURL: provisioning.photoURL ?? user.photoURL,
-        stripeCustomerNameEmail: provisioning.stripeCustomerNameEmail ?? user.email,
-        resumingEarlierAttempt: true,
-      });
-      provisioned = true;
-    }, { timeout: 30000, maxWait: 10000 });
+    const user = await findRecoverableUser(prisma, userId);
+    if (!user) return false;
+    await provisionNewUser({
+      userId,
+      email: user.email,
+      ...provisioning,
+      displayName: provisioning.displayName ?? user.displayName,
+      photoURL: provisioning.photoURL ?? user.photoURL,
+      stripeCustomerNameEmail: provisioning.stripeCustomerNameEmail ?? user.email,
+      resumingEarlierAttempt: true,
+    });
+    provisioned = true;
   } catch (error) {
-    console.error(provisioned
-      ? "Resumed signup provisioning finished but its lock transaction failed to commit"
-      : "CRITICAL: resuming incomplete signup provisioning failed; the account stays incomplete", { userId, error });
+    console.error("CRITICAL: resuming incomplete signup provisioning failed; the account stays incomplete", { userId, error });
   }
   if (provisioned) {
     await enqueueOutsideSaveAndProcessSoon(() => enqueueSignupCompleted(prisma, {

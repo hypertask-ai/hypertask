@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { LogType, Status } from "@prisma/client";
+import { LogType, Status, type Prisma } from "@prisma/client";
 import { CreateLogInput } from "@/models/model";
 import { stripe } from "@/lib/subscription";
 import createLog from "../logs/createLog";
@@ -21,7 +20,28 @@ type ProvisionNewUserInput = {
   resumingEarlierAttempt?: boolean;
 };
 
-export const provisionNewUser = async ({
+export const provisionNewUser = async (input: ProvisionNewUserInput) => {
+  const user = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(7289::int, ${input.userId}::int)`;
+    const existing = await tx.user.findUnique({
+      where: { id: input.userId },
+      include: { UserSetting: true },
+    });
+    if (existing?.stripe_customer_id) return existing;
+    return provisionUser(tx, input);
+  }, { timeout: 30000, maxWait: 10000 });
+
+  if (input.isVerified) {
+    try {
+      await autoJoinByEmailDomain(input.userId, input.email);
+    } catch (error) {
+      console.error("Auto-join by email domain failed (non-fatal):", error);
+    }
+  }
+  return user;
+};
+
+const provisionUser = async (db: Prisma.TransactionClient, {
   userId,
   email,
   displayName,
@@ -33,7 +53,7 @@ export const provisionNewUser = async ({
   createGoogleAccount = true,
   resumingEarlierAttempt = false,
 }: ProvisionNewUserInput) => {
-  await prisma.user_Activity.upsert({
+  await db.user_Activity.upsert({
     where: { userId },
     update: {},
     create: {
@@ -42,7 +62,7 @@ export const provisionNewUser = async ({
       lastActiveAt: new Date(),
     },
   });
-  const signupLog = await prisma.logs.findFirst({
+  const signupLog = await db.logs.findFirst({
     where: { LoggedById: userId, type: LogType.Signup, log: `${email} just signed up for HyperTask` },
     select: { id: true },
   });
@@ -55,7 +75,7 @@ export const provisionNewUser = async ({
     };
     createLog(createLogBody);
   }
-  const userSetting = await prisma.userSetting.upsert({
+  const userSetting = await db.userSetting.upsert({
     where: { userId },
     update: {},
     create: {
@@ -67,7 +87,7 @@ export const provisionNewUser = async ({
     },
   });
 
-  await prisma.userPicture.upsert({
+  await db.userPicture.upsert({
     where: { userId },
     update: {},
     create: {
@@ -77,8 +97,8 @@ export const provisionNewUser = async ({
     },
   });
 
-  const getAllAnnouncements = await prisma.announcments.findMany();
-  await prisma.userAnnouncement.createMany({
+  const getAllAnnouncements = await db.announcments.findMany();
+  await db.userAnnouncement.createMany({
     data: getAllAnnouncements.map((item) => ({
       userId,
       announcementId: item.id,
@@ -86,7 +106,7 @@ export const provisionNewUser = async ({
     skipDuplicates: true,
   });
 
-  await prisma.user.update({
+  await db.user.update({
     where: {
       id: userId,
     },
@@ -95,23 +115,15 @@ export const provisionNewUser = async ({
     },
   });
 
-  const googleAccount = await findOrCreateGoogleAccount(userId, createGoogleAccount);
-  const customerId = await findOrCreateSignupStripeCustomer({
+  const googleAccount = await findOrCreateGoogleAccount(db, userId, createGoogleAccount);
+  const customerId = await findOrCreateSignupStripeCustomer(db, {
     userId,
     googleAccount,
     name: stripeCustomerName(stripeCustomerNameEmail),
     resumingEarlierAttempt,
   });
 
-  if (isVerified) {
-    try {
-      await autoJoinByEmailDomain(userId, email);
-    } catch (error) {
-      console.error("Auto-join by email domain failed (non-fatal):", error);
-    }
-  }
-
-  return prisma.user.update({
+  return db.user.update({
     where: {
       id: userId,
     },
@@ -125,19 +137,19 @@ export const provisionNewUser = async ({
   });
 };
 
-const findOrCreateGoogleAccount = async (userId: number, createIfMissing: boolean) => {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { accountId: true } });
+const findOrCreateGoogleAccount = async (db: Prisma.TransactionClient, userId: number, createIfMissing: boolean) => {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { accountId: true } });
   const linked = user?.accountId
-    ? await prisma.googleAccount.findFirst({ where: { id: user.accountId, userId } })
+    ? await db.googleAccount.findFirst({ where: { id: user.accountId, userId } })
     : null;
-  const existing = linked ?? (await prisma.googleAccount.findFirst({ where: { userId } }));
+  const existing = linked ?? (await db.googleAccount.findFirst({ where: { userId } }));
   if (!existing && !createIfMissing) return null;
-  const googleAccount = existing ?? (await prisma.googleAccount.create({ data: { userId, stripe_customer_id: "" } }));
-  await prisma.user.update({ where: { id: userId }, data: { accountId: googleAccount.id } });
+  const googleAccount = existing ?? (await db.googleAccount.create({ data: { userId, stripe_customer_id: "" } }));
+  await db.user.update({ where: { id: userId }, data: { accountId: googleAccount.id } });
   return googleAccount;
 };
 
-const findOrCreateSignupStripeCustomer = async ({
+const findOrCreateSignupStripeCustomer = async (db: Prisma.TransactionClient, {
   userId,
   googleAccount,
   name,
@@ -153,10 +165,10 @@ const findOrCreateSignupStripeCustomer = async ({
   const earlier = resumingEarlierAttempt ? await findEarlierSignupStripeCustomer(metadata) : undefined;
   const customer = earlier ?? await stripe.customers.create(
     { name, metadata },
-    { idempotencyKey: `hypertask-user:${userId}:signup-stripe-customer:${requestFingerprint({ name, metadata })}` },
+    { idempotencyKey: `hypertask-user:${userId}:signup-stripe-customer` },
   );
   if (googleAccount) {
-    await prisma.googleAccount.updateMany({
+    await db.googleAccount.updateMany({
       where: { id: googleAccount.id, stripe_customer_id: "" },
       data: { stripe_customer_id: customer.id },
     });
@@ -168,9 +180,6 @@ const findEarlierSignupStripeCustomer = async (metadata: Record<string, string>)
   const query = Object.entries(metadata).map(([key, value]) => `metadata['${key}']:'${value}'`).join(" OR ");
   return (await stripe.customers.search({ query, limit: 1 })).data[0];
 };
-
-const requestFingerprint = (request: unknown) =>
-  createHash("sha256").update(JSON.stringify(request)).digest("hex").slice(0, 16);
 
 export const updateUserProfilePicture = async (
   userId: number,

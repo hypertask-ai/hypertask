@@ -57,6 +57,12 @@ function database({ user, googleAccounts = [], userSetting = null, userPicture =
       updateMany: async ({ where, data }) => { const row = rows.googleAccounts.find((item) => item.id === where.id && item.stripe_customer_id === where.stripe_customer_id); if (row) Object.assign(row, data); return { count: row ? 1 : 0 } },
     },
   }
+  let transactionTail = Promise.resolve()
+  client.$transaction = (work) => {
+    const pending = transactionTail.then(() => work({ ...client, $executeRaw: async () => {} }))
+    transactionTail = pending.catch(() => {})
+    return pending
+  }
   return { rows, writes, client }
 }
 
@@ -125,7 +131,7 @@ test('a resumed Google provisioning also finds a customer the old code tagged on
   assert.equal(db.rows.user.stripe_customer_id, 'cus_old_code')
 })
 
-test('retries with the same request reuse one Stripe idempotency key, and a changed request gets a different key', async () => {
+test('retries keep one per-user Stripe idempotency key even if the profile changes', async () => {
   const keys = []
   for (const email of ['new@example.test', 'new@example.test', 'other@example.test']) {
     const fake = stripeFake()
@@ -134,7 +140,7 @@ test('retries with the same request reuse one Stripe idempotency key, and a chan
     keys.push(fake.calls.create[0].options.idempotencyKey)
   }
   assert.equal(keys[0], keys[1])
-  assert.notEqual(keys[0], keys[2])
+  assert.equal(keys[0], keys[2])
 })
 
 test('an email-sign-in recovery reuses the GoogleAccount and Stripe customer an earlier Google attempt saved', async () => {
@@ -157,23 +163,17 @@ test('a first provisioning creates every row once and one Stripe customer with a
   assert.equal(createdLogs.length, 1)
   assert.equal(fake.calls.search.length, 0)
   assert.equal(fake.calls.create.length, 1)
-  assert.match(fake.calls.create[0].options.idempotencyKey, /^hypertask-user:7:signup-stripe-customer:[0-9a-f]{16}$/)
+  assert.equal(fake.calls.create[0].options.idempotencyKey, 'hypertask-user:7:signup-stripe-customer')
   assert.deepEqual(fake.calls.create[0].data.metadata, { hypertaskUserId: '7', googleAccountId: 'ga-1' })
   assert.equal(db.rows.googleAccounts[0].stripe_customer_id, 'cus_new')
   assert.equal(db.rows.user.stripe_customer_id, 'cus_new')
 })
 
-function loadResume({ user, enabled = true, provisionError = null, commitError = null }) {
-  const calls = { provision: [], signups: [], locks: 0 }
+function loadResume({ user, enabled = true, provisionError = null }) {
+  const calls = { provision: [], signups: [] }
   let current = { ...user }
   const client = { user: { findUnique: async () => current && { ...current } } }
-  const prisma = {
-    ...client,
-    $transaction: async (work) => {
-      await work({ ...client, $executeRaw: async () => { calls.locks += 1 } })
-      if (commitError) throw commitError
-    },
-  }
+  const prisma = client
   const load = loader({
     '@/lib/prisma': prisma,
     '@/lib/flags': { isFeatureEnabled: async (key) => key === 'htpr-7289-resume-signup-provisioning' && enabled },
@@ -201,7 +201,6 @@ test('a sign-in by a recent account whose setup failed finishes setup and record
   assert.equal(calls.provision.length, 1)
   assert.equal(calls.provision[0].email, 'new@example.test')
   assert.equal(calls.provision[0].resumingEarlierAttempt, true)
-  assert.equal(calls.locks, 1)
   assert.deepEqual(calls.signups, [{ decision: null, cookieHeader: 'consent=all', userId: 7, signupMethod: 'google' }])
 })
 
@@ -212,18 +211,6 @@ test('a Better Auth recovery with no profile input uses the saved name, photo an
   assert.equal(calls.provision[0].displayName, 'Saved Name')
   assert.equal(calls.provision[0].photoURL, 'saved.png')
   assert.equal(calls.provision[0].stripeCustomerNameEmail, 'new@example.test')
-})
-
-test('a finished recovery still records its signup when the lock transaction fails to commit', async () => {
-  const { resumeIncompleteSignup, calls } = loadResume({ user: recent, commitError: new Error('Transaction already closed') })
-  const originalError = console.error
-  console.error = () => {}
-  try {
-    assert.equal(await resumeIncompleteSignup(resumeArgs), true)
-  } finally {
-    console.error = originalError
-  }
-  assert.equal(calls.signups.length, 1)
 })
 
 test('established, old, guest and flag-off accounts are never re-provisioned and emit no signup', async () => {
@@ -287,4 +274,30 @@ test('the legacy sign-in resumes an existing account before its usual updates', 
   assert.equal(resumed[0].createGoogleAccount, true)
   assert.deepEqual(resumed[0].signupAttribution, { signupMethod: 'email' })
   assert.equal(resumed[0].cookieHeader, 'consent=all')
+})
+
+
+test('initial signup and concurrent recovery share one customer even when their provider differs', async () => {
+  const db = database({ user: { id: 7, accountId: null, stripe_customer_id: null } })
+  const fake = stripeFake()
+  let entered
+  const started = new Promise((resolve) => { entered = resolve })
+  let release
+  const paused = new Promise((resolve) => { release = resolve })
+  const create = fake.stripe.customers.create
+  fake.stripe.customers.create = async (...args) => {
+    entered()
+    await paused
+    return create(...args)
+  }
+  const { provisionNewUser } = loadProvisioning(db, fake.stripe)
+  const initial = provisionNewUser({ ...provisionArgs, createGoogleAccount: false })
+  await started
+  const recovery = provisionNewUser({ ...provisionArgs, createGoogleAccount: true, resumingEarlierAttempt: true })
+  release()
+  const users = await Promise.all([initial, recovery])
+  assert.equal(fake.calls.create.length, 1)
+  assert.deepEqual(users.map((user) => user.stripe_customer_id), ['cus_new', 'cus_new'])
+  assert.equal(db.rows.googleAccounts.length, 0)
+  assert.equal(db.rows.user.accountId, null)
 })
