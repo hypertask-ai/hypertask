@@ -235,7 +235,7 @@ function server({ enabled = true, readable = true, agentReadable: initialAgentRe
     "@/lib/storage/uploadTaskAttachmentToS3": {},
     "@/lib/agents/chatContentScope": { chatContentScopeWhere: async () => ({}) }, "@/lib/mcp/tasks/agentMutationFence": { TaskTeamScopeError: class extends Error {} },
     "@/lib/agentRuns/model": { AGENT_CHAT_SYSTEM_MESSAGES: [], isAgentChatSystemMessage: () => false },
-    "@/lib/agentRuns/service": { readAgentChatTurn: async () => null }, "@/lib/agents/agentChatActivity": {},
+    "@/lib/agentRuns/service": { readAgentChatTurn: async () => null }, "@/lib/agents/agentChatActivity": { listAgentChatActivity: async () => [] },
     "@/lib/agents/chatActivityFeed": { asksForAgentActivity: () => false }, "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@/lib/mcp/tasks/services": {}, "@/lib/agents/chatTicketProposal": { serializeChatTicketProposal: () => null },
   };
