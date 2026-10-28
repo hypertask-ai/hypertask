@@ -11,6 +11,10 @@ Verify your change on `https://app.hypertask.ai` after deployment. Drive real en
 
 Never use Valentin's login or browser. Use headless Playwright. Never print credentials. Never build or install app packages on the VPS.
 
+## Optional pre-PR check
+
+Push the candidate, then run `scripts/verify-qa <branch> inbox-cycle`. This uses GitHub-hosted disposable fixtures, not the VPS or production data. Mint a fresh `gh-app-token` for later GitHub commands; never fall back to human login. Follow the returned run URL with one `gh run watch <run-id> --exit-status --interval 300`, then download artifacts. `inbox-cycle-broken` proves failure propagation. This optional check never replaces live QA. See [the CI contract](../../../docs/ci.md) for limits.
+
 ## Steps
 
 1. Read the ticket's acceptance criteria. Pick its [feature-map page](reference/feature-map/INDEX.md). Update missing or changed recipes in the PR. Write a checklist before testing. For tools, test the parse or dispatch entry point, not only helpers.

@@ -83,8 +83,24 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.deepEqual(job.permissions, { contents: "read", packages: "read" });
   assert.doesNotMatch(workflow, /secrets\.|: write|workflow_run|pull_request_target/);
   assert.match(workflow, /github\.event\.pull_request\.draft == false/);
-  assert.match(workflow, /group: visual-regression-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/);
-  assert.match(workflow, /cancel-in-progress: true/);
+  const parsed = yaml.load(workflow);
+  const evaluate = (expression, event, journey) => vm.runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), {
+    github: { event_name: event, event: { pull_request: { number: event === "pull_request" ? 19 : null, draft: false } }, ref: "refs/heads/production" },
+    inputs: { journey }, format: (template, value) => template.replace("{0}", value),
+  });
+  for (const [event, journey, group, cancel, visual, verify] of [
+    ["pull_request", "", "visual-regression-19", true, true, false],
+    ["push", "", "visual-regression-refs/heads/production", true, true, false],
+    ["workflow_dispatch", "", "visual-regression-refs/heads/production", true, true, false],
+    ["workflow_dispatch", "visual", "visual-regression-refs/heads/production", true, true, false],
+    ["workflow_dispatch", "inbox-cycle", "verify-qa", false, false, true],
+    ["workflow_dispatch", "inbox-cycle-broken", "verify-qa", false, false, true],
+  ]) {
+    assert.equal(evaluate(parsed.concurrency.group, event, journey), group);
+    assert.equal(evaluate(parsed.concurrency["cancel-in-progress"], event, journey), cancel);
+    assert.equal(evaluate(job.if, event, journey), visual);
+    assert.equal(evaluate(parsed.jobs["verify-qa"].if, event, journey), verify);
+  }
   assert.match(workflow, /name: visual-regression/);
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /timeout-minutes: 35/);
@@ -92,7 +108,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.match(workflow, /@playwright\/test@1\.64\.0/);
   assert.match(workflow, /github\.event\.pull_request\.base\.sha \|\| inputs\.base/);
   assert.match(workflow, /github\.event\.pull_request\.head\.sha \|\| inputs\.head/);
-  assert.equal((workflow.match(/persist-credentials: false/g) || []).length, 2);
+  assert.equal(job.steps.filter(step => step.with?.["persist-credentials"] === false).length, 2);
   const smoke = source(".github/workflows/ci-tests.yml");
   for (const service of ["postgres", "redis"]) {
     const image = workflow.match(new RegExp(`image: (ghcr\\.io/hypertask-ai/ci-${service}:[^\\n]+)`))[1];
@@ -106,7 +122,9 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.match(workflow, /retention-days: 7/);
   assert.equal(job.steps.find(step => step.name === "Summarize failed screens").if, "always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
   assert.equal(job.steps.find(step => step.name === "Upload visual differences").with["if-no-files-found"], "ignore");
-  assert.ok(!source("docs/ci-policy.yml").includes("visual-regression"));
+  const required = yaml.load(source("docs/ci-policy.yml")).required_checks.contexts;
+  assert.equal(required.includes("visual-regression"), false);
+  assert.equal(required.includes("verify-qa"), false);
   assert.match(source("docs/ci.md"), /Visual change approved: <ticket URL>/);
   assert.doesNotMatch(source("docs/ci.md"), /visual\/harness\.mjs|visual\/baseline/);
 });

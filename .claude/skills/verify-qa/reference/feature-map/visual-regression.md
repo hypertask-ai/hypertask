@@ -28,3 +28,9 @@ For Next.js build-cache changes, collect three paired-build timing tables before
 ## Cleanup
 
 Nothing to clean: dispatched runs write only GitHub artifacts.
+
+## Optional named pre-PR journey
+
+Use `scripts/verify-qa <pushed-branch> inbox-cycle`; the helper mints a Runner App token and resolves the branch to its pushed SHA. To verify workflow changes before release, pass that branch again as the third argument. After release, omit it to use the production workflow.
+
+Require doctor PASS with a disposable non-production identity, eight passing inbox steps, screenshots, and a successful artifact upload. Run `inbox-cycle-broken` separately: doctor must pass, the missing reminder assertion must fail, the job must fail, and evidence must still upload. Record full job and doctor/journey times separately. Verify the existing production push and PR visual routes remain enabled, while named journeys use their own non-cancelling concurrency group. Never run both controls concurrently; one hosted slot is shared globally. This proves fixture behavior, not production delivery or real AI quality.

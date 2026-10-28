@@ -1,4 +1,5 @@
 name: Visual Regression
+run-name: ${{ inputs.journey || 'visual' }} @ ${{ inputs.head || github.head_ref || github.ref_name }}
 
 on:
   pull_request:
@@ -32,15 +33,20 @@ on:
         description: Candidate ref to compare
         required: true
         type: string
+      journey:
+        description: Optional single pre-PR journey instead of visual comparison
+        default: visual
+        type: choice
+        options: [visual, inbox-cycle, inbox-cycle-broken]
 
 concurrency:
-  group: visual-regression-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ inputs.journey && inputs.journey != 'visual' && 'verify-qa' || format('visual-regression-{0}', github.event.pull_request.number || github.ref) }}
+  cancel-in-progress: ${{ !inputs.journey || inputs.journey == 'visual' }}
 
 jobs:
   visual-regression:
     name: visual-regression
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.journey == '' || inputs.journey == 'visual')) || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
@@ -212,3 +218,169 @@ jobs:
             test-results/**/trace.zip
           if-no-files-found: ignore
           retention-days: 7
+
+  verify-qa:
+    name: verify-qa
+    if: github.event_name == 'workflow_dispatch' && inputs.journey != '' && inputs.journey != 'visual'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+    services:
+      postgres:
+        image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          POSTGRES_DB: hypertask_smoke
+          POSTGRES_USER: browser_smoke
+          POSTGRES_PASSWORD: browser_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U browser_smoke -d hypertask_smoke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      soketi:
+        image: ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          SOKETI_DEFAULT_APP_ID: app-id
+          SOKETI_DEFAULT_APP_KEY: app-key
+          SOKETI_DEFAULT_APP_SECRET: app-secret
+        ports:
+          - 6001:6001
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://127.0.0.1:6001"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.head }}
+          persist-credentials: false
+      - name: Initialize evidence
+        run: mkdir -p verify-qa
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+          cache: npm
+      - name: Test verification helpers
+        run: node --test tests/verify-qa.test.cjs tests/verify-qa-premerge.test.cjs
+      - name: Install dependencies and Chromium
+        run: |
+          set -o pipefail
+          npm ci --prefer-offline --no-audit --no-fund 2>&1 | tee verify-qa/install.log
+          npx prisma generate
+          npx playwright install --with-deps chromium
+      - name: Prepare disposable local credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          session_secret=$(openssl rand -hex 32)
+          jwt_secret=$(openssl rand -hex 32)
+          better_auth_secret=$(openssl rand -hex 32)
+          printf '::add-mask::%s\n' "$session_secret"
+          printf '::add-mask::%s\n' "$jwt_secret"
+          printf '::add-mask::%s\n' "$better_auth_secret"
+          {
+            printf '%s\n' 'DATABASE_URL=postgresql://browser_smoke:browser_smoke@127.0.0.1:5432/hypertask_smoke'
+            printf '%s\n' 'REDIS_URL=redis://127.0.0.1:6379'
+            printf 'SESSION_SECRET=%s\n' "$session_secret"
+            printf 'JWT_SECRET=%s\n' "$jwt_secret"
+            printf 'BETTER_AUTH_SECRET=%s\n' "$better_auth_secret"
+            printf '%s\n' 'BETTER_AUTH_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100'
+            printf '%s\n' 'TURBOPUFFER_BASE_URL=http://127.0.0.1:53101'
+            printf '%s\n' 'TURBOPUFFER_API_KEY=disposable-fixture'
+            printf '%s\n' 'HT_PREMERGE_AI_STUB=1'
+            printf '%s\n' 'HT_PREMERGE_QUEUE_STUB=1'
+            printf '%s\n' 'QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'QSTASH_AUTO_REGISTER_SWEEP=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_KEY=app-key'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_PORT=6001'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_USE_TLS=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_CLUSTER=mt1'
+            printf '%s\n' 'PUSHER_APP_ID=app-id'
+            printf '%s\n' 'PUSHER_KEY=app-key'
+            printf '%s\n' 'PUSHER_SECRET=app-secret'
+            printf '%s\n' 'PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'PUSHER_PORT=6001'
+            printf '%s\n' 'PUSHER_USE_TLS=false'
+            printf '%s\n' 'PUSHER_CLUSTER=mt1'
+          } >> "$GITHUB_ENV"
+      - name: Seed disposable fixtures
+        env:
+          BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
+        run: |
+          set -o pipefail
+          { npx prisma migrate deploy && node scripts/seed-browser-smoke.mjs && node scripts/seed-browser-smoke.mjs --inbox-cycle; } 2>&1 | tee verify-qa/seed.log
+      - name: Build once
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NODE_OPTIONS: --max-old-space-size=5120
+        run: |
+          set -o pipefail
+          for attempt in 1 2; do
+            npx next build --webpack 2>&1 | tee "verify-qa/build-${attempt}.log" && exit 0
+            grep -q 'next/font/google' "verify-qa/build-${attempt}.log" || exit 1
+          done
+          exit 1
+      - name: Launch, doctor, drive, and tear down
+        env:
+          VERIFY_QA_JOURNEY: ${{ inputs.journey }}
+          VERIFY_QA_BASE: http://127.0.0.1:3100
+          VERIFY_QA_STATE_FILE: e2e/smoke/.state/smoke-state.json
+          VERIFY_QA_FIXTURE: e2e/smoke/.state/inbox-cycle-fixture.json
+          VERIFY_QA_REPORT_ONLY: '0'
+        run: |
+          set -euo pipefail
+          node scripts/premerge-local-search.mjs e2e/smoke/.state/card-fixture.json 53101 > verify-qa/search.log 2>&1 &
+          search=$!
+          npx next start -H 127.0.0.1 -p 3100 > verify-qa/server.log 2>&1 &
+          server=$!
+          trap 'kill "$server" "$search" 2>/dev/null || true' EXIT
+          timeout --signal=TERM --kill-after=20s 240s node scripts/verify-qa-run.mjs 2>&1 | tee verify-qa/journey.log
+      - name: Summarize and sanitize evidence
+        if: always()
+        env:
+          VERIFY_QA_JOB_STATUS: ${{ job.status }}
+          VERIFY_QA_JOURNEY: ${{ inputs.journey }}
+          VERIFY_QA_STATE_FILE: e2e/smoke/.state/smoke-state.json
+        run: node scripts/verify-qa-run.mjs --summary
+      - name: Upload verification evidence
+        if: always()
+        id: evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verify-qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verify-qa/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Link evidence
+        if: always() && steps.evidence.outputs.artifact-url != ''
+        env:
+          ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
+        run: |
+          printf '\nEvidence artifact: %s\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
