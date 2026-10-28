@@ -94,3 +94,14 @@ decisions and tickets containing questions or mentions stay. Historical question
 are conservatively kept too. A new protected event between preview and confirm
 must refresh the preview instead of archiving. Flag off hides the entry point and
 the server refuses the safe rule; ordinary Inbox Zero remains available.
+
+## Phone undo toast
+
+Archive a seeded notification by swiping its Inbox row left. With
+`htpr-8097-mobile-undo-toast` on, the small undo card sits at 52% height,
+left aligned, at most 110px wide. On a 390x844 phone, verify it stays clear
+of the bottom split dock, task comment field and Remove notification action.
+Tap Undo and verify the same notification returns, including after reload.
+Archive again and dismiss; the notification must stay archived. Check all
+four themes. Desktop placement and content stay unchanged; flag off retains
+the previous wide bottom-left phone card.
