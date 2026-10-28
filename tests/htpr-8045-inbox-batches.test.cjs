@@ -249,6 +249,34 @@ test("an empty model reply still reports exact archived counts and every cleared
 });
 
 
+test("an empty model reply preserves archive previews and failed calls", () => {
+  const { buildEmptyCompletionSummary } = load("src/app/api/ai/chat/stream/bulkTools.ts", {});
+  const summarize = (results) => buildEmptyCompletionSummary({
+    toolExecutions: results.map((result) => ({ name: "hypertask_inbox_archive", result })),
+    writeToolNames: new Set(["hypertask_inbox_archive"]), reachedStepLimit: false, maxToolSteps: 32,
+  });
+  const preview = { success: false, confirmation_required: true, archive_count: 2, sibling_count: 1, notifications: [
+    { task: { ticketNumber: "QA-1", title: "Pending" } },
+    { task: { ticketNumber: "QA-2", title: "Sibling" } },
+  ] };
+  const pendingOnly = summarize([preview]);
+  assert.match(pendingOnly, /2 inbox messages.*approval/i);
+  assert.match(pendingOnly, /QA-1: Pending; QA-2: Sibling/);
+  assert.match(pendingOnly, /1 sibling/);
+  assert.match(pendingOnly, /confirm/i);
+  assert.doesNotMatch(pendingOnly, /Archived 0/);
+  assert.doesNotMatch(pendingOnly, /call failed/);
+  const mixed = summarize([
+    { success: true, archived_count: 1, notifications: [{ task: { ticketNumber: "QA-3", title: "Cleared" } }] },
+    preview,
+    { success: false, error: "The listed batch changed. Nothing was archived." },
+  ]);
+  assert.match(mixed, /Archived 1 inbox message.*QA-3: Cleared/);
+  assert.match(mixed, /2 inbox messages.*approval/i);
+  assert.match(mixed, /1 tool call failed/);
+  assert.match(mixed, /listed batch changed/);
+});
+
 test("a plain later yes replays the server-saved batch without model-retained IDs or receipts", async () => {
   const f = fixture({ count: 3 });
   const turn = f.turn();
