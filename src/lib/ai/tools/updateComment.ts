@@ -9,8 +9,6 @@ import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRef
 import { updateCommentService } from "@/utils/controllers/comments/updateCommentService";
 import { persistUrlsForComment } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { broadcastTaskComment } from "@/lib/realtime/server";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { COMMENT_TASK_LINK_RULE } from "@/lib/ai/chatStream/prompt";
 import { withToolErrors } from "@/lib/ai/tools/execution";
 import { userHasProjectAccess, validateMentionUsers, commentInclude, mapCommentToResponse, applyDurableCommentAttribution, sanitizeForJson } from "@/lib/ai/tools/helpers";
@@ -135,8 +133,7 @@ export function createUpdateCommentTool(context: ToolContext) {
             updatedCommentPayload.comment,
             updatedComment,
             user.id,
-            comment.task.projectId,
-            await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+            comment.task.projectId
           );
         }
         return sanitizeForJson(updatedCommentPayload);

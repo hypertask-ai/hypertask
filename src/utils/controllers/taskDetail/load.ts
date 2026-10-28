@@ -16,7 +16,7 @@ import {
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
+import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -583,7 +583,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
   `;
 }
 
-function applyDurableAgentAttribution(comments: IComment[], attributionEnabled: boolean) {
+function applyDurableAgentAttribution(comments: IComment[]) {
   return comments.map((comment) => {
     const row = comment as IComment & {
       hasLiveAgentRow?: boolean;
@@ -591,7 +591,7 @@ function applyDurableAgentAttribution(comments: IComment[], attributionEnabled: 
     };
     const stored = row.storedAgentDisplayName?.trim();
     const agentDisplayName =
-      attributionEnabled && !row.hasLiveAgentRow && stored
+      !row.hasLiveAgentRow && stored
         ? stored
         : comment.agentDisplayName;
     const { hasLiveAgentRow: _hasLive, storedAgentDisplayName: _stored, ...rest } = row;
@@ -604,13 +604,9 @@ export async function fetchCommentsForTask(
   userId: number,
   db: Db = prisma
 ) {
-  const attributionEnabled = await isFeatureEnabled(
-    HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-    userId,
-  );
   const comments = await commentsQuery(db, taskId, userId);
   return sanitizeAgentCredentials(
-    applyDurableAgentAttribution(comments, attributionEnabled),
+    applyDurableAgentAttribution(comments),
   ) as IComment[];
 }
 
@@ -633,10 +629,6 @@ export async function fetchDescriptionReactionsWithDb(
 
 export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number) {
   const { projectId, uniqueIndex } = slug;
-  const attributionEnabled = await isFeatureEnabled(
-    HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-    userId,
-  );
   const comments = await prisma.$queryRaw<IComment[]>`
     WITH authorized_task AS (
       SELECT t.id, t."projectId" FROM "Task" t
@@ -727,7 +719,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     ORDER BY bc."createdAt" ASC
   `;
   return sanitizeAgentCredentials(
-    applyDurableAgentAttribution(comments, attributionEnabled),
+    applyDurableAgentAttribution(comments),
   ) as IComment[];
 }
 

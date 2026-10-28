@@ -10,10 +10,6 @@ import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
-import {
-  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-  isFeatureEnabled,
-} from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
 import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
@@ -322,13 +318,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       user.id,
       comment.task.projectId
     )
-    const hasAgentAttribution = Boolean(
-      commentWithAgent?.agent || commentWithAgent?.agentDisplayName
-    )
-    const attributionEnabled = await isFeatureEnabled(
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-      user.id
-    )
 
     const editorAgents = await loadVisibleReactionAgents(
       updatedComment.editedByAgentId ? [updatedComment.editedByAgentId] : [],
@@ -351,21 +340,14 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
           : null,
         creatorId: updatedComment.creatorId ?? undefined,
         ...(agent ? { agent } : {}),
-        ...(hasAgentAttribution
-          ? { agent_display_name: agent?.displayName || 'Private agent' }
-          : {}),
       }
     }
-    if (attributionEnabled) {
-      const agentDisplayName = resolvePublicAgentDisplayName({
-        hasAgentRow: Boolean(commentWithAgent?.agent),
-        visibleAgent: agent,
-        storedDisplayName: commentWithAgent?.agentDisplayName,
-        attributionEnabled: true,
-      })
-      if (agentDisplayName) response.comment.agent_display_name = agentDisplayName
-      else delete response.comment.agent_display_name
-    }
+    const agentDisplayName = resolvePublicAgentDisplayName({
+      hasAgentRow: Boolean(commentWithAgent?.agent),
+      visibleAgent: agent,
+      storedDisplayName: commentWithAgent?.agentDisplayName,
+    })
+    if (agentDisplayName) response.comment.agent_display_name = agentDisplayName
 
     void broadcastTaskComment(comment.task.id, { originUserId: user.id })
 

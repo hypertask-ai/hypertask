@@ -1002,21 +1002,6 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   }
 });
 
-test("historical Bug labels are display-only and preserve Owner + QA defaults and stored modes", async () => {
-  const key = flags.HTPR_6516_AGENT_ATTRIBUTION_FLAG;
-  assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).kind, "bugfix");
-  assert.deepEqual(await flags.featureFlagCandidateUserIds(key), [6, 985]);
-  for (const mode of [null, "OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
-    row = mode ? { mode } : null;
-    listedRows = row ? [{ key, ...row }] : [];
-    const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-    assert.equal(entry.kind, "bugfix");
-    assert.equal(entry.mode, mode ?? "OWNER_AND_QA");
-    assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(key, id))),
-      [6, 985, 7].map(id => flags.featureFlagModeEnabled(mode ?? "OWNER_AND_QA", id === 6, id === 985)));
-  }
-});
-
 test("listed related keys cannot mutate registered flag metadata", async () => {
   const key = flags.HTPR_6951_TASK_WRITING_PROGRESS_FLAG;
   const first = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);

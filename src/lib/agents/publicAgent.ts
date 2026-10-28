@@ -30,12 +30,8 @@ export function resolvePublicAgentDisplayName(opts: {
   hasAgentRow: boolean;
   visibleAgent?: { displayName?: string | null } | null;
   storedDisplayName?: string | null;
-  attributionEnabled?: boolean;
 }): string | null {
   if (opts.hasAgentRow && !opts.visibleAgent) return PRIVATE_AGENT_DISPLAY_NAME;
-  if (!opts.attributionEnabled && !opts.hasAgentRow && opts.storedDisplayName) {
-    return PRIVATE_AGENT_DISPLAY_NAME;
-  }
   const stored = opts.storedDisplayName?.trim();
   if (stored) return stored;
   const live = opts.visibleAgent?.displayName?.trim();
@@ -48,14 +44,9 @@ export function overlayDurableAgentDisplayName<T extends object>(
     hasAgentRow: boolean;
     visibleAgent?: { displayName?: string | null } | null;
     storedDisplayName?: string | null;
-    attributionEnabled?: boolean;
   }
 ): T {
-  if (!opts.attributionEnabled) return mapped;
-  const agentDisplayName = resolvePublicAgentDisplayName({
-    ...opts,
-    attributionEnabled: true,
-  });
+  const agentDisplayName = resolvePublicAgentDisplayName(opts);
   const next = { ...mapped } as T & { agent_display_name?: string };
   if (agentDisplayName) next.agent_display_name = agentDisplayName;
   else delete next.agent_display_name;
