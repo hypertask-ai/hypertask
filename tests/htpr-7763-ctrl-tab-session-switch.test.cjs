@@ -292,6 +292,7 @@ test("Everyone default enables switching and switching the flag Off removes the 
 test("existing Ctrl+Shift+O, Ctrl+Shift+J and Ctrl+Q still execute alongside session switching", () => {
   const view = chat();
   const { createAiChatKeyboard } = load("src/hooks/MultiPages/AIChat/aiChatKeyboard.ts", {
+    "@/lib/aiChat/chatShortcuts": load("src/lib/aiChat/chatShortcuts.ts"),
     "@/lib/constants/keyboard-handler": load("src/lib/constants/keyboard-handler.ts"),
     "@/lib/skills/slashSkills": { SLASH_MENU_DOM_ID: "slash-menu" },
     "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { aiMentionList: "mentions" } },

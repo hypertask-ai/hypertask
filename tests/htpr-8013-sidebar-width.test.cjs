@@ -62,7 +62,7 @@ async function fixture(t, enabled = true, mobileSidebar = false, pendingPanel = 
     "@tanstack/react-query": { useQueryClient: noop },
     "./MessageList": { MessageList: noop },
     "./WelcomeScreen": { WelcomeScreen: noop },
-    "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ showWelcomeScreen: true }) },
+    "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ showWelcomeScreen: true, sessions: [], historySessions: [], sessionPagingEnabled: false }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: Mobile },
     "./ChatHeader": { ChatHeader: noop },
     "./AI_Tiptap_Container": { AI_Tiptap_Container: noop },
