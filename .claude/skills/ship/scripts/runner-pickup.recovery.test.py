@@ -91,7 +91,9 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
         self.assertEqual(json.loads((self.root / 'tasks').read_text())['tasks'][0]['section'], 'In Progress')
         self.assertEqual([c[:2] for c in self.calls()], [
             ['task', 'list'], ['comment', 'list'], ['sections', 'list'], ['task', 'get'], ['raw', 'POST'], ['task', 'get'], ['activity', 'add']])
-        self.tasks['tasks'][0]['section'] = 'In Progress'
+        self.tasks = json.loads((self.root / 'tasks').read_text())
+        self.assertIn('Resume YPER4-1', self.run_command('drain', '6').stdout)
+        self.assertEqual(self.run_command('ack', '6', 'YPER4-1').returncode, 0)
         self.assertEqual(self.run_command('drain', '6').stdout, '')
         self.assertEqual(sum(c[:2] == ['activity', 'add'] for c in self.calls()), 1)
 
@@ -219,7 +221,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
             "    (root / 'tasks').write_text(json.dumps(tasks))\n"
             "    payload = json.loads(a[3])"))
         result = self.run_command('drain', '6')
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, '')
         self.assertEqual(json.loads((self.root / 'tasks').read_text())['tasks'][0]['section'],
                          'Valentin Review')
@@ -232,7 +234,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
             "    (root / 'tasks').write_text(json.dumps(tasks))\n"
             "    payload = json.loads(a[3])"))
         result = self.run_command('drain', '6')
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, '')
         self.assertEqual(json.loads((self.root / 'tasks').read_text())['tasks'][0]['section'],
                          'Agent Blocked')
@@ -244,8 +246,40 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
             "    task['assignees'] = [{'agent': {'displayName': 'Runner 7'}}]\n"
             "    task['section'] = 'In Progress'"))
         result = self.run_command('drain', '6')
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, '')
+
+    def test_pending_intent_retires_after_revision_hold_reassignment_or_archive(self):
+        original = self.tasks['tasks'][0].copy()
+        for change in [
+            {'updatedAt': '2026-10-28T12:00:00.000Z'},
+            {'sectionId': 40, 'section': 'Valentin Review'},
+            {'assignees': [{'agent': {'displayName': 'Runner 7'}}]},
+            {'status': 'Archive'},
+            {'blockerCommentId': 456},
+        ]:
+            with self.subTest(change=change):
+                self.tasks['tasks'][0] = original | change
+                intent = {'ticket': 'YPER4-1', 'runner': 'Runner 6', 'lift': int(self.lift),
+                          'block': 123, 'projectId': 4060, 'sectionId': 30,
+                          'expected_section_id': 20, 'expected_updated_at': '2026-10-28T10:00:00.000Z'}
+                (self.state / 'runner-6.recovery.json').write_text(json.dumps(intent))
+                result = self.run_command('drain', '6')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, '')
+                self.assertFalse((self.state / 'runner-6.recovery.json').exists())
+
+    def test_ready_handoff_survives_until_matching_acknowledgement(self):
+        result = self.run_command('drain', '6')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.tasks = json.loads((self.root / 'tasks').read_text())
+        self.assertIn('Resume YPER4-1', self.run_command('drain', '6').stdout)
+        self.assertNotEqual(self.run_command('ack', '6', 'YPER4-2').returncode, 0)
+        self.assertTrue((self.state / 'runner-6.recovery.json').exists())
+        self.assertEqual(self.run_command('ack', '6', 'YPER4-1').returncode, 0)
+        self.assertEqual(self.run_command('drain', '6').stdout, '')
+        self.assertEqual(sum(c[:2] == ['activity', 'add'] for c in self.calls()), 1)
+        self.assertEqual(sum(c[:2] == ['raw', 'POST'] for c in self.calls()), 1)
 
     def test_record_lift_persists_epoch(self):
         result = self.run_command('record-lift')

@@ -258,6 +258,8 @@ exec /bin/sleep 0.01
                 self.assertNotIn(session_id, session_ids)
                 session_ids.add(session_id)
                 self.assertIn('recovery drain 8', events)
+                self.assertIn('recovery ack 8 YPER4-1', events)
+                self.assertLess(events.index('final-phase'), events.index('recovery ack 8 YPER4-1'))
                 self.assertIn('Recovery: Resume YPER4-1: stale freeze block cleared', (self.home / 'brief').read_text())
                 self.assertLess(events.index('recovery drain 8'), events.index('brief'))
                 self.assertLess(events.index('brief'), events.index('submitted'))
@@ -267,6 +269,22 @@ exec /bin/sleep 0.01
                 self.assertIn(f'retry {cooldown}', events)
                 self.assertIn(final_line, (self.state / 'runner-8.latest.log').read_text())
                 self.assertIn(final_line, (self.state / 'runner-8.log').read_text())
+
+    def test_failed_launch_retains_recovery_without_acknowledging(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        recovery = self.home / '.local/lib/hypertask/runner-pickup/runner-pickup'
+        recovery.parent.mkdir(parents=True)
+        recovery.write_text('#!/bin/sh\necho "recovery $*" >> "$HOME/events"\n[ "$1" = drain ] && echo "Resume YPER4-1: ready"\n')
+        recovery.chmod(0o755)
+        self.command('clear', 'exit 0')
+        self.command('tmux', 'exit 0')
+        self.command('hax', 'echo failed-start >> "$HOME/events"; exit 42')
+        self.command('sleep', 'echo "retry $1" >> "$HOME/events"; kill -TERM "$PPID"')
+        self.run_keeper('8', '--loop')
+        events = self.events.read_text().splitlines()
+        self.assertIn('recovery drain 8', events)
+        self.assertIn('failed-start', events)
+        self.assertFalse(any(event.startswith('recovery ack') for event in events))
 
     def test_missing_session_identity_never_launches_hax(self):
         self.env['TMUX_PANE'] = '%fixture'

@@ -1134,7 +1134,7 @@ test("conditional movement preserves a newer hold or revision under the mutation
       { id: TASK_ID, sectionId: SECTION_ID, section: "Todo" },
       { id: USER_ID }, OWNED_AGENT,
       { expectedProjectId: OWNER_PROJECT, expectedSectionId: SECTION_ID - 1,
-        expectedStatus: "Normal", expectedUpdatedAt: revision, skipAutoAssign: true, skipRecurrence: true,
+        expectedStatus: "Normal", expectedUpdatedAt: revision, expectedAssigneeAgentId: OWNED_AGENT, skipAutoAssign: true, skipRecurrence: true,
         taskMovedActivity: { fromAgent: { id: OWNED_AGENT, userId: USER_ID, displayName: "Runner 6" } } },
     );
     const conflict = Object.keys(concurrentState).length > 0;
@@ -1147,6 +1147,7 @@ test("conditional movement preserves a newer hold or revision under the mutation
       assert.equal(result.json.sectionId, SECTION_ID);
       assert.equal(calls.updateWhere.sectionId, SECTION_ID - 1);
       assert.equal(calls.updateWhere.updatedAt.getTime(), revision.getTime());
+      assert.deepEqual(calls.updateWhere.assignees, { some: { agentId: OWNED_AGENT } });
     }
   }
 });

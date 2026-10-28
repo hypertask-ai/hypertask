@@ -89,6 +89,7 @@ test('move route validates conditions and forwards them into the shared atomic c
   assert.equal(received[2], 'runner-6');
   assert.equal(received[3].expectedProjectId, 4060);
   assert.equal(received[3].expectedSectionId, 20);
+  assert.equal(received[3].expectedAssigneeAgentId, 'runner-6');
   assert.equal(received[3].expectedStatus, 'Normal');
   assert.equal(received[3].expectedUpdatedAt.toISOString(), body.expected_updated_at);
 });

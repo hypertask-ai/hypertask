@@ -203,28 +203,45 @@ record_lift() {
 }
 
 finish_recovery() {
-  local n=$1 pending=$2 intent ticket current section payload
+  local n=$1 pending=$2 intent ticket current section payload moved=0
   intent=$(cat "$pending") || return 1
   ticket=$(jq -er '.ticket' <<<"$intent") || return 1
   current=$(board "$n" task get "$ticket" --json) || return 1
-  jq -e --argjson intent "$intent" '.success == true and (.tasks | length) == 1
-    and .tasks[0].projectId == $intent.projectId
-    and .tasks[0].status == "Normal" and .tasks[0].blockerCommentId == null
-    and any(.tasks[0].assignees[]?; .agent.displayName == $intent.runner)' <<<"$current" >/dev/null || return 1
-  section=$(jq -r '.tasks[0].section' <<<"$current")
-  if [[ $section =~ ^(Agent\ Blocked(\ \(Infra\))?|Blocked)$ ]]; then
+  while :; do
+    jq -e '.success == true and (.tasks | type) == "array" and (.tasks | length) == 1' <<<"$current" >/dev/null || return 1
+    if ! jq -e --argjson intent "$intent" '.tasks[0].projectId == $intent.projectId
+      and .tasks[0].status == "Normal" and .tasks[0].blockerCommentId == null
+      and any(.tasks[0].assignees[]?; .agent.displayName == $intent.runner)' <<<"$current" >/dev/null; then
+      rm -f "$pending"; return 0
+    fi
+    section=$(jq -r '.tasks[0].section' <<<"$current")
+    if [ "$section" = 'In Progress' ]; then
+      [ "$(jq -r '.tasks[0].sectionId' <<<"$current")" = "$(jq -r .sectionId <<<"$intent")" ] || return 1
+      break
+    fi
+    if ! jq -e --argjson intent "$intent" '.tasks[0].sectionId == $intent.expected_section_id
+      and .tasks[0].updatedAt == $intent.expected_updated_at' <<<"$current" >/dev/null; then
+      rm -f "$pending"; return 0
+    fi
+    [ "$moved" = 0 ] || return 1
     payload=$(jq -c '{ticket_number: .ticket, sectionId, expected_section_id, expected_updated_at}' <<<"$intent") || return 1
-    board "$n" raw POST /mcp/tasks/update "$payload" >/dev/null || return 1
+    board "$n" raw POST /mcp/tasks/update "$payload" >/dev/null 2>&1 || true
+    moved=1
     current=$(board "$n" task get "$ticket" --json) || return 1
-    section=$(jq -er 'select(.success == true) | .tasks[0].section' <<<"$current") || return 1
+  done
+  if [ "$(jq -r '.audited // false' <<<"$intent")" != true ]; then
+    board "$n" activity add "$ticket" "Resuming after freeze lift $(jq -r .lift <<<"$intent"): earlier runner block comment $(jq -r .block <<<"$intent") is superseded. Current checks still apply." >/dev/null || return 1
   fi
-  if [ "$section" != 'In Progress' ]; then rm -f "$pending"; return 0; fi
-  jq -e --argjson intent "$intent" '.success == true and (.tasks | length) == 1
-    and .tasks[0].projectId == $intent.projectId and .tasks[0].sectionId == $intent.sectionId
-    and .tasks[0].status == "Normal" and .tasks[0].blockerCommentId == null
-    and any(.tasks[0].assignees[]?; .agent.displayName == $intent.runner)' <<<"$current" >/dev/null || return 1
-  board "$n" activity add "$ticket" "Resuming after freeze lift $(jq -r .lift <<<"$intent"): earlier runner block comment $(jq -r .block <<<"$intent") is superseded. Current checks still apply." >/dev/null || return 1
-  printf 'Resume %s: stale freeze block cleared; finish existing work first.\n' "$ticket" || return 1
+  jq '. + {phase: "ready", audited: true}' <<<"$intent" > "$pending.tmp.$$" && mv "$pending.tmp.$$" "$pending" || return 1
+  printf 'Resume %s: stale freeze block cleared; finish existing work first.\n' "$ticket"
+}
+
+ack_recovery() {
+  local n=$1 ticket=$2 pending="$STATE/runner-$1.recovery.json"
+  [[ $ticket =~ ^(HTPR|YPER4)-[0-9]+$ ]] || return 1
+  [ -f "$pending" ] || return 0
+  exec 9>"$STATE/runner-$n.lock"; flock -x 9
+  jq -e --arg ticket "$ticket" '.ticket == $ticket and .phase == "ready"' "$pending" >/dev/null || return 1
   rm -f "$pending"
 }
 
@@ -361,13 +378,14 @@ run_tick() {
 }
 
 cmd=${1:-}; num=${2:-}
-USAGE='usage: runner-pickup run|drain|install|events <runner number> [--dry-run] | install-webhook | record-lift'
+USAGE='usage: runner-pickup run|drain|ack|install|events <runner number> [--dry-run] | install-webhook | record-lift'
 if [ "$cmd" = record-lift ]; then record_lift; exit 0; fi
 if [ "$cmd" = install-webhook ]; then install_webhook; exit 0; fi
 [[ $num =~ ^[1-9][0-9]*$ ]] || { echo "$USAGE" >&2; exit 2; }
 case "$cmd" in
   run) run_tick "$num" ;;
   drain) drain_blocks "$num" ;;
+  ack) ack_recovery "$num" "${3:-}" ;;
   install) install_units "$num" ;;
   events) [ "${3:-}" = --dry-run ] || { echo "$USAGE" >&2; exit 2; }; events_dry_run "$num" ;;
   *) echo "$USAGE" >&2; exit 2 ;;

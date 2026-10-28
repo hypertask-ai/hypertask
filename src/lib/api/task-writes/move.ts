@@ -71,6 +71,7 @@ export const PUT = taskWriteRoute({
       }, userObj, agentId ?? null, { teamScope: session.teamScope,
         expectedProjectId: expectedSectionId === undefined ? undefined : projectId,
         expectedSectionId,
+        expectedAssigneeAgentId: expectedSectionId === undefined ? undefined : agentId ?? undefined,
         expectedStatus: expectedSectionId === undefined ? undefined : "Normal",
         expectedUpdatedAt: expectedUpdatedAt === undefined ? undefined : new Date(expectedUpdatedAt),
         taskMovedActivity: {

@@ -111,6 +111,7 @@ case "${1:-}" in
       if [ -x "$recovery" ]; then
         recovery_brief=$("$recovery" drain "$n") || { log "RUNNER $n: freeze recovery failed"; exit 1; }
       fi
+      recovery_ticket=${recovery_brief#Resume }; recovery_ticket=${recovery_ticket%%:*}
       run_brief="$brief${recovery_brief:+ Recovery: $recovery_brief}"
       echo "$(date -u +%FT%TZ) start" >> "$rlog"
       clear; tmux clear-history -t "$TMUX_PANE"
@@ -164,6 +165,9 @@ sys.exit(1)
 PYTHON
           ); then
             result=$completed
+            if [ -n "$recovery_brief" ]; then
+              "$recovery" ack "$n" "$recovery_ticket" || log "RUNNER $n: recovery acknowledgement failed"
+            fi
             break
           fi
         done
