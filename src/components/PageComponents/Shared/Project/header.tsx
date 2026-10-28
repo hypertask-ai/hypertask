@@ -88,7 +88,7 @@ const ReadOnlyHeader = ({
                     {project.members.length > 5 && (
                       <div
                         key="extra-members"
-                        className="w-[30px] h-[30px] border-[var(--border-board-avatar)] bg-[#4F5765] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro leading-[10.98px] font-normal text-white"
+                        className="w-[30px] h-[30px] border-[var(--border-board-avatar)] bg-[var(--bg-board-avatar-overflow)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro leading-[var(--leading-board-avatar-overflow)] font-normal text-white"
                       >
                         +{project.members.length - 5}
                       </div>
@@ -98,7 +98,7 @@ const ReadOnlyHeader = ({
               : project.members.length > 0 && (
                   <div
                     key="extra-members"
-                    className="w-[24px] h-[24px] border-[var(--border-board-avatar)] bg-[#4F5765] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro font-normal text-white"
+                    className="w-[24px] h-[24px] border-[var(--border-board-avatar)] bg-[var(--bg-board-avatar-overflow)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro font-normal text-white"
                   >
                     +{project.members.length}
                   </div>

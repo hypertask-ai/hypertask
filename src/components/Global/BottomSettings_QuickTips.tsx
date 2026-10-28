@@ -404,7 +404,7 @@ const TipsComp = ({
                   {tip.key.map((tKey, tIndex) => (
                     <KBDElement
                       key={`${tIndex}-quicktips`}
-                      className={`bg-[var(--bg-quick-tip-key)] py-auto px-[6.25px] text-meta leading-[14px] font-semibold h-[20px] flex items-center justify-center mx-[0px] pt-[0px]`}
+                      className={`bg-[var(--bg-quick-tip-key)] py-auto px-[6.25px] text-meta leading-[var(--leading-quick-tip-key)] font-semibold h-[20px] flex items-center justify-center mx-[0px] pt-[0px]`}
                       content={renderShortcut(tKey)}
                     />
                   ))}

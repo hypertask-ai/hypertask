@@ -136,7 +136,7 @@ const LegacyTooltip = ({keyCombination,bottom, text,left, groupHoverId="",should
                       <kbd
                         key={key}
                           className={`px-1 pt-[2px] mx-[1.5px] rounded-[2px] pb-0
-                              bg-[#555B64]  border-[var(--border-keycap)]`}
+                              bg-[var(--bg-keycap)]  border-[var(--border-keycap)]`}
                           >
                           {key}
                       </kbd>
@@ -182,7 +182,7 @@ const LegacyTooltip = ({keyCombination,bottom, text,left, groupHoverId="",should
                       <kbd
                         key={key}
                           className={`px-1 pt-[2px] mx-[1.5px] rounded-[2px] pb-0
-                              bg-[#555B64]  border-[var(--border-keycap)]`}
+                              bg-[var(--bg-keycap)]  border-[var(--border-keycap)]`}
                           >
                           {key}
                       </kbd>

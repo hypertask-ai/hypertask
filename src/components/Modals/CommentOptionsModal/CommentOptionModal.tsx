@@ -254,7 +254,7 @@ const CommentOption = ({ option }: { option: ICommentOption }) => {
 
 const SingleKey = ({ item }: { item: "CTRL" | string }) => {
   return (
-    <kbd className="px-[6px] pt-[1px] text-content mx-[1.5px] rounded-[2px] pb-0 bg-[#555B64] font-bold border-[var(--border-keycap)]">
+    <kbd className="px-[6px] pt-[1px] text-content mx-[1.5px] rounded-[2px] pb-0 bg-[var(--bg-keycap)] font-bold border-[var(--border-keycap)]">
       {item}
     </kbd>
   );

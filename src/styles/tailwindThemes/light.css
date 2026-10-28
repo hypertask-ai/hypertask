@@ -108,6 +108,14 @@
 }
 
 :root {
+  --bg-keycap: #555b64;
+  --bg-board-avatar-overflow: #4f5765;
+  --leading-board-avatar-overflow: 10.98px;
+  --leading-quick-tip-key: 14px;
+  --color-task-complete: #696b6e;
+  --color-task-complete-hover: #008000;
+  --color-task-link-hover: #8e9093;
+  --color-file-spinner: var(--color-red-600);
   --border-keycap: var(--color-gray-200);
   --bg-quick-tip-key: #555b64;
   --bg-chat-mention-selected: #ececec;

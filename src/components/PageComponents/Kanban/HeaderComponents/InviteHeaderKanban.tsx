@@ -67,7 +67,7 @@ const InviteNewMembers: React.FC<{ currentProject: IProject }> = ({
                 {currentProject.members.length > 2 && (
                   <div
                     key="extra-members"
-                    className="board-header-avatar w-[30px] h-[30px] border-[var(--border-board-avatar)] bg-[#4F5765] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro leading-[10.98px] font-normal text-white"
+                    className="board-header-avatar w-[30px] h-[30px] border-[var(--border-board-avatar)] bg-[var(--bg-board-avatar-overflow)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro leading-[var(--leading-board-avatar-overflow)] font-normal text-white"
                   >
                     +{currentProject.members.length - 2}
                   </div>
@@ -77,7 +77,7 @@ const InviteNewMembers: React.FC<{ currentProject: IProject }> = ({
           : currentProject.members.length > 0 && (
               <div
                 key="extra-members"
-                className="board-header-avatar w-[20px] h-[20px] border-[var(--border-board-avatar)] bg-[#4F5765] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro font-normal text-white"
+                className="board-header-avatar w-[20px] h-[20px] border-[var(--border-board-avatar)] bg-[var(--bg-board-avatar-overflow)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro font-normal text-white"
               >
                 +{currentProject.members.length}
               </div>

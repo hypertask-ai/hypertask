@@ -58,7 +58,7 @@ const TaskHeadingContainer = ({ heading }: { heading: string }) => {
             <button tabIndex={-1}>
               <Check
                 color={"#696b6e"}
-                className={`transition-colors stroke-[length:var(--stroke-task-link)] duration-75 text-[#696b6e] hover:text-[#008000]`}
+                className={`transition-colors stroke-[length:var(--stroke-task-link)] duration-75 text-[var(--color-task-complete)] hover:text-[var(--color-task-complete-hover)]`}
                 size={20}
                strokeWidth={1.75}/>
             </button>

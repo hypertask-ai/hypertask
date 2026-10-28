@@ -98,13 +98,13 @@ const ExitOption = ({
       <span className="text-white-black">Exit Tutorial</span>
       <kbd
         className={`px-2 pt-[3px] rounded-[2px]
-            bg-[#555B64]  border-[var(--border-onboarding-key)] border-[length:var(--width-onboarding-key-border)] text-micro`}
+            bg-[var(--bg-keycap)]  border-[var(--border-onboarding-key)] border-[length:var(--width-onboarding-key-border)] text-micro`}
       >
         {isApple ? "CMD" : "CTRL"}
       </kbd>
       <kbd
         className={`px-2 pt-[3px] rounded-[2px]
-            bg-[#555B64]  border-[var(--border-onboarding-key)] border-[length:var(--width-onboarding-key-border)] text-micro`}
+            bg-[var(--bg-keycap)]  border-[var(--border-onboarding-key)] border-[length:var(--width-onboarding-key-border)] text-micro`}
       >
         .
       </kbd>
