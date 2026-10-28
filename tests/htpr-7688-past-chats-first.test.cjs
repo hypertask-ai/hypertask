@@ -164,6 +164,7 @@ function sidebar(initialSession = { id: "remembered", agentId: null }) {
     selectSession: id => { events.push(`select:${id}`); chat = { ...chat, currentSession: { id, agentId: id === "native-session" ? "native" : null } }; },
   };
   const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
+    "react-hot-toast": { default: { error: assert.fail } },
     react: { ...state.react, default: state.react },
     "@/hooks/useFlag": { useFlag: key => !["htpr-7800-skill-runs-in-sidebar", "htpr-8048-agent-sessions"].includes(key) }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
     "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
