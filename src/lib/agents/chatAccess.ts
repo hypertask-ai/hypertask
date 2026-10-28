@@ -21,6 +21,7 @@ type ChatAccessGranted<TSession> = {
   ok: true;
   session: TSession;
   agentId: string;
+  sharedConversationEnabled?: boolean;
 };
 
 export type ChatAccessResult<TSession> =
@@ -214,6 +215,7 @@ export async function loadUserAgentChatSession<
     ok: true,
     session: session as ChatSessionOf<TSelect>,
     agentId: session.agentId,
+    sharedConversationEnabled: identity.agent.crossTeamHomeTeamId == null,
   };
 }
 
