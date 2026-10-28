@@ -15,6 +15,10 @@ Quarantine is only for a flake whose cause is not yet found. A known cause is fi
 The timer report order row is that case. Its fixture rows use fixed startedAt values, and listReport breaks equal startedAt by id, so it is not quarantined.
 A different SHA is counted only as a same-code flake: the ci-tests or browser-smoke job passed on that SHA, and the diff touches neither src/, e2e/, nor the failing test file.
 
+Chat startup is fixed in https://app.hypertask.ai/detail/project-15/8038.
+The resolved scope entry is removed below.
+Historical log-parser regression fixtures remain.
+
 ## Proven flaky tests (1)
 
 ### tests/htpr-7146-agent-scope-routes.test.cjs › MCP timer running/report and team presence forward the authenticated agent to real services
@@ -109,7 +113,7 @@ tests/mcp-transports.test.ts › actual routes preserve legacy SSE across instan
 ```
 - `3d6e341138014f07635813ec4b625851c4a5e4ef` failed https://github.com/hypertask-ai/hypertask/actions/runs/38015139209/attempts/1 then passed https://github.com/hypertask-ai/hypertask/actions/runs/38015139209/attempts/2
 
-## Same-code flakes across SHAs (89)
+## Same-code flakes across SHAs (88)
 
 These failed on one SHA and passed on another SHA whose diff does not change app code or the failing test. They are not quarantined unless the same SHA itself failed and later passed at least twice.
 
@@ -883,18 +887,6 @@ Log line:
 e2e/smoke/layout-lock.spec.ts › layout baseline: inbox
 ```
 - `0c62f16125dbf93d90f3145b39d773146c94e0a2` failed https://github.com/hypertask-ai/hypertask/actions/runs/38434846135/job/115426048580 then passed https://github.com/hypertask-ai/hypertask/actions/runs/38447609740/job/115470695014
-
-### e2e/smoke/prod.spec.ts › docked AI chat follows the viewed board and keeps hand picks board-local @id:chat-follows-board
-
-Distinct SHAs: 1. Failing attempts: 1.
-
-Log line:
-
-```
-Locator: getByTestId('ai-sidebar').locator('[data-ai-chat-scope]:visible > button').first()
-Error: element(s) not found
-```
-- `db996c272a34fc3b2ee9e58693bb594c5edb24d4` failed https://github.com/hypertask-ai/hypertask/actions/runs/40112766265/job/120927753363 then passed https://github.com/hypertask-ai/hypertask/actions/runs/40114868851/job/120933967914
 
 ### MCP and AI tool inputs trim titles and reject empty or overlong titles before mutation
 

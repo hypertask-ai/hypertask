@@ -20,7 +20,8 @@ test("phone cached composer keeps its draft and focus when Next publishes the de
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
+    "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true, useFlagReady: () => true },
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/lib/flags/keys": {
       HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket",
     },

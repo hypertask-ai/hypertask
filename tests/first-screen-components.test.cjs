@@ -42,7 +42,7 @@ const mocks = {
   'next/navigation': { usePathname: () => pathname, useRouter: () => ({ push: noop, refresh: noop }), useSearchParams: () => new URLSearchParams() },
   '@/lib/contexts/mobileContext': { MobileViewContext: mobile, useMobileView: () => React.useContext(mobile) },
   '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
-  '@/hooks/useFlag': { useFlag: () => false },
+  '@/hooks/useFlag': { useFlag: () => false, useFlagReady: () => true },
   '@/hooks/Task Detail/useTimeTracking': { useBoardRunningTimers: () => ({ showTimeTotals: false, timers: new Map(), timeTotals: new Map() }) },
   '@/components/PageComponents/TaskDetail/TaskInfoColumn/TaskTime': { useTimerNow: () => Date.parse(snapshot.now), formatElapsed: () => '' },
   '@/hooks/Homepage/Views/useKanbanViews': { __esModule: true, default: () => ({ switchViewHandler: noop, resetView: noop }) },

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { errorPageHeading } from './lib/errorPage'
 import { withRealtime } from './lib/realtime'
 import { tieredId } from './lib/tier'
+import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from '../../src/lib/firstScreen/boardDisplay'
 
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
@@ -325,6 +326,72 @@ test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-
   expect(await title.inputValue()).toBe(fixture.title)
   expect(await description.isVisible()).toBe(true)
   expect(documentRequests, 'card click must not reload the document').toBe(0)
+})
+
+test('chat opener waits for hydration before accepting its first click', { tag: ['@id:chat-open-hydration'] }, async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  const mobile = testInfo.project.name === 'Mobile'
+  const flags = await (await page.request.get('/api/flags')).json()
+  expect(flags.flags['htpr-8038-chat-opener-ready']).toBe(true)
+  await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
+  const opener = page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true })
+  const user = await (await page.request.get('/api/users/getById')).json()
+  await expect.poll(async () => (await page.context().cookies()).some(cookie => cookie.name === BOARD_DISPLAY_COOKIE)).toBe(true)
+  const cookie = (await page.context().cookies()).find(cookie => cookie.name === BOARD_DISPLAY_COOKIE)
+  if (!cookie) throw new Error('Missing warm-user display cookie')
+  const display = parseBoardDisplay(decodeURIComponent(cookie.value), Number(user.id), { desktopChat: true })
+  if (!display) throw new Error('Invalid warm-user display cookie')
+  await page.context().addCookies([{ ...cookie, value: encodeURIComponent(JSON.stringify({ ...display,
+    board: { ...display.board, openChat: false, chatSuppressed: true, chatPinned: false },
+  })) }])
+  await page.addInitScript(() => {
+    const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
+    localStorage.setItem('recoil-persist', JSON.stringify({ ...saved,
+      aiChatAutoOpenSuppressed: true, aiChatPinned: false, openAiChatByDefault: false,
+    }))
+    document.addEventListener('click', event => {
+      if (!(event.target instanceof Element)) return
+      const button = event.target.closest('button')
+      if (!button || (button.getAttribute('aria-label') !== 'Open AI chat' && button.textContent?.trim() !== 'AI')) return
+      const key = Reflect.ownKeys(button).find(key => String(key).startsWith('__reactProps$'))
+      const props = key ? Reflect.get(button, key) : undefined
+      document.documentElement.dataset.chatOpenerClicks = String(Number(document.documentElement.dataset.chatOpenerClicks ?? '0') + 1)
+      document.documentElement.dataset.chatOpenerHandler = String(typeof props?.onClick === 'function')
+      document.documentElement.dataset.chatOpenerRoute = location.pathname + location.search
+    }, true)
+  })
+  const bootstrap = Promise.withResolvers<void>()
+  await page.route('**/_next/static/**', async route => {
+    if (route.request().resourceType() === 'script') await bootstrap.promise
+    await route.continue()
+  })
+  try {
+    await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'commit' })
+    await expect(opener).toBeVisible()
+    await expect(opener).toBeDisabled()
+    await expect(opener).toHaveAttribute('aria-busy', 'true')
+    const clicked = opener.click()
+    bootstrap.resolve()
+    await clicked
+    const click = await page.evaluate(() => ({ count: document.documentElement.dataset.chatOpenerClicks, handler: document.documentElement.dataset.chatOpenerHandler }))
+    expect(click).toEqual({ count: '1', handler: 'true' })
+    const scope = page.getByTestId('ai-sidebar').locator('[data-ai-chat-scope]:visible > button').first()
+    await expect(scope).toBeVisible()
+    await scope.click()
+    await expect(page.locator('#option-picker')).toBeVisible()
+  } finally {
+    bootstrap.resolve()
+    if (!page.isClosed()) {
+      const startup = await page.evaluate(() => ({ route: location.pathname + location.search,
+        clickRoute: document.documentElement.dataset.chatOpenerRoute,
+        clicks: document.documentElement.dataset.chatOpenerClicks,
+        handler: document.documentElement.dataset.chatOpenerHandler,
+        sidebar: document.querySelector('[data-testid="ai-sidebar"]') !== null,
+      })).catch(() => null)
+      console.log('[chat opener startup]', JSON.stringify(startup))
+    }
+  }
 })
 
 // Positive and negative controls for the error-screen check every view below relies on (YPER4-304).
