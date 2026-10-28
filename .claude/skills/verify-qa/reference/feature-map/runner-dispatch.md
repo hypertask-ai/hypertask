@@ -68,6 +68,13 @@ For live proof, use disposable Fleet Infra fixtures assigned only to this
 runner, clearly marked as synthetic. Give both a same-runner freeze-block
 comment and the Agent Blocked section. Use an isolated `RUNNER_INBOX_DIR`,
 record the synthetic lift there, then post a newer block on the control.
+Restrict `RUNNER_PICKUP_VCC` task-list responses to these actual fixture rows,
+read through `vcc`; forward all mutations to `vcc` unchanged and refuse any
+non-fixture ticket. Suppress inbox delivery in this isolated adapter. A local
+state directory alone does not stop drain from selecting other assigned work.
+For the renewed-section control, post its freeze comment before the lift,
+then move it out of and back into Agent Blocked afterward without another
+comment. It must remain blocked too.
 Run the installed drain command: the older fixture must move to In Progress
 and gain an agent audit; the newer control must stay blocked. Drain again: the
 ready handoff must repeat without another move or audit. Acknowledge only this
