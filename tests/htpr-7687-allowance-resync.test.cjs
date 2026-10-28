@@ -17,7 +17,7 @@ function stubModule(relativePath, exports) {
 
 let client;
 let resyncFlagOn = true;
-stubModule("src/lib/ai/gatewayReport.ts", { gatewayReport: (apiKey, params, signal) => fetch(`https://ai-gateway.vercel.sh/v1/report?${params}`, { signal, cache: "no-store", headers: { Authorization: `Bearer ${apiKey}` } }) });
+stubModule("src/lib/ai/gatewayReport.ts", { withBackgroundReportBudget: work => work(), gatewayReport: (apiKey, params, signal) => fetch(`https://ai-gateway.vercel.sh/v1/report?${params}`, { signal, cache: "no-store", headers: { Authorization: `Bearer ${apiKey}` } }) });
 stubModule("src/lib/ai/dailyGatewaySpend.ts", { checkDailyGatewaySpend: async () => {} });
 stubModule("src/lib/redis.ts", { getRedis: async () => client });
 const resyncFlagUsers = [];

@@ -1,7 +1,7 @@
 {
   "src/lib/ai/gatewayReport.ts:94299875379822911d9aff799438fb282ed172d0927c1314dd56fbbf881fc96c": {
     "maxUsdPerDay": 0.12,
-    "reason": "Automatic /report calls are atomically limited to 24 per rolling day. Estimate uses the ticket measurement: four calls cost $0.02. On-demand Settings remains unchanged.",
+    "reason": "Cron /report calls are atomically limited to 24 per rolling day. Foreground initialization and resync are unchanged; this is not a global allowance-request cost bound. Estimate uses the ticket measurement: four calls cost $0.02. On-demand Settings remains unchanged.",
     "source": "https://app.hypertask.ai/detail/project-4060/873#comment-324281"
   },
   "src/lib/ai/dailyGatewaySpend.ts:2394cf5434731cc3ecc06818fbdd180a01478cdff2d2aed1e9daa6d348344cde": {

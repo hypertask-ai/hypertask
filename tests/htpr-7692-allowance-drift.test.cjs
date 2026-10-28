@@ -37,7 +37,7 @@ let hourlyFails;
 let hourlyCalls;
 let hourlyParams;
 
-stub("src/lib/ai/gatewayReport.ts", { gatewayReport: (apiKey, params, signal) => fetch(`https://ai-gateway.vercel.sh/v1/report?${params}`, { signal, cache: "no-store", headers: { Authorization: `Bearer ${apiKey}` } }) });
+stub("src/lib/ai/gatewayReport.ts", { withBackgroundReportBudget: work => work(), gatewayReport: (apiKey, params, signal) => fetch(`https://ai-gateway.vercel.sh/v1/report?${params}`, { signal, cache: "no-store", headers: { Authorization: `Bearer ${apiKey}` } }) });
 stub("src/lib/ai/dailyGatewaySpend.ts", { checkDailyGatewaySpend: async () => {} });
 stub("src/lib/redis.ts", { getRedis: async () => redis });
 stub("src/lib/flags.ts", { isFeatureEnabled: async (key) => {

@@ -23,6 +23,7 @@ const { GET } = load("src/app/api/cron/ai-allowance-drift/route.ts", {
   "@/lib/ai/allowanceDriftCheck": { checkActiveTeamAllowanceDrift: async () => counts },
   "@/lib/ai/billedAllowanceRefresh": { refreshActiveBilledAllowances: async () => {} },
   "@/lib/ai/dailyGatewaySpend": { checkDailyGatewaySpend },
+  "@/lib/ai/gatewayReport": { withBackgroundReportBudget: work => work() },
   "@/lib/cronAuthorization": { hasValidCronAuthorization: () => authorized },
 });
 const nativeFetch = global.fetch;

@@ -10,7 +10,7 @@ const redis = { set: async (key, value, ...options) => {
   expires = now + 3600000;
   return "OK";
 }, hgetall: async () => ({}), eval: async () => 0 };
-const { gatewayReport } = load("src/lib/ai/gatewayReport.ts", { "@/lib/redis": { getRedis: async () => redis } });
+const { gatewayReport, withBackgroundReportBudget } = load("src/lib/ai/gatewayReport.ts", { "@/lib/redis": { getRedis: async () => redis } });
 const classification = load("src/lib/aiUsageClassification.ts");
 const billed = load("src/app/api/ai/_lib/billedAllowance.ts", {
   "@/lib/ai/gatewayReport": { gatewayReport },
@@ -45,9 +45,9 @@ test.beforeEach(() => {
 });
 test.afterEach(() => { global.fetch = nativeFetch; });
 const period = { startDate: "2026-10-01", endDate: "2026-10-28" };
-const breakdown = () => billed.gatewaySpendBreakdownMicroUsd("fixture-key", "team", period.startDate, period.endDate);
-const hourly = () => shared.gatewayHourlySpend("other-fixture-key", "other-team", period.startDate, period.endDate);
-const demo = () => billed.demoGatewaySpendMicroUsd("demo-fixture-key", period);
+const breakdown = () => withBackgroundReportBudget(() => billed.gatewaySpendBreakdownMicroUsd("fixture-key", "team", period.startDate, period.endDate));
+const hourly = () => withBackgroundReportBudget(() => shared.gatewayHourlySpend("other-fixture-key", "other-team", period.startDate, period.endDate));
+const demo = () => withBackgroundReportBudget(() => billed.demoGatewaySpendMicroUsd("demo-fixture-key", period));
 
 test("the three automated report entry points share one rolling hourly budget", async () => {
   const results = await Promise.allSettled(Array.from({ length: 30 }, (_, i) => [breakdown, hourly, demo][i % 3]()));
@@ -89,8 +89,39 @@ test("a cancelled report neither fetches nor consumes the budget", async () => {
 test("exhausted report budget preserves the real billed-admission estimate fallback", async () => {
   await breakdown();
   const period = new Date().toISOString().slice(0, 7);
-  const result = await billed.effectiveAccountingSource({ teamId: "team", kind: "month", period,
-    funding: { apiKey: "fixture-key", provenance: "managed-fixture" } });
+  const result = await withBackgroundReportBudget(() => billed.effectiveAccountingSource({ teamId: "team", kind: "month", period,
+    funding: { apiKey: "fixture-key", provenance: "managed-fixture" } }));
   assert.deepEqual(result, { mode: "v1", key: `ai-allowance-billed:v1:month:${period}:team` });
   assert.equal(requests.length, 1);
+});
+
+
+test("foreground month, day, demo and other teams remain usable after a background report", async () => {
+  await breakdown();
+  assert.deepEqual(await billed.gatewaySpendBreakdownMicroUsd("fixture-key", "team", "2026-10-28", "2026-10-28"),
+    { legacySystemMicroUsd: 0, systemMicroUsd: 0, totalMicroUsd: 0, visibleMicroUsd: 0 });
+  assert.equal(await billed.demoGatewaySpendMicroUsd("demo-fixture-key", period), 0);
+  assert.equal(await shared.gatewayHourlySpend("fixture-key", "other-team", period.startDate, period.endDate), null);
+  await assert.rejects(hourly, /hourly budget exhausted/);
+  assert.equal(requests.length, 4);
+});
+
+test("the authenticated cron enforces the budget through its real dispatch wrapper", async () => {
+  const { GET } = load("src/app/api/cron/ai-allowance-drift/route.ts", {
+    "next/server": { NextResponse: { json: Response.json } },
+    "@/lib/ai/gatewayReport": { withBackgroundReportBudget },
+    "@/lib/ai/dailyGatewaySpend": { checkDailyGatewaySpend: async () => {} },
+    "@/lib/ai/billedAllowanceRefresh": { refreshActiveBilledAllowances: () => billed.gatewaySpendBreakdownMicroUsd("fixture-key", "team", period.startDate, period.endDate) },
+    "@/lib/ai/allowanceDriftCheck": { checkActiveTeamAllowanceDrift: () => shared.gatewayHourlySpend("fixture-key", "team", period.startDate, period.endDate) },
+    "@/lib/cronAuthorization": { hasValidCronAuthorization: () => true },
+  });
+  const previous = { NODE_ENV: process.env.NODE_ENV, VERCEL_ENV: process.env.VERCEL_ENV };
+  try {
+    process.env.NODE_ENV = "production"; process.env.VERCEL_ENV = "production";
+    const response = await GET(new Request("https://app.hypertask.ai/api/cron/ai-allowance-drift"));
+    assert.equal(response.status, 503);
+    assert.equal(requests.length, 1);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
 });

@@ -33,3 +33,34 @@ Save before/after response status and safe payload, the selected team, productio
 ## Cleanup
 
 Read-only checks need no cleanup. Never reveal saved keys or authentication state. Key replacement costs money and belongs to Valentin.
+
+## Automatic reporting cost controls
+
+Sources: `src/lib/ai/gatewayReport.ts`,
+`src/lib/ai/dailyGatewaySpend.ts`, and
+`src/app/api/cron/ai-allowance-drift/route.ts`.
+
+- Entry point: the authenticated production allowance cron. An unauthenticated
+  GET must remain 401; non-production invocations do not read credits.
+- Read both `htpr-7692-allowance-drift-check` and `htpr-7692-billed-cost` modes
+  through `ht-flag get`; never enable them merely for QA.
+- Use production cron logs for the merged deployment to prove hourly
+  `ai-gateway-credit-observation` records even while both switches are Off.
+  These contain only time, balance, cumulative spend and cumulative funding.
+  Missing credentials, malformed metadata or failed credit reads make the cron
+  return 503 rather than a false clean result.
+- Confirm ordinary Settings reports still load through their existing
+  on-demand path. Do not repeatedly buy reports for QA.
+- The cron's metered transports share one rolling-hour Redis reservation.
+  Foreground admission and resync remain outside this async-local budget.
+  The narrower background-only scope requires the ticket owner's approval.
+  Prove concurrency, upstream failure, Redis refusal and estimate fallback
+  with `tests/yper4-873-paid-reports.test.cjs`; never manufacture paid live
+  traffic to fill that budget.
+- Prove the $5 alert, day boundary and existing daily fingerprint using
+  `tests/yper4-873-daily-spend.test.cjs`. Never spend money to trigger an alert.
+- Save actual funding observations or provider credit history spanning at
+  least 24 hours. No increase in cumulative funding proves no top-up over
+  that observed window; a single balance or a passing fixture cannot.
+- Label unavailable production logs and incomplete time windows UNREACHABLE,
+  not PASS. Keep the ticket open until its no-top-up requirement is proven.

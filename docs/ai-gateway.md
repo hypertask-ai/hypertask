@@ -258,14 +258,17 @@ root-route redirect; server-side AI entitlement is HTPR-4130.
 
 ## Automatic report budget and daily spend alarm
 
-Automatic allowance reporting shares one rolling-hour Redis reservation across
+Allowance cron reporting shares one rolling-hour Redis reservation across
 the billed snapshot, demo snapshot and hourly drift transports. It is reserved
 before the paid `/v1/report` request, across all workers and credentials. A failed
 request still consumes that hour; unavailable Redis refuses the request. No
 report cache pretends an old response is newly fetched. The existing billed
 snapshot age limit and estimate-accounting fallback are unchanged.
 
-This budget covers automatic reporting only. The existing Settings usage page
+This budget covers the background cron only, using async-local request scope.
+Foreground allowance initialization and resync are unchanged; restricting them
+would break cold month/day admission and system-lane recovery. This narrower
+limit needs the ticket owner's approval before release. The existing Settings usage page
 still makes its three explicit, on-demand reports; putting that three-request
 page behind a one-request budget would make it permanently unavailable.
 
