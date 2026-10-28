@@ -1004,10 +1004,13 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
   if (fn?.asteriskToken || fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
-      fn?.parameters.some((parameter) => parameter.initializer)) return false;
-  for (let parent = node.parent; parent && !typescript.isFunctionLike(parent); parent = parent.parent) {
-    if (typescript.isTryStatement(parent)) return false;
+      fn?.parameters.some((parameter) => parameter.initializer && staticBoolean(parameter.initializer, true) === null)) return false;
+  for (let child = node, parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
+    if (typescript.isTryStatement(parent) ||
+        (typescript.isIfStatement(parent) && child !== parent.expression)) return false;
   }
+  const parameterNames = new Set(fn?.parameters.filter((parameter) => typescript.isIdentifier(parameter.name))
+    .map((parameter) => parameter.name.text));
   const localBindings = new Set();
   (function visit(item) {
     if (typescript.isVariableDeclaration(item)) {
@@ -1035,13 +1038,15 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
         const other = child === parent.left ? parent.right : parent.left;
         let repeated = false;
         (function visit(item) {
-          if (typescript.isIdentifier(item) && (item.text === node.text || localBindings.has(item.text))) repeated = true;
+          if (typescript.isIdentifier(item) && (item.text === node.text || localBindings.has(item.text) ||
+              (parameterNames.has(item.text) && !(typescript.isPropertyAccessExpression(item.parent) &&
+                item.parent.expression === item)))) repeated = true;
           if (!repeated) typescript.forEachChild(item, visit);
         })(other);
         if (repeated) return false;
-        const value = staticBoolean(other);
-        if ((child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
-            (child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
+        const value = staticBoolean(other, true);
+        if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
+            (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
         continue;
       }
       const other = child === parent.left ? parent.right : parent.left;
@@ -1049,7 +1054,8 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
            parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsEqualsToken) &&
-          staticBoolean(other) !== null) continue;
+          [typescript.SyntaxKind.TrueKeyword, typescript.SyntaxKind.FalseKeyword]
+            .includes(unwrapArgumentExpression(other).kind)) continue;
       return false;
     }
     if (typescript.isIfStatement(parent) && child === parent.expression) {
@@ -1160,13 +1166,16 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   if (!renderFunctions.has(enclosingFunctionLike(call)) && !controlsRuntimeBranch(call, false)) return false;
   return gatesRuntimeBehavior(call, checker, sourceFile,
     (reference) => renderFunctions.has(enclosingFunctionLike(reference)) &&
-      controlsReturnedValue(reference, { earlyOnly: true, after: call }), live);
+      controlsReturnedValue(reference, { earlyOnly: true, after: call }), live,
+    (value) => renderFunctions.has(enclosingFunctionLike(value))
+      ? controlsReturnedValue(value, { earlyOnly: true }) : controlsRuntimeBranch(value, false));
 }
 
-function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null) {
+function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null,
+    directGates = controlsRuntimeBranch) {
   const live = liveFunctions ?? collectLiveFunctions(sourceFile, checker);
   if (!callEnclosingFunctionIsLive(call, sourceFile, checker, live)) return false;
-  if (controlsRuntimeBranch(call)) return true;
+  if (directGates(call)) return true;
   const assigned = assignedGateSymbol(call, checker);
   if (!assigned?.symbol) return false;
 

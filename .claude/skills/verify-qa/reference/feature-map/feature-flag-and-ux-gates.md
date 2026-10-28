@@ -40,7 +40,8 @@ Do not change that PR, its flag, or its ticket during verification.
 Hosted `tests/feature-flag-gate.test.cjs` must prove all five formatter groups: aliased parameters, explicit live return branches, rendered consumers, return truthiness and invariant guards.
 These fixtures exercise the real `evaluate` entry point with committed repositories, not copied helpers.
 The allowed controls include relative and `@/` imports, top-level early returns and boolean negation.
-Refused controls include ignored or overwritten parameters, nested contradictory guards, exception overrides, invariant comparisons, conditional guards, parameter defaults and discarded output.
+Refused controls include ignored or overwritten parameters, nested contradictory guards, exception overrides, invariant comparisons, conditional guards, correlated parameters, dependent parameter defaults, truthy masks and discarded output.
+Constant defaults remain supported; direct formatter calls use the same consumer proof as assigned results.
 Save the tested head SHA, hosted run URL and successful group lines.
 A local AST reproduction supplements those results; it does not replace evaluator or trusted-workflow proof.
 No app output changes, so theme screenshots and customer-data writes are unnecessary.

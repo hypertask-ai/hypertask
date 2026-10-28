@@ -2376,6 +2376,7 @@ test('aliased formatter parameters gate real output, not ignored or overwritten 
     ['aliased return', '@/lib/formatter', 'return enabled ? "Age" : null;', true],
     ['early null return', '@/lib/formatter', 'if (!enabled) return null; return "Age";', true],
     ['compound early return', '@/lib/formatter', 'if ((!enabled && data.fresh) || data.missing) { return null; } const suffix = data.days; return `Age ${suffix}`;', true],
+    ['constant default parameter', '@/lib/formatter', 'if (!enabled) return null; return "Age";', true, 'function', 'data, enabled = false'],
     ['if else return', '@/lib/formatter', 'if (enabled) { return "Age"; } else { return null; }', true],
     ['finally overrides early returns', '@/lib/formatter', 'try { if (!enabled) return null; return "Age"; } finally { return "Age"; }', false],
     ['finally overrides conditional return', '@/lib/formatter', 'try { return enabled ? "Age" : null; } finally { return "Age"; }', false],
@@ -2406,9 +2407,9 @@ test('aliased formatter parameters gate real output, not ignored or overwritten 
     ['external module', 'formatter', 'if (!enabled) return null; return "Age";', false],
     ['outside source alias', '@/../formatter', 'if (!enabled) return null; return "Age";', false],
   ];
-  for (const [name, moduleName, body, expected, declaration = 'function'] of cases) {
+  for (const [name, moduleName, body, expected, declaration = 'function', parameters = 'data, enabled'] of cases) {
     const { dir, git } = makeRepo(t), base = commit(git, 'base');
-    const helper = `export ${declaration} format(data, enabled) { ${body} }\n`;
+    const helper = `export ${declaration} format(${parameters}) { ${body} }\n`;
     const helperPath = moduleName === './formatter' ? 'src/components/formatter.ts' : 'src/lib/formatter.ts';
     writeFile(dir, helperPath, helper);
     writeFile(dir, 'src/components/Widget.tsx', `import {useFlag} from "@/hooks/useFlag";
@@ -2516,6 +2517,12 @@ test('early-return formatter truthiness refuses always-visible branches', async 
 
 test('invariant formatter guards cannot prove an early-return gate', async (t) => {
   const cases = [
+    ['correlated parameter contradiction', 'enabled, inverse', 'if (enabled && inverse) return null; return "Age";', 'const label = format(enabled, !enabled); if (!label) return null; return <p>Age</p>;'],
+    ['correlated parameter tautology', 'enabled, inverse', 'if (enabled || inverse) return "Age"; return null;', 'const label = format(enabled, !enabled); if (!label) return null; return <p>Age</p>;'],
+    ...['undefined', 'null', '"yes"', '0'].map(value => ['impossible comparison ' + value, 'enabled', `if (enabled === ${value}) return null; return "Age";`, 'const label = format(enabled); if (!label) return null; return <p>Age</p>;']),
+    ...['{}', '[]', '`Age ${enabled}`', '() => {}'].map(value => ['truthy mask ' + value, 'enabled', `if (enabled || ${value}) return "Age"; return null;`, 'const label = format(enabled); if (!label) return null; return <p>Age</p>;']),
+    ['nested conditional return', 'enabled', 'if (enabled) return enabled ? "Age" : null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['impossible direct consumer', 'enabled', 'if (!enabled) return null; return "Age";', 'if (format(enabled) !== undefined) return <p>Age</p>; return null;'],
     ['invariant ternary helper', 'enabled', 'if (enabled ? !enabled : false) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
     ['invariant alternate ternary helper', 'enabled', 'if (enabled ? false : enabled) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
     ['default parameter contradiction', 'enabled, inverse = !enabled', 'if (enabled && inverse) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
