@@ -202,11 +202,41 @@ record_lift() {
   echo "runner-pickup: freeze lift recorded at $NOW"
 }
 
+finish_recovery() {
+  local n=$1 pending=$2 intent ticket current section payload
+  intent=$(cat "$pending") || return 1
+  ticket=$(jq -er '.ticket' <<<"$intent") || return 1
+  current=$(board "$n" task get "$ticket" --json) || return 1
+  jq -e --argjson intent "$intent" '.success == true and (.tasks | length) == 1
+    and .tasks[0].projectId == $intent.projectId
+    and .tasks[0].status == "Normal" and .tasks[0].blockerCommentId == null
+    and any(.tasks[0].assignees[]?; .agent.displayName == $intent.runner)' <<<"$current" >/dev/null || return 1
+  section=$(jq -r '.tasks[0].section' <<<"$current")
+  if [[ $section =~ ^(Agent\ Blocked(\ \(Infra\))?|Blocked)$ ]]; then
+    payload=$(jq -c '{ticket_number: .ticket, sectionId, expected_section_id, expected_updated_at}' <<<"$intent") || return 1
+    board "$n" raw POST /mcp/tasks/update "$payload" >/dev/null || return 1
+    current=$(board "$n" task get "$ticket" --json) || return 1
+    section=$(jq -er 'select(.success == true) | .tasks[0].section' <<<"$current") || return 1
+  fi
+  if [ "$section" != 'In Progress' ]; then rm -f "$pending"; return 0; fi
+  jq -e --argjson intent "$intent" '.success == true and (.tasks | length) == 1
+    and .tasks[0].projectId == $intent.projectId and .tasks[0].sectionId == $intent.sectionId
+    and .tasks[0].status == "Normal" and .tasks[0].blockerCommentId == null
+    and any(.tasks[0].assignees[]?; .agent.displayName == $intent.runner)' <<<"$current" >/dev/null || return 1
+  board "$n" activity add "$ticket" "Resuming after freeze lift $(jq -r .lift <<<"$intent"): earlier runner block comment $(jq -r .block <<<"$intent") is superseded. Current checks still apply." >/dev/null || return 1
+  printf 'Resume %s: stale freeze block cleared; finish existing work first.\n' "$ticket" || return 1
+  rm -f "$pending"
+}
+
 recover_blocks() {
-  local n=$1 mode=$2 resp=$3 lift candidates ticket comments block
+  local n=$1 mode=$2 resp=$3 lift candidates ticket comments block project sections destination intent pending="$STATE/runner-$1.recovery.json"
   RECOVERED=$resp
   lift=$(cat "$STATE/freeze-lift" 2>/dev/null) || return 0
   [[ $lift =~ ^[1-9][0-9]*$ ]] && [ "$lift" -le "$NOW" ] || return 0
+  if [ "$mode" = drain ] && [ -s "$pending" ]; then
+    finish_recovery "$n" "$pending"
+    return $?
+  fi
   candidates=$(jq -r --arg name "Runner $n" '.tasks[]
     | select(.projectId == 15 or .projectId == 4060)
     | select(any(.assignees[]?; .agent.displayName == $name))
@@ -227,14 +257,23 @@ recover_blocks() {
       | select((.createdAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) < $lift)
       | (.text // .commentText // "" | gsub("<[^>]*>"; " ") | gsub("&nbsp;"; " ") | sub("^\\s+"; "")) as $text
       | select($text | test("^Blocked[;:. ]"; "i"))
-      | select($text | test("freeze|MERGE_FREEZE|GitHub (API )?limit"; "i"))
+      | select($text | gsub("\\s+"; " ") | sub("\\s+$"; "")
+        | test("^Blocked( on HT Product Lead)?[;:. ]+((Release |merge )?freeze( active)?|MERGE_FREEZE|GitHub (API )?limit)[.! ]*$"; "i"))
       | select($text | test("Question:|money|keys|approval|sign.off"; "i") | not)
       | .id' <<<"$comments") || continue
     if [ "$mode" = drain ]; then
-      board "$n" activity add "$ticket" "Resuming after freeze lift $lift: earlier runner block comment $block is superseded. Current checks still apply." >/dev/null || return 1
-      board "$n" task move "$ticket" --section "In Progress" >/dev/null || return 1
-      board "$n" task get "$ticket" --json | jq -e '.success == true and .tasks[0].section == "In Progress"' >/dev/null || return 1
-      printf 'Resume %s: stale freeze block cleared; finish existing work first.\n' "$ticket"
+      project=$(jq -er --arg ticket "$ticket" '.tasks[] | select(.ticketNumber == $ticket) | .projectId' <<<"$resp") || return 1
+      sections=$(board "$n" sections list --project "$project" --json) || return 1
+      destination=$(jq -er 'select(.success == true and (.nextCursor // null) == null)
+        | [.sections[] | select(.section_title == "In Progress" and .deleted != true)]
+        | select(length == 1) | .[0].id' <<<"$sections") || return 1
+      intent=$(jq -ce --arg ticket "$ticket" --arg runner "Runner $n" --argjson lift "$lift" --argjson block "$block" --argjson destination "$destination" '
+        .tasks[] | select(.ticketNumber == $ticket)
+        | select((.sectionId | type) == "number" and (.updatedAt | type) == "string")
+        | {ticket: $ticket, runner: $runner, lift: $lift, block: $block, projectId,
+           sectionId: $destination, expected_section_id: .sectionId, expected_updated_at: .updatedAt}' <<<"$resp") || return 1
+      printf '%s\n' "$intent" > "$pending.tmp.$$" && mv "$pending.tmp.$$" "$pending" || return 1
+      finish_recovery "$n" "$pending" || return 1
       break
     fi
     RECOVERED=$(jq -c --arg ticket "$ticket" --argjson lift "$lift" '.tasks |= map(if .ticketNumber == $ticket then . + {resumeAfterFreeze: $lift} else . end)' <<<"$RECOVERED") || return 1

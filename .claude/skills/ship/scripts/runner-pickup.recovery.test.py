@@ -18,8 +18,8 @@ class RecoveryTests(unittest.TestCase):
         self.tasks = {'success': True, 'total': 1, 'tasks': [{
             'ticketNumber': 'YPER4-1', 'uniqueIndex': 1, 'projectId': 4060,
             'section': 'Agent Blocked', 'title': 'Fixture',
-            'blockerCommentId': None, 'createdAt': '2026-10-27T10:00:00Z',
-            'updatedAt': '2026-10-28T10:00:00Z',
+            'sectionId': 20, 'status': 'Normal', 'blockerCommentId': None, 'createdAt': '2026-10-27T10:00:00Z',
+            'updatedAt': '2026-10-28T10:00:00.000Z',
             'assignees': [{'agent': {'displayName': 'Runner 6'}}],
         }]}
         self.comments = {'success': True, 'comments': [{
@@ -41,9 +41,15 @@ if a[:2] == ['task', 'list']:
     print(json.dumps(tasks))
 elif a[:2] == ['comment', 'list']: print((root / 'comments').read_text())
 elif a[:2] == ['inbox', 'list']: print('{"success":true,"agent_notifications":[]}')
-elif a[:2] == ['task', 'move']:
+elif a[:2] == ['sections', 'list']:
+    print('{"success":true,"sections":[{"id":30,"section_title":"In Progress"}]}')
+elif a[:2] == ['raw', 'POST']:
+    payload = json.loads(a[3])
+    task = next(t for t in tasks['tasks'] if t['ticketNumber'] == payload['ticket_number'])
+    if task['sectionId'] != payload['expected_section_id'] or task['updatedAt'] != payload['expected_updated_at']: sys.exit(1)
     if os.environ.get('FAIL_MOVE'): sys.exit(1)
-    next(t for t in tasks['tasks'] if t['ticketNumber'] == a[2])['section'] = 'In Progress'
+    task['section'] = 'In Progress'
+    task['sectionId'] = payload['sectionId']
     (root / 'tasks').write_text(json.dumps(tasks))
 elif a[:2] == ['task', 'get']:
     tasks['tasks'] = [t for t in tasks['tasks'] if t['ticketNumber'] == a[2]]
@@ -76,7 +82,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
         items = json.loads((self.state / 'runner-6.json').read_text())['items']
         self.assertEqual([i['ticket'] for i in items], ['YPER4-1'])
         self.assertEqual(items[0]['resumeAfterFreeze'], int(self.lift))
-        self.assertFalse(any(c[:2] == ['task', 'move'] for c in self.calls()))
+        self.assertFalse(any(c[:2] == ['raw', 'POST'] for c in self.calls()))
 
     def test_drain_moves_and_audits_once(self):
         result = self.run_command('drain', '6')
@@ -84,7 +90,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
         self.assertIn('Resume YPER4-1', result.stdout)
         self.assertEqual(json.loads((self.root / 'tasks').read_text())['tasks'][0]['section'], 'In Progress')
         self.assertEqual([c[:2] for c in self.calls()], [
-            ['task', 'list'], ['comment', 'list'], ['activity', 'add'], ['task', 'move'], ['task', 'get']])
+            ['task', 'list'], ['comment', 'list'], ['sections', 'list'], ['task', 'get'], ['raw', 'POST'], ['task', 'get'], ['activity', 'add']])
         self.tasks['tasks'][0]['section'] = 'In Progress'
         self.assertEqual(self.run_command('drain', '6').stdout, '')
         self.assertEqual(sum(c[:2] == ['activity', 'add'] for c in self.calls()), 1)
@@ -122,7 +128,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
                 result = self.run_command('drain', '6')
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout, '')
-        self.assertFalse(any(c[:2] == ['task', 'move'] for c in self.calls()))
+        self.assertFalse(any(c[:2] == ['raw', 'POST'] for c in self.calls()))
 
     def test_missing_invalid_future_epoch_and_partial_reads_never_clear(self):
         for lift in [None, 'invalid', '1793192400']:
@@ -137,7 +143,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
         self.tasks['total'] = 1
         self.comments['nextCursor'] = 'more'
         self.assertEqual(self.run_command('drain', '6').stdout, '')
-        self.assertFalse(any(c[:2] == ['task', 'move'] for c in self.calls()))
+        self.assertFalse(any(c[:2] == ['raw', 'POST'] for c in self.calls()))
 
     def test_explicit_blocker_review_parked_and_other_assignment_stay(self):
         original = self.tasks['tasks'][0].copy()
@@ -146,7 +152,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
                         {'assignees': [{'agent': {'displayName': 'Runner 7'}}]}]:
             self.tasks['tasks'] = [original | changes]
             self.assertEqual(self.run_command('drain', '6').stdout, '')
-        self.assertFalse(any(c[:2] == ['task', 'move'] for c in self.calls()))
+        self.assertFalse(any(c[:2] == ['raw', 'POST'] for c in self.calls()))
 
     def test_fresh_block_removes_an_earlier_recovery_from_pickup(self):
         self.assertEqual(self.run_command('run', '6').returncode, 0)
@@ -159,7 +165,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
             'id': 122, 'createdAt': '2026-10-26T10:00:00Z',
             'agent': None, 'text': '<p>Question: Allow this access?</p>'})
         self.assertEqual(self.run_command('drain', '6').stdout, '')
-        self.assertFalse(any(c[:2] == ['task', 'move'] for c in self.calls()))
+        self.assertFalse(any(c[:2] == ['raw', 'POST'] for c in self.calls()))
 
     def test_failed_move_is_not_reported_as_resumed(self):
         self.env['FAIL_MOVE'] = '1'
@@ -181,6 +187,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
             "elif a[:2] == ['comment', 'list']: print((root / 'comments').read_text())",
             "elif a[:2] == ['comment', 'list']:\n"
             "    tasks['tasks'][0]['section'] = 'Valentin Review'\n"
+            "    tasks['tasks'][0]['sectionId'] = 40\n"
             "    (root / 'tasks').write_text(json.dumps(tasks))\n"
             "    print((root / 'comments').read_text())"))
         result = self.run_command('drain', '6')
@@ -194,14 +201,51 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
         original = fake.read_text()
         fake.write_text(original.replace(
             "elif a[:2] == ['task', 'get']:",
-            "elif a[:2] == ['task', 'get']:\n    sys.exit(1)"))
+            "elif a[:2] == ['task', 'get']:\n    if tasks['tasks'][0]['section'] == 'In Progress': sys.exit(1)"))
         self.assertNotEqual(self.run_command('drain', '6').returncode, 0)
         self.tasks = json.loads((self.root / 'tasks').read_text())
         fake.write_text(original)
         result = self.run_command('drain', '6')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('Resume YPER4-1', result.stdout)
-        self.assertEqual(sum(c[:2] == ['task', 'move'] for c in self.calls()), 1)
+        self.assertEqual(sum(c[:2] == ['raw', 'POST'] for c in self.calls()), 1)
+
+    def test_new_hold_during_conditional_write_is_not_overwritten(self):
+        fake = self.root / 'vcc'
+        fake.write_text(fake.read_text().replace(
+            "    payload = json.loads(a[3])",
+            "    tasks['tasks'][0]['section'] = 'Valentin Review'\n"
+            "    tasks['tasks'][0]['sectionId'] = 40\n"
+            "    (root / 'tasks').write_text(json.dumps(tasks))\n"
+            "    payload = json.loads(a[3])"))
+        result = self.run_command('drain', '6')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertEqual(json.loads((self.root / 'tasks').read_text())['tasks'][0]['section'],
+                         'Valentin Review')
+
+    def test_new_revision_during_conditional_write_is_not_overwritten(self):
+        fake = self.root / 'vcc'
+        fake.write_text(fake.read_text().replace(
+            "    payload = json.loads(a[3])",
+            "    tasks['tasks'][0]['updatedAt'] = '2026-10-28T12:00:00.000Z'\n"
+            "    (root / 'tasks').write_text(json.dumps(tasks))\n"
+            "    payload = json.loads(a[3])"))
+        result = self.run_command('drain', '6')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertEqual(json.loads((self.root / 'tasks').read_text())['tasks'][0]['section'],
+                         'Agent Blocked')
+
+    def test_reassigned_move_does_not_emit_an_old_runner_handoff(self):
+        fake = self.root / 'vcc'
+        fake.write_text(fake.read_text().replace(
+            "    task['section'] = 'In Progress'",
+            "    task['assignees'] = [{'agent': {'displayName': 'Runner 7'}}]\n"
+            "    task['section'] = 'In Progress'"))
+        result = self.run_command('drain', '6')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
 
     def test_record_lift_persists_epoch(self):
         result = self.run_command('record-lift')

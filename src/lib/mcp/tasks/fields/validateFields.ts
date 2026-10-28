@@ -9,6 +9,17 @@ import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests
 import type { UpdateTaskBody } from './types';
 
 export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryRun: boolean) {
+    if (requestBody.expected_section_id !== undefined || requestBody.expected_updated_at !== undefined) {
+        const allowed = new Set(['task_id', 'project_id', 'ticket_number', 'unique_index', 'sectionId', 'expected_section_id', 'expected_updated_at', 'dry_run']);
+        if (typeof requestBody.expected_section_id !== 'number' || !Number.isSafeInteger(requestBody.expected_section_id) || requestBody.expected_section_id <= 0 || requestBody.expected_section_id > 2147483647 ||
+            typeof requestBody.expected_updated_at !== 'string' ||
+            !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(requestBody.expected_updated_at) ||
+            !Number.isFinite(Date.parse(requestBody.expected_updated_at)) || !requestBody.sectionId ||
+            Array.isArray(requestBody.task_id) || Array.isArray(requestBody.ticket_number) ||
+            Object.keys(requestBody).some(key => !allowed.has(key))) {
+            return NextResponse.json(buildFieldError('invalid_field', 'expected_section_id', 'Conditional moves require a section, a revision timestamp, and no other mutations'), { status: 400 });
+        }
+    }
     if (requestBody.inline_images !== undefined && typeof requestBody.inline_images !== "boolean") {
         return NextResponse.json(buildFieldError("invalid_field", "inline_images", "inline_images must be a boolean"), { status: 400 });
     }

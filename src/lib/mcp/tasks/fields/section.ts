@@ -22,7 +22,9 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
                 section_title: sectionInfo.section_title,
                 sectionId: requestBody.sectionId,
                 projectId: task.projectId,
-                agentId: ctx.agentId || undefined
+                agentId: ctx.agentId || undefined,
+                expectedSectionId: requestBody.expected_section_id,
+                expectedUpdatedAt: requestBody.expected_updated_at
             })
         })
         if (!moveResponse.ok) {
@@ -34,7 +36,7 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
                 )
             )
             if (moveResponse.status >= 400 && moveResponse.status < 500 &&
-                await isFeatureEnabled(HTPR_7990_TASK_MOVE_REFUSAL_FLAG, ctx.user.id)) {
+                (requestBody.expected_section_id !== undefined || await isFeatureEnabled(HTPR_7990_TASK_MOVE_REFUSAL_FLAG, ctx.user.id))) {
                 throw Object.assign(error, { status: moveResponse.status, code: 'task_move_refused' })
             }
             throw error

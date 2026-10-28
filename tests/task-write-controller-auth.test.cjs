@@ -1118,3 +1118,35 @@ test("column archive refuses changed targets and atomically binds the successful
   assert.equal(result.status, 409);
   assert.equal(calls.sideEffects, 0);
 });
+
+test("conditional movement preserves a newer hold or revision under the mutation fence", async () => {
+  const revision = new Date("2026-01-01T00:00:00Z");
+  for (const concurrentState of [
+    {},
+    { sectionId: SECTION_ID + 1, section: "Valentin Review" },
+    { updatedAt: new Date("2026-01-01T00:00:01Z") },
+    { status: "Archive" },
+  ]) {
+    const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, {
+      stateAtFence: concurrentState,
+    });
+    const result = await updateTaskSingle(
+      { id: TASK_ID, sectionId: SECTION_ID, section: "Todo" },
+      { id: USER_ID }, OWNED_AGENT,
+      { expectedProjectId: OWNER_PROJECT, expectedSectionId: SECTION_ID - 1,
+        expectedStatus: "Normal", expectedUpdatedAt: revision, skipAutoAssign: true, skipRecurrence: true,
+        taskMovedActivity: { fromAgent: { id: OWNED_AGENT, userId: USER_ID, displayName: "Runner 6" } } },
+    );
+    const conflict = Object.keys(concurrentState).length > 0;
+    assert.equal(result.status, conflict ? 409 : 200);
+    if (conflict) {
+      assert.equal(calls.order, undefined);
+      assert.equal(calls.sideEffects, 0);
+    } else {
+      assert.equal(result.json.section, "Todo");
+      assert.equal(result.json.sectionId, SECTION_ID);
+      assert.equal(calls.updateWhere.sectionId, SECTION_ID - 1);
+      assert.equal(calls.updateWhere.updatedAt.getTime(), revision.getTime());
+    }
+  }
+});
