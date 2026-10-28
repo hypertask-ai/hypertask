@@ -69,6 +69,7 @@ pr_job_budget:
       jobs: 2
       published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
       concurrency_group: feature-flag-gate-production
+      queue: max
       cancel_in_progress: false
     - workflow: .github/workflows/ux-signoff-gate.yml
       jobs: 1

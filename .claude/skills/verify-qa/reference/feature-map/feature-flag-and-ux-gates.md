@@ -12,7 +12,7 @@ After merge, observe the next production pull-request event. Require the per-PR 
 - A later run within 30 minutes skips PRs whose head, base, title and labels are unchanged (`skip #N: unchanged since its last status under 30 minutes ago`, then `evaluated N, skipped M`).
 - A rate limit shows as `GitHub API rate limited; waiting Ns until reset` and then a normal result, or as `::warning::skipped: GitHub rate limited until <time>` with a green job and no error status.
 
-The positive control is the per-PR feature-flag-gate job: it still judges and posts its own result. PR and fleet runs retain the same non-cancelling concurrency group so a sweep cannot race a PR verdict.
+The positive control is the per-PR feature-flag-gate job: it still judges and posts its own result. PR and fleet runs retain the same non-cancelling concurrency group so a sweep cannot race a PR verdict. The group uses GitHub `queue: max` to retain up to 100 pending PR runs; a burst beyond that limit cancels new arrivals until scheduled reconciliation. Inspect the production workflow for that setting and retain a queued-run example when available.
 
 ## What usually breaks
 
