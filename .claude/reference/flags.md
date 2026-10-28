@@ -115,4 +115,3 @@ Use one ticket-specific flag for new features, deliberate behavior/design change
 | Cleanup after 7 days for bugfixes, otherwise 14; money/access/deletion stay 14 | Feature-flag-removals cron files up to 10 tickets daily; never switches flags |
 
 Mechanical title exemptions are bounded heuristics, not permission to omit a required flag. Never retitle a PR or weaken a check to pass it. See [flag-release detail](../../.claude/reference/flags.md) and the gate implementation for syntax and thresholds.
-
