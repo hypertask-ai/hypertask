@@ -228,6 +228,20 @@ for section in 'In Progress' 'AI Review'; do
   SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "merged $section work holds" "$?" 4
 done
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-123 >/dev/null; eq "resuming the unfinished ticket stays allowed" "$?" 0
+jq '.tasks += [.tasks[0] | .ticketNumber="HTPR-124" | .uniqueIndex=124] | .total=2' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
+printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"},{"number":43,"title":"HTPR-124 [BUGFIX] Other unfinished work"}]' > "$HOLD_MERGED"
+for ticket in HTPR-123 HTPR-124; do
+  SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold "$ticket" >/dev/null; eq "resuming $ticket succeeds despite other unfinished merged work" "$?" 0
+done
+: > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "two unfinished merged tickets still hold new claims" "$?" 4
+[ ! -s "$D/log" ] && ok "multiple unfinished tickets prevent new claim writes" || bad "multiple unfinished tickets wrote a claim"
+printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX] Open work"}]' > "$HOLD_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-456 >/dev/null; eq "open PR resumption survives other merged work" "$?" 0
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-123 >/dev/null; eq "merged work resumption survives another open PR" "$?" 0
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "mixed open and merged work still holds new claims" "$?" 4
+printf '[]' > "$HOLD_OPEN"
+jq '.tasks=[.tasks[0]] | .total=1' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
+printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
 for section in Done 'Flag: Everyone' 'Flag: Only Me + QA' 'Flag: Off'; do
   jq --arg s "$section" '.tasks[0].section=$s' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
   SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "settled $section work permits the next claim" "$?" 0
@@ -275,9 +289,19 @@ SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1; eq "sa
 printf '[]' > "$HOLD_OPEN"
 jq '[range(100)|{number:.,title:"Other work"}]' -n > "$HOLD_MERGED"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1; eq "saturated merged PR list refuses" "$?" 4
+printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
 printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX] Open work"}]' > "$HOLD_OPEN"
-: > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "existing open-PR hold is preserved" "$?" 4
+: > "$D/log"; out=$(SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999); rc=$?; eq "existing open-PR hold is preserved" "$rc" 4
+[[ $out == *'still has open PRs'* && $out == *'/pull/99'* ]] && ok "open-PR hold still names its PR" || bad "wrong open-PR refusal: $out"
 [ ! -s "$D/log" ] && ok "open-PR hold still precedes board writes" || bad "open-PR hold wrote to board"
+printf '[{"number":99,"headRefName":"runner6/yper4-999","title":"YPER4-999 [INFRA] Existing open work"}]' > "$HOLD_OPEN"
+: > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "actual claim dispatch resumes an open PR despite merged work" "$?" 0
+grep -q '^task move YPER4-999 --section In Progress' "$D/log" && ok "recognized open work reaches the claim move" || bad "open resumption failed to write"
+printf '[]' > "$HOLD_OPEN"
+jq '.tasks += [.tasks[0] | .ticketNumber="YPER4-999" | .projectId=4060 | .uniqueIndex=999] | .total=2' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
+printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"},{"number":99,"title":"YPER4-999 [INFRA] Existing merged work"}]' > "$HOLD_MERGED"
+: > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "actual claim dispatch resumes merged work despite another unfinished ticket" "$?" 0
+grep -q '^task move YPER4-999 --section In Progress' "$D/log" && ok "recognized merged work reaches the claim move" || bad "merged resumption failed to write"
 : > "$HOLD_READS"; SHIP_SESSION_NAME='HT Product Lead' ./ship-claim hold YPER4-999 >/dev/null; eq "non-runner identity remains unaffected" "$?" 0
 [ ! -s "$HOLD_READS" ] && ok "non-runner performs no hold reads" || bad "non-runner accessed hold services"
 if [ "$fails" = 0 ]; then echo 'ship-claim completion-hold ok'; fi
