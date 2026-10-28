@@ -42,7 +42,7 @@ async function withButton(fn, backend) {
   };
   const router = { push: (url) => pushes.push(url), refresh: () => { refreshes++; } };
   const flagMock = { useFlag: (name) => {
-    if (name === "htpr-7686-free-plan-copy") return false;
+    if (name === "htpr-7686-free-plan-copy" || name === "htpr-7919-allowance-percent") return false;
     assert.equal(name, key); return state.enabled;
   }, useFlagReady: () => state.flagReady };
   const buttonModule = load("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx", {
