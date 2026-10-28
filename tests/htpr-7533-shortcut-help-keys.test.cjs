@@ -95,7 +95,7 @@ contract(globalGroup, "Search", "/", "global", "e.keyCode === KeyCodes.FORWARD_S
 contract(globalGroup, "Set priority", "P", "edit", 'action: "priority", matches: () => e.keyCode === KeyCodes.P && !cmdControl');
 contract(globalGroup, "Set task size", "S", "nav", 'action: "estimate", matches: () => e.keyCode === KeyCodes.S && !e.shiftKey && !e.altKey && !cmdControl');
 contract(globalGroup, "Add tags", "T", "nav", 'action: "projectOrLabel", matches: () => e.keyCode === KeyCodes.T', "!e.altKey && !e.shiftKey && !cmdControl", "toggleLabelModal()");
-contract(globalGroup, "Archive", "E", "row", "e.keyCode === KeyCodes.E && !cmdControl", "archiveNotification(sectionId, task.id)");
+contract(globalGroup, "Archive", "E", "row", 'taskShortcutAction === "edit"', "eHandler()", "archiveNotification(sectionId, task.id)");
 contract(globalGroup, "Move focus down", "J", "board", '(e.keyCode === 74 ||e.key==="ArrowDown") && !e.shiftKey && !cmdControl', "spaceship.focus.down()");
 contract(globalGroup, "Move focus up", "K", "board", '(e.keyCode === 75 ||e.key==="ArrowUp") && (!e.shiftKey && !cmdControl )', "spaceship.focus.up()");
 contract(globalGroup, "Move focus", "←|⭡|⭣|→", "src/lib/utils/keyboardShortcuts.ts", "keys: [KeyCodes.ARROW_LEFT, KeyCodes.H]", "keys: [KeyCodes.ARROW_UP, KeyCodes.K]", "keys: [KeyCodes.ARROW_DOWN, KeyCodes.J]", "keys: [KeyCodes.ARROW_RIGHT, KeyCodes.L]");
@@ -130,7 +130,7 @@ contract("Board", "Add task with AI Task Writer", "MOD|J", "section", "e.keyCode
 ambiguous("Board", "Add sub-task", "MOD|SHIFT|+", "Mod+Shift+= links subtasks in task detail, but no board-level handler exists; creating versus linking also needs clarification.");
 contract("Board", "Add task at top", "MOD|SHIFT|C", "section", "e.keyCode === KeyCodes.C", "e.shiftKey && (e.ctrlKey || e.metaKey)", 'createTaskAt("top"');
 ambiguous("Board", "Add task at bottom", "SHIFT|C", "Legacy Shift+C creates at bottom; quick-add flags intercept it and open a modal instead.");
-contract("Board", "Open task", "ENTER", "row", "e.keyCode === KeyCodes.ENTER", "navigateToTask(task.projectId");
+contract("Board", "Open task", "ENTER", "row", 'taskShortcutAction === "open"', "navigateToTask(task.projectId");
 contract("Board", "Next view", "]", "views", "event.key === '[' || event.key === ']'", "event.key === ']' ? 1 : -1");
 contract("Board", "Previous view", "[", "views", "event.key === '[' || event.key === ']'", "event.key === ']' ? 1 : -1");
 contract("Board", "Move focus to top", "gg", "section", "e.keyCode === KeyCodes.G", "lastgPress.current", "const element = tasksList[0]");
