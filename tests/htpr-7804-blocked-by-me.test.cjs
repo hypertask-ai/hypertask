@@ -107,6 +107,7 @@ test("empty Blocked by me remains discoverable without changing other empty tabs
     "@/hooks/Task Detail/useTimeTracking": { useBoardRunningTimers: () => ({ timers: new Map() }) },
     "@/hooks/useFlag": { useFlag: () => true },
     "@/lib/flags/keys": {},
+    "@/lib/flags/definitions/htpr-7804-blocked-by-me": flag,
     "@/models/Views/model": { DEFAULT_SUBTASK_SETTING: "None" },
   });
   assert.deepEqual(hook(project(15)).renderedViews.map((view) => view.id), ["home", id]);

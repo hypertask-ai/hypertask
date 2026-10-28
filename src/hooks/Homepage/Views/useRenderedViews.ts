@@ -17,7 +17,8 @@ import {
 import useOrderedViews from './useOrderedViews'
 import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG, HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/keys'
+import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
+import { HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/definitions/htpr-7804-blocked-by-me'
 import { DEFAULT_SUBTASK_SETTING } from '@/models/Views/model'
 
 const useRenderedViews = (project: IProject | null) => {
