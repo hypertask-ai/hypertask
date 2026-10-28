@@ -31,6 +31,12 @@ function isUiFile(path) {
     UI_INCLUDE.some((pattern) => pattern.test(path));
 }
 
+function isServerFile(path) {
+  return /^src\/(?:lib\/(?:mcp|mcp-server|api)|app\/api|pages\/api|utils\/controllers)\//.test(path) &&
+    /\.[jt]sx?$/.test(path) && !/(^|\/)tests?\//.test(path) &&
+    !/\.(test|spec|stories)\.[jt]sx?$/.test(path);
+}
+
 function refactorUiLineCounts(baseSha, headSha) {
   const diff = git(["-c", "core.quotePath=false", "diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`]);
   const normalizeLine = (line) => line.trim().replace(/\s+/g, " ").replace(/[,;]$/, "");
@@ -760,6 +766,22 @@ function collectLiveFunctions(sourceFile, checker, entries = null) {
       changed = true;
     }
     for (const fn of functions) {
+      if (live.has(fn) || fn.asteriskToken || !typescript.isCallExpression(fn.parent) ||
+          fn.parent.arguments.length !== 1 || fn.parent.arguments[0] !== fn ||
+          !typescript.isIdentifier(fn.parent.expression)) continue;
+      const call = fn.parent;
+      const binding = checker.getSymbolAtLocation(call.expression)?.declarations?.[0];
+      if (!binding || !typescript.isImportSpecifier(binding) ||
+          (binding.propertyName ?? binding.name).text !== "wrapMcpRoute") continue;
+      const declaration = binding.parent.parent.parent;
+      if (!typescript.isImportDeclaration(declaration) ||
+          declaration.moduleSpecifier.text !== "@/lib/mcp/routeWrapper" ||
+          !typescript.isCallExpression(call.parent) || call.parent.expression !== call ||
+          !isLiveCallSite(call.parent, live, !entries)) continue;
+      live.add(fn);
+      changed = true;
+    }
+    for (const fn of functions) {
       if (live.has(fn) || reboundFunctions.has(fn)) continue;
       const name = functionBindingName(fn, checker);
       if (!name) continue;
@@ -1292,7 +1314,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
       const symbol = checker.getSymbolAtLocation(specifier.name);
       if (!symbol) continue;
       importedFunctions.set(symbol, { imported, module: moduleName });
-      if ((moduleName === "@/hooks/useFlag" && imported === "useFlag") ||
+      if ((moduleName === "@/hooks/useFlag" && imported === "useFlag" && !isServerFile(path)) ||
           (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
       const key = registry.byIdentifier.get(imported);
       if (!key) continue;
@@ -1601,12 +1623,14 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     }
   }
   const uiFiles = changedFiles.filter(isUiFile);
+  const serverFiles = changedFiles.filter(isServerFile).filter((path) =>
+    git(["ls-tree", "--name-only", headSha, "--", path]).trim());
   const runtimeFiles = changedFiles.filter((path) =>
     /^src\//.test(path) && /\.[jt]sx?$/.test(path) &&
     !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
     !/\.stories\.[jt]sx?$/.test(path));
-  if (uiFiles.length === 0) {
-    return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
+  if (uiFiles.length === 0 && serverFiles.length === 0) {
+    return { pass: true, ownerReview: null, reason: "No changed file matches the UI/server-change path filter." };
   }
 
   // Title exemptions never bypass registry default validation.
@@ -1704,6 +1728,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         return false;
       }
     });
+    let hasServerGate = false;
     const coveredUiFiles = new Set();
     let matchedGate = null;
 
@@ -1723,17 +1748,23 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         mergeBase,
       );
       if (key) {
+        if (isServerFile(path)) hasServerGate = true;
         const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);
         for (const uiPath of covered) coveredUiFiles.add(uiPath);
-        if (covered.size > 0 && !matchedGate) matchedGate = { key, path };
+        if ((covered.size > 0 || isServerFile(path)) && !matchedGate) matchedGate = { key, path };
       }
+    }
+    if (serverFiles.length > 0 && !hasServerGate) {
+      return failure(`[${tag}] changes server behavior (${serverFiles.slice(0, 5).join(", ")}) without a ticket-specific server flag. ` +
+        `Define src/lib/flags/definitions/${ticketPrefix}<name>.ts and call isFeatureEnabled from @/lib/flags ` +
+        "with that key on an added or modified server line controlling the behavior.");
     }
     if (matchedGate && (requiredUiFiles.length === 0 ||
         requiredUiFiles.every((path) => coveredUiFiles.has(path)))) {
       return {
         pass: true,
         ownerReview: "feature-gated-ui",
-        reason: `[${tag}] calls ticket-specific feature gate ${matchedGate.key} in changed code covering every UI entry from ${matchedGate.path}.`,
+        reason: `[${tag}] calls ticket-specific feature gate ${matchedGate.key} in changed code covering the changed server behavior and every UI entry from ${matchedGate.path}.`,
       };
     }
   } catch (error) {

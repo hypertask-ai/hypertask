@@ -112,7 +112,7 @@ test("malformed YPER4 titles do not bypass the feature flag requirement", async 
   }
 });
 
-test("JavaScript UI paths and API helpers keep the UI-only scope", async (t) => {
+test("JavaScript UI paths and server helpers enforce their respective scopes", async (t) => {
   const jsUi = makeRepo(t);
   const jsUiBase = commit(jsUi.git, "base");
   writeFile(jsUi.dir, "src/features/NewView.js", "export const NewView = () => <div />;\n");
@@ -129,13 +129,116 @@ test("JavaScript UI paths and API helpers keep the UI-only scope", async (t) => 
   const apiHelperBase = commit(apiHelper.git, "base");
   writeFile(apiHelper.dir, "src/app/api/widget/service.ts", "export function buildWidget() { return { ok: true }; }\n");
   const apiHelperHead = commit(apiHelper.git, "api helper");
-  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", apiHelperBase, apiHelperHead, apiHelper.dir)).pass, true);
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", apiHelperBase, apiHelperHead, apiHelper.dir)).pass, false);
 
   const utilJs = makeRepo(t);
   const utilJsBase = commit(utilJs.git, "base");
   writeFile(utilJs.dir, "src/utils/format.js", "export function formatName(value) { return String(value); }\n");
   const utilJsHead = commit(utilJs.git, "util js");
   assert.equal((await evaluate("HTPR-2 [FEATURE] backend", utilJsBase, utilJsHead, utilJs.dir)).pass, true);
+});
+
+test("server-only changes require a changed ticket-specific server gate", async (t) => {
+  for (const file of [
+    "src/lib/mcp/operations/tasks/waiting-on.ts",
+    "src/lib/mcp-server/section.service.ts",
+    "src/app/api/widget/route.ts",
+    "src/pages/api/widget.ts",
+    "src/lib/api/task-writes/create.ts",
+    "src/utils/controllers/tasks.ts",
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, file, 'export async function execute(userId) { return "new"; }\n');
+    const ungated = commit(git, "server feature");
+    for (const tag of ["FEATURE", "IMPROVE"]) {
+      const result = await evaluate(`HTPR-1 [${tag}] server behavior`, base, ungated, dir);
+      assert.equal(result.pass, false, `${tag}: ${file}`);
+      assert.match(result.reason, /isFeatureEnabled/);
+      assert.match(result.reason, /src\/lib\/flags\/definitions\/htpr-1-/);
+    }
+    writeFile(dir, file, 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function execute(userId) { return await isFeatureEnabled(OTHER_FLAG, userId) ? "new" : "old"; }\n');
+    const gated = commit(git, "server flag");
+    const allowed = await evaluate("HTPR-1 [FEATURE] server behavior", base, gated, dir);
+    assert.equal(allowed.pass, true, file);
+    assert.equal(allowed.ownerReview, "feature-gated-ui");
+    const decision = path.join(dir, "decision.txt");
+    execFileSync(process.execPath, [path.join(root, ".github/scripts/feature-flag-gate.mjs"),
+      "HTPR-1 [FEATURE] server behavior", base, gated, decision], { cwd: dir });
+    assert.equal(fs.readFileSync(decision, "utf8"), "feature-gated-ui\n");
+  }
+});
+
+test("server gates reject client hooks, dead calls, unrelated flags and unchanged reads", async (t) => {
+  for (const source of [
+    'import { useFlag } from "@/hooks/useFlag";\nexport function execute() { return useFlag("htpr-1-other") ? "new" : "old"; }\n',
+    'import { isFeatureEnabled } from "@/lib/flags";\nfunction dead() { return isFeatureEnabled("htpr-1-other", 6); }\nexport function execute() { return "new"; }\n',
+    'import { isFeatureEnabled } from "@/lib/flags";\nexport async function execute() {\n  const enabled = await isFeatureEnabled("htpr-1-other", 6);\n  return enabled ? "new" : "old";\n}\n',
+  ]) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, "src/app/api/widget/route.ts", source);
+    const base = commit(git, "existing server behavior");
+    writeFile(dir, "src/app/api/widget/route.ts", source.replace('"new"', '"changed"'));
+    const head = commit(git, "changed behavior without changed server gate");
+    for (const number of [1, 2]) {
+      assert.equal((await evaluate(`HTPR-${number} [FEATURE] behavior`, base, head, dir)).pass, false);
+    }
+  }
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/api/widget/route.ts", 'import { useFlag } from "@/hooks/useFlag";\nexport function execute() { return useFlag("htpr-1-other") ? "new" : "old"; }\n');
+  const head = commit(git, "client-only gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
+});
+
+test("server coverage cannot excuse unrelated UI or use a client gate", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nexport async function GET() { return await isFeatureEnabled("htpr-1-other", 6) ? "new" : "old"; }\n');
+  writeFile(dir, "src/components/Unrelated.tsx", 'export const Unrelated = () => <div />;\n');
+  let head = commit(git, "unrelated ungated UI");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
+  fs.rmSync(path.join(dir, "src/components/Unrelated.tsx"));
+  writeFile(dir, "src/app/api/other/route.ts", 'export { GET } from "../widget/route";\n');
+  head = commit(git, "delegating route");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, true);
+  writeFile(dir, "src/app/api/other/route.ts", 'import { GET as executeGET } from "../widget/route";\nexport const GET = executeGET;\n');
+  head = commit(git, "imported handler alias");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, true);
+  writeFile(dir, "src/app/api/widget/route.ts", 'export async function GET() { return "ungated"; }\n');
+  writeFile(dir, "src/components/Unrelated.tsx", 'import { useFlag } from "@/hooks/useFlag";\nexport function Widget() { return useFlag("htpr-1-other") ? <div /> : null; }\n');
+  head = commit(git, "UI gate does not cover server");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
+});
+
+test("server flags in invoked MCP route wrappers count, but discarded and shadowed wrappers do not", async (t) => {
+  for (const [source, expected] of [
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async (request) => { if (!(await isFeatureEnabled("htpr-1-other", request.userId))) return "off"; return "on"; })(request); }\n', true],
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; }); return "ungated"; }\n', false],
+    ['function wrap(callback) { return () => "ungated"; }\nexport async function POST(request) { return wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; })(request); }\n', false],
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async function* () { if (await isFeatureEnabled("htpr-1-other", 6)) yield "on"; })(request); }\n', false],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/mcp/operations/widget.ts", 'import { isFeatureEnabled } from "@/lib/flags";\n' + source);
+    const head = commit(git, "wrapped server handler");
+    assert.equal((await evaluate("HTPR-1 [FEATURE] wrapped operation", base, head, dir)).pass, expected);
+  }
+});
+
+test("server-only changes preserve existing exemptions and deletion behavior", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/lib/mcp/operation.ts", 'export const oldValue = "old";\n');
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/mcp/operation.ts", 'export const value = "new";\n');
+  const head = commit(git, "server behavior");
+  for (const title of ["YPER4-1 [FEATURE] infra", "HTPR-1 [INFRA] infra", "HTPR-1 [BUGFIX] repair", "HTPR-1 [REFACTOR] cleanup"]) {
+    assert.equal((await evaluate(title, base, head, dir)).pass, true, title);
+  }
+  assert.equal((await evaluate("HTPR-1 [FEATURE] AI chat", base, head, dir, ["AI CHAT 💬"])).pass, true);
+  fs.rmSync(path.join(dir, "src/lib/mcp/operation.ts"));
+  const deleted = commit(git, "remove old code");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] remove code", base, deleted, dir)).pass, true);
 });
 
 test("memo-wrapped exported JSX entries still require a ticket gate", async (t) => {
@@ -200,12 +303,12 @@ test("memo-wrapped exported JSX entries still require a ticket gate", async (t) 
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", parenWrappedBase, parenWrappedHead, parenWrapped.dir)).pass, false);
 });
 
-test("App Router API changes do not need a flag", async (t) => {
+test("App Router API changes require a server flag", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
   writeFile(dir, "src/app/api/example/route.ts", "export function GET() { return new Response(); }\n");
   const head = commit(git, "backend");
-  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, false);
 });
 
 test("server-side ticket gates cover related UI changes", async (t) => {
