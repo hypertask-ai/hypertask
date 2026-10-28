@@ -664,7 +664,7 @@ for (const backend of ["fake", "real Redis"]) {
       assert.ok(fundingReads.some((value) => value?.includeProvenance));
     });
 
-    test("T10/V8: disconnect continues inference with hold; explicit stop before doStream resolves releases immediately and once", async () => {
+    test("T10/V8: disconnect continues inference with hold; explicit stop before doStream resolves releases immediately and once", { timeout: 5000 }, async () => {
       let source;
       const result = await middleware().wrapStream({ params: params(), model: {}, doStream: async () => ({ stream: new ReadableStream({ start(controller) { source = controller; } }) }) });
       // runStream keeps consuming the provider after the client send path disconnects.
@@ -681,7 +681,14 @@ for (const backend of ["fake", "real Redis"]) {
       const pending = middleware().wrapStream({ params: params(abort.signal, 986), model: {}, doStream: () => new Promise((resolve) => { complete = resolve; started(); }) });
       await ready;
       const member = (await redis.zrange(`${PREFIX}:reservations`, 0, -1))[0];
-      abort.abort("PRIVATE before first token"); await turn();
+      const released = new Promise((resolve) => {
+        console.info = (line) => {
+          const entry = JSON.parse(line);
+          logs.push(entry);
+          if (entry.event === "ai-allowance-billed-release" && entry.reason === "stop") resolve();
+        };
+      });
+      abort.abort("PRIVATE before first token"); await released;
       assert.deepEqual(await redis.zrange(`${PREFIX}:reservations`, 0, -1), []);
       assert.ok(releases().some((entry) => entry.reservationId === member.split("|")[0] && entry.userId === 986 && entry.reason === "stop"));
       complete({ stream: new ReadableStream({ start(controller) { controller.close(); } }) });
