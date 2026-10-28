@@ -56,3 +56,24 @@ queued event, and no warning after restart. Never stop real runner panes.
 ## Cleanup
 
 Remove only the isolated tmux server and temporary QA state.
+
+## Freeze recovery
+
+Entry points: installed `runner-pickup run <n>` (queue only),
+`runner-pickup drain <n>` (one audited move), and keeper startup.
+The recovery epoch is recorded only after successfully lifting a real freeze;
+see `docs/ci.md`. Never invent a shared epoch to make a real ticket eligible.
+
+For live proof, use disposable Fleet Infra fixtures assigned only to this
+runner, clearly marked as synthetic. Give both a same-runner freeze-block
+comment and the Agent Blocked section. Use an isolated `RUNNER_INBOX_DIR`,
+record the synthetic lift there, then post a newer block on the control.
+Run the installed drain command: the older fixture must move to In Progress
+and gain an agent audit; the newer control must stay blocked. Read both back
+through the CLI and delete only these fixtures afterward. Keep the live
+runner's normal inbox and freeze record untouched. Record that existing
+running keeper processes use their original code until a safe restart.
+
+Offline: `python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py`
+exercises missing epochs, fresh/human/decision blocks, complete pagination,
+one-ticket recovery, pickup invalidation, failed moves and repeat drains.

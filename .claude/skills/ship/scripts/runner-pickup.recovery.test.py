@@ -148,6 +148,12 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
             self.assertEqual(self.run_command('drain', '6').stdout, '')
         self.assertFalse(any(c[:2] == ['task', 'move'] for c in self.calls()))
 
+    def test_fresh_block_removes_an_earlier_recovery_from_pickup(self):
+        self.assertEqual(self.run_command('run', '6').returncode, 0)
+        self.comments['comments'][0]['createdAt'] = '2026-10-28T12:00:00Z'
+        self.assertEqual(self.run_command('run', '6').returncode, 0)
+        self.assertEqual(json.loads((self.state / 'runner-6.json').read_text())['items'], [])
+
     def test_older_question_is_not_cleared_by_a_later_freeze_note(self):
         self.comments['comments'].append({
             'id': 122, 'createdAt': '2026-10-26T10:00:00Z',
