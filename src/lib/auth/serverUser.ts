@@ -29,8 +29,10 @@ export async function getServerCookieUser(): Promise<IUser | null> {
 
   let userId: number;
   if (!userCookie?.value) {
+    const requestHeaders = await headers();
+    if (!requestHeaders.get("authorization")?.startsWith("Bearer ")) return null;
     const { getSessionUser } = await import("@/lib/auth/getSessionUser");
-    const session = await getSessionUser(await headers());
+    const session = await getSessionUser(requestHeaders);
     if (session?.source !== "cli-bearer") return null;
     userId = session.userId;
   } else {
