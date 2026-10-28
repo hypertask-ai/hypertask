@@ -56,10 +56,11 @@ export const useSessionAndChatHistory = (
   const taskNavigationEnabled = useFlag(HTPR_7736_CHAT_FOLLOWS_TASK_FLAG);
   let followsTaskNavigation = false;
   if (taskNavigationEnabled && isTaskScoped && !pathname?.startsWith("/chat")) followsTaskNavigation = true;
-  const explicitTaskRef = useRef<number | undefined>(undefined);
+  const explicitTaskRef = useRef<{ taskId: number | undefined; generation: number }>({ taskId: undefined, generation: 0 });
   const hasExplicitTask = taskId !== undefined && (composeIntro?.taskId === taskId || pendingFollowup?.taskId === taskId);
-  if (hasExplicitTask) explicitTaskRef.current = taskId;
-  const selectionScope = followsTaskNavigation ? `following:${explicitTaskRef.current}` : taskId;
+  if (hasExplicitTask && explicitTaskRef.current.taskId !== taskId) explicitTaskRef.current.generation += 1;
+  explicitTaskRef.current.taskId = hasExplicitTask ? taskId : undefined;
+  const selectionScope = followsTaskNavigation ? `following:${explicitTaskRef.current.generation}` : taskId;
   const currentProject = useRecoilValue(currentProjectAtom);
   const [dockedScope] = useDockedChatScope();
   const fullScreenScope = useRecoilValue(fullScreenChatScopeAtom);

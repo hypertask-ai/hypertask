@@ -37,9 +37,9 @@ async function withHistory(config, check) {
     deleteSession: async (sessionId) => { requests.push(['delete', sessionId]); if (config.delete) return config.delete(sessionId); if (config.deleteError) throw config.deleteError; rows.splice(rows.findIndex((row) => row.id === sessionId), 1); if (!rows.length) rows.push(session(60, { messages: [] })); return response({ message: 'Deleted' }); },
   };
   const { useSessionAndChatHistory } = load('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', {
-    '@/hooks/useFlag': { useFlag: (key) => key === flag ? enabled : key === 'htpr-7736-chat-follows-task' ? !!config.followsTask : key === 'htpr-6929-compose-task-writer' && !!config.compose },
-    '@/lib/state': { useRecoilValue: (atom) => atom === 'user' ? user : null, useRecoilState: () => [intro, (next) => { intro = next; }] },
-    '@/store': { currentUserAtom: 'user', composeTaskChatIntroAtom: 'intro' },
+    '@/hooks/useFlag': { useFlag: (key) => key === flag ? enabled : key === 'htpr-7736-chat-follows-task' ? !!config.followsTask : key === 'htpr-7319-skill-chat-followup' ? !!config.pendingFollowup : key === 'htpr-6929-compose-task-writer' && !!config.compose },
+    '@/lib/state': { useRecoilValue: (atom) => atom === 'user' ? user : atom === 'followup' ? config.pendingFollowup : null, useRecoilState: () => [intro, (next) => { intro = next; }] },
+    '@/store': { currentUserAtom: 'user', composeTaskChatIntroAtom: 'intro', composeTaskSkillFollowupAtom: 'followup' },
     '@/utils/api/ai_chat': { ...wire, AI_Chat_API: api },
     'next/navigation': { usePathname: () => pathname },
   });
@@ -1362,6 +1362,24 @@ for (const empty of [false, true]) {
       assert.ok(history().currentSession, 'resolving the ticket must initialize its conversation');
       assert.equal(history().currentSession.taskId, 91);
       assert.equal(requests.filter(([type]) => type === 'create').length, empty ? 1 : 0);
+    });
+  });
+}
+
+for (const paging of [true, false]) {
+  test(`returning to a pending ticket introduction restores its conversation (paging ${paging})`, async () => {
+    const seen = [];
+    await withHistory({ on: paging, followsTask: true, pendingFollowup: { taskId: 91 }, pathname: '/detail/project-4/91', taskId: 91, rows: [session(1, { taskId: 91 })], observe: (history, taskId) => seen.push([taskId, history.currentSession?.taskId]) }, async ({ history, setTask, render, flush }) => {
+      assert.equal(history().currentSession.id, id(1));
+      setTask(92); await render();
+      assert.equal(history().currentSession.id, id(1));
+      await React.act(async () => { await history().startNewSession(); }); await flush();
+      assert.equal(history().currentSession.taskId, 92);
+      seen.length = 0;
+      setTask(91); await render();
+      assert.equal(history().currentSession.id, id(1));
+      assert.equal(history().currentSession.taskId, 91);
+      assert.ok(seen.every(([taskId, sessionTaskId]) => taskId !== 91 || sessionTaskId === undefined || sessionTaskId === 91), 'pending ticket must never expose the other conversation');
     });
   });
 }
