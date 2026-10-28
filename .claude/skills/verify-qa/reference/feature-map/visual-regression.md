@@ -23,6 +23,8 @@ Run ids, conclusions and head SHAs of three consecutive green runs; the log line
 
 For timing-only instrumentation, one successful PR run and one successful released-code dispatch suffice; three runs remain required for flake fixes. Save the five-row phase table and its matching log line. Sum the five phase durations and compare with GitHub's `Build and capture base, then compare head` step timestamps; the gap must be at most 30 seconds. Record whether the rendered summary was actually reachable; log reconciliation and exact-output tests do not prove visual observation of GitHub's table.
 
+For Next.js build-cache changes, collect three paired-build timing tables before and after. Inspect both restore steps for the selected production `nextjs-` key and successful extraction, then confirm both staging steps and all ten head comparisons completed. Production browser-smoke owns these archives; visual runs restore through `.next/cache` and move only that directory into each checkout. Record cold misses, fallback hits and screenshot-cache skips separately. Build caches must never skip head build/comparison or publish from a pull request. Historical runs on different commits/runners are descriptive, not a controlled speedup measurement.
+
 ## Cleanup
 
 Nothing to clean: dispatched runs write only GitHub artifacts.
