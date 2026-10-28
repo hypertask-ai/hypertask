@@ -46,7 +46,7 @@ concurrency:
 jobs:
   visual-regression:
     name: visual-regression
-    if: (github.event_name == 'workflow_dispatch' && (inputs.journey == '' || inputs.journey == 'visual')) || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.journey == '' || inputs.journey == 'visual')) || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
