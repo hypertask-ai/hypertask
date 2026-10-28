@@ -28,6 +28,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG } from "@/lib/flags/definitions/htpr-8140-ctrlj-dictation-shortcut";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
@@ -55,6 +56,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const chatAutoOpenAllowed = useRef(false);
   chatAutoOpenAllowed.current = false;
   if (!aiChatOpenSwitchesEnabled) chatAutoOpenAllowed.current = aiChatOpenSwitchesReady && chatAutoOpenReady && !keepAiChatClosed;
+  const dictationShortcutEnabled = useFlag(HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG);
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
   const skillFollowupFlag = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   let skillFollowupEnabled = false;
@@ -228,6 +230,14 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     if (!enabled || !active || writing) return;
     const attachShortcut = (event: KeyboardEvent) => {
       if (boardChipEnabled && boardPickerOpen) return;
+      if (dictationShortcutEnabled && newTaskWindow && !event.repeat && !event.isComposing &&
+          ((isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey)) &&
+          !event.altKey && event.shiftKey && event.code === "KeyD") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!addingImages) document.getElementById("compose-task-audio-button")?.click();
+        return;
+      }
       if (boardChipEnabled && event.target === input.current && !event.isComposing &&
           ((isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey)) &&
           !event.altKey && event.shiftKey && event.code === "KeyB") {
@@ -245,7 +255,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
     document.addEventListener("keydown", attachShortcut, true);
     return () => document.removeEventListener("keydown", attachShortcut, true);
-  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardChipEnabled, boardPickerOpen, isApple, dictating]);
+  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardChipEnabled, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow]);
 
   const addImages = async (images: File[]) => {
     if (sending.current || dictating) return;
