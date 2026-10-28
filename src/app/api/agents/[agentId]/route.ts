@@ -163,6 +163,7 @@ async function getAgentDetails(
       (!agent.credentialTeamAccessBinding || agent.credentialTeamId)
       ? (await prisma.project.findMany({
           where: {
+            ...getProjectWhere(user.id, actingAgentId),
             id: { in: accessibleBoards.map((board) => board.id) },
             status: "Normal",
             team: ownerTeamWhere(user.id),

@@ -40,6 +40,9 @@ function loadReal(relativePath) {
       });
     }
     if (request === "@/lib/prisma") return { __esModule: true, default: {} };
+    if (request === "@/lib/agents/crossTeam") return require("./task-route-loader.cjs").load("src/lib/agents/crossTeam.ts", {
+      "@/lib/prisma": { default: {} },
+    });
     if (request === "@/lib/mcp/managementKeyTeamScope") {
       return { __esModule: true, agentWithinTeamWhere: () => ({}) };
     }

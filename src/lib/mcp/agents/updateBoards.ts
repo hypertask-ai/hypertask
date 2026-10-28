@@ -272,8 +272,9 @@ export async function updateOwnedAgentBoards(
                 .map((membership) => membership.project.teamId),
               ...additions.map((project) => project.teamId),
             ]
-            const invalidTeam = additions.some((project) => project.teamId !== homeTeamId) ||
-              (!agent.crossTeamHomeTeamId && (finalTeams.includes(null) || new Set(finalTeams).size > 1))
+            const invalidTeam = agent.crossTeamHomeTeamId
+              ? additions.some((project) => project.teamId !== agent.crossTeamHomeTeamId)
+              : finalTeams.includes(null) || new Set(finalTeams).size > 1
             if (invalidTeam) {
               throw new AgentBoardUpdateError(
                 'Agents can only belong to boards in one team',
@@ -282,7 +283,7 @@ export async function updateOwnedAgentBoards(
               )
             }
           }
-          const markExpanded = additions.length > 0 && expandsTeams && !agent.crossTeamHomeTeamId
+          const markExpanded = enabled && additions.length > 0 && expandsTeams && !agent.crossTeamHomeTeamId
           if (homeTeamId && ((!agent.boardHomeTeamId && (toAdd.length || toRemove.length)) || markExpanded)) {
             await agentStore.update({
               where: { id: agent.id },

@@ -270,12 +270,12 @@ for (const entry of ['cookie', 'update']) {
   })
 }
 
-test('MCP: rollout-off replacement refuses a different lifetime team; enabled replacement stays allowed', async () => {
+test('MCP: rollout-off legacy replacement stays usable; enabled replacement becomes private', async () => {
   const off = harness({ enabled: false })
-  assert.equal((await off.update([2], [1])).status, 400)
-  assert.deepEqual(off.state.members.map((row) => row.projectId), [1])
+  assert.equal((await off.update([2], [1])).status, 200)
+  assert.deepEqual(off.state.members.map((row) => row.projectId), [2])
   assert.equal(off.state.agents[0].crossTeamHomeTeamId, null)
-  assert.equal((await off.update([4], [1])).status, 200)
+  assert.equal((await off.update([4], [2])).status, 200)
   assert.deepEqual(off.state.members.map((row) => row.projectId), [4])
   const on = harness()
   assert.equal((await on.update([2], [1])).status, 200)
@@ -469,10 +469,10 @@ test('MCP create stores first explicit team as lifetime home without changing sa
 
 test('legacy replacement never reassigns lifetime home across later admissions', async () => {
   const h = harness({ enabled: false, boardHome: 'a' })
-  assert.equal((await h.update([2], [1])).status, 400)
+  assert.equal((await h.update([2], [1])).status, 200)
   assert.equal(h.state.agents[0].boardHomeTeamId, 'a')
   assert.equal(h.state.agents[0].crossTeamHomeTeamId, null)
-  assert.deepEqual(h.state.members.map((row) => row.projectId), [1])
+  assert.deepEqual(h.state.members.map((row) => row.projectId), [2])
   h.state.enabled = true
   assert.equal((await h.update([5])).status, 200)
   assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
@@ -541,17 +541,27 @@ test('guest associated agent creation captures known lifetime team without expan
 
 
 for (const entry of ['cookie', 'update']) {
-  test(`${entry}: rollout-off rehoming refuses unusable grants and permits the original team`, async () => {
-    const h = harness({ enabled: false, boardHome: 'a' })
-    const removed = entry === 'cookie' ? await h.remove(1) : await h.update([], [1])
-    assert.equal(entry === 'cookie' ? removed.ok : removed.status, entry === 'cookie' ? true : 200)
-    const added = await h[entry](entry === 'cookie' ? 2 : [2])
-    assert.equal(added.statusCode ?? added.status, entry === 'cookie' ? 403 : 400)
-    assert.deepEqual(h.state.members, [])
-    assert.equal(h.state.agents[0].boardHomeTeamId, 'a')
-    assert.equal(h.state.agents[0].crossTeamHomeTeamId, null)
-    const restored = await h[entry](entry === 'cookie' ? 4 : [4])
-    assert.equal(restored.statusCode ?? restored.status, 200)
-    assert.deepEqual(h.state.members.map((row) => row.projectId), [4])
-  })
+  for (const expanded of [false, true]) {
+    test(`${entry}: rollout-off rehoming preserves legacy moves and restricts expanded identities (expanded=${expanded})`, async () => {
+      const h = harness({ enabled: false, boardHome: 'a', home: expanded ? 'a' : null })
+      const removed = entry === 'cookie' ? await h.remove(1) : await h.update([], [1])
+      assert.equal(entry === 'cookie' ? removed.ok : removed.status, entry === 'cookie' ? true : 200)
+      const added = await h[entry](entry === 'cookie' ? 2 : [2])
+      assert.equal(added.statusCode ?? added.status, expanded ? (entry === 'cookie' ? 403 : 400) : 200)
+      assert.deepEqual(h.state.members.map((row) => row.projectId), expanded ? [] : [2])
+      assert.equal(h.state.agents[0].boardHomeTeamId, 'a')
+      assert.equal(h.state.agents[0].crossTeamHomeTeamId, expanded ? 'a' : null)
+      const { crossTeamProjectFence } = load('src/lib/agents/crossTeam.ts', {
+        '@/lib/prisma': { default: { agent: { findFirst: async () => h.state.agents[0] } } },
+        '@/lib/flags': { isFeatureEnabled: async () => false },
+      })
+      const fence = await crossTeamProjectFence('agent', 42)
+      assert.equal(fence?.teamId ?? null, expanded ? 'a' : null)
+      if (!expanded) {
+        const anotherTeam = await h[entry](entry === 'cookie' ? 4 : [4])
+        assert.equal(anotherTeam.statusCode ?? anotherTeam.status, entry === 'cookie' ? 403 : 400)
+        assert.deepEqual(h.state.members.map((row) => row.projectId), [2])
+      }
+    })
+  }
 }

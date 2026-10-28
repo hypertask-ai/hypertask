@@ -211,7 +211,7 @@ async function addAgentToBoardTransaction(
   if (
     (agent.credentialTeamId && agent.credentialTeamId !== project.teamId) ||
     (agent.credentialTeamAccessBinding && !agent.credentialTeamId) ||
-    (!enabled && (homeTeamId !== project.teamId || !belongsToTargetTeam))
+    (!enabled && !belongsToTargetTeam)
   ) {
     return { ok: false, status: 403, message: "This agent belongs to another team" };
   }
@@ -236,7 +236,7 @@ async function addAgentToBoardTransaction(
     await assertAgentBoardInviteScope(database.member, projectId, requestingUserId, actingAgentId);
   }
   const expandsTeams = homeTeamId !== project.teamId || !belongsToTargetTeam;
-  const markExpanded = !agent.crossTeamHomeTeamId && expandsTeams;
+  const markExpanded = enabled && !agent.crossTeamHomeTeamId && expandsTeams;
   if (!agent.boardHomeTeamId || markExpanded) {
     await database.agent.update({
       where: { id: agent.id },
