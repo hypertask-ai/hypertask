@@ -63,7 +63,7 @@ export async function runAsAgent<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   const { auth } = await createInProcessMcpClient(token)
-  if (!(await isFeatureEnabled(HTPR_7529_MCP_ACT_AS_AGENT_FLAG, auth.user.id).catch(() => false))) {
+  if (!(await isFeatureEnabled(HTPR_7529_MCP_ACT_AS_AGENT_FLAG, auth.user.id))) {
     throw new ActAsAgentError('as_agent is not switched on for this account yet.')
   }
   const projectIds = request.requireBoard ? await resolveActAsBoards(auth.user.id, request.input) : []
