@@ -48,7 +48,8 @@ Sources: `src/lib/ai/gatewayReport.ts`,
   `ai-gateway-credit-observation` records even while both switches are Off.
   These contain only time, balance, cumulative spend and cumulative funding.
   Missing credentials, malformed metadata or failed credit reads make the cron
-  return 503 rather than a false clean result.
+  return 503 rather than a false clean result, including subsequent throttled
+  calls after a failed or pending observation.
 - Confirm ordinary Settings reports still load through their existing
   on-demand path. Do not repeatedly buy reports for QA.
 - The cron's metered transports share one rolling-hour Redis reservation.
@@ -57,7 +58,7 @@ Sources: `src/lib/ai/gatewayReport.ts`,
   Prove concurrency, upstream failure, Redis refusal and estimate fallback
   with `tests/yper4-873-paid-reports.test.cjs`; never manufacture paid live
   traffic to fill that budget.
-- Prove the $5 alert, day boundary and existing daily fingerprint using
+- Prove the $5 alert, midnight-spanning spend, daily reset and existing fingerprint using
   `tests/yper4-873-daily-spend.test.cjs`. Never spend money to trigger an alert.
 - Save actual funding observations or provider credit history spanning at
   least 24 hours. No increase in cumulative funding proves no top-up over

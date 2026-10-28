@@ -64,11 +64,35 @@ test("the real cron checks credit metadata hourly even with both allowance check
   await request(); assert.equal(alerts[1].fingerprintKey, alerts[0].fingerprintKey);
 });
 
-test("the next UTC day gets a fresh baseline", async () => {
-  await request(); now += 86400000; credits = { balance: "10", total_used: "110" };
+test("midnight-spanning spend alerts through the real cron", async () => {
+  now = nativeDate.parse("2026-10-28T23:30:00Z");
+  await request();
+  now += 3600000; credits = { balance: "14", total_used: "106" };
+  await request();
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].extra.spentUsd, 6);
+  assert.equal(alerts[0].fingerprintKey, "ai-gateway-daily-spend:2026-10-29");
+});
+
+test("new days reset accumulated spend without dropping the crossing interval", async () => {
+  await request(); now += 23 * 3600000;
+  credits = { balance: "16", total_used: "104" }; await request();
+  now += 3600000; credits = { balance: "14", total_used: "106" };
   await request(); assert.equal(alerts.length, 0);
-  now += 3600000; credits = { balance: "4", total_used: "116" };
-  await request(); assert.equal(alerts[0].fingerprintKey, "ai-gateway-daily-spend:2026-10-29");
+  now += 3600000; credits = { balance: "10", total_used: "110" };
+  await request(); assert.equal(alerts[0].extra.spentUsd, 6);
+});
+
+test("failed observations remain unavailable throughout the hourly throttle", async () => {
+  unavailable = true;
+  assert.equal((await request()).status, 503);
+  unavailable = false;
+  assert.equal((await request()).status, 503);
+  assert.equal(reads, 1);
+  now += 3600000;
+  assert.equal((await request()).status, 200);
+  assert.equal((await request()).status, 200);
+  assert.equal(reads, 2);
 });
 
 test("failed and malformed credits cannot create a spend alert or suppress drift", async () => {

@@ -276,9 +276,12 @@ The production allowance cron also reads `/v1/credits` metadata at most hourly,
 even while both allowance flags are Off. Its response follows the installed SDK metadata schema. An
 observed increase above $5 in the UTC day's cumulative used credits creates an
 alert through the existing error-ticket pipeline, with a day-specific dedupe key.
-The initial baseline starts at the first successful daily check, so the first
-partial hour/day is not a complete daily-spend measurement. Top-ups do not mask
-spend because the alarm compares cumulative usage, not remaining balance.
+Each day starts from the preceding successful observation, including the
+midnight-crossing interval instead of dropping it. Initial rollout starts from
+the first successful observation, so that first partial day remains incomplete.
+Failed or pending hourly observations keep returning 503 until the next hourly
+attempt succeeds; throttling never turns them into clean results. Top-ups do not
+mask spend because the alarm compares cumulative usage, not remaining balance.
 
 No flag is switched by this work. Verify the no-top-up requirement with actual
 credit history over 24 hours; a test or a single balance snapshot cannot prove it.
