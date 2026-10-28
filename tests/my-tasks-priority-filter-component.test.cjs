@@ -233,43 +233,50 @@ test("flag turning off mid-session stops filtering and hides the control", () =>
   delete global.IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("time group flag groups by due time without saved views", () => {
-  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.IS_REACT_ACT_ENVIRONMENT = true;
-  const dated = [
-    {
-      id: 100,
-      section_title: "MyBoard",
-      projectId: 10,
-      items: [
-        { id: 1, projectId: 10, dueDate: new Date(2020, 0, 1) },
-        { id: 2, projectId: 10, dueDate: new Date() },
-      ],
-    },
-  ];
-  const rootEl = dom.window.document.getElementById("root");
-  const reactRoot = createRoot(rootEl);
-  act(() => {
-    reactRoot.render(React.createElement(MyTasks, {
-      sections: dated,
-      tabs: ["All", "MyBoard"],
-      currentUser: { id: 6 },
-      timeGroupEnabled: true,
-    }));
-  });
-  const titles = tableViewProps[tableViewProps.length - 1].filteredSections.map(
-    (section) => section.section_title,
-  );
-  assert.deepEqual(titles, ["Overdue", "Today"]);
-  assert.ok(!titles.includes("MyBoard"), "board titles must not be the group headers");
+for (const savedBoardGroup of [false, true]) {
+  test(`My Tasks preserves ${savedBoardGroup ? "saved board" : "default time"} grouping without the retired flag`, () => {
+    const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: `https://app.hypertask.ai/my-tasks${savedBoardGroup ? "?view=1" : ""}` });
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    for (const key of Object.keys(flagValues)) flagValues[key] = false;
+    flagValues["htpr-6422-my-tasks-views"] = savedBoardGroup;
+    const dated = [
+      {
+        id: 100,
+        section_title: "MyBoard",
+        projectId: 10,
+        items: [
+          { id: 1, projectId: 10, dueDate: new Date(2020, 0, 1) },
+          { id: 2, projectId: 10, dueDate: new Date() },
+        ],
+      },
+    ];
+    const rootEl = dom.window.document.getElementById("root");
+    const reactRoot = createRoot(rootEl);
+    act(() => {
+      reactRoot.render(React.createElement(MyTasks, {
+        sections: dated,
+        tabs: ["All", "MyBoard"],
+        currentUser: { id: 6 },
+        viewsEnabled: savedBoardGroup,
+        initialViewId: savedBoardGroup ? 1 : null,
+        initialViews: savedBoardGroup ? [{ id: 1, name: "By board", config: { groupBy: "board" } }] : [],
+      }));
+    });
+    const titles = tableViewProps[tableViewProps.length - 1].filteredSections.map(
+      (section) => section.section_title,
+    );
+    assert.deepEqual(titles, savedBoardGroup ? ["MyBoard"] : ["Overdue", "Today"]);
 
-  act(() => { reactRoot.unmount(); });
-  delete global.window;
-  delete global.document;
-  delete global.IS_REACT_ACT_ENVIRONMENT;
-});
+    flagValues["htpr-6422-my-tasks-views"] = false;
+    act(() => { reactRoot.unmount(); });
+    delete global.window;
+    delete global.document;
+    delete global.IS_REACT_ACT_ENVIRONMENT;
+  });
+
+}
 
 test("Escape closes the menu instead of navigating back", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
@@ -297,8 +304,9 @@ test("Escape closes the menu instead of navigating back", () => {
 });
 
 for (const viewsEnabled of [false, true]) {
-  test(`board grouping counts every Tab before a render (saved views ${viewsEnabled})`, () => {
-    const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/my-tasks?view=all&board=10" });
+  for (const groupBy of ["board", "time"]) {
+  test(`${groupBy} grouping counts every Tab before a render (saved views ${viewsEnabled})`, () => {
+    const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/my-tasks?view=1&board=10" });
     global.window = dom.window;
     global.document = dom.window.document;
     global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -316,6 +324,11 @@ for (const viewsEnabled of [false, true]) {
       act(() => reactRoot.render(React.createElement(MyTasks, {
         sections: boardSections, tabs: ["All", ...boardSections.map((section) => section.section_title)],
         currentUser: { id: 6 }, viewsEnabled,
+        initialViewId: 1,
+        initialViews: [{ id: 1, name: "Navigation", config: { groupBy } }],
+        boards: boardSections.map(({ projectId, section_title }) => ({
+          id: projectId, title: section_title, labels: [], sections: [],
+        })),
       })));
       assert.deepEqual(lastViewItems(), [10]);
       const panel = document.querySelector('[data-testid="my-tasks-panel"]');
@@ -346,7 +359,7 @@ for (const viewsEnabled of [false, true]) {
     }
   });
 }
-
+}
 
 test("live updates stay active without a feature flag", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });

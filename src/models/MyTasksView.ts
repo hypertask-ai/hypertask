@@ -183,17 +183,8 @@ const groupByValue = (value: unknown): MyTasksGroupBy | undefined =>
 
 export function effectiveMyTasksGroupBy(
   config: Pick<MyTasksViewConfig, "groupBy">,
-  flagEnabled: boolean,
 ): MyTasksGroupBy {
-  if (!flagEnabled) return "board";
   return config.groupBy ?? "time";
-}
-
-export function myTasksTimeGroupOn(
-  serverEnabled: boolean,
-  clientEnabled: boolean,
-): boolean {
-  return Boolean(serverEnabled || clientEnabled);
 }
 
 const KNOWN_CONFIG_KEYS = new Set([

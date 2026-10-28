@@ -14,7 +14,6 @@ import {
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
-  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
@@ -66,7 +65,6 @@ import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   effectiveMyTasksGroupBy,
   effectiveMyTasksTableVisibleColumns,
-  myTasksTimeGroupOn,
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
@@ -117,7 +115,6 @@ interface IProps {
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
   viewsEnabled: boolean;
-  timeGroupEnabled?: boolean;
   scopesEnabled?: boolean;
 }
 
@@ -141,7 +138,6 @@ const MyTasks = ({
   initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
   viewsEnabled = false,
-  timeGroupEnabled = false,
   scopesEnabled = false,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
@@ -170,11 +166,6 @@ const MyTasks = ({
   }, []);
 
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const myTasksTimeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
-  const myTasksTimeGroupEnabled = myTasksTimeGroupOn(
-    timeGroupEnabled,
-    Boolean(myTasksTimeGroupFlag),
-  );
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
@@ -429,7 +420,7 @@ const MyTasks = ({
     [sections, selectedPriorities]
   );
 
-  const groupBy = effectiveMyTasksGroupBy(viewConfig, myTasksTimeGroupEnabled);
+  const groupBy = effectiveMyTasksGroupBy(viewConfig);
 
   const availableBoards = useMemo(() => {
     if (!viewConfig.boardIds) return boards;
@@ -1050,36 +1041,30 @@ const boardTabCounts = useMemo(() => {
             {totalCount}
           </span>
           <span className="sr-only">Live list updates on</span>
-          {myTasksTimeGroupFlag ? (
-            <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
-          ) : null}
         </span>
-        {((viewsEnabled && myTasksViewsEnabled) || myTasksTimeGroupEnabled) && (
-          <MyTasksViewControls
-            variant={iconControlsEnabled ? "icons" : "labels"}
-            boards={boards}
-            config={viewConfig}
-            onChange={updateViewConfig}
-            timeGroupEnabled={myTasksTimeGroupEnabled}
-            tableColumnsEnabled={tableColumnsFeatureEnabled}
-            scopesEnabled={scopesEnabled}
-            snoozeEnabled={myTasksSnoozeEnabled}
-            onOpenTableColumns={openTableColumnsPicker}
-            onOpenKanbanFilters={() => {
-              updateViewConfig((current) =>
-                migrateFlatFiltersToFilterSettings(
-                  current,
-                  new Map(
-                    boards.flatMap((board) =>
-                      board.labels.map((label) => [label.id, label.name] as const),
-                    ),
+        <MyTasksViewControls
+          variant={iconControlsEnabled ? "icons" : "labels"}
+          boards={boards}
+          config={viewConfig}
+          onChange={updateViewConfig}
+          tableColumnsEnabled={tableColumnsFeatureEnabled}
+          scopesEnabled={scopesEnabled}
+          snoozeEnabled={myTasksSnoozeEnabled}
+          onOpenTableColumns={openTableColumnsPicker}
+          onOpenKanbanFilters={() => {
+            updateViewConfig((current) =>
+              migrateFlatFiltersToFilterSettings(
+                current,
+                new Map(
+                  boards.flatMap((board) =>
+                    board.labels.map((label) => [label.id, label.name] as const),
                   ),
                 ),
-              );
-              setKanbanFiltersOpen(true);
-            }}
-          />
-        )}
+              ),
+            );
+            setKanbanFiltersOpen(true);
+          }}
+        />
         {myTasksSnoozeEnabled && !viewsFeatureEnabled ? (
           <label className="ml-auto flex items-center gap-2 self-center text-content text-text-light-gray">
             <input
