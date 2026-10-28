@@ -9,4 +9,3 @@ No VPN runner, new host or default preview gate without a recorded decision.
 ## CI contract
 
 Read [docs/ci.md](../../docs/ci.md) and [docs/ci-policy.yml](../../docs/ci-policy.yml) before changing workflows, runners, rulesets, required checks, previews, or deploy behavior. App CI uses GitHub-hosted Ubuntu. Never add a VPN runner or another host implicitly. Full CI belongs on hosted runners; run only the targeted checks permitted by the current task and host policy.
-

@@ -14,4 +14,3 @@ Before UI work, follow [reuse-existing-ui](../../.claude/skills/reuse-existing-u
 | No explanatory code comments | `local/no-comments`; use clearer code instead |
 
 Never increase UI baseline allowances. Lower counts when removing debt. New files have zero allowance. Only shared implementation files own raw controls. An exceptional paradigm requires a human-approved reason and expiry on the offending line, never a blanket lint disable. Syntax checks do not replace semantic review. Requested layout changes update the baseline or flagged-change record with the ticket and Valentin's quote. Run UI lint and `tests/ui-patterns.test.cjs` when touching these rules or UI.
-
