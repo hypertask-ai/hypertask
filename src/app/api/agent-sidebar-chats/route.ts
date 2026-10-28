@@ -10,7 +10,7 @@ import { openAgentChat } from "@/lib/agents/chatService";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import { agentChatDeliveryMode, hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
 import { getAgentTeamIds } from "@/utils/controllers/agents/boardMembers";
-import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { browserMutationIsSameOrigin } from "@/lib/agentRuns/service";
 
@@ -62,8 +62,7 @@ export async function GET(request: NextRequest) {
       });
       if (!access.ok) return null;
     } else if (agent.userId !== viewer.userId &&
-      (!(await isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, agent.userId)) ||
-        !teamIds.includes(agentTeamIds.get(agent.id) ?? ""))) return null;
+      !teamIds.includes(agentTeamIds.get(agent.id) ?? "")) return null;
     if (before) {
       const access = await loadUserAgentChatSession({ sessionId: before, userId: viewer.userId,
         sidebarProjectId: projectId, actingAgentId: viewer.agentId, select: {} });

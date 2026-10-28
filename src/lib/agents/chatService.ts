@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import { getAgentTeamIds } from "@/utils/controllers/agents/boardMembers";
-import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 import { ensureChatParticipant, loadSidebarChatAgent, loadUserAgentChatSession, userTeamIds } from "./chatAccess";
 
 export async function openAgentChat({ userId, agentId, sidebarProjectId, actingAgentId, sessionId, newSession = false }: {
@@ -32,18 +32,15 @@ export async function openAgentChat({ userId, agentId, sidebarProjectId, actingA
     return denied;
   }
 
-  const [agentTeamIds, sharedConversationEnabled] = await Promise.all([
-    getAgentTeamIds([agent.id]),
-    isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, agent.userId),
-  ]);
+  const agentTeamIds = await getAgentTeamIds([agent.id]);
   const teamId = agentTeamIds.get(agent.id) ?? null;
   const teamIds =
-    sharedConversationEnabled && agent.userId !== userId
+    agent.userId !== userId
       ? await userTeamIds(userId)
       : [];
   const mayOpen =
     agent.userId === userId ||
-    (agent.crossTeamHomeTeamId == null && sharedConversationEnabled &&
+    (agent.crossTeamHomeTeamId == null &&
       teamId !== null &&
       teamIds.includes(teamId));
   if (!mayOpen) {

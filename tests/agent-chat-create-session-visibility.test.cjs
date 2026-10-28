@@ -276,7 +276,6 @@ const prisma = {
         sessions.find((row) => matchSession(row, where)) ?? null;
       if (!session) return null;
       const agent = AGENTS.find((row) => row.id === session.agentId);
-      // chatAccess looks up the agent owner to evaluate the shared-chat flag.
       return { ...session, agent: agent ? { userId: agent.userId } : null };
     },
     create: async () => {
@@ -298,12 +297,7 @@ stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => ({ userId: sessionUserId }),
 });
-stub("src/lib/flags.ts", {
-  SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
-  // Visibility tests need the shared mode on so a teammate can open a TEAM
-  // agent; the private-agent denials still come from accessibleAgentWhere.
-  isFeatureEnabled: async (key) => key === "htpr-6002-shared-agent-chat",
-});
+stub("src/lib/flags.ts", { isFeatureEnabled: async () => false });
 
 const route = createJiti(path.join(root, "tests/agent-chat-create-session-visibility-load.cjs"), {
   alias: { "@": path.join(root, "src") },

@@ -35,7 +35,6 @@ const prisma = {
       id: "session-1",
       agentId: "agent-1",
       userId: 6,
-      // chatAccess evaluates the shared-chat flag against the agent owner.
       agent: { userId: 6 },
       ...(select.user ? { user: { displayName: "Valentin" } } : {}),
     }),
@@ -66,12 +65,8 @@ stub("src/lib/auth/getSessionUser.ts", {
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
 stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaiting: true }) });
 stub("src/lib/flags.ts", {
-  SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
   isFeatureEnabled: async (key, userId) => {
     assert.equal(userId, 6);
-    // Shared-chat rollout is evaluated against the agent owner before history
-    // loads. Keep it on here so this suite stays about activity rows.
-    if (key === "htpr-6002-shared-agent-chat") return true;
     // Chat context is a separate feature; keep it off so these routes keep
     // their plain transcript shape.
     if (key === "htpr-7734-agent-chat-context") return false;

@@ -21,7 +21,7 @@ function matches(row, where = {}) {
   });
 }
 
-function fixture({ marked = true, shared = true, sessionUserId = 6, teamId = "team-a", runtimeType = "EXTERNAL" } = {}) {
+function fixture({ marked = true, sessionUserId = 6, teamId = "team-a", runtimeType = "EXTERNAL" } = {}) {
   const state = { sessionExists: true, viewer: { userId: 6 }, token: { user: { id: 6 }, agentId: "22222222-2222-4222-8222-222222222222", teamScope: null } };
   const writes = [], broadcasts = [], flags = [];
   const board = { id: 15, ownerId: 6, teamId: "team-a", status: "Normal", members: [{ userId: 7, agentId: null, status: "Accepted" }] };
@@ -86,7 +86,7 @@ function fixture({ marked = true, shared = true, sessionUserId = 6, teamId = "te
     "next/headers": { cookies: async () => ({ get: () => null }) },
     "@/utils/edgeHelpers": { isValidUser: () => ({ isValid: false }) },
     "@/lib/auth/agentScope": { withAgentScopeRequest: async (_request, fn) => fn() },
-    "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", AGENT_CHAT_TICKET_CONFIRM_FLAG: "confirm", isFeatureEnabled: async (key) => { flags.push(key); return key === "htpr-7518-agent-sidebar-chats" || key === "shared" && shared; } },
+    "@/lib/flags": { AGENT_CHAT_TICKET_CONFIRM_FLAG: "confirm", isFeatureEnabled: async (key) => { flags.push(key); return key === "htpr-7518-agent-sidebar-chats"; } },
     "@/lib/agents/visibility": { accessibleAgentWhere: (userId) => ({ __visibleTo: userId }) },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}), projectContentAccessWhere: (_userId, _agentId, scope) => scope ? { teamId: scope.teamId } : {} },
     "@/utils/controllers/agents/boardMembers": { getAgentTeamIds: async () => new Map([[agent.id, "team-a"]]) },
@@ -157,37 +157,35 @@ function fixture({ marked = true, shared = true, sessionUserId = 6, teamId = "te
   return { state, agent, session, writes, broadcasts, flags, participants, call, loadModule, request, prisma };
 }
 
-for (const shared of [true, false]) {
-  for (const sidebar of [false, true]) {
-    for (const name of ["history", "send", "draft", "stop", "open", ...(sidebar ? ["roster"] : [])]) {
-      test(`${name}: sticky privacy, shared=${shared}, sidebar=${sidebar}, owner allowed / teammate refused`, async () => {
-        const f = fixture({ shared });
-        const allowed = await f.call(name, sidebar);
-        assert.equal(allowed.status, 200, JSON.stringify(await allowed.json()));
-        f.writes.length = 0;
-        f.state.viewer.userId = 7;
-        const refused = await f.call(name, sidebar);
-        if (name === "roster") assert.deepEqual((await refused.json()).agents, []);
-        else assert.equal(refused.status, 404, JSON.stringify(await refused.json()));
-        assert.deepEqual(f.writes, []);
-        assert.ok(!f.flags.includes("htpr-8084-cross-team-agents"), "privacy cannot depend on rollout state");
-      });
-    }
+for (const sidebar of [false, true]) {
+  for (const name of ["history", "send", "draft", "stop", "open", ...(sidebar ? ["roster"] : [])]) {
+    test(`${name}: sticky privacy, sidebar=${sidebar}, owner allowed / teammate refused`, async () => {
+      const f = fixture();
+      const allowed = await f.call(name, sidebar);
+      assert.equal(allowed.status, 200, JSON.stringify(await allowed.json()));
+      f.writes.length = 0;
+      f.state.viewer.userId = 7;
+      const refused = await f.call(name, sidebar);
+      if (name === "roster") assert.deepEqual((await refused.json()).agents, []);
+      else assert.equal(refused.status, 404, JSON.stringify(await refused.json()));
+      assert.deepEqual(f.writes, []);
+      assert.ok(!f.flags.includes("htpr-8084-cross-team-agents"), "privacy cannot depend on rollout state");
+    });
   }
-  test(`private history hides previous participant roster, shared=${shared}`, async () => {
-    const f = fixture({ shared });
-    const body = await (await f.call("history")).json();
-    assert.equal(body.messages[0].content, "PRIVATE-HISTORY");
-    assert.equal(body.participants, null);
-    assert.equal(body.sharedConversationEnabled, false);
-    assert.equal(body.viewer.draft, "6-draft");
-  });
-  test(`broadcast discards foreign participant and explicit recipients, shared=${shared}`, async () => {
-    const f = fixture({ shared });
-    await f.loadModule("src/lib/agents/chatBroadcast.ts").broadcastChatSession(f.session.id, [7, 8, 99, 6]);
-    assert.deepEqual(f.broadcasts, ["user-6"]);
-  });
 }
+test("private history hides previous participant roster", async () => {
+  const f = fixture();
+  const body = await (await f.call("history")).json();
+  assert.equal(body.messages[0].content, "PRIVATE-HISTORY");
+  assert.equal(body.participants, null);
+  assert.equal(body.sharedConversationEnabled, false);
+  assert.equal(body.viewer.draft, "6-draft");
+});
+test("broadcast discards foreign participant and explicit recipients", async () => {
+  const f = fixture();
+  await f.loadModule("src/lib/agents/chatBroadcast.ts").broadcastChatSession(f.session.id, [7, 8, 99, 6]);
+  assert.deepEqual(f.broadcasts, ["user-6"]);
+});
 
 for (const name of ["history", "send", "draft", "stop", "open", "roster"]) test(`${name}: null marker preserves legacy TEAM sharing`, async () => {
   const f = fixture({ marked: false });
@@ -272,7 +270,7 @@ for (const name of ["roster", "open"]) test(`${name}: no previous conversation c
 });
 
 test("removing home-team grants cannot restore former teammates' history or broadcasts", async () => {
-  const f = fixture({ shared: false });
+  const f = fixture();
   f.agent.members = [];
   f.session.teamId = null;
   f.state.viewer.userId = 7;
@@ -306,14 +304,12 @@ function runServiceFixture(options = {}) {
 }
 
 for (const marked of [true, false]) {
-  for (const shared of [true, false]) {
-    for (const operation of ["stop", "sweep"]) test(`run service ${operation}: marked=${marked}, shared=${shared} authorizes broadcast recipients`, async () => {
-      const f = runServiceFixture({ marked, shared });
-      if (operation === "stop") assert.equal(await f.service.stopAgentChatTurn(f.principal, f.session.id), true);
-      else assert.equal(await f.service.sweepExpiredAgentChatTurns(), 1);
-      assert.deepEqual(f.broadcasts.sort(), !marked && shared ? ["user-6", "user-7", "user-8"] : ["user-6"]);
-    });
-  }
+  for (const operation of ["stop", "sweep"]) test(`run service ${operation}: marked=${marked} authorizes broadcast recipients`, async () => {
+    const f = runServiceFixture({ marked });
+    if (operation === "stop") assert.equal(await f.service.stopAgentChatTurn(f.principal, f.session.id), true);
+    else assert.equal(await f.service.sweepExpiredAgentChatTurns(), 1);
+    assert.deepEqual(f.broadcasts.sort(), !marked ? ["user-6", "user-7", "user-8"] : ["user-6"]);
+  });
 }
 
 test("run service stop awaits private audience lookup before completing", async () => {

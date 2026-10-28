@@ -84,7 +84,7 @@ async function run(operation, requestedMode = 'OFF', options = {}) {
       if (mode === 'USER_FAILURE') throw new Error('user lookup failed');
       return mode === 'NO_SESSION' ? null : { userId };
     } },
-    '@/lib/flags': { SHARED_AGENT_CHAT_FLAG: 'shared-agent-chat', isFeatureEnabled: async (...args) => {
+    '@/lib/flags': { isFeatureEnabled: async (...args) => {
       if (args[0] === 'htpr-7052-chat-names') return false;
       return mode === 'ON';
     } },

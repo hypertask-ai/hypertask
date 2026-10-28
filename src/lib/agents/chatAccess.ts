@@ -5,7 +5,7 @@ import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/definitions/htpr
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
-import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 
 
 export const AGENT_CHAT_SESSION_NOT_FOUND = "Session not found";
@@ -84,13 +84,6 @@ export async function chatParticipantUserIds(
     return [];
   }
   if (identity.agent.crossTeamHomeTeamId != null) return [identity.agent.userId];
-  const sharedConversationEnabled = await isFeatureEnabled(
-    SHARED_AGENT_CHAT_FLAG,
-    identity.agent.userId,
-  );
-  if (!sharedConversationEnabled) {
-    return [...new Set([identity.agent.userId, ...alsoUserIds])];
-  }
   const rows = await prisma.chatSessionParticipant.findMany({
     where: { sessionId },
     select: { userId: true },
@@ -209,15 +202,11 @@ export async function loadUserAgentChatSession<
   if (sidebarProjectId !== undefined && !(await loadSidebarChatAgent(
     userId, sidebarProjectId, identity.agentId, actingAgentId,
   ))) return notFound;
-  const sharedConversationEnabled = identity.agent.crossTeamHomeTeamId == null && await isFeatureEnabled(
-    SHARED_AGENT_CHAT_FLAG,
-    identity.agent.userId,
-  );
   const session = await findChatSession(
     userAgentChatSessionWhere(
       sessionId,
       userId,
-      sharedConversationEnabled ? await userTeamIds(userId) : [],
+      await userTeamIds(userId),
     ),
     select,
   );
@@ -226,7 +215,7 @@ export async function loadUserAgentChatSession<
     ok: true,
     session: session as ChatSessionOf<TSelect>,
     agentId: session.agentId,
-    sharedConversationEnabled,
+    sharedConversationEnabled: identity.agent.crossTeamHomeTeamId == null,
   };
 }
 

@@ -197,7 +197,7 @@ function server({ enabled = true, readable = true, agentReadable: initialAgentRe
     },
     project: { findMany: async ({ where }) => where.id ? canRead(where) ? where.id.in.map((id) => ({ id })) : [] : [{ id: 15 }], findFirst: async (query) => { queries.push(query); return canRead(query.where) ? { id: query.where.id, title: "Board title" } : null; } },
     chatSession: { update: async () => ({}), findMany: async () => [], findFirst: async () => session },
-    chatSessionParticipant: { updateMany: async () => ({ count: 1 }) },
+    chatSessionParticipant: { updateMany: async () => ({ count: 1 }), findMany: async () => [] },
     chatMessage: { create: async ({ data }) => { const row = { id: "message", createdAt: new Date(), attachments: [], ...data }; rows.push(row); return row; }, update: async () => ({}), findMany: async () => [...rows].reverse(), count: async () => rows.length },
     agentWebhookSubscription: { findUnique: async () => null },
     $transaction: async (fn) => fn(prisma),
