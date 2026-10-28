@@ -98,10 +98,23 @@ function addedLinesFor(baseSha, headSha, path, includeDeletions = false) {
   return lines;
 }
 
-function staticBoolean(node, returnedValue = false) {
+function staticBoolean(node, returnedValue = false, checker = null, seen = new Set()) {
   while (typescript.isParenthesizedExpression(node) || typescript.isAsExpression(node) ||
          typescript.isTypeAssertionExpression(node) || typescript.isNonNullExpression(node) ||
          typescript.isSatisfiesExpression(node)) node = node.expression;
+  if (checker && typescript.isIdentifier(node)) {
+    const symbol = checker.getSymbolAtLocation(node);
+    const declaration = symbol?.valueDeclaration;
+    if (declaration && !seen.has(symbol) && typescript.isVariableDeclaration(declaration) &&
+        declaration.initializer && typescript.isVariableDeclarationList(declaration.parent) &&
+        (declaration.parent.flags & typescript.NodeFlags.Const) &&
+        !writtenBindingSymbols(node.getSourceFile(), checker).has(symbol)) {
+      seen.add(symbol);
+      const value = staticBoolean(declaration.initializer, returnedValue, checker, seen);
+      seen.delete(symbol);
+      return value;
+    }
+  }
   if (node.kind === typescript.SyntaxKind.TrueKeyword) return true;
   if (node.kind === typescript.SyntaxKind.FalseKeyword) return false;
   if (node.kind === typescript.SyntaxKind.NullKeyword) return false;
@@ -118,34 +131,34 @@ function staticBoolean(node, returnedValue = false) {
       (node.head.text.length > 0 || node.templateSpans.some((span) => span.literal.text.length > 0))) return true;
   if (typescript.isNumericLiteral(node)) return Number(node.text) !== 0;
   if (typescript.isPrefixUnaryExpression(node) && node.operator === typescript.SyntaxKind.ExclamationToken) {
-    const operand = staticBoolean(node.operand, returnedValue);
+    const operand = staticBoolean(node.operand, returnedValue, checker, seen);
     return operand === null ? null : !operand;
   }
   return null;
 }
 
-function isStaticallyUnreachable(node) {
+function isStaticallyUnreachable(node, checker = null) {
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     if (typescript.isBinaryExpression(parent) && child === parent.right) {
-      const left = staticBoolean(parent.left);
+      const left = staticBoolean(parent.left, true, checker);
       if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && left === false) ||
           (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && left === true)) return true;
     }
     if (typescript.isConditionalExpression(parent)) {
-      const condition = staticBoolean(parent.condition);
+      const condition = staticBoolean(parent.condition, true, checker);
       if ((child === parent.whenTrue && condition === false) ||
           (child === parent.whenFalse && condition === true)) return true;
     }
     if (typescript.isIfStatement(parent)) {
-      const condition = staticBoolean(parent.expression);
+      const condition = staticBoolean(parent.expression, true, checker);
       if ((child === parent.thenStatement && condition === false) ||
           (child === parent.elseStatement && condition === true)) return true;
     }
     if (typescript.isWhileStatement(parent) && child === parent.statement &&
-        staticBoolean(parent.expression) === false) return true;
+        staticBoolean(parent.expression, true, checker) === false) return true;
     if (typescript.isForStatement(parent) && child === parent.statement && parent.condition &&
-        staticBoolean(parent.condition) === false) return true;
+        staticBoolean(parent.condition, true, checker) === false) return true;
     if (typescript.isBlock(parent)) {
       const statementIndex = parent.statements.findIndex((statement) => statement === child);
       if (statementIndex > 0 && parent.statements.slice(0, statementIndex)
@@ -250,7 +263,7 @@ function functionBindingName(fn, checker = null) {
 // expression, an argument of a call, or a const that is itself consumed.
 function jsxResultIsConsumed(node, checker, live, seen = new Set(), allowCallArguments = true) {
   // A reference or element on a statically dead path (false && x, if (false)) never renders.
-  if (isStaticallyUnreachable(node)) return false;
+  if (isStaticallyUnreachable(node, checker)) return false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     // A consuming use only counts inside a live function on a reachable path.
@@ -493,6 +506,16 @@ function branchIsNullishOrEmpty(node, renderOnly = false) {
       return branchIsNullishOrEmpty(returnsLeft ? expression.left : expression.right, true);
     }
     return branchIsNullishOrEmpty(expression.left, true) && branchIsNullishOrEmpty(expression.right, true);
+  }
+  if (renderOnly && typescript.isBinaryExpression(expression) &&
+      expression.operatorToken.kind === typescript.SyntaxKind.QuestionQuestionToken) {
+    const left = unwrapExpr(expression.left);
+    if (left.kind === typescript.SyntaxKind.NullKeyword || typescript.isVoidExpression(left) ||
+        (typescript.isIdentifier(left) && left.text === "undefined")) {
+      return branchIsNullishOrEmpty(expression.right, true);
+    }
+    if (staticBoolean(left, true) !== null) return branchIsNullishOrEmpty(left, true);
+    return branchIsNullishOrEmpty(left, true) || branchIsNullishOrEmpty(expression.right, true);
   }
   if (renderOnly && typescript.isSpreadElement(expression)) {
     const operand = unwrapExpr(expression.expression);

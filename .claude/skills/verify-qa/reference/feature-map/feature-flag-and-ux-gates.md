@@ -74,3 +74,5 @@ No app output changes, so theme screenshots and customer-data writes are unneces
 ## Cleanup
 
 None. Nothing is created.
+
+Nullish render children select the actually returned operand: null-to-boolean stays invisible, null-to-text and zero remain visible. Logical render reachability resolves immutable constant aliases, including truthy arrays and objects; masked JSX cannot prove a formatter gate. Keep reachable conjunction and disjunction controls beside those refusals.

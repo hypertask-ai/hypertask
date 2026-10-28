@@ -2790,3 +2790,28 @@ test('imported formatter server boolean responses remain effective gates', async
     assert.equal((await evaluate('HTPR-1 [FEATURE] imported server boolean gate', base, commit(git, name), dir)).pass, expected, name);
   }
 });
+
+test('formatter consumers reject invisible nullish children and unreachable logical aliases', async (t) => {
+  const cases = [
+    ['nullish boolean child', 'return <div>{label ? [null ?? true] : null}</div>;', false],
+    ['false nullish text child', 'return label ? [false ?? "Age"] : null;', false],
+    ['true nullish text child', 'return label ? [true ?? "Age"] : null;', false],
+    ['undefined nullish boolean child', 'return label ? [undefined ?? false] : null;', false],
+    ['nullish text control', 'return label ? [null ?? "Age"] : null;', true],
+    ['nullish zero control', 'return label ? [0 ?? true] : null;', true],
+    ['nullish empty string', 'return label ? ["" ?? "Age"] : null;', false],
+    ['truthy array alias', 'const empty = []; return empty || <div>{label && <p>Age</p>}</div>;', false],
+    ['truthy array literal', 'return [] || <div>{label && <p>Age</p>}</div>;', false],
+    ['truthy object alias', 'const empty = {}; return empty || <div>{label && <p>Age</p>}</div>;', false],
+    ['transitive truthy alias', 'const empty = []; const mask = empty; return mask || <div>{label && <p>Age</p>}</div>;', false],
+    ['falsy conjunction alias', 'const ready = false; return ready && <div>{label && <p>Age</p>}</div>;', false],
+    ['reachable disjunction control', 'const ready = false; return ready || <div>{label && <p>Age</p>}</div>;', true],
+    ['reachable conjunction control', 'const ready = []; return ready && <div>{label && <p>Age</p>}</div>;', true],
+  ];
+  for (const [name, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + `export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] reachable formatter output', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
