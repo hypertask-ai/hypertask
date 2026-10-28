@@ -191,6 +191,8 @@ while [ ! -f "$HOME/closed" ]; do /bin/sleep 0.01; done
         self.command('tmux', """
 case "$1" in
   select-pane|clear-history) : ;;
+  display-message) echo "0 2" ;;
+  if-shell) echo submitted >> "$HOME/events"; touch "$HOME/recovered"; echo provider-retried ;;
   send-keys)
     case "$*" in
       *' -l '*) echo brief >> "$HOME/events"; printf '%s' "$*" > "$HOME/brief" ;;
@@ -198,7 +200,9 @@ case "$1" in
       *C-d) echo closed >> "$HOME/events"; touch "$HOME/closed" ;;
     esac ;;
   capture-pane)
-    printf '  %s\\n' "$FINAL_LINE"
+    if [ "${RECOVER_PROVIDER:-0}" = 1 ] && [ ! -f "$HOME/recovered" ]; then
+      printf '\\033[2m[provider error — enter to retry]\\033[0m\\n\\n❯\\n'
+    else printf '  %s\\n' "$FINAL_LINE"; fi
     echo capture >> "$HOME/events" ;;
   *) exit 99 ;;
 esac
@@ -211,7 +215,7 @@ case "$1" in
     elif [ -f "$HOME/started" ]; then
       if [ ! -f "$HOME/tool-phase" ]; then
         echo tool-phase >> "$HOME/events"; touch "$HOME/tool-phase"
-      else
+      elif [ "${RECOVER_PROVIDER:-0}" != 1 ] || [ -f "$HOME/recovered" ]; then
         printf '{"kind":"assistant","text":"%s"}\\n{"kind":"turn_usage"}\\n' "$FINAL_LINE" >> "$HOME/session.jsonl"
         echo final-phase >> "$HOME/events"
       fi
@@ -220,19 +224,21 @@ esac
 exec /bin/sleep 0.01
 """)
         session_ids = set()
-        for final_line, cooldown in [
-            ('RUNNER DONE YPER4-1 Done', 30),
-            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done', 30),
-            ('RUNNER DONE YPER4-1 Agent Blocked', 30),
-            ('RUNNER DONE YPER4-776 Done', 30),
-            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30),
-            ('• RUNNER IDLE no free tickets', 900),
+        for final_line, cooldown, recovery in [
+            ('RUNNER DONE YPER4-1 Done', 30, False),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done', 30, False),
+            ('RUNNER DONE YPER4-1 Agent Blocked', 30, False),
+            ('RUNNER DONE YPER4-776 Done', 30, False),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30, False),
+            ('• RUNNER IDLE no free tickets', 900, False),
+            ('RUNNER DONE YPER4-776 Done', 30, True),
         ]:
             with self.subTest(final_line=final_line):
                 self.events.write_text('')
-                for name in ['closed', 'started', 'tool-phase']:
+                for name in ['closed', 'started', 'tool-phase', 'recovered']:
                     (self.home / name).unlink(missing_ok=True)
                 self.env['FINAL_LINE'] = final_line
+                self.env['RECOVER_PROVIDER'] = '1' if recovery else '0'
                 records = [
                     {'type': 'session', 'version': 1, 'cwd': str(self.home / 'projects/hypertask')},
                     {'kind': 'user', 'text': final_line},
@@ -273,9 +279,11 @@ exec /bin/sleep 0.01
                 self.assertLess(events.index('recovery drain 8'), events.index('brief'))
                 self.assertLess(events.index('brief'), events.index('submitted'))
                 self.assertLess(events.index('tool-phase'), events.index('final-phase'))
-                self.assertLess(events.index('final-phase'), events.index('capture'))
-                self.assertLess(events.index('capture'), events.index('closed'))
+                self.assertLess(events.index('final-phase'), len(events) - 1 - events[::-1].index('capture'))
+                self.assertLess(len(events) - 1 - events[::-1].index('capture'), events.index('closed'))
                 self.assertIn(f'retry {cooldown}', events)
+                self.assertEqual(events.count('submitted'), 2 if recovery else 1)
+                self.assertFalse((self.state / 'stop-8').exists())
                 self.assertIn(final_line, (self.state / 'runner-8.latest.log').read_text())
                 self.assertIn(final_line, (self.state / 'runner-8.log').read_text())
 
@@ -338,6 +346,86 @@ fi
         self.assertEqual((self.state / 'runner-8.result').read_text(), 'TIMEOUT\n')
         self.assertEqual((self.state / 'runner-8.latest.log').read_text(), 'unfinished fixture screen\n')
         self.assertIn('unfinished fixture screen', (self.state / 'runner-8.log').read_text())
+
+    def test_provider_error_retries_back_off_and_stop_without_submitting_other_input(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        self.command('clear', 'exit 0')
+        self.command('python3', '[ "$(cat "$HOME/tick")" -ge 10 ] && { echo DONE; exit 0; }; exit 1')
+        self.command('hax', 'while [ ! -f "$HOME/closed" ]; do /bin/sleep 0.01; done')
+        self.command('tmux', """
+case "$1" in
+  select-pane|clear-history) : ;;
+  display-message) echo "$PANE_STATE" ;;
+  if-shell)
+    if [ "${RACE_STATE:-0 2}" = '0 2' ]; then
+      cat "$HOME/tick" >> "$HOME/retries"; echo provider-retried
+    fi ;;
+  send-keys)
+    case "$*" in
+      *' -l '*) touch "$HOME/brief" ;;
+      *C-m)
+        if [ -f "$HOME/submitted" ]; then
+          cat "$HOME/tick" >> "$HOME/retries"
+        else touch "$HOME/submitted"; fi ;;
+      *C-d) touch "$HOME/closed" ;;
+    esac ;;
+  capture-pane) printf '%s\\n' "$PANE_TEXT" ;;
+  *) exit 99 ;;
+esac
+""")
+        self.command('sleep', """
+if [ -f "$HOME/closed" ]; then
+  echo "cooldown $1" >> "$HOME/events"; kill -TERM "$PPID"
+fi
+if [ "$1" = 30 ]; then
+  tick=$(cat "$HOME/tick" 2>/dev/null || echo 0)
+  echo $((tick + 1)) > "$HOME/tick"
+fi
+exec /bin/sleep 0.001
+""")
+        footer = '\x1b[2m[provider error — enter to retry]\x1b[0m'
+        for text, pane_state, race_state, retries, stopped in [
+            (footer + '\n\n❯', '0 2', '0 2', ['1', '3', '7'], True),
+            (footer + '\n\n>', '0 2', '0 2', ['1', '3', '7'], True),
+            ('quoted [provider error — enter to retry]\n❯', '0 2', '0 2', [], False),
+            ('[provider error — enter to retry]\n❯', '0 2', '0 2', [], False),
+            (footer + '\n❯ do not send', '0 13', '0 13', [], False),
+            (footer + '\n❯', '0 3', '0 3', [], False),
+            (footer + '\n❯', '1 2', '1 2', [], False),
+            (footer + '\n❯', '0 2', '1 2', [], False),
+            (footer + '\n❯', '0 2', '0 7', [], False),
+            ('  ' + footer + '\n  ❯', '0 2', '0 2', [], False),
+            (footer + '\nworking...', '0 2', '0 2', [], False),
+            ('[paused — enter to continue]\n❯', '0 2', '0 2', [], False),
+        ]:
+            with self.subTest(text=text):
+                for name in ['closed', 'brief', 'submitted', 'tick', 'retries']:
+                    (self.home / name).unlink(missing_ok=True)
+                (self.state / 'stop-8').unlink(missing_ok=True)
+                self.events.write_text('')
+                self.env['PANE_TEXT'] = text
+                self.env['PANE_STATE'] = pane_state
+                self.env['RACE_STATE'] = race_state
+                process = subprocess.Popen(['bash', str(SCRIPT), '8', '--loop'], env=self.env,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, start_new_session=True)
+                try:
+                    process.communicate(timeout=10)
+                finally:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
+                retry_file = self.home / 'retries'
+                self.assertEqual(retry_file.read_text().splitlines() if retry_file.exists() else [], retries)
+                self.assertEqual((self.state / 'stop-8').exists(), stopped)
+                self.assertEqual((self.state / 'runner-8.result').read_text(),
+                                 'PROVIDER_ERROR\n' if stopped else 'DONE\n')
+                if stopped:
+                    log = (self.state / 'runner-8.log').read_text()
+                    self.assertIn('provider retry 3/3', log)
+                    self.assertIn('provider retry limit reached', log)
 
     def test_invalid_targets_fail_before_launch(self):
         for target, cap in [('0', '20'), ('21', '21'), ('3', '2'), ('oops', '20'), ('9999999999999', '20')]:

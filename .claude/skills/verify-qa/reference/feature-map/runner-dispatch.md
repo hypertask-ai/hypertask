@@ -27,6 +27,24 @@ an identity, pane, prompt or model request. It also checks admission before
 creating a new pool pane and before each subsequent ticket session. Install
 updates only after its owning runner finishes; never interrupt active tickets.
 
+The standing loop watches the final two nonblank pane lines. Only the exact
+dim `[provider error — enter to retry]` footer followed by an empty `❯` or `>`
+prompt permits Enter. Attached sessions and nonempty input are skipped; tmux
+rechecks attachment and cursor position when sending. It retries at 30, 60
+and 120-second intervals, logging
+each attempt. A fourth provider-error observation creates `stop-<n>` in
+`~/.local/state/ht-hax-runners`, saves `PROVIDER_ERROR` and pauses the runner.
+Inspect its log and fix the provider before removing that runner's stop file.
+
+For recovery QA, use an isolated tmux socket, HOME and runner state. Drive the
+real `ht-hax-runner <n> --loop` entry point. A disposable hax Codex session
+behind a loopback CONNECT proxy can fail its first request, show the actual
+provider-error footer, then regain connectivity before the loop retries.
+Require a logged retry and a completed response without manually sending
+Enter. Keep TLS opaque; never log headers, tokens or traffic. The offline
+lifecycle tests cover typed-input refusal, lookalike output, backoff, retry
+exhaustion and successful ordinary completion. Do not disrupt real runners.
+
 ## What usually breaks
 
 - A helper script the dispatcher calls is not where it looks (YPER4-577: `runner-snapshot` stayed in the runners skill).

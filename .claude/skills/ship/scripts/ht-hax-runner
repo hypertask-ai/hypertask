@@ -124,7 +124,9 @@ case "${1:-}" in
         sleep 1
         tmux send-keys -t "$TMUX_PANE" C-m
         result=TIMEOUT
-        for _ in $(seq 1 480); do
+        provider_retries=0
+        retry_due=1
+        for poll in $(seq 1 480); do
           sleep 30
           if completed=$(python3 - "$$" "$REPO" "$recovery_ticket" <<'PYTHON'
 import json
@@ -176,6 +178,31 @@ PYTHON
               "$recovery" ack "$n" "$recovery_ticket" || log "RUNNER $n: recovery acknowledgement failed"
             fi
             break
+          fi
+          prompt=$(tmux capture-pane -p -e -t "$TMUX_PANE" -S -8 2>/dev/null | awk '
+            NF {
+              previous_error = error
+              line = $0
+              gsub(/\033\[[0-9;]*m/, "", line)
+              error = $0 ~ /^\033\[2m/ && line == "[provider error — enter to retry]"
+              last = line
+            }
+            END { if (previous_error && (last == "❯" || last == ">")) print "provider-error" }')
+          if [ "$prompt" = provider-error ] &&
+             [ "$(tmux display-message -p -t "$TMUX_PANE" '#{session_attached} #{cursor_x}')" = '0 2' ]; then
+            if [ "$provider_retries" -ge 3 ]; then
+              echo "$(date -u +%FT%TZ) provider retry limit reached; runner paused" >> "$rlog"
+              touch "$STATE/stop-$n"
+              result=PROVIDER_ERROR
+              break
+            fi
+            if [ "$poll" -ge "$retry_due" ] &&
+               [ "$(tmux if-shell -F -t "$TMUX_PANE" '#{&&:#{==:#{session_attached},0},#{==:#{cursor_x},2}}' \
+                    "send-keys -t '$TMUX_PANE' C-m ; display-message -p provider-retried")" = provider-retried ]; then
+              provider_retries=$((provider_retries + 1))
+              echo "$(date -u +%FT%TZ) provider retry $provider_retries/3" >> "$rlog"
+              retry_due=$((poll + (1 << provider_retries)))
+            fi
           fi
         done
         printf '%s\n' "$result" > "$STATE/runner-$n.result"
