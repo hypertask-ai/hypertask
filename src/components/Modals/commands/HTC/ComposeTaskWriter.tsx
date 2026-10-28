@@ -28,7 +28,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG } from "@/lib/flags/definitions/htpr-8140-ctrlj-dictation-shortcut";
+import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";

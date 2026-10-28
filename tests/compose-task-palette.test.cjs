@@ -1758,7 +1758,7 @@ test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and 
     const AudioButton = (props) => React.createElement('button', {
       id: props.id, 'aria-label': props.ariaLabel, onClick: () => { starts++; },
     }, 'Mic');
-    await withPalette(t, { newWindow: true, tab: 'compose', apple, AudioButton }, async ({ flags, rerender, type, press, input, clickTab, requests }) => {
+    await withPalette(t, { newWindow: true, tab: 'compose', apple, AudioButton }, async ({ flags, rerender, type, press, input, requests }) => {
       flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
       await rerender();
       await type('Keep this draft');
@@ -1774,10 +1774,10 @@ test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and 
         assert.equal(ignored.defaultPrevented, false);
       }
       assert.equal(starts, 2);
-      await clickTab('Search');
+      await press('k', modifiers);
       await press('D', { ...modifiers, shiftKey: true });
       assert.equal(starts, 2);
-      await clickTab('New Task');
+      await press('j', modifiers);
       assert.equal(input().value, 'Keep this draft');
       flags['htpr-8140-ctrlj-dictation-shortcut'] = false;
       await rerender();
