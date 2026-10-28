@@ -55,6 +55,7 @@
       "toolbar",
       "list"
     ],
-    "reason": "Requested: \"IDs and titles get their own space\" and \"Back button no longer covers rows\". Phone header controls get a full row below the heading, and the task scroller reserves Back clearance. Desktop landmarks remain unchanged."
+    "reason": "Requested: \"IDs and titles get their own space\" and \"Back button no longer covers rows\". Phone header controls get a full row below the heading, and the task scroller reserves Back clearance. Desktop landmarks remain unchanged.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/8144"
   }
 ]
