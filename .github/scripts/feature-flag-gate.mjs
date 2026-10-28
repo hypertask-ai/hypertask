@@ -1000,7 +1000,7 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
   return null;
 }
 
-function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set() } = {}) {
+function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), checker = null, live = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
   if (fn?.asteriskToken || fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
@@ -1041,14 +1041,14 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
         (function visit(item) {
           if (typescript.isIdentifier(item) && (item.text === node.text || localBindings.has(item.text) ||
               (parameterNames.has(item.text) &&
-                !(independentParameters.has(item.text) && parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) &&
-                !(typescript.isPropertyAccessExpression(item.parent) && item.parent.expression === item)))) repeated = true;
+                !independentParameters.has(item.text)))) repeated = true;
           if (!repeated) typescript.forEachChild(item, visit);
         })(other);
         if (repeated) return false;
         const value = staticBoolean(other, true);
         if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
             (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
+        if (child === parent.left && value !== null) conditionalOutput = true;
         continue;
       }
       const other = child === parent.left ? parent.right : parent.left;
@@ -1082,6 +1082,9 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
           branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression)) return false;
       const a = staticBoolean(whenTrue.expression, true), b = staticBoolean(whenFalse.expression, true);
       return a !== null && b !== null && a !== b;
+    }
+    if (earlyOnly && conditionalOutput && typescript.isJsxExpression(parent) && checker && live) {
+      return jsxResultIsConsumed(parent, checker, live, new Set(), false);
     }
     if (typescript.isConditionalExpression(parent)) {
       conditionalGuard = true;
@@ -1168,14 +1171,45 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   const imported = importedFunctions.get(checker.getSymbolAtLocation(call.expression));
   if (argumentIndex === -1 || !imported || isStaticallyUnreachable(node)) return false;
   const independentArguments = new Set();
+  const written = writtenBindingSymbols(node.getSourceFile(), checker);
+  const flagSymbol = checker.getSymbolAtLocation(node);
   call.arguments.forEach((value, index) => {
     if (index === argumentIndex || staticBoolean(value, true) === false) return;
     let dependent = false;
+    const seen = new Set();
     (function visit(item) {
-      if (typescript.isCallExpression(item) || typescript.isElementAccessExpression(item) ||
-          (typescript.isIdentifier(item) && checker.getSymbolAtLocation(item) &&
-            !(typescript.isPropertyAccessExpression(item.parent) && item.parent.name === item))) dependent = true;
-      if (!dependent) typescript.forEachChild(item, visit);
+      if (dependent) return;
+      if (typescript.isCallExpression(item) || typescript.isElementAccessExpression(item)) {
+        dependent = true;
+        return;
+      }
+      if (typescript.isIdentifier(item) &&
+          !(typescript.isPropertyAccessExpression(item.parent) && item.parent.name === item) &&
+          !(typescript.isPropertyAssignment(item.parent) && item.parent.name === item)) {
+        const symbol = typescript.isShorthandPropertyAssignment(item.parent)
+          ? checker.getShorthandAssignmentValueSymbol(item.parent) : checker.getSymbolAtLocation(item);
+        if (!symbol) return;
+        if (symbol === flagSymbol || written.has(symbol) || seen.has(symbol)) {
+          dependent = true;
+          return;
+        }
+        seen.add(symbol);
+        for (const declaration of symbol.declarations ?? []) {
+          let binding = declaration;
+          while (typescript.isBindingElement(binding) || typescript.isObjectBindingPattern(binding) ||
+                 typescript.isArrayBindingPattern(binding)) {
+            if (binding.initializer) visit(binding.initializer);
+            binding = binding.parent;
+          }
+          if (typescript.isVariableDeclaration(binding) && binding.initializer) visit(binding.initializer);
+          else if (typescript.isParameter(binding)) {
+            if (binding.initializer) visit(binding.initializer);
+          } else dependent = true;
+        }
+        seen.delete(symbol);
+        return;
+      }
+      typescript.forEachChild(item, visit);
     })(value);
     if (!dependent) independentArguments.add(index);
   });
@@ -1185,9 +1219,9 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   if (!renderFunctions.has(enclosingFunctionLike(call)) && !controlsRuntimeBranch(call, false)) return false;
   return gatesRuntimeBehavior(call, checker, sourceFile,
     (reference) => renderFunctions.has(enclosingFunctionLike(reference)) &&
-      controlsReturnedValue(reference, { earlyOnly: true, after: call }), live,
+      controlsReturnedValue(reference, { earlyOnly: true, after: call, checker, live }), live,
     (value) => renderFunctions.has(enclosingFunctionLike(value))
-      ? controlsReturnedValue(value, { earlyOnly: true }) : controlsRuntimeBranch(value, false));
+      ? controlsReturnedValue(value, { earlyOnly: true, checker, live }) : controlsRuntimeBranch(value, false));
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null,

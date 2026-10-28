@@ -2562,3 +2562,27 @@ test('imported boolean conjunctions preserve independent caller inputs', async (
     assert.equal((await evaluate('HTPR-1 [FEATURE] independent formatter input', base, commit(git, name), dir)).pass, expected, name + ': ' + input);
   }
 });
+
+
+test('formatter dependencies and consumed logical rendering stay sound', async (t) => {
+  const cases = [
+    ['correlated object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format({inverse: !enabled}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['aliased correlated object', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const data = {inverse: !enabled}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['independent object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '{ready}', 'const label = format({inverse: ready}, enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['logical rendering', 'enabled', 'return enabled;', '', 'return format(enabled) && <p>Age</p>;', true],
+    ['nested logical rendering', 'enabled', 'return enabled;', '', 'return <div>{format(enabled) && <p>Age</p>}</div>;', true],
+    ['nested conditional rendering', 'enabled', 'return enabled;', '', 'return <div>{format(enabled) ? <p>Age</p> : null}</div>;', true],
+    ['discarded nested rendering', 'enabled', 'return enabled;', '', 'const discarded = <div>{format(enabled) && <p>Age</p>}</div>; return <p>Age</p>;', false],
+    ['masked nested rendering', 'enabled', 'return enabled;', '', 'return (<div>{format(enabled) && <p>Age</p>}</div>, <p>Age</p>);', false],
+    ['independent destructured prop', 'ready, enabled', 'return ready && enabled;', '{ready}', 'return format(ready, enabled) ? <p>Age</p> : null;', true],
+    ['independent prop alias', 'ready, enabled', 'return ready && enabled;', '{ready}', 'const available = ready; return format(available, enabled) ? <p>Age</p> : null;', true],
+    ['independent parameter prop', 'ready, enabled', 'return ready && enabled;', 'props', 'return format(props.ready, enabled) ? <p>Age</p> : null;', true],
+    ['correlated shorthand field', 'data, enabled', 'if (enabled && data.enabled) return null; return "Age";', '', 'const label = format({enabled}, enabled); if (!label) return null; return <p>Age</p>;', false],
+  ];
+  for (const [name, parameters, helper, props, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(${parameters}) { ${helper} }`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + `export function Widget(${props}) { const enabled = useFlag(OTHER_FLAG); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter dependency', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
