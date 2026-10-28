@@ -144,7 +144,16 @@ const projectAccess = loadModule("src/utils/controllers/projects/getAllIncludes.
 });
 function patchHarness({ userId = 1, agentId, grantStatus, teamScope, revoked = false, enabled = true } = {}) {
   const updates = [], accessCalls = [];
-  let stored = { name: "Bug", title: "[BUG] {problem}", descriptionHtml: "<h2>Steps</h2><p>Reproduce.</p>" };
+  let stored = { updatedAt: "2026-10-28T00:00:00.000Z", name: "Bug", title: "[BUG] {problem}", descriptionHtml: "<h2>Steps</h2><p>Reproduce.</p>" };
+  const allowed = (where) => {
+    const branches = where.project.OR ?? where.project.AND?.[0].OR ?? [];
+    const scopedTeam = where.project.AND?.[1].teamId;
+    return where.id === 7 && (!scopedTeam || scopedTeam === "team-a") && branches.some((entry) => {
+      const member = entry.members?.some;
+      return entry.ownerId === 1 || (member?.agentId === null && member.userId === 2) ||
+        (member?.agentId === agentId && agentId && grantStatus === "Accepted" && member.status === "Accepted" && member.agent.userId === userId && member.agent.revokedAt === null && !revoked);
+    });
+  };
   const route = loadModule("src/app/api/task-templates/route.ts", {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => userId ? { userId, agentId, teamScope } : null },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag); assert.equal(id, userId); return enabled; } },
@@ -158,26 +167,21 @@ function patchHarness({ userId = 1, agentId, grantStatus, teamScope, revoked = f
     "@/lib/prisma": { default: { taskTemplate: {
       updateMany: async (args) => {
         updates.push(plain(args));
-        const branches = args.where.project.OR ?? args.where.project.AND?.[0].OR ?? [];
-        const scopedTeam = args.where.project.AND?.[1].teamId;
-        const allowed = args.where.id === 7 && (!scopedTeam || scopedTeam === "team-a") && branches.some((entry) => {
-          const member = entry.members?.some;
-          return entry.ownerId === 1 || (member?.agentId === null && member.userId === 2) ||
-            (member?.agentId === agentId && agentId && grantStatus === "Accepted" && member.status === "Accepted" && member.agent.userId === userId && member.agent.revokedAt === null && !revoked);
-        });
-        if (allowed) stored = args.data;
-        return { count: allowed ? 1 : 0 };
+        const matches = allowed(args.where) && args.where.updatedAt.toISOString() === stored.updatedAt;
+        if (matches) stored = { ...args.data, updatedAt: "2026-10-28T00:00:01.000Z" };
+        return { count: matches ? 1 : 0 };
       },
+      findFirst: async ({ where }) => allowed(where) ? { id: 7 } : null,
     } } },
   });
-  return { updates, accessCalls, stored: () => stored, patch: (body = { templateId: 7, name: " A/B test ", title: "[TAG] {idea} ICE {score}/30", descriptionHtml: "<h2>Variations</h2>" }) => route.PATCH({ headers: new Headers(), json: async () => body }) };
+  return { updates, accessCalls, stored: () => stored, patch: (body = { templateId: 7, name: " A/B test ", title: "[TAG] {idea} ICE {score}/30", descriptionHtml: "<h2>Variations</h2>" }) => route.PATCH({ headers: new Headers(), json: async () => body && { updatedAt: "2026-10-28T00:00:00.000Z", ...body } }) };
 }
 test("PATCH still allows both board owner and editor, preserving board-scoped authorization", async () => {
   for (const userId of [1, 2]) {
     const h = patchHarness({ userId });
     assert.equal((await h.patch()).status, 200);
     assert.deepEqual(h.accessCalls, [[userId, null]]);
-    assert.deepEqual(h.updates[0].where, { id: 7, project: plain(projectAccess.taskWriteAccessWhere(userId)) });
+    assert.deepEqual(h.updates[0].where, { id: 7, project: plain(projectAccess.taskWriteAccessWhere(userId)), updatedAt: "2026-10-28T00:00:00.000Z" });
     assert.equal(h.stored().name, "A/B test");
     assert.equal(h.stored().title, "[TAG] {idea} ICE {score}/30");
   }
@@ -212,6 +216,24 @@ test("PATCH keeps a team-limited agent within its bound team while allowing its 
     assert.deepEqual(h.updates[0].where.project.AND[1], { teamId });
     assert.equal(h.stored().name, status === 200 ? "A/B test" : "Bug");
   }
+});
+test("PATCH refuses a stale save without overwriting the first editor's changes", async () => {
+  const h = patchHarness();
+  assert.equal((await h.patch()).status, 200);
+  const first = h.stored();
+  const stale = await h.patch();
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).error, "Template changed. Reload before saving.");
+  assert.equal(h.stored(), first);
+  assert.equal((await h.patch({ templateId: 7, updatedAt: first.updatedAt, name: "New name", title: first.title, descriptionHtml: first.descriptionHtml })).status, 200);
+  assert.equal(h.stored().name, "New name");
+});
+test("PATCH rejects missing or invalid loaded versions", async () => {
+  const h = patchHarness();
+  for (const updatedAt of [undefined, null, "not-a-date"]) {
+    assert.equal((await h.patch({ templateId: 7, name: "Bug", title: "Title", descriptionHtml: "", updatedAt })).status, 400);
+  }
+  assert.deepEqual(h.updates, []);
 });
 test("PATCH now strips script content and event-handler attributes before saving", async () => {
   const h = patchHarness();
@@ -360,7 +382,8 @@ function renderSettings(options = {}) {
       useQuery: (query) => { queries.push(query); return { data: { templates: options.templates ?? [] } }; },
       useMutation: (mutation) => { mutations.push(mutation); return { isPending: Boolean(options.pending), mutate() {} }; },
     },
-    axios: { default: { patch: async (...args) => { options.writes?.push(args); } } },
+    axios: { default: { patch: async (...args) => { options.writes?.push(args); }, isAxiosError: (error) => error?.isAxiosError === true } },
+    "react-hot-toast": { default: { error: (message) => options.errors?.push(message), success() {} } },
   }).default;
   const html = renderToStaticMarkup(React.createElement(component));
   return { html, queries, mutations };
@@ -384,7 +407,7 @@ test("flag off renders no list or editor and disables its template query", () =>
 });
 test("editor renders approved fields and saves plain-text edits through PATCH", async () => {
   const writes = [];
-  const template = { id: 7, projectId: 15, name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2><p>Original.</p>", text: "## Ideas\n\nFinished copy." };
+  const template = { id: 7, updatedAt: "2026-10-28T00:00:00.000Z", projectId: 15, name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2><p>Original.</p>", text: "## Ideas\n\nFinished copy." };
   const { html, mutations } = renderSettings({ editing: template, writes });
   const document = new JSDOM(html).window.document;
   assert.equal(document.querySelector("h2").textContent, "A/B test template");
@@ -404,7 +427,14 @@ test("editor renders approved fields and saves plain-text edits through PATCH", 
   assert.equal(cancel.classList.contains("bg-shadcn-primary"), false);
   assert.equal(document.querySelector("textarea").readOnly, false);
   await mutations[0].mutationFn(template);
-  assert.deepEqual(plain(writes), [["/api/task-templates", { templateId: 7, name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2><p>Finished copy.</p>" }]]);
+  assert.deepEqual(plain(writes), [["/api/task-templates", { templateId: 7, updatedAt: "2026-10-28T00:00:00.000Z", name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2><p>Finished copy.</p>" }]]);
+});
+test("stale editor saves explain the conflict instead of reporting success", () => {
+  const errors = [];
+  const { mutations } = renderSettings({ errors });
+  mutations[0].onError({ isAxiosError: true, response: { status: 409 } });
+  mutations[0].onError(new Error("offline"));
+  assert.deepEqual(errors, ["Template changed. Reload before saving.", "Unable to save template"]);
 });
 test("editor disables the primary Save action while pending or when the name is blank", () => {
   for (const { pending, name } of [{ pending: true, name: "A/B test" }, { pending: false, name: " " }]) {
@@ -419,7 +449,7 @@ test("editor disables the primary Save action while pending or when the name is 
 });
 test("rich editor shows a read-only note and preserves its HTML when other fields save", async () => {
   const writes = [];
-  const template = { id: 7, projectId: 15, name: "Rich", title: "Title", descriptionHtml: '<h2>Ideas</h2><p><strong>Keep this</strong></p>', text: "Changed" };
+  const template = { id: 7, updatedAt: "2026-10-28T00:00:00.000Z", projectId: 15, name: "Rich", title: "Title", descriptionHtml: '<h2>Ideas</h2><p><strong>Keep this</strong></p>', text: "Changed" };
   const { html, mutations } = renderSettings({ editing: template, writes });
   assert.equal(new JSDOM(html).window.document.querySelector("textarea").readOnly, true);
   assert.match(html, /rich formatting and is read-only here to preserve it/);

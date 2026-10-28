@@ -18,6 +18,7 @@ interface TaskTemplate {
   name: string;
   title: string;
   descriptionHtml: string;
+  updatedAt: string;
 }
 
 const BoardTaskTemplatesSection = () => {
@@ -37,6 +38,7 @@ const BoardTaskTemplatesSection = () => {
     mutationFn: async (template: NonNullable<typeof editing>) => {
       await axios.patch("/api/task-templates", {
         templateId: template.id,
+        updatedAt: template.updatedAt,
         name: template.name,
         title: template.title,
         descriptionHtml: writeTaskTemplateDescription(template.text, template.descriptionHtml),
@@ -47,7 +49,9 @@ const BoardTaskTemplatesSection = () => {
       setEditing(null);
       toast.success("Template saved");
     },
-    onError: () => toast.error("Unable to save template"),
+    onError: (error) => toast.error(axios.isAxiosError(error) && error.response?.status === 409
+      ? "Template changed. Reload before saving."
+      : "Unable to save template"),
   });
 
   if (!project) return null;

@@ -27,7 +27,8 @@ Use QA 985 on sandbox board 7049. The ticket flag is
 ## Common failures
 
 Cross-board edits must return 404. Anonymous edits return 401. Flag-off
-PATCH returns 403. Use `/api/task-templates` to inspect saved values, never
+PATCH returns 403. Stale saves return 409 without replacing newer changes;
+the editor asks you to reload before saving. Use `/api/task-templates` to inspect saved values, never
 raw database access. Check the ordinary instruction editor still saves.
 
 ## Evidence and cleanup

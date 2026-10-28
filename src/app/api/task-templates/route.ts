@@ -143,10 +143,12 @@ export async function PATCH(request: NextRequest) {
   }
   const body = await request.json().catch(() => null);
   const templateId = Number(body?.templateId);
-  if (!Number.isInteger(templateId) || templateId <= 0 ||
+  const updatedAt = typeof body?.updatedAt === "string" ? new Date(body.updatedAt) : null;
+  if (!updatedAt || !Number.isFinite(updatedAt.getTime()) ||
+      !Number.isInteger(templateId) || templateId <= 0 ||
       typeof body?.name !== "string" || !body.name.trim() ||
       typeof body?.title !== "string" || typeof body?.descriptionHtml !== "string") {
-    return NextResponse.json({ success: false, error: "templateId, name, title and descriptionHtml are required" }, { status: 400 });
+    return NextResponse.json({ success: false, error: "templateId, name, title, descriptionHtml and updatedAt are required" }, { status: 400 });
   }
   if (body.title.length > TEMPLATE_TITLE_MAX) {
     return NextResponse.json({ success: false, error: `title cannot exceed ${TEMPLATE_TITLE_MAX} characters` }, { status: 400 });
@@ -154,8 +156,9 @@ export async function PATCH(request: NextRequest) {
   if (body.descriptionHtml.length > TEMPLATE_DESCRIPTION_MAX) {
     return NextResponse.json({ success: false, error: `descriptionHtml cannot exceed ${TEMPLATE_DESCRIPTION_MAX} characters` }, { status: 400 });
   }
+  const where = { id: templateId, project: taskWriteAccessWhere(session.userId, session.agentId, session.teamScope) };
   const updated = await prisma.taskTemplate.updateMany({
-    where: { id: templateId, project: { ...taskWriteAccessWhere(session.userId, session.agentId, session.teamScope) } },
+    where: { ...where, updatedAt },
     data: {
       name: body.name.trim().slice(0, TEMPLATE_NAME_MAX),
       title: body.title,
@@ -163,7 +166,10 @@ export async function PATCH(request: NextRequest) {
     },
   });
   if (updated.count === 0) {
-    return NextResponse.json({ success: false, error: "Template not found or access denied" }, { status: 404 });
+    const existing = await prisma.taskTemplate.findFirst({ where, select: { id: true } });
+    return existing
+      ? NextResponse.json({ success: false, error: "Template changed. Reload before saving." }, { status: 409 })
+      : NextResponse.json({ success: false, error: "Template not found or access denied" }, { status: 404 });
   }
   return NextResponse.json({ success: true });
 }
