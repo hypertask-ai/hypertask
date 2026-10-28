@@ -60,7 +60,7 @@ async function buildLabelsFilterEntry(
     });
     const { ids, unresolved } = matchLabelIds(projectLabels, labelNames);
     if (unresolved.length) {
-        throw new Error(
+        throw new ValidationError(
             `Label(s) not found in project: ${unresolved.join(', ')}`
         );
     }
