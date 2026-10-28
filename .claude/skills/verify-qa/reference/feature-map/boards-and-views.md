@@ -178,4 +178,3 @@ after: no view or board-default change is allowed. Existing labels still
 save their filter. Expected label refusals log warnings; unexpected storage
 failures must still log errors. Local behavior coverage:
 `node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
-
