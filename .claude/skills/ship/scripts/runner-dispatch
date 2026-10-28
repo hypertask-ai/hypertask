@@ -147,6 +147,8 @@ def read_comments(boards, cache=None, *, full_refresh=False, reads=None):
                                and isinstance(a.get("createdAt"), str) and isinstance(a.get("agentName"), str)
                                for a in activity["activities"])):
                 raise ValueError(f"Invalid agent activity for {ticket}")
+            if len(activity["activities"]) >= 100 and not claims(activity["activities"]):
+                raise ValueError(f"Agent claim history may be truncated for {ticket}")
             comments[ticket].extend(dict(a, type="activity", agent={"displayName": a["agentName"]})
                                     for a in activity["activities"])
     if cache is not None:

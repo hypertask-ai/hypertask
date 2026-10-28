@@ -409,6 +409,28 @@ class CacheTests(unittest.TestCase):
         self.assertNotIn("planned=HTPR-1", self.stdout.getvalue())
         self.assertEqual(self.fetched(), [])
 
+    def test_full_agent_log_without_claim_prevents_dispatch(self):
+        self.run_dispatch()
+        self.activities["HTPR-1"] = {"success": True, "activities": [
+            {"id": f"heartbeat-{i}", "agentName": "RUNNER 1", "text": "Working.",
+             "createdAt": "2026-10-21T10:01:00Z"} for i in range(100)]}
+        self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "done"}]
+        with self.assertRaisesRegex(ValueError, "Agent claim history may be truncated for HTPR-1"):
+            self.run_dispatch()
+        self.assertFalse(self.claim_dir.exists())
+
+    def test_full_agent_log_with_visible_claim_preserves_ownership(self):
+        activities = [{"id": f"heartbeat-{i}", "agentName": "RUNNER 1", "text": "Working.",
+                       "createdAt": "2026-10-21T10:01:00Z"} for i in range(99)]
+        self.activities["HTPR-1"] = {"success": True, "activities": activities}
+        self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "done"}]
+        self.run_dispatch(go=False)
+        self.assertIn("planned=HTPR-1", self.stdout.getvalue())
+        activities.append({"id": "claim-log", "agentName": "RUNNER 1", "text": "Claimed.",
+                           "createdAt": "2026-10-21T10:00:00Z"})
+        self.run_dispatch(go=False)
+        self.assertNotIn("planned=HTPR-1", self.stdout.getvalue())
+
     def test_agent_log_read_failure_prevents_dispatch(self):
         self.activities["HTPR-1"] = {"success": False, "error": "unavailable"}
         self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "done"}]
