@@ -447,6 +447,36 @@ function formatWriteSummary(
     return `${success}${countedFailureSummary}${uncountedFailureSummary}`;
   }
 
+  if (name === "hypertask_inbox_archive" && results.some((result) => Array.isArray(result.notifications))) {
+    const archived = results.filter((result) => result.success === true);
+    const count = archived.reduce((total, result) => total + (typeof result.archived_count === "number" ? result.archived_count : 0), 0);
+    const tickets = new Set(archived.flatMap((result) => Array.isArray(result.notifications)
+      ? result.notifications.flatMap((notification) => {
+        const task = resultObject(resultObject(notification)?.task);
+        return task && typeof task.title === "string"
+          ? [`${typeof task.ticketNumber === "string" ? `${task.ticketNumber}: ` : ""}${task.title}`]
+          : [];
+      }) : []));
+    const previews = results.filter((result) => result.confirmation_required === true).map((result) => {
+      const pendingTickets = Array.isArray(result.notifications) ? result.notifications.flatMap((notification) => {
+        const task = resultObject(resultObject(notification)?.task);
+        return task && typeof task.title === "string"
+          ? [`${typeof task.ticketNumber === "string" ? `${task.ticketNumber}: ` : ""}${task.title}`]
+          : [];
+      }) : [];
+      const pendingCount = typeof result.archive_count === "number" ? result.archive_count : 0;
+      const siblings = typeof result.sibling_count === "number" ? result.sibling_count : 0;
+      return `${pendingCount} inbox ${plural(pendingCount, "message")} await approval${siblings ? `, including ${siblings} sibling ${plural(siblings, "message")}` : ""}.${pendingTickets.length ? ` Tickets: ${[...new Set(pendingTickets)].join("; ")}.` : ""} Nothing in this batch was archived. Confirm this exact batch?`;
+    });
+    const failedCalls = results.filter((result) => result.success !== true && result.confirmation_required !== true);
+    const errors = failedCalls.flatMap((result) => typeof result.error === "string" ? [result.error] : []);
+    return [
+      archived.length ? `Archived ${count} inbox ${plural(count, "message")}.${tickets.size ? ` Tickets: ${[...tickets].join("; ")}.` : ""}` : "",
+      ...previews,
+      failedCalls.length ? `${failedCalls.length} tool ${plural(failedCalls.length, "call")} failed.${errors.length ? ` ${errors.join(" ")}` : ""}` : "",
+    ].filter(Boolean).join(" ");
+  }
+
   const completed = results.filter((result) => toolResultSucceeded(result)).length;
   if (completed === 0 && failed === 0 && uncountedFailures === 0) return null;
   const success =
