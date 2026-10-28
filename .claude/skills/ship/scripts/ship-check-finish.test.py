@@ -93,6 +93,12 @@ else:
         self.comments('Provider returned HTTP 403.')
         self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
 
+    def test_local_success_does_not_turn_ci_failure_into_local_failure(self):
+        self.comments('Local tests passed. CI tests got SIGKILL, exit 137.')
+        self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
+        self.comments('<p>Local tests got SIGKILL.</p><p>Blocker: CI tests got SIGKILL, exit 137.</p>')
+        self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
+
     def test_ci_failure_and_working_moves_still_allowed(self):
         self.comments('CI test job got SIGKILL, exit 137.')
         self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')

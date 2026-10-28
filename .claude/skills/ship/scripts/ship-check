@@ -648,9 +648,14 @@ text = re.sub(r"<[^>]*>", "", text)
 killed = r"\bsigkill\b|exit(?:\s+code)?[ :]*(?:137|9)\b|\bkilled\b|\boom\b"
 local = r"\blocal\b|\bvps\b"
 check = r"\btests?\b|\bchecks?\b|node|npm|pytest|tsc"
-if all(re.search(pattern, text, re.I) for pattern in (killed, local, check)):
+def local_failure(statement):
+    return all(re.search(pattern, statement, re.I) for pattern in (killed, local, check))
+
+statements = re.split(r"[.!?](?:\s+|$)|[;\n]+", text)
+if any(local_failure(statement) for statement in statements):
     blockers = re.findall(r"^\s*Blocker:\s*(.+)$", text, re.I | re.M)
-    if not any(not re.search(killed, blocker, re.I) for blocker in blockers):
+    if not any(not any(local_failure(part) for part in re.split(r"[.!?](?:\s+|$)|[;\n]+", blocker))
+               for blocker in blockers):
         print("FAIL: a killed local check is not a blocker; push and let CI decide. "
               "For an independent failure, add Blocker: <exact error>.")
         sys.exit(1)
