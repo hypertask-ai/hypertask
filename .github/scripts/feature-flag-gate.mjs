@@ -1000,7 +1000,7 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
   return null;
 }
 
-function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
+function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set() } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
   if (fn?.asteriskToken || fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
@@ -1022,10 +1022,11 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
     if (!typescript.isFunctionLike(item)) typescript.forEachChild(item, visit);
   })(fn?.body ?? node);
   let conditionalGuard = false;
+  let conditionalOutput = false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
-    if (typescript.isReturnStatement(parent) && child === parent.expression) return !earlyOnly;
-    if (typescript.isArrowFunction(parent) && child === parent.body) return !earlyOnly;
+    if (typescript.isReturnStatement(parent) && child === parent.expression) return !earlyOnly || conditionalOutput;
+    if (typescript.isArrowFunction(parent) && child === parent.body) return !earlyOnly || conditionalOutput;
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
         typescript.isTypeAssertionExpression(parent) || typescript.isNonNullExpression(parent) ||
         typescript.isSatisfiesExpression(parent) || typescript.isAwaitExpression(parent) ||
@@ -1039,8 +1040,9 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
         let repeated = false;
         (function visit(item) {
           if (typescript.isIdentifier(item) && (item.text === node.text || localBindings.has(item.text) ||
-              (parameterNames.has(item.text) && !(typescript.isPropertyAccessExpression(item.parent) &&
-                item.parent.expression === item)))) repeated = true;
+              (parameterNames.has(item.text) &&
+                !(independentParameters.has(item.text) && parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) &&
+                !(typescript.isPropertyAccessExpression(item.parent) && item.parent.expression === item)))) repeated = true;
           if (!repeated) typescript.forEachChild(item, visit);
         })(other);
         if (repeated) return false;
@@ -1084,9 +1086,12 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
     if (typescript.isConditionalExpression(parent)) {
       conditionalGuard = true;
       if (child === parent.condition) {
-        const whenTrue = staticBoolean(parent.whenTrue);
-        const whenFalse = staticBoolean(parent.whenFalse);
-        if (whenTrue !== null && whenTrue === whenFalse) return false;
+        const whenTrue = staticBoolean(parent.whenTrue, true);
+        const whenFalse = staticBoolean(parent.whenFalse, true);
+        if (whenTrue === null || whenFalse === null || whenTrue === whenFalse) return false;
+        conditionalOutput = true;
+      } else {
+        return false;
       }
       continue;
     }
@@ -1095,7 +1100,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
   return false;
 }
 
-function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex) {
+function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex, independentArguments) {
   const targetPath = resolveLocalModule(ref, sourcePath, imported.module);
   if (!targetPath) return false;
   const source = git(["show", `${ref}:${targetPath}`]);
@@ -1134,11 +1139,13 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
   const symbol = checker.getSymbolAtLocation(parameter.name);
   if (!symbol || writtenBindingSymbols(sourceFile, checker).has(symbol)) return false;
 
+  const independentParameters = new Set(declaration.parameters.flatMap((item, index) =>
+    independentArguments.has(index) && typescript.isIdentifier(item.name) ? [item.name.text] : []));
   let controls = false;
   function visit(node) {
     if (controls || typescript.isFunctionLike(node)) return;
     if (typescript.isIdentifier(node) && node !== parameter.name &&
-        checker.getSymbolAtLocation(node) === symbol && controlsReturnedValue(node)) {
+        checker.getSymbolAtLocation(node) === symbol && controlsReturnedValue(node, { independentParameters })) {
       controls = true;
       return;
     }
@@ -1159,8 +1166,20 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   if (!typescript.isCallExpression(call) || !typescript.isIdentifier(call.expression)) return false;
   const argumentIndex = call.arguments.findIndex((item) => item === argument);
   const imported = importedFunctions.get(checker.getSymbolAtLocation(call.expression));
-  if (argumentIndex === -1 || !imported || isStaticallyUnreachable(node) ||
-      !importedParameterControlsReturnValue(ref, path, imported, argumentIndex)) return false;
+  if (argumentIndex === -1 || !imported || isStaticallyUnreachable(node)) return false;
+  const independentArguments = new Set();
+  call.arguments.forEach((value, index) => {
+    if (index === argumentIndex || staticBoolean(value, true) === false) return;
+    let dependent = false;
+    (function visit(item) {
+      if (typescript.isCallExpression(item) || typescript.isElementAccessExpression(item) ||
+          (typescript.isIdentifier(item) && checker.getSymbolAtLocation(item) &&
+            !(typescript.isPropertyAccessExpression(item.parent) && item.parent.name === item))) dependent = true;
+      if (!dependent) typescript.forEachChild(item, visit);
+    })(value);
+    if (!dependent) independentArguments.add(index);
+  });
+  if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, independentArguments)) return false;
   const sourceFile = node.getSourceFile();
   const live = collectLiveFunctions(sourceFile, checker);
   if (!renderFunctions.has(enclosingFunctionLike(call)) && !controlsRuntimeBranch(call, false)) return false;

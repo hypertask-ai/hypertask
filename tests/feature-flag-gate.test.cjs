@@ -2430,6 +2430,10 @@ test('formatter gate proof requires an explicit live return branch', async (t) =
   const cases = [
     ['unsupported direct JSX output', 'return <p>{format(enabled)}</p>;', false],
     ['unsupported assigned JSX output', 'const label = format(enabled); return <p>{label}</p>;', false],
+    ['direct conditional output', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['assigned conditional output', 'const label = format(enabled); return label ? <p>Age</p> : null;', true],
+    ['inverted direct conditional output', 'return !format(enabled) ? null : <p>Age</p>;', true],
+    ['same truthy conditional branches', 'return format(enabled) ? <p>Age</p> : <p>Always</p>;', false],
     ['assigned early-return output', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
     ['earlier rendering return', 'const always = true; if (always) return <p>Age</p>; const label = format(enabled); if (!label) return null; return <p>Age</p>;', false],
     ['contradictory consumer', 'const label = format(enabled); if (label && !label) return null; return <p>Age</p>;', false],
@@ -2523,6 +2527,9 @@ test('invariant formatter guards cannot prove an early-return gate', async (t) =
     ...['{}', '[]', '`Age ${enabled}`', '() => {}'].map(value => ['truthy mask ' + value, 'enabled', `if (enabled || ${value}) return "Age"; return null;`, 'const label = format(enabled); if (!label) return null; return <p>Age</p>;']),
     ['nested conditional return', 'enabled', 'if (enabled) return enabled ? "Age" : null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
     ['impossible direct consumer', 'enabled', 'if (!enabled) return null; return "Age";', 'if (format(enabled) !== undefined) return <p>Age</p>; return null;'],
+    ['invariant returned ternary helper', 'enabled', 'return enabled ? !enabled : false;', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['invariant returned alternate helper', 'enabled', 'return enabled ? true : !enabled;', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['invariant returned branch helper', 'enabled', 'return !enabled ? enabled : false;', 'return format(enabled) ? <p>Age</p> : null;'],
     ['invariant ternary helper', 'enabled', 'if (enabled ? !enabled : false) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
     ['invariant alternate ternary helper', 'enabled', 'if (enabled ? false : enabled) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
     ['default parameter contradiction', 'enabled, inverse = !enabled', 'if (enabled && inverse) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
@@ -2534,5 +2541,24 @@ test('invariant formatter guards cannot prove an early-return gate', async (t) =
     writeFile(dir, 'src/lib/formatter.ts', `export function format(${parameters}) { ${helper} }\n`);
     writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + consumer + ' }\n');
     assert.equal((await evaluate('HTPR-1 [FEATURE] formatter guard', base, commit(git, name), dir)).pass, false, name);
+  }
+});
+
+
+test('imported boolean conjunctions preserve independent caller inputs', async (t) => {
+  const cases = [
+    ['independent direct conditional', 'window.ready', 'return showWidget(window.ready, enabled) ? <p>Age</p> : null;', true],
+    ['independent assigned return', 'window.ready', 'const label = showWidget(window.ready, enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['truthy independent input', 'true', 'return showWidget(true, enabled) ? <p>Age</p> : null;', true],
+    ['falsy independent input', 'false', 'return showWidget(false, enabled) ? <p>Age</p> : null;', false],
+    ['correlated direct conditional', '!enabled', 'return showWidget(!enabled, enabled) ? <p>Age</p> : null;', false],
+    ['aliased correlated input', 'inverse', 'const inverse = !enabled; return showWidget(inverse, enabled) ? <p>Age</p> : null;', false],
+    ['same correlated input', 'enabled', 'return showWidget(enabled, enabled) ? <p>Age</p> : null;', false],
+  ];
+  for (const [name, input, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function showWidget(ready, enabled) { return ready && enabled; }\n');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {showWidget} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + body + ' }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] independent formatter input', base, commit(git, name), dir)).pass, expected, name + ': ' + input);
   }
 });
