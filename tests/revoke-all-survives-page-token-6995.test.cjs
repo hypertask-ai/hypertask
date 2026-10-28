@@ -13,7 +13,7 @@ test("minting a page token never clears the revoke-all marker", () => {
 });
 
 test("route regression: old tokens stay rejected, the new page token works", () => {
-  const result = spawnSync("npx", ["tsx", "src/app/api/mcp/token/route.test.ts"], {
+  const result = spawnSync("npx", ["tsx", "tests/app/api/mcp/token/route.test.ts"], {
     cwd: root,
     encoding: "utf8",
   });
