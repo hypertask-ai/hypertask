@@ -240,3 +240,15 @@ test("draft response logging covers unexpected failures without leaking their de
   ]);
   assert.equal(JSON.stringify(events).includes("private-repository-detail"), false);
 });
+
+test("learn-board validation uses the shared identity before provisioning", async () => {
+  const h = fixture();
+  h.mocks["@/lib/demo/provisionGuest"] = { provisionLearnBoard: async () => { throw new Error("invalid return board must not provision"); } };
+  h.mocks["@/lib/tutorial/keyboardShortcutTutorial"] = { KEYBOARD_SHORTCUT_TUTORIAL_ENABLED: true };
+  h.mocks["@/utils/controllers/tutorial/ensureLearnTutorialInbox"] = {};
+  const { NextRequest } = require("next/server");
+  const route = load("src/app/api/learn/board/route.ts", h.mocks);
+  const request = headers => new NextRequest("https://app.example.test/api/learn/board", { method: "POST", headers, body: JSON.stringify({ returnBoardId: 0 }) });
+  assert.equal((await route.POST(request(h.headers()))).status, 422);
+  assert.equal((await route.POST(request(new Headers()))).status, 401);
+});

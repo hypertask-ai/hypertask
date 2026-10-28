@@ -1,5 +1,4 @@
 import { cookies, headers } from "next/headers";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -30,6 +29,7 @@ export async function getServerCookieUser(): Promise<IUser | null> {
 
   let userId: number;
   if (!userCookie?.value) {
+    const { getSessionUser } = await import("@/lib/auth/getSessionUser");
     const session = await getSessionUser(await headers());
     if (session?.source !== "cli-bearer") return null;
     userId = session.userId;

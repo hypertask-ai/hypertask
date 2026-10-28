@@ -4,7 +4,6 @@ export { escapeHtml } from "./editorAiPrompts";
 
 export { NVC_STYLE_RULE, HOUSE_OUTPUT_STYLE, TASK_AUTHORING_STYLE, TASK_AUTHORING_WEB_STYLE, createTaskAuthoringStyle, createPromptForTiptapForwardSlash, createKanbanSystemPrompt, createTaskAndModelContext, createUploadedDocumentsContext, createTaskWriterPromptParts } from "./editorAiPrompts";
 import { cookies, headers } from "next/headers";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
@@ -107,6 +106,7 @@ export async function getCurrentUserFromCookies(): Promise<CookieUser | null> {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
     if (!userCookie?.value) {
+      const { getSessionUser } = await import("@/lib/auth/getSessionUser");
       const session = await getSessionUser(await headers());
       if (session?.source !== "cli-bearer") return null;
       const user = await prisma.user.findUnique({

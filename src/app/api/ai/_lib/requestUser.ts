@@ -22,7 +22,7 @@ export async function getAiRequestUser(
   request: NextRequest
 ): Promise<AiRequestUser | null> {
   const cookieUser = await getCurrentUserFromCookies();
-  if (Number.isInteger(cookieUser?.id) && Number(cookieUser?.id) > 0) {
+  if (cookieUser && Number.isInteger(cookieUser.id) && Number(cookieUser.id) > 0) {
     return {
       ...(cookieUser.source === "cli-bearer" ? { source: cookieUser.source } : {}),
       id: Number(cookieUser?.id),

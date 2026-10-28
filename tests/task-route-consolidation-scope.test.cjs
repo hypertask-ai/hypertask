@@ -54,7 +54,7 @@ test("there are no same-URL Pages task twins eligible for deletion", () => {
 
 test("shared current-user loader preserves session-only and legacy-profile preconditions", async () => {
   let cookie;
-  let session = { userId: 7 };
+  let session = { userId: 7, source: "legacy" };
   let sessionCalls = 0;
   const { loadCurrentUser } = load("src/lib/auth/currentUser.ts", {
     "next/headers": { cookies: async () => ({ get: (name) => { assert.equal(name, "nookies_user"); return cookie; } }) },
@@ -65,21 +65,21 @@ test("shared current-user loader preserves session-only and legacy-profile preco
     } },
   });
   const headers = new Headers({ "x-test": "current-user" });
-  assert.deepEqual(await loadCurrentUser(headers), { userId: 7 });
+  assert.deepEqual(await loadCurrentUser(headers), { userId: 7, source: "legacy" });
   session = null;
   assert.equal(await loadCurrentUser(headers), null);
   assert.equal(await loadCurrentUser(headers, true), null);
-  session = { userId: 7 };
+  session = { userId: 7, source: "legacy" };
   for (const value of ["{", "null", "{}", '{"id":7}', '{"id":7,"displayName":"User"}']) {
     cookie = { value };
     assert.equal(await loadCurrentUser(headers, true), null);
   }
   cookie = { value: JSON.stringify({ id: 7, displayName: "User", email: "test@example.invalid", UserSetting: { notificationPreference: "all" } }) };
-  assert.deepEqual(await loadCurrentUser(headers, true), { userId: 7, user: { ...JSON.parse(cookie.value), notificationPreference: "all" } });
-  session = { userId: 7, agentId: "agent-1" };
-  assert.deepEqual(await loadCurrentUser(headers), { userId: 7, agentId: "agent-1" });
-  assert.deepEqual(await loadCurrentUser(headers, true), { userId: 7, agentId: "agent-1", user: { ...JSON.parse(cookie.value), notificationPreference: "all" } });
-  session = { userId: 8 };
+  assert.deepEqual(await loadCurrentUser(headers, true), { userId: 7, source: "legacy", user: { ...JSON.parse(cookie.value), notificationPreference: "all" } });
+  session = { userId: 7, source: "legacy", agentId: "agent-1" };
+  assert.deepEqual(await loadCurrentUser(headers), { userId: 7, source: "legacy", agentId: "agent-1" });
+  assert.deepEqual(await loadCurrentUser(headers, true), { userId: 7, source: "legacy", agentId: "agent-1", user: { ...JSON.parse(cookie.value), notificationPreference: "all" } });
+  session = { userId: 8, source: "legacy" };
   assert.equal(await loadCurrentUser(headers, true), null);
   session = null;
   assert.equal(await loadCurrentUser(headers, true), null);

@@ -1,5 +1,4 @@
 import { cookies, headers } from 'next/headers'
-import { getSessionUser } from '@/lib/auth/getSessionUser'
 import prisma from '@/lib/prisma'
 
 import { isValidUser } from '@/utils/edgeHelpers'
@@ -19,6 +18,7 @@ export async function getApiKeyOwnerFromCookies() {
   const cookieStore = await cookies()
   const { isValid, user } = isValidUser(cookieStore.get('nookies_user')?.value)
   if (!isValid || !user?.id) {
+    const { getSessionUser } = await import("@/lib/auth/getSessionUser");
     const session = await getSessionUser(await headers())
     if (session?.source !== 'cli-bearer') return null
     return prisma.user.findUnique({ where: { id: session.userId } })

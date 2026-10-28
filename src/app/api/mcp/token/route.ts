@@ -1,7 +1,6 @@
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies, headers } from 'next/headers';
-import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { agentTokenCredentialFields, createMcpToken, revokeTokenByJti, validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
@@ -22,6 +21,7 @@ async function getCurrentUserFromCookies() {
     const userCookie = cookieStore.get('nookies_user')
     
     if (!userCookie?.value) {
+      const { getSessionUser } = await import("@/lib/auth/getSessionUser");
       const session = await getSessionUser(await headers())
       if (session?.source !== 'cli-bearer') return null
       return prisma.user.findUnique({ where: { id: session.userId }, select: { id: true, email: true, displayName: true } })
