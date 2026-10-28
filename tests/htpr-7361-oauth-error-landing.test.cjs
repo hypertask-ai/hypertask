@@ -65,6 +65,7 @@ async function makeHarness() {
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
     '@/lib/telemetry/signupCompleted': { enqueueSignupCompleted: async () => {} },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async () => {} },
+    '@/utils/controllers/users/resumeIncompleteSignup': { resumeIncompleteSignup: async () => false },
     '@better-auth/infra': { dash: () => ({ id: 'dash' }) },
   }
   for (const specifier of ['better-auth', 'better-auth/adapters/prisma', 'better-auth/plugins', 'better-auth/api', '@better-auth/passkey', '@better-auth/api-key']) {
