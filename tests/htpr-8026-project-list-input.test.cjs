@@ -13,6 +13,7 @@ const rows = [1, 2, 3].map(id => ({
 }))
 const route = load('src/lib/mcp/operations/projects/operation.ts', {
   '@/lib/auth/agentScope': { recordAgentBoardScopeMiss() {} },
+    '@/lib/flags': { isFeatureEnabled: async () => false },
   '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash() {} },
   '@/lib/mcp/routeWrapper': {
     wrapMcpRoute: handler => handler,
