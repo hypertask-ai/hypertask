@@ -1003,7 +1003,7 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
 function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), parameterBoolean = () => null, checker = null, live = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
-  if (fn?.asteriskToken || fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
+  if (fn?.asteriskToken || (!earlyOnly && fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword)) ||
       fn?.parameters.some((parameter) => parameter.initializer && staticBoolean(parameter.initializer, true) === null)) return false;
   for (let child = node, parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
     if (typescript.isTryStatement(parent) ||
@@ -1048,6 +1048,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
         })(other);
         if (repeated) return false;
         const value = staticBoolean(other, true) ?? parameterBoolean(other);
+        if (value === undefined) return false;
         if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
             (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
         if (child === parent.left && value !== null) conditionalOutput = true;
@@ -1142,16 +1143,18 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
   const parameter = declaration?.parameters[argumentIndex];
   if (!declaration?.body || !parameter || !typescript.isIdentifier(parameter.name)) return false;
   const symbol = checker.getSymbolAtLocation(parameter.name);
-  if (!symbol || writtenBindingSymbols(sourceFile, checker).has(symbol)) return false;
+  const written = writtenBindingSymbols(sourceFile, checker);
+  if (!symbol || written.has(symbol)) return false;
 
   const independentParameters = new Set(declaration.parameters.flatMap((item, index) =>
-    independentArguments.has(index) && typescript.isIdentifier(item.name) ? [item.name.text] : []));
+    independentArguments.has(index) && typescript.isIdentifier(item.name) &&
+      !written.has(checker.getSymbolAtLocation(item.name)) ? [item.name.text] : []));
   const parameterBoolean = (expression) => {
     const properties = [];
     let value = unwrapArgumentExpression(expression);
     if (typescript.isPrefixUnaryExpression(value) && value.operator === typescript.SyntaxKind.ExclamationToken) {
       const operand = parameterBoolean(value.operand);
-      return operand === null ? null : !operand;
+      return typeof operand === "boolean" ? !operand : operand;
     }
     while (typescript.isPropertyAccessExpression(value)) {
       properties.unshift(value.name.text);
@@ -1160,7 +1163,7 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
     if (!typescript.isIdentifier(value)) return null;
     const index = declaration.parameters.findIndex((item) =>
       typescript.isIdentifier(item.name) && checker.getSymbolAtLocation(item.name) === checker.getSymbolAtLocation(value));
-    return index < 0 ? null : argumentBoolean(index, properties);
+    return index < 0 ? null : argumentBoolean(index, properties, declaration.parameters[index].initializer);
   };
   let controls = false;
   function visit(node) {
@@ -1231,9 +1234,9 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
     })(value);
     if (!dependent) independentArguments.add(index);
   });
-  const argumentBoolean = (index, properties) => {
+  const argumentBoolean = (index, properties, defaultValue) => {
     const seen = new Set();
-    function resolve(value, fields) {
+    function resolve(value, fields, applyDefault = true) {
       value = unwrapArgumentExpression(value);
       if (typescript.isIdentifier(value)) {
         const symbol = checker.getSymbolAtLocation(value);
@@ -1243,21 +1246,24 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
               typescript.isVariableDeclarationList(declaration.parent) &&
               (declaration.parent.flags & typescript.NodeFlags.Const)) {
             seen.add(symbol);
-            const result = resolve(declaration.initializer, fields);
+            const result = resolve(declaration.initializer, fields, applyDefault);
             seen.delete(symbol);
             return result;
           }
         }
       }
+      if (applyDefault && defaultValue && ((typescript.isIdentifier(value) && value.text === "undefined") ||
+          typescript.isVoidExpression(value))) value = defaultValue;
       if (fields.length === 0) return staticBoolean(value, true);
-      if (!typescript.isObjectLiteralExpression(value) || value.properties.some((property) =>
-          !typescript.isPropertyAssignment(property) || typescript.isComputedPropertyName(property.name))) return null;
+      if (!typescript.isObjectLiteralExpression(value)) return staticBoolean(value, true) === null ? null : undefined;
+      if (fields[0] === "__proto__" || value.properties.some((property) =>
+          !typescript.isPropertyAssignment(property) || typescript.isComputedPropertyName(property.name))) return undefined;
       const matches = value.properties.filter((property) => property.name.text === fields[0]);
-      if (matches.length === 0) return false;
-      if (matches.length !== 1) return null;
-      return resolve(matches[0].initializer, fields.slice(1));
+      if (matches.length !== 1) return undefined;
+      return resolve(matches[0].initializer, fields.slice(1), false);
     }
-    return call.arguments[index] ? resolve(call.arguments[index], properties) : null;
+    const value = call.arguments[index] ?? defaultValue;
+    return value ? resolve(value, properties) : null;
   };
   if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, independentArguments, argumentBoolean)) return false;
   const sourceFile = node.getSourceFile();

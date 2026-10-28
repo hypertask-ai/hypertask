@@ -2571,10 +2571,32 @@ test('formatter dependencies and consumed logical rendering stay sound', async (
     ['aliased constant false object', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const data = {inverse: false}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
     ['nested constant false object', 'data, enabled', 'if (enabled && data.nested.inverse) return null; return "Age";', '', 'const data = {nested: {inverse: false}}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
     ['missing object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format({}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['inherited truthy method', 'data, enabled', 'if (enabled || data.toString) return "Age"; return null;', '', 'const label = format({}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['inherited constructor', 'data, enabled', 'return enabled || data.constructor;', '', 'return format({}, enabled) ? <p>Age</p> : null;', false],
+    ['inherited prototype', 'data, enabled', 'return enabled || data.__proto__;', '', 'return format({}, enabled) ? <p>Age</p> : null;', false],
+    ['ignored primitive prototype setter', 'data, enabled', 'return enabled || data.__proto__;', '', 'return format({__proto__: false}, enabled) ? <p>Age</p> : null;', false],
+    ['custom inherited truthy field', 'data, enabled', 'return enabled || data.ready;', '', 'return format({__proto__: {ready: true}}, enabled) ? <p>Age</p> : null;', false],
+    ['custom inherited falsy field', 'data, enabled', 'return enabled && data.ready;', '', 'return format({__proto__: {ready: false}}, enabled) ? <p>Age</p> : null;', false],
+    ['negated inherited field', 'data, enabled', 'return enabled && !data.toString;', '', 'return format({}, enabled) ? <p>Age</p> : null;', false],
+    ['nested inherited field', 'data, enabled', 'return enabled || data.nested.toString;', '', 'return format({nested: {}}, enabled) ? <p>Age</p> : null;', false],
+    ['empty string length', 'data, enabled', 'return enabled && data.length;', '', 'return format("", enabled) ? <p>Age</p> : null;', false],
+    ['spread inherited field', 'data, enabled', 'return enabled || data.toString;', '', 'return format({...{}}, enabled) ? <p>Age</p> : null;', false],
+    ['own falsy method override', 'data, enabled', 'return enabled || data.toString;', '', 'return format({toString: false}, enabled) ? <p>Age</p> : null;', true],
+    ['own truthy method override', 'data, enabled', 'return enabled && data.toString;', '', 'return format({toString: true}, enabled) ? <p>Age</p> : null;', true],
+    ['own field on custom prototype', 'data, enabled', 'return enabled || data.ready;', '', 'return format({__proto__: {ready: true}, ready: false}, enabled) ? <p>Age</p> : null;', true],
     ['negated constant object mask', 'data, enabled', 'if (enabled || !data.disabled) return "Age"; return null;', '', 'const label = format({disabled: false}, enabled); if (!label) return null; return <p>Age</p>;', false],
     ['constant true object control', 'data, enabled', 'if (enabled && data.ready) return "Age"; return null;', '', 'const label = format({ready: true}, enabled); if (!label) return null; return <p>Age</p>;', true],
     ['constant false object control', 'data, enabled', 'if (enabled || data.ready) return "Age"; return null;', '', 'const label = format({ready: false}, enabled); if (!label) return null; return <p>Age</p>;', true],
     ['independent field sharing flag name', 'data, enabled', 'return data.enabled && enabled;', 'props', 'return format(props, enabled) ? <p>Age</p> : null;', true],
+    ['default truthy mask', 'ready = true, enabled', 'if (enabled || ready) return "Age"; return null;', '', 'return format(undefined, enabled) ? <p>Age</p> : null;', false],
+    ['aliased undefined default mask', 'ready = true, enabled', 'return enabled || ready;', '', 'const ready = undefined; return format(ready, enabled) ? <p>Age</p> : null;', false],
+    ['void default mask', 'ready = true, enabled', 'return enabled || ready;', '', 'return format(void 0, enabled) ? <p>Age</p> : null;', false],
+    ['default falsy conjunction', 'ready = false, enabled', 'return enabled && ready;', '', 'return format(undefined, enabled) ? <p>Age</p> : null;', false],
+    ['default falsy disjunction control', 'ready = false, enabled', 'return enabled || ready;', '', 'return format(undefined, enabled) ? <p>Age</p> : null;', true],
+    ['null skips default control', 'ready = true, enabled', 'return enabled || ready;', '', 'return format(null, enabled) ? <p>Age</p> : null;', true],
+    ['false skips default control', 'ready = true, enabled', 'return enabled || ready;', '', 'return format(false, enabled) ? <p>Age</p> : null;', true],
+    ['overwritten secondary parameter', 'ready, enabled', 'const ignored = (ready = true); if (enabled || ready) return "Age"; return null;', '', 'return format(false, enabled) ? <p>Age</p> : null;', false],
+    ['updated secondary parameter', 'ready, enabled', 'const ignored = ready++; if (enabled || ready) return "Age"; return null;', '', 'return format(false, enabled) ? <p>Age</p> : null;', false],
     ['falsy disjunction input', 'ready, enabled', 'return ready || enabled;', '', 'return format(false, enabled) ? <p>Age</p> : null;', true],
     ['truthy disjunction mask', 'ready, enabled', 'return ready || enabled;', '', 'return format(true, enabled) ? <p>Age</p> : null;', false],
     ['aliased falsy conjunction', 'ready, enabled', 'return ready && enabled;', '', 'const ready = false; return format(ready, enabled) ? <p>Age</p> : null;', false],
@@ -2597,5 +2619,20 @@ test('formatter dependencies and consumed logical rendering stay sound', async (
     writeFile(dir, 'src/lib/formatter.ts', `export function format(${parameters}) { ${helper} }`);
     writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + `export function Widget(${props}) { const enabled = useFlag(OTHER_FLAG); ${consumer} }`);
     assert.equal((await evaluate('HTPR-1 [FEATURE] formatter dependency', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('async server consumers preserve synchronous formatter gates', async (t) => {
+  const cases = [
+    ['relative conditional', '../lib/formatter', 'export function format(enabled) { return enabled; }', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['alias conditional', '@/lib/formatter', 'export function format(enabled) { return enabled; }', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['assigned early return', '@/lib/formatter', 'export function format(enabled) { return enabled; }', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['async formatter remains refused', '@/lib/formatter', 'export async function format(enabled) { return enabled; }', 'return format(enabled) ? <p>Age</p> : null;', false],
+  ];
+  for (const [name, moduleName, helper, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', helper);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nexport async function Widget() { const enabled = await isFeatureEnabled(OTHER_FLAG); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] async formatter consumer', base, commit(git, name), dir)).pass, expected, name);
   }
 });
