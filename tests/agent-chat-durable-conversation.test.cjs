@@ -163,7 +163,7 @@ const prisma = {
           message.id === where.id &&
           (where.sessionId === undefined || message.sessionId === where.sessionId),
       ) ?? null,
-    findMany: async ({ where, orderBy, take, cursor, skip }) => {
+    findMany: async ({ where, orderBy, take, cursor, skip, include }) => {
       assert.deepEqual(
         orderBy,
         [{ createdAt: "desc" }, { id: "desc" }],
@@ -175,7 +175,10 @@ const prisma = {
         assert.notEqual(at, -1, "cursor must exist in the ordered set");
         rows = rows.slice(at + (skip ?? 0));
       }
-      return rows.slice(0, take);
+      return rows.slice(0, take).map(({ ticketProposal, ...row }) => ({
+        ...row,
+        ...(include?.ticketProposal ? { ticketProposal } : {}),
+      }));
     },
     count: async ({ where }) => {
       // An agent's reply has no author user, and those are exactly the rows
@@ -282,7 +285,6 @@ stub("src/lib/agents/visibility.ts", {
   accessibleAgentWhere: (userId) => ({ __visibleTo: userId }),
 });
 stub("src/lib/flags.ts", {
-  AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
   SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
   isFeatureEnabled: async (key, userId) =>
     key === "htpr-6002-shared-agent-chat"
@@ -422,6 +424,35 @@ test("history returns one page oldest first and reports more above it", async ()
   assert.equal(body.hasMore, true);
   assert.equal(body.nextBefore, "message-004", "paging continues above the page");
   assert.equal(body.awaiting, true, "the newest message is the person's, so the agent owes a reply");
+});
+
+test("history keeps ticket proposals when rollout checks are disabled", async () => {
+  messages = [{
+    ...message(2),
+    ticketProposal: {
+      id: "proposal-1",
+      status: "CONFIRMED",
+      outcome: "Rename the login button",
+      ticketTitle: "Rename the login button",
+      targetProjectTitle: "Product",
+      targetSectionTitle: "Bugs",
+      task: { ticketNumber: "HTPR-9001", projectId: 15, uniqueIndex: 9001, status: "Normal" },
+    },
+  }];
+
+  const response = await historyRoute.GET(historyRequest(), routeContext());
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.messages[0].proposal, {
+    id: "proposal-1",
+    status: "CONFIRMED",
+    outcome: "Rename the login button",
+    ticketTitle: "Rename the login button",
+    targetProjectTitle: "Product",
+    targetSectionTitle: "Bugs",
+    failureMessage: null,
+    task: { ticketNumber: "HTPR-9001", url: "/detail/project-15/9001" },
+  });
 });
 
 test("the page above continues from the cursor without repeating a row", async () => {

@@ -11,7 +11,6 @@ import { broadcastChatSession } from '@/lib/agents/chatBroadcast'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
 import { isFeatureEnabled } from '@/lib/flags'
-import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from '@/lib/flags'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 import { getSectionForTask, validateProjectAccess } from '@/lib/mcp/tasks/services'
 import {
@@ -251,42 +250,36 @@ export async function POST(
       targetSectionTitle: string
     } | null = null
     if (parsedProposal.proposal) {
-      const enabled = await isFeatureEnabled(
-        AGENT_CHAT_TICKET_CONFIRM_FLAG,
-        session.userId
+      const scopeError = await requireRole(ctx, 'write')
+      if (scopeError) return scopeError
+      const projectCheck = await validateProjectAccess(
+        parsedProposal.proposal.targetProjectId,
+        session.userId,
+        ctx.agentId, ctx.teamScope
       )
-      if (enabled) {
-        const scopeError = await requireRole(ctx, 'write')
-        if (scopeError) return scopeError
-        const projectCheck = await validateProjectAccess(
-          parsedProposal.proposal.targetProjectId,
-          session.userId,
-          ctx.agentId, ctx.teamScope
+      if (projectCheck.error) {
+        return NextResponse.json(
+          { success: false, error: projectCheck.error.message },
+          { status: projectCheck.error.status }
         )
-        if (projectCheck.error) {
-          return NextResponse.json(
-            { success: false, error: projectCheck.error.message },
-            { status: projectCheck.error.status }
-          )
-        }
-        const sectionCheck = await getSectionForTask(
-          parsedProposal.proposal.targetProjectId,
-          parsedProposal.proposal.targetSectionId
+      }
+      const sectionCheck = await getSectionForTask(
+        parsedProposal.proposal.targetProjectId,
+        parsedProposal.proposal.targetSectionId
+      )
+      if (sectionCheck.error) {
+        return NextResponse.json(
+          { success: false, error: sectionCheck.error.message },
+          { status: sectionCheck.error.status }
         )
-        if (sectionCheck.error) {
-          return NextResponse.json(
-            { success: false, error: sectionCheck.error.message },
-            { status: sectionCheck.error.status }
-          )
-        }
-        proposalData = {
-          outcome: parsedProposal.proposal.outcome,
-          ticketTitle: parsedProposal.proposal.ticketTitle,
-          targetProjectId: projectCheck.project.id,
-          targetProjectTitle: projectCheck.project.title,
-          targetSectionId: sectionCheck.section.id,
-          targetSectionTitle: sectionCheck.section.section_title,
-        }
+      }
+      proposalData = {
+        outcome: parsedProposal.proposal.outcome,
+        ticketTitle: parsedProposal.proposal.ticketTitle,
+        targetProjectId: projectCheck.project.id,
+        targetProjectTitle: projectCheck.project.title,
+        targetSectionId: sectionCheck.section.id,
+        targetSectionTitle: sectionCheck.section.section_title,
       }
     }
 
