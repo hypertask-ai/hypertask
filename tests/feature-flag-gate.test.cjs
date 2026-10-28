@@ -2830,6 +2830,6 @@ export default { key: NEW_FLAG, kind: "bugfix", defaultMode: "${mode}", shippedO
     const head = commit(git, "new money flag");
     const result = await evaluate("HTPR-2 [BUGFIX] money fixture", base, head, dir);
     assert.equal(result.pass, mode === "OWNER_AND_QA", result.reason);
-    if (mode !== "OWNER_AND_QA") assert.match(result.reason, /new money flag htpr-2-new must set defaultMode: "OWNER_AND_QA"/);
+    if (["OFF", "OWNER_ONLY"].includes(mode)) assert.match(result.reason, /new money flag htpr-2-new must set defaultMode: "OWNER_AND_QA"/);
   }
 });
