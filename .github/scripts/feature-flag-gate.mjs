@@ -1025,7 +1025,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
         continue;
       }
       const other = child === parent.left ? parent.right : parent.left;
-      if ((parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsToken ||
+      if (!earlyOnly && (parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsEqualsToken) &&
@@ -1033,7 +1033,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null } = {}) {
       return false;
     }
     if (typescript.isIfStatement(parent) && child === parent.expression) {
-      if (!typescript.isBlock(parent.parent)) return false;
+      if (!typescript.isBlock(parent.parent) || !typescript.isFunctionLike(parent.parent.parent)) return false;
       const statements = parent.parent.statements;
       const index = statements.indexOf(parent);
       let start = 0;
