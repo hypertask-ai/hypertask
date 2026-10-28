@@ -166,7 +166,7 @@
     "turndown": "^7.2.4",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "ua-parser-js": "^1.0.37",
-    "undici": "^7.30.1",
+    "undici": "^8.12.3",
     "unicode-segmenter": "0.17.3",
     "uuid": "^14.0.2",
     "web-vitals": "^6.2.3",
