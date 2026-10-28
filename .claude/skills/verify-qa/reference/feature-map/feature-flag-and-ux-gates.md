@@ -43,6 +43,8 @@ The allowed controls include relative and `@/` imports, top-level early returns,
 Refused controls include ignored or overwritten parameters, nested contradictory guards, exception overrides, invariant comparisons, conditional guards with unknown or constant truthiness, correlated parameters, dependent parameter defaults, truthy masks and discarded output.
 Constant defaults remain supported; direct formatter calls use the same consumer proof as assigned results.
 Dependency controls include correlated object fields and shorthand values, independent component props and immutable aliases.
+Caller-bound literal fields, nested objects and constant aliases must reject invariant conditions while preserving true conjunction and false disjunction controls.
+A property named `enabled` is not a reference to the flag parameter; independent fields with that name remain supported.
 Consumed logical and nested conditional JSX render paths pass; discarded or comma-masked JSX fails.
 Save the tested head SHA, hosted run URL and successful group lines.
 A local AST reproduction supplements those results; it does not replace evaluator or trusted-workflow proof.

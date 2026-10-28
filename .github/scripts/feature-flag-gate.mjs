@@ -1000,7 +1000,7 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
   return null;
 }
 
-function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), checker = null, live = null } = {}) {
+function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), parameterBoolean = () => null, checker = null, live = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
   if (fn?.asteriskToken || fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
@@ -1039,13 +1039,15 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
         const other = child === parent.left ? parent.right : parent.left;
         let repeated = false;
         (function visit(item) {
-          if (typescript.isIdentifier(item) && (item.text === node.text || localBindings.has(item.text) ||
+          if (typescript.isIdentifier(item) &&
+              !(typescript.isPropertyAccessExpression(item.parent) && item.parent.name === item) &&
+              (item.text === node.text || localBindings.has(item.text) ||
               (parameterNames.has(item.text) &&
                 !independentParameters.has(item.text)))) repeated = true;
           if (!repeated) typescript.forEachChild(item, visit);
         })(other);
         if (repeated) return false;
-        const value = staticBoolean(other, true);
+        const value = staticBoolean(other, true) ?? parameterBoolean(other);
         if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
             (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
         if (child === parent.left && value !== null) conditionalOutput = true;
@@ -1103,7 +1105,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
   return false;
 }
 
-function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex, independentArguments) {
+function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex, independentArguments, argumentBoolean) {
   const targetPath = resolveLocalModule(ref, sourcePath, imported.module);
   if (!targetPath) return false;
   const source = git(["show", `${ref}:${targetPath}`]);
@@ -1144,11 +1146,27 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
 
   const independentParameters = new Set(declaration.parameters.flatMap((item, index) =>
     independentArguments.has(index) && typescript.isIdentifier(item.name) ? [item.name.text] : []));
+  const parameterBoolean = (expression) => {
+    const properties = [];
+    let value = unwrapArgumentExpression(expression);
+    if (typescript.isPrefixUnaryExpression(value) && value.operator === typescript.SyntaxKind.ExclamationToken) {
+      const operand = parameterBoolean(value.operand);
+      return operand === null ? null : !operand;
+    }
+    while (typescript.isPropertyAccessExpression(value)) {
+      properties.unshift(value.name.text);
+      value = unwrapArgumentExpression(value.expression);
+    }
+    if (!typescript.isIdentifier(value)) return null;
+    const index = declaration.parameters.findIndex((item) =>
+      typescript.isIdentifier(item.name) && checker.getSymbolAtLocation(item.name) === checker.getSymbolAtLocation(value));
+    return index < 0 ? null : argumentBoolean(index, properties);
+  };
   let controls = false;
   function visit(node) {
     if (controls || typescript.isFunctionLike(node)) return;
     if (typescript.isIdentifier(node) && node !== parameter.name &&
-        checker.getSymbolAtLocation(node) === symbol && controlsReturnedValue(node, { independentParameters })) {
+        checker.getSymbolAtLocation(node) === symbol && controlsReturnedValue(node, { independentParameters, parameterBoolean })) {
       controls = true;
       return;
     }
@@ -1174,7 +1192,7 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   const written = writtenBindingSymbols(node.getSourceFile(), checker);
   const flagSymbol = checker.getSymbolAtLocation(node);
   call.arguments.forEach((value, index) => {
-    if (index === argumentIndex || staticBoolean(value, true) === false) return;
+    if (index === argumentIndex) return;
     let dependent = false;
     const seen = new Set();
     (function visit(item) {
@@ -1213,7 +1231,35 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
     })(value);
     if (!dependent) independentArguments.add(index);
   });
-  if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, independentArguments)) return false;
+  const argumentBoolean = (index, properties) => {
+    const seen = new Set();
+    function resolve(value, fields) {
+      value = unwrapArgumentExpression(value);
+      if (typescript.isIdentifier(value)) {
+        const symbol = checker.getSymbolAtLocation(value);
+        if (symbol && !written.has(symbol) && !seen.has(symbol)) {
+          const declaration = symbol.valueDeclaration;
+          if (declaration && typescript.isVariableDeclaration(declaration) && declaration.initializer &&
+              typescript.isVariableDeclarationList(declaration.parent) &&
+              (declaration.parent.flags & typescript.NodeFlags.Const)) {
+            seen.add(symbol);
+            const result = resolve(declaration.initializer, fields);
+            seen.delete(symbol);
+            return result;
+          }
+        }
+      }
+      if (fields.length === 0) return staticBoolean(value, true);
+      if (!typescript.isObjectLiteralExpression(value) || value.properties.some((property) =>
+          !typescript.isPropertyAssignment(property) || typescript.isComputedPropertyName(property.name))) return null;
+      const matches = value.properties.filter((property) => property.name.text === fields[0]);
+      if (matches.length === 0) return false;
+      if (matches.length !== 1) return null;
+      return resolve(matches[0].initializer, fields.slice(1));
+    }
+    return call.arguments[index] ? resolve(call.arguments[index], properties) : null;
+  };
+  if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, independentArguments, argumentBoolean)) return false;
   const sourceFile = node.getSourceFile();
   const live = collectLiveFunctions(sourceFile, checker);
   if (!renderFunctions.has(enclosingFunctionLike(call)) && !controlsRuntimeBranch(call, false)) return false;

@@ -2566,6 +2566,19 @@ test('imported boolean conjunctions preserve independent caller inputs', async (
 
 test('formatter dependencies and consumed logical rendering stay sound', async (t) => {
   const cases = [
+    ['constant false object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format({inverse: false}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['constant true object mask', 'data, enabled', 'if (enabled || data.always) return "Age"; return null;', '', 'const label = format({always: true}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['aliased constant false object', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const data = {inverse: false}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['nested constant false object', 'data, enabled', 'if (enabled && data.nested.inverse) return null; return "Age";', '', 'const data = {nested: {inverse: false}}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['missing object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format({}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['negated constant object mask', 'data, enabled', 'if (enabled || !data.disabled) return "Age"; return null;', '', 'const label = format({disabled: false}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['constant true object control', 'data, enabled', 'if (enabled && data.ready) return "Age"; return null;', '', 'const label = format({ready: true}, enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['constant false object control', 'data, enabled', 'if (enabled || data.ready) return "Age"; return null;', '', 'const label = format({ready: false}, enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['independent field sharing flag name', 'data, enabled', 'return data.enabled && enabled;', 'props', 'return format(props, enabled) ? <p>Age</p> : null;', true],
+    ['falsy disjunction input', 'ready, enabled', 'return ready || enabled;', '', 'return format(false, enabled) ? <p>Age</p> : null;', true],
+    ['truthy disjunction mask', 'ready, enabled', 'return ready || enabled;', '', 'return format(true, enabled) ? <p>Age</p> : null;', false],
+    ['aliased falsy conjunction', 'ready, enabled', 'return ready && enabled;', '', 'const ready = false; return format(ready, enabled) ? <p>Age</p> : null;', false],
+    ['aliased falsy disjunction', 'ready, enabled', 'return ready || enabled;', '', 'const ready = false; return format(ready, enabled) ? <p>Age</p> : null;', true],
     ['correlated object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format({inverse: !enabled}, enabled); if (!label) return null; return <p>Age</p>;', false],
     ['aliased correlated object', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const data = {inverse: !enabled}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
     ['independent object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '{ready}', 'const label = format({inverse: ready}, enabled); if (!label) return null; return <p>Age</p>;', true],
