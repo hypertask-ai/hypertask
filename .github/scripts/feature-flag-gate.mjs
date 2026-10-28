@@ -469,7 +469,7 @@ function branchIsNullishOrEmpty(node, renderOnly = false) {
     return true;
   }
   if (typescript.isIdentifier(expression) && expression.text === "undefined") return true;
-  if (typescript.isStringLiteral(expression) && expression.text === "") return true;
+  if ((typescript.isStringLiteral(expression) || typescript.isNoSubstitutionTemplateLiteral(expression)) && expression.text === "") return true;
   if (typescript.isJsxExpression(expression)) return branchIsNullishOrEmpty(expression.expression, renderOnly);
   if (renderOnly && (typescript.isOmittedExpression(expression) || typescript.isVoidExpression(expression) ||
       (typescript.isPrefixUnaryExpression(expression) && expression.operator === typescript.SyntaxKind.ExclamationToken) ||
@@ -756,7 +756,8 @@ function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = 
   // Export recognition remains intact for the ungated-sibling check, but a
   // rebound binding cannot prove which implementation runs. No flow analysis.
   const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) &&
-    (!renderOnly || functionContainsJsx(fn) || /^[A-Z]/.test(functionBindingName(fn, checker)?.text ?? "")) &&
+    (!renderOnly || (!isServerFile(sourceFile.fileName) &&
+      (functionContainsJsx(fn) || /^[A-Z]/.test(functionBindingName(fn, checker)?.text ?? "")))) &&
     (entries ? entries.has(fn) : isExportedUiEntry(fn, identifierExports))));
   const functionBySymbol = new Map();
   for (const fn of functions) {
@@ -1536,7 +1537,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
   const baseSource = git(["ls-tree", "--name-only", baseRef, "--", path]).trim()
     ? git(["show", `${baseRef}:${path}`]) : "";
   const baseSourceFile = typescript.createSourceFile(path, baseSource, typescript.ScriptTarget.Latest, true, scriptKind);
-  const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
+  const options = { noResolve: true, allowJs: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
   const host = {
     getSourceFile: (fileName) => fileName === path ? sourceFile : undefined,
     getDefaultLibFileName: () => "",

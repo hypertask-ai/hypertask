@@ -2759,11 +2759,28 @@ test('formatter consumer boundaries preserve action and JavaScript rendering gat
     ['JavaScript arrow component', 'js', 'export const Widget = () => { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; };', true],
     ['exported TSX action', 'tsx', 'export async function send() { const enabled = useFlag(OTHER_FLAG); if (format(enabled)) await doWork(); }', true],
     ['discarded action text', 'tsx', 'export function send() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; }', false],
+    ['empty template text', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); return label ? `` : null; }', false],
+    ['JavaScript ignored formatter', 'js', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); format(enabled); return "Age"; }', false],
   ];
   for (const [name, extension, source, expected] of cases) {
     const { dir, git } = makeRepo(t), base = commit(git, 'base');
     writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
     writeFile(dir, `src/components/Widget.${extension}`, 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + source);
     assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer boundary', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('imported formatter server boolean responses remain effective gates', async (t) => {
+  const cases = [
+    ['relative distinct booleans', '../../../lib/formatter', 'format(enabled) ? true : false', true],
+    ['aliased distinct booleans', '@/lib/formatter', 'format(enabled) ? true : false', true],
+    ['invariant boolean response', '@/lib/formatter', 'format(enabled) ? true : true', false],
+  ];
+  for (const [name, moduleName, response, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
+    writeFile(dir, 'src/components/Widget.tsx', 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+    writeFile(dir, 'src/app/api/widget/route.ts', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nexport async function GET() { const enabled = await isFeatureEnabled(OTHER_FLAG, 6); return Response.json(${response}); }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] imported server boolean gate', base, commit(git, name), dir)).pass, expected, name);
   }
 });
