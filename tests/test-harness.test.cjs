@@ -74,7 +74,7 @@ test("lint refuses new loaders, aliases, cache writes and element helpers", asyn
     'function findElement(tree, type) { return tree; }',
     'const findElement = tree => tree;',
   ]) {
-    const messages = await lint(code);
+    const messages = await lint(code, code.startsWith("import ") ? "tests/new-harness.mjs" : "tests/new-harness.cjs");
     assert.equal(messages.length, 1, code);
     assert.equal(messages[0].ruleId, "hypertask-tests/no-new-harness");
     assert.match(messages[0].message, /tests\/helpers\/loadModule.cjs/);
