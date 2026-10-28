@@ -38,7 +38,7 @@ async function readProjectId(request: NextRequest): Promise<number | null> {
 export async function POST(request: NextRequest) {
   const principal = await getGithubConnectPrincipal(request);
   if (principal.status !== "allowed") return refusePrincipal(principal);
-  if (!isTrustedMutationOrigin(request)) return noStore({ error: "Forbidden" }, 403);
+  if (principal.source !== "cli-bearer" && !isTrustedMutationOrigin(request)) return noStore({ error: "Forbidden" }, 403);
 
   const projectId = await readProjectId(request);
   if (projectId === null) return noStore({ error: "A board projectId is required" }, 400);

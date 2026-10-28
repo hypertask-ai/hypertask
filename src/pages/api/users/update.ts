@@ -1,6 +1,7 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import update_or_create_user from "@/utils/controllers/users/update_or_create_user";
 
@@ -9,7 +10,8 @@ const handler: NextApiHandler = async (
   res: NextApiResponse
 ) => {
   try {
-    const session = verifySession(req.cookies[SESSION_COOKIE]);
+    const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
     if (!session) {
       return res
         .status(401)
@@ -17,7 +19,7 @@ const handler: NextApiHandler = async (
     }
 
     const sessionUser = await prisma.user.findUnique({
-      where: { id: session.id },
+      where: { id: session.userId },
       select: { email: true },
     });
     if (!sessionUser) {

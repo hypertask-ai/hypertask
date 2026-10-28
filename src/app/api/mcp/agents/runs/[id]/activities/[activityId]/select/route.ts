@@ -58,7 +58,7 @@ export async function POST(
         403,
       );
     }
-    if (!browserMutationIsSameOrigin(request)) {
+    if (principal.credentialSource !== "cli-bearer" && !browserMutationIsSameOrigin(request)) {
       return noStore({ success: false, error: "Cross-origin request rejected" }, 403);
     }
 

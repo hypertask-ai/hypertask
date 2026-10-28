@@ -1,16 +1,18 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import getAllTeams from "@/utils/controllers/teams/getAll";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
-        const session = verifySession(req.cookies[SESSION_COOKIE])
+        const session = await getSessionUser(new Headers(req.headers as Record<string, string>))
+        logDesktopCliResponse(session, req, res)
         if (!session) {
             return res.status(401).json({ error: "Unauthorized", code: "SESSION_REQUIRED" })
         }
 
-        const response = await getAllTeams(session.id)
+        const response = await getAllTeams(session.userId)
         return res.status(response.status).json(response.json)
         
     } else {

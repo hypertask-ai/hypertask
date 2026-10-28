@@ -8,6 +8,7 @@ import { JWT_ISSUER, JWT_MCP_AUDIENCE } from "@/lib/mcp/auth/verifyJwt";
 import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 export type AiRequestUser = {
+  source?: "cli-bearer";
   id: number;
   email?: string;
   displayName?: string | null;
@@ -23,6 +24,7 @@ export async function getAiRequestUser(
   const cookieUser = await getCurrentUserFromCookies();
   if (Number.isInteger(cookieUser?.id) && Number(cookieUser?.id) > 0) {
     return {
+      ...(cookieUser.source === "cli-bearer" ? { source: cookieUser.source } : {}),
       id: Number(cookieUser?.id),
       email: cookieUser?.email,
       displayName: cookieUser?.displayName,

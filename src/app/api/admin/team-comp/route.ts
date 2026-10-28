@@ -1,3 +1,4 @@
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -56,7 +57,8 @@ async function ownerAccess(request: NextRequest) {
   if (!(await isFeatureFlagOwner(request.headers))) {
     return noStore({ success: false, error: "Forbidden" }, 403);
   }
-  if (request.method !== "GET" && !trustedOrigin(request)) {
+  const session = await getSessionUser(request.headers);
+  if (request.method !== "GET" && session?.source !== "cli-bearer" && !trustedOrigin(request)) {
     return noStore({ success: false, error: "Forbidden" }, 403);
   }
   return null;

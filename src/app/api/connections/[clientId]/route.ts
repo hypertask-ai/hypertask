@@ -50,7 +50,7 @@ export async function DELETE(
         { status: 401 },
       );
     }
-    if (!hasTrustedMutationOrigin(request)) {
+    if (session.source !== "cli-bearer" && !hasTrustedMutationOrigin(request)) {
       return NextResponse.json(
         { success: false, error: "Invalid request origin" },
         { status: 403 },

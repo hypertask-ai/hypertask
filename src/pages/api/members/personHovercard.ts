@@ -1,5 +1,6 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import type { NextApiHandler } from "next";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { resolvePersonHovercard } from "@/utils/controllers/members/personHovercard";
 
@@ -42,7 +43,8 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const session = verifySession(req.cookies[SESSION_COOKIE]);
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
   if (!session) {
     return res
       .status(401)
@@ -56,7 +58,7 @@ const handler: NextApiHandler = async (req, res) => {
 
   const result = await resolvePersonHovercard(
     parsed.projectId,
-    session.id,
+    session.userId,
     parsed.subject,
   );
   if (!result.ok) {

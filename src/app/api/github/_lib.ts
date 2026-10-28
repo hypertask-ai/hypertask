@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
@@ -14,7 +14,7 @@ export const GITHUB_SETTINGS_PATH = "/settings/github";
 export const GITHUB_OAUTH_CALLBACK_PATH = "/api/github/oauth/callback";
 
 export type GithubConnectPrincipal =
-  | { status: "allowed"; userId: number }
+  | { status: "allowed"; userId: number; source: SessionUser["source"] }
   | { status: "disabled" }
   | { status: "error" }
   | { status: "unauthorized" };
@@ -29,7 +29,7 @@ export async function getGithubConnectPrincipal(
       HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG,
       session.userId,
     );
-    return enabled ? { status: "allowed", userId: session.userId } : { status: "disabled" };
+    return enabled ? { status: "allowed", userId: session.userId, source: session.source } : { status: "disabled" };
   } catch (error) {
     console.error(
       "GitHub connect principal lookup failed",

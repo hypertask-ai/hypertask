@@ -311,6 +311,7 @@ test("a signed non-owner cannot create checkout for another team", async () => {
     {
       method: "POST",
       cookies: { [SESSION_COOKIE]: signSession({ id: 6 }) },
+      headers: { cookie: `${SESSION_COOKIE}=${signSession({ id: 6 })}` },
       body: validBody(),
     },
     response,

@@ -1,5 +1,6 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import prisma from "@/lib/prisma";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 export default async function handler(
@@ -10,11 +11,12 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const session = verifySession(req.cookies[SESSION_COOKIE]);
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
   if (!session) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  const userId = session.id;
+  const userId = session.userId;
 
   const draftId = Number(req.body?.draftId);
   if (!Number.isInteger(draftId) || draftId <= 0) {

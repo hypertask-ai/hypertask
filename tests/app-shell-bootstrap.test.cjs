@@ -145,18 +145,40 @@ test("a failed slice falls back without discarding successful slices", async () 
   }
 });
 
-test("server bootstrap derives every private slice from the verified account", () => {
+test("server bootstrap derives every private slice from the verified account", async () => {
   const route = read("src/app/api/app-shell/bootstrap/route.ts");
   const service = read("src/lib/appShellBootstrap/server.ts");
   const bridge = read("src/lib/auth/bridgePlugin.ts");
-  const favoritesRoute = read("src/pages/api/favorites/getFavorites.ts");
   const favoritesController = read(
     "src/utils/controllers/favorites/getAll.ts",
   );
   const projectsRoute = read("src/lib/api/project-writes/minimal-read.ts");
-  const userRoute = read("src/pages/api/users/getById.ts");
 
-  assert.match(route, /verifySession\([\s\S]*getAppShellBootstrap\(session\.id\)/);
+  const { load } = require("./task-route-loader.cjs");
+  let session = { userId: 6, source: "legacy", needsBridge: true, teamScope: null };
+  const mocks = {
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => session },
+    "next/headers": { headers: async () => new Headers() },
+    "@/lib/appShellBootstrap/server": { getAppShellBootstrap: async userId => ({ accountId: userId }) },
+    "@/utils/controllers/favorites/getAll": { getFavoritesForUser: async userId => ({ accountId: userId }) },
+    "@/utils/controllers/users/getById": { default: async userId => ({ status: 200, res: { accountId: userId } }) },
+  };
+  const bootstrap = load("src/app/api/app-shell/bootstrap/route.ts", mocks);
+  assert.deepEqual(await (await bootstrap.POST()).json(), { accountId: 6 });
+  for (const file of ["src/pages/api/favorites/getFavorites.ts", "src/pages/api/users/getById.ts"]) {
+    const handler = load(file, mocks).default;
+    const request = { method: "GET", headers: {}, query: { userId: "77" }, body: { userId: 77 } };
+    const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+    await handler(request, response);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body, { accountId: 6 });
+    session = null;
+    await handler(request, response);
+    assert.equal(response.statusCode, 401);
+    session = { userId: 6, source: "legacy", needsBridge: true, teamScope: null };
+  }
+  session = null;
+  assert.equal((await bootstrap.POST()).status, 401);
   assert.match(route, /private, no-store/);
   assert.match(service, /Promise\.all\(\[/);
   assert.match(service, /SLICE_TIMEOUT_MS/);
@@ -165,10 +187,6 @@ test("server bootstrap derives every private slice from the verified account", (
   assert.match(favoritesController, /owner: \{ select: favoriteUserSelect \}/);
   assert.match(favoritesController, /user: \{ select: favoriteUserSelect \}/);
   assert.doesNotMatch(favoritesController, /\b(owner|user): true\b/);
-  for (const source of [favoritesRoute, userRoute]) {
-    assert.match(source, /verifySession\(req\.cookies\[SESSION_COOKIE\]\)/);
-    assert.match(source, /session\.id/);
-  }
   // The minimal projects read moved into the shared handler.
   assert.match(projectsRoute, /await legacyTaskWriteSession\(request\)/);
   assert.match(projectsRoute, /getAllMinimal\(session\.userId, mode\)/);

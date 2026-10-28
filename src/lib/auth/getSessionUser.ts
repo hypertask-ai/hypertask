@@ -68,7 +68,9 @@ async function readSessionUser(headers: Headers): Promise<SessionUser | null> {
   }
 
   if (!legacySession) {
-    return null
+    if (!headers.get('authorization')?.startsWith('Bearer ')) return null
+    const { getDesktopCliTokenUser } = await import('@/lib/auth/desktopCliTokenUser')
+    return getDesktopCliTokenUser(headers, 'shared-session')
   }
 
   return {

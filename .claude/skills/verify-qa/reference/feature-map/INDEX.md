@@ -29,6 +29,7 @@ each ticket only needs the one or two areas it touches.
 | Webhooks | [webhooks.md](webhooks.md) | no smoke id; QA 985 team-wide endpoint on team 9bca4a7c via /api/settings/webhooks, test delivery to a 2xx receiver, hint vs one-time key; delete fixtures |
 | Team credential database races | [team-credential-db-races.md](team-credential-db-races.md) | 62 real PostgreSQL cases in CI; live doctor, MCP reads and core inbox only |
 | Agent run lifecycle | [agent-runs.md](agent-runs.md) | read-only QA 985 lifecycle discovery, run reads and authentication refusals |
+| Desktop human CLI login | [desktop-login.md](desktop-login.md) | QA 985 bearer exchange, shared and legacy route checks, isolated task save, cookie/flag-off/permission controls |
 | Agents and board access | [agents-board-access.md](agents-board-access.md) | QA 985 throwaway agents on sandbox 7049; self-access 403 text, /mcp safe reason, 24/24 invite picker opens; delete fixtures |
 | Secret scan workflow installer | [secret-scan-workflow.md](secret-scan-workflow.md) | temp checkouts from merged production, no app writes |
 | PostHog error alerts | [posthog-error-alerts.md](posthog-error-alerts.md) | nightly canary workflow, closes its own ticket |

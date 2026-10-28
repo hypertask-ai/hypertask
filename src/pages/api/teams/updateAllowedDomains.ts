@@ -1,7 +1,8 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import { normalizeDomain } from "@/lib/auth/emailDomain";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 
 const handler: NextApiHandler = async (
@@ -13,7 +14,8 @@ const handler: NextApiHandler = async (
   }
 
   try {
-    const session = verifySession(req.cookies[SESSION_COOKIE]);
+    const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
     if (!session) {
       return res
         .status(401)
@@ -35,7 +37,7 @@ const handler: NextApiHandler = async (
       return res.status(404).json({ message: "Team not found" });
     }
 
-    if (team.googleAccount.userId !== session.id) {
+    if (team.googleAccount.userId !== session.userId) {
       return res
         .status(403)
         .json({ message: "Only the team owner can update allowed domains" });

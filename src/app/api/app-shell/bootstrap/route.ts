@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { getAppShellBootstrap } from "@/lib/appShellBootstrap/server";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +11,7 @@ const NO_STORE_HEADERS = {
 };
 
 export async function POST() {
-  const cookieStore = await cookies();
-  const session = verifySession(cookieStore.get(SESSION_COOKIE)?.value);
+  const session = await getSessionUser(await headers());
   if (!session) {
     return NextResponse.json(
       { error: "Unauthorized", code: "SESSION_REQUIRED" },
@@ -21,7 +20,7 @@ export async function POST() {
   }
 
   try {
-    const payload = await getAppShellBootstrap(session.id);
+    const payload = await getAppShellBootstrap(session.userId);
     return NextResponse.json(payload, { headers: NO_STORE_HEADERS });
   } catch {
     return NextResponse.json(

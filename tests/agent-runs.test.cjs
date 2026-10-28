@@ -646,3 +646,33 @@ test("webhook updates preserve visible run subscriptions without a flag row", as
   assert.deepEqual(result.subscription.events, ["run.created"]);
   assert.equal(result.subscription.active, false);
 });
+
+test("mixed agent cookies and bearer keep the agent authority and team binding", async () => {
+  const teamScope = { teamId: "restricted-team", accessBinding: "binding" };
+  const { service } = loadService({
+    sessionUser: { userId: 6, agentId: "agent-1", source: "legacy", teamScope },
+    validateAuth: async () => ({ user: { id: 6, displayName: "Runtime agent" }, agentId: "agent-1", teamScope }),
+  });
+  const principal = await service.authenticateAgentRunRequest({
+    headers: new Headers({ authorization: "Bearer agent-fixture", cookie: "ht_session=agent-cookie-fixture" }),
+    nextUrl: new URL("https://app.hypertask.ai/api/mcp/agents/runs/run-1"),
+  });
+  assert.equal(principal.source, "agent");
+  assert.equal(principal.agentId, "agent-1");
+  assert.deepEqual(principal.teamScope, teamScope);
+});
+
+test("flagged desktop human is human authority, not an agent credential", async () => {
+  const { service } = loadService({
+    sessionUser: { userId: 6, source: "cli-bearer", teamScope: null },
+    validateAuth: async () => { throw new Error("desktop human must not enter agent credential dispatch"); },
+  });
+  const principal = await service.authenticateAgentRunRequest({
+    headers: new Headers({ authorization: "Bearer desktop-fixture" }),
+    nextUrl: new URL("https://app.hypertask.ai/api/mcp/agents/runs/run-1"),
+  });
+  assert.equal(principal.userId, 6);
+  assert.equal(principal.source, "browser");
+  assert.equal(principal.credentialSource, "cli-bearer");
+  assert.equal(principal.agentId, null);
+});

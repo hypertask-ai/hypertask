@@ -1,5 +1,6 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import { NextApiHandler } from "next";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getFavoritesForUser } from "@/utils/controllers/favorites/getAll";
 
 const handler: NextApiHandler = async (req, res) => {
@@ -7,7 +8,8 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const session = verifySession(req.cookies[SESSION_COOKIE]);
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
   if (!session) {
     return res
       .status(401)
@@ -15,7 +17,7 @@ const handler: NextApiHandler = async (req, res) => {
   }
 
   try {
-    return res.status(200).json(await getFavoritesForUser(session.id));
+    return res.status(200).json(await getFavoritesForUser(session.userId));
   } catch (error) {
     console.log(error);
     return res.status(400).json({ message: "Unable to load favorites" });

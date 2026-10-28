@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const viewer = await getSessionUser(request.headers);
   if (!viewer || viewer.agentId) return respond({ error: "Unauthorized" }, 401);
-  if (!browserMutationIsSameOrigin(request)) return respond({ error: "Cross-origin request rejected" }, 403);
+  if (viewer.source !== "cli-bearer" && !browserMutationIsSameOrigin(request)) return respond({ error: "Cross-origin request rejected" }, 403);
   const limited = await checkRestRateLimit(viewer.userId, "write");
   if (limited) return limited;
   const body = await request.json().catch(() => null);

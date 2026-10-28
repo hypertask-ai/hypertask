@@ -1,5 +1,6 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { createFollowerService } from "@/utils/controllers/followers/createFollowerService";
 
 const handler: NextApiHandler = async (
@@ -7,7 +8,8 @@ const handler: NextApiHandler = async (
   res: NextApiResponse,
 ) => {
   if (req.method === "POST") {
-    const session = verifySession(req.cookies[SESSION_COOKIE]);
+    const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
     if (!session) {
       return res
         .status(401)
@@ -16,7 +18,7 @@ const handler: NextApiHandler = async (
 
     const { taskId, mentionById, agentId, commentId, fromAgentId } = req.body;
     const result = await createFollowerService({
-      userId: session.id,
+      userId: session.userId,
       taskId,
       mentionById,
       agentId,
