@@ -46,9 +46,11 @@ sizes, colours, and theme selectors across `src/`. Theme definition files in
 `src/styles/tailwindThemes/` own raw values; components use named utilities or
 whole CSS-variable references, including `shadow-[var(--elevation-card)]`.
 
-`design-tokens-baseline.json` records existing counts per file and family. New
-files have zero allowance. Normal lint rejects both increased debt and stale
-allowances after a removal, including deleted files. Generated TypeScript
+`design-tokens-baseline.json` records existing counts per file and family. The
+initial rollout snapshots production source without changing rendered styles.
+Once merged, allowances can only decrease. New files have zero allowance.
+Normal lint rejects both increased debt and stale allowances after a removal,
+including deleted files. Generated TypeScript
 files use the same exclusions in lint and inventory. After replacing raw
 styles with tokens, run:
 
