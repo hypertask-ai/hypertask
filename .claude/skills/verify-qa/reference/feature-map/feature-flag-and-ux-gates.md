@@ -56,6 +56,8 @@ Empty arrays, nested empty arrays and sparse arrays cannot certify visible outpu
 Spread array and string literals follow the same visibility rule, including nested spreads; unknown spread operands alone cannot prove visible output.
 Visible spread elements and visible siblings of unknown spreads remain supported.
 Boolean invisibility applies only to React output; distinct JSON boolean responses remain valid server gates.
+Imported server formatters follow that same response rule for direct calls and immutable assigned results; ignored calls and identical responses remain refused.
+Interpolated template children need known nonempty literal text to prove visibility; empty or unknown interpolation-only children remain refused.
 Async server-component consumers of synchronous formatters remain supported; async formatters still cannot prove a truthiness gate.
 Consumed logical and nested conditional JSX render paths pass; discarded or comma-masked JSX fails.
 JSX returned only by an event handler cannot prove rendering; a binding returned by the rendered component still can.

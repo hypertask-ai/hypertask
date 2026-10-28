@@ -470,6 +470,7 @@ function branchIsNullishOrEmpty(node, renderOnly = false) {
   }
   if (typescript.isIdentifier(expression) && expression.text === "undefined") return true;
   if ((typescript.isStringLiteral(expression) || typescript.isNoSubstitutionTemplateLiteral(expression)) && expression.text === "") return true;
+  if (renderOnly && typescript.isTemplateExpression(expression)) return staticBoolean(expression, true) !== true;
   if (typescript.isJsxExpression(expression)) return branchIsNullishOrEmpty(expression.expression, renderOnly);
   if (renderOnly && (typescript.isOmittedExpression(expression) || typescript.isVoidExpression(expression) ||
       (typescript.isPrefixUnaryExpression(expression) && expression.operator === typescript.SyntaxKind.ExclamationToken) ||
@@ -1339,9 +1340,9 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   return gatesRuntimeBehavior(call, checker, sourceFile,
     (reference) => renderFunctions.has(enclosingFunctionLike(reference))
       ? controlsReturnedValue(reference, { earlyOnly: true, after: call, checker, live: renderFunctions })
-      : controlsRuntimeBranch(reference, false), live,
+      : controlsRuntimeBranch(reference, isServerFile(path)), live,
     (value) => renderFunctions.has(enclosingFunctionLike(value))
-      ? controlsReturnedValue(value, { earlyOnly: true, checker, live: renderFunctions }) : controlsRuntimeBranch(value, false));
+      ? controlsReturnedValue(value, { earlyOnly: true, checker, live: renderFunctions }) : controlsRuntimeBranch(value, isServerFile(path)));
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null,

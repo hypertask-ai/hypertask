@@ -2760,6 +2760,9 @@ test('formatter consumer boundaries preserve action and JavaScript rendering gat
     ['exported TSX action', 'tsx', 'export async function send() { const enabled = useFlag(OTHER_FLAG); if (format(enabled)) await doWork(); }', true],
     ['discarded action text', 'tsx', 'export function send() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; }', false],
     ['empty template text', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); return label ? `` : null; }', false],
+    ['empty interpolated template child', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); return <div>{label ? [`${""}`] : null}</div>; }', false],
+    ['unknown interpolated template child', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? [`${text}`] : null; }', false],
+    ['visible interpolated template child', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); return <div>{label ? [`Age ${days}`] : null}</div>; }', true],
     ['JavaScript ignored formatter', 'js', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); format(enabled); return "Age"; }', false],
   ];
   for (const [name, extension, source, expected] of cases) {
@@ -2775,12 +2778,15 @@ test('imported formatter server boolean responses remain effective gates', async
     ['relative distinct booleans', '../../../lib/formatter', 'format(enabled) ? true : false', true],
     ['aliased distinct booleans', '@/lib/formatter', 'format(enabled) ? true : false', true],
     ['invariant boolean response', '@/lib/formatter', 'format(enabled) ? true : true', false],
+    ['assigned distinct booleans', '@/lib/formatter', 'label ? true : false', true, 'const label = format(enabled);'],
+    ['assigned invariant booleans', '@/lib/formatter', 'label ? true : true', false, 'const label = format(enabled);'],
+    ['ignored server formatter', '@/lib/formatter', 'false', false, 'format(enabled);'],
   ];
-  for (const [name, moduleName, response, expected] of cases) {
+  for (const [name, moduleName, response, expected, setup = ''] of cases) {
     const { dir, git } = makeRepo(t), base = commit(git, 'base');
     writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
     writeFile(dir, 'src/components/Widget.tsx', 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
-    writeFile(dir, 'src/app/api/widget/route.ts', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nexport async function GET() { const enabled = await isFeatureEnabled(OTHER_FLAG, 6); return Response.json(${response}); }`);
+    writeFile(dir, 'src/app/api/widget/route.ts', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nexport async function GET() { const enabled = await isFeatureEnabled(OTHER_FLAG, 6); ${setup} return Response.json(${response}); }`);
     assert.equal((await evaluate('HTPR-1 [FEATURE] imported server boolean gate', base, commit(git, name), dir)).pass, expected, name);
   }
 });
