@@ -639,16 +639,16 @@
                 "x": 0,
                 "y": 148,
                 "width": 390,
-                "height": 44
+                "height": 79
               }
             },
             "list": {
               "selector": "[data-testid=\"my-tasks-list\"]",
               "box": {
                 "x": 0,
-                "y": 208,
+                "y": 243,
                 "width": 390,
-                "height": 535
+                "height": 500
               }
             },
             "splits": {
@@ -800,7 +800,7 @@
   "flagSnapshotSha256": "dbe55bec498b41eea368b0b8f51e532ef208dfb6565338725bb755822439f505",
   "approvedIn": {
     "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-4060/253",
-    "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-4060/253",
+    "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-15/8144",
     "ticket/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
     "board/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
     "inbox/Desktop": "https://app.hypertask.ai/detail/project-15/7298",
