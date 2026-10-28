@@ -56,6 +56,7 @@ import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-72
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
 import { HTPR_8035_SIDEBAR_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-8035-sidebar-new-task";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/definitions/htpr-6929-compose-task-writer";
+import { HTPR_8146_SETTINGS_NAME_FLAG } from "@/lib/flags/definitions/htpr-8146-settings-name";
 import { prefetchInboxQuery } from "@/hooks/Inbox/useGetNotifications";
 
 const FeedbackModal = dynamic(
@@ -103,6 +104,7 @@ const AppShellRail = ({
   notificationsUnseen = 0,
 }: AppShellRailProps) => {
   const isApple = useDeviceContext();
+  const settingsAccessibleName = useFlag(HTPR_8146_SETTINGS_NAME_FLAG);
   const sidebarNewTask = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
@@ -399,7 +401,7 @@ const AppShellRail = ({
           </button>
         </RailItem>
         <RailItem wide={wide} label="Settings">
-          <button data-testid="app-shell-settings" tabIndex={-1} onClick={() => openSettings()} className="group relative flex h-full w-full items-center justify-center text-text-light-gray hover:text-white-black">
+          <button data-testid="app-shell-settings" aria-label={settingsAccessibleName ? "Settings" : undefined} tabIndex={-1} onClick={() => openSettings()} className="group relative flex h-full w-full items-center justify-center text-text-light-gray hover:text-white-black">
             <IconoirSettings size={18} strokeWidth={1.5} />
             <Tooltip left={tooltipLeft} bottom={-8} text="Settings" keyCombination={["\\"]} />
           </button>
