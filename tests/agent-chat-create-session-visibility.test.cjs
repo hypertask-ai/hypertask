@@ -322,7 +322,7 @@ async function openChat(userId, agentId) {
 test("the owner can open their own private agent's chat", async () => {
   const result = await openChat(OWNER, PRIVATE_ID);
   assert.equal(result.status, 200);
-  assert.deepEqual(upserts, [{ userId: OWNER, agentId: PRIVATE_ID }]);
+  assert.deepEqual(upserts, [{ userId: OWNER, agentId: PRIVATE_ID, agentSessionKey: "default" }]);
   assert.deepEqual(participants, [
     { sessionId: "session-1", userId: OWNER },
   ]);
@@ -341,7 +341,7 @@ test("a teammate on the same board can open a team agent's chat", async () => {
   assert.equal(result.status, 200);
   // Keyed on the agent's owner, not on whoever opened it: everyone the agent is
   // shared with lands in one thread rather than a private copy each.
-  assert.deepEqual(upserts, [{ userId: OWNER, agentId: TEAM_ID }]);
+  assert.deepEqual(upserts, [{ userId: OWNER, agentId: TEAM_ID, agentSessionKey: "default" }]);
   assert.deepEqual(participants, [
     { sessionId: "session-1", userId: TEAMMATE },
   ]);

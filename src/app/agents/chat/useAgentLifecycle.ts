@@ -170,12 +170,12 @@ export function useAgentLifecycle({
 
   useEffect(() => {
     draftRef.current = draft;
-    if (selectedId) writeDraft(currentUser.id, selectedId, draft);
+    if (selectedId) writeDraft(currentUser.id, embedded?.draftKey ?? selectedId, draft);
     const activeSessionId = sessionIdRef.current;
     if (activeSessionId && draftHydratedRef.current === activeSessionId) {
       saveDraftToServer(activeSessionId, draft, embedded?.projectId);
     }
-  }, [draft, selectedId, currentUser.id, embedded?.projectId]);
+  }, [draft, selectedId, currentUser.id, embedded?.projectId, embedded?.draftKey]);
 
   useEffect(() => {
     if (embedded) return;

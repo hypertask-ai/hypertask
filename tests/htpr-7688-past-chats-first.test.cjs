@@ -15,6 +15,7 @@ function load(file, mocks = {}) {
   }).outputText;
   new Function("require", "module", "exports", js)((name) => {
     if (name === "react/jsx-runtime") return require(name);
+    if (name === "@/lib/flags/definitions/htpr-8048-agent-sessions") return { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" };
     assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency ${name}`);
     return { __esModule: true, ...mocks[name] };
   }, loaded, loaded.exports);
@@ -164,10 +165,11 @@ function sidebar(initialSession = { id: "remembered", agentId: null }, { createS
     selectSession: id => { events.push(`select:${id}`); chat = { ...chat, currentSession: { id, agentId: id === "native-session" ? "native" : null } }; },
   };
   const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
+    "react-hot-toast": { default: { error: assert.fail } },
     react: { ...state.react, default: state.react },
+    "@/hooks/useFlag": { useFlag: key => !["htpr-7800-skill-runs-in-sidebar", "htpr-8048-agent-sessions"].includes(key) }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: (options) => { shortcutOptions = options; return { enabled: true }; } },
-    "@/hooks/useFlag": { useFlag: key => key !== "htpr-7800-skill-runs-in-sidebar" }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
     "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
@@ -267,7 +269,7 @@ function roster(enabled) {
     "@/lib/agents/chatService": { openAgentChat: noop }, "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}) },
     "@/lib/agents/chatAvailability": availability,
     "@/utils/controllers/agents/boardMembers": { getAgentTeamIds: async () => new Map() },
-    "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return enabled; } },
+    "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return key === "htpr-8048-agent-sessions" ? false : enabled; } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag, "@/lib/agentStatus/chip": chip,
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/lib/api/rateLimit": { checkRestRateLimit: noop }, "@/lib/agentRuns/service": { browserMutationIsSameOrigin: noop },
@@ -289,7 +291,7 @@ test("roster batches authorized agent IDs once and marks only fresh ACTIVE runs 
   assert.deepEqual(body.agents.map(agent => [agent.id, agent.status, agent.deliveryMode]), [
     ["working", "working", "webhook"], ["quiet", null, "polling"], ["stale", null, null], ["done", null, null],
   ]);
-  assert.deepEqual(view.flagReads, [[flag.HTPR_7688_PAST_CHATS_FIRST_FLAG, 6]]);
+  assert.deepEqual(view.flagReads, [["htpr-8048-agent-sessions", 6], [flag.HTPR_7688_PAST_CHATS_FIRST_FLAG, 6]]);
   assert.equal(view.queries.length, 1);
   const query = view.queries[0];
   assert.deepEqual(query.where.agentId.in, ["working", "quiet", "stale", "done"]);

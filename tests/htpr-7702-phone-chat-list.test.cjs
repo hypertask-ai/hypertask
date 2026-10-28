@@ -21,7 +21,7 @@ const compiled = ts.transpileModule(`const effect = ${placement.arguments[0].get
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-function view({ mobile = true, enabled = true, composerTop = 558, listTop = 330, viewportHeight = 664, noComposer = false, noSidebar = false } = {}) {
+function view({ mobile = true, enabled = true, agentsOnly = false, composerTop = 558, listTop = 330, viewportHeight = 664, noComposer = false, noSidebar = false } = {}) {
   const dom = new JSDOM(`<div data-ai-chat-composer-root id="other-sidebar"></div><div data-testid="ai-sidebar"><button id="anchor"></button><ul id="list" tabindex="-1"></ul><div data-ai-chat-composer-root inert id="inactive"></div><div hidden><div data-ai-chat-composer-root id="hidden"></div></div>${noComposer ? "" : '<div data-ai-chat-composer-root id="composer"><input id="editor"></div>'}</div>`);
   const { window } = dom;
   const { document } = window;
@@ -29,7 +29,7 @@ function view({ mobile = true, enabled = true, composerTop = 558, listTop = 330,
   const anchor = document.getElementById("anchor");
   const composer = document.getElementById("composer");
   const editor = document.getElementById("editor");
-  const rect = (top, width = 339, height = 37) => ({ top, bottom: top + height, left: 58, width, height });
+  const rect = (top, width = 339, height = 37) => ({ top, bottom: top + height, left: 58, right: 58 + width, width, height });
   const geometry = { composerTop, listTop };
   host.getBoundingClientRect = () => rect(geometry.listTop, 288, 326);
   anchor.getBoundingClientRect = () => rect(geometry.listTop - 48, 180, 44);
@@ -41,8 +41,8 @@ function view({ mobile = true, enabled = true, composerTop = 558, listTop = 330,
   Object.defineProperty(window, "innerHeight", { value: viewportHeight, writable: true });
   Object.defineProperty(window, "visualViewport", { value: new window.EventTarget() });
   let closed = 0;
-  const effect = new Function("hostRef", "anchorRef", "isMobile", "phoneChatList", "onClose", "window", "document", `${compiled}\nreturn effect;`)(
-    { current: host }, { current: anchor }, mobile, enabled, () => { closed++; }, window, document,
+  const effect = new Function("hostRef", "anchorRef", "isMobile", "phoneChatList", "agentsOnly", "onClose", "window", "document", `${compiled}\nreturn effect;`)(
+    { current: host }, { current: anchor }, mobile, enabled, agentsOnly, () => { closed++; }, window, document,
   );
   const cleanup = effect();
   return { window, host, anchor, composer, editor, geometry, cleanup, get closed() { return closed; }, dispose() { cleanup(); window.close(); } };
@@ -54,6 +54,14 @@ test("phone max height uses active same-sidebar composer top minus actual list t
     assert.equal(chat.host.style.maxHeight, "216px");
     assert.equal(chat.geometry.listTop + parseFloat(chat.host.style.maxHeight), chat.geometry.composerTop - 12);
     assert.equal(chat.host.style.maxWidth, "958px");
+  } finally { chat.dispose(); }
+});
+
+test("agent picker caps its width against its right-aligned anchor", () => {
+  const chat = view({ agentsOnly: true });
+  try {
+    assert.equal(chat.host.style.maxWidth, "230px");
+    assert.equal(chat.host.style.maxHeight, "216px");
   } finally { chat.dispose(); }
 });
 
@@ -124,8 +132,8 @@ test("composer pointerdown closes the list without preventing default focus or s
 });
 
 test("placement follows phone context and flag changes; existing list styles and shared rows stay intact", () => {
-  assert.equal(placement.arguments[1].getText(parsed), "[anchorRef, onClose, isMobile, phoneChatList]");
-  assert.match(source, /className="absolute left-0 top-full z-\[1200\] mt-1 w-72 overflow-y-auto rounded-md bg-modalBackground py-1 text-white-black shadow-md outline-none"/);
+  assert.equal(placement.arguments[1].getText(parsed), "[anchorRef, onClose, isMobile, phoneChatList, agentsOnly]");
+  assert.match(source, /className=\{`absolute \$\{agentsOnly \? "right-0" : "left-0"\} top-full z-\[1200\] mt-1 w-72 overflow-y-auto \$\{agentsOnly \? "rounded-\[5px\]" : "rounded-md"\} bg-modalBackground py-1 text-white-black shadow-md outline-none`\}/);
   assert.match(source, /<CommandList\s+isMobile=\{isMobile\}\s+inline/);
 });
 

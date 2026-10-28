@@ -26,7 +26,7 @@ export type TAgentChatSession = { id: string; agentId: string };
 export interface IProp {
   currentUser: IUser;
   roomsEnabled: boolean;
-  embedded?: { projectId: number; agent: import("../AgentsRegister").TAgent; active: boolean; requestId?: number };
+  embedded?: { projectId: number; agent: import("../AgentsRegister").TAgent; active: boolean; requestId?: number; sessionId?: string; draftKey?: string; routedDraft?: { text: string; requestId: number }; onRoutedDraftConsumed?: (requestId: number) => void };
 }
 
 export type SidebarChatAgent = {
@@ -35,6 +35,9 @@ export type SidebarChatAgent = {
   photoURL: string | null;
   runtimeType: "NATIVE" | "EXTERNAL";
   sessionId: string | null;
+  draftKey?: string;
+  hasMoreSessions?: boolean;
+  sessions?: Pick<import("@/models/model").IChatSession, "id" | "title" | "createdAt" | "updatedAt">[];
   status: "connected" | "working" | "waiting" | "stalled" | "offline" | null;
   deliveryMode: "webhook" | "polling" | null;
 };
@@ -51,6 +54,9 @@ export interface SidebarChatContext {
   onSelect: (target: SidebarChatTarget) => void;
   onSelectSession: (sessionId: string) => void;
   onRetry: () => void;
+  onSelectAgentSession?: (agent: SidebarChatAgent, sessionId: string) => void;
+  onStartAgentSession?: (agent: SidebarChatAgent) => void;
+  onLoadMoreAgentSessions?: (agent: SidebarChatAgent) => void;
 }
 
 

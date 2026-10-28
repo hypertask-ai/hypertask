@@ -25,6 +25,11 @@ const AgentChatClient = (props: IProp) => {
     if (!props.embedded?.active) return;
     if (!agentChatSession.sessionName) agentChatSession.selectAgent(props.embedded.agent);
     else void agentChatSession.loadMessages(agentChatSession.sessionName);
+    if (props.embedded.routedDraft !== undefined) {
+      agentChatState.draftRef.current = props.embedded.routedDraft.text;
+      agentChatState.setDraft(props.embedded.routedDraft.text);
+      props.embedded.onRoutedDraftConsumed?.(props.embedded.routedDraft.requestId);
+    }
   }, [props.embedded?.agent.id, props.embedded?.active, props.embedded?.requestId]);
   useEffect(() => {
     if (!awaiting && (!props.embedded || props.embedded.active)) drainQueuedMessageRef.current();

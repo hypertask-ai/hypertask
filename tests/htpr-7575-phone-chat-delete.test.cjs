@@ -50,6 +50,7 @@ async function withHistory({ enabled = true, mobile = true, paging = false } = {
     "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: pagingFlag },
     "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: phoneFlag },
     "@/lib/flags/definitions/htpr-7773-chat-header-name": { HTPR_7773_CHAT_HEADER_NAME_FLAG: "htpr-7773-chat-header-name" },
+      "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
     "../Common/Tooltip": { __esModule: true, default: ({ children }) => children },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center" },

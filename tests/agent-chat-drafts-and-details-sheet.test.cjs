@@ -92,11 +92,11 @@ test("switching agents saves the outgoing draft before restoring the incoming on
   assert.ok(leavingAt > -1 && reassignAt > leavingAt);
   assert.match(
     selectAgent,
-    /writeDraft\(currentUser\.id, leaving, draftRef\.current\)/,
+    /writeDraft\(currentUser\.id, embedded\?\.draftKey \?\? leaving, draftRef\.current\)/,
   );
   assert.match(
     selectAgent,
-    /const restored = readDraft\(currentUser\.id, agent\.id\)/,
+    /const restored = readDraft\(currentUser\.id, embedded\?\.draftKey \?\? agent\.id\)/,
   );
   assert.match(selectAgent, /setDraft\(restored\)/);
   assert.doesNotMatch(selectAgent, /setDraft\(""\)/);

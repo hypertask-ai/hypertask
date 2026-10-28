@@ -98,7 +98,7 @@ export function useAgentChatSession({
           draftRef.current = stored;
           setDraft(stored);
           if (selectedIdRef.current)
-            writeDraft(currentUser.id, selectedIdRef.current, stored);
+            writeDraft(currentUser.id, embedded?.draftKey ?? selectedIdRef.current, stored);
         }
       }
       if (activeRef.current && data.viewer && data.viewer.unreadCount > 0) {
@@ -154,7 +154,7 @@ export function useAgentChatSession({
         const res = await fetch(embedded ? "/api/agent-sidebar-chats" : "/api/ai-chat/create-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agentId, ...(embedded ? { projectId: embedded.projectId } : {}) }),
+          body: JSON.stringify({ agentId, ...(embedded ? { projectId: embedded.projectId, sessionId: embedded.sessionId } : {}) }),
         });
         const data = (await res.json()) as {
           success?: boolean;
@@ -177,12 +177,12 @@ export function useAgentChatSession({
         if (selectedIdRef.current === agentId) setSessionLoading(false);
       }
     },
-    [embedded?.projectId],
+    [embedded?.projectId, embedded?.sessionId],
   );
 
   const clearSelectionState = () => {
     if (selectedIdRef.current) {
-      writeDraft(currentUser.id, selectedIdRef.current, draftRef.current);
+      writeDraft(currentUser.id, embedded?.draftKey ?? selectedIdRef.current, draftRef.current);
     }
     selectedIdRef.current = null;
     sessionIdRef.current = null;
@@ -210,7 +210,7 @@ export function useAgentChatSession({
     (agent: TAgent) => {
       const leaving = selectedIdRef.current;
       if (leaving && leaving !== agent.id) {
-        writeDraft(currentUser.id, leaving, draftRef.current);
+        writeDraft(currentUser.id, embedded?.draftKey ?? leaving, draftRef.current);
       }
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
@@ -219,7 +219,7 @@ export function useAgentChatSession({
         setSending(false);
       }
       draftHydratedRef.current = null;
-      const restored = readDraft(currentUser.id, agent.id);
+      const restored = readDraft(currentUser.id, embedded?.draftKey ?? agent.id);
       draftRef.current = restored;
       restoredDraftRef.current = restored;
       messageQueueRef.current = [];
