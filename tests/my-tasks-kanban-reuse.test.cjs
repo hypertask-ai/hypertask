@@ -219,7 +219,7 @@ const render = (component, props) => act(() => reactRoot.render(React.createElem
 function Harness() {
   const [value, setValue] = React.useState(config);
   config = value;
-  return React.createElement(Controls, { boards, config: value, onChange: setValue, scopesEnabled: true, timeGroupEnabled: true });
+  return React.createElement(Controls, { boards, config: value, onChange: setValue, scopesEnabled: true });
 }
 test.beforeEach((context) => {
   boardHookCalls = 0;

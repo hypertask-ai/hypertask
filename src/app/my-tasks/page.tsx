@@ -9,7 +9,6 @@ import {
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
-  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
@@ -55,12 +54,10 @@ export default async function Page({
   const [
     viewsEnabled,
     scopesEnabled,
-    timeGroupEnabled,
     overdueBadgesEnabled,
   ] = await Promise.all([
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_TIME_GROUP_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_OVERDUE_BADGES_FLAG, sessionUser.userId),
   ]);
   const snoozeEnabled = await isFeatureEnabled(
@@ -143,9 +140,6 @@ export default async function Page({
       {snoozeEnabled ? (
         <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
       ) : null}
-      {timeGroupEnabled ? (
-        <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
-      ) : null}
       {overdueBadgesEnabled ? (
         <span
           className="hidden"
@@ -166,7 +160,6 @@ export default async function Page({
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
           viewsEnabled={viewsEnabled}
-          timeGroupEnabled={timeGroupEnabled}
           scopesEnabled
         />
       ) : (
@@ -182,7 +175,6 @@ export default async function Page({
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
           viewsEnabled={viewsEnabled}
-          timeGroupEnabled={timeGroupEnabled}
           scopesEnabled={false}
         />
       )}

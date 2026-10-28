@@ -16,7 +16,6 @@ import {
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
-  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -44,7 +43,6 @@ interface Props {
   config: MyTasksViewConfig;
   onChange: (config: MyTasksViewConfig) => void;
   onOpenKanbanFilters?: () => void;
-  timeGroupEnabled?: boolean;
   tableColumnsEnabled?: boolean;
   onOpenTableColumns?: () => void;
   scopesEnabled?: boolean;
@@ -110,7 +108,6 @@ const MyTasksViewControls = ({
   config,
   onChange,
   onOpenKanbanFilters,
-  timeGroupEnabled = false,
   tableColumnsEnabled = false,
   onOpenTableColumns,
   scopesEnabled = false,
@@ -123,8 +120,6 @@ const MyTasksViewControls = ({
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const timeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
-  const timeGroupOn = Boolean(timeGroupEnabled || timeGroupFlag);
   const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
   const myTasksScopesEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -162,7 +157,7 @@ const MyTasksViewControls = ({
       setFilterOpen(false);
       setInvolvementOpen(picker === "involvement" && myTasksScopesEnabled);
       setSortOpen(picker === "sort" && myTasksViewsEnabled);
-      setGroupOpen(picker === "group" && timeGroupOn);
+      setGroupOpen(picker === "group");
     };
     const openInvolvement = () => openPicker("involvement");
     const openSort = () => openPicker("sort");
@@ -175,7 +170,7 @@ const MyTasksViewControls = ({
       window.removeEventListener("my-tasks-sort-picker", openSort);
       window.removeEventListener("my-tasks-group-picker", openGroup);
     };
-  }, [myTasksScopesEnabled, myTasksViewsEnabled, timeGroupOn]);
+  }, [myTasksScopesEnabled, myTasksViewsEnabled]);
 
   const scopes = normalizeMyTasksScopes(config.scopes);
   const involvementCount =
@@ -195,7 +190,7 @@ const MyTasksViewControls = ({
     });
   };
 
-  const groupBy = effectiveMyTasksGroupBy(config, timeGroupOn);
+  const groupBy = effectiveMyTasksGroupBy(config);
 
   const selectedBoardIds = config.boardIds ?? boards.map((board) => board.id);
   const selectedBoards = useMemo(
@@ -305,8 +300,6 @@ const MyTasksViewControls = ({
       ? "custom"
       : (config.filters.dueDate ?? "");
 
-  if (!myTasksViewsEnabled && !timeGroupOn) return null;
-
   const closeOtherMenus = () => {
     setScopeOpen(false);
     setInvolvementOpen(false);
@@ -323,9 +316,6 @@ const MyTasksViewControls = ({
           : `ml-auto flex shrink-0 items-center ${iconControlsEnabled ? "gap-2" : "gap-1"}`
       }
     >
-      {timeGroupFlag ? (
-        <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
-      ) : null}
       {myTasksScopesEnabled ? (
         <div ref={involvementRef} className="relative">
           {iconControlsEnabled ? (
@@ -843,31 +833,15 @@ const MyTasksViewControls = ({
       </div>
       ) : null}
 
-      {timeGroupOn && (
-        <div ref={groupRef} className="relative hidden @md:block">
-          {iconControlsEnabled ? (
-            <ViewControlButton
-              label="Group My Tasks"
-              tooltipText={`Group: ${groupBy === "time" ? "Due date" : "Board"}`}
-              tooltipLeft={-72}
-              className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
-              active={groupBy !== effectiveMyTasksGroupBy(DEFAULT_MY_TASKS_VIEW_CONFIG, timeGroupOn)}
-              expanded={groupOpen}
-              onClick={() => {
-                setGroupOpen((open) => !open);
-                setFilterOpen(false);
-                setScopeOpen(false);
-                setInvolvementOpen(false);
-                setSortOpen(false);
-              }}
-            >
-              <Layers size={18} strokeWidth={1.75} />
-            </ViewControlButton>
-          ) : (
-          <button
-            type="button"
-            aria-label="Group My Tasks"
-            aria-expanded={groupOpen}
+      <div ref={groupRef} className="relative hidden @md:block">
+        {iconControlsEnabled ? (
+          <ViewControlButton
+            label="Group My Tasks"
+            tooltipText={`Group: ${groupBy === "time" ? "Due date" : "Board"}`}
+            tooltipLeft={-72}
+            className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+            active={groupBy !== effectiveMyTasksGroupBy(DEFAULT_MY_TASKS_VIEW_CONFIG)}
+            expanded={groupOpen}
             onClick={() => {
               setGroupOpen((open) => !open);
               setFilterOpen(false);
@@ -875,23 +849,37 @@ const MyTasksViewControls = ({
               setInvolvementOpen(false);
               setSortOpen(false);
             }}
-            className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
-              groupBy === "time"
-                ? "text-shadcn-primary"
-                : "text-text-light-gray hover:text-white-black"
-            }`}
           >
-            <Layers size={16} strokeWidth={1.5} />
-            <span className="hidden @md:inline">
-              {`Group: ${groupBy === "time" ? "Due date" : "Board"}`}
-            </span>
-          </button>
-          )}
-          {groupOpen && (
-            <MyTasksGroupPicker groupBy={groupBy} onChange={(next) => onChange({ ...config, groupBy: next })} onClose={() => setGroupOpen(false)} />
-          )}
-        </div>
-      )}
+            <Layers size={18} strokeWidth={1.75} />
+          </ViewControlButton>
+        ) : (
+        <button
+          type="button"
+          aria-label="Group My Tasks"
+          aria-expanded={groupOpen}
+          onClick={() => {
+            setGroupOpen((open) => !open);
+            setFilterOpen(false);
+            setScopeOpen(false);
+            setInvolvementOpen(false);
+            setSortOpen(false);
+          }}
+          className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
+            groupBy === "time"
+              ? "text-shadcn-primary"
+              : "text-text-light-gray hover:text-white-black"
+          }`}
+        >
+          <Layers size={16} strokeWidth={1.5} />
+          <span className="hidden @md:inline">
+            {`Group: ${groupBy === "time" ? "Due date" : "Board"}`}
+          </span>
+        </button>
+        )}
+        {groupOpen && (
+          <MyTasksGroupPicker groupBy={groupBy} onChange={(next) => onChange({ ...config, groupBy: next })} onClose={() => setGroupOpen(false)} />
+        )}
+      </div>
     </div>
   );
 };

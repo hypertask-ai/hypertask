@@ -10,28 +10,16 @@ import {
 } from "../src/lib/myTasksGrouping";
 import {
   effectiveMyTasksGroupBy,
-  myTasksTimeGroupOn,
   parseMyTasksViewConfig,
 } from "../src/models/MyTasksView";
 
 // Monday 14 Sep 2026, midday local — week is Mon–Sun.
 const NOW = new Date(2026, 8, 14, 12, 0, 0);
 
-test("effectiveMyTasksGroupBy stays on board when the flag is off", () => {
-  assert.equal(effectiveMyTasksGroupBy({}, false), "board");
-  assert.equal(effectiveMyTasksGroupBy({ groupBy: "time" }, false), "board");
-});
-
-test("effectiveMyTasksGroupBy defaults to time when the flag is on and groupBy is missing", () => {
-  assert.equal(effectiveMyTasksGroupBy({}, true), "time");
-  assert.equal(effectiveMyTasksGroupBy({ groupBy: "board" }, true), "board");
-  assert.equal(effectiveMyTasksGroupBy({ groupBy: "time" }, true), "time");
-});
-
-test("myTasksTimeGroupOn uses the server flag so the first paint is not board-grouped", () => {
-  assert.equal(myTasksTimeGroupOn(true, false), true);
-  assert.equal(myTasksTimeGroupOn(false, true), true);
-  assert.equal(myTasksTimeGroupOn(false, false), false);
+test("due-time grouping is permanent and saved board grouping is preserved", () => {
+  assert.equal(effectiveMyTasksGroupBy({}), "time");
+  assert.equal(effectiveMyTasksGroupBy({ groupBy: "board" }), "board");
+  assert.equal(effectiveMyTasksGroupBy({ groupBy: "time" }), "time");
 });
 
 test("parseMyTasksViewConfig preserves groupBy and drops invalid values", () => {

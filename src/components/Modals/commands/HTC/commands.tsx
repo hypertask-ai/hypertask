@@ -71,7 +71,6 @@ import {
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   MY_TASKS_SCOPES_FLAG,
-  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -207,7 +206,6 @@ const Commands = (props: Props) => {
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
-  const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
@@ -274,7 +272,7 @@ const Commands = (props: Props) => {
         key: "myTasksSort", name: "Sort", commandMode: CommandMode.GoToBoard,
         keywords: "sort order field direction my tasks",
       });
-      if (myTasksTimeGroupEnabled) myTasksPickerCommands.push({
+      myTasksPickerCommands.push({
         key: "myTasksGroup", name: "Group by", commandMode: CommandMode.GoToBoard,
         keywords: "group due date time board my tasks",
       });
@@ -461,7 +459,6 @@ const Commands = (props: Props) => {
     onMyTasks,
     myTasksViewsEnabled,
     myTasksScopesEnabled,
-    myTasksTimeGroupEnabled,
     myTasksFilterParityEnabled,
     myTasksTableColumnsEnabled,
     projects,
