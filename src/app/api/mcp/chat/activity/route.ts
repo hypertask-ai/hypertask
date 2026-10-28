@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from "@/lib/prisma";
-import { MANAGER_LOOP_ACTIVITY_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 
 export const runtime = "nodejs";
@@ -66,13 +65,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Agent not found" },
         { status: 404 }
-      );
-    }
-
-    if (!(await isFeatureEnabled(MANAGER_LOOP_ACTIVITY_FLAG, agent.userId))) {
-      return NextResponse.json(
-        { success: false, error: "Agent Chat activity is not enabled for this thread" },
-        { status: 403 }
       );
     }
 

@@ -1,32 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-const { createJiti } = require("jiti");
+const { load } = require("./task-route-loader.cjs");
 
-const root = path.resolve(__dirname, "..");
-let loadId = 0;
-let flagEnabled = true;
 let agentRow = { id: "agent-1", userId: 6, revokedAt: null };
 let sessionRow = { id: "session-1", userId: 6, agentId: "agent-1" };
 let messageRows = [];
 let broadcastCalls = [];
-
-function stub(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = {
-    id: filename,
-    filename,
-    loaded: true,
-    exports,
-  };
-}
-
-function load(relativePath) {
-  return createJiti(
-    path.join(root, `manager-loop-chat-activity-${++loadId}.cjs`),
-    { alias: { "@": path.join(root, "src") }, interopDefault: true },
-  )(path.join(root, relativePath));
-}
 
 function makePrisma() {
   return {
@@ -71,35 +50,33 @@ function makePrisma() {
 }
 
 async function loadRoute() {
-  const prisma = makePrisma();
-  stub("src/lib/prisma.ts", { default: prisma });
-  stub("src/lib/mcp/auth.ts", {
-    checkMcpRateLimit: async () => null,
-    validateMcpAuth: async () => ({
-      user: { id: 6 }, teamScope: null,
-      agentId: agentTokenIsAgent ? "agent-1" : null,
-    }),
-  });
-  stub("src/lib/flags.ts", {
-    MANAGER_LOOP_ACTIVITY_FLAG: "htpr-6243-manager-loop-activity",
-    isFeatureEnabled: async (key, userId) => {
-      assert.equal(key, "htpr-6243-manager-loop-activity");
-      assert.equal(userId, 6);
-      return flagEnabled;
+  return load("src/app/api/mcp/chat/activity/route.ts", {
+    "@/lib/prisma": { default: makePrisma() },
+    "@/lib/mcp/routeWrapper": {
+      wrapMcpRoute: (handler) => handler,
+      checkMcpRouteRateLimit: async () => null,
+      validateMcpRouteAuth: async () => ({
+        user: { id: 6 }, teamScope: null,
+        agentId: agentTokenIsAgent ? "agent-1" : null,
+      }),
+    },
+    "@/utils/controllers/projects/getAllIncludes": {},
+    "@/lib/flags": {
+      isFeatureEnabled: async () => {
+        throw new Error("Manager activity must not consult a rollout flag");
+      },
+    },
+    "@/lib/agents/chatBroadcast": {
+      broadcastChatSession: async (sessionId) => {
+        broadcastCalls.push(sessionId);
+      },
     },
   });
-  stub("src/lib/agents/chatBroadcast.ts", {
-    broadcastChatSession: async (sessionId) => {
-      broadcastCalls.push(sessionId);
-    },
-  });
-  return load("src/app/api/mcp/chat/activity/route.ts");
 }
 
 let agentTokenIsAgent = true;
 
 function resetState() {
-  flagEnabled = true;
   agentTokenIsAgent = true;
   agentRow = { id: "agent-1", userId: 6, revokedAt: null };
   sessionRow = { id: "session-1", userId: 6, agentId: "agent-1" };
@@ -155,20 +132,19 @@ test("replay with the same clientMessageId stores nothing new but repairs the br
   assert.equal(body.success, true);
   assert.equal(body.duplicate, true);
   assert.equal(messageRows.length, 1);
-  // The replay repairs side effects: the session is refreshed and broadcast again.
   assert.deepEqual(broadcastCalls, ["session-1", "session-1"]);
 });
 
-test("flag off stores nothing", async () => {
+test("revoked agent is rejected before storing activity", async () => {
   resetState();
-  flagEnabled = false;
+  agentRow = null;
   const { POST } = await loadRoute();
   const response = await POST(
     makeRequest({ text: "Manager loop", clientMessageId: "20260908T074000Z" })
   );
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 404);
+  assert.deepEqual(await json(response), { success: false, error: "Agent not found" });
   assert.equal(messageRows.length, 0);
-  flagEnabled = true;
 });
 
 test("non-agent token is rejected", async () => {
