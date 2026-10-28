@@ -11,4 +11,3 @@ One AI model per class: a new model version replaces the old one in the same cha
 ## pstack in hax and Codex sessions
 
 Use the official shared pstack installation and its harness adapter. Read the matching skill when needed. Follow the house-rule model table and project model rules; use explicit models, subscription auth, and no fast mode. Claude Code model choices live in `.claude/rules/pstack-models.md`.
-
