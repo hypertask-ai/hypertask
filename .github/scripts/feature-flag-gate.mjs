@@ -464,14 +464,16 @@ function branchIsNullishOrEmpty(node) {
   if (!expression) return true;
   if (expression.kind === typescript.SyntaxKind.NullKeyword ||
       expression.kind === typescript.SyntaxKind.UndefinedKeyword ||
-      expression.kind === typescript.SyntaxKind.FalseKeyword) {
+      expression.kind === typescript.SyntaxKind.FalseKeyword ||
+      expression.kind === typescript.SyntaxKind.TrueKeyword) {
     return true;
   }
   if (typescript.isIdentifier(expression) && expression.text === "undefined") return true;
   if (typescript.isStringLiteral(expression) && expression.text === "") return true;
+  if (typescript.isJsxExpression(expression)) return branchIsNullishOrEmpty(expression.expression);
   if (typescript.isJsxFragment(expression)) {
     return expression.children.every((child) =>
-      typescript.isJsxText(child) ? child.getText().trim() === "" : false);
+      typescript.isJsxText(child) ? child.getText().trim() === "" : branchIsNullishOrEmpty(child));
   }
   return false;
 }
@@ -1000,7 +1002,7 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
   return null;
 }
 
-function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), parameterBoolean = () => null, checker = null, live = null } = {}) {
+function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), parameterBoolean = () => undefined, checker = null, live = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
   if (fn?.asteriskToken || (!earlyOnly && fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword)) ||
@@ -1046,7 +1048,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
                 !independentParameters.has(item.text)))) repeated = true;
           if (!repeated) typescript.forEachChild(item, visit);
         })(other);
-        if (repeated) return false;
+        if (repeated || (earlyOnly && branchIsNullishOrEmpty(other))) return false;
         const value = staticBoolean(other, true) ?? parameterBoolean(other);
         if (value === undefined) return false;
         if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
@@ -1082,7 +1084,8 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
       if (whenFalse && typescript.isBlock(whenFalse) && whenFalse.statements.length === 1) whenFalse = whenFalse.statements[0];
       if (!typescript.isReturnStatement(whenTrue) || !whenFalse || !typescript.isReturnStatement(whenFalse) ||
           !whenTrue.expression || !whenFalse.expression ||
-          branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression)) return false;
+          branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression) ||
+          (earlyOnly && branchIsNullishOrEmpty(whenTrue) && branchIsNullishOrEmpty(whenFalse))) return false;
       const a = staticBoolean(whenTrue.expression, true), b = staticBoolean(whenFalse.expression, true);
       return a !== null && b !== null && a !== b;
     }
@@ -1092,6 +1095,7 @@ function controlsReturnedValue(node, { earlyOnly = false, after = null, independ
     if (typescript.isConditionalExpression(parent)) {
       conditionalGuard = true;
       if (child === parent.condition) {
+        if (earlyOnly && branchIsNullishOrEmpty(parent.whenTrue) && branchIsNullishOrEmpty(parent.whenFalse)) return false;
         const whenTrue = staticBoolean(parent.whenTrue, true);
         const whenFalse = staticBoolean(parent.whenFalse, true);
         if (whenTrue === null || whenFalse === null || whenTrue === whenFalse) return false;
@@ -1146,9 +1150,17 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
   const written = writtenBindingSymbols(sourceFile, checker);
   if (!symbol || written.has(symbol)) return false;
 
-  const independentParameters = new Set(declaration.parameters.flatMap((item, index) =>
-    independentArguments.has(index) && typescript.isIdentifier(item.name) &&
-      !written.has(checker.getSymbolAtLocation(item.name)) ? [item.name.text] : []));
+  const parameterSymbols = new Set(declaration.parameters.map((item) => checker.getSymbolAtLocation(item.name)));
+  const independentParameters = new Set(declaration.parameters.flatMap((item, index) => {
+    let dependentDefault = false;
+    function visitDefault(node) {
+      if (typescript.isIdentifier(node) && parameterSymbols.has(checker.getSymbolAtLocation(node))) dependentDefault = true;
+      typescript.forEachChild(node, visitDefault);
+    }
+    if (item.initializer) visitDefault(item.initializer);
+    return independentArguments.has(index) && typescript.isIdentifier(item.name) && !dependentDefault &&
+      !written.has(checker.getSymbolAtLocation(item.name)) ? [item.name.text] : [];
+  }));
   const parameterBoolean = (expression) => {
     const properties = [];
     let value = unwrapArgumentExpression(expression);
@@ -1160,10 +1172,11 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
       properties.unshift(value.name.text);
       value = unwrapArgumentExpression(value.expression);
     }
-    if (!typescript.isIdentifier(value)) return null;
+    if (!typescript.isIdentifier(value)) return undefined;
     const index = declaration.parameters.findIndex((item) =>
       typescript.isIdentifier(item.name) && checker.getSymbolAtLocation(item.name) === checker.getSymbolAtLocation(value));
-    return index < 0 ? null : argumentBoolean(index, properties, declaration.parameters[index].initializer);
+    return index < 0 || !independentParameters.has(value.text) ? undefined
+      : argumentBoolean(index, properties, declaration.parameters[index].initializer);
   };
   let controls = false;
   function visit(node) {
@@ -1254,8 +1267,14 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
       }
       if (applyDefault && defaultValue && ((typescript.isIdentifier(value) && value.text === "undefined") ||
           typescript.isVoidExpression(value))) value = defaultValue;
-      if (fields.length === 0) return staticBoolean(value, true);
-      if (!typescript.isObjectLiteralExpression(value)) return staticBoolean(value, true) === null ? null : undefined;
+      if (fields.length === 0) {
+        const boolean = staticBoolean(value, true);
+        if (boolean !== null) return boolean;
+        return typescript.isIdentifier(value) || typescript.isPropertyAccessExpression(value) ? null : undefined;
+      }
+      if (!typescript.isObjectLiteralExpression(value)) {
+        return typescript.isIdentifier(value) || typescript.isPropertyAccessExpression(value) ? null : undefined;
+      }
       if (fields[0] === "__proto__" || value.properties.some((property) =>
           !typescript.isPropertyAssignment(property) || typescript.isComputedPropertyName(property.name))) return undefined;
       const matches = value.properties.filter((property) => property.name.text === fields[0]);

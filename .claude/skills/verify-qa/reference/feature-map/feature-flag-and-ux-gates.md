@@ -47,6 +47,9 @@ Caller-bound literal fields, nested objects and constant aliases must reject inv
 A property named `enabled` is not a reference to the flag parameter; independent fields with that name remain supported.
 Missing, inherited, ambiguous and prototype-setter properties are unsupported static lookups, not falsy own values; own-field overrides still work.
 Resolve explicit undefined arguments using the formatter's constant parameter defaults, and reject writes to secondary parameters.
+Unsupported compound operands fail closed; only constants and proven-independent parameter paths may participate in formatter conditions.
+Object parameter defaults referencing another parameter cannot establish independence.
+Empty fragments (including nested fragments) and boolean-only render branches cannot prove visible output.
 Async server-component consumers of synchronous formatters remain supported; async formatters still cannot prove a truthiness gate.
 Consumed logical and nested conditional JSX render paths pass; discarded or comma-masked JSX fails.
 Save the tested head SHA, hosted run URL and successful group lines.
