@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { load } = require('./helpers/agent-connection.cjs');
+const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const errors = load('src/lib/mcp-server/utils/errors.ts', {});
 const { logger } = load('src/lib/mcp-server/utils/logger.ts', {});

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { load } = require("./task-route-loader.cjs");
+const { loadModule: loadChatComponent, findElement } = require("./helpers/loadModule.cjs");
 
 const read = (file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 const hooks = { useCallback: (callback) => callback, useRef: (current) => ({ current }), useEffect: () => {} };
@@ -405,29 +406,6 @@ test("embedded awaiting chats reconcile on visibility before and after polling e
   } finally { global.document = originalDocument; Object.assign(global, originals); console.error = originalError; }
 });
 
-function loadChatComponent(file, mocks) {
-  const ts = require("typescript");
-  const compiled = ts.transpileModule(read(file), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
-    fileName: file,
-  }).outputText;
-  const exports = {};
-  new Function("require", "exports", compiled)((specifier) => {
-    if (specifier === "react/jsx-runtime") return require(specifier);
-    assert.ok(Object.hasOwn(mocks, specifier), `unexpected component dependency: ${specifier}`);
-    return { __esModule: true, ...mocks[specifier] };
-  }, exports);
-  return exports;
-}
-
-function findElement(element, type) {
-  if (!element || typeof element !== "object") return undefined;
-  if (element.type === type) return element;
-  for (const child of [element.props?.children].flat(Infinity)) {
-    const found = findElement(child, type);
-    if (found) return found;
-  }
-}
 
 test("native switching snapshots the latest draft and attachments after open, transcript and invalidation finish", async () => {
   const originalFetch = global.fetch;

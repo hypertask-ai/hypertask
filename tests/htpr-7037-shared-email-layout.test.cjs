@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM } = require("jsdom");
-const { load, root } = require("./helpers/agent-connection.cjs");
+const { loadModule: load, root } = require("./helpers/loadModule.cjs");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const flag = "htpr-7037-shared-email-layout";
 const legacyTemplates = load("src/utils/controllers/notifications/emailTemplates.ts", {

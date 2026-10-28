@@ -6,7 +6,7 @@ const ts = require("typescript");
 const React = require("react");
 const { JSDOM } = require("jsdom");
 const { createStore, Provider } = require("jotai");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 const { load: loadRoute } = require("./task-route-loader.cjs");
 
 const read = (file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8");

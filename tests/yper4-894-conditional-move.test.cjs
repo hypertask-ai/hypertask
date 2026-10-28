@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { load } = require('./helpers/agent-connection.cjs');
+const { loadModule: load } = require('./helpers/loadModule.cjs');
 const { NextResponse } = require('next/server');
 const { validateTaskUpdateFields } = load('src/lib/mcp/tasks/fields/validateFields.ts', {
   'next/server': { NextResponse },

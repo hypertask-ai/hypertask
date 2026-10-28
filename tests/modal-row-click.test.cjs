@@ -3,30 +3,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
+const { loadModule: loadComponent, findElement } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const commonFile = "src/components/Common/CommonModalComponents/index.tsx";
 const editBoardFile = "src/components/Modals/commands/editBoard.tsx";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-function loadComponent(file, stubs) {
-  const source = ts.transpileModule(read(file), {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-      jsx: ts.JsxEmit.ReactJSX,
-      esModuleInterop: true,
-    },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function("module", "exports", "require", source)(
-    mod, mod.exports, (request) => {
-      assert.ok(request in stubs, `Unexpected import: ${request}`);
-      return stubs[request];
-    },
-  );
-  return mod.exports;
-}
 
 const common = loadComponent(commonFile, {
   "react/jsx-runtime": require("react/jsx-runtime"),
@@ -56,14 +39,6 @@ test("modal row passes its index to a valid handler", () => {
   assert.deepEqual(calls, [3, undefined]);
 });
 
-function findElement(element, type) {
-  if (!element || typeof element !== "object") return undefined;
-  if (element.type === type) return element;
-  for (const child of [element.props?.children].flat()) {
-    const found = findElement(child, type);
-    if (found) return found;
-  }
-}
 
 test("rename board row submits the input just like Enter and rejects an empty name", () => {
   let title = "";

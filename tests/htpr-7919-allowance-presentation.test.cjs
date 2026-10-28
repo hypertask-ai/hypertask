@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const flag = "htpr-7919-allowance-percent";
 const flagModule = { HTPR_7919_ALLOWANCE_PERCENT_FLAG: flag };

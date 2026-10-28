@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, root } = require("./helpers/agent-connection.cjs");
+const { loadModule: load, root } = require("./helpers/loadModule.cjs");
 const LAYOUT_FLAG = "htpr-7037-shared-email-layout";
 const enums = { LogType: { Signup: "Signup" }, Status: { Normal: "Normal" } };
 

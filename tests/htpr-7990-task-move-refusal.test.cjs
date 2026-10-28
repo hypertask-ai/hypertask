@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { load } = require('./helpers/agent-connection.cjs');
+const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const types = load('src/lib/mcp/tasks/fields/types.ts');
 const errorMessage = load('src/lib/api/errorMessage.ts');

@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const React = require("react");
 const { JSDOM } = require("jsdom");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 const OVERLAY_FLAG = "htpr-7550-connect-overlay";
 const planFlag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 
