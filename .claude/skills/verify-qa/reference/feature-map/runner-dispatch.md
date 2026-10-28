@@ -93,3 +93,27 @@ unrelated completion and blocked completion retain its handoff.
 The dispatch path is `vcc raw POST /mcp/tasks/update` → MCP section update →
 `/api/tasks/moveTask` → `updateTaskSingle` with section/revision preconditions.
 A post-read concurrent hold must return 409 and remain untouched.
+
+## Released-ticket completion
+
+Section writes use `vcc` → `ship-check move` before the CLI mutation.
+A killed local check alone must refuse an Agent Blocked handoff. An
+independent error on a separate `Blocker:` line must remain permitted.
+Review the offline finish fixtures in the Ship scripts tests CI log; they
+exercise this actual dispatch and three released-column replays.
+
+After deployment, run the merged `ship-check done` read-only against
+released tickets in Flag: Everyone, Flag: Only Me + QA and No Flag. Require
+`done ok` without changing their columns or flags. Flag: Off remains not
+done. Never claim or close another runner's ticket for this check.
+
+Record every branch created by the current full session id with
+`ship-check branch <ticket> <branch>`; use `none` only when none were created.
+Run `ship-check cleaned` with that same id after removing only those
+resources. The CI fixtures must retain another session's real temporary
+worktree and remote branch, while own worktree, local branch and remote
+branch each refuse until removed. Missing ownership must refuse, not pass.
+
+Save production source/deploy metadata, CI fixture output, read-only
+column-check output and cleanup results outside the worktree. A single
+snapshot does not prove the ticket's separate 24-hour observation.
