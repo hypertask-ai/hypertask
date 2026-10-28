@@ -161,6 +161,7 @@ test("the trial table renders each plan's own features only when the copy flag i
     "@/lib/subscriptionPlans": plans,
     "@/lib/flags/definitions/htpr-7686-free-plan-copy": { HTPR_7686_FREE_PLAN_COPY_FLAG: "htpr-7686-free-plan-copy" },
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": { StartPlanButton: () => null, requestCheckout: async () => "" },
+    "@/lib/flags/definitions/htpr-7919-allowance-percent": { HTPR_7919_ALLOWANCE_PERCENT_FLAG: "htpr-7919-allowance-percent" },
     "@/hooks/useFlag": { useFlag: (name) => name === "htpr-7686-free-plan-copy" && shown.corrected, useFlagReady: () => true },
     "@/lib/flags/keys": { HTPR_7551_START_PLAN_CHECKOUT_FLAG: "htpr-7551-start-plan-checkout" },
     "next/navigation": { useRouter: () => ({ push() {} }) },
