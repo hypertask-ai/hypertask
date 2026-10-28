@@ -646,10 +646,17 @@ import sys
 text = html.unescape(re.sub(r"</(?:p|li|div)>|<br\s*/?>", "\n", sys.argv[1], flags=re.I))
 text = re.sub(r"<[^>]*>", "", text)
 killed = r"\bsigkill\b|exit(?:\s+code)?[ :]*(?:137|9)\b|\bkilled\b|\boom\b"
-local = r"\blocal\b|\bvps\b"
 check = r"\btests?\b|\bchecks?\b|node|npm|pytest|tsc"
 def local_failure(statement):
-    return all(re.search(pattern, statement, re.I) for pattern in (killed, local, check))
+    if not re.search(check, statement, re.I):
+        return False
+    environments = list(re.finditer(r"\blocal\b|\bvps\b|\bCI\b", statement, re.I))
+    for failure in re.finditer(killed, statement, re.I):
+        preceding = [environment for environment in environments if environment.start() < failure.start()]
+        environment = preceding[-1] if preceding else next(iter(environments), None)
+        if environment and environment.group().lower() != "ci":
+            return True
+    return False
 
 statements = re.split(r"[.!?](?:\s+|$)|[;\n]+", text)
 if any(local_failure(statement) for statement in statements):

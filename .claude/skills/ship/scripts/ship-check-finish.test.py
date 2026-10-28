@@ -94,8 +94,13 @@ else:
         self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
 
     def test_local_success_does_not_turn_ci_failure_into_local_failure(self):
-        self.comments('Local tests passed. CI tests got SIGKILL, exit 137.')
-        self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
+        for text in ['Local tests passed. CI tests got SIGKILL, exit 137.',
+                     'Local tests passed, but CI tests got SIGKILL, exit 137.',
+                     'CI tests got SIGKILL, exit 137, but local tests passed.']:
+            self.comments(text)
+            self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
+        self.comments('CI tests passed, but local tests got SIGKILL, exit 137.')
+        self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)', success=False)
         self.comments('<p>Local tests got SIGKILL.</p><p>Blocker: CI tests got SIGKILL, exit 137.</p>')
         self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
 
