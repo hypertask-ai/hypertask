@@ -39,7 +39,7 @@ import { usePathname } from "next/navigation";
 import { getTaskDraftContent } from "@/components/RTE/draftSync";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6555_IDLE_COMMENT_MIC_FLAG, HTPR_7379_INBOX_ACTIONS_NO_OUTLINE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6555_IDLE_COMMENT_MIC_FLAG, HTPR_7379_INBOX_ACTIONS_NO_OUTLINE_FLAG, HTPR_8139_COMMENT_DICTATION_SCROLL_FLAG } from "@/lib/flags/keys";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
 
@@ -104,6 +104,7 @@ const NewCommentComponent = (
         Boolean(replyQuote);
       const [hasMountedCommentEditor, setHasMountedCommentEditor] = useState(shouldMountCommentEditor);
       const idleCommentMicEnabled = useFlag(HTPR_6555_IDLE_COMMENT_MIC_FLAG);
+      const dictationScrollEnabled = useFlag(HTPR_8139_COMMENT_DICTATION_SCROLL_FLAG);
       const [idleRecording, setIdleRecording] = useState(false);
       const pendingIdleDictationRef = useRef<{
         text: string;
@@ -374,11 +375,14 @@ const NewCommentComponent = (
               active!.isContentEditable);
           if (inOtherField) return;
           e.preventDefault();
+          if (dictationScrollEnabled) {
+            tiptapContainerRef.current?.scrollIntoView({ block: "center", behavior: "instant" });
+          }
           anchor.click();
         };
         document.addEventListener("keydown", onKeyDown);
         return () => document.removeEventListener("keydown", onKeyDown);
-      }, [_mbl]);
+      }, [_mbl, dictationScrollEnabled]);
 
       useEffect(() => {
         if (!shouldRenderCommentEditor || currentId !== "comment-input") return;
