@@ -15,11 +15,8 @@ const taskCard = fs.readFileSync(
   "utf8",
 );
 
-const shortcutStart = taskCard.indexOf("if (\n      taskShortcutAction === \"archive\"");
-const nextShortcut = taskCard.indexOf(
-  "if (\n      (taskShortcutAction === \"size\"",
-  shortcutStart,
-);
+const shortcutStart = taskCard.indexOf('taskShortcutAction === "archive"');
+const nextShortcut = taskCard.indexOf('taskShortcutAction === "size"', shortcutStart);
 const ctrlEBranch = taskCard.slice(shortcutStart, nextShortcut);
 
 test("Ctrl/Cmd+E archives only on the initial keydown", () => {

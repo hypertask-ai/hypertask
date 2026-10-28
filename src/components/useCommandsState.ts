@@ -33,7 +33,7 @@ import { MIXED_BOARD_MESSAGE, sharedProjectId } from "@/lib/myTasksBulkSelection
 import { taskTemplatePickerForProject, type TaskTemplatePickerState } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
 
@@ -48,7 +48,6 @@ export function useCommandsState(context: Context) {
 
   const queryClient = useQueryClient();
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
-  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
@@ -164,7 +163,7 @@ export function useCommandsState(context: Context) {
   const taskProjectId =
     paletteContextOptions?.task?.projectId ?? inViewObject.taskProjectId;
   const isRowTaskProjectFallback =
-    rowShortcutsEnabled && Boolean(paletteContextOptions?.task) && !_currentProject;
+    Boolean(paletteContextOptions?.task) && !_currentProject;
   const { project: taskProject, isLoading: isTaskProjectLoading, isError: isTaskProjectError } =
     useTaskProjectFallback(
       _currentProject,
@@ -262,7 +261,7 @@ export function useCommandsState(context: Context) {
   }
 
   function refreshRowTaskList() {
-    if (rowShortcutsEnabled && isRowTaskProjectFallback) router.refresh();
+    if (isRowTaskProjectFallback) router.refresh();
   }
 
   useEffect(() => {
@@ -349,7 +348,7 @@ export function useCommandsState(context: Context) {
     };
   }, [commandMode, _currentProject?.id]);
   return {
-  queryClient, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
+  queryClient, myTasksViewsEnabled, myTasksTableColumnsEnabled,
   myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,

@@ -20,7 +20,7 @@ import { useRouter } from "next/navigation";
 import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
@@ -36,7 +36,6 @@ export function useTableState(context: Context) {
   } = context;
 
   const queryClient = useQueryClient();
-  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
@@ -116,7 +115,7 @@ export function useTableState(context: Context) {
     _currentProject,
     assignTask?.projectId,
     currentUser?.id,
-    rowShortcutsEnabled && Boolean(assignTask),
+    Boolean(assignTask),
   );
   useEffect(() => {
     if (!assignTask || assignProjectLoading) return;
@@ -212,7 +211,7 @@ export function useTableState(context: Context) {
   customFieldBySortColumnRef.current = customFieldBySortColumn;
   const customFieldById = useMemo(() => new Map(customFields.map((field) => [field.id, field])), [customFields]);
   return {
-  queryClient, rowShortcutsEnabled, myTasksSnoozeEnabled, router, navigateToTask,
+  queryClient, myTasksSnoozeEnabled, router, navigateToTask,
   toggleCreateTaskGlobally, updateActiveItemAndItemInView, removeFromListWithStatus, updateTaskInCache, starTask,
   showCommands, setShowCommands, persistedActiveItem, myTasksBulk, showArchivedOnBoard,
   isApple, setTasksPlayList, myTasksColumnsControlled, storedVisibleColumns, normalizeVisibleColumns,
