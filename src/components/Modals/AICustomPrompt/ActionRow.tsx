@@ -5,10 +5,10 @@ import toast from 'react-hot-toast';
 import { useRecoilState } from '@/lib/state';
 import { currentProjectAtom } from '@/store';
 import { useCustomAiInstructions } from '@/lib/contexts/Multipages/customAiInstructionContext';
-import { FC } from 'react';
+import { FC, ReactNode } from 'react';
 
 const customInstructionsActionButtonClass =
-  "inline-block rounded-[4px] px-6 py-2.5 font-medium leading-normal text-white-black transition hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-light-gray";
+  "inline-block rounded-[4px] px-6 py-2.5 font-medium leading-normal transition hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-light-gray";
 
 const ActionRow = () => {
     
@@ -57,20 +57,24 @@ const ActionRow = () => {
 type ActionButtonProps = {
   onClick: () => any;
   disabled?: boolean;
+  children?: ReactNode;
+  secondary?: boolean;
 };
 
-const ActionButton: FC<ActionButtonProps> = ({
+export const ActionButton: FC<ActionButtonProps> = ({
   onClick,
   disabled = false,
+  children = "Save instructions",
+  secondary = false,
 }) => {
   return (
     <button
-      className={customInstructionsActionButtonClass}
+      className={`${customInstructionsActionButtonClass} ${secondary ? "text-text-light-gray hover:text-white-black focus-visible:text-white-black" : "text-white-black"}`}
       disabled={disabled}
       onClick={onClick}
       type="button"
     >
-      Save instructions
+      {children}
     </button>
   );
 };

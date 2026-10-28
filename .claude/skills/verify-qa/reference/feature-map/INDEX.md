@@ -45,6 +45,7 @@ each ticket only needs the one or two areas it touches.
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
 | Command palette | [command-palette.md](command-palette.md) | no smoke id; read-only shots of the palette rows, the help list and a Share Task tooltip |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
+| Board task templates | [task-templates.md](task-templates.md) | QA 985 settings edit, authoring, saved reload and permission controls |
 | Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | production workflow dispatch, QA-only fixtures and score artifacts |
 | AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |
 | Board skills | [board-skills.md](board-skills.md) | no smoke id; create one skill from the textarea, prove POST /api/ai/skills 201 and the reload, delete it |
