@@ -155,7 +155,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: false, error: `descriptionHtml cannot exceed ${TEMPLATE_DESCRIPTION_MAX} characters` }, { status: 400 });
   }
   const updated = await prisma.taskTemplate.updateMany({
-    where: { id: templateId, project: { ...taskWriteAccessWhere(session.userId, session.agentId) } },
+    where: { id: templateId, project: { ...taskWriteAccessWhere(session.userId, session.agentId, session.teamScope) } },
     data: {
       name: body.name.trim().slice(0, TEMPLATE_NAME_MAX),
       title: body.title,

@@ -142,23 +142,25 @@ const projectAccess = loadModule("src/utils/controllers/projects/getAllIncludes.
   "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
   "@/utils/controllers/notifications/visibleInboxScope": {},
 });
-function patchHarness({ userId = 1, agentId, grantStatus, revoked = false, enabled = true } = {}) {
+function patchHarness({ userId = 1, agentId, grantStatus, teamScope, revoked = false, enabled = true } = {}) {
   const updates = [], accessCalls = [];
   let stored = { name: "Bug", title: "[BUG] {problem}", descriptionHtml: "<h2>Steps</h2><p>Reproduce.</p>" };
   const route = loadModule("src/app/api/task-templates/route.ts", {
-    "@/lib/auth/getSessionUser": { getSessionUser: async () => userId ? { userId, agentId } : null },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => userId ? { userId, agentId, teamScope } : null },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag); assert.equal(id, userId); return enabled; } },
     "@/lib/flags/keys": keys, "next/server": { NextResponse: { json: Response.json } },
     "@/lib/taskTemplatePrefill": {},
     "@/utils/helperFunctions/sanitizeRichHtml": load("src/utils/helperFunctions/sanitizeRichHtml.ts"),
-    "@/utils/controllers/projects/getAllIncludes": Object.fromEntries(["getProjectWhere", "taskWriteAccessWhere"].map((key) => [key, (id, agent) => {
+    "@/utils/controllers/projects/getAllIncludes": Object.fromEntries(["getProjectWhere", "taskWriteAccessWhere"].map((key) => [key, (id, agent, scope) => {
       accessCalls.push([id, agent ?? null]);
-      return projectAccess[key](id, agent);
+      return projectAccess[key](id, agent, scope);
     }])),
     "@/lib/prisma": { default: { taskTemplate: {
       updateMany: async (args) => {
         updates.push(plain(args));
-        const allowed = args.where.id === 7 && args.where.project.OR.some((entry) => {
+        const branches = args.where.project.OR ?? args.where.project.AND?.[0].OR ?? [];
+        const scopedTeam = args.where.project.AND?.[1].teamId;
+        const allowed = args.where.id === 7 && (!scopedTeam || scopedTeam === "team-a") && branches.some((entry) => {
           const member = entry.members?.some;
           return entry.ownerId === 1 || (member?.agentId === null && member.userId === 2) ||
             (member?.agentId === agentId && agentId && grantStatus === "Accepted" && member.status === "Accepted" && member.agent.userId === userId && member.agent.revokedAt === null && !revoked);
@@ -201,6 +203,15 @@ test("PATCH still allows an agent with an Accepted board grant", async () => {
   assert.equal((await h.patch()).status, 200);
   assert.deepEqual(h.accessCalls, [[1, "agent-1"]]);
   assert.equal(h.stored().name, "A/B test");
+});
+test("PATCH keeps a team-limited agent within its bound team while allowing its own team", async () => {
+  for (const [teamId, status] of [["team-a", 200], ["team-b", 404]]) {
+    const teamScope = { teamId, accessBinding: "accepted-binding" };
+    const h = patchHarness({ userId: 1, agentId: "agent-1", grantStatus: "Accepted", teamScope });
+    assert.equal((await h.patch()).status, status);
+    assert.deepEqual(h.updates[0].where.project.AND[1], { teamId });
+    assert.equal(h.stored().name, status === 200 ? "A/B test" : "Bug");
+  }
 });
 test("PATCH now strips script content and event-handler attributes before saving", async () => {
   const h = patchHarness();
