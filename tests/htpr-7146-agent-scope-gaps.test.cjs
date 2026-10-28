@@ -28,9 +28,8 @@ function miss(f, mode, kind, board, action) {
 for (const [mode, kind] of cases) {
   test(`agent board edits ${mode} ${kind}: touched and returned boards use Accepted grants`, async () => {
     const f = actor(mode, kind);
-    const target = { id: 'target-agent', userId: f.user.id, members: f.projects.filter(project => project.id !== 15).map(project => ({ projectId: project.id, project })) };
-    const originalFind = f.prisma.agent.findFirst;
-    f.prisma.agent.findFirst = async args => args.where.id === target.id ? hydrate(target, args) : originalFind(args);
+    const target = { id: 'target-agent', userId: f.user.id, boardHomeTeamId: 'team', members: f.projects.filter(project => project.id !== 15).map(project => ({ projectId: project.id, project })) };
+    f.user.agents.push(target);
     f.prisma.member.deleteMany = async ({ where }) => { target.members = target.members.filter(row => !where.projectId.in.includes(row.projectId)); f.writes.push('remove'); return { count: 1 }; };
     f.prisma.member.createMany = async ({ data }) => { target.members.push(...data.map(row => ({ projectId: row.projectId, project: f.projects.find(project => project.id === row.projectId) }))); f.writes.push('add'); return { count: data.length }; };
     const patch = f.load('src/lib/mcp/operations/agents/[agentId]/operation.ts', {
