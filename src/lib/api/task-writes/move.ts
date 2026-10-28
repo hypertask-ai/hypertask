@@ -17,10 +17,18 @@ type MoveTaskBody = {
   ranking?: string;
   projectId: number;
   agentId?: string | null;
+  expectedSectionId?: number;
+  expectedUpdatedAt?: string;
 };
 
 const schema = z.custom<MoveTaskBody>((body) => {
   const value = body as Partial<MoveTaskBody> | null;
+  if (value?.expectedSectionId !== undefined || value?.expectedUpdatedAt !== undefined) {
+    if (typeof value.expectedSectionId !== 'number' || !Number.isSafeInteger(value.expectedSectionId) || value.expectedSectionId <= 0 || value.expectedSectionId > 2147483647 ||
+      typeof value.expectedUpdatedAt !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.expectedUpdatedAt) ||
+      !Number.isFinite(Date.parse(value.expectedUpdatedAt))) return false;
+  }
   return !!(value?.taskId && value?.section_title && value?.sectionId && value?.projectId);
 });
 
@@ -28,7 +36,7 @@ export const PUT = taskWriteRoute({
   schema,
   validationMessage: "Missing Required Information",
   prepare: async (session) => ({ user: await loadSessionUserRecord(session.userId), session }),
-  operation: async ({ taskId, section_title, sectionId, ranking, projectId, agentId: requestedAgentId }, { user: userObj, session }) => {
+  operation: async ({ taskId, section_title, sectionId, ranking, projectId, agentId: requestedAgentId, expectedSectionId, expectedUpdatedAt }, { user: userObj, session }) => {
     try {
       const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
       if (!actingAgent.ok) {
@@ -61,6 +69,11 @@ export const PUT = taskWriteRoute({
         ranking: ranking_,
         updatedAt: new Date(),
       }, userObj, agentId ?? null, { teamScope: session.teamScope,
+        expectedProjectId: expectedSectionId === undefined ? undefined : projectId,
+        expectedSectionId,
+        expectedAssigneeAgentId: expectedSectionId === undefined ? undefined : agentId ?? undefined,
+        expectedStatus: expectedSectionId === undefined ? undefined : "Normal",
+        expectedUpdatedAt: expectedUpdatedAt === undefined ? undefined : new Date(expectedUpdatedAt),
         taskMovedActivity: {
           fromAgent: agent,
           sendNotification: () => sendNotificationForTask(

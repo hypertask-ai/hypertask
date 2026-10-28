@@ -77,6 +77,8 @@ type UpdateTaskSingleOptions = {
   expectedTitle?: string;
   expectedProjectId?: number;
   expectedSectionId?: number;
+  expectedUpdatedAt?: Date;
+  expectedAssigneeAgentId?: string;
   expectedStatus?: Status;
   taskMovedActivity?: Pick<
     TaskMovedActivityProps,
@@ -263,7 +265,8 @@ export async function updateTaskSingle(
         if (
           (options.expectedProjectId !== undefined && currentState.projectId !== options.expectedProjectId) ||
           (options.expectedSectionId !== undefined && currentState.sectionId !== options.expectedSectionId) ||
-          (options.expectedStatus !== undefined && currentState.status !== options.expectedStatus)
+          (options.expectedStatus !== undefined && currentState.status !== options.expectedStatus) ||
+          (options.expectedUpdatedAt !== undefined && currentState.updatedAt?.getTime() !== options.expectedUpdatedAt.getTime())
         ) {
           throw new TaskTargetChangedError();
         }
@@ -453,6 +456,8 @@ export async function updateTaskSingle(
               projectId: options.expectedProjectId,
               sectionId: options.expectedSectionId,
               status: options.expectedStatus,
+              ...(options.expectedUpdatedAt !== undefined ? { updatedAt: options.expectedUpdatedAt } : {}),
+              ...(options.expectedAssigneeAgentId !== undefined ? { assignees: { some: { agentId: options.expectedAssigneeAgentId } } } : {}),
             } : {}),
           },
           data: updateData,

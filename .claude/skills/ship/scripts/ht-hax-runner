@@ -106,6 +106,13 @@ case "${1:-}" in
       unset CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID
       CODEX_SESSION_ID=$(cat /proc/sys/kernel/random/uuid) || exit 1
       export CODEX_SESSION_ID
+      recovery=$HOME/.local/lib/hypertask/runner-pickup/runner-pickup
+      recovery_brief=''
+      if [ -x "$recovery" ]; then
+        recovery_brief=$("$recovery" drain "$n") || { log "RUNNER $n: freeze recovery failed"; exit 1; }
+      fi
+      recovery_ticket=${recovery_brief#Resume }; recovery_ticket=${recovery_ticket%%:*}
+      run_brief="$brief${recovery_brief:+ Recovery: $recovery_brief}"
       echo "$(date -u +%FT%TZ) start" >> "$rlog"
       clear; tmux clear-history -t "$TMUX_PANE"
       tmux select-pane -t "$TMUX_PANE" -T "RUNNER $n hax"
@@ -113,13 +120,13 @@ case "${1:-}" in
       : > "$STATE/runner-$n.result"
       (
         sleep 15
-        tmux send-keys -t "$TMUX_PANE" -l "$brief"
+        tmux send-keys -t "$TMUX_PANE" -l "$run_brief"
         sleep 1
         tmux send-keys -t "$TMUX_PANE" C-m
         result=TIMEOUT
         for _ in $(seq 1 480); do
           sleep 30
-          if completed=$(python3 - "$$" "$REPO" <<'PYTHON'
+          if completed=$(python3 - "$$" "$REPO" "$recovery_ticket" <<'PYTHON'
 import json
 import os
 from pathlib import Path
@@ -149,15 +156,25 @@ try:
                         last = item
                 if tail and tail.get('kind') == 'turn_usage' and last and last.get('kind') == 'assistant' and not last.get('origin'):
                     final = last.get('text', '').strip().splitlines()
-                    if final and re.fullmatch(r'(?:[•*-] )?RUNNER (?:DONE (?:(?:HTPR|YPER4|HYFA)-[0-9]+|https://\S+) .+|IDLE .+)', final[-1]):
-                        print('IDLE' if 'RUNNER IDLE ' in final[-1] else 'DONE')
+                    match = re.fullmatch(r'(?:[•*-] )?RUNNER (?:DONE (?P<ticket>(?:HTPR|YPER4|HYFA)-[0-9]+|https://\S+) (?P<state>.+)|IDLE .+)', final[-1]) if final else None
+                    if match:
+                        ticket = sys.argv[3]
+                        project = {'HTPR': '15', 'YPER4': '4060'}.get(ticket.split('-')[0])
+                        url = f'https://app.hypertask.ai/detail/project-{project}/{ticket.split("-")[-1]}'
+                        if ticket and match['ticket'] in (ticket, url) and match['state'] == 'Done':
+                            print('DONE_MATCH')
+                        else:
+                            print('IDLE' if match['ticket'] is None else 'DONE')
                         sys.exit(0)
 except (OSError, ValueError, StopIteration):
     pass
 sys.exit(1)
 PYTHON
           ); then
-            result=$completed
+            result=${completed%_MATCH}
+            if [ "$completed" = DONE_MATCH ]; then
+              "$recovery" ack "$n" "$recovery_ticket" || log "RUNNER $n: recovery acknowledgement failed"
+            fi
             break
           fi
         done

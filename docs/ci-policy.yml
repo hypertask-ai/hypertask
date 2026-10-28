@@ -164,6 +164,7 @@ ship_scripts_tests:
     - bash .claude/skills/ship/scripts/board-check.test.sh
     - bash .claude/skills/ship/scripts/user-unit-check.test.sh
     - python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
+    - python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py
     - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
     - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
     - bash .claude/skills/ship/scripts/error-collector.test.sh
@@ -386,7 +387,7 @@ policies:
       recovery:
         owner: trusted_claude_session
         prerequisites: "Investigate the incident, repair any failed rollback, verify the live production SHA and passing health/core-action/browser checks that can run. Do not clear just because a rollback was requested. Session merges must respect MERGE_FREEZE too."
-        clear_command: "gh variable delete MERGE_FREEZE --repo hypertask-ai/hypertask"
+        clear_command: "gh variable delete MERGE_FREEZE --repo hypertask-ai/hypertask && ~/.local/lib/hypertask/runner-pickup/runner-pickup record-lift"
         human_github_action_required: false
         note: "The next automatic merge sweep re-evaluates health. Green monitoring alone never clears the freeze; if the restored workflow is disabled or red, repair it before resuming merges."
   production_ruleset:
