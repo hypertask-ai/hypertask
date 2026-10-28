@@ -272,9 +272,8 @@ export async function updateOwnedAgentBoards(
                 .map((membership) => membership.project.teamId),
               ...additions.map((project) => project.teamId),
             ]
-            const invalidTeam = agent.crossTeamHomeTeamId
-              ? additions.some((project) => project.teamId !== agent.crossTeamHomeTeamId)
-              : finalTeams.includes(null) || new Set(finalTeams).size > 1
+            const invalidTeam = additions.some((project) => project.teamId !== homeTeamId) ||
+              (!agent.crossTeamHomeTeamId && (finalTeams.includes(null) || new Set(finalTeams).size > 1))
             if (invalidTeam) {
               throw new AgentBoardUpdateError(
                 'Agents can only belong to boards in one team',

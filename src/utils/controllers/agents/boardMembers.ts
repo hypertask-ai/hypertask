@@ -211,7 +211,7 @@ async function addAgentToBoardTransaction(
   if (
     (agent.credentialTeamId && agent.credentialTeamId !== project.teamId) ||
     (agent.credentialTeamAccessBinding && !agent.credentialTeamId) ||
-    (!enabled && !belongsToTargetTeam)
+    (!enabled && (homeTeamId !== project.teamId || !belongsToTargetTeam))
   ) {
     return { ok: false, status: 403, message: "This agent belongs to another team" };
   }

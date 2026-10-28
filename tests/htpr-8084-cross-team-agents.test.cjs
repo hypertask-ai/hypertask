@@ -270,11 +270,13 @@ for (const entry of ['cookie', 'update']) {
   })
 }
 
-test('MCP: legacy single-team replacement stays allowed; expanded identities retain original provenance', async () => {
+test('MCP: rollout-off replacement refuses a different lifetime team; enabled replacement stays allowed', async () => {
   const off = harness({ enabled: false })
-  assert.equal((await off.update([2], [1])).status, 200)
-  assert.deepEqual(off.state.members.map((row) => row.projectId), [2])
-  assert.equal(off.state.agents[0].crossTeamHomeTeamId, 'a')
+  assert.equal((await off.update([2], [1])).status, 400)
+  assert.deepEqual(off.state.members.map((row) => row.projectId), [1])
+  assert.equal(off.state.agents[0].crossTeamHomeTeamId, null)
+  assert.equal((await off.update([4], [1])).status, 200)
+  assert.deepEqual(off.state.members.map((row) => row.projectId), [4])
   const on = harness()
   assert.equal((await on.update([2], [1])).status, 200)
   assert.deepEqual(on.state.members.map((row) => row.projectId), [2])
@@ -467,9 +469,10 @@ test('MCP create stores first explicit team as lifetime home without changing sa
 
 test('legacy replacement never reassigns lifetime home across later admissions', async () => {
   const h = harness({ enabled: false, boardHome: 'a' })
-  assert.equal((await h.update([2], [1])).status, 200)
+  assert.equal((await h.update([2], [1])).status, 400)
   assert.equal(h.state.agents[0].boardHomeTeamId, 'a')
-  assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
+  assert.equal(h.state.agents[0].crossTeamHomeTeamId, null)
+  assert.deepEqual(h.state.members.map((row) => row.projectId), [1])
   h.state.enabled = true
   assert.equal((await h.update([5])).status, 200)
   assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
@@ -538,13 +541,17 @@ test('guest associated agent creation captures known lifetime team without expan
 
 
 for (const entry of ['cookie', 'update']) {
-  test(`${entry}: original-team privacy survives sequential rehoming while rollout is Off`, async () => {
+  test(`${entry}: rollout-off rehoming refuses unusable grants and permits the original team`, async () => {
     const h = harness({ enabled: false, boardHome: 'a' })
     const removed = entry === 'cookie' ? await h.remove(1) : await h.update([], [1])
     assert.equal(entry === 'cookie' ? removed.ok : removed.status, entry === 'cookie' ? true : 200)
     const added = await h[entry](entry === 'cookie' ? 2 : [2])
-    assert.equal(added.statusCode ?? added.status, 200)
+    assert.equal(added.statusCode ?? added.status, entry === 'cookie' ? 403 : 400)
+    assert.deepEqual(h.state.members, [])
     assert.equal(h.state.agents[0].boardHomeTeamId, 'a')
-    assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
+    assert.equal(h.state.agents[0].crossTeamHomeTeamId, null)
+    const restored = await h[entry](entry === 'cookie' ? 4 : [4])
+    assert.equal(restored.statusCode ?? restored.status, 200)
+    assert.deepEqual(h.state.members.map((row) => row.projectId), [4])
   })
 }
