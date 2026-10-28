@@ -79,7 +79,7 @@ test("choosing triage closes palette and hands the exact preset to a fresh full-
     setFrequentlyUsed: () => {}, recordHTCCommandUsage: () => {},
     document: { activeElement: { blur() {} } },
     pagesEnabled: false, standalonePages: false,
-    triageInboxEnabled: enabled,
+    triageInboxFlag: enabled, safeInboxBatches: true, freshChatHandoff: true,
     resetShowCommands: () => calls.push("close"),
     setAiChatPendingPrompt: prompt => calls.push(prompt),
     buildFullScreenChatPath: load(path.join(root, "src/lib/aiChatDisplayMode.ts")).buildFullScreenChatPath,

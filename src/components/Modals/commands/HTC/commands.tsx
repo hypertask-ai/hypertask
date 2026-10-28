@@ -689,7 +689,7 @@ const Commands = (props: Props) => {
         return;
       }
       if (command.key === "triageInbox") {
-        if (!triageInboxEnabled) return;
+        if (!triageInboxFlag || !safeInboxBatches || !freshChatHandoff) return;
         resetShowCommands();
         setAiChatPendingPrompt({ query: INBOX_TRIAGE_PROMPT, fullScreen: true });
         router.push(buildFullScreenChatPath(`${window.location.pathname}${window.location.search}${window.location.hash}`));
