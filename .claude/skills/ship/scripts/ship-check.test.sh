@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Live tests for ship-check against real tickets (needs gh and hypertask auth).
 cd "$(dirname "$0")"; fails=0; passes=0
+python3 ./ship-check-finish.test.py || exit 1
+[ "${1:-}" != --finish-only ] || exit 0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
 trap 'rm -rf "$E"' EXIT
@@ -1153,7 +1155,7 @@ cat > "$NC/bin/hypertask" <<'MOCK'
 [[ $1 == comment && $2 == list ]] && cat "$NC/comments" || exit 1
 MOCK
 chmod +x "$NC/bin/gh" "$NC/bin/hypertask"; export NC
-N() { SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check "$@"; }
+N() { CLAUDE_CODE_SESSION_ID=nc-fixture SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check "$@"; }
 echo '[]' > "$NC/prs"; echo 0 > "$NC/ahead"
 echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted a ticket with no comment" || ok "nochange refuses a ticket with no comment"
@@ -1209,12 +1211,15 @@ N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre b
 for x in merged:merged deployed:deployed proof:proof pr:title docs:docs; do
   N ${x%%:*} YPER4-901 | grep -q "^${x#*:} ok" && ok "nochange passes ${x%%:*}" || bad "nochange ${x%%:*}"
 done
+N branch YPER4-901 r3/yper4-901-fix >/dev/null
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored an origin branch" || ok "nochange cleaned fails while an origin branch exists"
 git -C "$NC/work" push -q origin :refs/heads/r3/yper4-901-fix 2>/dev/null
 git -C "$NC/work" branch -q r3/yper4-901-local 2>/dev/null
+N branch YPER4-901 r3/yper4-901-local >/dev/null
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored a local branch" || ok "nochange cleaned fails while a local branch exists"
 git -C "$NC/work" worktree add -q "$NC/wt901" -b r3/yper4-901-wt 2>/dev/null
 git -C "$NC/work" branch -q -D r3/yper4-901-local
+N branch YPER4-901 r3/yper4-901-wt >/dev/null
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored a worktree" || ok "nochange cleaned fails while a worktree branch exists"
 git -C "$NC/work" worktree remove --force "$NC/wt901"; git -C "$NC/work" branch -q -D r3/yper4-901-wt
 N cleaned YPER4-901 | grep -q 'cleaned ok' && ok "nochange cleaned passes once nothing is left" || bad "nochange cleaned clean case"

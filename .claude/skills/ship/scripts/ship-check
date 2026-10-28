@@ -2,7 +2,7 @@
 # ship-check: proof checks for /ship sessions (Valentin, 2026-10-01).
 # Used by the ledger gates (ship-gates) and by the Claude Code PreToolUse hook (guard).
 #   ship-check bind <T> <pr>     record this session's PR for the ticket (run right after opening it)
-#   ship-check branch <T> <b|none> record the branch this session made (required on the duplicate path)
+#   ship-check branch <T> <b|none> record each branch this session created, or none
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
 #   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and a comment opens with Decided against: Valentin, <date>: "<words>"
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
@@ -21,7 +21,7 @@
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
 #   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
 #   ship-check done <T>          ticket is in the done column its own board names
-#   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
+#   ship-check cleaned <T>       only this session's recorded branches and worktrees are gone
 #   ship-check move <T> <section> [project] [destination]  enforce completion before a board section write
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
 # CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...; a repo listed in NON_RELEASING_REPOS, or any repo with SHIP_DEPLOY=none, is checked against its workflow runs instead of a release.
@@ -168,9 +168,17 @@ pr_row() {
 }
 
 check_branch() {
+  local session=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}} record
   [[ ${2:-} =~ ^[A-Za-z0-9._/-]+$ ]] || fail "usage: ship-check branch <T> <branch|none>"
-  [ -s "$EVID/$1/duplicate-of" ] || fail "ship-check branch is only for the duplicate path; run ship-check duplicate first"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/branch" && echo "recorded branch $2 for $1"
+  [[ $session =~ ^[A-Za-z0-9_-]+$ ]] || fail "cleanup needs this session's full id"
+  record="$EVID/$1/cleanup/$session"
+  mkdir -p "$(dirname "$record")" || fail "cannot create cleanup record"
+  if [ -s "$record" ] && ! grep -qxF -- "$2" "$record"; then
+    [ "$2" != none ] && ! grep -qxF none "$record" || fail "cannot replace recorded cleanup ownership with none"
+  fi
+  grep -qxF -- "$2" "$record" 2>/dev/null || echo "$2" >> "$record" || fail "cannot record cleanup ownership"
+  if [ -s "$EVID/$1/duplicate-of" ]; then echo "$2" > "$EVID/$1/branch"; fi
+  echo "recorded branch $2 for $1"
 }
 
 check_bind() {
@@ -624,12 +632,46 @@ check_completion() {
   done
 }
 
+check_blocked_handoff() {
+  local comments text
+  comments=$(hypertask comment list "$1" --sort createdAt:desc --limit 1 --json 2>/dev/null) \
+    || fail "cannot read the blocked handoff for $1"
+  text=$(jq -er 'select(.success == true and (.comments | type) == "array") |
+    .comments | sort_by(.createdAt) | last | .text // ""' <<<"$comments") \
+    || fail "cannot parse the blocked handoff for $1"
+  python3 - "$text" <<'PYCODE'
+import html
+import re
+import sys
+text = html.unescape(re.sub(r"</(?:p|li|div)>|<br\s*/?>", "\n", sys.argv[1], flags=re.I))
+text = re.sub(r"<[^>]*>", "", text)
+killed = r"\bsigkill\b|exit(?:\s+code)?[ :]*(?:137|9)\b|\bkilled\b|\boom\b"
+local = r"\blocal\b|\bvps\b"
+check = r"\btests?\b|\bchecks?\b|node|npm|pytest|tsc"
+if all(re.search(pattern, text, re.I) for pattern in (killed, local, check)):
+    blockers = re.findall(r"^\s*Blocker:\s*(.+)$", text, re.I | re.M)
+    if not any(not re.search(killed, blocker, re.I) for blocker in blockers):
+        print("FAIL: a killed local check is not a blocker; push and let CI decide. "
+              "For an independent failure, add Blocker: <exact error>.")
+        sys.exit(1)
+PYCODE
+}
+
 check_move() {
   local ref=${1:-} section=${2:-} project=${3:-} destination=${4:-} t rc
   local -a args=(tasks get "$ref" --json)
   [ -z "$project" ] || args+=(--project "$project")
   t=$(hypertask "${args[@]}" 2>/dev/null | jq -er '.tasks | select(length == 1) | .[0].ticketNumber
     | select(test("^(HTPR|HYFA|YPER4)-[0-9]+$"))') || fail "cannot resolve ticket $ref for completion checks"
+  local title="$section" board=${destination:-$project}
+  if [[ $section =~ ^[0-9]+$ ]]; then
+    [ -n "$board" ] || board=$(hypertask tasks get "$t" --json | jq -er '.tasks[0].boardId // .tasks[0].projectId') \
+      || fail "cannot read the board of $t"
+    title=$(hypertask section list --project "$board" --json |
+      jq -er --arg id "$section" '.sections[] | select((.id | tostring) == $id) | .section_title') \
+      || fail "cannot resolve destination column $section"
+  fi
+  if [[ $title == "Agent Blocked"* ]]; then check_blocked_handoff "$t" || return 1; fi
   is_done_section "$t" "$section" "${destination:-$project}"; rc=$?
   [ "$rc" != 3 ] || fail "cannot resolve destination column $section; refusing section change"
   if [ "$rc" = 0 ]; then
@@ -685,35 +727,19 @@ cleaned_branch_checks() {
 }
 
 check_cleaned() {
-  local n b rc wt repo=${SHIP_CHECKOUT:-}
+  local b repo=${SHIP_CHECKOUT:-} session=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}} record
+  [[ $session =~ ^[A-Za-z0-9_-]+$ ]] || fail "cleanup needs this session's full id"
+  record="$EVID/$1/cleanup/$session"
+  [ -s "$record" ] || fail "record this session's branches first: ship-check branch $1 <branch>, or none if you created none"
   if [ -z "$repo" ]; then
     [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
     repo=$HOME/projects/hypertask
   fi
-  # Nochange ticket: no PR exists, so every origin branch, local branch and worktree branch named for the ticket
-  # (id not followed by a digit) goes through the same checks as a PR branch.
-  if [ -s "$EVID/$1/nochange" ]; then
-    nochange_ok cleaned "$1" >/dev/null
-    local low=${1,,} names
-    names=$( { nochange_origin_branches "$1"
-      git -C "$repo" for-each-ref --format='%(refname:short)' refs/heads
-      git -C "$repo" worktree list --porcelain | sed -n 's#^branch refs/heads/##p'; } | grep -E -- "${low}([^0-9]|\$)" | sort -u)
-    while read -r b; do [ -n "$b" ] && cleaned_branch_checks "$repo" "$b"; done <<<"$names"
-    echo "cleaned ok (nochange, no branch or worktree of this ticket)"; return 0
-  fi
-  # Normal ticket: the bound PR's own branch. Duplicate (bound to another ticket's PR): the branch it
-  # recorded with `ship-check branch` after `ship-check duplicate` (rebinding clears that record).
-  if [ -s "$EVID/$1/duplicate-of" ]; then
-    [ -s "$EVID/$1/branch" ] || fail "duplicate: record this session's branch first: ship-check branch $1 <branch>, or ship-check branch $1 none"
-    b=$(cat "$EVID/$1/branch")
-    [ "$b" = none ] && { echo "cleaned ok (duplicate, session recorded no branch)"; return 0; }
-  else
-    n=$(bound_pr "$1") || fail "no PR bound for $1"
-    b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
-    [ -n "$b" ] || fail "PR $n has no branch name"
-  fi
-  cleaned_branch_checks "$repo" "$b"
-  echo "cleaned ok"
+  while IFS= read -r b; do
+    [[ $b =~ ^[A-Za-z0-9._/-]+$ ]] || fail "invalid recorded cleanup branch"
+    [ "$b" = none ] || cleaned_branch_checks "$repo" "$b"
+  done < "$record"
+  echo "cleaned ok (this session's branches only)"
 }
 
 check_premerge() {
