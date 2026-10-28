@@ -171,9 +171,13 @@ esac''')
     def test_interactive_run_sends_brief_records_final_output_and_closes(self):
         self.env['TMUX_PANE'] = '%fixture'
         self.env['HAX_SUBAGENT_DEPTH'] = '1'
+        self.env['CLAUDE_CODE_SESSION_ID'] = 'inherited-claude-session'
+        self.env['CODEX_SESSION_ID'] = 'inherited-codex-session'
+        self.env['CODEX_THREAD_ID'] = 'inherited-codex-thread'
         self.command('clear', 'exit 0')
         self.command('hax', """
 printf 'hax %s depth=%s identity=%s\\n' "$*" "${HAX_SUBAGENT_DEPTH-unset}" "$SHIP_SESSION_NAME" >> "$HOME/events"
+printf 'session=%s claude=%s thread=%s\\n' "$CODEX_SESSION_ID" "${CLAUDE_CODE_SESSION_ID-unset}" "${CODEX_THREAD_ID-unset}" >> "$HOME/events"
 mkdir -p "$HT_HAX_PROC_ROOT/$PPID/task/$PPID" "$HT_HAX_PROC_ROOT/$$/fd"
 echo $$ > "$HT_HAX_PROC_ROOT/$PPID/task/$PPID/children"
 ln -s "$HOME/session.jsonl" "$HT_HAX_PROC_ROOT/$$/fd/3"
@@ -211,6 +215,7 @@ case "$1" in
 esac
 exec /bin/sleep 0.01
 """)
+        session_ids = set()
         for final_line, cooldown in [
             ('RUNNER DONE YPER4-776 Done', 30),
             ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30),
@@ -243,6 +248,11 @@ exec /bin/sleep 0.01
                     process.wait()
                 events = self.events.read_text().splitlines()
                 self.assertIn('hax --provider=codex --model=gpt-6.1-sol --effort=high depth=unset identity=RUNNER 8', events)
+                session = next(event for event in events if event.startswith('session='))
+                self.assertRegex(session, r'^session=[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12} claude=unset thread=unset$')
+                session_id = session.split()[0]
+                self.assertNotIn(session_id, session_ids)
+                session_ids.add(session_id)
                 self.assertLess(events.index('brief'), events.index('submitted'))
                 self.assertLess(events.index('tool-phase'), events.index('final-phase'))
                 self.assertLess(events.index('final-phase'), events.index('capture'))
@@ -250,6 +260,16 @@ exec /bin/sleep 0.01
                 self.assertIn(f'retry {cooldown}', events)
                 self.assertIn(final_line, (self.state / 'runner-8.latest.log').read_text())
                 self.assertIn(final_line, (self.state / 'runner-8.log').read_text())
+
+    def test_missing_session_identity_never_launches_hax(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        self.command('cat', """
+if [ "$1" = /proc/sys/kernel/random/uuid ]; then exit 42; fi
+exec /bin/cat "$@"
+""")
+        self.command('hax', 'echo launched >> "$HOME/events"')
+        self.assertEqual(self.run_keeper('6', '--loop').returncode, 1)
+        self.assertEqual(self.events.read_text(), '')
 
     def test_unreadable_completion_times_out_records_screen_and_retries(self):
         self.env['TMUX_PANE'] = '%fixture'

@@ -103,6 +103,9 @@ case "${1:-}" in
         echo "$(date -u +%FT%TZ) gate: vps load hold" >> "$rlog"; sleep 300; continue
       fi
       admit || exit 1
+      unset CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID
+      CODEX_SESSION_ID=$(cat /proc/sys/kernel/random/uuid) || exit 1
+      export CODEX_SESSION_ID
       echo "$(date -u +%FT%TZ) start" >> "$rlog"
       clear; tmux clear-history -t "$TMUX_PANE"
       tmux select-pane -t "$TMUX_PANE" -T "RUNNER $n hax"
