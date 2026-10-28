@@ -339,6 +339,8 @@ allowed bash "$vcc" task update X-1 --description 'tmux attach -t runner-8' --de
 agent_detail_refused task update X-1 --description 'Safe text' --description-file "$T/people.html"
 agent_detail_refused comments add X-1 --kind=qa '--body=Outputs: private'
 agent_detail_refused tasks create '--description=Gates: 3 met' --title 'Plain title'
+agent_detail_refused comment add X-1 --text '<span data-type = "mention">Valentin Yeo</span> Helpers: none'
+agent_detail_refused comment add X-1 --kind qa --text '<p><a href="/home/valentin/result">Proof</a></p>'
 printf 'agent detail boundary verified\n'
 
 

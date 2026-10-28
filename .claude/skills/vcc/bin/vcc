@@ -141,11 +141,11 @@ people_content() {
   fi
   if [ "$mode" = comment ]; then
     case "$kind" in question|qa|done) ;; *)
-      if [ "$mentioned" != true ] && ! [[ "$text" =~ data-type=[\"\']mention[\"\']|(^|[[:space:]])@[[:alnum:]] ]]; then return 0; fi ;;
+      if [ "$mentioned" != true ] && ! [[ "$text" =~ data-type[[:space:]]*=[[:space:]]*[\"\']mention[\"\']|(^|[[:space:]])@[[:alnum:]] ]]; then return 0; fi ;;
     esac
   fi
   status=0
-  jq -en --arg text "$text" '$text | gsub("<[^>]*>"; "") | test("tmux\\s+attach|claude\\s+--resume|codex\\s+resume|hax\\s+--resume|Helpers\\s*:|Branch/PR\\s*:|Outputs\\s*:|Gates\\s*:|GATES\\.md|\\.unlazy/|/home/|~/"; "i")' >/dev/null || status=$?
+  jq -en --arg text "$text" '($text + " " + ($text | gsub("<[^>]*>"; ""))) | test("tmux\\s+attach|claude\\s+--resume|codex\\s+resume|hax\\s+--resume|Helpers\\s*:|Branch/PR\\s*:|Outputs\\s*:|Gates\\s*:|GATES\\.md|\\.unlazy/|/home/|~/"; "i")' >/dev/null || status=$?
   if [ "$status" != 1 ]; then
     printf '%s\n' 'vcc: agent detail belongs in vcc activity add' >&2
     exit 5
