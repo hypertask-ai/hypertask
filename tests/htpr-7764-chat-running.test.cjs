@@ -5,7 +5,7 @@ const noop = () => {};
 const FLAG = "htpr-7764-chat-running";
 const { createSessionStreams } = loader()("src/lib/aiChat/sessionStreams.ts");
 
-function fixture({ enabled = true, mobile = false, parallel = true, sidebar = true } = {}) {
+function fixture({ enabled = true, mobile = false, parallel = true, sidebar = true, targetKind = "ai" } = {}) {
   const view = mount();
   HTMLElement.prototype.scrollIntoView = noop;
   const Chat = React.createContext(null);
@@ -48,7 +48,7 @@ function fixture({ enabled = true, mobile = false, parallel = true, sidebar = tr
     select = id => { current = id; refresh(); };
     minimize = () => { minimized = !minimized; refresh(); };
     return React.createElement(Chat.Provider, { value: { ...chat, sessions, historySessions: sessions, currentSession: sessions.find(s => s.id === current), minimizeChat: minimize, selectSession: select, togglePopover: noop, currentAiOption: {}, minimized } },
-      React.createElement("div", { "data-minimized": minimized }, React.createElement(ChatHeader, sidebar ? { sidebarChats: { target: { kind: "ai" }, agents: [], onSelect: noop, onSelectSession: select } } : {})));
+      React.createElement("div", { "data-minimized": minimized }, React.createElement(ChatHeader, sidebar ? { sidebarChats: { target: targetKind === "ai" ? { kind: "ai" } : { kind: targetKind, agent: { id: "agent", displayName: "Test agent" } }, agents: [], onSelect: noop, onSelectSession: select } } : {})));
   }
   view.render(React.createElement(App));
   return {
@@ -122,6 +122,18 @@ test("legacy single-stream mode marks the streaming session after selecting an i
     assert.equal(view.container.querySelector('[role="status"]'), null);
   } finally { view.close(); }
 });
+
+for (const targetKind of ["native-agent", "external-agent"]) {
+  test(`${targetKind} header shows only its compatible reply state`, () => {
+    const view = fixture({ targetKind });
+    try {
+      view.update(() => view.streams.get("A").setIsTyping(true));
+      assert.equal(view.container.querySelectorAll('[aria-label="Chat running"]').length, targetKind === "native-agent" ? 1 : 0);
+      view.update(() => view.streams.get("A").setIsTyping(false));
+      assert.equal(view.container.querySelector('[role="status"]'), null);
+    } finally { view.close(); }
+  });
+}
 
 test("indicator flag ships for Everyone with a low-risk rollback", () => {
   const definition = loader()("src/lib/flags/definitions/htpr-7764-chat-running.ts").default;

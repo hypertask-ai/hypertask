@@ -155,7 +155,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   const sidebarTitle = sidebarChats?.target.kind === "ai"
     ? (chatHeaderNameEnabled && currentSession?.title) || "AI chat"
     : sidebarChats?.target.agent.displayName;
-  const runningIndicator = chatRunningEnabled && aiSessionActionsAvailable && currentSession && runningSessionIds.includes(currentSession.id)
+  const runningIndicator = chatRunningEnabled && sidebarChats?.target.kind !== "external-agent" && currentSession && runningSessionIds.includes(currentSession.id)
     ? <Loader2 size={16} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />
     : null;
   const isMbl = useContext(MobileViewContext);
