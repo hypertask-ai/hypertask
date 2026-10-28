@@ -65,7 +65,6 @@ type Props = Pick<
   | "isDictationProcessing"
   | "setIsRecording"
   | "setIsDictationProcessing"
-  | "mobileFullscreenFlag"
   | "isRecording"
   | "detailsSheetOpen"
   | "detailsDialogRef"
@@ -148,7 +147,7 @@ export function AgentChatView({
   mentionLoading, mentionLoadError, mentionResults, mentionQuery, setMentionIndex, pickMention,
   mentionIndex, draft, composerRef, composerEditorRef, handleComposerChange, handleComposerKeyDown,
   composerLocked, isDictationProcessing, setIsRecording, setIsDictationProcessing, insertDictation,
-  mobileFullscreenFlag, dictationProjectId, isRecording, handleSend, detailsSheetShown,
+  dictationProjectId, isRecording, handleSend, detailsSheetShown,
   detailsSheetOpen, detailsDialogRef, creatingAgent, setCreateAgentError, setNewAgentName,
   setNewAgentToken, setTokenCopied, newAgentToken, showCreateAgent, tokenCopied, newAgentName,
   createAgent, createAgentError, mobileAgentChatViewport,
@@ -238,7 +237,6 @@ export function AgentChatView({
               setIsRecording={setIsRecording}
               setIsDictationProcessing={setIsDictationProcessing}
               insertDictation={insertDictation}
-              mobileFullscreenFlag={mobileFullscreenFlag}
               dictationProjectId={dictationProjectId}
               isRecording={isRecording}
               handleSend={handleSend}

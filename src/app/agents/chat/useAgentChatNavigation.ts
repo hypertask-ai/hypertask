@@ -14,7 +14,6 @@ type Props = Pick<
   | "embedded"
   | "agents"
   | "selectedId"
-  | "mobileFullscreenFlag"
   | "isMbl"
   | "mobileLayoutEnabled"
   | "teamId"
@@ -26,7 +25,7 @@ type Props = Pick<
 >;
 
 export function useAgentChatNavigation({
-  embedded, agents, selectedId, mobileFullscreenFlag, isMbl, mobileLayoutEnabled, teamId,
+  embedded, agents, selectedId, isMbl, mobileLayoutEnabled, teamId,
   setAgentChatMobileFullscreen, setMobileTopBarTitle, setTeamId, search, liveSortEnabled,
 }: Props) {
   const selectedAgent = useMemo(
@@ -35,15 +34,15 @@ export function useAgentChatNavigation({
   );
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
   const mobileFullscreenChrome = Boolean(
-    !embedded && mobileFullscreenFlag && isMbl && selectedAgent,
+    !embedded && isMbl && selectedAgent,
   );
-  const reuseAiComposer = Boolean(embedded || (mobileFullscreenFlag && isMbl));
+  const reuseAiComposer = Boolean(embedded || isMbl);
   const dictationProjectId = useMemo(
     () =>
-      embedded ? embedded.projectId : isMbl && (mobileLayoutEnabled || mobileFullscreenFlag)
+      embedded ? embedded.projectId : isMbl
         ? agentDictationProjectId(selectedAgent, teamId)
         : null,
-    [embedded?.projectId, isMbl, mobileLayoutEnabled, mobileFullscreenFlag, selectedAgent, teamId],
+    [embedded?.projectId, isMbl, selectedAgent, teamId],
   );
 
   useEffect(() => {

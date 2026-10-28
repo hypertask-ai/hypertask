@@ -4,7 +4,7 @@ import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport
 import { useFlag } from "@/hooks/useFlag";
 import { type AgentChatActivity, type AgentChatFilter } from "@/lib/agents/chatActivityFeed";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { ITask } from "@/models/model";
 import { agentChatMobileFullscreenAtom, appShellRailAtom, mobileTopBarTitleAtom } from "@/store";
@@ -21,7 +21,6 @@ export function useAgentChatState(props: IProp) {
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
   const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
-  const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
   const activityRowsEnabled = !embedded;
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   const [rosterNow, setRosterNow] = useState(() => Date.now());
@@ -124,7 +123,7 @@ export function useAgentChatState(props: IProp) {
 
   return {
     currentUser, roomsEnabled, embedded, router, searchParams, isMbl,
-    mobileLayoutEnabled, mobileFullscreenFlag, activityRowsEnabled, rosterNow, liveSortEnabled,
+    mobileLayoutEnabled, activityRowsEnabled, rosterNow, liveSortEnabled,
     appShellRailOn, setMobileTopBarTitle,
     setAgentChatMobileFullscreen, agents, setAgents, rosterError, setRosterError, search, setSearch,
     teamId, setTeamId, selectedId, setSelectedId, mobileAgentChatViewport, session, setSession,
