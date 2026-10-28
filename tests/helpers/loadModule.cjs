@@ -9,7 +9,11 @@ function loadModule(file, stubs = {}) {
   const cache = new Map();
   function load(filename) {
     if (cache.has(filename)) return cache.get(filename).exports;
-    if (filename.endsWith(".json")) return JSON.parse(fs.readFileSync(filename, "utf8"));
+    if (filename.endsWith(".json")) {
+      const exports = JSON.parse(fs.readFileSync(filename, "utf8"));
+      cache.set(filename, { exports });
+      return exports;
+    }
     const mod = { exports: {} };
     cache.set(filename, mod);
     const localRequire = createRequire(filename);

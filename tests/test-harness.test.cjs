@@ -20,6 +20,12 @@ test("loader isolates transitive, default and falsy stubs, circular exports and 
   fs.writeFileSync(path.join(folder, "b.ts"), 'exports.name = require("./a").name + "B";');
   fs.writeFileSync(path.join(folder, "child.ts"), 'import value from "fixture"; export const result = value;');
   fs.writeFileSync(path.join(folder, "index.ts"), 'export { result } from "./child"; export const empty = require("empty"); export let count = 0; export const next = () => ++count;');
+  fs.writeFileSync(path.join(folder, "meta.json"), '{"count":0}');
+  fs.writeFileSync(path.join(folder, "json.ts"), 'const first = require("./meta.json"); first.count++; exports.second = require("./meta.json"); exports.same = first === exports.second;');
+  const json = loadModule(path.join(folder, "json.ts"));
+  assert.equal(json.same, true);
+  assert.deepEqual(json.second, { count: 1 });
+  assert.deepEqual(loadModule(path.join(folder, "json.ts")).second, { count: 1 });
   const file = path.join(folder, "index.ts");
   const first = loadModule(file, { fixture: { default: "first" }, empty: false });
   const second = loadModule(file, { fixture: { default: "second" }, empty: null });
