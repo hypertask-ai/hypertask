@@ -1,5 +1,6 @@
+import type { LabelResponse } from "@/lib/api/contracts/taskWrites";
 import { CommandMode } from "@/models/enums";
-import { IAgent, IEstimate, IPriority, ITask, ITaskLabel, preSelectParamPricing } from "@/models/model";
+import { IAgent, IEstimate, IPriority, ITask, preSelectParamPricing } from "@/models/model";
 import globalConstants from "@/lib/constants";
 import { constructPricingPageUrl } from "@/utils/helperFunctions/helperFunctions";
 import { IPrioritiesConstants } from "@/lib/constants/constants";
@@ -121,7 +122,7 @@ export function createCommandModalCallbacks(context: Context) {
   };
 
   const toggleLabelModal = async (
-    taskLabels?: ITaskLabel[],
+    taskLabels?: LabelResponse,
     refresh?: boolean,
     shouldCloseOnUpdate = true
   ) => {

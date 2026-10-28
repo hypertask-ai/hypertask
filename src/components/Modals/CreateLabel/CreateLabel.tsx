@@ -1,3 +1,4 @@
+import type { LabelResponse } from "@/lib/api/contracts/taskWrites";
 import { assignTaskLabel } from "@/lib/api/typedClient";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { ICurrentInViewObject, inViewObjectAtom } from "@/store";
@@ -5,7 +6,7 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState, useMemo } from "
 import { ModalBody } from "reactstrap";
 import { useRecoilState } from "@/lib/state";
 import styles from "@/styles/linksModal.module.scss";
-import { ILabel, IProject, ITaskLabel } from "@/models/model";
+import { ILabel, IProject } from "@/models/model";
 import { Check, Settings, Sparkles } from "lucide-react";
 import axios from "axios";
 import { deepCopy } from "@/utils/helperFunctions/helperFunctions";
@@ -24,7 +25,7 @@ type TMode = "Task" | "CreateTaskGlobally";
 
 type Props = {
   closeHandler?: (
-    taskLabels?: ITaskLabel[],
+    taskLabels?: LabelResponse,
     refresh?: boolean,
     shouldCloseOnUpdate?: boolean
   ) => void;

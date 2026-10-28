@@ -1,10 +1,11 @@
-import { IComment, IUser, ITaskLabel, IAttachment, ISection, IAssignees } from "@/models/model";
+import type { MoveTaskComment, LabelResponse } from "@/lib/api/contracts/taskWrites";
+import { IUser, IAttachment, ISection, IAssignees } from "@/models/model";
 import { ViewVisibility } from "@prisma/client";
 import type { TaskDetailState } from "./TaskDetailState";
 export type TaskDetailContext = TaskDetailState & createTaskDetailActionsHandlers;
 
 export interface createTaskDetailActionsHandlers {
-  taskUpdateCommentsInCache: (newComment: IComment) => void;
+  taskUpdateCommentsInCache: (newComment: MoveTaskComment) => void;
   moveTaskToNextColumn: (sectionToMoveTo: ISection) => Promise<void>;
   returnCurrentFocusedType: () => "Description" | "Edit-Comment" | "New-Comment" | "Others";
   titleEscapeHandler: () => void;
@@ -12,7 +13,7 @@ export interface createTaskDetailActionsHandlers {
   EnterHandler: (e: any) => void;
   CTRL_ENTERHandler: (e: any) => void;
   undoHandler: (data: any, toastId: string) => Promise<void>;
-  toggleLabelModal: (taskLabels?: ITaskLabel[], refresh?: boolean, shouldCloseOnUpdate?: boolean) => void;
+  toggleLabelModal: (taskLabels?: LabelResponse, refresh?: boolean, shouldCloseOnUpdate?: boolean) => void;
   aHandler: () => void;
   toggleMoveToBoardModal: () => void;
   returnFocusToComment: () => void;

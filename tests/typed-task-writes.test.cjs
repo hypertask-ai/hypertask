@@ -233,8 +233,12 @@ function declaration(file, name, env) {
 }
 test(`label permanent typed adoption: optimistic toggle before one write, rollback on error`, async () => {
   const calls = [], original = [{ id: "label-1", check: false }];
+  const payload = structuredClone(fixtures.label.find((fixture) => fixture.data.length).data);
+  payload[0].label.value = null;
+  payload[0].label.projectId = null;
+  payload[0].label.future = { retained: true };
   let rows = original, failure = false;
-  const write = async (...args) => { calls.push(["write", ...args]); assert.equal(rows[0].check, true); if (failure) throw new Error("denied"); return { data: [] }; };
+  const write = async (...args) => { calls.push(["write", ...args]); assert.equal(rows[0].check, true); if (failure) throw new Error("denied"); return { data: payload }; };
   const fn = declaration("src/components/Modals/CreateLabel/CreateLabel.tsx", "toggleLabelAssignment", {
     useCallback: (fn) => fn, isLoading: false, setIsLoading: (value) => calls.push(["loading", value]),
     mode: "Task", handleToggle() {}, inViewObject: { taskId: 12 }, onBulkLabel: undefined, taskIds: undefined, refetch() {},
@@ -249,6 +253,8 @@ test(`label permanent typed adoption: optimistic toggle before one write, rollba
   assert.ok(calls.findIndex((call) => call[0] === "optimistic") < calls.findIndex((call) => call[0] === "write"));
   assert.deepEqual(calls.find((call) => call[0] === "write"), ["write", "typed", { taskId: 12, labelId: "label-1" }]);
   assert.equal(rows[0].check, true);
+  assert.deepEqual(calls.find((call) => call[0] === "close"), ["close", payload, true, false]);
+  assert.equal(calls.find((call) => call[0] === "close")[1], payload);
   failure = true; calls.length = 0; await fn(original[0]);
   assert.equal(rows, original);
   assert.ok(calls.some((call) => call[0] === "rollback"));
@@ -311,4 +317,41 @@ test(`due-date leaf permanent typed adoption: natural and custom picker pass the
   await new Promise(setImmediate);
   assert.equal(calls[0][3], typed);
   assert.ok(calls.some((call) => call[0] === "published" && call[1] === 12));
+});
+
+
+test("move navigation preserves activity metadata and completes moves without a comment", async () => {
+  for (const fixture of fixtures.move.filter((fixture) => fixture.status === 200)) {
+    for (const withComment of [true, false]) {
+      const data = structuredClone(fixture.data);
+      if (!withComment) delete data.newComment;
+      else data.newComment.activity.data.future = { retained: true };
+      const calls = [];
+      const currentTask = { id: 1, projectId: 1, sectionId: 1 };
+      const destination = { id: 2, section_title: "Done", visibility: true };
+      const fn = declaration("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", "moveTaskToNextColumn", {
+        sectionsForProjectTQ: [destination], currentTask, movingItem: false,
+        setCurrentTask: (update) => calls.push(["task", update(currentTask)]),
+        setMovingItem: (moving) => calls.push(["moving", moving]),
+        moveTask: async (body) => { calls.push(["write", body]); return { status: 200 }; },
+        taskDetailConfig: { httpStatus: { ok: 200 } }, dedupe: false,
+        readMoveTaskResponse: async () => data,
+        taskUpdateCommentsInCache: (comment) => calls.push(["comment", comment]),
+        moveItem: async (input) => calls.push(["move", input]),
+        getProjectIdxAndAllData: () => ({ allData: {}, projectToUpdateIndex: 0 }),
+        console: { error: (...args) => assert.fail(JSON.stringify(args)) },
+      });
+      await fn(destination);
+      assert.deepEqual(calls.find((call) => call[0] === "write"), ["write", {
+        projectId: 1, taskId: 1, section_title: "Done", sectionId: 2, section: "Done",
+      }]);
+      assert.deepEqual(calls.find((call) => call[0] === "move"), ["move", {
+        destinationSectionId: 2, itemId: 1, sourceSectionId: 1,
+      }]);
+      const comments = calls.filter((call) => call[0] === "comment");
+      assert.equal(comments.length, withComment ? 1 : 0);
+      if (withComment) assert.equal(comments[0][1], data.newComment);
+      assert.deepEqual(calls.at(-1), ["moving", false]);
+    }
+  }
 });

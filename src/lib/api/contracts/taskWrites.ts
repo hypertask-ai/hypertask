@@ -37,7 +37,13 @@ export const taskPropertyResponseSchema = taskRelationSchema.extend({
   startDate: z.string().nullable(),
 });
 export const moveTaskResponseSchema = taskPropertyResponseSchema.extend({
-  newComment: z.looseObject({ id }).optional(),
+  newComment: z.looseObject({
+    id,
+    activity: z.looseObject({
+      type: z.literal("TaskMove"),
+      data: z.looseObject({ fromUserId: id, fromUserDisplayName: z.string() }),
+    }),
+  }).optional(),
 });
 export const waitingOnResponseSchema = z.looseObject({
   id,
@@ -90,3 +96,6 @@ export type PriorityBody = z.input<typeof priorityBodySchema>;
 export type EstimateBody = z.input<typeof estimateBodySchema>;
 export type AssigneeBody = z.input<typeof assigneeBodySchema>;
 export type LabelBody = z.input<typeof labelBodySchema>;
+
+export type MoveTaskComment = NonNullable<z.output<typeof moveTaskResponseSchema>["newComment"]>;
+export type LabelResponse = z.output<typeof labelResponseSchema>;

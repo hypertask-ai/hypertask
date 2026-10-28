@@ -1,5 +1,6 @@
+import type { MoveTaskComment } from "@/lib/api/contracts/taskWrites";
 import { moveTask as moveTaskRequest, readMoveTaskResponse } from "@/lib/api/typedClient";
-import { IComment, IProjectsAll, ISection, ITask } from "@/models/model";
+import { IProjectsAll, ISection, ITask } from "@/models/model";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ModalBody } from "reactstrap";
 import styles from '@/styles/linksModal.module.scss'
@@ -29,7 +30,7 @@ type Props = {
   projectId: number;
   moveTaskToColumnHandler: (flag?: boolean) => void,
   callback?: (section: ISection) => void;
-  taskCacheCallback?: (newComment: IComment) => void;
+  taskCacheCallback?: (newComment: MoveTaskComment) => void;
   title?: string;
   bulkTaskIds?: number[];
   onBulkMove?: (section: ISection) => Promise<void>;

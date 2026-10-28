@@ -1,8 +1,9 @@
+import type { MoveTaskComment, LabelResponse } from "@/lib/api/contracts/taskWrites";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import { moveTask, readMoveTaskResponse } from "@/lib/api/typedClient";
-import { IComment, ITaskLabel, ISection } from "@/models/model";
+import { IComment, ISection } from "@/models/model";
 import toast from "react-hot-toast";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
@@ -13,7 +14,7 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
   const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
   const { updateCommentsActivityQuery, comments, currentTask, setComments, sectionsForProjectTQ, movingItem, setCurrentTask, setMovingItem, removeFromListWithStatus, moveItem, getProjectIdxAndAllData, setTasksPlayList, currentUser, navigate, setEditMode, focusOn, lastGPress, defaultCommentFocus, scrollVirtualize, editModeCheck, markAsDone, copyTaskURL, undoAction, queryClient, navigateToPreviousTask, showCreateLabelModal, setShowCreateLabelModal, _parsedTask, updateTaskInCache, currentProject, lastM_APress, setShowMoveTaskToBoard, currentId } = getContext();
 
-  const taskUpdateCommentsInCache = (newComment: IComment) => {
+  const taskUpdateCommentsInCache = (newComment: MoveTaskComment) => {
     updateCommentsActivityQuery(
       comments,
       newComment,
@@ -44,7 +45,7 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
       if (response.status === taskDetailConfig.httpStatus.ok) {
         if (dedupe && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { sectionId: sectionToMoveTo.id, section: sectionToMoveTo.section_title });
         const data = await readMoveTaskResponse(response);
-        taskUpdateCommentsInCache(data.newComment);
+        if (data.newComment) taskUpdateCommentsInCache(data.newComment);
 
         if (!sectionToMoveTo.visibility)
           await removeFromListWithStatus(
@@ -150,7 +151,7 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
   };
 
   const toggleLabelModal = (
-    taskLabels?: ITaskLabel[],
+    taskLabels?: LabelResponse,
     refresh?: boolean,
     shouldCloseOnUpdate = true
   ) => {
