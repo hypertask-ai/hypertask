@@ -167,6 +167,42 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, '')
 
+    def test_mixed_freeze_and_deployment_failure_stays_blocked(self):
+        self.comments['comments'][0]['text'] = '<p>Blocked: freeze lifted; deployment still failing.</p>'
+        result = self.run_command('drain', '6')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, '')
+        self.assertEqual(json.loads((self.root / 'tasks').read_text())['tasks'][0]['section'],
+                         'Agent Blocked')
+
+    def test_concurrent_review_hold_is_not_overwritten(self):
+        fake = self.root / 'vcc'
+        fake.write_text(fake.read_text().replace(
+            "elif a[:2] == ['comment', 'list']: print((root / 'comments').read_text())",
+            "elif a[:2] == ['comment', 'list']:\n"
+            "    tasks['tasks'][0]['section'] = 'Valentin Review'\n"
+            "    (root / 'tasks').write_text(json.dumps(tasks))\n"
+            "    print((root / 'comments').read_text())"))
+        result = self.run_command('drain', '6')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads((self.root / 'tasks').read_text())['tasks'][0]['section'],
+                         'Valentin Review')
+        self.assertEqual(result.stdout, '')
+
+    def test_completed_move_retains_handoff_after_failed_readback(self):
+        fake = self.root / 'vcc'
+        original = fake.read_text()
+        fake.write_text(original.replace(
+            "elif a[:2] == ['task', 'get']:",
+            "elif a[:2] == ['task', 'get']:\n    sys.exit(1)"))
+        self.assertNotEqual(self.run_command('drain', '6').returncode, 0)
+        self.tasks = json.loads((self.root / 'tasks').read_text())
+        fake.write_text(original)
+        result = self.run_command('drain', '6')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Resume YPER4-1', result.stdout)
+        self.assertEqual(sum(c[:2] == ['task', 'move'] for c in self.calls()), 1)
+
     def test_record_lift_persists_epoch(self):
         result = self.run_command('record-lift')
         self.assertEqual(result.returncode, 0, result.stderr)
