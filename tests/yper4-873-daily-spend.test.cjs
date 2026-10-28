@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule } = require("./helpers/loadModule.cjs");
 let now, credits, reads, alerts, storage, unavailable;
 const nativeDate = Date;
 const redis = {
@@ -12,13 +12,13 @@ const redis = {
   },
   get: async key => storage.get(key)?.value ?? null,
 };
-const { checkDailyGatewaySpend } = load("src/lib/ai/dailyGatewaySpend.ts", {
+const { checkDailyGatewaySpend } = loadModule("src/lib/ai/dailyGatewaySpend.ts", {
   "@/lib/redis": { getRedis: async () => redis },
   "@/lib/errors/reportError": { reportError: async report => alerts.push(report) },
 });
 let authorized = true;
 const counts = { checked: 0, inconclusive: 0, unknown: 0, drift: 0, refusalAlerts: 0 };
-const { GET } = load("src/app/api/cron/ai-allowance-drift/route.ts", {
+const { GET } = loadModule("src/app/api/cron/ai-allowance-drift/route.ts", {
   "next/server": { NextResponse: { json: Response.json } },
   "@/lib/ai/allowanceDriftCheck": { checkActiveTeamAllowanceDrift: async () => counts },
   "@/lib/ai/billedAllowanceRefresh": { refreshActiveBilledAllowances: async () => {} },

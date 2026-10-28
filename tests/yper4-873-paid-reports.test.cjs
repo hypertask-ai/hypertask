@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule } = require("./helpers/loadModule.cjs");
 let now, expires, requests, failRedis, failure;
 const redis = { set: async (key, value, ...options) => {
   if (key !== "ai-gateway-report:v1:hourly-budget") return "OK";
@@ -10,9 +10,9 @@ const redis = { set: async (key, value, ...options) => {
   expires = now + 3600000;
   return "OK";
 }, hgetall: async () => ({}), eval: async () => 0 };
-const { gatewayReport, withBackgroundReportBudget } = load("src/lib/ai/gatewayReport.ts", { "@/lib/redis": { getRedis: async () => redis } });
-const classification = load("src/lib/aiUsageClassification.ts");
-const billed = load("src/app/api/ai/_lib/billedAllowance.ts", {
+const { gatewayReport, withBackgroundReportBudget } = loadModule("src/lib/ai/gatewayReport.ts", { "@/lib/redis": { getRedis: async () => redis } });
+const classification = loadModule("src/lib/aiUsageClassification.ts");
+const billed = loadModule("src/app/api/ai/_lib/billedAllowance.ts", {
   "@/lib/ai/gatewayReport": { gatewayReport },
   "@/lib/redis": { getRedis: async () => redis },
   "@/lib/flags": { isFeatureEnabled: async () => false },
@@ -20,7 +20,7 @@ const billed = load("src/app/api/ai/_lib/billedAllowance.ts", {
   "@/lib/aiUsageClassification": classification,
   "@/lib/errors/reportError": { reportError: async () => {} },
 });
-const shared = load("src/app/api/ai/_lib/sharedAllowance.ts", {
+const shared = loadModule("src/app/api/ai/_lib/sharedAllowance.ts", {
   "@/lib/ai/gatewayReport": { gatewayReport },
   "@/app/api/ai/_lib/allowanceError": {},
   "@/lib/redis": { getRedis: async () => redis },
@@ -107,7 +107,7 @@ test("foreground month, day, demo and other teams remain usable after a backgrou
 });
 
 test("the authenticated cron enforces the budget through its real dispatch wrapper", async () => {
-  const { GET } = load("src/app/api/cron/ai-allowance-drift/route.ts", {
+  const { GET } = loadModule("src/app/api/cron/ai-allowance-drift/route.ts", {
     "next/server": { NextResponse: { json: Response.json } },
     "@/lib/ai/gatewayReport": { withBackgroundReportBudget },
     "@/lib/ai/dailyGatewaySpend": { checkDailyGatewaySpend: async () => {} },
