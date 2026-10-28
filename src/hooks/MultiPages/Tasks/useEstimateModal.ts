@@ -1,5 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6975_TYPED_WRITES_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { setTaskEstimate } from "@/lib/api/typedClient";
 import { useGetEstimateForTask } from "@/hooks/MultiPages/useGetEstimateForTask";
@@ -7,7 +7,6 @@ import globalConstants from "@/lib/constants";
 import { IEstimateConstants } from "@/lib/constants/constants";
 import { inViewObjectAtom, currentProjectAtom, calendarTaskFiltersAtom } from "@/store";
 import { useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
@@ -17,9 +16,6 @@ export const useEstimateModal = (
   previousSize?: IEstimateConstants
 ) => {
   const queryClient = useQueryClient();
-  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
-  let typedWrite: typeof setTaskEstimate | undefined;
-  if (typedClient) typedWrite = setTaskEstimate;
   const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
   const { updateTaskInCache } = UpdateKanban();
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -41,7 +37,7 @@ export const useEstimateModal = (
           estimate_index: estimate.estimate_index,
           estimate_value: estimate.estimate_value,
         };
-        const response = typedWrite ? await typedWrite(body) : await axios.post("/api/estimate/setEstimate", body);
+        const response = await setTaskEstimate(body);
         if (boardCardFresh) {
           try {
             const row = response.data && "estimate_index" in response.data ? response.data : undefined;

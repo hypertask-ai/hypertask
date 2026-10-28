@@ -82,16 +82,14 @@ async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSa
   const constants = { default: { CommentsTQPrefixKey: "comments" } };
   const assign = load("src/hooks/Task Detail/useAssignTaskUser.ts", {
     "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/keys": { HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes" },
-    "@/lib/api/typedClient": {},
-    "axios": { default: { post: async (url, body) => {
-      requests.push({ url, body });
+    "@/lib/api/typedClient": { assignTaskUser: async (body) => {
+      requests.push({ url: "/api/assignees/assign", body });
       if (holdSave) await new Promise(resolve => { resolveSave = resolve; });
       if (rejectSave) throw new Error("Save rejected");
       serverRows = body.intent === "unassign" ? serverRows.filter(row => row.userId !== user.id)
         : [...serverRows, { id: 1, taskId: task.id, userId: user.id, user, agentId: null, agent: null }];
       return { data: { body: serverRows } };
-    } } },
+    } },
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/constants": constants,
     "@/lib/assignees": assignees,
@@ -136,7 +134,7 @@ async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSa
     "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
   }, "useTaskDetailCommentActions");
   const useNavigation = load("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", {
-    ...common, "@/hooks/useFlag": { useFlag: () => false }, "@/lib/flags/keys": { HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes" }, "@/lib/api/typedClient": {},
+    ...common, "@/hooks/useFlag": { useFlag: () => false }, "@/lib/flags/keys": {}, "@/lib/api/typedClient": {},
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description" },
   }, "useTaskDetailNavigationActions");
   const useReactions = load("src/hooks/Task Detail/CommentAndDescriptionHooks/useDescriptionReactions.ts", {

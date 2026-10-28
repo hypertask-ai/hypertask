@@ -1,3 +1,4 @@
+import type { LabelResponse } from "@/lib/api/contracts/taskWrites";
 import React, {
   Suspense,
   useContext,
@@ -109,7 +110,7 @@ export interface ITaskInfoContainer {
   toggleEstimateModal: (refresh?: boolean) => void;
   estimate_: any;
   priority_: any;
-  toggleLabelModal: (taskLabels?: ITaskLabel[], refresh?: boolean, shouldCloseOnUpdate?: boolean) => void;
+  toggleLabelModal: (taskLabels?: LabelResponse, refresh?: boolean, shouldCloseOnUpdate?: boolean) => void;
   labelsFromTQ: any;
   currentTask: ITask & {
     customFieldValues?: ICustomFieldValue[];

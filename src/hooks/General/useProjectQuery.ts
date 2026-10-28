@@ -1,3 +1,4 @@
+import type { MoveTaskComment } from "@/lib/api/contracts/taskWrites";
 import globalConstants from "@/lib/constants";
 import { IComment, IDraft, IProject, ITask, IUser } from "@/models/model";
 import { activeItemAtom, currentUserAtom, inViewObjectAtom, lastUsedBoardsAtom } from "@/store";
@@ -110,7 +111,7 @@ export const useProjectQuery = () => {
 
   const updateCommentsActivityQuery = (
     comments: IComment[],
-    newComment: IComment,
+    newComment: MoveTaskComment,
     taskId: number,
     setCommentsHandler: (comments: IComment[]) => void
   ) => {

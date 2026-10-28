@@ -1046,15 +1046,10 @@ test("every registered flag has a valid kind and only registered explicit relate
   assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
 });
 
-test("typed property writes default Owner + QA and respect OFF", async () => {
-  const key = flags.HTPR_6975_TYPED_WRITES_FLAG;
-  assert.equal(key, "htpr-6975-typed-writes");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.shippedOn, "2026-10-06");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("typed property writes are no longer listed as a rollout", async () => {
+  const modes = await flags.listFeatureFlagModes();
+  assert.ok(modes.some((flag) => flag.key === "htpr-3533-google-calendar"));
+  assert.equal(modes.some((flag) => flag.key === "htpr-6975-typed-writes"), false);
 });
 
 test("typed section and notification writes no longer have a feature flag", async () => {

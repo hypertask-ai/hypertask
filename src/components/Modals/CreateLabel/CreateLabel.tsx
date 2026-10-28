@@ -1,5 +1,4 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import type { LabelResponse } from "@/lib/api/contracts/taskWrites";
 import { assignTaskLabel } from "@/lib/api/typedClient";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { ICurrentInViewObject, inViewObjectAtom } from "@/store";
@@ -7,7 +6,7 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState, useMemo } from "
 import { ModalBody } from "reactstrap";
 import { useRecoilState } from "@/lib/state";
 import styles from "@/styles/linksModal.module.scss";
-import { ILabel, IProject, ITaskLabel } from "@/models/model";
+import { ILabel, IProject } from "@/models/model";
 import { Check, Settings, Sparkles } from "lucide-react";
 import axios from "axios";
 import { deepCopy } from "@/utils/helperFunctions/helperFunctions";
@@ -26,7 +25,7 @@ type TMode = "Task" | "CreateTaskGlobally";
 
 type Props = {
   closeHandler?: (
-    taskLabels?: ITaskLabel[],
+    taskLabels?: LabelResponse,
     refresh?: boolean,
     shouldCloseOnUpdate?: boolean
   ) => void;
@@ -112,9 +111,6 @@ const CreateLabel: React.FC<Props> = ({
   onBulkLabel,
 }) => {
   const [label, setLabel] = useState("");
-  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
-  let typedWrite: typeof assignTaskLabel | undefined;
-  if (typedClient) typedWrite = assignTaskLabel;
   const labelInputRef = useRef<HTMLInputElement>(null);
   const [inViewObject, __] = useRecoilState(inViewObjectAtom);
   const {
@@ -219,10 +215,7 @@ const CreateLabel: React.FC<Props> = ({
         const newCheckState = !labelToToggle.check;
         updateLabelOptimistically(labelToToggle, newCheckState);
 
-        const response = typedWrite ? await typedWrite({ taskId: inViewObject.taskId!, labelId: labelToToggle.id }) : await axiosClient.post("/labels/assignLabel", {
-          taskId: inViewObject.taskId,
-          labelId: labelToToggle.id,
-        });
+        const response = await assignTaskLabel({ taskId: inViewObject.taskId!, labelId: labelToToggle.id });
 
         closeHandler?.(response.data, true, false);
         setLabel("");
@@ -243,7 +236,6 @@ const CreateLabel: React.FC<Props> = ({
       isLoading,
       onBulkLabel,
       taskIds,
-      typedWrite,
     ]
   );
 
