@@ -1,3 +1,4 @@
+import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
 import { archiveNotifications, toggleNotificationArchive } from "@/lib/api/typedClient";
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
 import { useFlag } from "@/hooks/useFlag";
@@ -58,6 +59,7 @@ const isWaitingOnSynthetic = (notification: unknown) => {
 };
 
 const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
+  const tabScopedSelection = useFlag(HTPR_8148_INBOX_TAB_SELECTION_FLAG);
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
   const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
@@ -392,6 +394,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       accountId: currentUser.id,
       mutation: {
         ...createInboxRemovalMutation(notificationsToRemove),
+        ...(tabScopedSelection ? { taskIds: [] } : {}),
         ...(bulkBlockedInbox ? {
           notificationIds: notificationsToRemove.flatMap(notification => [String(notification.id), `-${notification.taskId}`]),
         } : {}),
