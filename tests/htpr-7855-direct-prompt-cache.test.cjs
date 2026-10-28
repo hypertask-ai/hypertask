@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createAnthropic } = require("@ai-sdk/anthropic");
-const { load } = require("./helpers/agent-connection.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const FLAG = "htpr-7855-direct-prompt-cache";
 const fixed = "Stable chat instructions. ".repeat(700);

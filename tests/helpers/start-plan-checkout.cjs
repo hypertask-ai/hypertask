@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { load, root } = require("./agent-connection.cjs");
+const { loadModule: load, root } = require("./loadModule.cjs");
 
 Object.assign(process.env, {
   NEXT_PUBLIC_BASEURL: "https://app.hypertask.ai",

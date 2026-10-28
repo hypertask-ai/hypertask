@@ -61,3 +61,16 @@ prove a causal improvement. Never count missing logs as successful verification.
 
 No app fixtures, feature flags or production settings change.
 Keep sanitized job records outside the worktree.
+
+## Shared test harness
+
+For changes to `tests/helpers/loadModule.cjs`, require hosted CI to execute
+`tests/test-harness.test.cjs` and every migrated caller, including indirect
+callers through other `tests/helpers/` files. Save both shard file lists and logs.
+The historical PR 1993 fixture must be rejected by the real ESLint rule,
+while the shared import remains allowed. Runtime cases must preserve isolated
+stubs, circular imports, repeated JSON identity and per-load mutable state.
+
+Before removing a helper, search its basename across the repository again after
+rebasing. The scan must include helper-to-helper imports, not just test files.
+Keep the exact final-head CI result and the absence scan in the QA record.

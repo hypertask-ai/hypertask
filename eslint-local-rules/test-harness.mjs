@@ -16,6 +16,9 @@ const rule = {
   create(context) {
     const nodes = [];
     return {
+      ImportSpecifier(node) {
+        if (["transpileModule", "_load"].includes(node.imported.name)) nodes.push(node);
+      },
       MemberExpression(node) {
         if (member(node, "_load") || member(node, "transpileModule")) nodes.push(node);
         if (node.object?.type === "MemberExpression" && member(node.object, "cache") && node.object.object.name === "require"

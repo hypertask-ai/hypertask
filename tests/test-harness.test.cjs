@@ -68,6 +68,7 @@ test("lint refuses new loaders, aliases, cache writes and element helpers", asyn
     'const Module = require("node:module"); Module._load = () => {};',
     'const ts = require("typescript"); ts.transpileModule("", {});',
     'const { transpileModule: compile } = require("typescript"); compile("", {});',
+    'import { transpileModule as compile } from "typescript"; compile("", {});',
     'require.cache["fixture"] = {};',
     'delete require.cache["fixture"];',
     'function findElement(tree, type) { return tree; }',
