@@ -304,8 +304,9 @@ test("Escape closes the menu instead of navigating back", () => {
 });
 
 for (const viewsEnabled of [false, true]) {
-  test(`board grouping counts every Tab before a render (saved views ${viewsEnabled})`, () => {
-    const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/my-tasks?view=all&board=10" });
+  for (const groupBy of ["board", "time"]) {
+  test(`${groupBy} grouping counts every Tab before a render (saved views ${viewsEnabled})`, () => {
+    const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/my-tasks?view=1&board=10" });
     global.window = dom.window;
     global.document = dom.window.document;
     global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -323,6 +324,11 @@ for (const viewsEnabled of [false, true]) {
       act(() => reactRoot.render(React.createElement(MyTasks, {
         sections: boardSections, tabs: ["All", ...boardSections.map((section) => section.section_title)],
         currentUser: { id: 6 }, viewsEnabled,
+        initialViewId: 1,
+        initialViews: [{ id: 1, name: "Navigation", config: { groupBy } }],
+        boards: boardSections.map(({ projectId, section_title }) => ({
+          id: projectId, title: section_title, labels: [], sections: [],
+        })),
       })));
       assert.deepEqual(lastViewItems(), [10]);
       const panel = document.querySelector('[data-testid="my-tasks-panel"]');
@@ -353,7 +359,7 @@ for (const viewsEnabled of [false, true]) {
     }
   });
 }
-
+}
 
 test("live updates stay active without a feature flag", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
