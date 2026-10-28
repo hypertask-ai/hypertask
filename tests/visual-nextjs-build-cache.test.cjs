@@ -1,0 +1,79 @@
+const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
+const { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const test = require("node:test");
+const { runInNewContext } = require("node:vm");
+const yaml = require("js-yaml");
+
+const load = file => yaml.load(readFileSync(file, "utf8"));
+const steps = load(".github/workflows/visual-regression.yml").jobs["visual-regression"].steps;
+const smoke = load(".github/workflows/ci-tests.yml").jobs["browser-smoke"].steps;
+const producer = smoke.find(step => step.name === "Save Next.js build cache");
+
+for (const phase of ["base", "head"]) {
+  test(`${phase} restores the compatible production browser-smoke cache before its build`, () => {
+    const restore = steps.find(step => step.id === `restore-${phase}-nextjs-cache`);
+    const stage = steps.find(step => step.name === `Stage ${phase} Next.js build cache`);
+    assert.ok(restore);
+    assert.ok(stage);
+    assert.equal(restore.uses, producer.uses.replace("/save@", "/restore@"));
+    assert.equal(restore.with.path, ".next/cache");
+    assert.equal(restore.with.key, `nextjs-\${{ runner.os }}-\${{ hashFiles('${phase}/package-lock.json', '${phase}/next.config.*') }}-\${{ steps.baseline.outputs.${phase === "base" ? "sha" : "head"} }}`);
+    assert.equal(restore.with["restore-keys"].trim(), restore.with.key.replace(/\$\{\{ steps\.baseline\.outputs\.(?:sha|head) \}\}$/, ""));
+    assert.equal(stage.if, restore.if);
+    assert.ok(steps.indexOf(restore) < steps.indexOf(stage));
+    assert.ok(steps.indexOf(stage) < steps.findIndex(step => step.name === "Build and capture base, then compare head"));
+    assert.match(steps.find(step => step.id === "baseline").run, /git -C head rev-parse HEAD/);
+  });
+
+  test(`${phase} staging moves only incremental cache, handles cold misses, and leaves no cross-checkout residue`, () => {
+    const stage = steps.find(step => step.name === `Stage ${phase} Next.js build cache`);
+    assert.ok(stage);
+    for (const hit of [false, true]) {
+      const root = mkdtempSync(path.join(os.tmpdir(), "visual-next-cache-"));
+      try {
+        mkdirSync(path.join(root, ".next"));
+        writeFileSync(path.join(root, ".next", "BUILD_ID"), "must-not-move");
+        if (hit) {
+          mkdirSync(path.join(root, ".next", "cache", "webpack"), { recursive: true });
+          writeFileSync(path.join(root, ".next", "cache", "webpack", "pack"), phase);
+        }
+        execFileSync("bash", ["-e", "-c", stage.run], { cwd: root });
+        assert.equal(existsSync(path.join(root, ".next", "cache")), false);
+        assert.equal(readFileSync(path.join(root, ".next", "BUILD_ID"), "utf8"), "must-not-move");
+        assert.equal(existsSync(path.join(root, phase, ".next", "BUILD_ID")), false);
+        assert.equal(existsSync(path.join(root, phase, ".next", "cache")), hit);
+        if (hit) assert.equal(readFileSync(path.join(root, phase, ".next", "cache", "webpack", "pack"), "utf8"), phase);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+}
+
+test("base and head use separate restores; cached screenshots and production-only runs avoid unused restores", () => {
+  const base = steps.find(step => step.id === "restore-base-nextjs-cache");
+  const head = steps.find(step => step.id === "restore-head-nextjs-cache");
+  assert.ok(base);
+  assert.ok(head);
+  assert.ok(steps.findIndex(step => step.name === "Stage base Next.js build cache") < steps.indexOf(head));
+  for (const hit of ["true", "false", ""]) {
+    assert.equal(runInNewContext(base.if.replaceAll("steps.baseline-cache.outputs.cache-hit", JSON.stringify(hit))), hit !== "true");
+  }
+  for (const event of ["push", "pull_request", "workflow_dispatch"]) {
+    assert.equal(runInNewContext(head.if, { github: { event_name: event } }), event !== "push");
+  }
+});
+
+test("visual runs never write shared Next.js caches; only successful production smoke builds publish them", () => {
+  assert.equal(steps.filter(step => step.uses?.startsWith("actions/cache/save@") && step.with.path.includes(".next")).length, 0);
+  for (const event of ["push", "pull_request", "workflow_dispatch"]) {
+    for (const ref of ["refs/heads/production", "refs/heads/feature", "refs/pull/123/merge"]) {
+      const condition = producer.if.replaceAll("steps.restore-nextjs-cache.outputs.cache-hit", '"false"');
+      assert.equal(runInNewContext(condition, { github: { event_name: event, ref } }), event === "push" && ref === "refs/heads/production");
+    }
+  }
+  assert.doesNotMatch(producer.if, /always\(|failure\(/);
+});
