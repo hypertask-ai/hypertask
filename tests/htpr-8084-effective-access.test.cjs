@@ -153,6 +153,7 @@ for (const failure of ['database', 'flag']) {
 test("legacy Off transfer keeps real task dispatch usable while retaining permanent chat privacy provenance", async () => {
   const f = fixture({ enabled: false, expanded: false, privateHistory: true });
   f.projects[0].members = [];
+  f.projects[2].ownerId = 99;
   await f.run(async () => {
     assert.deepEqual(await f.resolve(2), { id: 20, projectId: 2 });
     assert.equal(await f.resolve(1), null);
@@ -163,5 +164,10 @@ test("legacy Off transfer keeps real task dispatch usable while retaining perman
   await f.run(async () => assert.equal(await f.resolve(2), null));
   f.agent.crossTeamAccessGranted = false;
   f.teams[1].googleAccount.userId = 99;
+  await f.run(async () => assert.deepEqual(await f.resolve(2), { id: 20, projectId: 2 }));
+  f.projects[1].ownerId = 99;
+  f.projects[1].members.push({ userId: 42, agentId: null, status: "Accepted" });
+  await f.run(async () => assert.deepEqual(await f.resolve(2), { id: 20, projectId: 2 }));
+  f.projects[1].members = f.projects[1].members.filter(row => row.agentId !== null);
   await f.run(async () => assert.equal(await f.resolve(2), null));
 });

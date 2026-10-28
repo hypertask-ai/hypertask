@@ -580,3 +580,30 @@ for (const entry of ['cookie', 'update']) {
     })
   }
 }
+
+
+for (const entry of ['cookie', 'update']) {
+  test(`${entry}: legacy Off board-only transfer stays usable and private without team membership`, async () => {
+    const h = harness({ enabled: false, boardHome: 'a' })
+    h.state.projects.find(row => row.id === 3).ownerId = 99
+    h.state.members.push({ id: 100, projectId: 3, userId: 42, agentId: null, status: 'Accepted' })
+    if (entry === 'cookie') assert.equal((await h.remove(1)).ok, true)
+    const response = entry === 'cookie' ? await h.cookie(3) : await h.update([3], [1])
+    assert.equal(response.statusCode ?? response.status, 200)
+    assert.equal(h.state.agents[0].crossTeamHomeTeamId, 'a')
+    assert.equal(h.state.agents[0].crossTeamAccessGranted, false)
+    const { crossTeamProjectFence } = load('src/lib/agents/crossTeam.ts', {
+      '@/lib/prisma': { default: { agent: { findFirst: async () => h.state.agents[0] } } },
+      '@/lib/flags': { isFeatureEnabled: async () => false },
+    })
+    const fence = await crossTeamProjectFence('agent', 42)
+    const target = {
+      ...h.state.projects.find(row => row.id === 3),
+      team: h.state.teams.find(row => row.id === 'c'),
+      members: h.state.members.filter(row => row.projectId === 3).map(row => ({ ...row, agent: row.agentId ? h.state.agents[0] : null })),
+    }
+    assert.equal(matches(target, fence), true)
+    target.members = target.members.filter(row => row.agentId !== null)
+    assert.equal(matches(target, fence), false)
+  })
+}

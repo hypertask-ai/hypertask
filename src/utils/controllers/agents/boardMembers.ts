@@ -216,7 +216,7 @@ async function addAgentToBoardTransaction(
   ) {
     return { ok: false, status: 403, message: "This agent belongs to another team" };
   }
-  if (enabled || agent.crossTeamHomeTeamId) {
+  if (enabled || agent.crossTeamAccessGranted) {
     const ownerTeamBoard = await database.project.findFirst({
       where: { id: projectId, status: "Normal", team: ownerTeamWhere(requestingUserId) },
       select: { id: true },

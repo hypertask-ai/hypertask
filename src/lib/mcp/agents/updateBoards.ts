@@ -76,7 +76,9 @@ type MemberWrite = {
 }
 
 type AgentBoardUpdateTransaction = {
-  agent: AgentRead & Pick<Prisma.TransactionClient["agent"], "update">
+  agent: AgentRead & {
+    update(args: Pick<Prisma.AgentUpdateArgs, "where" | "data">): Promise<unknown>
+  }
   member: MemberWrite
   project: Pick<Prisma.TransactionClient["project"], "findFirst">
 }
@@ -243,7 +245,7 @@ export async function updateOwnedAgentBoards(
                   'add_project_ids'
                 )
               }
-              if (enabled || agent.crossTeamHomeTeamId) {
+              if (enabled || agent.crossTeamAccessGranted) {
                 const ownerTeamBoard = await tx.project.findFirst({
                   where: { id, status: 'Normal', team: ownerTeamWhere(userId) },
                   select: { id: true },

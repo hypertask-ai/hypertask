@@ -28,7 +28,9 @@ export async function crossTeamProjectFence(
   const enabled = await crossTeamAgentsEnabled(userId);
   return {
     ...(enabled || !agent.crossTeamAccessGranted ? {} : { teamId: agent.crossTeamHomeTeamId }),
-    team: ownerTeamWhere(userId),
+    ...(agent.crossTeamAccessGranted
+      ? { team: ownerTeamWhere(userId) }
+      : { OR: [{ ownerId: userId }, { members: { some: { userId, agentId: null } } }] }),
     members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null, archivedAt: null } } },
   };
 }
