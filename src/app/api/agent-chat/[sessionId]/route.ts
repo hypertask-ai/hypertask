@@ -9,7 +9,6 @@ import {
 } from "@/lib/agents/chatAccess";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
-import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from "@/lib/flags";
 import {
   chatTicketProposalSelect,
   serializeChatTicketProposal,
@@ -104,10 +103,6 @@ export async function GET(
       "htpr-6094-agent-activity-rows",
       userId,
     );
-    const ticketConfirmEnabled = await isFeatureEnabled(
-      AGENT_CHAT_TICKET_CONFIRM_FLAG,
-      userId,
-    );
     const contextEnabled = await isFeatureEnabled(
       HTPR_7734_AGENT_CHAT_CONTEXT_FLAG,
       userId,
@@ -122,9 +117,7 @@ export async function GET(
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit + 1,
         ...(before ? { cursor: { id: before }, skip: 1 } : {}),
-        include: ticketConfirmEnabled
-          ? { ticketProposal: { select: chatTicketProposalSelect } }
-          : undefined,
+        include: { ticketProposal: { select: chatTicketProposalSelect } },
       }),
       activityRowsEnabled && !before
         ? listAgentChatActivity({

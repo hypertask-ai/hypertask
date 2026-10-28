@@ -64,13 +64,9 @@ stub("src/lib/auth/getSessionUser.ts", {
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
 stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaiting: true }) });
 stub("src/lib/flags.ts", {
-  AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
   SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
   isFeatureEnabled: async (key, userId) => {
     assert.equal(userId, 6);
-    // The history route also reads the ticket-confirmation flag; only the
-    // activity flag is under test here.
-    if (key === "htpr-6006-chat-confirm-ticket") return false;
     // Shared-chat rollout is evaluated against the agent owner before history
     // loads. Keep it on here so this suite stays about activity rows.
     if (key === "htpr-6002-shared-agent-chat") return true;

@@ -56,6 +56,28 @@ body completion, with sample counts and errors. Keep Task Writer inputs,
 models, prompts and output unchanged; prepare context before publishing so
 the new ticket cannot become its own duplicate-search result.
 
+## Agent ticket proposals
+
+Use QA 985 and a disposable external agent on QA Sandbox 7049.
+Keep its returned token in memory only; do not call a model.
+Open its chat with `POST /api/ai-chat/create-session`, send a human
+message through `/api/agent-chat/<session>/messages`, then reply through
+`POST /api/mcp/chat/sessions/<session>/messages` with `replyToMessageId`
+and a `proposal` targeting a Sandbox column. The response must contain
+`PENDING` and no ticket. Reload history and require the same proposal.
+
+Confirm through `POST /api/agent-chat/<session>/proposals/<proposal>`
+with `{action:"confirm"}`. Repeat confirmation and require the identical
+ticket number. Reload history and require that ticket link. A second
+proposal dismissed with `{action:"dismiss"}` must reject later confirmation
+with 409 and create no ticket. Anonymous reads/confirmation return 401;
+a different owner's reads return 404. Ticket confirmation is permanent,
+not controlled by a rollout flag.
+
+Record route statuses, proposal states and ticket links, plus desktop and
+phone screenshots. Remove only the recorded Sandbox tickets, session and
+agent created by this run, through the app APIs.
+
 ## Floating chat outline
 
 Open chat from a task, use the overflow menu's **Toggle Floating View**, then
