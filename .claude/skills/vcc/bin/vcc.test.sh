@@ -456,6 +456,17 @@ question_refused 'shared ticket-lint' --project 15 --json comment --kind qa add 
 question_refused 'shared ticket-lint' comment -kind qa add X-1 -text 'Next: src/app/page.tsx'
 question_refused 'shared ticket-lint' --description 'Next: src/app/page.tsx' task create
 printf 'ok shared human lint and agent routing\n'
+export VCC_VOICE_BYPASS_LOG="$T/bypass.log"
+run env VCC_VOICE_BYPASS='error collector raw evidence' SHIP_SESSION_NAME='RUNNER 8' bash "$vcc" task create --title 'src/app/page.tsx' --description 'Next: src/app/page.tsx'
+[ "$status" = 0 ] || fail "voice bypass did not reach CLI: $(cat "$T/err")"
+[ "$(wc -l < "$T/bypass.log")" = 1 ] || fail 'voice bypass not logged once'
+grep -q $'\tRUNNER 8\terror collector raw evidence$' "$T/bypass.log" || fail 'voice bypass log missing session or reason'
+run env VCC_VOICE_BYPASS='  ' bash "$vcc" task create --title 'src/app/page.tsx'
+[ "$status" = 5 ] || fail 'blank voice bypass skipped the lint'
+run env VCC_VOICE_BYPASS='raw evidence' bash "$vcc" comment add X-1 --kind question --text 'Is this fine'
+[ "$status" = 5 ] || fail 'voice bypass skipped the Question check'
+unset VCC_VOICE_BYPASS_LOG
+printf 'ok VCC_VOICE_BYPASS skips only the shared lint, needs a reason, and is logged\n'
 cat > "$HOME/.agents/skills/ship/scripts/ship-check" <<'STUB'
 #!/usr/bin/env bash
 printf 'completion %s\n' "$*" >> "$VCC_TEST_TRACE"
