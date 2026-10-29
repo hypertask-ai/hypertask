@@ -70,7 +70,7 @@ if (action === 'plan') {
       continue;
     }
     let recipe = 'Doctor first with verify-qa; check index links against sibling pages. No app clicks for index-only drift.';
-    if (problem.page !== 'INDEX.md') {
+    if (path.basename(problem.page) !== 'INDEX.md') {
       const markdown = read(path.join(repo, mapPath, problem.page));
       const drive = markdown.match(/## How to drive it\s+([\s\S]*?)(?=\n## |$)/)?.[1]?.trim();
       recipe = `Doctor first with verify-qa, then follow ${mapPath}/${problem.page}: ${drive || 'open the area using its documented customer entry point; verify the cited surface, reload and collect proof; clean up only your fixtures.'}`;

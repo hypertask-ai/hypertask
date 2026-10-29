@@ -159,6 +159,11 @@ test('CLI fails for ops drift and weekly reports its moved recipe', t => {
   const report = readFileSync(path.join(f.runs()[0], 'description.html'), 'utf8');
   assert.match(report, /ops-map\/build.md:1: missing path: docs\/removed.md/);
   assert.match(report, /Read the hosted build log/);
+  rmSync(path.join(f.repo, opsPath, 'INDEX.md'));
+  f.git('add', '.'); f.git('commit', '-m', 'missing ops index');
+  ok(f.run('--dry-run'));
+  const missingIndexReport = readFileSync(path.join(f.runs().at(-1), 'description.html'), 'utf8');
+  assert.match(missingIndexReport, /ops-map\/INDEX.md:1: missing index/);
 });
 
 test('repo paths strip citations, punctuation, commands and anchors; ignore globs, placeholders and explicit external-repo scopes', t => {
