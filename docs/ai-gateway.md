@@ -264,7 +264,7 @@ The allowance-drift cron and its background billed refresh are removed.
 There is no hourly paid-report replacement and no provider-credit polling.
 
 The replacement hourly `/api/cron/ai-spend` reads existing `AiUsage.costUsd`
-rows for the current UTC day. Explicit `byok:` providers and negative costs are
+rows for the current and previous UTC days. Explicit `byok:` providers and negative costs are
 excluded. Missing prices are not included. Recorded usage over $5 raises the
 existing daily-spend alert fingerprint through the error-ticket pipeline.
 These are saved token-cost estimates, not a provider invoice or a guarantee

@@ -45,7 +45,8 @@ five-minute schedule no longer exist. Do not turn on either existing
 HTPR-7692 switch for verification.
 
 The hourly `/api/cron/ai-spend` endpoint requires the existing cron authority.
-It sums today's non-BYOK, nonnegative saved `AiUsage.costUsd` records in UTC.
+It sums today's and yesterday's non-BYOK, nonnegative saved `AiUsage.costUsd` records in UTC.
+The previous day is checked too, so late usage is not lost at midnight.
 An estimate over $5 raises the existing daily-spend incident fingerprint.
 Empty priced usage is zero; database failures return 503, not a clean result.
 This check makes no provider requests. It is an estimate from saved token

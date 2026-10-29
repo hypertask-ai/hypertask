@@ -7,13 +7,13 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 const NativeDate = Date;
 const nativeFetch = global.fetch;
 const originalEnv = { NODE_ENV: process.env.NODE_ENV, VERCEL_ENV: process.env.VERCEL_ENV, CRON_SECRET: process.env.CRON_SECRET };
-let now, cost, queries, alerts, unavailable, requests;
+let now, cost, previousCost, queries, alerts, unavailable, requests;
 const { GET } = loadModule("src/app/api/cron/ai-spend/route.ts", {
   "next/server": { NextResponse: { json: Response.json } },
   "@/lib/prisma": { default: { aiUsage: { aggregate: async query => {
     queries.push(query);
     if (unavailable) throw new Error("private database failure");
-    return { _sum: { costUsd: cost } };
+    return { _sum: { costUsd: query.where.createdAt.gte.toISOString().slice(0, 10) === new Date(now).toISOString().slice(0, 10) ? cost : previousCost } };
   } } } },
   "@/lib/errors/reportError": { reportError: async report => alerts.push(report) },
 });
@@ -27,7 +27,7 @@ test.beforeEach(() => {
     constructor(...args) { super(...(args.length ? args : [now])); }
     static now() { return now; }
   };
-  cost = null; queries = []; alerts = []; unavailable = false; requests = 0;
+  cost = null; previousCost = null; queries = []; alerts = []; unavailable = false; requests = 0;
   global.fetch = async () => { requests++; throw new Error("No provider requests allowed"); };
   process.env.NODE_ENV = "production";
   process.env.VERCEL_ENV = "production";
@@ -46,10 +46,12 @@ test("real authenticated cron totals saved usage for the UTC day without buying 
   const response = await request();
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { checked: 1, recordedUsd: 4.25 });
-  assert.deepEqual(queries, [{ where: {
+  assert.equal(queries.length, 2);
+  assert.equal(queries[0].where.createdAt.gte.toISOString(), "2026-10-28T00:00:00.000Z");
+  assert.deepEqual(queries[1], { where: {
     createdAt: { gte: new NativeDate("2026-10-29T00:00:00Z"), lt: new NativeDate("2026-10-30T00:00:00Z") },
     provider: { not: { startsWith: "byok:" } }, costUsd: { gte: 0 },
-  }, _sum: { costUsd: true } }]);
+  }, _sum: { costUsd: true } });
   assert.equal(alerts.length, 0);
 });
 
@@ -65,7 +67,7 @@ test("above five dollars raises the daily estimate alarm with the existing finge
   assert.equal((await request()).status, 200);
   assert.equal(alerts.length, 1);
   assert.equal(alerts[0].fingerprintKey, "ai-gateway-daily-spend:2026-10-29");
-  assert.match(alerts[0].message, /estimate exceeded \$5 today: \$5.01/);
+  assert.match(alerts[0].message, /estimate exceeded \$5 on 2026-10-29: \$5.01/);
   assert.match(alerts[0].message, /not provider invoices/);
   assert.deepEqual(alerts[0].extra, { route: "/api/cron/ai-spend", stage: "daily-spend", spentUsd: 5.01 });
 });
@@ -74,9 +76,18 @@ test("UTC midnight changes both query bounds and daily alarm identity", async ()
   cost = 6; await request();
   now = NativeDate.parse("2026-10-30T00:01:00Z");
   await request();
-  assert.equal(queries[1].where.createdAt.gte.toISOString(), "2026-10-30T00:00:00.000Z");
-  assert.equal(queries[1].where.createdAt.lt.toISOString(), "2026-10-31T00:00:00.000Z");
+  assert.equal(queries[3].where.createdAt.gte.toISOString(), "2026-10-30T00:00:00.000Z");
+  assert.equal(queries[3].where.createdAt.lt.toISOString(), "2026-10-31T00:00:00.000Z");
   assert.equal(alerts[1].fingerprintKey, "ai-gateway-daily-spend:2026-10-30");
+});
+
+test("late previous-day usage is still checked after midnight or a missed hourly run", async () => {
+  previousCost = 6.25; cost = 0.5;
+  now = NativeDate.parse("2026-10-29T02:07:00Z");
+  assert.deepEqual(await (await request()).json(), { checked: 1, recordedUsd: 0.5 });
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].fingerprintKey, "ai-gateway-daily-spend:2026-10-28");
+  assert.equal(alerts[0].extra.spentUsd, 6.25);
 });
 
 test("database or malformed cost failures cannot report a clean observation", async () => {
