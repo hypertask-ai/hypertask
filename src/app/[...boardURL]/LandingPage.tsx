@@ -193,8 +193,8 @@ const markLocalBoardPublished = useCallback(
     )
   },
   [
-    agentCreatorFilterEnabled,
     assigneeFixEnabled,
+    agentCreatorFilterEnabled,
     defaultFiltersFixEnabled,
     restoreUrlViewSections,
     boardAccessKey,
@@ -721,7 +721,7 @@ const projectsForSection = useMemo(() => {
     projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections)
   }
   return projects
-}, [agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
+}, [assigneeFixEnabled, agentCreatorFilterEnabled, defaultFiltersFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
 
 const pinnedProject = projectsForSection[projectIndex]
 const boardLayoutForRender =
