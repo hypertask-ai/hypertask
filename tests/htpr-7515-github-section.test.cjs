@@ -249,6 +249,8 @@ test("flag Off excludes GitHub from the canonical search registry and remembered
     const bindings = {
       ...registry, ...flags, CommandMode, githubConnectEnabled,
       hiddenGithubCommandKey: githubConnectEnabled ? null : "settingsGithub",
+      hiddenBasetenCommandKey: "settingsApiKeysBasetenApiKey", hiddenXaiCommandKeys: "settingsApiKeysXaiApiKey settingsAiModelsXai",
+      standalonePages: false, pathname: "/projects/project-15",
       useMemo: (callback) => callback(), getCommands: registry.getAllCommands,
       appShellRailOn: false, selectedTasksFirst: false, boardLayout: "board",
       calendarSettings: { showWeekends: true }, contextOptions: {},
