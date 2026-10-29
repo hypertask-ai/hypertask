@@ -55,3 +55,19 @@ export function labelClassifierPrompt(
 ): string {
   return `View definitions:\n${JSON.stringify(definitions)}\n\nTask title:\n<task_title>\n${task.title}\n</task_title>\n\nTask description:\n<task_description>\n${task.description.slice(0, MAX_DESCRIPTION_LENGTH)}\n</task_description>`;
 }
+
+export const ERROR_LOG_LABEL = "Error Log";
+export const BUG_LABEL = "Bug";
+
+function sameLabel(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.toLowerCase();
+}
+
+export function withholdBugFromErrorLog(
+  labelIdsToAdd: string[],
+  labelValueById: ReadonlyMap<string, string>,
+  taskLabelValues: readonly string[],
+): string[] {
+  if (!taskLabelValues.some((value) => sameLabel(value, ERROR_LOG_LABEL))) return labelIdsToAdd;
+  return labelIdsToAdd.filter((id) => !sameLabel(labelValueById.get(id) ?? "", BUG_LABEL));
+}

@@ -537,7 +537,7 @@ def build_events(data):
         names = {n.lower() for n in label_names(t)}
         if classify(t) == 'bug' or 'bug' in names or t.get('section') == 'Bugs':
             add('bugs', t.get('createdAt'), **fields)
-        if t.get('projectId') == 15 and 'prod-error' in names:
+        if t.get('projectId') == 15 and ('error log' in names or 'prod-error' in names):
             add('errors', t.get('createdAt'), **fields)
     for repo, src in data.get('prs', {}).items():
         if src.get('ok'):
@@ -632,7 +632,7 @@ def sec_vital(config, snapshot):
     out.extend(tile(config[key] if config[key] is not None else 'n/a', label + ' (now)')
                for key, label in [('waiting', 'Waiting on Valentin'), ('runners', 'Active runners')])
     out.append('</div><p class="muted">Done: current Done tickets by last change (not a transition log). '
-               'New bugs: ticket creation on boards 15 and 4060. Production errors: board 15 tickets labeled prod-error, '
+               'New bugs: ticket creation on boards 15 and 4060. Production errors: board 15 tickets labeled Error Log (or the older prod-error), '
                'by creation time, not exception occurrences. PRs: GitHub mergedAt across the three repos below. '
                'n/a means a source or complete previous period is unavailable.</p></section>')
     return ''.join(out)

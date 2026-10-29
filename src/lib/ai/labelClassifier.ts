@@ -24,6 +24,7 @@ import {
   LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
   labelClassifierPrompt,
   parseMatchingLabelIds,
+  withholdBugFromErrorLog,
   type AiLabelDefinition,
 } from "@/lib/ai/labelClassifierOutput";
 import prisma from "@/lib/prisma";
@@ -182,7 +183,7 @@ export async function applyAiLabelVerdict({
       id: { in: definitions.map(({ labelId }) => labelId) },
       ai_prompt: { not: null },
     },
-    select: { id: true, ai_prompt: true },
+    select: { id: true, ai_prompt: true, value: true },
   });
   const currentPrompts = new Map(
     currentLabels.map(({ id, ai_prompt }) => [id, ai_prompt?.trim()])
@@ -241,8 +242,12 @@ export async function applyAiLabelVerdict({
       include: { label: true },
     });
     const existingIds = new Set(existing.map(({ labelId }) => labelId));
-    const toAdd = aiLabelIds.filter(
-      (labelId) => matchingIds.has(labelId) && !existingIds.has(labelId)
+    const toAdd = withholdBugFromErrorLog(
+      aiLabelIds.filter(
+        (labelId) => matchingIds.has(labelId) && !existingIds.has(labelId)
+      ),
+      new Map(currentLabels.map(({ id, value }) => [id, value])),
+      labelsBefore.map(({ label }) => label.value),
     );
     const toRemove = existing.filter(({ labelId }) => !matchingIds.has(labelId));
 
