@@ -99,13 +99,20 @@ cat > "$tmp/bin/curl" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 config=$(cat)
-[ "$config" = 'header = "Authorization: Bearer offline-test-credential"' ] || exit 1
+expected='header = "Authorization: Bearer offline-test-credential"'
+if [ -n "${TEST_GRANT:-}" ]; then expected+=$'\n'"header = \"X-Manager-Grant: $TEST_GRANT\""; fi
+[ "$config" = "$expected" ] || exit 1
 [[ "$*" != *offline-test-credential* ]] || exit 1
+[[ -z "${TEST_GRANT:-}" || "$*" != *"$TEST_GRANT"* ]] || exit 1
 output=''
+method=GET
 while [ "$#" -gt 0 ]; do
   if [ "$1" = --output ]; then output=$2; shift; fi
+  if [ "$1" = --request ]; then method=$2; shift; fi
   shift
 done
+if [ "${TEST_TIMEOUT:-}" = 1 ] && [ "$method" = PATCH ]; then exit 28; fi
+if [ "${TEST_TIMEOUT:-}" = 1 ]; then printf '%s' "$TEST_STATE"; exit 0; fi
 if [ -n "${TEST_RESPONSE:-}" ]; then
   printf '%s\n' "$TEST_RESPONSE" > "$output"
 else
@@ -140,4 +147,26 @@ for api_error in 'The review must be recorded by a different agent' 'Failure-Off
   fi
   grep -qE "$api_error" "$tmp/output"
 done
+grant_value=$(printf 'g%.0s' $(seq 1 43))
+printf '{"session":"s","token":"%s"}\n' "$grant_value" > "$tmp/receipt.json"
+HT_MANAGER_GRANT_FILE="$tmp/receipt.json" TEST_GRANT="$grant_value" "$script" set "$key" off --reason "$reason" > "$tmp/output" 2>&1
+! grep -q "$grant_value" "$tmp/output"
+printf '{"session":"s","token":"short"}\n' > "$tmp/receipt.json"
+if HT_MANAGER_GRANT_FILE="$tmp/receipt.json" "$script" set "$key" off --reason "$reason" > "$tmp/output" 2>&1; then
+  printf 'malformed grant must fail\n' >&2
+  exit 1
+fi
+grep -q 'malformed' "$tmp/output"
+HT_MANAGER_GRANT_FILE="$tmp/receipt.json" "$script" get "$key" > "$tmp/output" 2>&1
+jq -e '.flag.mode == "OFF"' "$tmp/output" >/dev/null
+if TEST_TIMEOUT=1 TEST_STATE="$(jq -nc --arg key "$key" '{flags:[{key:$key,mode:"OFF"}]}')" "$script" set "$key" off --reason "$reason" > "$tmp/output" 2>&1; then
+  printf 'timeout must fail\n' >&2
+  exit 1
+fi
+grep -q "timed out; $key is now OFF (requested OFF)" "$tmp/output"
+if TEST_TIMEOUT=1 TEST_STATE='not json' "$script" set "$key" off --reason "$reason" > "$tmp/output" 2>&1; then
+  printf 'unknown state must fail\n' >&2
+  exit 1
+fi
+grep -q 'switch state is unknown' "$tmp/output"
 printf 'ht-flag tests passed\n'

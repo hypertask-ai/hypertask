@@ -2,7 +2,9 @@
 
 ## How a customer reaches it
 
-Open `/starred`. Select **Starred Tasks** or **Starred Comments**.
+Open `/starred` in a fresh browser context, before saved content is cached.
+Both lists must render safely while the saved-content request is pending.
+Select **Starred Tasks** or **Starred Comments**.
 
 ## How to drive it
 

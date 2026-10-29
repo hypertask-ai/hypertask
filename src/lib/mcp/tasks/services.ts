@@ -5,6 +5,7 @@ import { CREATION_AGENT_HEADER, CREATION_CHANNEL_HEADER, type CreationChannel } 
 import type { Prisma } from '@prisma/client';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { taskDetailInclude } from './mappers';
+import { unresolvedLabelMessage } from '@/lib/mcp/labelMessages';
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import createLabelActivity from '@/utils/controllers/activities/createLabelActivity';
 import {
@@ -232,13 +233,7 @@ export async function resolveLabelIds(
 
     const { ids, unresolved } = matchLabelIds(projectLabels, labels);
     if (unresolved.length > 0) {
-        const available = projectLabels
-            .map(label => label.value)
-            .filter(Boolean)
-            .join(', ');
-        throw new Error(
-            `Label(s) not found in project: ${unresolved.join(', ')}. Available labels: ${available || 'none'}`
-        );
+        throw new Error(unresolvedLabelMessage(unresolved, projectLabels));
     }
 
     return ids;

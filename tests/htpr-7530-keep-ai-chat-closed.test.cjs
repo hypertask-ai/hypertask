@@ -59,8 +59,9 @@ test("Task Page reuses the adjacent SettingsToggle row, preserves the other sett
         "@/components/sidebars/RightSidebar/UserPreference": inert,
         "@/lib/state": { useRecoilState: (key) => [values[key], (next) => { values[key] = next(values[key]); }] },
         "@/store": { openAiChatByDefaultAtom: "open", keepAiChatClosedAtom: "closed" },
-        "@/hooks/useFlag": { useFlag: (key) => { if (key === flagModule.HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG) return false; assert.equal(key, flagKey); return enabled; } },
+        "@/hooks/useFlag": { useFlag: (key) => { if (key === flagModule.HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG) return false; if (key === "htpr-8088-manual-chat") return false; assert.equal(key, flagKey); return enabled; } },
         "@/lib/flags/keys": flagModule,
+        "@/lib/flags/definitions/htpr-8088-manual-chat": { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" },
         "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert,
         "./SettingsToggle": { __esModule: true, default: Toggle },
       });

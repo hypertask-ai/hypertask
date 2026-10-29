@@ -94,6 +94,22 @@ Record route statuses, proposal states and ticket links, plus desktop and
 phone screenshots. Remove only the recorded Sandbox tickets, session and
 agent created by this run, through the app APIs.
 
+## Manual chat control
+
+Flag `htpr-8088-manual-chat` (Everyone). With it on, the docked chat opens only
+when the user opens it and closes only when the user closes it. Moving between
+tickets, boards, My Tasks and Inbox leaves it as it was, and it keeps the same
+conversation across those pages inside one team. The one automatic case left:
+creating a ticket opens the chat while **Open AI chat on newly created tickets**
+is on (Settings, Task page); switching that off keeps it closed. The other two
+switches are hidden while the flag is on, and a first paint reserves no chat
+width for a chat the user did not open. Reload in the same tab keeps the open
+or closed state through `sessionStorage` key `ht:aiChatOpen`. Prove it at
+1440x900 and 390x844: open the chat, click through three tickets and a board,
+then reload once with it open and once with it closed, and create one ticket
+with the switch on and one with it off. With the flag off, the previous
+automatic opening comes back.
+
 ## Floating chat outline
 
 Open chat from a task, use the overflow menu's **Toggle Floating View**, then

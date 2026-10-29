@@ -16,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
@@ -54,6 +55,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const isSettingsPage = settingsEnabled && (pathname === "/settings" || pathname?.startsWith("/settings/"));
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
+  const manualDockedChat = manualChat && !isFullScreenChat && !(pathname?.startsWith("/demo") ?? false);
   const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const ticketScopeSelected =
     ticketScopeEnabled && !isFullScreenChat && isDetailPage &&
@@ -215,6 +218,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
     isDetailPage && inViewObject?.taskId ? inViewObject.taskId : undefined;
   const shouldLoadChatHistory =
     isFullScreenChat || showAiChatInterface || chatMounted;
+  let historyTaskId = taskId;
+  if (manualChat) historyTaskId = undefined;
 
   const {
     startNewSession: createSession,
@@ -230,7 +235,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage, parallelChatsEnabled);
+  } = useSessionAndChatHistory(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat || parallelChatsEnabled, manualDockedChat, modelTeamId);
   useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {
@@ -257,7 +262,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     scopedProjectId ?? "all",
     currentProject?.id ?? "no-board",
     currentUser?.id ?? "anonymous",
-    taskId ?? "no-task",
+    manualDockedChat ? "manual" : taskId ?? "no-task",
     ...(ticketScopeSelected ? ["ticket-scope"] : []),
     ...(sessionPagingEnabled ? ["htpr-6971-chat-history-paging"] : []),
   ].join(":");
@@ -299,7 +304,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
-  editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
+  editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, activeSession,
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,

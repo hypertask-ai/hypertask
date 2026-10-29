@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { useCallback, useContext } from 'react';
 import { usePathname } from 'next/navigation';
 import { MobileViewContext } from '@/lib/contexts/mobileContext';
@@ -62,6 +64,7 @@ const UI_STATE_CONFIG: Record<UIStateKey, UIStateConfig> = {
 };
 
 export const useUIStateManager = (stateKey: UIStateKey) => {
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const pathname = usePathname();
   const isMbl = useContext(MobileViewContext);
   const isLoginPage = pathname?.startsWith('/login');
@@ -108,7 +111,7 @@ export const useUIStateManager = (stateKey: UIStateKey) => {
     resetShortcuts();
     resetBoardManager();
     resetSidebar();
-    if (isMbl) resetAIChat();
+    if (isMbl && !manualChat) resetAIChat();
     if (stateKey !== 'announcements') resetAnnouncements();
     resetScrollSettings();
 
@@ -119,6 +122,7 @@ export const useUIStateManager = (stateKey: UIStateKey) => {
     config,
     stateKey,
     isMbl,
+    manualChat,
     resetShortcuts,
     resetBoardManager,
     resetSidebar,

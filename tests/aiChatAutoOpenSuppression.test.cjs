@@ -130,6 +130,8 @@ async function harness(persisted, run, flagEnabled = true, flagReady = true, swi
     atoms[name] = state.atom({ key: name, default: false });
   atoms.aiChatExplicitOpenAtAtom = state.atom({ key: "aiChatExplicitOpenAt", default: null });
   const { useUIStateManager } = load(read("src/hooks/General/useUIStateManager.ts"), {
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/lib/flags/definitions/htpr-8088-manual-chat": { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" },
     "@/lib/state": state,
     "@/store": atoms,
     "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
@@ -161,7 +163,7 @@ async function harness(persisted, run, flagEnabled = true, flagReady = true, swi
       openAIChatInterface: ui.open, setChatRuntimeMounted: () => {}, setChatMounted: () => {},
       setShowAIChat: setShowAiChatInterface,
       setAiChatExplicitOpenAt: state.useSetRecoilState(atoms.aiChatExplicitOpenAtAtom),
-      shouldMountChatRuntime: false, isFullScreenChat: false,
+      manualChat: false, shouldMountChatRuntime: false, isFullScreenChat: false,
       isControlQFocusShortcut: (event) => event.ctrlKey && event.key === "q" });
     return React.createElement("p", null, "Workspace");
   }
@@ -208,7 +210,7 @@ const restorePaths = ["src/components/ProviderGlobal/GloablProviders.tsx",
   "src/hooks/MultiPages/AIChat/useAiChatPresentation.ts"];
 for (const relative of restorePaths) {
   effects[relative] = effectFrom(relative, (source) => source.includes("readChatOpenForSession()"),
-    ["hasAttemptedChatRestoreRef", "hasAttemptedRestoreRef", "currentUser", "pathname",
+    ["manualChat", "hasAttemptedChatRestoreRef", "hasAttemptedRestoreRef", "currentUser", "pathname",
       "NO_CHAT_RESTORE_ROUTES", "MOBILE_VIEWPORT_MAX_PX", "readChatOpenForSession",
       "openAIChatInterface", "setChatRuntimeMounted", "setChatMounted", "setShowAIChat",
       "setAiChatExplicitOpenAt"]);

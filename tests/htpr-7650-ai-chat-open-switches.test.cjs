@@ -19,6 +19,7 @@ function load(file, mocks = {}) {
     if (name === "@/lib/flags/definitions/htpr-8052-fullscreen-chat-return") return { HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG: "htpr-8052-fullscreen-chat-return" };
     if (name === flagFile) return { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag };
     if (name === "@/lib/flags/definitions/htpr-8038-chat-opener-ready") return { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" };
+    if (name === "@/lib/flags/definitions/htpr-8088-manual-chat") return { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" };
     if (name === policyFile) return policy;
     assert.ok(name.startsWith("react"), `Unexpected dependency ${name} in ${file}`);
     return require(name);
@@ -28,6 +29,7 @@ function load(file, mocks = {}) {
 const policy = load("src/lib/aiChat/autoOpenPreferences.ts");
 const defaults = policy.AI_CHAT_AUTO_OPEN_DEFAULTS;
 const allOff = Object.fromEntries(policy.AI_CHAT_AUTO_OPEN_KEYS.map((key) => [key, false]));
+const settings = (extra = {}) => ({ ...defaults, ...extra });
 
 function hooks() {
   const slots = [], effects = [];
@@ -77,7 +79,7 @@ function pageHarness(values = defaults, options = {}) {
   let pathname = "/detail/project-15/1", query = "", mobile = false, enabled = options.enabled ?? true;
   const { useAiChatAutoOpen } = load("src/hooks/General/useAiChatAutoOpen.ts", {
     react: h.react, "@/lib/state": s.state, "@/store": atoms,
-    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8052-fullscreen-chat-return" ? options.fullscreenReturn !== false : options.stabilize !== false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8088-manual-chat" ? Boolean(options.manualChat) : key === "htpr-8052-fullscreen-chat-return" ? options.fullscreenReturn !== false : options.stabilize !== false },
     "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(query) },
     "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, ready: true, flagReady: true, values }), useSyncAiChatOpenPreferences() {} },
   });
@@ -432,14 +434,15 @@ test("a successful copy refetches the saved switches instead of guessing them", 
   assert.deepEqual(h.invalidated, [["user-preferences", "ai-chat-auto-open", "7"]]);
 });
 
-function toggles(enabled, keepClosedFlag = true) {
+function toggles(enabled, keepClosedFlag = true, manualChat = false) {
   const Toggle = () => null, inert = { default: () => null };
   const changes = [];
   const { default: Section } = load("src/components/Modals/Settings/TaskPageSection.tsx", {
     "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, values: defaults, setPreference: (key, value) => changes.push([key, value]) }) },
     "@/components/sidebars/RightSidebar/UserPreference": inert,
     "@/lib/state": { useRecoilState: () => [false, () => {}] }, "@/store": {},
-    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : keepClosedFlag },
+    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === "htpr-8088-manual-chat" ? manualChat : keepClosedFlag },
+    "@/lib/flags/definitions/htpr-8088-manual-chat": { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" },
     "@/lib/flags/keys": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
     "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert, "./SettingsToggle": { __esModule: true, default: Toggle },
   });
@@ -454,6 +457,11 @@ test("settings replaces old controls only with flag on, reuses SettingsToggle, a
   assert.deepEqual(changes, [["aiChatOpenNewTickets", false], ["aiChatOpenTickets", true], ["aiChatOpenBoards", true]]);
   assert.deepEqual(toggles(false).rows.map((row) => row.label), ["Open AI chat by default", "Keep AI chat closed always"]);
   assert.deepEqual(toggles(false, false).rows.map((row) => row.label), ["Open AI chat by default"]);
+});
+
+test("manual chat hides the two automatic switches and keeps the new-ticket one", () => {
+  const { rows } = toggles(true, true, true);
+  assert.deepEqual(rows.map((row) => row.label), ["Open AI chat on newly created tickets"]);
 });
 test("flag is an Everyone feature with release risk and production smoke mode", () => {
   const definition = load(`src/lib/flags/definitions/${flag}.ts`).default;
@@ -538,4 +546,42 @@ test("fullscreen return flag Off retains the saved automatic-opening choice", ()
     h.navigate("/my-tasks", phone);
     assert.equal(h.values.showAIChatInterfaceAtom, false);
   }
+});
+
+// HTPR-8088: with manual chat on, only the new-ticket switch still opens the chat by itself.
+const manual = (values, options = {}) => pageHarness(values, { ...options, manualChat: true });
+
+test("manual chat: no switch opens the chat on a ticket, a board or My Tasks", () => {
+  const h = manual(settings({ aiChatOpenTickets: true, aiChatOpenBoards: true, aiChatOpenNewTickets: true }));
+  for (const url of ["/detail/project-15/2", "/project?id=15", "/my-tasks", "/inbox"]) {
+    h.navigate(url);
+    assert.equal(h.values.showAIChatInterfaceAtom, false, `${url} must not open the chat`);
+  }
+});
+
+test("manual chat: navigation never closes an open chat, on desktop and phone", () => {
+  for (const phone of [false, true]) {
+    const h = manual(allOff);
+    h.navigate("/detail/project-15/2", phone);
+    h.manualOpen();
+    for (const url of ["/detail/project-15/3", "/project?id=15", "/my-tasks", "/detail/project-15/4"]) {
+      h.navigate(url, phone);
+      assert.equal(h.values.showAIChatInterfaceAtom, true, `${url} must not close the chat`);
+    }
+  }
+});
+
+test("manual chat: the new-ticket exception follows its own switch", () => {
+  const on = manual(settings({ aiChatOpenNewTickets: true }));
+  on.navigate("/detail/project-15/1");
+  assert.equal(on.values.showAIChatInterfaceAtom, true);
+  const off = manual(settings({ aiChatOpenNewTickets: false }));
+  off.navigate("/detail/project-15/1");
+  assert.equal(off.values.showAIChatInterfaceAtom, false);
+});
+
+test("manual chat: no width is reserved for a chat the user did not open", () => {
+  const h = manual(settings({ aiChatOpenTickets: true }));
+  h.navigate("/detail/project-15/2");
+  assert.equal(h.render().reserve, false);
 });
