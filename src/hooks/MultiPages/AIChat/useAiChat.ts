@@ -79,7 +79,7 @@ export function useAiChat() {
     navigationKey, parallelStreams, agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
     createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
     deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
-    currentAiOption, pathname, currentUser, taskId, manualChat, sessionsRef,
+    currentAiOption, pathname, currentUser, scopedProjectId, taskId, manualChat, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
     setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
   };
