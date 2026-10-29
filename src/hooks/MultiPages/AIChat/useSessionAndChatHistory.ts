@@ -15,7 +15,7 @@ import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
 import { usePagedChatHistory } from "./usePagedChatHistory";
 import { useDockedChatScope } from "./useDockedChatScope";
-import { chatNavigationKey } from "@/lib/aiChat/chatNavigationState";
+import { chatNavigationKey, initialChatSessionId } from "@/lib/aiChat/chatNavigationState";
 import { useChatSessionSelection } from "./useChatSessionSelection";
 
 const createDemoSession = (user: IUser): IChatSession => {
@@ -528,12 +528,7 @@ export const useSessionAndChatHistory = (
         if (taskId === undefined) {
           if (taskScopedHistory) return;
           if (navigationKey && sessions.some((session) => session.id === activeSession)) return;
-          const availableSessions = navigationKey
-            ? sessions.filter((session) => !session.agentId && (scopedBoardId === undefined || (session.projectId === scopedBoardId && session.taskId === null)))
-            : sessions;
-          if (preserveSessionSelection) {
-            setActiveSession(availableSessions.some((session) => session.id === activeSession) ? activeSession : availableSessions[0]?.id ?? null);
-          } else setActiveSession(availableSessions[0]?.id ?? null);
+          setActiveSession(initialChatSessionId(sessions, activeSession, preserveSessionSelection, navigationKey, scopedBoardId));
           return;
         }
 
@@ -608,7 +603,7 @@ export const useSessionAndChatHistory = (
   const getDisplayedSession = useCallback(() => currentSession, [currentSession]);
   const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope) => sessions.find((session) =>
     sessionId ? session.id === sessionId :
-      !session.agentId && (!scope?.taskId || session.taskId === scope.taskId) &&
+      (scope?.taskId !== undefined || !session.agentId) && (!scope?.taskId || session.taskId === scope.taskId) &&
       (!scope?.projectId || (session.projectId === scope.projectId && session.taskId === null))), [sessions]);
   if (paged) return { ...pagedHistory, navigationKey, showWelcomeScreen: pagedHistory.showWelcomeScreen && !waitingForSkillFollowup && !hasPendingSkillIntro, sessionPagingEnabled: true };
 

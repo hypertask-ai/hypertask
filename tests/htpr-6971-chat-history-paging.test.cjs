@@ -37,8 +37,8 @@ async function withHistory(config, check) {
     deleteSession: async (sessionId) => { requests.push(['delete', sessionId]); if (config.delete) return config.delete(sessionId); if (config.deleteError) throw config.deleteError; rows.splice(rows.findIndex((row) => row.id === sessionId), 1); if (!rows.length) rows.push(session(60, { messages: [] })); return response({ message: 'Deleted' }); },
   };
   const { useSessionAndChatHistory } = load('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', {
-    "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
-    "./useChatSessionSelection": require("./task-route-loader.cjs").load("src/hooks/MultiPages/AIChat/useChatSessionSelection.ts", { "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} }, }),
+    "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
+    "./useChatSessionSelection": require("./task-route-loader.cjs").load("src/hooks/MultiPages/AIChat/useChatSessionSelection.ts", { "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} }, }),
     '@/hooks/useFlag': { useFlag: (key) => key === flag ? enabled : key === 'htpr-7736-chat-follows-task' ? !!config.followsTask : key === 'htpr-7319-skill-chat-followup' ? !!config.pendingFollowup : key === 'htpr-6929-compose-task-writer' && !!config.compose },
     '@/lib/state': { useRecoilValue: (atom) => atom === 'user' ? user : atom === 'followup' ? config.pendingFollowup : null, useRecoilState: () => [intro, (next) => { intro = next; }] },
     '@/store': { currentUserAtom: 'user', composeTaskChatIntroAtom: 'intro', composeTaskSkillFollowupAtom: 'followup' },
@@ -49,7 +49,7 @@ async function withHistory(config, check) {
   const mapChanges = [];
   const parallelStreams = config.preserveSelection ? load('src/lib/aiChat/sessionStreams.ts', {}).createSessionStreams(() => {}) : undefined;
   const useAiChatSessions = config.boardMap ? load('src/hooks/MultiPages/AIChat/useAiChatSessions.ts', {
-    "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
+    "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
     '@/lib/flags/definitions/htpr-7762-chat-new-session-focus': { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: 'htpr-7762-chat-new-session-focus' },
     '@/hooks/useFlag': { useFlag: (key) => key === 'htpr-7736-chat-follows-task' ? !!config.followsTask : key === flag && enabled },
     '@/lib/constants': { default: {} }, '@/lib/contexts/deviceContext': { useDeviceContext: () => false },

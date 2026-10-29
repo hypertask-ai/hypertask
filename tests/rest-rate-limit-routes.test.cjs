@@ -96,7 +96,7 @@ test('existing history hook keeps cache/transcript on 429, invalidates failed op
     invalidateQueries: async (args) => { invalidations.push(args); },
   };
   const hooks = load('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', {
-    "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
+    "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
     "./useChatSessionSelection": { useChatSessionSelection: () => [null, value => states.push(value)] },
     '@/hooks/useFlag': { useFlag: () => false }, '@/store': { currentUserAtom: 'user', composeTaskChatIntroAtom: 'compose' },
     '@/lib/state': { useRecoilValue: () => ({ id: 985, uid: 'fixture-user' }), useRecoilState: () => [null, () => {}] },

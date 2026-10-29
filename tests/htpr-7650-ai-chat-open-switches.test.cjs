@@ -78,7 +78,7 @@ function pageHarness(values = defaults, options = {}) {
   const s = stateHarness({ currentUserAtom: { id: 7 }, aiChatNewTicketPathAtom: "/detail/project-15/1", aiChatAutoOpenSuppressedAtom: false, showAIChatInterfaceAtom: false, aiChatAutoOpenPageAtom: null, ...options.state });
   let pathname = "/detail/project-15/1", query = "", mobile = false, enabled = options.enabled ?? true;
   const { useAiChatAutoOpen } = load("src/hooks/General/useAiChatAutoOpen.ts", {
-    "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
+    "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
     "@/lib/flags/keys": {},
     react: h.react, "@/lib/state": s.state, "@/store": atoms,
     "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8088-manual-chat" ? Boolean(options.manualChat) : key === "htpr-8052-fullscreen-chat-return" ? options.fullscreenReturn !== false : options.stabilize !== false },

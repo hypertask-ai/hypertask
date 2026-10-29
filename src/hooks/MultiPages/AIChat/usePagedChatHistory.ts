@@ -7,7 +7,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 
 import { useChatSessionSelection } from "./useChatSessionSelection";
-
+import { findGeneralNavigationSession } from "@/lib/aiChat/chatNavigationState";
 type Transcript = IChatSession & { pendingMessageIds?: string[]; pendingTitle?: string };
 type History = InfiniteData<TPagedChatSessionsResponse, string | null>;
 const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSummary => {
@@ -161,25 +161,13 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope, emptyOnly = false) => {
     let id = sessionId;
     if (!id) {
-      let cursor: string | undefined;
-      do {
-        const page = await queryClient.fetchQuery({
-          queryKey: [...summaryKey, "scope", scope?.taskId ?? null, scope?.projectId ?? null, emptyOnly, cursor ?? null],
-          queryFn: ({ signal }) => AI_Chat_API.getSessionPage({ ...scope, ...(emptyOnly ? { emptyOnly: true } : {}), ...(cursor ? { cursor } : {}), limit: emptyOnly ? 1 : 30 }, signal),
-          staleTime: 0,
-        });
-        if (!page.data.success) throw new Error("Could not resolve chat session");
-        id = page.data.sessions.find((session) =>
-          !session.agentId && (!scope?.taskId || session.taskId === scope.taskId) && (!scope?.projectId || (session.projectId === scope.projectId && (scope.taskId !== undefined || session.taskId === null))) &&
-          (!emptyOnly || (session.taskId === null && ("hasMessages" in session ? !session.hasMessages : session.messages.length === 0))))?.id;
-        cursor = isPagedChatSessions(page.data) ? page.data.nextCursor ?? undefined : undefined;
-      } while (!id && cursor);
+      id = await findGeneralNavigationSession(queryClient, summaryKey, AI_Chat_API.getSessionPage, scope, emptyOnly, !!navigationKey && scope?.taskId === undefined);
     }
     if (!id) return;
     const session = await queryClient.fetchQuery(transcriptOptions(id));
     if (session === null) await evictSession(id);
     return session ?? undefined;
-  }, [identity, queryClient]);
+  }, [identity, queryClient, navigationKey]);
 
   const cacheCreatedSession = (session: IChatSession) => {
     const hadHistory = !!queryClient.getQueryData(summaryKey);
@@ -245,9 +233,8 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
         if (navigationKey) {
           const session = await resolveHistorySession(undefined, isTaskScoped || navigationBoardId === undefined ? undefined : { projectId: navigationBoardId });
           if (!cancelled && identityRef.current === identity && !activeRef.current && !newChatRef.current) {
-            const generalSession = session?.agentId ? undefined : session;
-            setActiveSession(generalSession?.id ?? null);
-            if (!generalSession) setEmptyNavigationIdentity(identity);
+            setActiveSession(session?.id ?? null);
+            if (!session) setEmptyNavigationIdentity(identity);
           }
           return;
         }
