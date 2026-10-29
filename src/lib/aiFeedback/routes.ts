@@ -37,6 +37,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/inbox/move',
   '/api/mcp/inbox/seen',
   '/api/mcp/inbox/unarchive',
+  '/api/mcp/manager-leases',
   '/api/mcp/pages/archive',
   '/api/mcp/pages/create',
   '/api/mcp/pages/get',

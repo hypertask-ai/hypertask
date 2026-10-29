@@ -21,6 +21,9 @@ import {
 import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
 import { HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7727-plain-yes-flag-approval";
 import { authorize } from "@/lib/flags/agentAuthorization";
+import { YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG } from "@/lib/flags/definitions/yper4-801-manager-lease-flag-switch";
+import { isManagerClassAgentName, MANAGER_GRANT_HEADER, requireCurrentManagerGrant } from "@/lib/flags/managerLease";
+import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
 import { FEATURE_FLAG_RELEASE_RISKS } from "@/lib/flags/releaseRisk";
 import { lockCommentReactions } from "@/lib/mcp/comments/reactionLock";
 import prisma from "@/lib/prisma";
@@ -113,6 +116,9 @@ export async function PATCH(request: NextRequest) {
     });
     const batchAllowed = await isFeatureEnabled(HTPR_7364_BATCH_FLAG_APPROVAL_FLAG, ctx.user.id);
     const plainYesAllowed = await isFeatureEnabled(HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG, ctx.user.id);
+    const requiresManagerGrant = isManagerClassAgentName(agent.displayName)
+      && await isFeatureEnabled(YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG, ctx.user.id);
+    const managerGrant = request.headers.get(MANAGER_GRANT_HEADER);
     const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
@@ -120,6 +126,9 @@ export async function PATCH(request: NextRequest) {
       reason: usesReview ? `flag-review:${body.review}` : usesFailure ? `live-qa-failed:${body.failure}` : body.reason as string,
       source: "api",
     }, async (tx) => {
+      if (requiresManagerGrant) {
+        await requireCurrentManagerGrant(tx, { agentId: ctx.agentId as string, grant: managerGrant });
+      }
       if (usesFailure) {
         const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
         if ((stored?.mode ?? defaultFeatureFlagMode(body.key as string)) === body.mode) {
