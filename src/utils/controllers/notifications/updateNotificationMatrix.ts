@@ -19,8 +19,6 @@ type MatrixUpdate = { matrix: NotificationMatrix } | {
   expected: boolean;
 };
 
-// HTPR-7622: a receipt written in the same transaction as the change, so a lost Redis status
-// write can be reconciled later instead of guessing whether this write happened.
 export type SettingOperationReceipt = { id: string; userId: number; proposalId: string; action: string };
 
 export async function updateNotificationMatrix(userId: number, input: MatrixUpdate, operation?: SettingOperationReceipt) {

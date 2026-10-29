@@ -45,7 +45,6 @@ function harness() {
       findFirst: async ({ where }) => { const row = state.operations.get(where.id); return row && row.proposalId === where.proposalId && row.userId === where.userId ? row : null; },
       deleteMany: async ({ where }) => ({ count: state.operations.delete(where.id) ? 1 : 0 }),
     },
-    // A transaction that rolls its writes back, so a failing receipt write cannot leave a change behind.
     $transaction: async (fn) => {
       const snapshot = { members: structuredClone(state.members), settings: structuredClone([...state.settings]), operations: new Map(state.operations) };
       try { return await fn(db); } catch (error) { state.members = snapshot.members; state.settings = new Map(snapshot.settings); state.operations = snapshot.operations; throw error; }
@@ -199,7 +198,7 @@ for (const failCleanup of [false, true]) {
     const key = `ai-setting:6:${card.id}`;
     h.state.beforeRoleWrite = () => { h.state.members[0].role = "Admin"; };
     if (failCleanup) h.state.failProposalSave = "pending";
-    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), failCleanup ? /Redis proposal SET failed/ : /Role or board access changed/);
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), /Role or board access changed/);
     h.state.beforeRoleWrite = null;
     const rejected = JSON.parse(h.state.records.get(key));
     assert.equal(rejected.status, "pending");
@@ -242,7 +241,7 @@ for (const kind of ["board-role", "notification"]) {
     const value = () => kind === "board-role" ? h.state.members[0].role : h.state.settings.get(6).notificationMatrix.comments.email;
     const card = await h.proposals.createSettingProposal(6, sessionId, scope, change);
     h.state.failReceipt = true;
-    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", scope), /Could not record the change/);
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", scope), kind === "board-role" ? /Could not change member role/ : /Could not record the change/);
     assert.deepEqual([value(), h.state.members[0].role], [card.before, "Member"]);
     assert.equal(h.state.operations.size, 0);
     const pending = JSON.parse(h.state.records.get(`ai-setting:6:${card.id}`));
@@ -553,7 +552,9 @@ test("theme: a lost Apply response can be retried after the commit marker is los
   const h = harness();
   const card = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
   h.state.failProposalSave = "apply-committed";
-  await assert.rejects(h.route.POST(request({ id: card.id, action: "apply", scope: themeScope })), /Redis proposal SET failed/);
+  const interrupted = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
+  assert.equal(interrupted.status, 409);
+  assert.match((await interrupted.json()).error, /Redis proposal SET failed/);
   const retried = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
   assert.equal(retried.status, 200);
   assert.equal(retried.cookies.get("theme").value, "graphite");

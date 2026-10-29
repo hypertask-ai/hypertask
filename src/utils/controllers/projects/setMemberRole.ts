@@ -2,8 +2,6 @@ import prisma from "@/lib/prisma";
 
 type MemberRole = "Admin" | "Member";
 
-// HTPR-7622: a receipt written in the same transaction as the role change, so a lost Redis
-// status write can be reconciled later instead of guessing whether this write happened.
 export type SettingOperationReceipt = { id: string; userId: number; proposalId: string; action: string };
 
 const setMemberRole = async (

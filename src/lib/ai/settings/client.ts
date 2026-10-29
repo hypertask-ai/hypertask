@@ -1,7 +1,6 @@
 import { themeOptions } from "@/lib/themePreferences";
 import type { SettingProposalCard, SettingsScope } from "./catalog";
 
-// Client-side calls for a setting change card. No React here, so the card keeps only rendering.
 
 export function settingValueLabel(value: string | boolean) {
   if (typeof value === "boolean") return value ? "On" : "Off";
@@ -25,7 +24,6 @@ export async function actOnSettingProposalCard(id: string, action: "apply" | "ca
   return data.proposal;
 }
 
-// Ctrl+J (or Cmd+J) opens the AI chat on a Settings page; typing in a field never triggers it.
 function isAiChatShortcut(event: KeyboardEvent) {
   if (event.isComposing || event.key.toLowerCase() !== "j") return false;
   return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey;
@@ -34,7 +32,6 @@ function isAiChatShortcut(event: KeyboardEvent) {
 export const SETTINGS_OPEN_EVENT = "hypertask:open-settings";
 export const SETTINGS_CHANGED_EVENT = "hypertask:settings-changed";
 
-// A settings page advertises that the AI chat may move it and refresh its values.
 export function subscribeAiSettingsEvents(handlers: { openSettings: (path: string) => void; changed: () => void; shortcut: () => void }) {
   const open = (event: Event) => {
     const path = (event as CustomEvent<{ path?: unknown }>).detail?.path;

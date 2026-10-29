@@ -12,8 +12,6 @@ const proposalKey = (userId: number, id: string) => `ai-setting:${userId}:${id}`
 type SettingProposalOperation = { action: "apply" | "undo"; id: string; committed?: boolean };
 type StoredProposal = SettingProposal & { operation?: SettingProposalOperation };
 
-// The database receipt is written inside the same transaction as the change, so it proves the
-// write happened even when the Redis proposal record could not record it.
 async function operationReachedDatabase(userId: number, proposalId: string, operationId: string) {
   const row = await prisma.aiSettingOperation.findFirst({ where: { id: operationId, userId, proposalId }, select: { id: true } });
   return Boolean(row);
@@ -91,15 +89,19 @@ export async function actOnSettingProposal(userId: number, id: string, action: "
             return { proposal: settingProposalCard(proposal), ...(proposal.change.kind === "theme" ? { theme: destination as SettingsScope["theme"] } : {}) };
           }
         } else {
-          // The change never reached the database, so the stored intent is stale: retry from a clean state.
           delete proposal.operation;
           await redis.set(key, JSON.stringify(proposal), "EX", TTL_SECONDS);
         }
       }
       if (proposal.status !== (undo ? "applied" : "pending")) {
-        // A theme action only delivers a cookie: repeating the same action re-sends it.
         if (proposal.change.kind === "theme" && proposal.status === (undo ? "undone" : "applied")) {
-          return { proposal: settingProposalCard(proposal), theme: (undo ? proposal.before : proposal.after) as SettingsScope["theme"] };
+          const destination = (undo ? proposal.before : proposal.after) as SettingsScope["theme"];
+          const source = (undo ? proposal.after : proposal.before) as SettingsScope["theme"];
+          const current = await readSettingChange(userId, currentScope, proposal.change, destination);
+          if (current.value === source || current.value === destination) {
+            return { proposal: settingProposalCard(proposal), theme: destination };
+          }
+          throw new Error("This setting changed since the preview. Ask for a fresh proposal.");
         }
         throw new Error("This action has already been handled.");
       }

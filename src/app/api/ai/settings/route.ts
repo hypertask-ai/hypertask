@@ -15,7 +15,6 @@ const actionSchema = z.object({ id: idSchema, action: z.enum(["apply", "cancel",
 async function settingsUser(request: NextRequest) {
   const session = await getSessionUser(request.headers);
   if (!session || session.agentId) throw new Error("Sign in as yourself to review settings changes.");
-  // Server-side gate: the flag is checked at the entry point as well as inside the proposal store.
   if (!(await isFeatureEnabled(HTPR_7622_AI_SETTINGS_FLAG, session.userId))) throw new Error("AI settings changes are not available for this account.");
   return session.userId;
 }
