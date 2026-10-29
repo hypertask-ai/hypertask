@@ -37,7 +37,7 @@ function fixture({ error, failAt = "generate", enabled = true, flagError = false
     "@/app/api/ai/_lib/byokKeys": {
       getTeamGatewayApiKey: async () => { if (error && failAt === "funding") throw error; return "vck_fixture"; },
     },
-    "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, batchBackgroundAiEnabled: async () => false },
+    "@/app/api/ai/_lib/planGate": { batchBackgroundAiEnabled: async () => false },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, resolveGatewayModel: () => ({}), gatewayProviderOptionsForModel: () => ({}) },
     "@/app/api/ai/_lib/sharedAllowance": {},
     "@/app/api/ai/_lib/allowanceError": allowanceError,

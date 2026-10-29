@@ -67,7 +67,7 @@ function boardWith({ taskLabelIds, modelMatches }) {
       resolveAutomaticAiModel: () => ({ modelId: "fixture" }),
     },
     "@/app/api/ai/_lib/planGate": {
-      
+
       batchBackgroundAiEnabled: async () => false,
     },
     "@/app/api/ai/_lib/modelProvider": {
