@@ -34,34 +34,32 @@ Save before/after response status and safe payload, the selected team, productio
 
 Read-only checks need no cleanup. Never reveal saved keys or authentication state. Key replacement costs money and belongs to Valentin.
 
-## Automatic reporting cost controls
+## Local daily usage check
 
-Sources: `src/lib/ai/gatewayReport.ts`,
-`src/lib/ai/dailyGatewaySpend.ts`, and
-`src/app/api/cron/ai-allowance-drift/route.ts`.
+Sources: `src/lib/ai/dailyAiSpend.ts`,
+`src/app/api/cron/ai-spend/route.ts` and `vercel.json`.
 
-- Entry point: the authenticated production allowance cron. An unauthenticated
-  GET must remain 401; non-production invocations do not read credits.
-- Read both `htpr-7692-allowance-drift-check` and `htpr-7692-billed-cost` modes
-  through `ht-flag get`; never enable them merely for QA.
-- Use production cron logs for the merged deployment to prove hourly
-  `ai-gateway-credit-observation` records even while both switches are Off.
-  These contain only time, balance, cumulative spend and cumulative funding.
-  Missing credentials, malformed metadata or failed credit reads make the cron
-  return 503 rather than a false clean result, including subsequent throttled
-  calls after a failed or pending observation.
-- Confirm ordinary Settings reports still load through their existing
-  on-demand path. Do not repeatedly buy reports for QA.
-- The cron's metered transports share one rolling-hour Redis reservation.
-  Foreground admission and resync remain outside this async-local budget.
-  The narrower background-only scope requires the ticket owner's approval.
-  Prove concurrency, upstream failure, Redis refusal and estimate fallback
-  with `tests/yper4-873-paid-reports.test.cjs`; never manufacture paid live
-  traffic to fill that budget.
-- Prove the $5 alert, midnight-spanning spend, daily reset and existing fingerprint using
-  `tests/yper4-873-daily-spend.test.cjs`. Never spend money to trigger an alert.
-- Save actual funding observations or provider credit history spanning at
-  least 24 hours. No increase in cumulative funding proves no top-up over
-  that observed window; a single balance or a passing fixture cannot.
-- Label unavailable production logs and incomplete time windows UNREACHABLE,
-  not PASS. Keep the ticket open until its no-top-up requirement is proven.
+The paid allowance drift checker and background billed-snapshot refresh are
+removed by YPER4-873. The old `/api/cron/ai-allowance-drift` endpoint and
+five-minute schedule no longer exist. Do not turn on either existing
+HTPR-7692 switch for verification.
+
+The hourly `/api/cron/ai-spend` endpoint requires the existing cron authority.
+It sums today's non-BYOK, nonnegative saved `AiUsage.costUsd` records in UTC.
+An estimate over $5 raises the existing daily-spend incident fingerprint.
+Empty priced usage is zero; database failures return 503, not a clean result.
+This check makes no provider requests. It is an estimate from saved token
+usage, not invoice reconciliation or proof that every provider cost is logged.
+Rows without pricing are not included.
+
+- Doctor: successful Production deployment for this PR and signed-in QA985.
+- Require HTTP401 from the new cron without authority, before any usage read.
+- Verify the retired endpoint is absent on the merged deployment.
+- Verify the authenticated new cron returns a local recorded-usage result.
+  Never buy provider reports or change production flags to create a fixture.
+- Hosted tests exercise the real cron dispatch with a provider-network trap,
+  the $5 boundary, UTC day bounds, empty usage and fail-closed reads.
+- Foreground allowance admission, settlement and on-demand Settings reports
+  remain unchanged. Their existing tests must pass in hosted CI.
+- Save actual provider funding history over the required 24-hour window before
+  claiming no top-up. Local token costs do not prove funding history.

@@ -1,109 +1,113 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { loadModule } = require("./helpers/loadModule.cjs");
-let now, credits, reads, alerts, storage, unavailable;
-const nativeDate = Date;
-const redis = {
-  set: async (key, value, ...options) => {
-    const previous = storage.get(key);
-    if (previous && previous.expires > now && options.includes("NX")) return null;
-    storage.set(key, { value, expires: now + Number(options[options.indexOf("EX") + 1]) * 1000 });
-    return "OK";
-  },
-  get: async key => storage.get(key)?.value ?? null,
-};
-const { checkDailyGatewaySpend } = loadModule("src/lib/ai/dailyGatewaySpend.ts", {
-  "@/lib/redis": { getRedis: async () => redis },
+
+const NativeDate = Date;
+const nativeFetch = global.fetch;
+const originalEnv = { NODE_ENV: process.env.NODE_ENV, VERCEL_ENV: process.env.VERCEL_ENV, CRON_SECRET: process.env.CRON_SECRET };
+let now, cost, queries, alerts, unavailable, requests;
+const { GET } = loadModule("src/app/api/cron/ai-spend/route.ts", {
+  "next/server": { NextResponse: { json: Response.json } },
+  "@/lib/prisma": { default: { aiUsage: { aggregate: async query => {
+    queries.push(query);
+    if (unavailable) throw new Error("private database failure");
+    return { _sum: { costUsd: cost } };
+  } } } },
   "@/lib/errors/reportError": { reportError: async report => alerts.push(report) },
 });
-let authorized = true;
-const counts = { checked: 0, inconclusive: 0, unknown: 0, drift: 0, refusalAlerts: 0 };
-const { GET } = loadModule("src/app/api/cron/ai-allowance-drift/route.ts", {
-  "next/server": { NextResponse: { json: Response.json } },
-  "@/lib/ai/allowanceDriftCheck": { checkActiveTeamAllowanceDrift: async () => counts },
-  "@/lib/ai/billedAllowanceRefresh": { refreshActiveBilledAllowances: async () => {} },
-  "@/lib/ai/dailyGatewaySpend": { checkDailyGatewaySpend },
-  "@/lib/ai/gatewayReport": { withBackgroundReportBudget: work => work() },
-  "@/lib/cronAuthorization": { hasValidCronAuthorization: () => authorized },
-});
-const nativeFetch = global.fetch;
-const nativeEnv = { NODE_ENV: process.env.NODE_ENV, VERCEL_ENV: process.env.VERCEL_ENV, AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY };
-const nativeError = console.error;
+const request = (authorization = "Bearer fixture-cron-authority") => GET(new Request("https://app.hypertask.ai/api/cron/ai-spend", {
+  headers: authorization ? { authorization } : {},
+}));
+
 test.beforeEach(() => {
-  now = nativeDate.parse("2026-10-28T00:00:00Z");
-  global.Date = class extends nativeDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
-  credits = { balance: "20.00", total_used: "100.00" }; reads = 0; alerts = []; storage = new Map(); unavailable = false; authorized = true;
-  process.env.AI_GATEWAY_API_KEY = "fixture-credit-key";
-  global.fetch = async (url, options) => {
-    reads++;
-    assert.equal(url, "https://ai-gateway.vercel.sh/v1/credits");
-    assert.equal(options.headers.Authorization, "Bearer fixture-credit-key");
-    assert.ok(options.signal instanceof AbortSignal);
-    if (unavailable) throw new Error("credits unavailable");
-    return Response.json(credits);
+  now = NativeDate.parse("2026-10-29T10:15:00Z");
+  global.Date = class extends NativeDate {
+    constructor(...args) { super(...(args.length ? args : [now])); }
+    static now() { return now; }
   };
-  process.env.NODE_ENV = "production"; process.env.VERCEL_ENV = "production"; console.error = () => {};
+  cost = null; queries = []; alerts = []; unavailable = false; requests = 0;
+  global.fetch = async () => { requests++; throw new Error("No provider requests allowed"); };
+  process.env.NODE_ENV = "production";
+  process.env.VERCEL_ENV = "production";
+  process.env.CRON_SECRET = "fixture-cron-authority";
 });
 test.afterEach(() => {
-  global.Date = nativeDate; global.fetch = nativeFetch; console.error = nativeError;
-  for (const [key, value] of Object.entries(nativeEnv)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
-});
-const request = () => GET(new Request("https://app.hypertask.ai/api/cron/ai-allowance-drift"));
-
-test("the real cron checks credit metadata hourly even with both allowance checks off", async () => {
-  assert.deepEqual(await (await request()).json(), counts);
-  await request(); assert.equal(reads, 1); assert.equal(alerts.length, 0);
-  now += 3600000; credits = { balance: "15.00", total_used: "105.00" };
-  await request(); assert.equal(alerts.length, 0);
-  now += 3600000; credits = { balance: "14.99", total_used: "105.01" };
-  await request(); assert.equal(alerts.length, 1);
-  assert.match(alerts[0].message, /exceeded \$5/);
-  assert.ok(Math.abs(alerts[0].extra.spentUsd - 5.01) < 0.000001);
-  assert.equal(alerts[0].fingerprintKey, "ai-gateway-daily-spend:2026-10-28");
-  now += 3600000; credits = { balance: "30.00", total_used: "106.00" };
-  await request(); assert.equal(alerts[1].fingerprintKey, alerts[0].fingerprintKey);
+  global.Date = NativeDate; global.fetch = nativeFetch;
+  for (const [key, value] of Object.entries(originalEnv)) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+  assert.equal(requests, 0);
 });
 
-test("midnight-spanning spend alerts through the real cron", async () => {
-  now = nativeDate.parse("2026-10-28T23:30:00Z");
-  await request();
-  now += 3600000; credits = { balance: "14", total_used: "106" };
-  await request();
+test("real authenticated cron totals saved usage for the UTC day without buying reports", async () => {
+  cost = 4.25;
+  const response = await request();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { checked: 1, recordedUsd: 4.25 });
+  assert.deepEqual(queries, [{ where: {
+    createdAt: { gte: new NativeDate("2026-10-29T00:00:00Z"), lt: new NativeDate("2026-10-30T00:00:00Z") },
+    provider: { not: { startsWith: "byok:" } }, costUsd: { gte: 0 },
+  }, _sum: { costUsd: true } }]);
+  assert.equal(alerts.length, 0);
+});
+
+test("empty saved usage is zero and exactly five dollars does not alert", async () => {
+  assert.deepEqual(await (await request()).json(), { checked: 1, recordedUsd: 0 });
+  cost = 5;
+  assert.deepEqual(await (await request()).json(), { checked: 1, recordedUsd: 5 });
+  assert.equal(alerts.length, 0);
+});
+
+test("above five dollars raises the daily estimate alarm with the existing fingerprint", async () => {
+  cost = 5.01;
+  assert.equal((await request()).status, 200);
   assert.equal(alerts.length, 1);
-  assert.equal(alerts[0].extra.spentUsd, 6);
   assert.equal(alerts[0].fingerprintKey, "ai-gateway-daily-spend:2026-10-29");
+  assert.match(alerts[0].message, /estimate exceeded \$5 today: \$5.01/);
+  assert.match(alerts[0].message, /not provider invoices/);
+  assert.deepEqual(alerts[0].extra, { route: "/api/cron/ai-spend", stage: "daily-spend", spentUsd: 5.01 });
 });
 
-test("new days reset accumulated spend without dropping the crossing interval", async () => {
-  await request(); now += 23 * 3600000;
-  credits = { balance: "16", total_used: "104" }; await request();
-  now += 3600000; credits = { balance: "14", total_used: "106" };
-  await request(); assert.equal(alerts.length, 0);
-  now += 3600000; credits = { balance: "10", total_used: "110" };
-  await request(); assert.equal(alerts[0].extra.spentUsd, 6);
+test("UTC midnight changes both query bounds and daily alarm identity", async () => {
+  cost = 6; await request();
+  now = NativeDate.parse("2026-10-30T00:01:00Z");
+  await request();
+  assert.equal(queries[1].where.createdAt.gte.toISOString(), "2026-10-30T00:00:00.000Z");
+  assert.equal(queries[1].where.createdAt.lt.toISOString(), "2026-10-31T00:00:00.000Z");
+  assert.equal(alerts[1].fingerprintKey, "ai-gateway-daily-spend:2026-10-30");
 });
 
-test("failed observations remain unavailable throughout the hourly throttle", async () => {
+test("database or malformed cost failures cannot report a clean observation", async () => {
   unavailable = true;
   assert.equal((await request()).status, 503);
-  unavailable = false;
-  assert.equal((await request()).status, 503);
-  assert.equal(reads, 1);
-  now += 3600000;
-  assert.equal((await request()).status, 200);
-  assert.equal((await request()).status, 200);
-  assert.equal(reads, 2);
+  unavailable = false; cost = NaN;
+  const response = await request();
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "AI usage check unavailable" });
+  assert.equal(alerts.length, 0);
 });
 
-test("failed and malformed credits cannot create a spend alert or suppress drift", async () => {
-  unavailable = true;
-  assert.deepEqual(await (await request()).json(), { ...counts, unknown: 1 }); assert.equal(alerts.length, 0);
-  unavailable = false; now += 3600000; credits = { balance: "secret-not-a-number", total_used: "NaN" };
-  assert.deepEqual(await (await request()).json(), { ...counts, unknown: 1 }); assert.equal(alerts.length, 0);
+test("missing or wrong authority is refused before reading usage; preview does no work", async () => {
+  assert.equal((await request(null)).status, 401);
+  assert.equal((await request("Bearer wrong")).status, 401);
+  process.env.CRON_SECRET = "";
+  assert.equal((await request("Bearer ")).status, 401);
+  assert.equal(queries.length, 0);
+  process.env.CRON_SECRET = "fixture-cron-authority";
+  process.env.VERCEL_ENV = "preview";
+  assert.deepEqual(await (await request()).json(), { checked: 0 });
+  assert.equal(queries.length, 0);
 });
 
-test("unauthorized and non-production cron requests never read credits", async () => {
-  authorized = false; assert.equal((await request()).status, 401);
-  authorized = true; process.env.VERCEL_ENV = "preview";
-  assert.deepEqual(await (await request()).json(), counts); assert.equal(reads, 0);
+test("paid observer and refresh implementations retire; only local hourly spending remains scheduled", () => {
+  const root = path.resolve(__dirname, "..");
+  for (const file of ["src/lib/ai/allowanceDriftCheck.ts", "src/lib/ai/billedAllowanceRefresh.ts", "src/app/api/cron/ai-allowance-drift/route.ts"]) {
+    assert.equal(fs.existsSync(path.join(root, file)), false, file);
+  }
+  const { crons } = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+  assert.deepEqual(crons.filter(entry => ["/api/cron/ai-spend", "/api/cron/ai-allowance-drift"].includes(entry.path)), [
+    { path: "/api/cron/ai-spend", schedule: "7 * * * *" },
+  ]);
 });

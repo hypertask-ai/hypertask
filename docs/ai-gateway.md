@@ -256,32 +256,21 @@ team by title, only by teamId or owner email.
 then must be Premium or BYOK. Trial expiry is currently enforced only by a
 root-route redirect; server-side AI entitlement is HTPR-4130.
 
-## Automatic report budget and daily spend alarm
+## Local daily usage alarm
 
-Allowance cron reporting shares one rolling-hour Redis reservation across
-the billed snapshot, demo snapshot and hourly drift transports. It is reserved
-before the paid `/v1/report` request, across all workers and credentials. A failed
-request still consumes that hour; unavailable Redis refuses the request. No
-report cache pretends an old response is newly fetched. The existing billed
-snapshot age limit and estimate-accounting fallback are unchanged.
+Valentin approved deleting the paid background reporting checker on
+[YPER4-873](https://app.hypertask.ai/detail/project-4060/873#comment-329354).
+The allowance-drift cron and its background billed refresh are removed.
+There is no hourly paid-report replacement and no provider-credit polling.
 
-This budget covers the background cron only, using async-local request scope.
-Foreground allowance initialization and resync are unchanged; restricting them
-would break cold month/day admission and system-lane recovery. This narrower
-limit needs the ticket owner's approval before release. The existing Settings usage page
-still makes its three explicit, on-demand reports; putting that three-request
-page behind a one-request budget would make it permanently unavailable.
+The replacement hourly `/api/cron/ai-spend` reads existing `AiUsage.costUsd`
+rows for the current UTC day. Explicit `byok:` providers and negative costs are
+excluded. Missing prices are not included. Recorded usage over $5 raises the
+existing daily-spend alert fingerprint through the error-ticket pipeline.
+These are saved token-cost estimates, not a provider invoice or a guarantee
+that every billable event is recorded. Failed database reads return 503.
 
-The production allowance cron also reads `/v1/credits` metadata at most hourly,
-even while both allowance flags are Off. Its response follows the installed SDK metadata schema. An
-observed increase above $5 in the UTC day's cumulative used credits creates an
-alert through the existing error-ticket pipeline, with a day-specific dedupe key.
-Each day starts from the preceding successful observation, including the
-midnight-crossing interval instead of dropping it. Initial rollout starts from
-the first successful observation, so that first partial day remains incomplete.
-Failed or pending hourly observations keep returning 503 until the next hourly
-attempt succeeds; throttling never turns them into clean results. Top-ups do not
-mask spend because the alarm compares cumulative usage, not remaining balance.
-
-No flag is switched by this work. Verify the no-top-up requirement with actual
-credit history over 24 hours; a test or a single balance snapshot cannot prove it.
+Foreground allowance initialization, recovery, settlement and explicit Settings
+reports remain unchanged. Neither existing HTPR-7692 flag is switched by this
+change. Provider funding history is still needed to prove no top-up across
+24 hours; local token costs cannot establish that fact.

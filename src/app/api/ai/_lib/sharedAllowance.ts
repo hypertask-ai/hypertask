@@ -1,4 +1,3 @@
-import { gatewayReport } from "@/lib/ai/gatewayReport";
 import { randomUUID } from "node:crypto";
 import { findSharedAiAllowanceError, SHARED_AI_ALLOWANCE_ERROR_NAME } from "@/app/api/ai/_lib/allowanceError";
 import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
@@ -510,7 +509,11 @@ export async function gatewayHourlySpend(
     date_part: "hour",
     tags: `team:${teamId}`,
   });
-  const response = await gatewayReport(gatewayApiKey, params, signal);
+  const response = await fetch(`${GATEWAY_BASE_URL}/report?${params}`, {
+    signal,
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${gatewayApiKey}` },
+  });
   if (!response.ok) throw new Error("AI Gateway hourly allowance report failed");
   const payload = await response.json() as { results?: unknown };
   if (!Array.isArray(payload.results)) throw new Error("AI Gateway hourly allowance report is invalid");
