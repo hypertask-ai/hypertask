@@ -54,8 +54,6 @@ const route = taskWriteRoute({
         committedAccessIds.push(id);
       } catch (error) {
         if (!(error instanceof BoardAccessError)) throw error;
-        // Earlier access rows already committed, so report the partial result and
-        // broadcast it instead of leaving other tabs showing stale unarchived rows.
         if (committedAccessIds.length > 0) {
           void broadcastInboxChange(session.userId, { originUserId: session.userId },
             socketIdFromHeader(request.rawHeaders ? request.rawHeaders["x-socket-id"] : request.headers.get("x-socket-id")));

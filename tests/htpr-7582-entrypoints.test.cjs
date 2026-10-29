@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { fixture, loader, source, ctx, session, NOW, ID, FLAG, ts, root } = require('./htpr-7582-fixtures.cjs');
+const ts = require('typescript');
+const { fixture, loader, source, ctx, session, NOW, ID, FLAG, root } = require('./htpr-7582-fixtures.cjs');
 const { NextRequest } = require('next/server');
 const { z } = require('zod');
 const POST_PATH = 'src/lib/mcp/operations/agents/board-access-requests/operation.ts';

@@ -1,8 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
-const ts = require('typescript');
+const { loadModule } = require('./helpers/loadModule.cjs');
 const root = path.resolve(__dirname, '..');
 const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 const FLAG = ['htpr', '7582', 'agent', 'access', 'request'].join('-');
@@ -90,32 +89,14 @@ function fixture(overrides = {}) {
   const service = load('src/lib/agents/boardAccessRequests/service.ts');
   return { state, db, stubs, load, service, conflict: n => { conflicts = n; }, async create(input = {}) { return service.createBoardAccessRequest(ctx(), { project_id: 15, reason: 'Investigate deployment', ...input }, NOW); } };
 }
-const compiled = new Map();
 function loader(stubs = {}) {
   const cache = new Map();
-  function load(file) {
+  return function load(file) {
     const full = path.isAbsolute(file) ? file : path.join(root, file);
-    if (cache.has(full)) return cache.get(full).exports;
-    const loaded = { exports: {} }; cache.set(full, loaded);
-    const code = compiled.get(full) ?? ts.transpileModule(fs.readFileSync(full, 'utf8'), { fileName: full, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, esModuleInterop: true }, reportDiagnostics: true });
-    compiled.set(full, code);
-    assert.deepEqual(code.diagnostics.filter(d => d.category === ts.DiagnosticCategory.Error), [], full);
-    const requireLocal = name => {
-      if (name in stubs) return stubs[name];
-      if (name.startsWith('.') || name.startsWith('@/')) {
-        let target = name.startsWith('@/') ? path.join(root, 'src', name.slice(2)) : path.resolve(path.dirname(full), name);
-        const candidates = [target, target + '.ts', target + '.tsx', target + '.json', path.join(target, 'index.ts')];
-        target = candidates.find(item => fs.existsSync(item) && fs.statSync(item).isFile());
-        if (!target) throw Error(`Missing ${name} from ${full}`);
-        if (target.endsWith('.json')) return JSON.parse(fs.readFileSync(target, 'utf8'));
-        return load(target);
-      }
-      if (name.startsWith('node:') || ['crypto', 'zod', 'next/server', 'react', 'react-dom/server'].includes(name)) return require(name);
-      throw Error(`Unstubbed dependency (offline test): ${name} from ${full}`);
-    };
-    vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${code.outputText}\n})`, { filename: full })(requireLocal, loaded, loaded.exports, full, path.dirname(full));
-    return loaded.exports;
-  }
-  return load;
+    if (cache.has(full)) return cache.get(full);
+    const exports = loadModule(full, stubs);
+    cache.set(full, exports);
+    return exports;
+  };
 }
-module.exports = { fixture, loader, source, root, ctx, session, NOW, ID, FLAG, matches, ts };
+module.exports = { fixture, loader, source, root, ctx, session, NOW, ID, FLAG, matches };

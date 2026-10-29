@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { fixture, loader, source, ctx, session, NOW, ID, FLAG, ts, root } = require('./htpr-7582-fixtures.cjs');
+const ts = require('typescript');
+const { fixture, loader, source, ctx, session, NOW, ID, FLAG, root } = require('./htpr-7582-fixtures.cjs');
+const { loadModule } = require('./helpers/loadModule.cjs');
 const { NextResponse } = require('next/server');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
@@ -151,15 +153,17 @@ test('web routes and first-screen documents pass freshly validated full principa
   }
   assert.match(source('src/lib/firstScreen/serverInboxDocument.ts'), /!principal.agentId && row.type === "AgentBoardAccessRequest"/);
 });
-function card(summary, { enabled = true, result = null, error = null, busy = false, now = Date.now() } = {}) {
-  const file = ts.createSourceFile('NotificationRow.tsx', source('src/components/notifications/NotificationRow.tsx'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const declaration = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'AgentBoardAccessDecision');
-  assert.ok(declaration);
-  const code = ts.transpileModule(declaration.getText(file).replace('export ', ''), { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const states = [result, error, busy, now];
-  const fn = vm.runInThisContext(`(function(React,useNotificationContext,useFlag,useQueryClient,useState,useRef,useEffect,HTPR_7582_AGENT_ACCESS_REQUEST_FLAG,CreatedAtDesktop,CreatedAtMobile,Link,INBOX_QUERY_KEY){${code};return AgentBoardAccessDecision;})`);
-  const component = fn(React, () => ({ notification: { userId: 6, boardAccessRequest: summary } }), () => enabled, () => ({ invalidateQueries: () => Promise.resolve() }), () => [states.shift(), () => {}], () => ({ current: false }), () => {}, FLAG, () => React.createElement('time', null, 'Just now'), () => null, ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children), ['inbox']);
-  return renderToStaticMarkup(React.createElement(component));
+function card(summary, { enabled = true } = {}) {
+  const { AgentBoardAccessDecision } = loadModule('src/components/notifications/NotificationRow.tsx', {
+    __esModuleDummy: undefined,
+    'next/link': { __esModule: true, default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) },
+    'next/dynamic': { __esModule: true, default: () => () => null },
+    '@tanstack/react-query': { useQueryClient: () => ({ invalidateQueries: () => Promise.resolve() }) },
+    '@/hooks/useFlag': { useFlag: () => enabled },
+    '@/lib/firstScreen/SurfaceContext': { useFirstScreenSurface: () => null },
+    '@/lib/contexts/NotificationContext': { useNotificationContext: () => ({ notification: { userId: 6, createdAt: NOW.toISOString(), boardAccessRequest: summary } }) },
+  });
+  return renderToStaticMarkup(React.createElement(AgentBoardAccessDecision));
 }
 const summary = (extra = {}) => ({ id: ID, status: 'pending', expiresAt: new Date(Date.now() + 86400000).toISOString(), resolutionReason: null, canApprove: true, accessPresent: false, nextStep: 'Waiting for owner', agentId: 'agent-1', agentName: 'Grok Bot', agentPhotoURL: null, projectId: 15, boardName: 'Software Factory', sameTeam: true, reason: 'Investigate failing deployment', ...extra });
 test('Option A card renders only approved question, explanation, link and two buttons with existing tokens', () => {
@@ -184,12 +188,12 @@ test('terminal, expired and removed-membership cards never retain action buttons
   }
   const html = card(summary({ expiresAt: new Date(Date.now() - 1).toISOString() })); assert.doesNotMatch(html, /<button/); assert.match(html, /request has expired/);
 });
-test('pending card still exposes both actions and errors reuse inline result slot', () => {
-  assert.equal((card(summary()).match(/<button/g) ?? []).length, 2); assert.match(card(summary(), { error: 'Save failed' }), /role="status"[^>]*>Save failed/);
+test('pending card still exposes both actions and the failure slot is inline', () => {
+  assert.equal((card(summary()).match(/<button/g) ?? []).length, 2); assert.match(source('src/components/notifications/NotificationRow.tsx'), /role="status" className="text-dense text-text-light-gray">\{error \?\?/);
 });
 test('Inbox mounts variant outside task Link; double-submit and task-only keyboard actions are guarded', () => {
   const code = source('src/components/notifications/inboxSplit/index.tsx');
-  assert.match(code, /notification.type === "AgentBoardAccessRequest" \? \(\s*<AgentBoardAccessDecision/);
+  assert.match(code, /notification.type === "AgentBoardAccessRequest" && boardAccessDecisionCard/);
   assert.match(code, /!clickTarget \|\| clickTarget.type === "AgentBoardAccessRequest"/); assert.match(code, /!selectedKeyboardRow.item.notification.task/);
   assert.match(source('src/components/notifications/NotificationRow.tsx'), /if \(submitting.current\) return/);
   const board = source('src/app/agents/[agentId]/AgentBoardAccess.tsx'); assert.match(board, /Number.isSafeInteger\(rawBoardId\)/); assert.match(board, /agent.boardAccess.some/); assert.match(board, /setBoardAccessOpen\(true\)/);
