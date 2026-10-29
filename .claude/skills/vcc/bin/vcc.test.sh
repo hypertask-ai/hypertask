@@ -459,6 +459,10 @@ printf '%s\n' '**Status** long agent note about src/x.ts' > "$T/note.md"
 rerouted '**Status** long agent note about src/x.ts' bash "$vcc" comment add X-1 --markdown "--file=$T/note.md"
 rerouted 'hi' launch_hax interactive comment add X-1 --text hi
 allowed bash "$vcc" comment add 75994 --project 15 --text hi
+rerouted 'See PR 12 (https://github.com/o/r/pull/12) now.' bash "$vcc" comment add X-1 --text '<p>See <a href="https://github.com/o/r/pull/12">PR 12</a> now.</p>'
+allowed bash "$vcc" comment add X-1 --text hi --help
+[[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--text> <hi> <--help>" ]] || fail 'help must reach the CLI, never an agent-lane write'
+allowed bash "$vcc" task create --project 15 --title 'Make the board load much faster for every single user today' -h
 printf 'ok untyped agent comments are rerouted to vcc activity add\n'
 cat > "$HOME/.agents/skills/ship/scripts/ship-check" <<'STUB'
 #!/usr/bin/env bash

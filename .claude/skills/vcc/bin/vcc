@@ -211,7 +211,7 @@ voice_lint() {
   [ -z "$reason" ] || voice_refuse "$1" "$reason"
 }
 html_plain() {
-  jq -nr --arg t "$1" '$t | gsub("<br\\s*/?>|</(?:p|li|h[1-6]|div|blockquote|tr)>"; "\n"; "i") | gsub("<[^>]*>"; "") |
+  jq -nr --arg t "$1" '$t | gsub("<a\\b[^>]*href=[\"\u0027](?<u>[^\"\u0027]*)[\"\u0027][^>]*>(?<l>.*?)</a>"; "\(.l) (\(.u))"; "is") | gsub("<br\\s*/?>|</(?:p|li|h[1-6]|div|blockquote|tr)>"; "\n"; "i") | gsub("<[^>]*>"; "") |
     gsub("&nbsp;|&#160;"; " ") | gsub("&quot;"; "\"") | gsub("&#39;|&apos;"; "\u0027") | gsub("&lt;"; "<") |
     gsub("&gt;"; ">") | gsub("&amp;"; "&") | gsub("\\n\\s*\\n+"; "\n") | gsub("^\\s+|\\s+$"; "")'
 }
@@ -242,6 +242,7 @@ voice_route() {
       --description-file=*) descfile=${arg#*=} ;;
       --reply-to-comment-id=*|--reply-to-invocation-id=*|--attach=*) human=true ;;
       --markdown) markdown=true ;;
+      --help|-h) return 0 ;;
       --) shift; pos+=("$@"); break ;;
       -*) ;;
       *) pos+=("$arg") ;;
