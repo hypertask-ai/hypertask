@@ -66,7 +66,7 @@ test("hover chat is reversible and preserves profile links, human contacts and l
   } finally { global.CustomEvent = oldCustomEvent; view.close(); }
 });
 
-for (const sessions of [false, true]) test(`existing sidebar dispatch selects repeated agent requests, sessions ${sessions}`, async () => {
+for (const deepLink of [null, "agent-other"]) for (const sessions of [false, true]) test(`existing sidebar dispatch selects repeated agent requests, sessions ${sessions}, deep link ${deepLink}`, async () => {
   const view = mount();
   const originalFetch = global.fetch;
   const project = { id: 7049 }, user = { id: 985 };
@@ -83,7 +83,7 @@ for (const sessions of [false, true]) test(`existing sidebar dispatch selects re
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null, setNativeSidebarChat: noop },
     "@/utils/api/ai_chat/aiChatHelpers": { AI_Chat_API: {} },
     "@/store": { currentProjectAtom: "project", currentUserAtom: "user", aiChatSidebarWidthPxAtom: "width" },
-    "next/navigation": { useSearchParams: () => new URLSearchParams() },
+    "next/navigation": { useSearchParams: () => new URLSearchParams(deepLink ? { sidebarAgent: deepLink } : {}) },
     "@tanstack/react-query": { useQueryClient: () => ({ invalidateQueries: async () => {} }) },
     "@/lib/state": { useRecoilValue: atom => atom === "project" ? project : user, useRecoilState: () => [320] },
     "./MessageList": { MessageList: () => null }, "./WelcomeScreen": { WelcomeScreen: () => null },
@@ -97,11 +97,12 @@ for (const sessions of [false, true]) test(`existing sidebar dispatch selects re
   });
   global.fetch = async (_url, options) => {
     if (options?.method === "POST") opened.push(JSON.parse(options.body));
-    return { ok: true, json: async () => ({ success: true, agents: [agent], session: { id: "agent-session" } }) };
+    return { ok: true, json: async () => ({ success: true, agents: [agent, { ...agent, id: "agent-other" }], session: { id: "agent-session" } }) };
   };
   try {
     const Sidebar = source("src/components/AI_CHAT/AI_Chat_Sidebar.tsx").AI_Chat_Sidebar;
     await React.act(async () => view.render(React.createElement(Sidebar)));
+    if (deepLink) assert.equal(header.target.agent.id, deepLink);
     const select = async () => React.act(async () => window.dispatchEvent(new window.CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: agent.id } })));
     await select();
     assert.equal(header.target.kind, "external-agent");
@@ -112,7 +113,10 @@ for (const sessions of [false, true]) test(`existing sidebar dispatch selects re
     assert.equal(header.target.agent.id, agent.id);
     await React.act(async () => window.dispatchEvent(new window.CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: "not-in-roster" } })));
     assert.equal(header.target.agent.id, agent.id);
-    assert.equal(opened.length, sessions ? 2 : 0);
-    if (sessions) assert.deepEqual(opened[0], { projectId: 7049, agentId: agent.id });
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    await React.act(async () => document.dispatchEvent(new window.Event("visibilitychange")));
+    assert.equal(header.target.agent.id, agent.id, "roster refresh must not replay the old URL agent");
+    assert.equal(opened.length, sessions ? (deepLink ? 3 : 2) : 0);
+    if (sessions) assert.deepEqual(opened.at(-1), { projectId: 7049, agentId: agent.id });
   } finally { view.close(); global.fetch = originalFetch; }
 });

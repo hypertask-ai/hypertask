@@ -227,8 +227,6 @@ export const AI_Chat_Sidebar = ({
       }
     } catch {}
   }, [agentSessionsEnabled, sidebarEnabled, agents, currentUser?.id, projectId]);
-  const deepLink = searchParams?.get("sidebarAgent");
-  const handledDeepLink = useRef<string | null>(null);
   useEffect(agentSessionsEnabled || agentHoverChat ? () => {
     if (!sidebarEnabled) return;
     const choose = (event: Event) => {
@@ -236,7 +234,6 @@ export const AI_Chat_Sidebar = ({
       if (detail.agentId === null) { void selectTargetRef.current({ kind: "ai" }); return; }
       const agent = agents.find((item) => item.id === detail.agentId);
       if (agent) {
-        handledDeepLink.current = agent.id;
         void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId: lastAgentSessions.current.get(agent.id), getMentionDraft: detail.getDraft });
       }
     };
@@ -317,6 +314,8 @@ export const AI_Chat_Sidebar = ({
     if (target.kind !== "ai" && !agents.some((agent) => agent.id === target.agent.id)) void selectTargetRef.current({ kind: "ai" });
   }, [agents]);
 
+  const deepLink = searchParams?.get("sidebarAgent");
+  const handledDeepLink = useRef<string | null>(null);
   useEffect(() => { handledDeepLink.current = null; }, [projectId, currentUser?.id, sidebarEnabled]);
   useEffect(() => {
     if (!sidebarEnabled || !deepLink || handledDeepLink.current === deepLink) return;
