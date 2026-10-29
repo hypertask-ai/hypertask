@@ -118,7 +118,7 @@ Do not edit any repository files, commit, push, open PRs, write to boards, acces
 Explain the feature summary, source entry points, drift with path:line citations (or none), and one concise live recipe for a runner to execute later with verify-qa. Product regressions are reported separately, never papered over in docs. No live checks now.
 Return ONLY one JSON object, no markdown fences: {\"summary\":\"feature summary\",\"entryPoints\":[\"repo/path:line\"],\"drift\":\"none\",\"liveRecipe\":\"one live recipe\"}. If drift exists replace none with an array of concise descriptions each containing path:line evidence."
   for attempt in 1 2; do
-    (cd "$checkout" && timeout --kill-after=30s 18m nice -n 19 hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "$prompt") > "$run/$output.json" 2>/dev/null &
+    (cd "$checkout" && timeout --kill-after=30s 18m nice -n 19 hax --provider=codex --model=gpt-6-luna --effort=low --no-session -p "$prompt") > "$run/$output.json" 2>/dev/null &
     helper_pid=$!
     if wait "$helper_pid" &&
        node "$here/maintain-verification-state.mjs" validate "$checkout" "$state" "$run" "$page" >/dev/null 2>&1; then

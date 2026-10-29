@@ -5,7 +5,7 @@ REPO=$HOME/projects/hypertask
 FIRST=6
 SELF=$(readlink -f "$0")
 GUARD=$HOME/.local/bin/session-policy-guard
-LAUNCH=(hax --provider=codex --model=gpt-6.1-sol --effort=high)
+LAUNCH=(hax --provider=codex --model=gpt-6.1-sol --effort=medium)
 mkdir -p "$STATE"
 target() { cat "$STATE/target" 2>/dev/null || echo 10; }
 maxcap() { cat "$STATE/max" 2>/dev/null || echo 20; }

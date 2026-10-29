@@ -57,7 +57,7 @@ sys.exit(1 if sys.argv[1] == "has-session" else 0)
         result = self.pool("check")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls.read_text().splitlines(), ["guard " + json.dumps([
-            "--project", str(self.repo), "--", "hax", "--provider=codex", "--model=gpt-6.1-sol", "--effort=high"])])
+            "--project", str(self.repo), "--", "hax", "--provider=codex", "--model=gpt-6.1-sol", "--effort=medium"])])
 
     def test_refused_pool_cannot_create_session_or_setup_identity(self):
         result = self.pool("11", deny=True)

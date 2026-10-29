@@ -166,7 +166,7 @@ esac''')
                 pass
             process.wait()
         self.assertEqual(self.events.read_text().splitlines(), [
-            'hax --provider=codex --model=gpt-6.1-sol --effort=high ', 'retry'])
+            'hax --provider=codex --model=gpt-6.1-sol --effort=medium ', 'retry'])
 
     def test_interactive_run_sends_brief_records_final_output_and_closes(self):
         self.env['TMUX_PANE'] = '%fixture'
@@ -260,7 +260,7 @@ exec /bin/sleep 0.01
                         pass
                     process.wait()
                 events = self.events.read_text().splitlines()
-                self.assertIn('hax --provider=codex --model=gpt-6.1-sol --effort=high depth=unset identity=RUNNER 8', events)
+                self.assertIn('hax --provider=codex --model=gpt-6.1-sol --effort=medium depth=unset identity=RUNNER 8', events)
                 session = next(event for event in events if event.startswith('session='))
                 self.assertRegex(session, r'^session=[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12} claude=unset thread=unset$')
                 session_id = session.split()[0]
