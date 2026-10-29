@@ -574,7 +574,7 @@ test("Undo from Material restores an available theme after Material is disabled"
   assert.equal(h.state.writes, 0);
 });
 
-test("Settings chat cannot bypass Apply with legacy mutation tools; ordinary chat keeps those tools", () => {
+test("the tool catalog keeps every tool, including the settings tool, and only the chat stream narrows it", () => {
   const fs = require("node:fs");
   const path = require("node:path");
   const source = fs.readFileSync(path.join(__dirname, "../src/lib/ai/tools/index.ts"), "utf8");
@@ -587,16 +587,15 @@ test("Settings chat cannot bypass Apply with legacy mutation tools; ordinary cha
   mocks["@/lib/ai/tools/execution"] = { trackToolSetExecutions: (tools) => tools };
   const { buildTools } = load("src/lib/ai/tools/index.ts", mocks);
   const args = [{ id: 6 }, { settings_context: themeScope }, () => {}, () => {}, null, undefined, undefined, false, undefined, false, null];
-  const settingsTools = buildTools(...args, true);
-  assert.deepEqual(Object.keys(settingsTools), ["hypertask_settings"]);
-  assert.equal(settingsTools.hypertask_settings.name, "preview-only");
-  const ordinaryTools = buildTools(...args, false);
-  assert.equal(ordinaryTools.hypertask_update_profile.name, "hypertask_update_profile");
-  assert.equal(ordinaryTools.hypertask_project_admin.name, "hypertask_project_admin");
+  const catalog = buildTools(...args);
+  assert.equal(catalog.hypertask_settings.name, "preview-only");
+  assert.equal(catalog.hypertask_update_profile.name, "hypertask_update_profile");
+  assert.equal(catalog.hypertask_project_admin.name, "hypertask_project_admin");
+  assert.equal(Object.isSealed(catalog), true);
 });
 
 test("the streamed and persisted reply contains the server's review-card marker, without relying on model HTML", async () => {
-  const events = [], saved = [];
+  const events = [], saved = [], seenToolNames = [];
   const cardId = "00000000-0000-4000-8000-000000000002";
   const mocks = {
     "@/lib/ai/prompts/registry": { renderPrompt: () => "" },
@@ -616,8 +615,11 @@ test("the streamed and persisted reply contains the server's review-card marker,
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, aiPromptCachingEnabled: async () => false },
     "@/lib/ai/chatStream/content": { createUserContent: () => "request" },
     "@/lib/ai/chatStream/title": {},
-    "@/lib/ai/tools": { buildTools: (_user, _body, _send, record) => ({ propose: () => record({ name: "hypertask_settings", result: { proposal: { id: cardId } } }) }) },
-    "./modelReply": { generateModelReply: async (_state, { tools }) => { tools.propose(); return { chunks: ["<p>Review it</p>"] }; } },
+    "@/lib/ai/tools": { buildTools: (_user, _body, _send, record) => ({
+      hypertask_settings: { execute: async () => record({ name: "hypertask_settings", result: { proposal: { id: cardId } } }) },
+      hypertask_update_profile: { execute: async () => ({ success: true }) },
+    }) },
+    "./modelReply": { generateModelReply: async (_state, { tools }) => { seenToolNames.push(...Object.keys(tools)); await tools.hypertask_settings.execute(); return { chunks: ["<p>Review it</p>"] }; } },
     "./chatNames": { nameChatFromFirstMessage: async () => undefined },
   };
   const { runModelTurn } = load("src/lib/ai/chatStream/modelTurn.ts", mocks);
@@ -629,6 +631,7 @@ test("the streamed and persisted reply contains the server's review-card marker,
   };
   await runModelTurn(state, body, { systemPromptAddition: "", cleanedText: body.message });
   const marker = `<p><a href="/settings/ai-change/${cardId}">Review setting change</a></p>`;
+  assert.deepEqual(seenToolNames, ["hypertask_settings"]);
   assert.deepEqual(saved, [`<p>Review it</p>${marker}`]);
   assert.deepEqual(events[0], ["content", { content: marker }]);
   assert.deepEqual(events.at(-1), ["finish", "complete", { user_message_persisted: undefined, assistant_persisted: true }]);

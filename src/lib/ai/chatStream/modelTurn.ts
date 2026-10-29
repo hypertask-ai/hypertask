@@ -137,10 +137,11 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     bulkScopeConfirmationEnabled,
     skillDraftsEnabled,
     ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
-    settingsEnabled,
   );
-  const tools = ticketRowsEnabled ? catalogTools
-    : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
+  const tools = settingsEnabled
+    ? Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name === "hypertask_settings"))
+    : ticketRowsEnabled ? catalogTools
+      : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
   if (
     heartbeatExecutionId &&
     body.session_id &&

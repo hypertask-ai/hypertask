@@ -109,12 +109,8 @@ export function buildTools(
   bulkScopeConfirmationEnabled = false,
   skillDraftsEnabled = false,
   ticketRows?: TicketRowsSink,
-  settingsEnabled = false,
 ): ToolSet {
   const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal, inlineAgentImagesEnabled, teamScope, bulkScopeConfirmationEnabled, skillDraftsEnabled, ticketRows);
-  if (settingsEnabled && body.settings_context && !actingAgentId) {
-    return trackToolSetExecutions(createSettingsTool(context), recordToolExecution, recordToolStart);
-  }
   const tools: ToolSet = {
     hypertask_list_agents: createListAgentsTool(context).hypertask_list_agents,
     hypertask_agent_webhook: createAgentWebhookTool(context).hypertask_agent_webhook,
@@ -201,6 +197,7 @@ export function buildTools(
     web_search: createWebSearchTool(context).web_search,
     search_help_docs: createSearchHelpDocsTool(context).search_help_docs,
     hypertask_show_ticket_rows: createShowTicketRowsTool(context).hypertask_show_ticket_rows,
+    hypertask_settings: createSettingsTool(context).hypertask_settings,
   };
 
   Object.seal(tools);
