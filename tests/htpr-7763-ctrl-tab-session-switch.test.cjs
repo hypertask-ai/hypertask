@@ -84,7 +84,13 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       context.currentSession = rows.find(row => row.id === id);
     },
   };
-  const router = { replace: route => routes.push(route) };
+  const remountComposer = () => {
+    document.activeElement?.blur?.();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    container.appendChild(composer);
+  };
+  const router = { replace: route => { routes.push(route); remountComposer(); } };
   const { default: Chat } = load("src/app/chat/Chat.tsx", {
     react,
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: shared }) },
@@ -151,7 +157,12 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       elements(tree, node => node.type === "input")[0].props.onChange({ target: { value } });
       render();
     },
-    press(overrides = {}) {
+    get location() { return dom.window.location.pathname + dom.window.location.search; },
+    remountComposer,
+    drainTimers() {
+      for (let pass = 0; pass < 5 && timers.length; pass++) timers.splice(0).forEach(callback => callback());
+    },
+    press(overrides = {}, { beforeTimers } = {}) {
       const event = new dom.window.KeyboardEvent("keydown", { key: "Tab", ctrlKey: true, bubbles: true, cancelable: true, ...overrides });
       if (overrides.defaultPrevented) event.preventDefault();
       document.getElementById("search").focus();
@@ -161,7 +172,8 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       if (selections.length > previousSelections) {
         assert.equal(document.activeElement.id, "search", "composer focus waits until after selection renders");
       }
-      timers.splice(0).forEach(callback => callback());
+      beforeTimers?.();
+      this.drainTimers();
       return event;
     },
     close() {
@@ -176,7 +188,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
 }
 
 for (const paging of [false, true]) {
-  test(`${paging ? "paged" : "legacy"} rail order drives both directions, routes and deferred composer focus`, () => {
+  test(`${paging ? "paged" : "legacy"} rail order drives both directions, updates the address without navigating and keeps the caret in the composer`, () => {
     const view = chat({ paging });
     try {
       assert.deepEqual(view.groups, ["Pinned", "Today", "Previous 7 days", "Older"]);
@@ -193,10 +205,28 @@ for (const paging of [false, true]) {
       assert.equal(view.context.currentSession.id, "pinned");
       assert.equal(document.activeElement, view.composer);
       assert.deepEqual(view.selections, ["hidden", "week", "hidden", "today", "pinned"]);
-      assert.deepEqual(view.routes, ["hidden", "week", "hidden", "today", "pinned"].map(id => `/chat/${id}?return_to=%2Fmy-tasks`));
+      assert.deepEqual(view.routes, []);
+      assert.equal(view.location, "/chat/pinned?return_to=%2Fmy-tasks");
+      assert.equal(document.activeElement, view.composer);
     } finally { view.close(); }
   });
 }
+
+test("switching chats updates the address without navigating and keeps the caret when the composer re-renders", () => {
+  const view = chat();
+  try {
+    view.press();
+    assert.equal(view.context.currentSession.id, "hidden");
+    assert.deepEqual(view.routes, []);
+    assert.equal(view.location, "/chat/hidden?return_to=%2Fmy-tasks");
+    assert.equal(document.activeElement, view.composer);
+    view.remountComposer();
+    assert.notEqual(document.activeElement, view.composer);
+    view.press();
+    assert.equal(view.context.currentSession.id, "week");
+    assert.equal(document.activeElement, view.composer);
+  } finally { view.close(); }
+});
 
 test("search uses only displayed matches and stops at both ends without wrapping", () => {
   const view = chat({ current: "pinned" });
@@ -209,7 +239,8 @@ test("search uses only displayed matches and stops at both ends without wrapping
     for (let i = 0; i < 4; i++) view.press();
     assert.equal(view.context.currentSession.id, "older");
     assert.deepEqual(view.selections, ["today", "week", "older"]);
-    assert.equal(view.routes.at(-1), "/chat/older?return_to=%2Fmy-tasks");
+    assert.deepEqual(view.routes, []);
+    assert.equal(view.location, "/chat/older?return_to=%2Fmy-tasks");
     view.press({ shiftKey: true });
     assert.equal(view.context.currentSession.id, "week");
     assert.equal(document.activeElement, view.composer);
