@@ -10,6 +10,7 @@ import { mapPath, repoPaths, apiRoutes, routePatterns, routeExists, checkFeature
 const here = path.dirname(fileURLToPath(import.meta.url));
 const checker = path.join(here, 'feature-map-check.mjs');
 const runner = path.join(here, 'maintain-verification-weekly');
+const opsPath = '.claude/skills/verify-qa/reference/ops-map';
 
 function fixture(t, count = 1) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'feature-map-'));
@@ -27,6 +28,7 @@ function fixture(t, count = 1) {
   const pages = Array.from({ length: count }, (_, index) => `area-${String(index).padStart(2, '0')}.md`);
   put(`${mapPath}/INDEX.md`, '| Area | File |\n|---|---|\n' + pages.map(page => `| ${page} | [${page}](${page}) |`).join('\n') + '\n');
   for (const page of pages) put(`${mapPath}/${page}`, '# Area\n\n`src/shared.ts`\n\n## How to drive it\nOpen area, reload and collect proof.\n');
+  put(`${opsPath}/INDEX.md`, '# Ops map\n');
   put('src/shared.ts', 'export const fixture = true;\n');
   git('add', '.');
   git('commit', '-m', 'fixture');
@@ -121,6 +123,42 @@ test('index requires table coverage, existing siblings and unique entries and ro
   assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing index'));
   rmSync(path.join(f.repo, mapPath), { recursive: true });
   assert.deepEqual(checkFeatureMap(f.repo), [{ page: 'INDEX.md', kind: 'missing directory', value: mapPath }]);
+});
+
+test('ops map receives the same index, path and route checks as customer recipes', t => {
+  const f = fixture(t);
+  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Build | [build](build.md) |\n');
+  f.put(`${opsPath}/build.md`, '`src/shared.ts`');
+  assert.deepEqual(checkFeatureMap(f.repo), []);
+  f.put(`${opsPath}/build.md`, '`src/missing.ts` POST /api/missing');
+  assert.deepEqual(checkFeatureMap(f.repo), [
+    { page: '../ops-map/build.md', kind: 'missing path', value: 'src/missing.ts' },
+    { page: '../ops-map/build.md', kind: 'missing API route', value: '/api/missing' },
+  ]);
+  f.put(`${opsPath}/build.md`, '`src/shared.ts`');
+  f.put(`${opsPath}/unlisted.md`, '# Unlisted');
+  assert.ok(checkFeatureMap(f.repo).some(value => value.page === '../ops-map/INDEX.md' && value.kind === 'unindexed page' && value.value === 'unlisted.md'));
+  rmSync(path.join(f.repo, opsPath, 'unlisted.md'));
+  rmSync(path.join(f.repo, opsPath, 'build.md'));
+  assert.ok(checkFeatureMap(f.repo).some(value => value.page === '../ops-map/INDEX.md' && value.kind === 'missing file' && value.value === 'build.md'));
+  rmSync(path.join(f.repo, opsPath, 'INDEX.md'));
+  assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing index' && value.page === '../ops-map/INDEX.md'));
+  rmSync(path.join(f.repo, opsPath), { recursive: true });
+  assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing directory' && value.value === opsPath));
+});
+
+test('CLI fails for ops drift and weekly reports its moved recipe', t => {
+  const f = weeklyFixture(t);
+  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Build | [build](build.md) |\n');
+  f.put(`${opsPath}/build.md`, '`docs/removed.md`\n\n## How to drive it\nRead the hosted build log.\n');
+  const result = spawnSync(process.execPath, [checker, f.repo], { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /ops-map\/build.md: missing path: docs\/removed.md/);
+  f.git('add', '.'); f.git('commit', '-m', 'ops citation drift');
+  ok(f.run('--dry-run'));
+  const report = readFileSync(path.join(f.runs()[0], 'description.html'), 'utf8');
+  assert.match(report, /ops-map\/build.md:1: missing path: docs\/removed.md/);
+  assert.match(report, /Read the hosted build log/);
 });
 
 test('repo paths strip citations, punctuation, commands and anchors; ignore globs, placeholders and explicit external-repo scopes', t => {
@@ -384,7 +422,7 @@ test('GitHub workflow and policy keep the tiny check free, pinned, scoped and no
   const workflow = read('.github/workflows/feature-map-weekly.yml');
   assert.match(workflow, /schedule:\n    - cron: '37 3 \* \* 1'\n  workflow_dispatch:\n  pull_request:/);
   assert.match(workflow, /branches: \[production\]/);
-  for (const scope of ['.claude/skills/maintain-verification-skill/**', '.claude/skills/verify-qa/reference/feature-map/**', '.github/workflows/feature-map-weekly.yml']) assert.ok(workflow.includes(`- '${scope}'`));
+  for (const scope of ['.claude/skills/maintain-verification-skill/**', '.claude/skills/verify-qa/reference/feature-map/**', '.claude/skills/verify-qa/reference/ops-map/**', '.github/workflows/feature-map-weekly.yml']) assert.ok(workflow.includes(`- '${scope}'`));
   assert.match(workflow, /permissions:\n  contents: read\n/);
   assert.match(workflow, /runs-on: ubuntu-latest\n    timeout-minutes: 5/);
   assert.match(workflow, /node-version: \^24\.\d+\.\d+\n          check-latest: true/);

@@ -180,7 +180,7 @@ feature_map_weekly:
   cron_utc: "37 3 * * 1"
   triggers: [schedule, workflow_dispatch, pull_request]
   pull_request_base: production
-  paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-qa/reference/feature-map/**", ".github/workflows/feature-map-weekly.yml"]
+  paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-qa/reference/feature-map/**", ".claude/skills/verify-qa/reference/ops-map/**", ".github/workflows/feature-map-weekly.yml"]
   node_major: 24
   permissions: [contents_read]
   commands:

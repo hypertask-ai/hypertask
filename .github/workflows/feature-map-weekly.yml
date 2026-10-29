@@ -10,6 +10,7 @@ on:
     paths:
       - '.claude/skills/maintain-verification-skill/**'
       - '.claude/skills/verify-qa/reference/feature-map/**'
+      - '.claude/skills/verify-qa/reference/ops-map/**'
       - '.github/workflows/feature-map-weekly.yml'
 
 permissions:

@@ -9,7 +9,7 @@ Server-side board creation, agent connection, agent task completion and invitati
 - Doctor: production deployment success, QA 985 signed in on `/my-tasks`, and the core inbox cycle.
 - Read `/api/flags` with QA 985 and ordinary QA 2343. Retired activation switches must be absent; other switches remain available.
 - Never create customer-looking analytics using synthetic QA identities. QA 985, guest users and configured QA emails remain excluded. Local activation/controller tests prove exclusions alongside an eligible positive control.
-- Read the existing `https://hypertask.app/signup-check` aggregate report when its Access service identity is available. Follow `signup-check.md`; do not query ticket data through a database.
+- Read the existing `https://hypertask.app/signup-check` aggregate report when its Access service identity is available. Follow [signup-check.md](../ops-map/signup-check.md); do not query ticket data through a database.
 - Provider-side event delivery is UNREACHABLE when the runner lacks read access. Record that limit rather than claiming a mock proves live delivery.
 
 ## What usually breaks
