@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # ship-claim: the whole claim step, with a race check (YPER4-264).
 #   ship-claim <TICKET> ["<resume command>"]            claim, re-read the comments, step back if another runner claimed first
-#   ship-claim decide <RESUME_ID> <comments.json> [idle-ids-file]   pure decision from a saved comments read (tests use this)
+#   ship-claim decide <CLAIM_ID> <comments.json> [idle-ids] [assigned-ids] [self-resume]   pure decision from a saved comments read (tests use this)
 #   ship-claim hold <TICKET>                            read-only: would unfinished work, the queue brake or infra first refuse this claim?
 # Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error,
 #   4 HOLD (this RUNNER n has open PRs or unfinished merged work: finish it, claim nothing new; or, for an app
 #   ticket, the PR queue is full (more than QUEUE_MAX open non-draft PRs: infra only) or a free Fleet Infra ticket waits).
 # Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id, then log ids.
-# Ownership is the session resume id in the comment text, not the agent name. Assignment is never
+# Ownership is the claim id in the comment text, not the agent name: the harness session id, or the
+# last word of the resume command when the harness gives none. Assignment is never
 # consulted (a claimer may have posted but not assigned yet). A competing claim older than 6 h
 # before ours is ignored only when its agent has no ticket activity in the last 6 h (`vcc activity
 # last`); if that read fails the old claim counts. Losing to the same agent identity (another
@@ -20,34 +21,44 @@
 # Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
 set -uo pipefail
 
-# decide <resume-id> <comments.json> [idle-ids-file]
+# decide <claim-id> <comments.json> [idle-ids] [assigned-ids] [self-resume]
 # Prints "WIN", "NOOURS" or "LOSE<TAB>name<TAB>agent id<TAB>old(0|1)<TAB>same-agent(0|1)".
 # idle-ids-file: agent ids (one per line) with no recent activity; their claims older than 6 h are ignored.
 # assigned-ids-file: agent ids (one per line) now assigned; empty or missing = unknown, rule (a) is skipped.
 decide() {
-  local idle=${3:-/dev/null} asg=${4:-/dev/null}
-  jq -r --arg rid "$1" --rawfile idle "$idle" --rawfile asg "$asg" '
+  local idle=${3:-/dev/null} asg=${4:-/dev/null} self=${5:-}
+  jq -r --arg rid "$1" --arg self "$self" --rawfile idle "$idle" --rawfile asg "$asg" '
     def txt: ((.text // .commentText // "") | gsub("<[^>]*>"; " "));
     def key: (.agent.id // .agent_id // .agent.displayName // .agent_display_name // "");
     def name: (.agent.displayName // .agent_display_name // key | tostring);
     def at: [(.createdAt // ""), ((.id // 0) | (tonumber? // .) | if type == "number" then [0, .] else [1, tostring] end)];
     def secs: (.createdAt | sub("\\.[0-9]+"; "") | fromdateiso8601);
-    def sess: (txt | capture("resume[[:space:]]+(?<s>[^[:space:]]+)").s? // "");
+    def sess: (txt as $t | ($t | capture("[Cc]laim id:[[:space:]]*\\[(?<s>[^\\]]+)\\]").s?)
+      // ($t | capture("[Cc]laim id:[[:space:]]*(?<s>[^[:space:]<.,]+)").s?)
+      // ($t | capture("resume[[:space:]]+(?<s>[^[:space:]]+)").s?) // "");
+    def legacy: ((txt | test("[Cc]laim id:")) | not);
+    def resume: (txt as $t | ($t | capture("[Rr]esume( this [Cc]laude session)?:[[:space:]]*(?<r>[^<]*)").r?) // "");
+    def ours: (sess == $rid) or ($self != "" and legacy and (txt | contains($self)));
+    def norm: (gsub("[[:space:]]+"; " ") | sub("^ "; "") | sub(" $"; ""));
+    def retires($k; $r): (sess != "" and sess == ($k | sess))
+      or ((legacy or ($k | legacy))
+        and ((($r | norm) as $rn | $rn != "" and (((($k | txt) | norm)) | contains($rn)))));
     def handover: (txt | sub("^[[:space:]]+"; "") | test("^(Handing over|Handed over|Stepping back|Released|Unclaimed)"; "i"));
     ($idle | split("\n") | map(select(. != ""))) as $idle
     | ($asg | split("\n") | map(select(. != ""))) as $asg
     | [(.comments[], (.activities[]? | {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}})) | select(key != "")] as $c
     | [$c[] | select(txt | test("Stepping back"))] as $back
     | [$c[] | select(handover)] as $gone
-    | ([$c[] | select(txt | contains($rid)) | secs] | min // 0) as $mine
+    | ([$c[] | select(ours) | secs] | min // 0) as $mine
     | [$c[] | select(txt | contains("Claimed."))
-        | . as $k | select(([$back[] | select(sess == ($k | sess) and at > ($k | at))] | length) == 0)
-        | select(([$gone[] | select(key == ($k | key) and (sess == "" or sess == ($k | sess)) and at > ($k | at))] | length) == 0)
+        | . as $k | select(([$back[] | select(retires($k; resume) and at > ($k | at))] | length) == 0)
+        | select(([$gone[] | select(key == ($k | key) and ((legacy and resume == "") or retires($k; resume))
+              and at > ($k | at))] | length) == 0)
         | select(($asg | length) == 0 or ($asg | index($k | key)) or (($k | secs) > $mine - 300))] as $claims
-    | [$claims[] | select(txt | contains($rid))] as $ours
+    | [$claims[] | select(ours)] as $ours
     | if ($ours | length) == 0 then "NOOURS"
       else ($ours | sort_by(at) | first) as $me
-        | ([$claims[] | select((txt | contains($rid) | not)
+        | ([$claims[] | select((ours | not)
               and at < ($me | at)
               and ((($me | secs) - secs) <= 21600 or (key as $k | $idle | index($k) | not)))]
             | sort_by(at) | first // null) as $other
@@ -179,9 +190,9 @@ if [ "${1:-}" = hold ]; then
 fi
 
 if [ "${1:-}" = decide ]; then
-  [ $# -ge 3 ] || { echo "usage: ship-claim decide <resume-id> <comments.json> [idle-ids-file]" >&2; exit 2; }
+  [ $# -ge 3 ] || { echo "usage: ship-claim decide <claim-id> <comments.json> [idle-ids] [assigned-ids] [self-resume]" >&2; exit 2; }
   jq -e '.comments | type == "array"' "$3" >/dev/null 2>&1 || { echo "ship-claim: $3 is not readable comments JSON" >&2; exit 2; }
-  decide "$2" "$3" "${4:-}" "${5:-}" || exit 2
+  decide "$2" "$3" "${4:-}" "${5:-}" "${6:-}" || exit 2
   exit 0
 fi
 
@@ -194,7 +205,11 @@ RESUME=${2:-${SHIP_CLAIM_RESUME:-}}
 CSID=${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}
 [ -n "$RESUME" ] || { [ -n "$CSID" ] && RESUME="codex resume $CSID"; }
 [ -n "$RESUME" ] || { echo "ship-claim: no session id found; pass the resume command: ship-claim $T \"<resume command>\"" >&2; exit 2; }
-RID=${RESUME##* }
+# The claim id tells two sessions apart. Codex and hax runners all resume through a tmux attach line,
+# so the resume command is not unique; the harness session id is, and never matches another runner's claim.
+# A claim id is the whole resume command: two runners never share one, and the same runner keeps it across a
+# restart, so a restarted runner still owns the claim its previous session left.
+RID=$(printf '%s' "$RESUME" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//')
 
 hold_check "$T" || exit $?
 
@@ -206,7 +221,7 @@ if [[ $T == HTPR-* ]]; then
 fi
 
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
-"$VCC" activity add "$T" "Claimed. Session working it now.
+"$VCC" activity add "$T" "Claimed. Session working it now. Claim id: [$RID]
 Next: I examine and fix it. Resume: $RESUME" >/dev/null \
   || { echo "ship-claim: claim activity failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
@@ -252,7 +267,7 @@ agent_idle() {
 
 res=NOOURS
 for _ in 1 2 3 4 5 6 7 8; do
-  res=$(decide "$RID" "$W" "$IDLE" "$ASG") || { echo "ship-claim: cannot judge comments on $T" >&2; exit 2; }
+  res=$(decide "$RID" "$W" "$IDLE" "$ASG" "$RESUME") || { echo "ship-claim: cannot judge comments on $T" >&2; exit 2; }
   case "$res" in
     LOSE*)
       IFS=$'\t' read -r _ other oid old same <<< "$res"
@@ -277,7 +292,7 @@ case "$res" in
       echo "ship-claim: reuse any unanswered question; edit your own or bump the original in agent activity, never post it again."
       [ -z "$questions" ] || printf '%s\n' "$questions"
       links=$(printf '%s\n' "$questions" | cut -d' ' -f1 | paste -sd ' ' -)
-      "$VCC" activity add "$T" "Takeover: review questions and replies; reuse unanswered questions, never re-ask. ${links:-Read older comment pages before asking.} Resume: $RESUME" >/dev/null \
+      "$VCC" activity add "$T" "Takeover: review questions and replies; reuse unanswered questions, never re-ask. ${links:-Read older comment pages before asking.} Claim id: [$RID]. Resume: $RESUME" >/dev/null \
         || { echo "ship-claim: takeover handoff failed" >&2; exit 2; }
     fi
     echo "ship-claim: $T claimed, you are first. Start work."; exit 0 ;;
@@ -289,7 +304,7 @@ case "$res" in
     else
       "$VCC" task unassign "$T" --self >/dev/null || echo "ship-claim: unassign failed, remove yourself by hand" >&2
     fi
-    "$VCC" activity add "$T" "Stepping back: $other claimed this first.
+    "$VCC" activity add "$T" "Stepping back: $other claimed this first. Claim id: [$RID]
 Next: $other carries on. Resume: $RESUME" >/dev/null \
       || echo "ship-claim: step-back comment failed" >&2
     echo "ship-claim: STEP BACK, $other claimed $T first. Do NOT start work; pick another ticket."

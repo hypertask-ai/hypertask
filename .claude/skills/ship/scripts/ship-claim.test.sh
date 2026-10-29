@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Offline tests for ship-claim (YPER4-264): decision from saved comments, and the full flow with stub vcc/hypertask.
 cd "$(dirname "$0")" || exit 1
-unset SHIP_SESSION_NAME
+unset SHIP_SESSION_NAME CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID
 fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 eq() { [ "$2" = "$3" ] && ok "$1" || bad "$1 (want '$3' got '$2')"; }
@@ -88,6 +88,88 @@ mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" \
    "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 eq "someone else's hand-over does not cancel A's claim" "$(dec)" "$(printf 'LOSE\tRUNNER 7')"
 
+# Codex and hax runners resume through a tmux attach line, so every claim, hand-over and step-back
+# carries its own claim id plus its runner's resume line (YPER4-931).
+H5='tmux attach -t ht-hax-runner-5 (hax RUNNER 5)'
+L3='tmux attach -t ht-hax-runner-3 (hax RUNNER 3)'
+L7='tmux attach -t ht-hax-runner-7 (hax RUNNER 7)'
+L9='tmux attach -t ht-hax-runner-9 (hax RUNNER 9)'
+claimid() { echo "<p><strong>Claimed.</strong> Claim id: [$1]</p><p>Next: go. Resume: ${2:-$H5}</p>"; }
+stepback() { echo "<p><strong>Stepping back: RUNNER 9 claimed this first.</strong> Claim id: [$1]</p><p>Next: go on. Resume: ${2:-$H5}</p>"; }
+oldclaim() { echo "<p><strong>Claimed.</strong></p><p>Next: go. Resume: $1</p>"; }
+decideS() { ./ship-claim decide "$1" "$D/c.json" "" "" "${2:-}" | cut -f1,2; }
+mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claimid codex-sess-7 "$L7")")" \
+   "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claimid $ME "$L3")")"
+eq "two Codex runners, earliest claim wins" "$(decide)" "$(printf 'LOSE\tRUNNER 7')"
+mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claimid codex-sess-7 "$L7")")" \
+   "$(c 11 2026-10-11T10:00:02.000Z a2 'RUNNER 3' "$(claimid codex-sess-3 "$L3")")" \
+   "$(c 12 2026-10-11T10:00:05.000Z a1 'RUNNER 7' "$(stepback codex-sess-7 "$L7")")" \
+   "$(c 13 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claimid $ME "$L3")")"
+eq "a step-back cancels only its own claim" "$(decide)" "$(printf 'LOSE\tRUNNER 3')"
+mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claimid codex-sess-7 "$L7")")" \
+   "$(c 11 2026-10-11T10:00:02.000Z a2 'RUNNER 3' "$(claimid $ME "$L3")")" \
+   "$(c 12 2026-10-11T10:00:05.000Z a1 'RUNNER 7' "$(stepback codex-sess-7 "$L7")")"
+eq "another session's step-back leaves our claim standing" "$(decide)" WIN
+mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claimid active-other)")" \
+   "$(c 11 2026-10-11T10:00:02.000Z a2 'RUNNER 3' "$(claimid $ME)")" \
+   "$(c 12 2026-10-11T10:00:05.000Z a1 'RUNNER 7' "$(stepback active-other)")"
+eq "a step-back never retires another live claim id" "$(decideS $ME '')" WIN
+mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(oldclaim "$H5")")" \
+   "$(c 11 2026-10-11T10:05:00.000Z a2 'RUNNER 3' "$(claimid $ME)")"
+eq "own earlier session's claim is ours by its resume line" "$(decideS $ME "$H5")" WIN
+eq "without the resume line the earlier claim competes" "$(decideS $ME '')" "$(printf 'LOSE\tRUNNER 3')"
+mk "$(c 10 2026-10-11T09:00:00.000Z a2 'RUNNER 3' "$(oldclaim "$H5")")" \
+   "$(c 11 2026-10-11T09:05:00.000Z a2 'RUNNER 3' "$(claimid $ME)")" \
+   "$(c 12 2026-10-11T09:06:00.000Z a2 'RUNNER 3' "$(stepback $ME)")" \
+   "$(c 13 2026-10-11T09:10:00.000Z a3 'RUNNER 4' "$(claimid third-sess)")"
+eq "own step-back retires the resume-adopted older claim" "$(decideS third-sess '')" WIN
+mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 7' "$(oldclaim "$L7")")" \
+   "$(c 11 2026-10-11T09:02:00.000Z a2 'RUNNER 3' "$(stepback other-session)")" \
+   "$(c 12 2026-10-11T09:05:00.000Z a2 'RUNNER 3' "$(claimid $ME)")"
+eq "another agent's older claim survives our step-back" "$(decideS $ME '')" "$(printf 'LOSE\tRUNNER 7')"
+mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 7' "$(claimid active-other)")" \
+   "$(c 11 2026-10-11T09:05:00.000Z a2 'RUNNER 3' "$(claimid $ME)")"
+eq "two live claim ids compete even on one resume line" "$(decideS $ME "$H5")" "$(printf 'LOSE\tRUNNER 7')"
+mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 7' "$(claimid active-1 "$L7")")" \
+   "$(c 11 2026-10-11T09:05:00.000Z a1 'RUNNER 7' '<p><strong>Released this ticket</strong></p>')" \
+   "$(c 12 2026-10-11T09:10:00.000Z a2 'RUNNER 3' "$(claimid $ME "$L3")")"
+eq "a sessionless release retires a new claim of its own agent" "$(decide)" WIN
+mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 7' "$(claimid active-1 "$L7")")" \
+   "$(c 11 2026-10-11T09:05:00.000Z a1 'RUNNER 7' '<p><strong>Released this ticket</strong> Claim id: active-1</p>')" \
+   "$(c 12 2026-10-11T09:10:00.000Z a2 'RUNNER 3' "$(claimid $ME "$L3")")"
+eq "a released session stops competing" "$(decide)" WIN
+# A claim id is the whole resume command, so a restarted runner keeps the id its previous session used,
+# while another runner's claim still competes and a release only retires what it names.
+mk "$(c 10 2026-10-11T09:00:00.000Z a2 'RUNNER 3' "$(oldclaim "$H5")")" \
+   "$(c 11 2026-10-11T09:05:00.000Z a2 'RUNNER 3' "$(claimid "$H5")")"
+eq "a restarted runner keeps its claim id" "$(decideS "$H5" "$H5")" WIN
+mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 7' "$(claimid "$L7")")" \
+   "$(c 11 2026-10-11T09:05:00.000Z a2 'RUNNER 3' "$(claimid "$L3")")"
+eq "another runner's claim still competes" "$(decideS "$L3")" "$(printf 'LOSE\tRUNNER 7')"
+mk "$(c 10 2026-10-11T09:00:00.000Z a2 'RUNNER 3' "$(claimid "$L3")")" \
+   "$(c 11 2026-10-11T09:02:00.000Z a2 'RUNNER 3' "<p><strong>Handed over to RUNNER 9: all yours.</strong></p><p>Resume: $L9</p>")" \
+   "$(c 12 2026-10-11T09:05:00.000Z a5 'RUNNER 9' "$(claimid "$L9")")"
+eq "a release with a different resume line keeps the claim" "$(decideS "$L9")" "$(printf 'LOSE\tRUNNER 3')"
+mk "$(c 10 2026-10-11T09:00:00.000Z a2 'RUNNER 3' "$(claimid "$H5")")" \
+   "$(c 11 2026-10-11T09:02:00.000Z a2 'RUNNER 3' "<p><strong>Handed over to RUNNER 9: all yours.</strong></p><p>Resume: $H5</p>")" \
+   "$(c 12 2026-10-11T09:10:00.000Z a5 'RUNNER 9' "$(claimid "$L9")")"
+eq "a resume-only handover retires the tagged claim it names" "$(decideS "$L9")" WIN
+mk "$(c 10 2026-10-11T09:00:00.000Z a2 'RUNNER 3' "$(claimid "$L3")")" \
+   "$(c 11 2026-10-11T09:02:00.000Z a1 'RUNNER 7' "$(claimid "$L7")")" \
+   "$(c 12 2026-10-11T09:10:00.000Z a5 'RUNNER 9' "$(claimid "$L9")")"
+eq "another runner's step-back never retires a claim" "$(decideS "$L9")" "$(printf 'LOSE\tRUNNER 3')"
+mk "$(c 10 2026-10-11T09:00:00.000Z a2 'RUNNER 3' "$(claimid "$L3")")" \
+   "$(c 11 2026-10-11T09:02:00.000Z a2 'RUNNER 3' "$(stepback "$L3")")" \
+   "$(c 12 2026-10-11T09:10:00.000Z a5 'RUNNER 9' "$(claimid "$L9")")"
+eq "a step-back retires its own runner's claims for any reader" "$(decideS "$L9")" WIN
+mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 15' "$(claimid '15)')")" \
+   "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 5' "$(claimid '5)')")"
+eq "claim ids compare exactly, so 5) never matches 15)" "$(decideS '5)')" "$(printf 'LOSE\tRUNNER 15')"
+mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 7' "$(oldclaim "$L7")")" \
+   "$(c 11 2026-10-11T09:02:00.000Z a2 'RUNNER 3' "$(stepback "" "$L3")")" \
+   "$(c 12 2026-10-11T09:10:00.000Z a5 'RUNNER 9' "$(oldclaim "$L9")")"
+eq "a legacy step-back never retires another runner's claim" "$(decideS "$L9" "$L9")" "$(printf 'LOSE\tRUNNER 7')"
+
 # Full flow with stubs.
 cat > "$D/vcc" <<'EOF'
 #!/usr/bin/env bash
@@ -135,6 +217,11 @@ grep -q '^task unassign YPER4-999 --self' "$D/log" && ok "flow unassigns self" |
 grep -q 'Stepping back: RUNNER 7 claimed this first' "$D/log" && ok "flow posts step-back note" || bad "no note"
 grep -q '^activity add YPER4-999 Claimed\.' "$D/log" && grep -q '^task assign YPER4-999 --self' "$D/log" && grep -q '^task move YPER4-999 --section In Progress' "$D/log" \
   && ok "flow claims in the agent log (assign, activity, move)" || bad "claim writes missing"
+
+CLAIMKEY="claude --resume $ME"
+mk "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claimid "$CLAIMKEY")")"
+: > "$D/log"; ./ship-claim YPER4-999 >/dev/null; eq "flow: claim id finds its own claim" "$?" 0
+grep -qF "Claim id: [$CLAIMKEY]" "$D/log" && ok "flow claim carries its claim id" || bad "claim id missing from claim text"
 
 mk
 jq -n --arg text "$(claim "$ME")" '{success:true,activities:[{id:"bbbb-uuid",createdAt:"2026-10-11T10:00:09.000Z",agentId:"a2",agentName:"RUNNER 3",text:$text}]}' > "$D/activities.json"
@@ -224,7 +311,7 @@ mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 eq "flow winner exit code" "$rc" 0
 grep -q unassign "$D/log" && bad "winner unassigned" || ok "winner stays assigned"
 
-mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim argsess)")"
+mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(oldclaim 'codex resume argsess')")"
 unset SHIP_CLAIM_RESUME; : > "$D/log"; ./ship-claim YPER4-999 "codex resume argsess" >/dev/null; eq "resume command as 2nd argument" "$?" 0
 grep -q 'codex resume argsess' "$D/log" && ok "argument lands in the claim comment" || bad "argument missing in comment"
 env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID ./ship-claim YPER4-999 >/dev/null 2>"$D/err"; eq "no resume id anywhere -> exit 2" "$?" 2
@@ -263,7 +350,7 @@ if [[ " $* " == *' --offset 100 '* ]]; then cat "$HOLD_BOARD_PAGE2"; else cat "$
 EOF
 chmod +x "$D/hold-gh" "$D/hold-ht"
 export HOLD_READS=$D/hold-reads HOLD_OPEN=$D/open.json HOLD_MERGED=$D/merged.json HOLD_BOARD=$D/board.json HOLD_BOARD_PAGE2=$D/page2.json HOLD_ORIGINAL_HT=$D/hypertask
-export SHIP_CLAIM_GH=$D/hold-gh SHIP_CLAIM_HYPERTASK=$D/hold-ht SHIP_CLAIM_RESUME="codex resume $ME"
+export SHIP_CLAIM_GH=$D/hold-gh SHIP_CLAIM_HYPERTASK=$D/hold-ht SHIP_CLAIM_RESUME="claude --resume $ME"
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
 printf '[]' > "$HOLD_OPEN"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
