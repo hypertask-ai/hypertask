@@ -41,11 +41,6 @@ jobs:
           cache: npm
           cache-dependency-path: .github/scripts/feature-flag-parser/package-lock.json
 
-      # YPER4-881: GitHub reads and cancels use the hypertask-ci App's own
-      # API pool, not the GITHUB_TOKEN pool every workflow shares. Status
-      # posts stay on github.token (the ruleset pins required checks to
-      # GitHub Actions). No secret (Dependabot, forks) or a failed mint falls
-      # back to github.token.
       - name: Mint the hypertask-ci read token
         id: ci-token
         continue-on-error: true
@@ -58,6 +53,7 @@ jobs:
           permission-statuses: read
       - name: Evaluate the current pull-request head with trusted code
         env:
+          # Required status authorship is pinned to GitHub Actions.
           GH_TOKEN: ${{ github.token }}
           GH_READ_TOKEN: ${{ steps.ci-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -282,11 +278,6 @@ jobs:
           cache: npm
           cache-dependency-path: .github/scripts/feature-flag-parser/package-lock.json
 
-      # YPER4-881: GitHub reads and cancels use the hypertask-ci App's own
-      # API pool, not the GITHUB_TOKEN pool every workflow shares. Status
-      # posts stay on github.token (the ruleset pins required checks to
-      # GitHub Actions). No secret (Dependabot, forks) or a failed mint falls
-      # back to github.token.
       - name: Mint the hypertask-ci read token
         id: ci-token
         continue-on-error: true

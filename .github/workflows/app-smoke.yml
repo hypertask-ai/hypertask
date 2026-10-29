@@ -170,11 +170,6 @@ jobs:
             echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # YPER4-881: GitHub reads and cancels use the hypertask-ci App's own
-      # API pool, not the GITHUB_TOKEN pool every workflow shares. Status
-      # posts stay on github.token (the ruleset pins required checks to
-      # GitHub Actions). No secret (Dependabot, forks) or a failed mint falls
-      # back to github.token.
       - name: Mint the hypertask-ci read token
         id: ci-token
         if: steps.request.outputs.superseded != 'true'

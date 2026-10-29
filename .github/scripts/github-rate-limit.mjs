@@ -60,8 +60,6 @@ export async function ghApi(args, { exec = spawnSync, sleep = (ms) => new Promis
     if (arg.startsWith('--method=')) return arg.slice(9).toUpperCase() !== 'GET';
     return /^(--input(?:=|$)|--(?:raw-)?field(?:=|$)|-[fF])/.test(arg);
   });
-  // YPER4-881: reads go through the hypertask-ci App's own API pool when the
-  // workflow minted one; any failure on it retries once on GH_TOKEN.
   let readToken = readOnly ? env.GH_READ_TOKEN || '' : '';
   for (;;) {
     const response = exec('gh', ['api', '--include', ...args], {

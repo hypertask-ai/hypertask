@@ -667,8 +667,6 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
         },
       }));
     }
-    // YPER4-881: reads use the hypertask-ci App's own API pool when minted;
-    // any failure on it retries once on GH_TOKEN. Writes always use GH_TOKEN.
     let readToken = readOnly ? env.GH_READ_TOKEN || '' : '';
     for (let attempt = 0; ;) {
       let response;

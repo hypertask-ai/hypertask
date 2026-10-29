@@ -195,9 +195,6 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(workflow, /PR: \$\{\{ needs\.validate\.outputs\.pr \}\}/);
   assert.match(workflow, /-f context=app-smoke/);
   assert.match(workflow, /gh workflow run automerge\.yml .* -f pr="\$PR"/);
-  // YPER4-881: the only secret is the hypertask-ci App key, minted in the
-  // validate job (trusted production code, no candidate checkout) for API reads
-  // and cancels. Jobs that build or report on the candidate never see one.
   const parsedSmoke = JSON.parse(workflowJson);
   for (const [id, job] of Object.entries(parsedSmoke.jobs)) {
     const steps = id === "validate" ? job.steps.filter((step) => step.id !== "ci-token") : job.steps;
@@ -382,6 +379,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
 test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
   const ciWorkflow = await readFile(".github/workflows/ci-tests.yml", "utf8");
   const ciSteps = yaml.load(ciWorkflow).jobs["ci-prepare"].steps;
+  assert.doesNotMatch(JSON.stringify(ciSteps), /secrets\.CI_APP_(?:ID|PRIVATE_KEY)/);
   assert.equal(ciSteps.some((step) => step.run?.includes("verify-required-check-settings.mjs")), false);
   const settingsWorkflow = yaml.load(await readFile(".github/workflows/required-check-settings.yml", "utf8"));
   assert.deepEqual(Object.keys(settingsWorkflow.on).sort(), ["schedule", "workflow_dispatch"]);

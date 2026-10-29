@@ -43,6 +43,17 @@ Separate avoided serial work from overall CI wall time.
 `tests/shard-tests.test.cjs` exercises shard partition and execution proof.
 These isolated checks do not prove hosted scheduling.
 
+## CI App API pool
+
+Confirm CI Tests' single review precheck uses `github.token` and its
+PR-controlled workflow does not receive the App private key. For the current
+head, inspect mint and fallback logs in trusted App Smoke, Feature Flag Gate, and
+UX Signoff runs. Record evidence of actual App-authenticated requests without
+exposing credentials: a green run, successful mint, or fallback alone does not
+prove App-pool use. Inspect published status author integrations and confirm
+required writes remain authored by GitHub Actions. After merge, repeat against
+live trusted workflows. Save run URLs, head SHAs and evidence.
+
 ## Flaky-test collector
 
 Run `node --test tests/detect-flaky-tests.test.cjs` for the collector's real CLI
