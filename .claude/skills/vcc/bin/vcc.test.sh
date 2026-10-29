@@ -385,13 +385,11 @@ FIXTURE
 agent_detail_refused comment add X-1 --kind question --text "$old_question_7508_295851"
 fixture "$old_question_7508_295851"
 review_refused 'My recommendation:' task move X-1 --section 'Valentin Review'
-# The 7508 rewrite has the parts but long sentences: comment add now refuses it; an existing one still allows the move.
 voice_refused 'over 8 words' bash "$vcc" comment add X-1 --kind question --text "$rewrite_7508_303933"
 fixture "$rewrite_7508_303933"
 allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 printf 'ok verbatim old Question refuses; long rewrite refuses on add and passes newest review\n'
 
-# Human lane: caveman + pospeak lint on titles, descriptions, and comments a person reads.
 long='<p>This change makes the board load much faster for every single user.</p>'
 for kind in qa done; do
   voice_refused 'over 8 words' bash "$vcc" comment add X-1 --kind "$kind" --text "$long"
@@ -440,18 +438,40 @@ grep -q $'\tError Collector\ttitle\terror report evidence$' "$HOME/.local/state/
 [ "$(wc -l < "$HOME/.local/state/vcc/voice-bypass.log")" = 1 ] || fail 'bypass logged more than once per call'
 printf 'ok VCC_VOICE_BYPASS skips the lint and is logged once\n'
 
-# Untyped agent comments go to the agent lane, not the visible thread.
 rerouted() {
   local expected=$1; shift
   VCC_TEST_ACTIVITY=1 run "$@"
   [ "$status" = 0 ] || fail "reroute failed $status: $*: $(cat "$T/err" "$VCC_TEST_TRACE")"
-  [ "$(< "$T/out")" = act-1 ] || fail "reroute did not print the activity id: $(cat "$T/out")"
+  if [[ " $* " == *" --json "* ]]; then
+    [ "$(jq -er .activity.id "$T/out")" = act-1 ] || fail 'JSON receipt missing activity id'
+  else
+    [ "$(< "$T/out")" = act-1 ] || fail "reroute did not print the activity id: $(cat "$T/out")"
+  fi
   [[ $(< "$T/err") == 'vcc: no --kind, @mention or reply target: sent to the agent lane (vcc activity add X-1)'* ]] || fail "missing reroute notice: $(cat "$T/err")"
   [[ $(< "$VCC_TEST_TRACE") != *'hypertask comment'* ]] || fail 'untyped comment reached the visible thread'
   grep -qF "curl POST agents/runs/run-1/activities" "$VCC_TEST_TRACE" || fail 'no activity write'
   [ "$(jq -r .text "$T/activity.json")" = "$expected" ] || fail "activity text changed: $(cat "$T/activity.json")"
 }
 rm -rf "$HOME/.local/state/vcc-runs"
+for option in --dry-run --improve --improve=polish --project=15; do
+  run env VCC_TEST_ACTIVITY=1 bash "$vcc" comment add X-1 --text hi "$option"
+  [ "$status" = 2 ] || fail "unsupported reroute option accepted: $option"
+  [ ! -s "$VCC_TEST_TRACE" ] || fail "unsupported reroute option accessed CLI or network: $option"
+  [ ! -s "$T/out" ] || fail "unsupported reroute option produced output: $option"
+done
+for placement in before-command before-ticket; do
+  if [ "$placement" = before-command ]; then
+    args=(--dry-run comment add X-1 --text hi)
+  else
+    args=(comment add --dry-run X-1 --text hi)
+  fi
+  run env VCC_TEST_ACTIVITY=1 bash "$vcc" "${args[@]}"
+  [ "$status" = 2 ] || fail "unsupported reroute option accepted: $placement"
+  [ ! -s "$VCC_TEST_TRACE" ] || fail "unsupported reroute option accessed CLI or network: $placement"
+  [ ! -s "$T/out" ] || fail "unsupported reroute option produced output: $placement"
+done
+allowed bash "$vcc" comment add X-1 --kind qa --text hi --dry-run --improve
+[[ $(< "$T/out") == 'stub: <comment> <add> <X-1> <--kind> <qa> <--text> <hi> <--dry-run> <--improve>' ]] || fail 'human options changed'
 rerouted 'hi' bash "$vcc" comment add X-1 --text hi
 rerouted 'src/app/page.tsx /api/ CI OAuth PR #123' bash "$vcc" comments add X-1 --text 'src/app/page.tsx /api/ CI OAuth PR #123'
 rerouted $'Claimed. Session working it now.\nNext: resume abc & co' bash "$vcc" --json comment add X-1 --text '<p><strong>Claimed.</strong> Session working it now.</p><p>Next: resume abc &amp; co</p>'
