@@ -350,18 +350,18 @@ for (const paged of [false, true]) for (const allBoards of [false, true]) {
 }
 
 for (const paged of [false, true]) for (const hasGeneralSession of [false, true]) {
-  test(`${paged ? "paged" : "legacy"}: general sending refuses displayed and saved agent sessions and ${hasGeneralSession ? "resolves a general conversation" : "creates a general conversation"}`, async () => {
-    const agent = { ...row("newest"), agentId: "native-agent" };
-    await withChat({ paged, rows: [agent, ...(hasGeneralSession ? [row("older")] : [])] }, async view => {
+  test(`${paged ? "paged" : "legacy"} fullscreen: explicitly selected agent remains the send destination`, async () => {
+    const agent = { ...row("agent"), agentId: "native-agent" };
+    await withChat({ paged, fullscreen: true, rows: [agent, ...(hasGeneralSession ? [row("older")] : [])] }, async view => {
       await React.act(async () => { await view.history().selectSession(agent.id); }); await view.flush();
       assert.equal(view.history().currentSession.id, agent.id);
-      assert.equal(navigation.readChatNavigationState(view.chatState().navigationKey).sessionId, agent.id);
+      await view.reload();
+      assert.equal(view.history().currentSession.id, agent.id);
       let selected;
       await React.act(async () => { selected = await view.resolver().ensureSessionForCurrentBoard(0); }); await view.flush();
-      assert.equal(selected.id, hasGeneralSession ? "older" : "explicit-new");
-      assert.equal(selected.agentId, null);
-      assert.equal(view.history().currentSession.id, selected.id);
-      assert.equal(view.calls.filter(([type]) => type === "create").length, hasGeneralSession ? 0 : 1);
+      assert.equal(selected.id, agent.id);
+      assert.equal(view.history().currentSession.id, agent.id);
+      assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
     });
   });
 }
