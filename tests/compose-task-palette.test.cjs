@@ -1788,3 +1788,30 @@ test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and 
     });
   }
 });
+
+
+test('HTPR-8141 board tooltip matches platform footer and preserves picker and flag-off behavior', async (t) => {
+  for (const apple of [false, true]) {
+    await withPalette(t, { boardChip: true, newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, type, press, input }) => {
+      const before = chip().outerHTML;
+      assert.equal(document.querySelector('[data-tooltip="Change board"]'), null);
+      flags['htpr-8141-board-shortcut-tooltip'] = true;
+      await rerender();
+      assert.equal(document.querySelector('[data-tooltip="Change board"]').textContent, apple ? 'CMD+SHIFT+B' : 'CTRL+SHIFT+B');
+      assert.equal(chip().outerHTML, before);
+      await type('Keep the draft');
+      await React.act(async () => chip().click());
+      assert.ok(boardList());
+      await press('Escape', { code: 'Escape' });
+      assert.equal(input().value, 'Keep the draft');
+      await press('B', boardKey(apple));
+      assert.ok(boardList());
+      await press('Escape', { code: 'Escape' });
+      assert.equal(input().value, 'Keep the draft');
+      flags['htpr-8141-board-shortcut-tooltip'] = false;
+      await rerender();
+      assert.equal(document.querySelector('[data-tooltip="Change board"]'), null);
+      assert.equal(chip().outerHTML, before);
+    });
+  }
+});

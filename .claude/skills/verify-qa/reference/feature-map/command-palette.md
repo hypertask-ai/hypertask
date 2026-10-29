@@ -114,3 +114,16 @@ Enter uses the existing transcription action. Confirm the original draft
 remains, reopening the writer still works, and no background comment or chat
 recorder starts. Flag Off restores mouse-only activation in this writer.
 Use a permitted test microphone; physical sound quality needs real hardware.
+
+
+## New Task board shortcut tooltip
+
+With `htpr-8141-board-shortcut-tooltip` on, hover the destination board chip
+inside Ctrl+J New Task. The shared tooltip shows Change board and
+Ctrl+Shift+B (Cmd+Shift+B on Apple), matching the footer. Click the chip and
+use the shortcut independently; both open the existing board picker.
+Escape preserves the destination and draft. Repeat desktop and phone in
+all four themes; phone keeps the existing hidden-tooltip behavior.
+Compare the composer and chip dimensions against the before capture.
+Flag Off restores the existing board-name title without the shortcut tooltip.
+No tasks need creating.
