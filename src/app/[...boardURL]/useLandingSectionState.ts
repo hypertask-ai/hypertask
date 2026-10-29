@@ -110,10 +110,10 @@ const subtaskSectionsForActiveView = useMemo(() => {
   sections,
 ]);
 let filteredSectionsForActiveView = subtaskSectionsForActiveView;
-if (_currentProject) {
-  filteredSectionsForActiveView = showEmptyViewColumns
-    ? getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject, true)
-    : getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject);
+if (showEmptyViewColumns) {
+  if (_currentProject) filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject, true);
+} else if (_currentProject) {
+  filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject);
 }
 
 const [favorites, setFavorites] = useState<IFavorites[]>([]);

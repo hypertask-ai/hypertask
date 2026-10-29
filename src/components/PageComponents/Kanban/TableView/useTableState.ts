@@ -166,10 +166,10 @@ export function useTableState(context: Context) {
     }));
   }, [filteredSections, _sections, _currentProject, excludedTaskIds]);
   let sections = sortedSections;
-  if (_currentProject) {
-    sections = showEmptyViewColumns
-      ? getFilteredEmptySections(sortedSections, _currentProject, true)
-      : getFilteredEmptySections(sortedSections, _currentProject);
+  if (showEmptyViewColumns) {
+    if (_currentProject) sections = getFilteredEmptySections(sortedSections, _currentProject, true);
+  } else if (_currentProject) {
+    sections = getFilteredEmptySections(sortedSections, _currentProject);
   }
 
   useEffect(() => {
