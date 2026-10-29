@@ -116,7 +116,7 @@ html.graphite-2 {
 }
 
 .graphite-2 #title-input {
-  font-size: 24px !important;
+  @apply text-heading !important;
   font-weight: 600;
 }
 
