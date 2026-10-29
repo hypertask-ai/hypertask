@@ -105,3 +105,13 @@ Tap Undo and verify the same notification returns, including after reload.
 Archive again and dismiss; the notification must stay archived. Check all
 four themes. Desktop placement and content stay unchanged; flag off retains
 the previous wide bottom-left phone card.
+
+## Keyboard focus with a parked pointer
+
+With `htpr-8142-inbox-keyboard-focus` on, leave the pointer over the list
+while J/K scroll through five blocked rows mixed with ordinary notifications.
+Repeat on a short list and a 200-row Important list. Each displayed row must be
+visited once in order, in both directions. Scrolling a different row under the
+stationary pointer must not change selection. Moving the pointer must still
+focus its row. Open a blocked row, archive it, Undo, and reload: the blocker
+stays set and the row returns. Flag off retains mouse-enter focus.

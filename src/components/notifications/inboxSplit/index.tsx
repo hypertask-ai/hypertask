@@ -1,5 +1,6 @@
 "use client";
 
+import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
 import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-8083-inbox-boundaries";
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
@@ -198,6 +199,7 @@ const InboxSplit = ({
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
+  const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
   const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
@@ -733,7 +735,15 @@ const InboxSplit = ({
     prefetchHoverTimeout.current = null;
   }, []);
 
-  const handleMouseEnter = (index: number) => {
+  const handleMouseEnter = (
+    index: number,
+    pointerMovement?: { movementX: number; movementY: number },
+  ) => {
+    if (
+      inboxKeyboardFocus &&
+      (!pointerMovement ||
+        (pointerMovement.movementX === 0 && pointerMovement.movementY === 0))
+    ) return;
     currentHoveredDiv.current = index;
     const hoveredRow = keyboardRows.find(
       (row) =>
@@ -1075,6 +1085,9 @@ const InboxSplit = ({
                               },
                             )}
                             onMouseEnter={() => handleMouseEnter(globalIndex)}
+                            onMouseMove={(event) => {
+                              if (inboxKeyboardFocus) handleMouseEnter(globalIndex, event);
+                            }}
                             onMouseLeave={handleMouseLeave}
                             onTouchStart={() => handleTouchStart(globalIndex)}
                           >
