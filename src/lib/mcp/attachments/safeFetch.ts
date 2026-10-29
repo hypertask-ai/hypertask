@@ -216,7 +216,7 @@ function pinnedDispatcher(pinned: PinnedAddress): Agent {
       callback(null, pinned.address, pinned.family);
     }
   };
-  return new Agent({ connect: { lookup } });
+  return new Agent({ connect: { lookup }, allowH2: false });
 }
 
 export async function publicAddressDispatcher(url: URL, signal: AbortSignal): Promise<Agent> {

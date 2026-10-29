@@ -1371,7 +1371,7 @@ test("all three schemas share strict file validation", () => {
     [{ ...FILE, url: "https://example.com/evidence.png" }],
     [{ filename: "missing.png", content_type: "image/png" }],
     [{ filename: "bad.png", content_type: "image/png", url: "https://" }],
-    [{ filename: "bad.png", content_type: "image/png", url: "https://user:pass@example.com/bad.png" }],
+    [{ filename: "bad.png", content_type: "image/png", url: "https://user:pass@example.com/bad.png" }], // trufflehog:ignore fixture URL, not a secret
     [FILE, FILE],
     [FILE, { ...FILE, filename: "same-content-different-name.png" }],
   ]) {
@@ -1654,7 +1654,7 @@ test("the MCP handler forwards transport identity and attachment writes rebroadc
   );
   assert.match(fetchSource, /readBodyWithCap\([\s\S]*controller\.signal/);
   assert.match(fetchSource, /finally \{\s*clearTimeout\(timer\)/);
-  assert.match(fetchSource, /new Agent\(\{ connect: \{ lookup \} \}\)/);
+  assert.match(fetchSource, /new Agent\(\{ connect: \{ lookup \}, allowH2: false \}\)/);
   assert.match(fetchSource, /dispatcher/);
 
   const storageSource = fs.readFileSync(

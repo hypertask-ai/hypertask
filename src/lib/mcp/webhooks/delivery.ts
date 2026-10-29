@@ -53,6 +53,7 @@ export async function postSignedWebhook(input: {
   const signature = signWebhookBody(secret, `${timestamp}.${input.body}`)
 
   const agent = new Agent({
+    allowH2: false,
     connect: {
       lookup: (_hostname, options, cb) => {
         if (options && (options as { all?: boolean }).all) {
