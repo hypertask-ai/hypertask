@@ -29,7 +29,10 @@ async function withStarredQuery(run) {
     await render();
     await run({ client, data: () => data, resolve, render });
   } finally {
-    await React.act(async () => root.unmount());
+    await React.act(async () => {
+      await client.cancelQueries();
+      root.unmount();
+    });
     client.clear();
     Object.assign(global, { window: previous.window, document: previous.document, IS_REACT_ACT_ENVIRONMENT: previous.act });
     dom.window.close();
