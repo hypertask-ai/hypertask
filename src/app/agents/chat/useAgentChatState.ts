@@ -4,7 +4,7 @@ import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport
 import { useFlag } from "@/hooks/useFlag";
 import { type AgentChatActivity, type AgentChatFilter } from "@/lib/agents/chatActivityFeed";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { ITask } from "@/models/model";
 import { agentChatMobileFullscreenAtom, appShellRailAtom, mobileTopBarTitleAtom } from "@/store";
@@ -29,7 +29,6 @@ export function useAgentChatState(props: IProp) {
     const tick = setInterval(() => setRosterNow(Date.now()), 30_000);
     return () => clearInterval(tick);
   }, [rosterStatusEnabled]);
-  const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
   const setAgentChatMobileFullscreen = useSetRecoilState(
@@ -123,7 +122,7 @@ export function useAgentChatState(props: IProp) {
 
   return {
     currentUser, roomsEnabled, embedded, router, searchParams, isMbl,
-    mobileLayoutEnabled, activityRowsEnabled, rosterNow, liveSortEnabled,
+    mobileLayoutEnabled, activityRowsEnabled, rosterNow,
     appShellRailOn, setMobileTopBarTitle,
     setAgentChatMobileFullscreen, agents, setAgents, rosterError, setRosterError, search, setSearch,
     teamId, setTeamId, selectedId, setSelectedId, mobileAgentChatViewport, session, setSession,

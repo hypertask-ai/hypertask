@@ -13,9 +13,8 @@ import {
 } from "@/lib/aiAllowancePolicy";
 import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
 import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
-import { isOwnerOrQaUserId, isFeatureEnabled } from "@/lib/flags";
+import { isOwnerOrQaUserId } from "@/lib/flags";
 import { getAiModelOptionById } from "@/lib/aiModelOptions";
-import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG } from "@/lib/flags/keys";
 import { ensureDefaultAgentsOnAccessibleTeams } from "@/utils/controllers/agents/ensureDefaultTeamAgent";
 
 const MAX_AGENTS = 200;
@@ -125,15 +124,9 @@ export async function GET(request: NextRequest) {
     userId,
   );
 
-  const liveSortEnabled = await isFeatureEnabled(
-    HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
-    userId,
-  );
   const [unreadByAgent, lastChatMessageByAgent] = await Promise.all([
     unreadChatCounts(userId),
-    liveSortEnabled
-      ? lastChatMessageAtByAgent(userId)
-      : Promise.resolve(new Map<string, Date>()),
+    lastChatMessageAtByAgent(userId),
   ]);
 
   const nativeIds = agents

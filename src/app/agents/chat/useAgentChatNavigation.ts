@@ -21,12 +21,11 @@ type Props = Pick<
   | "setMobileTopBarTitle"
   | "setTeamId"
   | "search"
-  | "liveSortEnabled"
 >;
 
 export function useAgentChatNavigation({
   embedded, agents, selectedId, isMbl, mobileLayoutEnabled, teamId,
-  setAgentChatMobileFullscreen, setMobileTopBarTitle, setTeamId, search, liveSortEnabled,
+  setAgentChatMobileFullscreen, setMobileTopBarTitle, setTeamId, search,
 }: Props) {
   const selectedAgent = useMemo(
     () => (agents ?? []).find((a) => a.id === selectedId) ?? null,
@@ -105,8 +104,8 @@ export function useAgentChatNavigation({
     const matching = needle
       ? inTeam.filter((a) => a.displayName.toLowerCase().includes(needle))
       : inTeam;
-    return sortRosterByActivity(matching, liveSortEnabled);
-  }, [agents, search, teamId, teams, liveSortEnabled]);
+    return sortRosterByActivity(matching);
+  }, [agents, search, teamId, teams]);
 
 
   return {

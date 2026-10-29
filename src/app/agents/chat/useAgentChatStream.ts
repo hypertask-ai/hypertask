@@ -25,7 +25,6 @@ type Props = Pick<
   | "selectedIdRef"
   | "setAgents"
   | "rosterGenRef"
-  | "liveSortEnabled"
 > &
   Pick<
   ReturnType<typeof useAgentChatSession>,
@@ -39,7 +38,7 @@ type Props = Pick<
 export function useAgentChatStream({
   embedded, awaiting, session, setAwaitingSince, setReplyTimedOut, messages, deliveryNotice, awaitingSince,
   loadMessages, activityRowsEnabled, currentUser, sessionIdRef, selectedIdRef,
-  setAgents, rosterGenRef, loadAgents, liveSortEnabled,
+  setAgents, rosterGenRef, loadAgents,
 }: Props) {
   useEffect(() => {
     if (embedded && !embedded.active) return;
@@ -220,6 +219,6 @@ export function useAgentChatStream({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [currentUser.id, loadMessages, loadAgents, activityRowsEnabled, liveSortEnabled, embedded?.active]);
+  }, [currentUser.id, loadMessages, loadAgents, activityRowsEnabled, embedded?.active]);
 
 }

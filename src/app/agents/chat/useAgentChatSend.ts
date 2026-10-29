@@ -36,7 +36,6 @@ type Props = Pick<
   | "messageQueueRef"
   | "setQueuedMessages"
   | "setDraft"
-  | "liveSortEnabled"
   | "awaitingRef"
   | "session"
   | "awaiting"
@@ -71,7 +70,7 @@ type Props = Pick<
 export function useAgentChatSend({
   embedded, sessionIdRef, selectedIdRef, setDeliveryNotice, setAwaiting, setReplyTimedOut, setAwaitingSince,
   setMessages, sendingRef, setSending, setAgents, blockedQueueIdRef, messageQueueRef,
-  setQueuedMessages, setDraft, liveSortEnabled, awaitingRef, session, awaiting, stopping,
+  setQueuedMessages, setDraft, awaitingRef, session, awaiting, stopping,
   setStopping, loadMessages, draft, dismissMention, composerEditorRef, composerRef, focusComposer,
   composerLocked, roster, selectedId, selectAgent, messages, projectIdForPrefix,
 }: Props) {
@@ -155,7 +154,7 @@ export function useAgentChatSend({
         setSending(false);
       }
     }
-  }, [liveSortEnabled, embedded?.projectId, contextEnabled]);
+  }, [embedded?.projectId, contextEnabled]);
 
   const removeQueuedMessage = useCallback((id: string) => {
     messageQueueRef.current = messageQueueRef.current.filter(
