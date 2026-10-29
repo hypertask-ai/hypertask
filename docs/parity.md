@@ -9,7 +9,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
 | **Discover identity and accessible workspace context** | ✅ 4 | ✅ 3 | ✅ 2 | ✅ 1 | ✅ 3 |
-| **Update the human profile** | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 |
+| **Update the human profile** | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 (transition) | ✅ 1 |
 | **List, inspect, and contact board agents** | ✅ 7 | ✅ 2 | ✅ 4 | ✅ 3 | ✅ 2 |
 | **Agent Chat: an agent runtime reads and answers its owner's chat** | ✅ 10 (transition) | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 | ↪ Agent Chat is the surface itself; native agents answer in-process without this route. | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 |
 | **Create, revoke, and rotate managed agents or keys** | ✅ 20 | ✅ 7 | ✅ 18 | ✅ 5 | ✅ 7 |

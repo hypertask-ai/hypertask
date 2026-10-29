@@ -24,8 +24,15 @@
         "api": ["^(GET|PATCH) /api/mcp/user/profile$"],
         "mcp": ["^hypertask_update_profile$"],
         "cli": ["^user update$"],
-        "ai_chat": ["^hypertask_update_profile$"],
+        "ai_chat": ["^hypertask_update_profile$", "^hypertask_settings$"],
         "hyperai": ["^hypertask_update_profile$"]
+      },
+      "planned": {
+        "ai_chat": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7622",
+          "expires": "2026-11-27",
+          "entries": ["hypertask_settings"]
+        }
       }
     },
     {
