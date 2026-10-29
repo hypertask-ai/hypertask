@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const ts = require("typescript");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 const { JSDOM } = require("jsdom");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") } });
@@ -12,19 +12,6 @@ const { buildThemeBootScript } = jiti("../src/lib/themeBootScript.ts");
 const { getAllCommands } = jiti("../src/components/Modals/commands/HTC/AllCommands.ts");
 const { CommandMode } = jiti("../src/models/enums.ts");
 const flag = "htpr-8054-graphite-2";
-
-function load(file, mocks) {
-  const exports = {};
-  const code = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
-  }).outputText;
-  new Function("require", "exports", code)((id) => {
-    if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
-    if (id === "react/jsx-runtime") return require(id);
-    throw new Error(`Unexpected import: ${id}`);
-  }, exports);
-  return exports;
-}
 
 function boot(theme, enabled, dark) {
   const dom = new JSDOM('<html class="dark graphite"><head><meta name="theme-color" content="#232326"></head></html>', { url: "https://app.hypertask.ai" });
