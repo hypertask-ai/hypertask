@@ -398,3 +398,48 @@ test("Enter selects the active agent mention before send; ordinary Enter still s
     assert.equal(selected, 1);
   } finally { editor?.destroy(); view.close(); }
 });
+
+
+for (const mobile of [false, true]) for (const enabled of [false, true]) {
+  test(`${mobile ? "phone" : "desktop"} title toggles the existing conversation list with agent sessions ${enabled ? "On" : "Off"}`, () => {
+    const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+    const view = mount();
+    const noop = () => {};
+    const source = loader({
+      "next/navigation": { usePathname: () => "/project", useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: noop }) },
+      "@/hooks/useFlag": { useFlag: key => key === FLAG && enabled },
+      "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({
+        sessions: [], currentSession: { id: "saved", title: "Existing chat" }, runningSessionIds: [],
+      }) },
+      "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
+      "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
+      "@/lib/state": { useRecoilState: () => React.useState(false) },
+      "@/store": {},
+      "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+      "../Common/Tooltip": { default: () => null },
+      "@/lib/aiModelOptions": { getMobileAiChatModelLabel: () => "GPT" },
+      "@/lib/configs/aiTaskWriter.config": { aiTaskWriterConfig: { shortcutsAndTooltips: { ai_chat: {
+        new_chat_button: () => ({}), minimize_button: () => ({}),
+      } } } },
+      "./AgentSidebarChatCommands": { AgentSidebarChatCommands: ({ agentsOnly }) => React.createElement("ul", { "data-testid": agentsOnly ? "agents" : "conversations" }) },
+    });
+    const Header = source("src/components/AI_CHAT/ChatHeader.tsx").ChatHeader;
+    try {
+      view.render(React.createElement(Header, { sidebarChats: { projectId: 15, target: { kind: "ai" }, agents: [], onSelect: noop } }));
+      const title = view.container.querySelector('[aria-label="Switch conversation"]');
+      const agents = view.container.querySelector('[aria-label="Agent sessions"]');
+      assert.equal(Boolean(agents), enabled);
+      if (enabled) {
+        React.act(() => agents.click());
+        assert.equal(view.container.querySelector('[data-testid="agents"]').parentElement, title.parentElement);
+      }
+      React.act(() => title.click());
+      assert.equal(title.getAttribute("aria-expanded"), "true");
+      assert.equal(view.container.querySelector('[data-testid="conversations"]').parentElement, title.parentElement);
+      assert.equal(view.container.querySelector('[data-testid="agents"]'), null);
+      React.act(() => title.click());
+      assert.equal(title.getAttribute("aria-expanded"), "false");
+      assert.equal(view.container.querySelector('[data-testid="conversations"]'), null);
+    } finally { view.close(); }
+  });
+}

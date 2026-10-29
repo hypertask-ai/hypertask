@@ -59,7 +59,6 @@ test("Off keeps the legacy header and composer and mounts no agent projection", 
   assert.match(source, /sidebarEnabled && !minimized && currentUser && embeddedAgents\.map/);
   assert.match(source, /<AI_Tiptap_Container sidebarAgent=\{agentSessionsEnabled && target\.kind === "native-agent" \? target\.agent\.displayName : undefined\} disabled=\{generalChatPending\} active=\{!sidebarEnabled \|\| target\.kind !== "external-agent"\} \/>/);
   assert.match(source, /if \(!enabled \|\| !projectId\) return/);
-  assert.match(read("src/components/AI_CHAT/ChatHeader.tsx"), /if \(sidebarChats\) \{ setIsDropdownOpen\(false\); setConversationsOpen/);
 });
 
 test("old direct links are gated and historical rooms retain their original route", () => {
