@@ -270,7 +270,7 @@ function harness(options = {}) {
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": load(path.join(root, "src/utils/aiWriterUtils.ts")),
     "@/utils/htmlEscape": load(path.join(root, "src/utils/htmlEscape.ts")),
-    "./taskWriterMedia": { createTaskWriterMediaTokenFactory() {}, extractTaskWriterMedia: (html) => ({ html, media: [] }), restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (text) => text },
+    "./taskWriterMedia": { extractTaskWriterPromptMedia: html => ({ html, media: [] }), createTaskWriterMediaTokenFactory() {}, extractTaskWriterMedia: (html) => ({ html, media: [] }), restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (text) => text },
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads() {} },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveFiltersFromProject: () => ({ addedFilters: ["labels"] }) },
     "@/utils/helperFunctions/Views/NewTaskViewDefaults": { getNewTaskViewDefaults: () => ({ tags: options.viewTags ?? [], assignees: [] }) },

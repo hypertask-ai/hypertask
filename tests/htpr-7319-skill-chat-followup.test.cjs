@@ -207,7 +207,7 @@ function composeApi(writes = []) {
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": jiti(path.join(root, "src/utils/aiWriterUtils.ts")),
     "@/utils/htmlEscape": jiti(path.join(root, "src/utils/htmlEscape.ts")),
-    "./taskWriterMedia": { createTaskWriterMediaTokenFactory: () => () => "", extractTaskWriterMedia: (html) => ({ html, media: [] }), restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (value) => value },
+    "./taskWriterMedia": { extractTaskWriterPromptMedia: html => ({ html, media: [] }), createTaskWriterMediaTokenFactory: () => () => "", extractTaskWriterMedia: (html) => ({ html, media: [] }), restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (value) => value },
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads() {} },
     "@/utils/api/global/apiHelpers/createTaskGloballycontroller": { default: async (payload) => { writes.push(payload); return { resposne: { newTask: task } }; } },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": {}, "@/utils/helperFunctions/Views/NewTaskViewDefaults": {},
