@@ -3,6 +3,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
+const os = require("node:os");
+const { loadModule } = require("./helpers/loadModule.cjs");
 const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 const ts = require("typescript");
@@ -411,8 +413,10 @@ test("/new keyboard handoff keeps the saved ticket instead of closing back to it
         }
         visit(file);
         assert.ok(callback);
-        const compiled = ts.transpileModule(`const callback = ${callback};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-        const closeHandler = new Function("pathname", "formValues", "hasUnsavedChanges", "saveEpochRef", "autoTitleCoordinator", "setIsGeneratingTitle", "setUploadingStateCreateTaskModal", "goToProjectShortcut", `${compiled}; return callback;`)(
+        const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "htpr-8172-close-"));
+        const callbackFile = path.join(scratch, "close.ts");
+        fs.writeFileSync(callbackFile, `export default function(pathname, formValues, hasUnsavedChanges, saveEpochRef, autoTitleCoordinator, setIsGeneratingTitle, setUploadingStateCreateTaskModal, goToProjectShortcut) { return ${callback}; }`);
+        const closeHandler = loadModule(callbackFile).default(
           "/new", { currentProject: { id: 7049 } }, () => false, { current: 0 }, { cancelPending() {} }, () => {}, () => {},
           (id) => dom.window.history.pushState({}, "", `/project?id=${id}`),
         );
@@ -427,7 +431,7 @@ test("/new keyboard handoff keeps the saved ticket instead of closing back to it
           await new Promise((resolve) => setImmediate(resolve));
           assert.equal(calls.filter((call) => call === "save").length, 1);
           assert.equal(dom.window.location.pathname + dom.window.location.search, enabled ? "/detail/project-7049/43?newTaskAi=1" : "/project?id=7049");
-        } finally { cleanup(); dom.window.close(); }
+        } finally { cleanup(); dom.window.close(); fs.rmSync(scratch, { recursive: true, force: true }); }
       }
     }
   }
