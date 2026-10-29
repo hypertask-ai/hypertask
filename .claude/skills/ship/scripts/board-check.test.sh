@@ -42,7 +42,9 @@ elif name == 'ht':
     assert os.environ.get('HT_TOKEN') == 'runner-fixture-token'
     if '/agent-activity?' in args[1]:
         ticket = args[1].split('/')[3]
-        print(json.dumps(dict(success=True, activities=f.get('logs', {}).get(ticket, []))))
+        offset = int(args[1].split('&offset=')[1]) if '&offset=' in args[1] else 0
+        if f.get('repeat_log_page'): offset = 0
+        print(json.dumps(dict(success=True, activities=f.get('logs', {}).get(ticket, [])[offset:offset+100])))
         sys.exit(0)
     assert args[:1] == ['GET'] and args[1].startswith('/mcp/tasks?ticket_number=')
     tickets = args[1].split('ticket_number=')[1].split('&')[0].split(',')
@@ -155,10 +157,24 @@ split_history = dict(tasks=[task(1)], prs=[], activities={},
 checked, _ = run(split_history)
 assert checked.returncode == 0, checked.stderr
 assert '\tHTPR-1\t' in checked.stdout
-split_history['logs']['HTPR-1'] *= 2
+split_history['logs']['HTPR-1'] = [dict(id=f'log-{i}', text='Agent heartbeat', createdAt=iso(8),
+    agentId='Agent One', agentName='Agent One') for i in range(100)]
+checked, _ = run(split_history)
+assert checked.returncode == 0, checked.stderr
+assert '\tHTPR-1\t' in checked.stdout
+split_history['logs']['HTPR-1'].append(dict(id='old-claim', text='Claimed. Resume: tmux attach -t ht-hax-runner-8',
+    createdAt=iso(8), agentId='Agent One', agentName='Agent One'))
+split_history['activities']['HTPR-1'] = iso(1)+'\tAgent One\n'
+checked, _ = run(split_history)
+assert checked.returncode == 0, checked.stderr
+assert '\tHTPR-1\t' not in checked.stdout
+repeated, _ = run(dict(split_history, repeat_log_page=True))
+assert repeated.returncode != 0 and 'repeated agent activity' in repeated.stderr
+split_history['comments']['HTPR-1'] *= 2
+split_history['logs']['HTPR-1'] = []
 checked, _ = run(split_history)
 assert checked.returncode != 0 and 'outside the bounded' in checked.stderr
-print('ok completeness limits apply separately to comments and agent activity')
+print('ok complete agent log pages preserve claims and comment completeness remains guarded')
 
 
 

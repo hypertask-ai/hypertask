@@ -141,16 +141,25 @@ def read_comments(boards, cache=None, *, full_refresh=False, reads=None):
             else:
                 entries[key] = {"updatedAt": updated, "commentCount": count, "comments": listed}
             comments[ticket] = [c for c in listed if c.get("type") != "activity"]
-            activity = json.loads(command("ht", "GET", f"/mcp/tasks/{ticket}/agent-activity?limit=100"))
-            if (activity.get("success") is not True or not isinstance(activity.get("activities"), list)
-                    or not all(isinstance(a, dict) and isinstance(a.get("text"), str)
-                               and isinstance(a.get("createdAt"), str) and isinstance(a.get("agentName"), str)
-                               for a in activity["activities"])):
-                raise ValueError(f"Invalid agent activity for {ticket}")
-            if len(activity["activities"]) >= 100 and not claims(activity["activities"]):
-                raise ValueError(f"Agent claim history may be truncated for {ticket}")
-            comments[ticket].extend(dict(a, type="activity", agent={"displayName": a["agentName"]})
-                                    for a in activity["activities"])
+            offset, activity_ids = 0, set()
+            while True:
+                suffix = f"&offset={offset}" if offset else ""
+                activity = json.loads(command("ht", "GET", f"/mcp/tasks/{ticket}/agent-activity?limit=100{suffix}"))
+                if (activity.get("success") is not True or not isinstance(activity.get("activities"), list)
+                        or len(activity["activities"]) > 100
+                        or not all(isinstance(a, dict) and isinstance(a.get("id"), str)
+                                   and isinstance(a.get("text"), str) and isinstance(a.get("createdAt"), str)
+                                   and isinstance(a.get("agentName"), str) for a in activity["activities"])):
+                    raise ValueError(f"Invalid agent activity for {ticket}")
+                page_ids = {a["id"] for a in activity["activities"]}
+                if len(page_ids) != len(activity["activities"]) or activity_ids.intersection(page_ids):
+                    raise ValueError(f"Repeated agent activity for {ticket}; retry the scan")
+                activity_ids.update(page_ids)
+                comments[ticket].extend(dict(a, type="activity", agent={"displayName": a["agentName"]})
+                                        for a in activity["activities"])
+                if len(activity["activities"]) < 100:
+                    break
+                offset += len(activity["activities"])
     if cache is not None:
         cache.clear()
         cache.update(entries)

@@ -30,6 +30,11 @@ export async function GET(
     if (!/^\d+$/.test(rawLimit) || !Number.isSafeInteger(limit) || limit < 1) {
       return noStore({ success: false, error: 'limit must be a positive integer' }, 400)
     }
+    const rawOffset = request.nextUrl.searchParams.get('offset') ?? '0'
+    const offset = Number(rawOffset)
+    if (!/^\d+$/.test(rawOffset) || !Number.isSafeInteger(offset) || offset > 2_147_483_647) {
+      return noStore({ success: false, error: 'offset must be a non-negative integer' }, 400)
+    }
     const numericId = Number(identifier)
     const ticketNumber = /^[A-Za-z][A-Za-z0-9_-]*-\d+$/.test(identifier)
     if (!ticketNumber && (!/^\d+$/.test(identifier) || !Number.isSafeInteger(numericId) || numericId < 1)) {
@@ -50,6 +55,7 @@ export async function GET(
       where: { run: { taskId: task.id, ...(ctx.teamScope != null ? { task: { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } } : {}), ...(agentId ? { agentId } : {}) } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: Math.min(limit, 100),
+      ...(offset > 0 ? { skip: offset } : {}),
       select: {
         id: true,
         runId: true,

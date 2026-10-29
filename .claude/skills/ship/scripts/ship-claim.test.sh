@@ -108,8 +108,12 @@ EOF
 cat > "$D/ht" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$2" == /mcp/tasks\?* ]] && [ -n "${FAKE_RELATED:-}" ]; then cat "$FAKE_RELATED"; exit; fi
-[ "$1 $2" = 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100' ] || [ "$1 $2" = 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100' ] || exit 1
-if [ -n "${FAKE_AGENT_LOG:-}" ]; then cat "$FAKE_AGENT_LOG"; else echo '{"success":true,"activities":[]}'; fi
+[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* ]] || exit 1
+if [ -n "${FAKE_AGENT_LOG:-}" ]; then
+  offset=0; [[ "$2" == *'&offset='* ]] && offset=${2##*&offset=}
+  [ -z "${FAKE_REPEAT_ACTIVITY:-}" ] || offset=0
+  jq --argjson offset "$offset" '.activities |= .[$offset:$offset+100]' "$FAKE_AGENT_LOG"
+else echo '{"success":true,"activities":[]}'; fi
 EOF
 chmod +x "$D/vcc" "$D/hypertask" "$D/ht"
 export SHIP_CLAIM_HT=$D/ht
@@ -133,6 +137,11 @@ jq '.activities |= map(.createdAt = "2026-10-11T10:00:09.000Z")' "$D/earlier.jso
 FAKE_AGENT_LOG=$D/tie.json ./ship-claim YPER4-999 >/dev/null; eq "flow: UUID tie uses id string -> step back" "$?" 3
 jq '.activities += [{id:"cccc-uuid",createdAt:"2026-10-11T10:00:05.000Z",agentId:"a1",agentName:"RUNNER 7",text:"Handed over: RUNNER 7 released this ticket."}]' "$D/earlier.json" > "$D/released.json"
 FAKE_AGENT_LOG=$D/released.json ./ship-claim YPER4-999 >/dev/null; eq "flow: earlier log claim released in the log -> proceed" "$?" 0
+jq --arg text "$(claim other-sess)" '.activities = [.activities[0]] + [range(100) | {id:("heartbeat-" + tostring),createdAt:"2026-10-11T10:00:08.000Z",agentId:"a1",agentName:"RUNNER 7",text:"Working."}] + [{id:"older-claim",createdAt:"2026-10-11T10:00:00.000Z",agentId:"a1",agentName:"RUNNER 7",text:$text}]' "$D/activities.json" > "$D/paged.json"
+FAKE_AGENT_LOG=$D/paged.json ./ship-claim YPER4-999 >/dev/null; eq "flow: competing claim beyond 100 activities -> step back" "$?" 3
+out=$(FAKE_REPEAT_ACTIVITY=1 FAKE_AGENT_LOG=$D/paged.json ./ship-claim YPER4-999 2>&1); rc=$?
+eq "flow: repeated activity page refuses ownership" "$rc" 2
+[[ $out == *'cannot read complete agent log'* ]] && ok "repeated page names incomplete history" || bad "repeated page error: $out"
 if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
 
 # Failed membership must not publish any claim or move.

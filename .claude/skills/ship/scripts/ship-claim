@@ -211,16 +211,27 @@ Next: I examine and fix it. Resume: $RESUME" >/dev/null \
   || { echo "ship-claim: claim activity failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
 
-W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); LOG=$(mktemp); MERGED=$(mktemp); trap 'rm -f "$W" "$IDLE" "$ASG" "$LOG" "$MERGED"' EXIT
+W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); LOG=$(mktemp); PAGE=$(mktemp); MERGED=$(mktemp); trap 'rm -f "$W" "$IDLE" "$ASG" "$LOG" "$PAGE" "$MERGED"' EXIT
 "$HT" comment list "$T" --sort createdAt:desc --limit 100 --json > "$W" \
   && jq -e '.comments | type == "array"' "$W" >/dev/null \
   || { echo "ship-claim: cannot re-read comments on $T; do not start work until the claim is confirmed" >&2; exit 2; }
 
-"$HT_API" GET "/mcp/tasks/$T/agent-activity?limit=100" > "$LOG" \
-  && jq -e '.success == true and (.activities | type == "array")' "$LOG" >/dev/null \
-  && jq -s '.[0] + {activities: .[1].activities}' "$W" "$LOG" > "$MERGED" \
-  && mv "$MERGED" "$W" \
-  || { echo "ship-claim: cannot re-read agent log on $T; do not start work until the claim is confirmed" >&2; exit 2; }
+printf '{"success":true,"activities":[]}' > "$LOG"
+offset=0
+while :; do
+  suffix=''; [ "$offset" = 0 ] || suffix="&offset=$offset"
+  "$HT_API" GET "/mcp/tasks/$T/agent-activity?limit=100$suffix" > "$PAGE" \
+    && jq -e '.success == true and (.activities | type == "array" and length <= 100)' "$PAGE" >/dev/null \
+    && jq -s '.[0] + {activities: (.[0].activities + .[1].activities)}' "$LOG" "$PAGE" > "$MERGED" \
+    && jq -e '.activities | length == (unique_by(.id) | length)' "$MERGED" >/dev/null \
+    && mv "$MERGED" "$LOG" \
+    || { echo "ship-claim: cannot read complete agent log on $T; retry before working" >&2; exit 2; }
+  count=$(jq '.activities | length' "$PAGE")
+  [ "$count" -eq 100 ] || break
+  offset=$((offset + count))
+done
+jq -s '.[0] + {activities: .[1].activities}' "$W" "$LOG" > "$MERGED" && mv "$MERGED" "$W" \
+  || { echo "ship-claim: cannot combine claim history on $T" >&2; exit 2; }
 
 # Agents now assigned (one read). A failed read leaves the file empty, which skips rule (a).
 "$HT" tasks get "$T" --json > "$MERGED" 2>/dev/null \

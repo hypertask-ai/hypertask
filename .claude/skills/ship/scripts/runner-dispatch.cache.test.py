@@ -85,9 +85,13 @@ class CacheTests(unittest.TestCase):
             data = override if override is not None else {
                 "success": True, "comments": self.comments[ticket], "total": len(self.comments[ticket])}
         elif args[:2] == ("ht", "GET"):
-            match = re.fullmatch(r"/mcp/tasks/([A-Z0-9]+-\d+)/agent-activity\?limit=100", args[2])
+            match = re.fullmatch(r"/mcp/tasks/([A-Z0-9]+-\d+)/agent-activity\?limit=100(?:&offset=(\d+))?", args[2])
             self.assertIsNotNone(match)
-            data = self.activities.get(match[1], {"success": True, "activities": []})
+            data = copy.deepcopy(self.activities.get(match[1], {"success": True, "activities": []}))
+            if isinstance(data, dict) and isinstance(data.get("activities"), list):
+                offset = int(match[2] or 0)
+                data["activities"] = data["activities"][offset:offset + 100]
+            data = self.replies.get(("activity", match[1], int(match[2] or 0)), data)
         elif args == ("tmux", "capture-pane", "-p", "-t", "%1"):
             return "status save 10k"
         elif args in [("tmux", "send-keys", "-t", "%1", "-l", text)
@@ -409,15 +413,28 @@ class CacheTests(unittest.TestCase):
         self.assertNotIn("planned=HTPR-1", self.stdout.getvalue())
         self.assertEqual(self.fetched(), [])
 
-    def test_full_agent_log_without_claim_prevents_dispatch(self):
-        self.run_dispatch()
+    def test_full_legacy_activity_log_keeps_unrelated_dispatch_available(self):
+        self.boards[15][0]["section"] = "In Progress"
+        self.comments["HTPR-1"] = [comment("Claimed.")]
         self.activities["HTPR-1"] = {"success": True, "activities": [
             {"id": f"heartbeat-{i}", "agentName": "RUNNER 1", "text": "Working.",
              "createdAt": "2026-10-21T10:01:00Z"} for i in range(100)]}
-        self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "done"}]
-        with self.assertRaisesRegex(ValueError, "Agent claim history may be truncated for HTPR-1"):
-            self.run_dispatch()
-        self.assertFalse(self.claim_dir.exists())
+        self.rows = [{"runner": "RUNNER 2", "pane": "%2", "state": "done"}]
+        self.run_dispatch(go=False)
+        self.assertIn("planned=HTPR-2", self.stdout.getvalue())
+        self.assertIn(("ht", "GET", "/mcp/tasks/HTPR-1/agent-activity?limit=100&offset=100"), self.calls)
+
+    def test_claim_older_than_first_activity_page_still_holds_runner(self):
+        self.boards[15][0]["section"] = "In Progress"
+        self.activities["HTPR-1"] = {"success": True, "activities": [
+            {"id": f"heartbeat-{i}", "agentName": "RUNNER 1", "text": "Working.",
+             "createdAt": "2026-10-21T10:01:00Z"} for i in range(100)] + [
+            {"id": "old-claim", "agentName": "RUNNER 1", "text": "Claimed.",
+             "createdAt": "2026-10-21T10:00:00Z"}]}
+        self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "idle"}]
+        self.run_dispatch(go=False)
+        self.assertIn("held=HTPR-1", self.stdout.getvalue())
+        self.assertNotIn("planned=HTPR-2", self.stdout.getvalue())
 
     def test_full_agent_log_with_visible_claim_preserves_ownership(self):
         activities = [{"id": f"heartbeat-{i}", "agentName": "RUNNER 1", "text": "Working.",
@@ -430,6 +447,15 @@ class CacheTests(unittest.TestCase):
                            "createdAt": "2026-10-21T10:00:00Z"})
         self.run_dispatch(go=False)
         self.assertNotIn("planned=HTPR-1", self.stdout.getvalue())
+
+    def test_repeated_activity_page_refuses_unsafe_dispatch(self):
+        activities = [{"id": f"heartbeat-{i}", "agentName": "RUNNER 1", "text": "Working.",
+                       "createdAt": "2026-10-21T10:01:00Z"} for i in range(100)]
+        self.activities["HTPR-1"] = {"success": True, "activities": activities}
+        self.replies[("activity", "HTPR-1", 100)] = self.activities["HTPR-1"]
+        with self.assertRaisesRegex(ValueError, "Repeated agent activity for HTPR-1"):
+            self.run_dispatch()
+        self.assertFalse(self.claim_dir.exists())
 
     def test_agent_log_read_failure_prevents_dispatch(self):
         self.activities["HTPR-1"] = {"success": False, "error": "unavailable"}
