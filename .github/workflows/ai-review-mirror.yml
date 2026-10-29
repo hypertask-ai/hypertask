@@ -1,0 +1,184 @@
+name: AI review verdict to ticket
+
+# YPER4-675: the verdict lived only on the pull request, because the private
+# reviewer repository mirrored it with its own board token and that login is
+# rejected ("Unauthorized"), hidden behind `continue-on-error`. This workflow
+# does the copy from here instead: the application repository already holds the
+# board token that binds titles and files tickets today, and the ticket lives on
+# this board. No new secret, no new permission, no candidate code is checked
+# out or run - the PR number and the review comment text arrive as data.
+on:
+  issue_comment:
+    types: [created, edited]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number whose latest AI review verdict goes to its ticket
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ai-review-mirror-${{ github.event.issue.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    name: Copy the verdict to the ticket
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          # Machine account that writes the review comment. Only its comment is
+          # mirrored, so a comment by anyone else never reaches a ticket.
+          REVIEW_COMMENT_AUTHOR: hypertask-ai-review
+        with:
+          script: |
+            const REVIEW_AUTHOR = process.env.REVIEW_COMMENT_AUTHOR;
+            const APP = 'https://app.hypertask.ai';
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            const token = process.env.HYPERTASK_MCP_TOKEN;
+
+            if (!token) {
+              core.setFailed('HYPERTASK_MCP_TOKEN is missing; the verdict cannot reach the ticket.');
+              return;
+            }
+
+            // A comment on an issue is not a review; leave it alone without an
+            // API call, so the workflow costs nothing on ordinary discussion.
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              if (!context.payload.issue?.pull_request) {
+                core.info('Comment is not on a pull request; nothing to mirror.');
+                return;
+              }
+              const author = context.payload.comment?.user?.login;
+              if (author !== REVIEW_AUTHOR) {
+                core.info(`Comment author ${author} is not ${REVIEW_AUTHOR}; nothing to mirror.`);
+                return;
+              }
+              prNumber = context.payload.issue.number;
+            } else {
+              prNumber = Number(context.payload.inputs?.pr);
+              if (!Number.isSafeInteger(prNumber) || prNumber <= 0) {
+                core.setFailed('workflow_dispatch needs a numeric pr input.');
+                return;
+              }
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: prNumber,
+            });
+
+            if (pr.base.ref !== 'production') {
+              core.info(`PR #${prNumber} targets ${pr.base.ref}, not production; nothing to mirror.`);
+              return;
+            }
+            // The branch name is only trustworthy inside this repository, and
+            // the same-repository rule is what the title guard already binds.
+            if (pr.base.repo?.full_name !== repository || pr.head.repo?.full_name !== repository) {
+              core.info(`PR #${prNumber} is not a same-repository PR; nothing to mirror.`);
+              return;
+            }
+
+            const ticket = /(htpr|yper4|hyfa)-\d+/i.exec(pr.head.ref)?.[0]?.toUpperCase();
+            if (!ticket) {
+              core.info(`Branch ${pr.head.ref} names no ticket; nothing to mirror.`);
+              return;
+            }
+
+            // The reviewer upserts one comment per head commit, so the newest
+            // verdict comment is the one that describes the current head.
+            const reviewComments = (await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            })).filter(comment =>
+              comment.user?.login === REVIEW_AUTHOR &&
+              /^(APPROVE|CONCERNS)\b/.test(comment.body ?? ''));
+            const review = reviewComments.at(-1);
+            if (!review) {
+              core.info(`PR #${prNumber} has no AI review verdict comment yet; nothing to mirror.`);
+              return;
+            }
+
+            const body = review.body ?? '';
+            const verdict = body.split('\n')[0].trim().slice(0, 300);
+            const sha = /reviewed-commit:\s*([0-9a-f]{40})/.exec(body)?.[1];
+            if (!sha) {
+              core.info('Verdict comment carries no reviewed-commit marker; nothing to mirror.');
+              return;
+            }
+
+            const escapeHtml = value => value
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;');
+            const findings = body
+              .split('\n')
+              .slice(1)
+              .join('\n')
+              .split(/<!--/)[0]
+              .trim()
+              .slice(0, 4000);
+            const marker = `reviewed-commit: ${sha}`;
+            const text = [
+              `<p><strong>AI review (PR <a href="${escapeHtml(pr.html_url)}">#${pr.number}</a>):</strong> ${escapeHtml(verdict)}</p>`,
+              findings ? `<pre>${escapeHtml(findings)}</pre>` : '',
+              `<p><code>${marker}</code></p>`,
+            ].filter(Boolean).join('\n');
+
+            const appRequest = (path, init = {}) => fetch(`${APP}${path}`, {
+              ...init,
+              redirect: 'error',
+              signal: AbortSignal.timeout(30_000),
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                ...(init.headers ?? {}),
+              },
+            });
+
+            // Re-reading the ticket keeps a re-run or an edited verdict comment
+            // from posting the same commit twice.
+            const existing = await appRequest(
+              `/api/mcp/comments?ticket_number=${encodeURIComponent(ticket)}&limit=100`,
+              { method: 'GET' });
+            if (!existing.ok) {
+              core.setFailed(`Reading ${ticket} comments returned HTTP ${existing.status}.`);
+              return;
+            }
+            const existingBody = await existing.json();
+            if (existingBody.success !== true || !Array.isArray(existingBody.comments)) {
+              core.setFailed(`Reading ${ticket} comments was not confirmed by the app.`);
+              return;
+            }
+            if (existingBody.comments.some(comment =>
+              `${comment.text ?? ''}${comment.commentText ?? ''}`.includes(marker))) {
+              core.info(`${ticket} already carries the verdict for ${sha.slice(0, 12)}; nothing to post.`);
+              return;
+            }
+
+            const response = await appRequest('/api/mcp/comments', {
+              method: 'POST',
+              headers: { 'Idempotency-Key': `ai-review-mirror-${prNumber}-${sha}` },
+              // `kind: qa` keeps the verdict in the ticket thread people read:
+              // an agent comment without a kind is filed in the hidden agent log.
+              body: JSON.stringify({ ticket_number: ticket, kind: 'qa', text }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || result.success !== true) {
+              core.setFailed(
+                `Posting the verdict to ${ticket} failed: HTTP ${response.status} ` +
+                `${result.error ?? result.message ?? 'no error text'}.`,
+              );
+              return;
+            }
+            core.info(`Mirrored ${verdict} for ${sha.slice(0, 12)} to ${ticket}: ${result.url ?? 'saved'}`);
