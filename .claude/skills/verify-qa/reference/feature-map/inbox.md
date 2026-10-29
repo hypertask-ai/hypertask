@@ -115,3 +115,13 @@ visited once in order, in both directions. Scrolling a different row under the
 stationary pointer must not change selection. Moving the pointer must still
 focus its row. Open a blocked row, archive it, Undo, and reload: the blocker
 stays set and the row returns. Flag off retains mouse-enter focus.
+
+## Select all stays inside the open tab
+
+With `htpr-8148-inbox-tab-selection` on, keep messages in at least two
+splits, select one row, then click the existing group-header checkbox.
+The selected count must equal the open split, not All. Click again to clear.
+Repeat with Ctrl+A (Cmd+A on Mac). Ctrl+Shift+A remains explicitly global.
+Archive the selected split, reload, and verify every unselected message remains.
+Existing ticket-wide archive and Undo behavior stays unchanged.
+Flag off retains the previous global checkbox behavior.

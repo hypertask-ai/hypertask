@@ -1,6 +1,7 @@
 "use client";
 
 import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
+import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
 import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-8083-inbox-boundaries";
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
@@ -200,6 +201,7 @@ const InboxSplit = ({
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
   const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
+  const tabScopedSelection = useFlag(HTPR_8148_INBOX_TAB_SELECTION_FLAG);
   const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
@@ -373,8 +375,17 @@ const InboxSplit = ({
         <SelectionCheckbox
           className="!border-white-black mr-2"
           alwaysVisible
-          isChecked={isAllSelected}
-          onClick={() => selectAllFromAllTabs()}
+          isChecked={tabScopedSelection
+            ? _notifications.length > 0 && _notifications.every(({ id }) => selectedIdsArray.includes(parseInt(id)))
+            : isAllSelected}
+          onClick={() => {
+            if (!tabScopedSelection) return selectAllFromAllTabs();
+            if (_notifications.every(({ id }) => selectedIdsArray.includes(parseInt(id)))) {
+              clearSelection();
+            } else {
+              selectAll();
+            }
+          }}
         />
         <Tooltip
           shouldReAdjustToViewport
@@ -460,6 +471,8 @@ const InboxSplit = ({
   const {
     selectedIds,
     selectedCount,
+    selectAll,
+    clearSelection,
     toggleSelection,
     handleKeyDown: bulkHandleKeyDown,
   } = useBulkActions({
