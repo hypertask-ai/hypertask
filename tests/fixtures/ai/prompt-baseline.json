@@ -296,9 +296,16 @@
   {
     "file": "src/lib/ai/chatStream/prompt.ts",
     "id": "agent-system-prompt",
-    "version": "2",
-    "partsHash": "0477da0e69c4591b4503889ae60f7d26f7d123b38c8d0382efe2b62883f4cf22",
+    "version": "1",
+    "partsHash": "cbe07e00931582770548622a04d27f557e2f621e1dffd7a36fa56f0154c818a2",
     "expressionsHash": "f25482aca279220b626a7e98b3b496b4113853b09f608a5c80187135a0023824"
+  },
+  {
+    "file": "src/lib/ai/chatStream/prompt.ts",
+    "id": "product-answers-from-docs",
+    "version": "1",
+    "partsHash": "d6c22f42c3922528a8741a3939ee0c5300afadb3ec7b9c58e949614027e8fe9c",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   },
   {
     "file": "src/lib/ai/chatStream/title.ts",

@@ -1079,7 +1079,7 @@ Check: reading only the headings, the bold words and the first line of each para
   },
   "agent-system-prompt": {
     id: "agent-system-prompt",
-    version: "2",
+    version: "1",
     parts: [`
                 You are an intelligent and helpful agentic assistant with access to tools and a knowledge base.
                 Your goal is to provide helpful, accurate, and relevant responses to user queries.
@@ -1153,10 +1153,6 @@ Check: reading only the headings, the bold words and the first line of each para
                     - This searches the Hypertask help center (help.hypertask.ai), NOT the user's own tasks.
                       Product/how-to questions → search_help_docs; questions about the user's own tasks,
                       comments, or board content → RAG/list_tasks/search_tasks. Cite the returned article URL.
-                    - Call search_help_docs before answering any question about what Hypertask can or cannot do, plans, prices, limits, shortcuts or setup. Never answer these from memory.
-                    - Answer in one short paragraph, then link the article. Quote at most two to four passages and never a whole page.
-                    - State a feature, price, limit, plan name or tool name only when the returned articles state it. If they do not, say it is not documented and offer to file a ticket. A failed docs search is not evidence that a feature does not exist; explain the lookup failed instead.
-                    - For "what can you do" questions, link https://docs.hypertask.ai/features/ai-chat-capabilities/ after searching the docs. Describe only tools available in this turn, not every tool the MCP server exposes.
                 ### 4.2. WRITE OPERATIONS
                     RAG is read-only. For any write operation always use the appropriate tool directly:
                     - Create task → hypertask_create_task
@@ -1249,6 +1245,15 @@ Check: reading only the headings, the bold words and the first line of each para
                 ### FINAL REMINDER
                 Section 0 OUTPUT STYLE binds every response: bottom line up front, scannable bullets, bold content, ~120 words unless depth was explicitly requested.
             `],
+  },
+  "product-answers-from-docs": {
+    id: "product-answers-from-docs",
+    version: "1",
+    parts: [`Product, plan, price, limit, shortcut and setup questions follow these rules:
+- Call search_help_docs before answering any question about what Hypertask can or cannot do, plans, prices, limits, shortcuts or setup. Never answer these from memory.
+- Answer in one short paragraph, then link the article. Quote at most two to four passages and never a whole page.
+- State a feature, price, limit, plan name or tool name only when the returned articles state it. If they do not, say it is not documented and offer to file a ticket. A failed docs search is not evidence that a feature does not exist; explain the lookup failed instead.
+- For "what can you do" questions, link https://docs.hypertask.ai/features/ai-chat-capabilities/ after searching the docs. Describe only tools available in this turn, not every tool the MCP server exposes.`],
   },
   "title-instructions-1": {
     id: "title-instructions-1",

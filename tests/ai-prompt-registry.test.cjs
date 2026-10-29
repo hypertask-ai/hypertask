@@ -58,7 +58,7 @@ test('route prompt literals are short and the detector rejects a known long inli
 
 test('prompt identification records only id and version, including composed chat prompts', () => {
   const { AGENT_SYSTEM_PROMPT } = load(path.join(root, 'src/lib/ai/chatStream/prompt.ts'));
-  assert.deepEqual(identifyPrompt([{ role: 'system', content: `${AGENT_SYSTEM_PROMPT}\nUser-specific context` }]), { promptId: 'agent-system-prompt', promptVersion: '2' });
+  assert.deepEqual(identifyPrompt([{ role: 'system', content: `${AGENT_SYSTEM_PROMPT}\nUser-specific context` }]), { promptId: 'agent-system-prompt', promptVersion: '1' });
   assert.deepEqual(identifyPrompt([{ role: 'user', content: [{ type: 'text', text: renderPrompt('task-summaries-system-2') }] }]), { promptId: 'task-summaries-system-2', promptVersion: '1' });
   assert.deepEqual(identifyPrompt([{ role: 'user', content: 'private dynamic content' }]), { promptId: 'dynamic-input', promptVersion: '1' });
   const { createPromptForTiptapForwardSlash } = load(path.join(root, 'src/app/api/ai/_lib/editorAiPrompts.ts'));
@@ -67,13 +67,12 @@ test('prompt identification records only id and version, including composed chat
   assert.throws(() => renderPrompt('agent-system-prompt'), /interpolation count/);
 });
 
-test('chat prompt sends product questions to the docs and forbids undocumented claims', () => {
-  const { AGENT_SYSTEM_PROMPT: text } = load(path.join(root, 'src/lib/ai/chatStream/prompt.ts'));
-  assert.match(text, /Call search_help_docs before answering any question about what Hypertask can or cannot do/);
-  assert.match(text, /Never answer these from memory/);
-  assert.match(text, /only when the returned articles state it/);
-  assert.match(text, /not documented and offer to file a ticket/);
-  assert.match(text, /failed docs search is not evidence that a feature does not exist/);
-  assert.match(text, /https:\/\/docs\.hypertask\.ai\/features\/ai-chat-capabilities\//);
-  assert.match(text, /questions about the user's own tasks,[\s\S]*?RAG\/list_tasks\/search_tasks/);
+test('gated docs prompt sends product questions to the docs and forbids undocumented claims', () => {
+  const { PRODUCT_ANSWERS_FROM_DOCS_PROMPT } = load(path.join(root, 'src/lib/ai/chatStream/prompt.ts'));
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /Call search_help_docs before answering any question about what Hypertask can or cannot do/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /Never answer these from memory/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /only when the returned articles state it/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /not documented and offer to file a ticket/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /failed docs search is not evidence that a feature does not exist/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /https:\/\/docs\.hypertask\.ai\/features\/ai-chat-capabilities\//);
 });
