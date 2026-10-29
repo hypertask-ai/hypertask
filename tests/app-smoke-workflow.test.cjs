@@ -121,6 +121,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(recheck.with.script, /requestNumber === request\.run_number && run\.run_number < context\.runNumber/);
   assert.ok(recheck.with.script.lastIndexOf("if (!await currentHead()) return;") < recheck.with.script.indexOf("await client.rest.actions.cancelWorkflowRun("));
   assert.match(recheck.with.script, /new github.constructor\(\{ auth: process.env.GH_FALLBACK_TOKEN \}\)/);
+  assert.match(recheck.with.script, /Could not cancel older app-smoke runs; continuing the build/);
   assert.equal(parsedWorkflow.jobs.validate.concurrency, undefined);
   assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(

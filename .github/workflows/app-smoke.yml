@@ -229,16 +229,21 @@ jobs:
               }
               await currentHead();
             };
-            await retryGithubRequest(async () => {
-              try {
-                await discover();
-              } catch (error) {
-                if (client !== github || process.env.CI_TOKEN_MINTED !== 'true') throw error;
-                core.warning('hypertask-ci token failed; retrying with github.token');
-                client = new github.constructor({ auth: process.env.GH_FALLBACK_TOKEN });
-                await discover();
-              }
-            }, { log: core.warning });
+            try {
+              await retryGithubRequest(async () => {
+                try {
+                  await discover();
+                } catch (error) {
+                  if (client !== github || process.env.CI_TOKEN_MINTED !== 'true') throw error;
+                  core.warning('hypertask-ci token failed; retrying with github.token');
+                  client = new github.constructor({ auth: process.env.GH_FALLBACK_TOKEN });
+                  await discover();
+                }
+              }, { log: core.warning });
+            } catch (error) {
+              if (!error.rateLimited) throw error;
+              core.warning(`Could not cancel older app-smoke runs; continuing the build. ${error.message}`);
+            }
 
   app-smoke:
     name: run app-smoke

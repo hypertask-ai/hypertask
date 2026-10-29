@@ -137,7 +137,7 @@ test("negative control: removing either feature-flag job's parser install is cau
   const withoutInstall = content.replace(/npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/g, "true");
   assert.notEqual(withoutInstall, content);
   const result = checkWorkflow("feature-flag-gate.yml", withoutInstall);
-  assert.equal(result.checked, 2);
+  assert.equal(result.checked, 3);
   assert.equal(result.issues.filter((issue) => /loads typescript without its own install/.test(issue)).length, 2);
   const freshWorkflow = `jobs:\n  gate:\n    steps:\n      - run: node .github/scripts/feature-flag-gate.mjs\n`;
   assert.match(checkWorkflow("new-light-gate.yml", freshWorkflow).issues.join("\n"), /loads typescript without its own install/);

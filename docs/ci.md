@@ -42,6 +42,7 @@ Small guards share scanner work and trusted metadata:
 - The trusted guard publishes one existing required `pr-title` context for outside and title results. Size stays advisory. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. PR runs and fleet sweeps share the non-cancelling `feature-flag-gate-production` group, so an old sweep cannot overwrite a newer PR verdict. The shared group uses `queue: max`, preserving up to 100 pending runs instead of replacing the previous pending PR event. GitHub cancels new arrivals beyond that documented limit; scheduled sweeps recover missed events. See [GitHub concurrency syntax](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency). The single-PR path still lists open heads to reject shared commits, but never reads or posts unrelated verdicts. Policy changes and closed/shared-head recovery reach other PRs at the next scheduled sweep; GitHub scheduling can delay that sweep. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group. Their original semantic statuses and flag fingerprints are unchanged.
+- Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
 Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
@@ -667,7 +668,7 @@ records its production source SHA. Ten simulated pushes recover both a read
 and publication 403 each; a real ten-push burst still requires separate logs.
 
 App-smoke discovery uses the same reset-aware callback retry. Each replay
-starts by rechecking the live head before cancelling older runs. This covers
+starts by rechecking the live head before cancelling older runs. If the retry budget is exhausted, cancellation is skipped and the build continues. This covers
 the observed discovery-step refusal; the workflow's separate initial shell
 lookups and final report remain separate API consumers.
 

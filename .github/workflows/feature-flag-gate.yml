@@ -385,6 +385,17 @@ jobs:
           fi
           export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
 
+          status_batch="$gate_tmp/status-by-sha.json"
+          batch_status=0
+          node .github/scripts/feature-flag-status-batch.mjs "$REPO" >"$status_batch" || batch_status=$?
+          if [ "$batch_status" -eq 78 ]; then
+            exit 0
+          fi
+          if [ "$batch_status" -ne 0 ]; then
+            echo "::warning::Batched feature-flag status read failed; reading each commit."
+            rm -f "$status_batch"
+          fi
+
           while IFS= read -r pull; do
             fingerprint=""
             if ! jq -e '
@@ -416,7 +427,9 @@ jobs:
             result=2
             fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
             statuses_file="$gate_tmp/latest-statuses-$number.json"
-            if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
+            if [ -f "$status_batch" ] && jq -e --arg sha "$head_sha" 'has($sha)' "$status_batch" >/dev/null; then
+              jq -c --arg sha "$head_sha" '.[$sha]' "$status_batch" >"$statuses_file"
+            elif ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
               echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; evaluating without deduplication."
               printf '[]\n' >"$statuses_file"
             fi
