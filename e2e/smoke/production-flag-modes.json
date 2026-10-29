@@ -24,7 +24,6 @@
     "htpr-6551-quiet-run-activity": "EVERYONE",
     "htpr-6555-idle-comment-mic": "EVERYONE",
     "htpr-6556-mobile-description-first": "OWNER_AND_QA",
-    "htpr-6557-agent-rooms": "EVERYONE",
     "htpr-6817-slack-app": "OWNER_AND_QA",
     "htpr-6868-ticket-prefix": "EVERYONE",
     "htpr-6872-page-image-gallery": "EVERYONE",
