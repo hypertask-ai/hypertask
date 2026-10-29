@@ -58,6 +58,7 @@ function renderRail({ enabled = true, compose = true, wide = false, apple = fals
     "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "pages" },
     "@/lib/flags/definitions/htpr-7309-pages-screens": { HTPR_7309_PAGES_SCREENS_FLAG: "screens" },
     "@/lib/flags/definitions/htpr-8146-settings-name": { HTPR_8146_SETTINGS_NAME_FLAG: "htpr-8146-settings-name" },
+    "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
     "@/lib/flags/definitions/htpr-8035-sidebar-new-task": { HTPR_8035_SIDEBAR_NEW_TASK_FLAG: flag.key },
     "@/lib/flags/definitions/htpr-6929-compose-task-writer": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "htpr-6929-compose-task-writer" },
     "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: () => {} },
