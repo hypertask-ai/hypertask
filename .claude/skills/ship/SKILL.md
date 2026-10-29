@@ -80,7 +80,7 @@ For non-app repositories, configure `SHIP_REPO`, `SHIP_BASE`, and `SHIP_CHECKOUT
 
 Write agent activity at claim, fix, PR, checks green, merge, deploy, and QA; at least every two hours while active. Include the parse or dispatch layer you tested. Plans, test output, retries, and helper reports stay in the agent lane.
 
-Human comments are for claim, decisions, QA, and completion. Use the shared `tickets` rules and the appropriate `--kind`. Before waiting on CI, a helper, deployment, or a person, post the required state record with separate **Next**, **Helpers**, **Branch/PR**, and **Outputs** lines. Include the resume command. Do not message another session.
+People comments are only for a decision (one Question), one QA verdict, and one Done note, written per the shared `tickets` rules with the right `--kind`. Everything else goes to the agent lane with `vcc activity add`: claims, state records (**Next**, **Helpers**, **Branch/PR**, **Outputs**), resume commands, retries. Never repeat a status that has not changed; one note per real change. Do not message another session.
 
 Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Mark each case PASS, FAIL, or UNREACHABLE with evidence; failures include steps and actual behavior. Record account ID and role, never credentials. Use verify-qa's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA verdict with the report link and key attachments. No bare "tests pass" claims.
 
