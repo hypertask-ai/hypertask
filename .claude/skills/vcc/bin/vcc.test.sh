@@ -221,8 +221,8 @@ question_refused() {
   [[ $(< "$T/err") == *'rewrite it for a product owner (pospeak)'* ]] || fail 'missing product-owner guidance'
   [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'refused Question reached CLI'
 }
-plain='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
-inline_why='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
+plain='<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+inline_why='<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes. Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
 for text in "$plain" "$inline_why" "$question"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
@@ -238,6 +238,58 @@ done
 question_refused 'Question:' comment add X-1 --kind question --text "${plain/Keep it?/Keep it.}"
 printf 'ok required Question parts and shared review validation\n'
 
+for text in \
+  "<p>One.</p><p>Two.</p><p>Three.</p><p>Four.</p>$plain" \
+  "<ul><li>One.</li><li>Two.</li><li>Three.</li><li>Four.</li></ul>$plain" \
+  "<p>One.<br>Two.<br/>Three.<br />Four.</p>$plain"; do
+  question_refused '3 lines' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused '3 lines' task move X-1 --section 'Valentin Review'
+done
+for text in \
+  "<p>One.</p><p>Two.</p><p>Three.</p>$plain" \
+  "<ul><li>One.</li><li>Two.</li><li>Three.</li></ul>$plain"; do
+  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+done
+late='<p>Question: <strong>Keep it?</strong></p><p>Why: less work.</p><p>My recommendation: yes.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+question_refused 'right under' comment add X-1 --kind question --text "$late"
+fixture "$late"
+review_refused 'right under' task move X-1 --section 'Valentin Review'
+for link in \
+  '<a href="https://linear.app/docs">Linear</a>' \
+  'https://notion.so/help' \
+  'www.google.com' \
+  '<a href="//example.test/help">Help</a>'; do
+  question_refused 'links' comment add X-1 --kind question --text "$plain<p>$link</p>"
+  fixture "$plain<p>$link</p>"
+  review_refused 'links' task move X-1 --section 'Valentin Review'
+done
+question_refused '3 lines' comment add X-1 --kind question --markdown --text "One.
+Two.
+Three.
+Four.
+Question: **Keep it?**
+My recommendation: yes.
+Why: less work.
+Yes: keep it.
+No: remove it."
+mention='<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
+for text in \
+  "${late/Question:/$mention Question:}" \
+  "<p>One.</p><p>Two.</p><p>Three.</p><p>Four.</p>$question"; do
+  question_refused '' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused '' task move X-1 --section 'Valentin Review'
+done
+old_question_7980_325102=$(cat <<'FIXTURE'
+<p><strong>Billing release still needs separate approval.</strong></p><p>Terms approved; release approval remains excluded.</p><p>Linear: explains billing adjustments. <a href="https://linear.app/docs/billing-and-plans">https://linear.app/docs/billing-and-plans</a></p><p>Notion: explains plan-change charges. <a href="https://www.notion.com/help/upgrade-or-downgrade-your-plan">https://www.notion.com/help/upgrade-or-downgrade-your-plan</a></p><p>Jira: publishes purchase rules. <a href="https://www.atlassian.com/licensing/purchase-licensing">https://www.atlassian.com/licensing/purchase-licensing</a></p><p>Google: explains billing commitments. <a href="https://support.google.com/a/answer/1247360">https://support.google.com/a/answer/1247360</a></p><p>Our approved terms remain unchanged.</p><p>Release audience: owner and designated tester only.</p><p>Everyone else keeps existing billing.</p><p>Required browser checks previously failed.</p><p>Checks must pass before merging and deployment.</p><p>Live verification follows deployment.</p><p>My recommendation: Approve this limited release.</p><p>Why: Validate billing without exposing everyone.</p><p>Yes: Authorize release after required checks pass.</p><p>No: Keep billing release held.</p><p><a href="https://github.com/hypertask-ai/hypertask/pull/2275">https://github.com/hypertask-ai/hypertask/pull/2275</a></p><p>Question: <strong>Authorize billing release after required checks pass?</strong></p><p>For <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span></p>
+FIXTURE
+)
+question_refused 'links' comment add X-1 --kind question --text "$old_question_7980_325102"
+fixture "$old_question_7980_325102"
+review_refused 'links' task move X-1 --section 'Valentin Review'
+printf 'ok short question format enforced through comment dispatch and review moves\n'
+
 for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.js' 'NOTES.md' endpoint ROUTE bearer OAuth prefilter regex schema migration CodeQL 'token audience' CI 'PR #123' PR123 '#123'; do
   text="$plain<p>$word</p>"
   question_refused "$word" comment add X-1 --kind question --text "$text"
@@ -246,9 +298,7 @@ for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.
 done
 question_refused CI comment add X-1 --kind question --text "$plain<p>CI and OAuth</p>"
 [[ $(< "$T/err") == *OAuth* ]] || fail 'did not name every developer word'
-for text in   "$plain<p>We can decide in Circle, with ci and circles.</p>"   "$plain<p><a href="https://example.test/src/app/page.tsx/api/OAuth/CI#123">Details</a></p>"   "$plain<p><a href="https://example.test/123">PR #123</a></p>"   "$plain<p><a href="https://example.test/123"><strong>#123</strong></a></p>"; do
-  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
-done
+allowed bash "$vcc" comment add X-1 --kind question --text "$plain<p>We can decide in Circle, with ci and circles.</p>"
 question_refused '#456' comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">PR #123</a> #456</p>"
 question_refused OAuth comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">OAuth</a></p>"
 printf 'ok visible developer words and unlinked references refuse without CI substring or href false positives\n'
@@ -276,9 +326,11 @@ question_refused 'My recommendation:' comments add X-1 --kind=question "--file=$
 question_refused 'cannot read --file' comment add X-1 --kind question --file "$T/missing.html"
 markdown='Question: **Keep it?**
 
+My recommendation: yes. Why: less work.
+
 Yes: keep it.
-No: remove it.
-My recommendation: yes. Why: less work.'
+
+No: remove it.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
 printf '%s\n' "$markdown" > "$T/question.md"
@@ -287,8 +339,8 @@ question_refused 'My recommendation:' comment add X-1 --kind question --markdown
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
 question_refused OAuth comment add X-1 --kind question --markdown --text "$markdown
 OAuth"
-allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown
-[PR #123](https://example.test/api/OAuth/CI)"
+question_refused 'links' comment add X-1 --kind question --markdown --text "$markdown
+[Details](https://example.test/help)"
 printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n'
 
 for kind in qa done ''; do
