@@ -371,7 +371,7 @@ test("chat turn resolves the server flag once for the authenticated user and for
     "@/utils/controllers/comments/linkifyTicketRefs": {},
     "@/lib/ai/chatStream/prompt": { AGENT_SYSTEM_PROMPT: "chat prompt" },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, aiPromptCachingEnabled: async () => false },
-    "@/lib/ai/chatStream/content": { createUserContent: () => "request" },
+    "@/lib/ai/chatStream/content": { createUserContent: () => "request", createImageAwareUserContent: async () => "request" },
     "@/lib/ai/tools/metadata": {}, "@/lib/ai/chatStream/title": {},
     "@/lib/ai/tools": { buildTools: (...args) => { toolArgs.push(args); return {}; } },
     "./modelReply": { generateModelReply: async () => null },

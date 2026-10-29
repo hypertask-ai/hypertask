@@ -614,7 +614,7 @@ test("the streamed and persisted reply contains the server's review-card marker,
     "@/utils/controllers/comments/linkifyTicketRefs": { linkifyTicketRefs: async (html) => html },
     "@/lib/ai/chatStream/prompt": { AGENT_SYSTEM_PROMPT: "" },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, aiPromptCachingEnabled: async () => false },
-    "@/lib/ai/chatStream/content": { createUserContent: () => "request" },
+    "@/lib/ai/chatStream/content": { createUserContent: () => "request", createImageAwareUserContent: async () => "request" },
     "@/lib/ai/chatStream/title": {},
     "@/lib/ai/tools": { buildTools: (_user, _body, _send, record) => ({
       hypertask_settings: { execute: async () => record({ name: "hypertask_settings", result: { proposal: { id: cardId } } }) },
