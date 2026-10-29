@@ -8,17 +8,12 @@ import { currentProjectAtom, currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { settingsScopeFromPath, type SettingProposalCard } from "@/lib/ai/settings/catalog";
-import { themeOptions } from "@/lib/themePreferences";
+import { actOnSettingProposalCard, fetchSettingProposal, settingValueLabel } from "@/lib/ai/settings/client";
 import SettingsCard from "@/components/Modals/Settings/SettingsCard";
 import { settingsActionButtonClass } from "@/components/Modals/Settings/SettingsBillingRow";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { USER_PREFERENCES_QUERY_KEY } from "@/hooks/General/useGetUserPreferences";
 import { cn } from "@/utils/undoActions/helperFuncs";
-
-const valueLabel = (value: string | boolean) => {
-  if (typeof value === "boolean") return value ? "On" : "Off";
-  return themeOptions.find((option) => option.value === value)?.title ?? value;
-};
 
 export function AiSettingChangeCard({ id }: { id: string }) {
   const enabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
@@ -34,12 +29,7 @@ export function AiSettingChangeCard({ id }: { id: string }) {
   const query = useQuery<SettingProposalCard>({
     queryKey,
     enabled: enabled && !!user?.id,
-    queryFn: async () => {
-      const response = await fetch(`/api/ai/settings?id=${id}`, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Could not load setting change");
-      return data.proposal;
-    },
+    queryFn: () => fetchSettingProposal(id),
     retry: false,
   });
   const proposal = query.data;
@@ -52,13 +42,7 @@ export function AiSettingChangeCard({ id }: { id: string }) {
     setBusy(true);
     setError(undefined);
     try {
-      const response = await fetch("/api/ai/settings", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action, scope }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Could not change setting");
-      queryClient.setQueryData(queryKey, data.proposal);
+      queryClient.setQueryData(queryKey, await actOnSettingProposalCard(id, action, scope));
       if (action !== "cancel") {
         await Promise.allSettled([
           queryClient.invalidateQueries({ queryKey: ["assign", project?.id] }),
@@ -84,7 +68,7 @@ export function AiSettingChangeCard({ id }: { id: string }) {
         {proposal ? <>
           <p className="break-words font-medium">{proposal.label}</p>
           {proposal.accessChange && <p className="text-meta text-text-light-gray">Access change — requires the board owner’s confirmation</p>}
-          <p className="break-words text-text-light-gray">From {valueLabel(proposal.before)} to {valueLabel(proposal.after)}</p>
+          <p className="break-words text-text-light-gray">From {settingValueLabel(proposal.before)} to {settingValueLabel(proposal.after)}</p>
           <button type="button" className={buttonClass} onClick={() => router.push(proposal.path)}>Open setting</button>
           {proposal.status === "pending" && <div className="flex justify-end gap-2">
             <button type="button" className={buttonClass} disabled={busy} onClick={() => void act("cancel")}>Cancel</button>
