@@ -119,7 +119,7 @@ test("the ticket flag is an Everyone improvement with a release risk and a serve
   assert.match(layout, /isFeatureEnabled\(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession\?\.id \?\? -1\)/);
   assert.match(layout, /flagProvider=\{flagReaderSubscribe \? SubscribedFeatureFlagProvider : FeatureFlagProvider\}/);
   assert.match(read("src/utils/Providers.tsx"), /flagProvider: FlagProvider = FeatureFlagProvider,/);
-  assert.match(read("src/utils/Providers.tsx"), /<FlagProvider userId=\{authenticatedUserId\} initialFlags=\{snapshot\?\.flags \?\? shell\?\.flags\}>/);
+  assert.match(read("src/utils/Providers.tsx"), /<FlagProvider userId=\{authenticatedUserId\} initialFlags=\{snapshot\?\.flags \?\? shell\?\.flags \?\? flagSeed \?\? undefined\}>/);
 });
 
 test("every registry key has the same answers Off and On before load, with saved flags, and after fetch", async () => {
