@@ -253,8 +253,18 @@ test("app analytics use the slim PostHog runtime", () => {
     analyticsSource,
     /import\("posthog-js\/dist\/extension-bundles"\)/,
   );
-  assert.match(analyticsSource, /__extensionClasses: ErrorTrackingExtensions/);
+  // YPER4-376: clicks and in-app page changes need the analytics bundle, and
+  // demo-guest replay needs the session bundle; the slim runtime has neither.
+  assert.match(analyticsSource, /__extensionClasses: \{/);
+  for (const bundle of [
+    "ErrorTrackingExtensions",
+    "AnalyticsExtensions",
+    "SessionReplayExtensions",
+  ]) {
+    assert.match(analyticsSource, new RegExp(`\\.\\.\\.${bundle}\\b`));
+  }
   assert.match(analyticsSource, /capture_exceptions: true/);
+  assert.match(analyticsSource, /capture_performance: false/);
   assert.doesNotMatch(analyticsSource, /next\/web-vitals|useReportWebVitals/);
   assert.match(
     analyticsSource,
