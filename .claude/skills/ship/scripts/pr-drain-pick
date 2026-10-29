@@ -51,18 +51,12 @@ def main():
     if not isinstance(prs, list) or len(prs) >= 1000:
         sys.exit("pr-drain-pick: incomplete PR list")
     now = dt.datetime.now(dt.timezone.utc)
-    candidates = []
-    for pr in prs:
-        key = rank(pr, now)
-        if key is not None:
-            candidates.append((key, pr))
-    if not candidates:
-        print("NONE")
-        return
     CLAIMS.mkdir(parents=True, exist_ok=True)
     with (CLAIMS / ".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        for _, pr in sorted(candidates):
+        candidates = []
+        for pr in prs:
+            key = rank(pr, now)
             path = CLAIMS / str(pr["number"])
             owner_file = path / "owner"
             owner = None
@@ -70,10 +64,21 @@ def main():
                 owner = owner_file.read_text().split("\t")
                 if len(owner) != 2:
                     sys.exit("pr-drain-pick: invalid claim record")
-                claimed_at = parse(owner[1])
-                if owner[0] != runner and now - claimed_at < CLAIM_TTL:
-                    continue
+                parse(owner[1])
             mine = owner is not None and owner[0] == runner
+            if mine:
+                key = (-1, pr["updatedAt"], pr["number"])
+            if key is not None:
+                candidates.append((key, pr, owner))
+        if not candidates:
+            print("NONE")
+            return
+        for _, pr, owner in sorted(candidates):
+            path = CLAIMS / str(pr["number"])
+            owner_file = path / "owner"
+            mine = owner is not None and owner[0] == runner
+            if owner is not None and not mine and now - parse(owner[1]) < CLAIM_TTL:
+                continue
             if not mine and now - parse(pr["updatedAt"]) < ACTIVE_WINDOW:
                 continue
             if not dry_run:

@@ -8,7 +8,8 @@ An urgent board-15 Bug or Error Log ticket may take precedence.
 
 1. Run `SHIP_SESSION_NAME="RUNNER <number>" ~/.local/bin/pr-drain-pick --dry-run`.
    It reads GitHub with a freshly minted runner App token, never human login.
-2. Compare the result against open production PRs. App drafts come first,
+2. Compare the result against open production PRs. An existing own PR claim
+   comes first, even after that PR becomes ready. Otherwise app drafts come first,
    oldest updated first; dependency drafts follow; failed non-draft PRs idle
    over six hours come last. Recently updated PRs stay with active owners.
 3. `PR <number> <branch> <ticket-or-dash> <title>` names the next eligible PR.

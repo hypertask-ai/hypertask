@@ -73,6 +73,14 @@ cat "$HOME/prs.json"
         self.assertEqual(owner.read_text(), before)
         self.assertFalse((self.claims / '1').exists())
 
+    def test_owned_ready_pr_finishes_before_any_new_draft(self):
+        self.prs = [self.pr(1, hours=20), self.pr(2, hours=0, draft=False)]
+        self.owner(2, runner='RUNNER 16')
+        result = self.pick()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith('PR 2 '), result.stdout)
+        self.assertFalse((self.claims / '1').exists())
+
     def test_stale_claim_replaced_and_own_active_claim_renewed(self):
         self.prs = [self.pr(1)]
         owner = self.owner(1, hours=4)
