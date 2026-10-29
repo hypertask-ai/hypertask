@@ -4,7 +4,7 @@ const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const errors = load('src/lib/mcp-server/utils/errors.ts', {});
 const { logger } = load('src/lib/mcp-server/utils/logger.ts', {});
-function service({ duplicate = true, labels = [] } = {}) {
+function service({ duplicate = true, labels = [], viewLabelError = true } = {}) {
   const saved = [];
   const prisma = {
     label: { findMany: async () => labels },
@@ -39,6 +39,8 @@ function service({ duplicate = true, labels = [] } = {}) {
     },
     './nativeBoardSettings': {},
     '@/lib/mcp-server/utils/errors': errors,
+    '@/lib/flags': { isFeatureEnabled: async () => viewLabelError },
+    '@/lib/flags/definitions/htpr-8135-view-label-error': {},
   });
   return { createView, saved };
 }
@@ -117,15 +119,25 @@ test('successful create still returns the saved view', async () => {
 });
 
 test('missing view label is a readable refusal, with warnings across both create layers', async () => {
-  const { createView, saved } = service({ duplicate: false });
+  const { createView, saved } = service({ duplicate: false, labels: [{ id: 'label-ai', value: 'AI' }] });
   const calls = await capture(async () => {
     await assert.rejects(pipeline(createView, { label_names: ['Management'] }).createView(input), error => {
       assert.equal(error.code, -32602);
-      assert.equal(error.message, 'Label(s) not found in project: Management');
+      assert.equal(error.message, 'Label(s) not found in project: Management. Available labels: AI');
       return true;
     });
   });
   assert.deepEqual(calls.map(call => call.level), ['warn', 'warn']);
+  assert.deepEqual(saved, []);
+});
+
+test('with the flag off the view refusal keeps its old wording', async () => {
+  const { createView, saved } = service({ duplicate: false, labels: [{ id: 'label-ai', value: 'AI' }], viewLabelError: false });
+  await assert.rejects(pipeline(createView, { label_names: ['Management'] }).createView(input), error => {
+    assert.equal(error.code, -32602);
+    assert.equal(error.message, 'Label(s) not found in project: Management');
+    return true;
+  });
   assert.deepEqual(saved, []);
 });
 
