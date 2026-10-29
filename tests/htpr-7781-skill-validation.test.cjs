@@ -67,7 +67,7 @@ for (const operation of ["create", "update", "import"]) {
     [{ name: "Review", slug: "!!!", body: "Review changes" }, undefined, "Skill slug is required"],
     [{ name: "Review", body: " " }, undefined, "Skill body is required"],
     [{ name: "Review", body: "x".repeat(64 * 1024 + 1) }, undefined, "Skill body exceeds the 64KB limit"],
-    [{ markdown: "Review changes" }, undefined, "Skill name is required"],
+    [{ markdown: " \n\t " }, undefined, "Skill name is required"],
     [{ markdown: "---\nname: Review" }, undefined, "SKILL.md frontmatter is not closed"],
   ];
 
@@ -96,6 +96,23 @@ for (const operation of ["create", "update", "import"]) {
     assert.deepEqual(h.reports, []);
     assert.deepEqual(h.flagChecks, []);
   });
+
+  if (operation !== "import") {
+    test(`${operation}: heading-free Markdown still saves with its derived name`, async (t) => {
+      const h = harness(t);
+      const response = await h.invoke(operation, { markdown: "Review changes" });
+      assert.equal(response.status, operation === "create" ? 201 : 200);
+      assert.deepEqual((await response.json()).skill, {
+        ...skill,
+        ...(operation === "create" ? { userId: 2343, projectId: null, enabled: true, createdById: 2343 } : {}),
+        name: "Review changes", slug: "review-changes", body: "Review changes",
+        description: null, argumentHint: null,
+      });
+      assert.equal(h.writes.length, 1);
+      assert.deepEqual(h.reports, []);
+      assert.deepEqual(h.flagChecks, []);
+    });
+  }
 
   test(`${operation}: schema validation returns 400 without reporting`, async (t) => {
     const h = harness(t);
