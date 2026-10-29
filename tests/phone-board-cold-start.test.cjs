@@ -36,7 +36,7 @@ function loadLayout(board, inbox = null, overrides = {}) {
   Object.assign(mocks, overrides);
   const exports = {};
   const code = ts.transpileModule(read("src/app/layout.tsx"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, require: id => {
+  vm.runInNewContext(code, { exports, process: { env: {} }, require: id => {
     if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
     if (id.endsWith(".css") || id.endsWith(".scss")) return {};
     if (id.startsWith("@/") || id === "@vercel/speed-insights/next") return { __esModule: true, default: () => null, SpeedInsights: () => null };
