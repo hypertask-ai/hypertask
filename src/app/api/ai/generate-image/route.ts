@@ -12,10 +12,12 @@ import {
   getCurrentUserFromCookies,
 } from "@/app/api/ai/_lib/editorAi";
 import {
+  configureAiModelUsage,
   gatewayProviderOptionsForModel,
   resolveGatewayImageModel,
   resolveGatewayModel,
 } from "@/app/api/ai/_lib/modelProvider";
+import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { assertImageModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
@@ -124,6 +126,7 @@ export async function POST(request: NextRequest) {
         teamId: teamContext.teamId,
         projectId: body.projectId,
         userId: cookieUser.id,
+        taskId: body.taskId,
       };
       const image =
         definition.generation === "language"
@@ -230,9 +233,10 @@ async function generateWithLanguageModel(
   modelId: string,
   prompt: string,
   gatewayApiKey: string | undefined,
-  tags: { teamId?: string | null; projectId?: number | null; userId?: number | null }
+  tags: { teamId?: string | null; projectId?: number | null; userId?: number | null; taskId?: number | null }
 ) {
   const model = resolveGatewayModel(modelId, gatewayApiKey);
+  configureAiModelUsage(model, { taskId: tags.taskId });
   const result = await generateText({
     experimental_download: downloadWithoutBrotli,
     model,
@@ -253,21 +257,35 @@ async function generateWithImageModel(
   modelId: string,
   prompt: string,
   gatewayApiKey: string | undefined,
-  tags: { teamId?: string | null; projectId?: number | null; userId?: number | null }
+  tags: { teamId?: string | null; projectId?: number | null; userId?: number | null; taskId?: number | null }
 ) {
   const model = resolveGatewayImageModel(modelId, gatewayApiKey);
-  const result = await generateImage({
-    model,
-    prompt,
-    n: 1,
-    maxRetries: 2,
-    providerOptions: gatewayProviderOptionsForModel(
+  const startedAt = Date.now();
+  let result: Awaited<ReturnType<typeof generateImage>> | undefined;
+  try {
+    result = await generateImage({
       model,
-      "generate-image",
-      tags
-    ),
-  });
-  return result.image;
+      prompt,
+      n: 1,
+      maxRetries: 2,
+      providerOptions: gatewayProviderOptionsForModel(model, "generate-image", tags),
+    });
+    return result.image;
+  } finally {
+    await logAiUsage({
+      ...tags,
+      userId: tags.userId ?? null,
+      provider: "gateway",
+      model: modelId,
+      feature: "generate-image",
+      outcome: result ? "ok" : "failed",
+      inputTokens: result?.usage?.inputTokens,
+      outputTokens: result?.usage?.outputTokens,
+      totalTokens: result?.usage?.totalTokens,
+      costUsd: null,
+      latencyMs: Date.now() - startedAt,
+    });
+  }
 }
 
 function extensionForMediaType(mediaType: string) {

@@ -125,7 +125,15 @@ async function logUsage(
   outcome: BatchItemOutcome,
   ids: { projectId: number | null; taskId: number | null },
 ) {
-  if (outcome.status !== "succeeded") return;
+  if (outcome.status !== "succeeded") {
+    await logAiUsage({
+      ...ids, userId: batch.userId, teamId: batch.teamId,
+      provider: "gateway-batch", model: batch.model,
+      feature: batch.kind === "slack-summary" ? "summary" : "smart-label",
+      outcome: outcome.status, costUsd: null,
+    });
+    return;
+  }
   let normalCostUsd: number | null = null;
   try {
     const pricing = await modelPricing(batch.model);

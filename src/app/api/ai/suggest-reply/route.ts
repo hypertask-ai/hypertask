@@ -14,6 +14,7 @@ import {
   selectTaskWriterModel,
 } from "@/app/api/ai/_lib/editorAi";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
@@ -83,6 +84,7 @@ async function fetchReplyContext(taskId: number, userId: number) {
       project: getProjectWhere(userId),
     },
     select: {
+      id: true,
       title: true,
       description: true,
       section: true,
@@ -141,6 +143,15 @@ async function generateSuggestion(task: NonNullable<ReplyContext>, userId: numbe
   const selected = await selectTaskWriterModel({
     projectId: task.projectId,
     userId,
+    feature: "suggest-reply",
+  });
+  configureAiModelUsage(selected.model, {
+    userId,
+    teamId: selected.teamId,
+    projectId: task.projectId,
+    taskId: task.id,
+    provider: selected.usageProvider,
+    feature: "suggest-reply",
   });
   const { text } = await generateText({
     experimental_download: downloadWithoutBrotli,
