@@ -44,7 +44,7 @@ async function withChat(options, check) {
     "@/tiptap/pm/state": { EditorState: { create: value => value } },
     "@tiptap/pm/state": { EditorState: { create: value => value } },
     "@/store": atoms, "@/lib/state": state,
-    "@/hooks/useFlag": { useFlag: key => key === flag ? options.enabled !== false : key === "htpr-6971-chat-history-paging" ? options.paged : key === "htpr-7518-agent-sidebar-chats" ? !!options.agentSidebar : ["htpr-7052-chat-names", "htpr-6936-ask-ai-fullscreen"].includes(key), useFlagReady: () => true },
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-8088-manual-chat" ? !!options.manualChat : key === "htpr-7736-chat-follows-task" ? !!options.followsTask : key === flag ? options.enabled !== false : key === "htpr-6971-chat-history-paging" ? options.paged : key === "htpr-7518-agent-sidebar-chats" ? !!options.agentSidebar : ["htpr-7052-chat-names", "htpr-6936-ask-ai-fullscreen"].includes(key), useFlagReady: () => true },
     "@/lib/flags/keys": { HTPR_7783_REMEMBER_CHAT_FLAG: flag, HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "htpr-6971-chat-history-paging", HTPR_7052_CHAT_NAMES_FLAG: "htpr-7052-chat-names", HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats", HTPR_6936_ASK_AI_FULLSCREEN_FLAG: "htpr-6936-ask-ai-fullscreen" },
     "@/lib/aiChat/chatNavigationState": navigation,
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => nativeSidebar },
@@ -59,7 +59,7 @@ async function withChat(options, check) {
     "./useAiChatModelPreference": { useAiChatModelPreference: () => ({}) }, "./aiChatShared": { aiOptionsWithoutOpenRouter: [] },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ ...history, chatMounted: true, registerMessageListRef: element => { messageListElement = element; }, handleMessageListScroll() {}, scrollMessagesToBottom: () => { if (messageListElement) messageListElement.scrollTop = 1000; } }) },
     "./MessageItem": { MessageItem: ({ message }) => React.createElement("p", null, message.content) }, "./TypingIndicator": { TypingIndicator: () => null },
-    "./useAiChatOpenPreferences": { useSyncAiChatOpenPreferences() {}, useAiChatOpenPreferences: () => ({ enabled: true, ready: true, flagReady: true, values: { aiChatOpenBoards: true } }) },
+    "./useAiChatOpenPreferences": { useSyncAiChatOpenPreferences() {}, useAiChatOpenPreferences: () => ({ enabled: true, ready: true, flagReady: true, values: { aiChatOpenBoards: options.boardAutoOpen !== false, aiChatOpenTickets: true } }) },
   });
   const { useAiChatSessions } = source("src/hooks/MultiPages/AIChat/useAiChatSessions.ts");
   const { useAiChatState } = source("src/hooks/MultiPages/AIChat/useAiChatState.ts");
@@ -326,7 +326,7 @@ for (const paged of [false, true]) for (const allBoards of [false, true]) {
       assert.equal((await view.resolver().ensureSessionForCurrentBoard(0)).id, "older");
       assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
       assert.equal(view.calls.some(([type, id]) => type === "transcript" && id === agent.id), false);
-      if (paged) assert.ok(view.calls.some(([type, scope]) => type === "page" && scope.projectId === (allBoards ? undefined : 15) && scope.cursor === "1"));
+      if (paged) assert.ok(view.calls.some(([type, scope]) => type === "page" && scope.projectId === (allBoards ? undefined : 15) && scope.limit === 30));
     });
   });
 }
@@ -428,5 +428,46 @@ for (const paged of [false, true]) test(`${paged ? "paged" : "legacy"}: flag-off
     assert.equal(view.chatState().dockedChatScope, null);
     assert.equal(view.history().currentSession.id, "explicit-new");
     assert.equal(view.calls.filter(([type]) => type === "create").length, 1);
+  });
+});
+
+
+test("following tickets keeps the chosen conversation with remembered navigation", async () => {
+  await withChat({ paged: true, followsTask: true }, async view => {
+    await view.set(atoms.inViewObjectAtom, { taskId: 43 });
+    await view.visit("/detail/project-15/43");
+    await React.act(async () => { await view.history().selectSession("older"); }); await view.flush();
+    const key = view.chatState().navigationKey;
+    await view.set(atoms.inViewObjectAtom, { taskId: 44 });
+    await view.visit("/detail/project-15/44");
+    assert.equal(view.chatState().navigationKey, key);
+    assert.equal(view.history().currentSession.id, "older");
+    assert.equal((await view.resolver().ensureSessionForCurrentBoard(0)).id, "older");
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+  });
+});
+
+test("first manual send from a ticket creates a general conversation", async () => {
+  await withChat({ paged: true, manualChat: true, rows: [] }, async view => {
+    await view.set(atoms.inViewObjectAtom, { taskId: 43 });
+    await view.visit("/detail/project-15/43");
+    assert.equal(view.chatState().chatHistoryReady, true);
+    const session = await view.resolver().ensureSessionForCurrentBoard(0);
+    assert.equal(session.id, "explicit-new");
+    assert.equal(session.taskId, null);
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 1);
+  });
+});
+
+test("restored closed board does not bypass auto-open policy on later visits", async () => {
+  await withChat({ panel: true, boardAutoOpen: false }, async view => {
+    await view.set(atoms.showAIChatInterfaceAtom, false);
+    await view.visit("/settings/profile");
+    await view.visit("/project");
+    assert.equal(view.values.get(atoms.showAIChatInterfaceAtom), false);
+    await view.visit("/detail/project-15/43");
+    assert.equal(view.values.get(atoms.showAIChatInterfaceAtom), true);
+    await view.visit("/project");
+    assert.equal(view.values.get(atoms.showAIChatInterfaceAtom), false);
   });
 });

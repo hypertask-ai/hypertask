@@ -63,6 +63,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       previousPage.current = null;
       return;
     }
+    if (previousPage.current !== pageKey) restoredPage.current = null;
     if (previousRoute.current === null || previousRoute.current.startsWith("/settings")) {
       restoreVisit.current = pageKey;
       attemptedRestore.current = null;

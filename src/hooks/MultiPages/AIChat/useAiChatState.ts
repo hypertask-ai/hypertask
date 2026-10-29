@@ -246,7 +246,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   }, [sessionQueue, currentSession?.id]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
-  const chatHistoryReady = navigationKey ? !!currentSession || (taskId === undefined && isHistoryReady && !isSessionPending) : sessionReady;
+  const chatHistoryReady = navigationKey ? !!currentSession || (historyTaskId === undefined && isHistoryReady && !isSessionPending) : sessionReady;
   const chatHistoryReadyRef = useRef(chatHistoryReady);
   chatHistoryReadyRef.current = chatHistoryReady;
   const sessionSetupRef = useRef<{

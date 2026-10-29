@@ -184,7 +184,7 @@ export function useAiChatSessions(context: Context) {
         : sessionsRef.current.find((session) => session.id === sidebarNative.sessionId);
     }
 
-    if (taskId !== undefined) {
+    if (taskId !== undefined && !manualChat) {
       if (sessionPagingEnabled || navigationKey) {
         const generation = sessionIntentGenerationRef.current;
         const deadline = Date.now() + timeoutMs;
@@ -367,7 +367,6 @@ export function useAiChatSessions(context: Context) {
   }, [
     aiChatBoardSessionMap,
     navigationKey,
-    scopedProjectId,
     context.agentSidebarChatsEnabled,
     createSession,
     currentProject?.id,
@@ -378,7 +377,7 @@ export function useAiChatSessions(context: Context) {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
-    taskId, sessionPagingEnabled, parallelStreams, resolveHistorySession, getDisplayedSession, followsTaskNavigation,
+    taskId, manualChat, sessionPagingEnabled, parallelStreams, resolveHistorySession, getDisplayedSession, followsTaskNavigation,
   ]);
 
   useEffect(() => {
