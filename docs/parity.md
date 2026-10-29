@@ -12,7 +12,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Update the human profile** | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 (transition) | ✅ 1 |
 | **List, inspect, and contact board agents** | ✅ 7 | ✅ 2 | ✅ 4 | ✅ 3 | ✅ 2 |
 | **Agent Chat: an agent runtime reads and answers its owner's chat** | ✅ 10 (transition) | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 | ↪ Agent Chat is the surface itself; native agents answer in-process without this route. | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 |
-| **Create, revoke, and rotate managed agents or keys** | ✅ 20 | ✅ 7 | ✅ 18 | ✅ 5 | ✅ 7 |
+| **Create, revoke, and rotate managed agents or keys** | ✅ 20 (transition) | ✅ 7 (transition) | ✅ 18 | ✅ 5 | ✅ 7 (transition) |
 | **Owner-approved feature flag changes by agent sessions** | ✅ 4 | ↪ Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags. | ↪ The session-only ht-flag script uses the agent identity directly; the public CLI does not expose release controls. | ↪ Feature flag release controls are restricted to approved owner agent sessions, not AI Chat tools. | ↪ The embedded agent inherits the human session and cannot use the agent-only flag route. |
 | **Create, refresh, inspect, or clear a CLI/API session** | ✅ 4 | ↪ MCP clients receive credentials out of band and do not manage interactive login. | ✅ 4 | ↪ The signed-in web session is managed by the app shell. | ↪ The embedded agent inherits the invoking human session. |
 | **List, inspect, and filter tasks** | ✅ 2 | ✅ 2 | ✅ 2 | ✅ 4 | ✅ 2 |
