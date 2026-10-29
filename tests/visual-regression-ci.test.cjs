@@ -5,7 +5,7 @@ const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseOnly = false, corruptBaseline = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" } } = {}) {
+function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseOnly = false, corruptBaseline = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" }, lockVersions = playwrightVersions } = {}) {
   const filename = path.join(__dirname, "../scripts/visual-regression-ci.mjs");
   const code = readFileSync(filename, "utf8").replace(/^import .*;\n/gm, "").replace(/^export /gm, "").replaceAll("import.meta.url", JSON.stringify(pathToFileURL(filename).href));
   const calls = [];
@@ -32,6 +32,7 @@ function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cache
     cp: async () => {}, mkdir: async () => {},
     openSync: () => 42, closeSync: () => {},
     appendFile: async (file, text) => files.set(file, (files.get(file) ?? "") + text),
+    readFileSync: file => JSON.stringify({ packages: { "node_modules/@playwright/test": { version: lockVersions[path.basename(path.dirname(file))] } } }),
     readFile: async file => {
       if (file.endsWith(".png")) {
         const png = Buffer.alloc(24);
@@ -177,6 +178,17 @@ test("base and head must install one Playwright version so the screenshots compa
   const run = fixture({ playwrightVersions: { base: "1.64.1", head: "1.64.2" } });
   await assert.rejects(run.main(), /base and head must capture with one Playwright version .*base has 1\.64\.1, head has 1\.64\.2/);
   assert.deepEqual(run.calls, [...commands("base"), `${commands("head")[0]}`]);
+});
+
+test("a cached baseline still needs head to match the base lockfile version", async () => {
+  const run = fixture({ cachedBase: true, playwrightVersions: { base: "1.64.1", head: "1.64.2" } });
+  await assert.rejects(run.main(), /base has 1\.64\.1, head has 1\.64\.2/);
+  assert.deepEqual(run.calls, [commands("head")[0]]);
+});
+
+test("an install that disagrees with the checkout lockfile stops before captures", async () => {
+  const run = fixture({ playwrightVersions: { base: "1.64.1", head: "1.64.2" }, lockVersions: { base: "1.64.1", head: "1.64.1" } });
+  await assert.rejects(run.main(), /head installed Playwright 1\.64\.2 but its package-lock\.json locks 1\.64\.1/);
 });
 
 test("invalid cached PNG dimensions fail closed before any builds or comparisons", async () => {

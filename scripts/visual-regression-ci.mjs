@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { appendFile, cp, mkdir, readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -34,6 +35,12 @@ export function failedScreens(report) {
   }
   visit(report);
   return failed;
+}
+
+export function lockedPlaywright(root) {
+  const version = JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8")).packages?.["node_modules/@playwright/test"]?.version;
+  if (!version) throw new Error(`${path.basename(root)}/package-lock.json locks no @playwright/test version`);
+  return version;
 }
 
 export function assertSamePlaywright(baseVersion, headVersion) {
@@ -153,6 +160,7 @@ async function main() {
     const expected = path.join(temp, "visual-expected");
     await mkdir(expected, { recursive: true, mode: 0o700 });
     const cachedBase = process.env.VISUAL_BASE_CACHE_HIT === "true";
+    if (cachedBase) basePlaywright = lockedPlaywright(base);
     if (cachedBase) {
       await validateBaseline(expected);
       console.log("Visual base cache hit: ten validated screenshots; skipping base build and capture");
@@ -176,8 +184,10 @@ async function main() {
       command(root, env, ["npm", "ci", "--prefer-offline", "--no-audit", "--no-fund"]);
       const require = createRequire(path.join(root, "package.json"));
       const playwright = require("@playwright/test/package.json").version;
+      const locked = lockedPlaywright(root);
+      if (playwright !== locked) throw new Error(`${phase} installed Playwright ${playwright} but its package-lock.json locks ${locked}`);
       if (phase === "base") basePlaywright = playwright;
-      else if (basePlaywright) assertSamePlaywright(basePlaywright, playwright);
+      else assertSamePlaywright(basePlaywright ?? lockedPlaywright(base), playwright);
       command(root, env, ["npx", "prisma", "generate"]);
       command(root, env, ["npx", "prisma", "db", "execute", "--stdin"], "DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
       const Redis = require("ioredis");
