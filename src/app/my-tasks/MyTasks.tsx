@@ -7,6 +7,7 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8144_PHONE_MY_TASKS_FLAG } from "@/lib/flags/definitions/htpr-8144-phone-my-tasks";
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -141,6 +142,7 @@ const MyTasks = ({
   scopesEnabled = false,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
+  const phoneLayoutEnabled = useFlag(HTPR_8144_PHONE_MY_TASKS_FLAG);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const showCommands = useRecoilValue(showCommandsAtom);
   const router = useRouter();
@@ -1012,7 +1014,7 @@ const boardTabCounts = useMemo(() => {
     <div
       suppressHydrationWarning
       data-testid="my-tasks-panel"
-      className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 w-full flex linksModal ${styles.links_modal}`}
+      className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 w-full flex linksModal ${styles.links_modal} ${phoneLayoutEnabled ? styles.phone_layout : ""}`}
     >
       {viewsEnabled && myTasksViewsEnabled && (
         <div className="mb-4 px-[16px] @md:!px-[78px]">
