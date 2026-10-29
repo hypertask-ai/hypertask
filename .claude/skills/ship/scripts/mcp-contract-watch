@@ -399,7 +399,7 @@ def report(incident, dry_run, state, path):
                 save(state, path)
                 # Only board 15 has a Bugs column; a proof run on another board uses its default column.
                 section_args = ['--section', section] if section else []
-                code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', *section_args, '--json'], env)
+                code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', *section_args, '--json'], {**env, 'VCC_VOICE_BYPASS': 'mcp contract incident evidence'})
                 ticket = receipt(output) if code == 0 else None
                 if ticket:
                     incident.update(create_state='done', ticket_id=ticket)
