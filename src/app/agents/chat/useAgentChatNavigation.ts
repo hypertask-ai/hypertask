@@ -15,7 +15,6 @@ type Props = Pick<
   | "agents"
   | "selectedId"
   | "isMbl"
-  | "mobileLayoutEnabled"
   | "teamId"
   | "setAgentChatMobileFullscreen"
   | "setMobileTopBarTitle"
@@ -24,7 +23,7 @@ type Props = Pick<
 >;
 
 export function useAgentChatNavigation({
-  embedded, agents, selectedId, isMbl, mobileLayoutEnabled, teamId,
+  embedded, agents, selectedId, isMbl, teamId,
   setAgentChatMobileFullscreen, setMobileTopBarTitle, setTeamId, search,
 }: Props) {
   const selectedAgent = useMemo(
@@ -51,11 +50,10 @@ export function useAgentChatNavigation({
   }, [mobileFullscreenChrome, setAgentChatMobileFullscreen]);
 
   useEffect(() => {
-    if (embedded || !mobileLayoutEnabled || !isMbl || mobileFullscreenChrome) return;
+    if (embedded || !isMbl || mobileFullscreenChrome) return;
     setMobileTopBarTitle(selectedAgent?.displayName ?? "Agents");
     return () => setMobileTopBarTitle(null);
   }, [
-    mobileLayoutEnabled,
     isMbl,
     mobileFullscreenChrome,
     selectedAgent?.displayName,

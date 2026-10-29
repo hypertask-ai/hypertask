@@ -28,7 +28,6 @@ function stubModule(relativePath, exports) {
 function loadMessageRoute({
   brief,
   briefError = null,
-  adhdReplyEnabled = false,
 }) {
   const deliveries = [];
   let briefCalls = 0;
@@ -89,10 +88,7 @@ function loadMessageRoute({
   });
   stubModule("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
   stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async (key) => {
-      if (key === "htpr-6407-mobile-agent-chat-layout") return adhdReplyEnabled;
-      return false;
-    },
+    isFeatureEnabled: async () => false,
   });
   stubModule("src/lib/agents/chatBrief.ts", {
     buildAgentChatBrief: async (input) => {
@@ -416,7 +412,7 @@ test("message send always includes the brief without a feature flag", async () =
   );
 });
 
-test("message send keeps the exact legacy payload when enrichment fails", async () => {
+test("message send keeps released reply guidance when enrichment fails", async () => {
   const route = loadMessageRoute({
     brief: null,
     briefError: new Error("brief unavailable"),
@@ -436,13 +432,13 @@ test("message send keeps the exact legacy payload when enrichment fails", async 
     messageId: "message-1",
     text: "What are you working on?",
     userName: "Valentin",
+    replyGuidance: "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.",
   });
 });
 
-test("message send adds ADHD reply guidance when the layout flag is on", async () => {
+test("message send always adds ADHD reply guidance after layout flag retirement", async () => {
   const route = loadMessageRoute({
     brief: null,
-    adhdReplyEnabled: true,
   });
   assert.equal((await sendMessage(route)).status, 200);
   assert.match(route.deliveries[0].chat.replyGuidance, /Lead with the next action/);
