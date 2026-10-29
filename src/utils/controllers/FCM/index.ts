@@ -160,8 +160,16 @@ const fcmCommentPayload = (comment: any, creator: any) => {
   });
 };
 
+const UNREGISTERED_TOKEN_CODE = "messaging/registration-token-not-registered";
+
 function firebaseMessagingErrorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object" || !("errorInfo" in error)) {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+  if ("code" in error && typeof error.code === "string") {
+    return error.code;
+  }
+  if (!("errorInfo" in error)) {
     return undefined;
   }
   const errorInfo = error.errorInfo;
@@ -169,6 +177,10 @@ function firebaseMessagingErrorCode(error: unknown): string | undefined {
     return undefined;
   }
   return typeof errorInfo.code === "string" ? errorInfo.code : undefined;
+}
+
+function isUnregisteredTokenError(error: unknown): boolean {
+  return firebaseMessagingErrorCode(error) === UNREGISTERED_TOKEN_CODE;
 }
 
 export const sendDataOnlyFcm = async (
@@ -251,15 +263,17 @@ export const sendDataOnlyFcm = async (
       console.log("🚀 ~ sendDataOnlyFcm ~ response:", response);
       deliveryResolved = true;
     } catch (error) {
-      console.error("🚀 ~ sendDataOnlyFcm ~ send failed:", error);
-      await removeDeadDeviceToken(error, device.firebaseId);
-      if (
-        firebaseMessagingErrorCode(error) ===
-        "messaging/registration-token-not-registered"
-      ) {
+      if (isUnregisteredTokenError(error)) {
+        console.log(
+          `🚀 ~ sendDataOnlyFcm ~ dropping unregistered device token ${device.firebaseId.slice(0, 12)}`
+        );
+        await removeDeadDeviceToken(device.firebaseId);
         deliveryResolved = true;
-      } else if (deliveryOptions?.failOnError) {
-        deliveryErrors.push(error);
+      } else {
+        console.error("🚀 ~ sendDataOnlyFcm ~ send failed:", error);
+        if (deliveryOptions?.failOnError) {
+          deliveryErrors.push(error);
+        }
       }
     }
     if (deliveryResolved) {
@@ -272,13 +286,7 @@ export const sendDataOnlyFcm = async (
   }
 };
 
-const removeDeadDeviceToken = async (error: unknown, firebaseId: string) => {
-  if (
-    firebaseMessagingErrorCode(error) !==
-    "messaging/registration-token-not-registered"
-  ) {
-    return;
-  }
+const removeDeadDeviceToken = async (firebaseId: string) => {
   try {
     await prisma.subscribedDevices.deleteMany({ where: { firebaseId } });
     console.log("🚀 ~ removed dead device token", firebaseId.slice(0, 12));
@@ -366,7 +374,9 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
             
         } catch (error) {
             console.log("🚀 ~ sendDataNewCommentFCM ~ error:", error)
-            await removeDeadDeviceToken(error, device.firebaseId);
+            if (isUnregisteredTokenError(error)) {
+                await removeDeadDeviceToken(device.firebaseId);
+            }
         }
     }
 }
