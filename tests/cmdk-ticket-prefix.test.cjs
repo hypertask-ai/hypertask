@@ -34,8 +34,8 @@ function evaluate(source, bindings) {
   return new Function(...Object.keys(bindings), `${js}; return result;`)(...Object.values(bindings));
 }
 
-function flagBindings(file, enabled) {
-  const bindings = { ...flags, useFlag: (key) => enabled && key === flags.HTPR_6868_TICKET_PREFIX_FLAG };
+function flagBindings(file, enabled, githubEnabled = false) {
+  const bindings = { ...flags, useFlag: (key) => (enabled && key === flags.HTPR_6868_TICKET_PREFIX_FLAG) || (githubEnabled && key === flags.HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG) };
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const result = {};
   function visit(node) {
@@ -48,9 +48,9 @@ function flagBindings(file, enabled) {
   return result;
 }
 
-function paletteGroups(enabled, frequent = {}, contextOptions) {
+function paletteGroups(enabled, frequent = {}, contextOptions, githubEnabled = false) {
   const bindings = {
-    ...registry, ...flagBindings(palette, enabled), CommandMode,
+    ...registry, ...flagBindings(palette, enabled, githubEnabled), CommandMode,
     useMemo: (callback) => callback(),
     boardLayout: "board", calendarSettings: { showWeekends: true },
     currentProject: { id: 15 }, frequentlyUsed: frequent, projects: [],
@@ -64,17 +64,17 @@ function paletteGroups(enabled, frequent = {}, contextOptions) {
     getHTCFrecencyScore: () => 0,
   };
   const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible", "hiddenBasetenCommandKey", "hiddenXaiCommandKeys"]);
+  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible", "hiddenBasetenCommandKey", "hiddenXaiCommandKeys", "hiddenGithubCommandKey"]);
   const statements = [];
   function visit(node) {
     if ((ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => names.has(declaration.name.getText(source)))) ||
-        (ts.isIfStatement(node) && ["ticketPrefixEnabled", "!basetenByokEnabled", "!grokGemini4Enabled"].includes(node.expression.getText(source)))) {
+        (ts.isIfStatement(node) && ["ticketPrefixEnabled", "!basetenByokEnabled", "!grokGemini4Enabled", "githubConnectEnabled"].includes(node.expression.getText(source)))) {
       statements.push(node.getText(source));
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  Object.assign(bindings, evaluate(`(() => { ${statements.join("\n")} return { isTicketPrefixCommandVisible, hiddenBasetenCommandKey, hiddenXaiCommandKeys }; })()`, {
+  Object.assign(bindings, evaluate(`(() => { ${statements.join("\n")} return { isTicketPrefixCommandVisible, hiddenBasetenCommandKey, hiddenXaiCommandKeys, hiddenGithubCommandKey }; })()`, {
     ...bindings, useCallback: (callback) => callback,
   }));
   bindings.getCommands = registry.getAllCommands;
@@ -151,5 +151,15 @@ test("the command search memo re-evaluates when the Ticket prefix flag changes",
     const source = ts.createSourceFile(file, initializer(file, name), ts.ScriptTarget.Latest, true);
     const expression = source.statements[0].expression;
     assert.ok(expression.arguments[1].elements.some((element) => element.getText(source) === dependency));
+  }
+});
+
+test("GitHub command visibility includes remembered commands only when enabled", () => {
+  for (const enabled of [false, true]) {
+    const groups = paletteGroups(false, { settingsGithub: { frequency: 100, lastUsedAt: Date.now() }, createTask: { frequency: 1, lastUsedAt: Date.now() } }, {}, enabled);
+    const all = groups.flatMap((group) => group.commandLists);
+    assert.equal(all.some((command) => command.key === "settingsGithub"), enabled);
+    assert.equal(groups.find((group) => group.group === "Frequently used").commandLists.some((command) => command.key === "settingsGithub"), enabled);
+    assert.ok(all.some((command) => command.key === "createTask"));
   }
 });

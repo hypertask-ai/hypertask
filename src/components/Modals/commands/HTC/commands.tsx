@@ -30,6 +30,7 @@ import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import {
@@ -202,6 +203,9 @@ const Commands = (props: Props) => {
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   let hiddenXaiCommandKeys = "";
   if (!grokGemini4Enabled) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai";
+  const githubConnectEnabled = useFlag(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
+  let hiddenGithubCommandKey: string | null = "settingsGithub";
+  if (githubConnectEnabled) hiddenGithubCommandKey = null;
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -298,6 +302,7 @@ const Commands = (props: Props) => {
               showByokApiKeys) &&
             command.key !== hiddenBasetenCommandKey &&
             !hiddenXaiCommandKeys.split(" ").includes(command.key) &&
+            command.key !== hiddenGithubCommandKey &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -447,6 +452,7 @@ const Commands = (props: Props) => {
     pagesEnabled,
     standalonePages,
     pathname,
+    hiddenGithubCommandKey,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
     hiddenXaiCommandKeys,

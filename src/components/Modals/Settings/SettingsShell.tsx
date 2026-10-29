@@ -4,10 +4,11 @@ import { SettingsScopeTabs } from "./SettingsScopeTabs";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
 import { subscribeAiSettingsEvents } from "@/lib/ai/settings/client";
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ComponentType,
   useEffect,
@@ -206,6 +207,10 @@ const SlackSection = dynamic(() => import("./SlackSection"), {
   ssr: false,
   loading: () => <SettingsSectionLoading />,
 });
+const GitHubSection = dynamic(() => import("./GitHubSection"), {
+  ssr: false,
+  loading: () => <SettingsSectionLoading />,
+});
 const WebhooksSection = dynamic(() => import("./WebhooksSection"), {
   ssr: false,
   loading: () => <SettingsSectionLoading />,
@@ -268,6 +273,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
   "management-keys": ManagementKeysSection,
   mcp: McpSection,
   slack: SlackSection,
+  github: GitHubSection,
   webhooks: WebhooksSection,
   "my-ai-usage": MyAiUsageSection,
   notifications: NotificationsSection,
@@ -281,8 +287,13 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const aiSettingsEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
   const [settingsRevision, setSettingsRevision] = useState(0);
   const taskTemplatesEnabled = useFlag(HTPR_7472_TASK_TEMPLATES_FLAG);
-  const activeSection = section === "board-task-templates" && !taskTemplatesEnabled
-    ? "board-ai" : normalizeSettingsSection(section);
+  const githubConnectEnabled = useFlag(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
+  const githubConnectReady = useFlagReady(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
+  const searchParams = useSearchParams();
+  const normalizedSection = normalizeSettingsSection(section);
+  let activeSection = normalizedSection;
+  if (!githubConnectEnabled && normalizedSection === "github") activeSection = "mcp";
+  if (!taskTemplatesEnabled && normalizedSection === "board-task-templates") activeSection = "board-ai";
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
   const { open: openAiChat, close: closeAiChat } = useUIStateManager("aiChatInterface");
@@ -344,10 +355,11 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   }, [activeTab.id, section]);
 
   useEffect(() => {
+    if (normalizedSection === "github" && !githubConnectReady) return;
     if (section && section !== activeSection) {
       router.replace(getSettingsPath(activeSection));
     }
-  }, [activeSection, router, section]);
+  }, [activeSection, githubConnectReady, normalizedSection, router, section]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -386,6 +398,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
           items: group.items.filter(
             (item) =>
               (isSettingsNavLink(item) || item.id !== "board-task-templates" || taskTemplatesEnabled) &&
+              (isSettingsNavLink(item) || item.id !== "github" || githubConnectEnabled) &&
               (isSettingsNavLink(item) ||
                 item.id !== "apiKeys" ||
                 Boolean(billing && billing.storePlanId !== "Free")) &&
@@ -406,7 +419,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
       bottomGroups: filterGroups(SETTINGS_CROSS_TAB_GROUPS),
       primaryGroups: filterGroups(navigationTab.groups),
     };
-  }, [billing, navigationTab.groups, searchTerm, taskTemplatesEnabled]);
+  }, [billing, githubConnectEnabled, navigationTab.groups, searchTerm, taskTemplatesEnabled]);
 
   const isSearching = searchTerm.trim().length > 0;
   const hasVisibleGroups = primaryGroups.length > 0 || bottomGroups.length > 0;
@@ -634,7 +647,9 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
                   mbl ? "px-4 pt-2" : "px-6 pt-5",
                 )}
               >
-                {currentUser ? <ActiveSection key={settingsRevision} /> : <SettingsSectionLoading />}
+                {currentUser ? (
+                  <ActiveSection key={`${settingsRevision}:${activeSection === "github" ? `${currentUser.id}:${searchParams?.get("projectId")}` : activeSection}`} />
+                ) : <SettingsSectionLoading />}
               </div>
             </SidebarContextProvider>
           </div>
