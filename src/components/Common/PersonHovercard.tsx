@@ -187,7 +187,7 @@ const PersonHovercardSurfaceContent = ({
                 <button
                   type="button"
                   aria-label={`Chat with ${profile.displayName}`}
-                  className="relative z-20 mt-2 min-h-[28px] rounded-[3px] px-2 text-dense text-text-light-gray outline-none hover:bg-hover-active hover:text-white-black focus-visible:ring-1 focus-visible:ring-hypertasks-purple"
+                  className="relative z-20 mt-2 min-h-[28px] rounded-sm px-2 text-dense text-text-light-gray outline-none hover:bg-hover-active hover:text-white-black focus-visible:ring-1 focus-visible:ring-hypertasks-purple"
                   onClick={(event) => {
                     event.stopPropagation();
                     const params = new URLSearchParams(window.location.search);

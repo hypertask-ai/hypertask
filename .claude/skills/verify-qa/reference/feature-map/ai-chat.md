@@ -303,6 +303,21 @@ isolated heartbeat trigger and execution-step telemetry are available through
 approved product surfaces, record the live four-step case as UNREACHABLE;
 do not substitute mocked SDK results for a live heartbeat.
 
+## Agent hovercard Chat action
+
+On a QA-owned ticket, hover an agent mention and an assigned agent.
+The existing person hovercard offers **Chat**. Select it with the sidebar
+closed and open: the chosen agent's conversation must appear without leaving
+the ticket. Preserve `inboxFlow=true` and other existing query parameters.
+Switch to another conversation, then select the same agent again; the new
+selection must win over a previously handled `sidebarAgent` deep link.
+Reload and confirm the selected agent is restored. The separate profile
+link still opens the agent page; human contact cards retain Copy email.
+Loading, error and unavailable-board states must not offer an unusable action.
+Check desktop and phone in all four themes. Do not send messages or wake
+agents merely to verify selection. `htpr-7737-agent-hover-chat` Off removes
+only this shortcut, preserving existing sidebar and profile navigation.
+
 ## Agent sessions in the sidebar
 
 On a board with an agent, open AI chat. With `htpr-8048-agent-sessions`
