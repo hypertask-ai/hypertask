@@ -404,6 +404,22 @@ done
 voice_refused 'over 8 words' bash "$vcc" comment add X-1 --kind question --text "${plain/Why: less work./Why: this makes the board load much faster for every user.}"
 voice_refused 'over 8 words' bash "$vcc" comments add X-1 --text "<p><span data-type=\"mention\" data-id=\"Valentin Yeo\">Valentin Yeo</span> This change makes the board load much faster for every user.</p>"
 voice_refused 'over 8 words' bash "$vcc" comment add X-1 --markdown --text '@Valentin Yeo this change makes the board load much faster for everyone.'
+for mention in '--mentions 6' '--mentions=6' 'html' 'digit'; do
+  case "$mention" in
+    '--mentions 6') args=(--mentions 6 --text 'Done.') ;;
+    '--mentions=6') args=(--mentions=6 --text 'Done.') ;;
+    html) args=(--text '<span data-type = "mention">Valentin</span> Done.') ;;
+    digit) args=(--text '@6 Done.') ;;
+  esac
+  allowed bash "$vcc" comment add X-1 "${args[@]}"
+  case "$mention" in
+    '--mentions 6') args=(--mentions 6 --text "$long") ;;
+    '--mentions=6') args=(--mentions=6 --text "$long") ;;
+    html) args=(--text "<span data-type = \"mention\">Valentin</span> $long") ;;
+    digit) args=(--text "@6 $long") ;;
+  esac
+  voice_refused 'over 8 words' bash "$vcc" comment add X-1 "${args[@]}"
+done
 voice_refused 'over 8 words' bash "$vcc" comment add X-1 --reply-to-comment-id 9 --text "$long"
 voice_refused 'over 8 words' bash "$vcc" comment add X-1 --attach shot.png --text "$long"
 voice_refused 'over 8 words' bash "$vcc" --json comment add X-1 --kind=done "--text=$long"

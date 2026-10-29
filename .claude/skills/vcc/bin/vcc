@@ -217,7 +217,7 @@ voice_route() {
   while [ "$#" -gt 0 ]; do
     arg=$1
     case "$arg" in
-      --kind|--text|--body|--file|--title|--description|--description-file|--reply-to-comment-id|--reply-to-invocation-id|--attach|--project|--improve-command|--priority|--estimate|--labels|--due|--parent-task|--section|--assignee|--to|--to-section)
+      --kind|--text|--body|--file|--title|--description|--description-file|--reply-to-comment-id|--reply-to-invocation-id|--attach|--mentions|--project|--improve-command|--priority|--estimate|--labels|--due|--parent-task|--section|--assignee|--to|--to-section)
         [ "$#" -ge 2 ] || { unsupported+=("$arg"); break; }
         case "$arg" in
           --title|--description|--description-file|--project|--improve-command|--priority|--estimate|--labels|--due|--parent-task|--section|--assignee|--to|--to-section) unsupported+=("$arg") ;;
@@ -229,7 +229,7 @@ voice_route() {
           --title) title=$2; has_title=true ;;
           --description) desc=$2; has_desc=true ;;
           --description-file) descfile=$2 ;;
-          --reply-to-comment-id|--reply-to-invocation-id|--attach) human=true ;;
+          --reply-to-comment-id|--reply-to-invocation-id|--attach|--mentions) human=true ;;
         esac
         shift ;;
       --kind=*) kind=${arg#*=} ;;
@@ -238,7 +238,7 @@ voice_route() {
       --title=*) unsupported+=("${arg%%=*}"); title=${arg#*=}; has_title=true ;;
       --description=*) unsupported+=("${arg%%=*}"); desc=${arg#*=}; has_desc=true ;;
       --description-file=*) unsupported+=("${arg%%=*}"); descfile=${arg#*=} ;;
-      --reply-to-comment-id=*|--reply-to-invocation-id=*|--attach=*) human=true ;;
+      --reply-to-comment-id=*|--reply-to-invocation-id=*|--attach=*|--mentions=*) human=true ;;
       --markdown) markdown=true ;;
       --json) VOICE_JSON=true ;;
       --help|-h) return 0 ;;
@@ -252,7 +252,7 @@ voice_route() {
     'comment add'|'comments add')
       if [ -n "$file" ]; then text=$(cat -- "$file" 2>/dev/null) || voice_refuse comment 'cannot read --file'; fi
       [ -z "$kind" ] || human=true
-      [[ $text =~ data-type=[\"\']mention || $text =~ (^|[[:space:]>])@[A-Za-z] ]] && human=true
+      [[ "$text" =~ data-type[[:space:]]*=[[:space:]]*[\"\']mention[\"\']|(^|[[:space:]])@[[:alnum:]] || $text =~ data-type=[\"\']mention || $text =~ (^|[[:space:]>])@[A-Za-z] ]] && human=true
       if [ "$human" = true ]; then voice_lint comment "$text" "$markdown"; return 0; fi
       ticket=${pos[2]:-}
       [[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || return 0
