@@ -1,5 +1,8 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8145_PHONE_ZOOM_FLAG } from "@/lib/flags/definitions/htpr-8145-phone-zoom";
+
 import { ReactNode, useRef, useState } from "react";
 import { Archive, Clock } from "lucide-react";
 
@@ -15,6 +18,7 @@ const SwipeableNotificationRow = ({
   onArchive: () => void;
   onSnooze: () => void;
 }) => {
+  const phoneZoom = useFlag(HTPR_8145_PHONE_ZOOM_FLAG);
   const [offset, setOffset] = useState(0);
   const start = useRef<{ x: number; y: number } | null>(null);
   const engaged = useRef(false);
@@ -26,7 +30,7 @@ const SwipeableNotificationRow = ({
   };
 
   return (
-    <div className="relative overflow-hidden" style={{ touchAction: "pan-y" }}>
+    <div className="relative overflow-hidden" style={{ touchAction: phoneZoom ? "pan-y pinch-zoom" : "pan-y" }}>
       <div
         aria-hidden
         className="pointer-events-none absolute inset-y-0 left-0 flex flex-col items-center justify-center gap-[3px] bg-[#e5a13a] text-[10px] font-bold text-white"

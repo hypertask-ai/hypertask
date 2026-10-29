@@ -20,7 +20,8 @@ const { isCommentCreatedByUser } = jiti(
   path.join(root, "src/lib/htc/isCommentCreatedByUser.ts")
 );
 
-test("comment rows always use long press and cancel it on movement, release or unmount", (t) => {
+for (const phoneZoom of [false, true]) {
+test(`comment long press cancels on movement, release or unmount; phone zoom ${phoneZoom}`, (t) => {
   const source = fs.readFileSync(path.join(root,
     "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/SwipeableCommentRow.tsx"), "utf8");
   const js = ts.transpileModule(source, {
@@ -28,6 +29,8 @@ test("comment rows always use long press and cancel it on movement, release or u
   }).outputText;
   let cleanup;
   const mocks = {
+    "@/hooks/useFlag": { useFlag: () => phoneZoom },
+    "@/lib/flags/definitions/htpr-8145-phone-zoom": { HTPR_8145_PHONE_ZOOM_FLAG: "htpr-8145-phone-zoom" },
     react: {
       useRef: (current) => ({ current }),
       useEffect: (effect) => { cleanup = effect(); },
@@ -56,7 +59,7 @@ test("comment rows always use long press and cancel it on movement, release or u
   const press = { pointerType: "touch", pointerId: 1, clientX: 0, clientY: 0 };
   assert.equal(props.children, "Comment");
   assert.equal(props.onTouchMove, undefined);
-  assert.equal(props.style.touchAction, "pan-y");
+  assert.equal(props.style.touchAction, phoneZoom ? "pan-y pinch-zoom" : "pan-y");
   props.onPointerDown(press);
   timer();
   assert.equal(opened, 1);
@@ -79,6 +82,7 @@ test("comment rows always use long press and cancel it on movement, release or u
   assert.equal(timer, null);
   assert.equal(opened, 1);
 });
+}
 
 test("comment commands already list Edit comment first", () => {
   const groups = getAllCommands({

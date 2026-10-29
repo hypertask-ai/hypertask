@@ -60,3 +60,15 @@ change and reshoot to confirm it held at that viewport.
 
 Same as whichever underlying area you were testing (task, comment, board);
 mobile isn't a separate data surface.
+
+## Phone zoom
+
+With `htpr-8145-phone-zoom` enabled, inspect the server viewport on a phone:
+`user-scalable=yes`, `maximum-scale=5`. Pinch to at least 200% on My Tasks,
+Inbox rows and task comments. Swipe rows must keep vertical scrolling and
+pinch zoom. Text inputs, textareas and editable composers must compute to at
+least 16px; focusing them from 100% must not enlarge the visual viewport.
+Capture phone screenshots before/after pinching and after focus. Check the
+unchanged desktop viewport and the flag-off phone viewport separately. Browser
+emulation proves Chromium behavior; record physical iPhone Safari as
+unreachable unless a real device is available.

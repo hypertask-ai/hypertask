@@ -1,3 +1,4 @@
+import { HTPR_8145_PHONE_ZOOM_FLAG } from "@/lib/flags/definitions/htpr-8145-phone-zoom";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import "@/styles/globals.scss";
 import "@/styles/tailwindThemes/rounded.css";
@@ -38,6 +39,8 @@ import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG
 
 export async function generateViewport() {
   const device = await isMobileDevice();
+  const session = verifySession((await cookies()).get(SESSION_COOKIE)?.value);
+  const phoneZoom = device.isMobile && await isFeatureEnabled(HTPR_8145_PHONE_ZOOM_FLAG, session?.id ?? -1);
 
   return {
     width: "device-width",
@@ -48,6 +51,7 @@ export async function generateViewport() {
     viewportFit: "cover",
     height: "device-height",
     interactiveWidget: "resizes-content",
+    ...(phoneZoom && { maximumScale: 5, userScalable: true }),
   };
 }
 
@@ -74,6 +78,7 @@ export default async function RootLayout(
     } catch {}
   }
   const [device, boardDocument, inboxDocument] = await firstScreenPromise;
+  const phoneZoom = device.isMobile && await isFeatureEnabled(HTPR_8145_PHONE_ZOOM_FLAG, analyticsSession?.id ?? -1);
   const ticketShellEnabled = await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession?.id ?? -1);
   const shellSeed = ticketShellEnabled ? await getServerTicketShell() : null;
   const firstScreen = boardDocument ?? inboxDocument;
@@ -119,6 +124,7 @@ export default async function RootLayout(
   return (
     <html
       lang="en"
+      data-phone-zoom={phoneZoom ? "true" : undefined}
       suppressHydrationWarning
       className={`${themeClassName} ${inter.variable} ${newsreader.variable} ${ibmPlexSans.variable} ${inter.className}`}
       data-theme={themeValue === "rounded" ? initialResolvedTheme : themeValue}

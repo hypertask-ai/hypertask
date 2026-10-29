@@ -892,3 +892,13 @@ svg.lucide.fill-current {
     box-shadow: none !important;
   }
 }
+
+@media (max-width: 767px) {
+  html[data-phone-zoom="true"] {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]),
+    textarea,
+    [contenteditable="true"] {
+      @apply text-emphasis!;
+    }
+  }
+}
