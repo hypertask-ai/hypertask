@@ -152,6 +152,7 @@ async function generateSuggestion(task: NonNullable<ReplyContext>, userId: numbe
     taskId: task.id,
     provider: selected.usageProvider,
     feature: "suggest-reply",
+    reasoningFeature: "task-writer",
   });
   const { text } = await generateText({
     experimental_download: downloadWithoutBrotli,

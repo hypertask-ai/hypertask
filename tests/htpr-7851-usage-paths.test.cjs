@@ -52,7 +52,7 @@ function harness() {
 }
 
 function languageModel(h, text = '<p>Suggested reply</p>') {
-  return new MockLanguageModelV4({ provider: 'gateway', doGenerate: async (params) => {
+  return new MockLanguageModelV4({ provider: 'gateway', modelId: 'claude-sonnet-5.5', doGenerate: async (params) => {
     h.calls.push(params);
     return { content: [{ type: 'text', text }], usage: { inputTokens: { total: 40 }, outputTokens: { total: 10 } }, finishReason: { unified: 'stop', raw: 'stop' }, warnings: [] };
   } });
@@ -67,6 +67,8 @@ function assertRow(h, expected) {
 test('suggest-reply POST preserves HTML and model selection, persisting one attributed row', async () => {
   const h = harness();
   h.stubs.ai = { ...ai, createGateway: () => () => languageModel(h) };
+  h.stubs['@/lib/flags'] = { isFeatureEnabled: async () => true };
+  h.stubs['@/app/api/ai/_lib/reasoningEffort'] = h.load('src/app/api/ai/_lib/reasoningEffort.ts');
   const provider = h.load('src/app/api/ai/_lib/modelProvider.ts');
   const model = provider.resolveGatewayModel('anthropic/claude-haiku-5.5', 'vck_fixture');
   h.stubs['@/app/api/ai/_lib/modelProvider'] = provider;
@@ -85,6 +87,8 @@ test('suggest-reply POST preserves HTML and model selection, persisting one attr
   assert.deepEqual(await response.json(), { html: '<p>Suggested reply</p>' });
   assertRow(h, { userId, teamId, projectId, taskId, provider: 'byok:claude', feature: 'suggest-reply', totalTokens: 50 });
   assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].providerOptions.anthropic.thinking.type, 'adaptive');
+  assert.equal(h.calls[0].providerOptions.anthropic.effort, 'low');
 });
 
 test('status-update POST configures its own feature without changing the status output', async () => {
