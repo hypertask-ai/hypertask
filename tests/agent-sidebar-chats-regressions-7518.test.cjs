@@ -312,7 +312,7 @@ test("old agent links redirect only to an eligible board and otherwise retain th
       "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: JSON.stringify(currentUser) }) }) },
       "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6, agentId }) },
       "@/lib/flags": { isFeatureEnabled: async (key) => key === "sidebar" ? enabled : true },
-      "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar", HTPR_6557_AGENT_ROOMS_FLAG: "rooms" },
+      "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
       "next/navigation": { redirect: (url) => { redirects.push(url); return url; } },
       "./AgentChatClient": "legacy-agent-chat",
       "./AgentRoomClient": "legacy-agent-rooms",
@@ -329,7 +329,10 @@ test("old agent links redirect only to an eligible board and otherwise retain th
     } else {
       assert.equal(result.type, expected);
       assert.deepEqual(redirects, []);
-      if (expected === "legacy-agent-chat") assert.deepEqual(result.props.currentUser, currentUser);
+      if (expected === "legacy-agent-chat") {
+        assert.deepEqual(result.props.currentUser, currentUser);
+        assert.equal(result.props.roomsEnabled, true);
+      }
     }
     const resolvesBoard = enabled && !agentId && query.view !== "rooms" && query.agent && query.agent !== "unknown";
     assert.equal(boardQueries.length, resolvesBoard ? 1 : 0);

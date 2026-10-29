@@ -527,12 +527,12 @@ test('switching chats does not move the ticket, its comments or its comment comp
   await expect(page.getByTestId('ai-sidebar')).toBeHidden()
 })
 
-test('new flag On keeps activity hidden with parked room and fullscreen flags Off', async ({ page }, info) => {
+test('new flag On keeps activity hidden with parked fullscreen flag Off', async ({ page }, info) => {
   await page.route('**/api/flags', async (route) => {
     const response = await route.fetch()
     const body = await response.json()
     await route.fulfill({ response, json: { ...body, flags: { ...body.flags,
-      [FLAG]: true, 'htpr-6557-agent-rooms': false, 'htpr-6476-mobile-agent-chat-fullscreen': false,
+      [FLAG]: true, 'htpr-6476-mobile-agent-chat-fullscreen': false,
     } } })
   })
   await open(page, info.project.name)

@@ -3,8 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 
-import { HTPR_6557_AGENT_ROOMS_FLAG, isFeatureEnabled } from "@/lib/flags";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -27,9 +25,6 @@ export async function GET(request: NextRequest) {
         { success: false, error: "Agent rooms require an agent token" },
         { status: 403 },
       );
-    }
-    if (!(await isFeatureEnabled(HTPR_6557_AGENT_ROOMS_FLAG, ctx.user.id))) {
-      return NextResponse.json({ success: true, messages: [] });
     }
 
     const deliveries = await prisma.agentRoomDelivery.findMany({

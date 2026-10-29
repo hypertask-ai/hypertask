@@ -68,7 +68,7 @@ test("old direct links are gated and historical rooms retain their original rout
   assert.match(page, /target\.set\("sidebarAgent", agentId\)/);
   assert.match(page, /target\.set\("id", query\.projectId\)/);
   assert.match(page, /return <AgentRoomClient/);
-  assert.match(page, /<AgentChatClient currentUser=\{currentUser\} roomsEnabled=\{roomsEnabled\}/);
+  assert.match(page, /<AgentChatClient currentUser=\{currentUser\} roomsEnabled=\{true\}/);
   assert.match(read("src/components/commandDispatcher.ts"), /context\.agentSidebarChatsEnabled && _currentProject\?\.id/);
   const commands = read("src/components/commands.tsx");
   assert.match(commands, /useFlag\(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG\)/);

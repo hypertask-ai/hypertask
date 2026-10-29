@@ -22,6 +22,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
+| Board agent rooms | [agent-rooms.md](agent-rooms.md) | read-only room listing, authentication, desktop/phone reload |
 | Agent chat roster ordering | [agent-chat-roster.md](agent-chat-roster.md) | standalone roster, owned API recency, desktop/phone reload |
 | Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
 | Webhooks | [webhooks.md](webhooks.md) | no smoke id; QA 985 team-wide endpoint on team 9bca4a7c via /api/settings/webhooks, test delivery to a 2xx receiver, hint vs one-time key; delete fixtures |

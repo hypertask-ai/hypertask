@@ -14,7 +14,6 @@ import AgentChatClient from "./AgentChatClient";
 import AgentRoomClient from "./AgentRoomClient";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6557_AGENT_ROOMS_FLAG } from "@/lib/flags/keys";
 
 export const metadata: Metadata = {
   title: "Agent Chat",
@@ -50,15 +49,11 @@ export default async function AgentChatPage({
   if (!userCookie) return redirect("/login");
 
   const currentUser: IUser = JSON.parse(userCookie.value);
-  const roomsEnabled = await isFeatureEnabled(
-    HTPR_6557_AGENT_ROOMS_FLAG,
-    currentUser.id,
-  );
-  if (roomsEnabled && (await searchParams).view === "rooms") {
+  if (query.view === "rooms") {
     return <AgentRoomClient />;
   }
 
   return (
-    <AgentChatClient currentUser={currentUser} roomsEnabled={roomsEnabled} />
+    <AgentChatClient currentUser={currentUser} roomsEnabled={true} />
   );
 }
