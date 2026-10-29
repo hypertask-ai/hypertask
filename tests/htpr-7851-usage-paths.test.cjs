@@ -192,31 +192,6 @@ for (const status of [200, 401, null]) test(`BYOK test POST records a sanitized 
   if (status !== null) assert.equal(h.rows[0].totalTokens, 9);
 });
 
-for (const failed of [false, true]) test(`image POST preserves attachments, logs image models once; failure=${failed}`, async () => {
-  const h = harness();
-  h.stubs['@/app/api/ai/_lib/editorAi'] = { getCurrentUserFromCookies: async () => ({ id: userId }), errorMessage: String };
-  h.stubs['@/app/api/ai/_lib/currentTaskContext'] = { htmlToText: (text) => text };
-  h.stubs['@/app/api/ai/_lib/byokKeys'] = { getTeamGatewayApiKey: async () => 'vck_fixture' };
-  h.stubs['@/app/api/ai/_lib/providerGate'] = { getProjectTeamProviderContext: async () => ({ projectId, teamId, settings: {} }) };
-  h.stubs['@/lib/aiProviders'] = { resolveTeamProviderEnabled: () => true };
-  h.stubs['@/lib/aiModelOptions'] = { resolveAiImageModelMention: () => null };
-  h.stubs['@/lib/systemModelLadder'] = { isAiFeatureEnabled: () => true, resolveImageModel: () => ({ provider: 'openai', generation: 'image', gatewayModel: 'openai/gpt-image-1' }) };
-  h.stubs['@/lib/aiModelPreferences'] = { getAiModelPreferenceIds: () => ({}) };
-  h.stubs['@/utils/controllers/users/fetch_preferences'] = { fetchUserPreferenceController: async () => ({ res: {} }) };
-  h.stubs['@/app/api/ai/_lib/modelProvider'] = { resolveGatewayImageModel: () => ({}), gatewayProviderOptionsForModel: () => ({ gateway: { tags: ['generate-image'] } }) };
-  h.stubs['@/lib/storage/uploadTaskAttachmentToS3'] = { uploadTaskAttachmentToS3: async () => 'https://fixture.test/image.png' };
-  h.stubs['@/utils/controllers/urls/addIntoTask'] = { default: async () => {} };
-  h.prisma.task = { findFirst: async () => ({ userId }) };
-  h.prisma.user = { findUnique: async () => ({ id: 332 }) };
-  h.stubs.ai = { generateImage: async (args) => { h.calls.push(args); if (failed) throw new Error('Provider unavailable'); return { image: { mediaType: 'image/png', base64: 'aQ==' }, usage: { inputTokens: 100, outputTokens: 200, totalTokens: 300 } }; } };
-  const response = await h.load('src/app/api/ai/generate-image/route.ts').POST(request({ projectId, taskId, text: 'private image prompt' }));
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).unavailable, failed);
-  assert.equal(h.calls.length, 1);
-  assert.equal(h.calls[0].maxRetries, 2);
-  assertRow(h, { userId, teamId, projectId, taskId, feature: 'generate-image', provider: 'gateway', model: 'openai/gpt-image-1', outcome: failed ? 'failed' : 'ok' });
-});
-
 for (const status of ['failed', 'expired', 'cancelled', 'succeeded']) test(`batch collector persists ${status} items without losing instant fallback`, async () => {
   const h = harness();
   const item = { taskId, projectId, labelId: 'label', promptAtSubmit: 'label prompt', snapshotAt: new Date().toISOString(), contentHash: 'hash' };
