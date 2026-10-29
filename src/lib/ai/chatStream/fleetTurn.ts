@@ -1,8 +1,6 @@
 
 
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6284_AGENT_MENTION_ROUTING_FLAG } from "@/lib/flags/keys";
 
 import { AI_CHAT_TURN_DEADLINE_REASON, acquireAiChatCompletionFence, finishAiChatCompletionFence, releaseAiChatCompletionFence } from "@/app/api/ai/chat/stream/streamLease";
 import { failHeartbeatExecution, completeHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
@@ -22,10 +20,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
   const { body, dbUser, heartbeatExecutionId, userMessagePersisted, actingAgent, streamId, streamLease } = state;
 
   const mentionDecision = decideAgentMentionRouting({
-    routingEnabled: await isFeatureEnabled(
-      HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
-      dbUser.id,
-    ),
     mentionedAgentIds: extractMentionedAgentIds(resolvedBody.context_list),
     hasAttachments:
       (resolvedBody.attachments?.length ?? 0) > 0 ||
