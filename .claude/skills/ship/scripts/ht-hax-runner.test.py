@@ -277,6 +277,11 @@ exec /bin/sleep 0.01
                     self.assertNotIn('recovery ack 8 YPER4-1', events)
                 self.assertIn('Recovery: Resume YPER4-1: stale freeze block cleared', (self.home / 'brief').read_text())
                 self.assertLess(events.index('recovery drain 8'), events.index('brief'))
+                brief = (self.home / 'brief').read_text()
+                self.assertIn('next run ~/.local/bin/pr-drain-pick', brief)
+                self.assertIn('Only if it prints NONE, pick the top free ticket', brief)
+                self.assertIn('If the picker prints WAIT, or fails, stop', brief)
+                self.assertIn('urgent Bug or Error Log ticket on board 15', brief)
                 self.assertLess(events.index('brief'), events.index('submitted'))
                 self.assertLess(events.index('tool-phase'), events.index('final-phase'))
                 self.assertLess(events.index('final-phase'), len(events) - 1 - events[::-1].index('capture'))
@@ -456,6 +461,7 @@ exec /bin/sleep 0.001
         scripts = root / 'skills/ship/scripts'
         scripts.mkdir(parents=True)
         shutil.copy2(SCRIPT, scripts / SCRIPT.name)
+        shutil.copy2(SCRIPT.with_name('pr-drain-pick'), scripts / 'pr-drain-pick')
         check = scripts / 'user-unit-check'
         check.write_text('#!/bin/sh\necho validate >> "$HOME/events"\nexit "${CHECK_EXIT:-0}"\n')
         check.chmod(0o755)
@@ -475,6 +481,9 @@ exec /bin/sleep 0.001
             'systemctl --user enable --now ht-hax-runner-keeper.timer'])
         launcher = self.home / '.local/bin/ht-hax-runner'
         self.assertEqual(launcher.resolve().read_bytes(), SCRIPT.read_bytes())
+        picker = self.home / '.local/bin/pr-drain-pick'
+        self.assertEqual(picker.resolve().read_bytes(), SCRIPT.with_name('pr-drain-pick').read_bytes())
+        self.assertTrue(os.access(picker, os.X_OK))
         unit = self.home / '.config/systemd/user/ht-hax-runner-keeper.service'
         self.assertNotIn(str(scripts), unit.read_text())
 
