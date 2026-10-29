@@ -142,11 +142,11 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
     assert.deepEqual(picker.props.options, themeOptions.filter(({ value }) => value !== "rounded" || (enabled && !isMobile)));
     const source = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/commands.tsx"), "utf8");
     const parsed = ts.createSourceFile("commands.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const names = new Set(["getCommands", "getRoundedCommands", "getLegacyCommands"]);
+    const names = new Set(["getCommands", "getThemeCommands", "getLegacyCommands"]);
     const statements = [];
     const visit = (node) => {
       if ((ts.isVariableStatement(node) && node.declarationList.declarations.some(item => names.has(item.name.getText(parsed)))) ||
-          (ts.isIfStatement(node) && node.expression.getText(parsed) === "roundedEnabled")) statements.push(node.getText(parsed));
+          (ts.isIfStatement(node) && node.expression.getText(parsed) === "roundedEnabled || graphite2Enabled")) statements.push(node.getText(parsed));
       ts.forEachChild(node, visit);
     };
     visit(parsed);
@@ -160,13 +160,13 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
     const dispatcher = ts.createSourceFile("commands.tsx", dispatcherSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let themeWriter;
     const findThemeWriter = (node) => {
-      if (ts.isIfStatement(node) && node.expression.getText(dispatcher) === "!roundedEnabled") themeWriter = node.getText(dispatcher);
+      if (ts.isIfStatement(node) && node.expression.getText(dispatcher) === "!roundedEnabled || !graphite2Enabled") themeWriter = node.getText(dispatcher);
       ts.forEachChild(node, findThemeWriter);
     };
     findThemeWriter(dispatcher);
     assert.ok(themeWriter);
     const themeWriterCode = ts.transpileModule(`let switchCommandTheme = switchToTheme; ${themeWriter}; const write = switchCommandTheme;`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    const write = new Function("roundedEnabled", "switchToTheme", `${themeWriterCode}; return write;`)(enabled, theme => normalizeThemePreference(theme, enabled));
+    const write = new Function("roundedEnabled", "graphite2Enabled", "switchToTheme", `${themeWriterCode}; return write;`)(enabled, true, theme => normalizeThemePreference(theme, enabled));
     for (const option of themeOptions) assert.equal(write(option.value), normalizeThemePreference(option.value, enabled));
     for (const theme of [undefined, "unknown", "light", "dark", ...themeOptions.map(option => option.value)]) for (const dark of [false, true]) {
       let written;
