@@ -95,6 +95,63 @@ question_comment() {
   reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
   [ -z "$reason" ] || question_refuse "$reason"
 }
+people_content() {
+  local mode='' kind='' text='' file='' description='' description_file='' mentioned=false arg status
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project|--team) [ "$#" -ge 2 ] || return 0; shift 2 ;;
+      --json|--human|--project=*|--team=*) shift ;;
+      *) break ;;
+    esac
+  done
+  case "${1:-} ${2:-}" in
+    'comment add'|'comments add') mode=comment ;;
+    'task create'|'tasks create'|'task update'|'tasks update') mode=description ;;
+    *) return 0 ;;
+  esac
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    arg=$1
+    case "$arg" in
+      --kind|--text|--body|--file|--description|--description-file|--mentions)
+        [ "$#" -ge 2 ] || break
+        case "$arg" in
+          --kind) kind=$2 ;;
+          --text|--body) text=$2; file='' ;;
+          --file) file=$2; text='' ;;
+          --description) description=$2 ;;
+          --description-file) description_file=$2 ;;
+          --mentions) mentioned=true ;;
+        esac
+        shift ;;
+      --kind=*) kind=${arg#*=} ;;
+      --text=*|--body=*) text=${arg#*=}; file='' ;;
+      --file=*) file=${arg#*=}; text='' ;;
+      --description=*) description=${arg#*=} ;;
+      --description-file=*) description_file=${arg#*=} ;;
+      --mentions=*) mentioned=true ;;
+    esac
+    shift
+  done
+  if [ "$mode" = description ]; then
+    text=$description; file=$description_file
+  fi
+  if [ -n "$file" ]; then
+    text=$(cat -- "$file" 2>/dev/null) || { printf '%s\n' 'vcc: cannot read people content file' >&2; exit 5; }
+  fi
+  if [ "$mode" = comment ]; then
+    case "$kind" in question|qa|done) ;; *)
+      if [ "$mentioned" != true ] && ! [[ "$text" =~ data-type[[:space:]]*=[[:space:]]*[\"\']mention[\"\']|(^|[[:space:]])@[[:alnum:]] ]]; then return 0; fi ;;
+    esac
+  fi
+  status=0
+  jq -en --arg text "$text" '($text + " " + ($text | gsub("<[^>]*>"; ""))) | test("tmux\\s+attach|claude\\s+--resume|codex\\s+resume|hax\\s+--resume|Helpers\\s*:|Branch/PR\\s*:|Outputs\\s*:|Gates\\s*:|GATES\\.md|\\.unlazy/|/home/|~/"; "i")' >/dev/null || status=$?
+  if [ "$status" != 1 ]; then
+    printf '%s\n' 'vcc: agent detail belongs in vcc activity add' >&2
+    exit 5
+  fi
+}
+people_content "$@"
 question_comment "$@"
 
 completion_move() {

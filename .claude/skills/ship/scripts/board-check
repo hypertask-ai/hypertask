@@ -84,7 +84,7 @@ commit_time() {
 
 # A ticket shared by a PR and a column is read only once.
 inspect_ticket() {
-  local t=$1 comments claim claim_id has_resume stamp line rc last_commit
+  local t=$1 comments claim claim_id has_resume stamp line rc last_commit offset suffix count
   [[ $t =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || fail "invalid ticket number: $t"
   jq --arg t "$t" '[.[] | select(.ticketNumber == $t)][0] // empty' "$work/tasks" > "$work/$t.task"
   if [ ! -s "$work/$t.task" ]; then
@@ -94,16 +94,35 @@ inspect_ticket() {
     || fail "cannot read comments for $t"
   jq -e '.success == true and (.comments | type == "array")' "$work/$t.comments" >/dev/null \
     || fail "invalid comments for $t"
-  comments="$work/$t.comments"
+  printf '{"success":true,"activities":[]}' > "$work/$t.log"
+  offset=0
+  while :; do
+    suffix=''; [ "$offset" = 0 ] || suffix="&offset=$offset"
+    ht GET "/mcp/tasks/$t/agent-activity?limit=100$suffix" > "$work/$t.page" \
+      || fail "cannot read agent log for $t"
+    jq -e '.success == true and (.activities | type == "array" and length <= 100)' "$work/$t.page" >/dev/null \
+      || fail "invalid agent log for $t"
+    jq -s '.[0] + {activities: (.[0].activities + .[1].activities)}' "$work/$t.log" "$work/$t.page" > "$work/$t.merged"
+    jq -e '.activities | length == (unique_by(.id) | length)' "$work/$t.merged" >/dev/null \
+      || fail "repeated agent activity for $t; retry the scan"
+    mv "$work/$t.merged" "$work/$t.log"
+    count=$(jq '.activities | length' "$work/$t.page")
+    [ "$count" -eq 100 ] || break
+    offset=$((offset + count))
+  done
+  jq -s '.[0] + {comments: (.[0].comments + [.[1].activities[] |
+    {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}}])}' \
+    "$work/$t.comments" "$work/$t.log" > "$work/$t.combined"
+  comments="$work/$t.combined"
   claim=$(jq -c '[.comments[] | select(.agent.id != null or (.agent_display_name // "") != "")
     | select((.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed."))]
     | sort_by(.createdAt) | last // null' "$comments")
-  if [ "$claim" = null ] && [ "$(jq '.comments | length' "$comments")" -ge 100 ]; then
+  if [ "$claim" = null ] && [ "$(jq '.comments | length' "$work/$t.comments")" -ge 100 ]; then
     fail "latest claim for $t may be outside the bounded comment read"
   fi
   claim_id=$(jq -r '.agent.id // ""' <<< "$claim")
   has_resume=$(jq '(.text // .commentText // "") | gsub("<[^>]*>"; " ")
-    | test("(claude[[:space:]]+--resume|codex[[:space:]]+resume)[[:space:]]+[^[:space:]]+")' <<< "$claim")
+    | test("(claude[[:space:]]+--resume|codex[[:space:]]+resume|hax[[:space:]]+--resume|tmux[[:space:]]+attach)[[:space:]]+[^[:space:]]+")' <<< "$claim")
   last_commit=$(seconds "$(commit_time "$t")")
   stamp=$(seconds "$(jq -r '[.comments[].createdAt] | max // ""' "$comments")")
   [ "$last_commit" -le "$stamp" ] || stamp=$last_commit

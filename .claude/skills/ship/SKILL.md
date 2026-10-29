@@ -13,7 +13,7 @@ This session owns the ticket end to end. Load the [skill map](../INDEX.md) once,
 2. Check `~/.config/agent-kit/pilot/<identity-slug>` at the ticket boundary, never mid-ticket. Follow its ship skill only when the resolved folder is `skills/ship` inside `~/.config/agent-kit` or `~/projects/company-skills*/kit/`. Otherwise use this skill and record an invalid pointer on the ticket.
 3. With no ticket, run `board-check` first. Stale means no sign of life for six hours. Leave listed tickets untouched until Valentin decides. Record stale-ticket decisions on the board, not in another session's chat. Pick the top free ticket matching your runner type and the current dispatch order. Exclude parked, human-review, and blocked work. Never take Abdul's tickets.
 4. Read the chosen ticket and comments, including replies and reactions to existing questions. Keep its full title and URL in the ticket record. Do not repeat an unanswered question. Link its original comment when handing over. Preserve human assignees and manual moves.
-5. Run `ship-claim` with your resume command before investigation, gates, or helpers. Exit 0 means proceed; exit 3 means step back; a hold means finish existing work first. A recent competing claim is taken. Old retired-bot notes are history, not ownership. Never take a stale claim merely because its runner is quiet.
+5. Run `ship-claim` with your resume command before investigation, gates, or helpers. Exit 0 means proceed; exit 3 means step back; a hold means finish existing work first. Claims go to agent activity after assignment succeeds; collision checks read activity and legacy comments. A recent competing claim is taken. Old retired-bot notes are history, not ownership. Never take a stale claim merely because its runner is quiet.
 
 Runners use headless QA browsers, never Valentin's browser or login. Only HT Product Lead opens links for him. Keep your existing session name; name an unnamed session after its ticket.
 
@@ -31,7 +31,7 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 
 | Step | Load or use | Required proof |
 |---|---|---|
-| Claim | `ship-claim`, then [vcc](../vcc/SKILL.md) | Own claim won, own agent assigned, In Progress |
+| Claim | `ship-claim`, then [vcc](../vcc/SKILL.md) | Own claim activity won, own agent assigned, In Progress |
 | Sharpen the approach | Deeper activity and extra gate | `ship-check deeper` passes |
 | Plan visible work | [reuse-existing-ui](../reuse-existing-ui/SKILL.md); current design policy | Existing components identified; new component approval recorded |
 | Review high-risk design | [interrogate](../interrogate/SKILL.md), only for the valentin-review lane | Review blockers resolved; required human decision recorded |
@@ -80,7 +80,7 @@ For non-app repositories, configure `SHIP_REPO`, `SHIP_BASE`, and `SHIP_CHECKOUT
 
 Write agent activity at claim, fix, PR, checks green, merge, deploy, and QA; at least every two hours while active. Include the parse or dispatch layer you tested. Plans, test output, retries, and helper reports stay in the agent lane.
 
-Human comments are for claim, decisions, QA, and completion. Use the shared `tickets` rules and the appropriate `--kind`. Before waiting on CI, a helper, deployment, or a person, post the required state record with separate **Next**, **Helpers**, **Branch/PR**, and **Outputs** lines. Include the resume command. Do not message another session.
+Human comments are for decisions, QA, and completion. Claims, releases, handoffs, status, session names, and resume commands belong in agent activity only. Use the shared `tickets` rules and the appropriate `--kind`. Before waiting on CI, a helper, deployment, or a person, post the required agent activity record through `vcc activity add` with separate **Next**, **Helpers**, **Branch/PR**, and **Outputs** lines. Include the resume command. Do not message another session.
 
 Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Mark each case PASS, FAIL, or UNREACHABLE with evidence; failures include steps and actual behavior. Record account ID and role, never credentials. Use verify-qa's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA verdict with the report link and key attachments. No bare "tests pass" claims.
 

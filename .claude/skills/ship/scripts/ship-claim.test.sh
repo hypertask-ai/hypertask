@@ -92,9 +92,18 @@ eq "someone else's hand-over does not cancel A's claim" "$(dec)" "$(printf 'LOSE
 cat > "$D/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_LOG"
-if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
+if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
+if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
+if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
+  jq --arg id "new-activity-$(jq '.activities | length' "$FAKE_AGENT_LOG")" --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:$id,createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
+  mv "$FAKE_AGENT_LOG.next" "$FAKE_AGENT_LOG"
+  jq -r '.activities[-1].id' "$FAKE_AGENT_LOG"
+fi
 if [ "$1 $2" = "activity last" ]; then
   [ -z "${FAKE_ACTIVITY_FAIL:-}" ] || exit 1
+  if [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
+    jq -r '.activities | max_by(.createdAt) | [.createdAt, .agentName] | @tsv' "$FAKE_AGENT_LOG"; exit
+  fi
   [ -z "${FAKE_ACTIVITY:-}" ] || printf '%s\tx\n' "$FAKE_ACTIVITY"
 fi
 exit 0
@@ -107,8 +116,12 @@ EOF
 cat > "$D/ht" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$2" == /mcp/tasks\?* ]] && [ -n "${FAKE_RELATED:-}" ]; then cat "$FAKE_RELATED"; exit; fi
-[ "$1 $2" = 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100' ] || [ "$1 $2" = 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100' ] || exit 1
-if [ -n "${FAKE_AGENT_LOG:-}" ]; then cat "$FAKE_AGENT_LOG"; else echo '{"success":true,"activities":[]}'; fi
+[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* ]] || exit 1
+if [ -n "${FAKE_AGENT_LOG:-}" ]; then
+  offset=0; [[ "$2" == *'&offset='* ]] && offset=${2##*&offset=}
+  [ -z "${FAKE_REPEAT_ACTIVITY:-}" ] || offset=0
+  jq --argjson offset "$offset" '.activities |= .[$offset:$offset+100]' "$FAKE_AGENT_LOG"
+else echo '{"success":true,"activities":[]}'; fi
 EOF
 chmod +x "$D/vcc" "$D/hypertask" "$D/ht"
 export SHIP_CLAIM_HT=$D/ht
@@ -120,8 +133,8 @@ eq "flow step back exit code" "$rc" 3
 [[ $out == *"Do NOT start work"* ]] && ok "flow step back message" || bad "message: $out"
 grep -q '^task unassign YPER4-999 --self' "$D/log" && ok "flow unassigns self" || bad "no unassign"
 grep -q 'Stepping back: RUNNER 7 claimed this first' "$D/log" && ok "flow posts step-back note" || bad "no note"
-grep -q '^comment add YPER4-999 .*Claimed\.' "$D/log" && grep -q '^task assign YPER4-999 --self' "$D/log" && grep -q '^task move YPER4-999 --section In Progress' "$D/log" \
-  && ok "flow claims first (comment, assign, move)" || bad "claim writes missing"
+grep -q '^activity add YPER4-999 Claimed\.' "$D/log" && grep -q '^task assign YPER4-999 --self' "$D/log" && grep -q '^task move YPER4-999 --section In Progress' "$D/log" \
+  && ok "flow claims in the agent log (assign, activity, move)" || bad "claim writes missing"
 
 mk
 jq -n --arg text "$(claim "$ME")" '{success:true,activities:[{id:"bbbb-uuid",createdAt:"2026-10-11T10:00:09.000Z",agentId:"a2",agentName:"RUNNER 3",text:$text}]}' > "$D/activities.json"
@@ -132,7 +145,18 @@ jq '.activities |= map(.createdAt = "2026-10-11T10:00:09.000Z")' "$D/earlier.jso
 FAKE_AGENT_LOG=$D/tie.json ./ship-claim YPER4-999 >/dev/null; eq "flow: UUID tie uses id string -> step back" "$?" 3
 jq '.activities += [{id:"cccc-uuid",createdAt:"2026-10-11T10:00:05.000Z",agentId:"a1",agentName:"RUNNER 7",text:"Handed over: RUNNER 7 released this ticket."}]' "$D/earlier.json" > "$D/released.json"
 FAKE_AGENT_LOG=$D/released.json ./ship-claim YPER4-999 >/dev/null; eq "flow: earlier log claim released in the log -> proceed" "$?" 0
+jq --arg text "$(claim other-sess)" '.activities = [.activities[0]] + [range(100) | {id:("heartbeat-" + tostring),createdAt:"2026-10-11T10:00:08.000Z",agentId:"a1",agentName:"RUNNER 7",text:"Working."}] + [{id:"older-claim",createdAt:"2026-10-11T10:00:00.000Z",agentId:"a1",agentName:"RUNNER 7",text:$text}]' "$D/activities.json" > "$D/paged.json"
+FAKE_AGENT_LOG=$D/paged.json ./ship-claim YPER4-999 >/dev/null; eq "flow: competing claim beyond 100 activities -> step back" "$?" 3
+out=$(FAKE_REPEAT_ACTIVITY=1 FAKE_AGENT_LOG=$D/paged.json ./ship-claim YPER4-999 2>&1); rc=$?
+eq "flow: repeated activity page refuses ownership" "$rc" 2
+[[ $out == *'cannot read complete agent log'* ]] && ok "repeated page names incomplete history" || bad "repeated page error: $out"
 if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
+
+# Failed membership must not publish any claim or move.
+: > "$D/log"
+out=$(FAKE_ASSIGN_FAIL=1 ./ship-claim YPER4-999 2>&1); rc=$?
+eq "assignment failure stops the claim" "$rc" 2
+if grep -qE '^(comment|activity) add |^task move ' "$D/log"; then bad "failed assignment published a claim"; else ok "failed assignment leaves comments and log untouched"; fi
 
 # Hand-over replay through the full flow (task read via the stub).
 cp fixtures/ship-claim-y243-comments.json "$D/c.json"
@@ -149,7 +173,7 @@ eq "takeover with existing question succeeds" "$rc" 0
   && ok "takeover shows original question and link" || bad "takeover omitted existing question: $out"
 grep -q '^activity add YPER4-999 Takeover:.*comment-11' "$D/log" \
   && ok "takeover records question handoff in agent lane" || bad "takeover handoff missing"
-eq "takeover creates only its claim comment" "$(grep -c '^comment add ' "$D/log")" 1
+eq "takeover creates no people comments" "$(grep -c '^comment add ' "$D/log")" 0
 grep -q 'comment update\|--kind question' "$D/log" && bad "takeover changed or repeated the question" || ok "takeover leaves original question unchanged"
 out=$(FAKE_HANDOFF_FAIL=1 ./ship-claim YPER4-999 2>&1); rc=$?
 eq "failed takeover handoff stops work" "$rc" 2
@@ -165,6 +189,31 @@ mk "$(c 10 2026-10-11T00:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 1
 FAKE_ACTIVITY=$(date -u -d '-1 hour' +%FT%TZ) ./ship-claim YPER4-999 >/dev/null; eq "flow: old claim with recent activity -> step back" "$?" 3
 FAKE_ACTIVITY=$(date -u -d '-9 hours' +%FT%TZ) ./ship-claim YPER4-999 >/dev/null; eq "flow: old claim, idle claimant -> proceed" "$?" 0
 FAKE_ACTIVITY_FAIL=1 ./ship-claim YPER4-999 >/dev/null; eq "flow: activity read failure -> step back" "$?" 3
+for age in 9 1; do
+  mk
+  jq -n --arg old "$(date -u -d '-10 hours' +%FT%TZ)" --arg last "$(date -u -d "-$age hours" +%FT%TZ)" --arg text "$(claim other-sess)" '{success:true,activities:[{id:"old-claim",createdAt:$old,agentId:"a2",agentName:"RUNNER 3",text:$text},{id:"heartbeat",createdAt:$last,agentId:"a2",agentName:"RUNNER 3",text:"Working."}]}' > "$D/shared.json"
+  : > "$D/log"
+  FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1; rc=$?
+  if [ "$age" = 9 ]; then
+    eq "flow: own new claim does not revive an idle shared session" "$rc" 0
+    FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1
+    eq "flow: retry claims do not revive an idle shared session" "$?" 0
+    jq -e '.activities | any(.[]; .text | startswith("Takeover:"))' "$D/shared.json" >/dev/null \
+      && ok "flow: takeover records persist across retries" || bad "takeover record not persisted"
+  else
+    eq "flow: active shared session remains protected" "$rc" 3
+    FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1
+    eq "flow: retries still protect an active shared session" "$?" 3
+    jq -e '.activities | any(.[]; .text | startswith("Stepping back:"))' "$D/shared.json" >/dev/null \
+      && ok "flow: step-back records persist across retries" || bad "step-back record not persisted"
+    jq --arg last "$(date -u -d '-9 hours' +%FT%TZ)" '(.activities[] | select(.id == "heartbeat").createdAt) = $last' "$D/shared.json" > "$D/shared.next"
+    mv "$D/shared.next" "$D/shared.json"
+    FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1
+    eq "flow: own step-backs do not revive a now-idle shared session" "$?" 0
+  fi
+  grep -q unassign "$D/log" && bad "shared identity recovery called unassign" || ok "shared identity recovery preserves assignment"
+done
+
 # Same agent identity, different session: lose without unassigning.
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 : > "$D/log"; ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: same-agent loss exits 3" "$?" 3

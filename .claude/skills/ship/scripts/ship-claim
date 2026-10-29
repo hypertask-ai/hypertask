@@ -205,21 +205,33 @@ if [[ $T == HTPR-* ]]; then
   [ "$rc" = 0 ] || exit "$rc"
 fi
 
-"$VCC" comment add "$T" --text "<p><strong>Claimed.</strong> Session working it now.</p><p>Next: I examine and fix it. Requested by Valentin in a Claude session, $(date +%F). Resume this Claude session: $RESUME</p>" >/dev/null \
-  || { echo "ship-claim: claim comment failed" >&2; exit 2; }
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
+"$VCC" activity add "$T" "Claimed. Session working it now.
+Next: I examine and fix it. Resume: $RESUME" >/dev/null \
+  || { echo "ship-claim: claim activity failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
 
-W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); LOG=$(mktemp); MERGED=$(mktemp); trap 'rm -f "$W" "$IDLE" "$ASG" "$LOG" "$MERGED"' EXIT
+W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); LOG=$(mktemp); PAGE=$(mktemp); MERGED=$(mktemp); trap 'rm -f "$W" "$IDLE" "$ASG" "$LOG" "$PAGE" "$MERGED"' EXIT
 "$HT" comment list "$T" --sort createdAt:desc --limit 100 --json > "$W" \
   && jq -e '.comments | type == "array"' "$W" >/dev/null \
   || { echo "ship-claim: cannot re-read comments on $T; do not start work until the claim is confirmed" >&2; exit 2; }
 
-"$HT_API" GET "/mcp/tasks/$T/agent-activity?limit=100" > "$LOG" \
-  && jq -e '.success == true and (.activities | type == "array")' "$LOG" >/dev/null \
-  && jq -s '.[0] + {activities: .[1].activities}' "$W" "$LOG" > "$MERGED" \
-  && mv "$MERGED" "$W" \
-  || { echo "ship-claim: cannot re-read agent log on $T; do not start work until the claim is confirmed" >&2; exit 2; }
+printf '{"success":true,"activities":[]}' > "$LOG"
+offset=0
+while :; do
+  suffix=''; [ "$offset" = 0 ] || suffix="&offset=$offset"
+  "$HT_API" GET "/mcp/tasks/$T/agent-activity?limit=100$suffix" > "$PAGE" \
+    && jq -e '.success == true and (.activities | type == "array" and length <= 100)' "$PAGE" >/dev/null \
+    && jq -s '.[0] + {activities: (.[0].activities + .[1].activities)}' "$LOG" "$PAGE" > "$MERGED" \
+    && jq -e '.activities | length == (unique_by(.id) | length)' "$MERGED" >/dev/null \
+    && mv "$MERGED" "$LOG" \
+    || { echo "ship-claim: cannot read complete agent log on $T; retry before working" >&2; exit 2; }
+  count=$(jq '.activities | length' "$PAGE")
+  [ "$count" -eq 100 ] || break
+  offset=$((offset + count))
+done
+jq -s '.[0] + {activities: .[1].activities}' "$W" "$LOG" > "$MERGED" && mv "$MERGED" "$W" \
+  || { echo "ship-claim: cannot combine claim history on $T" >&2; exit 2; }
 
 # Agents now assigned (one read). A failed read leaves the file empty, which skips rule (a).
 "$HT" tasks get "$T" --json > "$MERGED" 2>/dev/null \
@@ -228,7 +240,11 @@ W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); LOG=$(mktemp); MERGED=$(mktemp); tra
 # An old competing claim is ignored only when its agent shows no activity in the last 6 h. Read failure = still active.
 agent_idle() {
   local line when
-  line=$(VCC_ACTIVITY_AGENT_ID="$1" "$VCC" activity last "$T" 2>/dev/null) || return 1
+  if [ "$2" = 1 ]; then
+    line=$(jq -r --arg agent "$1" --arg rid "$RID" '[.activities[] | select(.agentId == $agent) | select(.text | contains($rid) | not)] | max_by(.createdAt) | .createdAt // ""' "$LOG") || return 1
+  else
+    line=$(VCC_ACTIVITY_AGENT_ID="$1" "$VCC" activity last "$T" 2>/dev/null) || return 1
+  fi
   [ -n "$line" ] || return 0
   when=$(date -d "$(cut -f1 <<< "$line")" +%s 2>/dev/null) || return 1
   [ $(( $(date +%s) - when )) -gt 21600 ]
@@ -240,7 +256,7 @@ for _ in 1 2 3 4 5 6 7 8; do
   case "$res" in
     LOSE*)
       IFS=$'\t' read -r _ other oid old same <<< "$res"
-      if [ "$old" = 1 ] && agent_idle "$oid"; then echo "$oid" >> "$IDLE"; continue; fi ;;
+      if [ "$old" = 1 ] && agent_idle "$oid" "$same"; then echo "$oid" >> "$IDLE"; continue; fi ;;
   esac
   break
 done
@@ -273,7 +289,8 @@ case "$res" in
     else
       "$VCC" task unassign "$T" --self >/dev/null || echo "ship-claim: unassign failed, remove yourself by hand" >&2
     fi
-    "$VCC" comment add "$T" --text "<p><strong>Stepping back: $other claimed this first.</strong></p><p>Next: $other carries on; nothing for you to do. Requested by Valentin in a Claude session, $(date +%F). Resume this Claude session: $RESUME</p>" >/dev/null \
+    "$VCC" activity add "$T" "Stepping back: $other claimed this first.
+Next: $other carries on. Resume: $RESUME" >/dev/null \
       || echo "ship-claim: step-back comment failed" >&2
     echo "ship-claim: STEP BACK, $other claimed $T first. Do NOT start work; pick another ticket."
     exit 3 ;;

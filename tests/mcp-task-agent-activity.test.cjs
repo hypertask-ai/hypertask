@@ -10,10 +10,14 @@ function stub(relativePath, exports) {
   const filename = path.join(root, relativePath)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
-stub('src/lib/mcp/auth.ts', {
-  checkMcpRateLimit: async () => rateLimited,
-  validateMcpAuth: async () => ctx,
-  mcpUnauthorizedResponse: async () => Response.json({ success: false }, { status: 401 }),
+stub('src/utils/controllers/projects/getAllIncludes.ts', {
+  projectContentAccessWhere: () => ({}),
+})
+stub('src/lib/mcp/routeWrapper.ts', {
+  wrapMcpRoute: (handler) => handler,
+  checkMcpRouteRateLimit: async () => rateLimited,
+  validateMcpRouteAuth: async () => ctx,
+  mcpRouteUnauthorizedResponse: async () => Response.json({ success: false }, { status: 401 }),
 })
 class TaskIdentifierAmbiguityError extends Error {}
 stub('src/lib/mcp/tasks/resolveTask.ts', {
@@ -26,7 +30,7 @@ stub('src/lib/prisma.ts', {
     findMany: async (query) => {
       calls.push(query)
       if (dbError) throw dbError
-      return rows.slice(0, query.take)
+      return rows.slice(query.skip ?? 0, (query.skip ?? 0) + query.take)
     },
   },
 })
@@ -128,4 +132,21 @@ test('storage failures return no private data', async () => {
     assert.equal(response.status, 500)
     assert.deepEqual(await response.json(), { success: false, error: 'Failed to read task agent activity' })
   } finally { console.error = original }
+})
+
+test('activity history pages retain older claims and reject invalid offsets', async () => {
+  reset(); rows = Array.from({ length: 205 }, (_, n) => row(n))
+  for (const offset of [0, 100, 200]) {
+    const response = await read('42', `?limit=100&offset=${offset}`)
+    assert.equal(response.status, 200)
+    const data = await response.json()
+    assert.deepEqual(data.activities.map((activity) => activity.id),
+      rows.slice(offset, offset + 100).map((activity) => activity.id))
+    assert.deepEqual(calls.at(-2), [ctx.user, { task_id: 42 }, 'caller-agent', undefined, null])
+  }
+  for (const offset of ['-1', '1.5', 'abc', '', '2147483648', '9007199254740992']) {
+    reset()
+    assert.equal((await read('42', `?offset=${offset}`)).status, 400, offset)
+    assert.equal(calls.length, 0)
+  }
 })

@@ -273,7 +273,8 @@ allowed bash "$vcc" comment add X-1 --kind=question "--file=$T/question.html"
 printf '%s\n' "${plain/<p>My recommendation: yes.<\/p>/}" > "$T/question.html"
 question_refused 'My recommendation:' comment add X-1 --kind question --file "$T/question.html"
 question_refused 'My recommendation:' comments add X-1 --kind=question "--file=$T/question.html"
-question_refused 'cannot read --file' comment add X-1 --kind question --file "$T/missing.html"
+run bash "$vcc" comment add X-1 --kind question --file "$T/missing.html"
+[ "$status" = 5 ] || fail 'missing Question file must fail closed'
 markdown='Question: **Keep it?**
 
 Yes: keep it.
@@ -302,8 +303,46 @@ for kind in qa done ''; do
     [[ $(< "$T/out") == "$expected" ]] || fail 'non-question arguments changed'
   done
 done
-allowed bash "$vcc" comment add X-1 --kind=qa --file "$T/missing.html"
 printf 'ok qa, done, and untyped comments forward code words unchanged\n'
+
+agent_detail_refused() {
+  run bash "$vcc" "$@"
+  [ "$status" = 5 ] || fail "agent detail not refused: $*: $status"
+  [[ $(< "$T/err") == 'vcc: agent detail belongs in vcc activity add' ]] || fail "wrong agent detail refusal: $*"
+  [[ $(< "$VCC_TEST_TRACE") != *hypertask* && $(< "$VCC_TEST_TRACE") != *'identity lookup'* ]] || fail 'agent detail reached identity or board'
+}
+for detail in 'tmux attach -t runner-8' 'claude --resume session' 'codex resume session' 'hax --resume=session' \
+  'Helpers: none' 'Branch/PR: none' 'Outputs: evidence' 'Gates: 3 met' 'GATES.md' '.unlazy/session' '/home/valentin/file' '~/notes'; do
+  for kind in question qa done; do
+    agent_detail_refused comment add X-1 --kind "$kind" --text "$plain<p>$detail</p>"
+    printf '%s\n' "$plain<p>$detail</p>" > "$T/people.html"
+    agent_detail_refused comments add X-1 "--kind=$kind" "--file=$T/people.html"
+  done
+  for operation in create update; do
+    agent_detail_refused task "$operation" X-1 --description "$detail"
+    agent_detail_refused tasks "$operation" X-1 "--description-file=$T/people.html"
+  done
+  agent_detail_refused comment add X-1 --text "<span data-type=\"mention\">Valentin Yeo</span> $detail"
+  agent_detail_refused comment add X-1 --mentions 6 --body "$detail"
+  allowed bash "$vcc" comment add X-1 --text "$detail"
+done
+allowed bash "$vcc" comment add X-1 --kind question --text "$plain"
+allowed bash "$vcc" task update X-1 --description '<p>Settings now works.</p>'
+allowed bash "$vcc" task create --title 'Clearer settings' --description '<p>Nothing to decide.</p>'
+agent_detail_refused comment add X-1 --kind qa --text '<p><strong>Helpers</strong>: none</p>'
+agent_detail_refused --json comment add X-1 --kind qa --text 'tmux attach -t runner-8'
+agent_detail_refused --project 15 task update X-1 --description 'Outputs: private'
+run bash "$vcc" comment add X-1 --kind=qa --file "$T/missing.html"
+[ "$status" = 5 ] || fail 'unreadable people content must fail closed'
+printf '<p>Settings now works.</p>\n' > "$T/plain.html"
+allowed bash "$vcc" task update X-1 --description 'tmux attach -t runner-8' --description-file "$T/plain.html"
+agent_detail_refused task update X-1 --description 'Safe text' --description-file "$T/people.html"
+agent_detail_refused comments add X-1 --kind=qa '--body=Outputs: private'
+agent_detail_refused tasks create '--description=Gates: 3 met' --title 'Plain title'
+agent_detail_refused comment add X-1 --text '<span data-type = "mention">Valentin Yeo</span> Helpers: none'
+agent_detail_refused comment add X-1 --kind qa --text '<p><a href="/home/valentin/result">Proof</a></p>'
+printf 'agent detail boundary verified\n'
+
 
 old_question_7508_295851=$(cat <<'FIXTURE'
 <p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Should HT Product Lead check and approve the agent-access exceptions, with you deciding only the changes that hide data from people?</strong></p><p>Why: some of the 81 agent board reads here are already protected by a check just above them; marking them reviewed changes nothing in the app.</p><p>Yes: HT Product Lead reviews those code checks; changes that hide a board, ticket or comment from a person still come to you, one question per batch.</p><p>No: each batch of them comes to you too.</p><p>Next: claude --resume ce05d8aa-af47-49c9-8593-c7d186e29d77</p>
@@ -318,10 +357,10 @@ rewrite_7508_303933=$(cat <<'FIXTURE'
 <p>My recommendation: yes. Why: those sign-offs change nothing for any user, and asking you 81 times would hold the security fix up for days. Everything that takes access away still comes to you as one plain question per batch.</p>
 <p>Yes: I sign off the already-safe places; fixes that take access away come to you in batches. (My recommendation, 👍 this comment.)</p>
 <p>No: every batch comes to you, including the ones that change nothing.</p>
-<p>Next: on your 👍, RUNNER 4 finishes the list. claude --resume fe0bb917-b08d-465a-a586-2224a26af002</p>
+<p>Next: on your 👍, RUNNER 4 finishes the list.</p>
 FIXTURE
 )
-question_refused 'My recommendation:' comment add X-1 --kind question --text "$old_question_7508_295851"
+agent_detail_refused comment add X-1 --kind question --text "$old_question_7508_295851"
 fixture "$old_question_7508_295851"
 review_refused 'My recommendation:' task move X-1 --section 'Valentin Review'
 allowed bash "$vcc" comment add X-1 --kind question --text "$rewrite_7508_303933"
