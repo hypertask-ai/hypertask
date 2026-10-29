@@ -407,6 +407,11 @@ function CtrlTabSessionSwitch({
     document.addEventListener("keydown", handleSessionKeydown);
     return () => document.removeEventListener("keydown", handleSessionKeydown);
   }, [groups, currentSessionId, onSelect, returnPath]);
+
+  useEffect(() => () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  }, []);
   return null;
 }
 

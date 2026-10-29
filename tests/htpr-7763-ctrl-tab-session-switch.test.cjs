@@ -67,8 +67,8 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     if (index >= 0) timers.splice(index, 1);
   };
   const composer = document.getElementById("composer");
-  const slots = [], effects = [], routes = [], selections = [];
-  let cursor = 0, cleanups = [], tree, activeSlots = slots;
+  const slots = [], effects = [], routes = [], selections = [], mounted = [];
+  let cursor = 0, tree, activeSlots = slots;
   const react = {
     useMemo: callback => callback(),
     useRef: current => activeSlots[cursor++] ??= { current },
@@ -77,7 +77,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       if (!(index in activeSlots)) activeSlots[index] = initial;
       return [activeSlots[index], next => { activeSlots[index] = typeof next === "function" ? next(activeSlots[index]) : next; }];
     },
-    useEffect: callback => { effects.push(callback); },
+    useEffect: (callback, deps) => { effects.push({ callback, deps }); },
   };
   const context = {
     activeSession: current,
@@ -143,13 +143,21 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     [props.children].flat(Infinity).forEach(renderChildren);
   }
   function render() {
-    cleanups.forEach(cleanup => cleanup?.());
-    cleanups = [];
     cursor = 0;
     activeSlots = slots;
     tree = Chat({});
     renderChildren(tree);
-    cleanups = effects.splice(0).map(effect => effect());
+    effects.splice(0).forEach((effect, index) => {
+      const previous = mounted[index];
+      const changed = !previous || !sameDeps(previous.deps, effect.deps);
+      if (!changed) return;
+      previous?.cleanup?.();
+      mounted[index] = { deps: effect.deps, cleanup: effect.callback() };
+    });
+  }
+  function sameDeps(previous, next) {
+    if (!previous || !next || previous.length !== next.length) return false;
+    return previous.every((value, index) => value === next[index]);
   }
   render();
   return {
@@ -190,7 +198,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       return event;
     },
     close() {
-      cleanups.forEach(cleanup => cleanup?.());
+      mounted.splice(0).forEach(slot => slot?.cleanup?.());
       dom.window.close();
       for (const [key, descriptor] of savedGlobals) {
         if (descriptor) Object.defineProperty(global, key, descriptor);
