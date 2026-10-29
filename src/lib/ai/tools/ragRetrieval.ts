@@ -5,6 +5,8 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 
 import type { ToolContext } from "./context";
 
+const stringKeyedFilters = z.object({}).catchall(z.unknown());
+
 export function createRagRetrievalTool(context: ToolContext) {
   const { sendStatus, body, user } = context;
   return {
@@ -13,7 +15,7 @@ export function createRagRetrievalTool(context: ToolContext) {
         "Retrieve semantically relevant Hypertask task/comment context from Turbopuffer hybrid search. Use for conversational, ambiguous, or semantic task/comment questions.",
       inputSchema: z.object({
         query: z.string().min(1).max(500),
-        metadata_filters: z.record(z.string(), z.unknown()).optional(),
+        metadata_filters: stringKeyedFilters.optional(),
         limit: z.coerce.number().int().min(1).max(25).default(10),
       }),
       execute: async (input) => {
