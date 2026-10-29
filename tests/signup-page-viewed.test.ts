@@ -58,7 +58,7 @@ function harness() {
     "@/lib/analytics/productPerformance": { installProductPerformanceSink: () => () => {} },
     "@/lib/analytics/appPerformanceScope": { scopeProjectWebVitalsEvent: (event: any) => event },
     "@/lib/analytics/appWebVitals": { shouldInstallAuthenticatedProjectWebVitals: () => false },
-    "@/lib/analytics/browserNoise": { dropResizeObserverLoopException: (event: any) => event, dropSelfRecoveringChunkLoadException: (event: any) => event },
+    "@/lib/analytics/browserNoise": { dropResizeObserverLoopException: (event: any) => event, dropSelfRecoveringChunkLoadException: (event: any) => event, dropNetworkBlipException: (event: any) => event },
     "posthog-js/dist/module.slim": { default: posthog },
     "posthog-js/dist/extension-bundles": { ErrorTrackingExtensions: {} },
     "@/utils/Providers": { default: "Provider" },

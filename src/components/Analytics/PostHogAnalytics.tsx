@@ -21,6 +21,7 @@ import {
   type AppWebVitalMetric,
 } from "@/lib/analytics/appWebVitals";
 import {
+  dropNetworkBlipException,
   dropResizeObserverLoopException,
   dropSelfRecoveringChunkLoadException,
 } from "@/lib/analytics/browserNoise";
@@ -402,8 +403,10 @@ export default function PostHogAnalytics({
               event.properties.source = "web";
             }
             return scopeProjectWebVitalsEvent(
-              dropSelfRecoveringChunkLoadException(
-                dropResizeObserverLoopException(event),
+              dropNetworkBlipException(
+                dropSelfRecoveringChunkLoadException(
+                  dropResizeObserverLoopException(event),
+                ),
               ),
               {
                 userId: latestIdentityRef.current.userId,

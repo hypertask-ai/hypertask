@@ -33,7 +33,7 @@ export function rateIssue(message, users, source) {
 
 export function issueQuery(issueId, productionOnly = true) {
   if (!UUID.test(issueId)) throw new Error("PostHog issue ID is invalid");
-  return `SELECT count(), uniqExactIf(coalesce(toString(properties.userId), toString(properties.user_id), distinct_id), distinct_id != 'hypertask-app' OR properties.userId IS NOT NULL OR properties.user_id IS NOT NULL), min(timestamp), max(timestamp), argMax(properties.$exception_list, timestamp), argMax(properties.ht_source, timestamp), argMax(coalesce(properties.ht_url, properties.$current_url), timestamp), countIf(distinct_id = 'hypertask-app' AND properties.userId IS NULL AND properties.user_id IS NULL), argMax(coalesce(toString(properties.ht_featureFlag), ''), timestamp)
+  return `SELECT count(), uniqExactIf(coalesce(toString(properties.userId), toString(properties.user_id), distinct_id), distinct_id != 'hypertask-app' OR properties.userId IS NOT NULL OR properties.user_id IS NOT NULL), min(timestamp), max(timestamp), argMax(properties.$exception_list, timestamp), argMax(coalesce(properties.ht_source, if(properties.$lib = 'web', 'browser', 'server')), timestamp), argMax(coalesce(properties.ht_url, properties.$current_url), timestamp), countIf(distinct_id = 'hypertask-app' AND properties.userId IS NULL AND properties.user_id IS NULL), argMax(coalesce(toString(properties.ht_featureFlag), ''), timestamp)
 FROM events WHERE event = '$exception' AND toString(properties.$exception_issue_id) = '${issueId}'
 ${productionOnly ? "AND (properties.ht_environment = 'production' OR (properties.ht_environment IS NULL AND properties.$current_url LIKE 'https://app.hypertask.ai/%'))" : ""}`;
 }
