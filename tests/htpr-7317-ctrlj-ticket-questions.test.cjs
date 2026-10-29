@@ -16,6 +16,7 @@ let enabled = true;
 let session = { id: "s1", taskId: 43, messages: [intro] };
 const sent = [];
 const mocks = {
+  "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
   "@/store": { composeTaskQuestionsTaskIdAtom: "questionsTaskId" },
   "@/lib/state": { useRecoilValue: () => null, useSetRecoilState: () => () => {} },
   "@/hooks/useFlag": { useFlag: (key) => enabled && key === flag },

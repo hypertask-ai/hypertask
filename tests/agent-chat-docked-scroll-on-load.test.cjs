@@ -71,7 +71,8 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = f
   const listPath = path.join(root, "src/components/AI_CHAT/MessageList.tsx");
   const storePath = path.join(root, "src/store/index.ts");
   const statePath = path.join(root, "src/lib/state.tsx");
-  const stubbed = [contextPath, itemPath, typingPath, listPath, storePath, statePath];
+  const navigationPath = path.join(root, "src/lib/aiChat/chatNavigationState.ts");
+  const stubbed = [contextPath, itemPath, typingPath, listPath, storePath, statePath, navigationPath];
   const previousModules = new Map(
     stubbed.map((filename) => [filename, require.cache[filename]]),
   );
@@ -175,6 +176,7 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = f
     }
 
     for (const [filename, exports] of [
+      [navigationPath, { readChatNavigationState: () => ({}), writeChatNavigationState() {} }],
       [storePath, { composeTaskQuestionsTaskIdAtom: "questionsTaskId" }],
       [statePath, { useRecoilValue: () => null, useSetRecoilState: () => () => {} }],
     ]) {

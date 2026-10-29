@@ -517,6 +517,8 @@ test('real task chat hook persists the Compose greeting once, scoped to the crea
         addMessage: async (sessionId, message) => { persisted.push({ sessionId, message }); return { data: { message } }; },
       } });
       flags[flag] = scenario.enabled ?? true;
+      source('src/lib/aiChat/chatNavigationState.ts', { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} });
+      source('src/hooks/MultiPages/AIChat/useChatSessionSelection.ts', require('./task-route-loader.cjs').load('src/hooks/MultiPages/AIChat/useChatSessionSelection.ts', { "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} }, }));
       const { useSessionAndChatHistory } = jiti(path.join(root, 'src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts'));
       let chat;
       function ChatProbe() {

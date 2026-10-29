@@ -313,11 +313,11 @@ async function withCompose(options, check) {
     },
   };
   const dockedChatScope = load("src/hooks/MultiPages/AIChat/useDockedChatScope.ts", { ...basic, "@/lib/flags/definitions/htpr-7685-chat-follows-board": { HTPR_7685_CHAT_FOLLOWS_BOARD_FLAG: "htpr-7685-chat-follows-board" } });
-  const historyMocks = { ...basic, "next/navigation": { usePathname: () => "/detail/project-15/7319" }, "@/utils/api/ai_chat": historyApi, "./useDockedChatScope": dockedChatScope };
+  const historyMocks = { "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} }, "./useChatSessionSelection": require("./task-route-loader.cjs").load("src/hooks/MultiPages/AIChat/useChatSessionSelection.ts", { "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} }, }), ...basic, "next/navigation": { usePathname: () => "/detail/project-15/7319" }, "@/utils/api/ai_chat": historyApi, "./useDockedChatScope": dockedChatScope };
   const paged = load("src/hooks/MultiPages/AIChat/usePagedChatHistory.ts", { ...historyMocks, "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null } });
   const { useSessionAndChatHistory } = load("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts", { ...historyMocks, "./usePagedChatHistory": paged });
   const chatContext = { useAiChatContext: () => ({ ...history, chatMounted: true, handleMessageListScroll() {}, registerMessageListRef() {}, scrollMessagesToBottom() {}, isTyping: false, handleSendMessage: (value) => sent.push(value), isDetailPage: true, selectSession() {} }) };
-  const { MessageList } = load("src/components/AI_CHAT/MessageList.tsx", { ...basic, "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": chatContext, "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", { "data-message": message.id }, message.content) }, "./TypingIndicator": load("src/components/AI_CHAT/TypingIndicator.tsx") });
+  const { MessageList } = load("src/components/AI_CHAT/MessageList.tsx", { "@/lib/aiChat/chatNavigationState": { chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} }, ...basic, "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": chatContext, "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", { "data-message": message.id }, message.content) }, "./TypingIndicator": load("src/components/AI_CHAT/TypingIndicator.tsx") });
   const { WelcomeScreen } = load("src/components/AI_CHAT/WelcomeScreen.tsx", {
     ...basic, "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": chatContext,
     "next/navigation": { usePathname: () => "/detail/project-15/7319" },

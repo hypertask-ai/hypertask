@@ -6,6 +6,8 @@ import { AI_Chat_API, isPagedChatSessions, mergeSessionHistory, mergeSessionTran
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 
+import { useChatSessionSelection } from "./useChatSessionSelection";
+
 type Transcript = IChatSession & { pendingMessageIds?: string[]; pendingTitle?: string };
 type History = InfiniteData<TPagedChatSessionsResponse, string | null>;
 const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSummary => {
@@ -15,22 +17,22 @@ const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSumma
 };
 const staleTime = 1000 * 60 * 3;
 
-export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined }) {
+export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined }, navigationKey?: string | null, navigationBoardId?: number) {
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
   const queryClient = useQueryClient();
   const summaryKey = ["chat-session-summaries", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, "history"];
   const transcriptPrefix = ["aiChatTranscript", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG];
   const transcriptKey = (id: string | null) => [...transcriptPrefix, id];
-  const identity = `${user?.uid}:${user?.id}:${selectionScope.key}:${enabled}`;
+  const identity = `${user?.uid}:${user?.id}:${selectionScope.key}:${enabled}:${navigationKey ?? ""}`;
   const identityRef = useRef(identity);
   identityRef.current = identity;
-  const [selection, setSelection] = useState<{ identity: string; id: string | null }>({ identity, id: null });
-  const activeSession = selection.identity === identity ? selection.id : null;
+  const [activeSession, selectActiveSession] = useChatSessionSelection(identity, navigationKey);
   const activeRef = useRef(activeSession);
   activeRef.current = activeSession;
   const [creating, setCreating] = useState(false);
   const [initializationError, setInitializationError] = useState(false);
+  const [emptyNavigationIdentity, setEmptyNavigationIdentity] = useState<string | null>(null);
   const newChatRef = useRef<object | null>(null);
   const taskInitRef = useRef<{ identity: string; promise: Promise<IChatSession | string | undefined> } | null>(null);
   useEffect(() => {
@@ -43,8 +45,8 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   const ready = enabled && !pagingUnavailable && historyEnabled && !!user?.uid;
   const setActiveSession = useCallback((id: string | null) => {
     activeRef.current = id;
-    setSelection({ identity, id });
-  }, [identity]);
+    selectActiveSession(id);
+  }, [selectActiveSession]);
 
   const summaryQuery = useInfiniteQuery({
     queryKey: summaryKey,
@@ -158,15 +160,19 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope, emptyOnly = false) => {
     let id = sessionId;
     if (!id) {
-      const page = await queryClient.fetchQuery({
-        queryKey: [...summaryKey, "scope", scope?.taskId ?? null, scope?.projectId ?? null, emptyOnly],
-        queryFn: ({ signal }) => AI_Chat_API.getSessionPage({ ...scope, ...(emptyOnly ? { emptyOnly: true } : {}), limit: 1 }, signal),
-        staleTime: 0,
-      });
-      if (!page.data.success) throw new Error("Could not resolve chat session");
-      id = page.data.sessions.find((session) =>
-        (!scope?.taskId || session.taskId === scope.taskId) && (!scope?.projectId || (session.projectId === scope.projectId && (scope.taskId !== undefined || session.taskId === null))) &&
-        (!emptyOnly || (session.taskId === null && ("hasMessages" in session ? !session.hasMessages : session.messages.length === 0))))?.id;
+      let cursor: string | undefined;
+      do {
+        const page = await queryClient.fetchQuery({
+          queryKey: [...summaryKey, "scope", scope?.taskId ?? null, scope?.projectId ?? null, emptyOnly, cursor ?? null],
+          queryFn: ({ signal }) => AI_Chat_API.getSessionPage({ ...scope, ...(emptyOnly ? { emptyOnly: true } : {}), ...(cursor ? { cursor } : {}), limit: 1 }, signal),
+          staleTime: 0,
+        });
+        if (!page.data.success) throw new Error("Could not resolve chat session");
+        id = page.data.sessions.find((session) =>
+          !session.agentId && (!scope?.taskId || session.taskId === scope.taskId) && (!scope?.projectId || (session.projectId === scope.projectId && (scope.taskId !== undefined || session.taskId === null))) &&
+          (!emptyOnly || (session.taskId === null && ("hasMessages" in session ? !session.hasMessages : session.messages.length === 0))))?.id;
+        cursor = isPagedChatSessions(page.data) ? page.data.nextCursor ?? undefined : undefined;
+      } while (!id && cursor);
     }
     if (!id) return;
     const session = await queryClient.fetchQuery(transcriptOptions(id));
@@ -235,6 +241,15 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     setInitializationError(false);
     const initialize = async () => {
       if (initialTaskId === undefined) {
+        if (navigationKey) {
+          const session = await resolveHistorySession(undefined, navigationBoardId === undefined ? undefined : { projectId: navigationBoardId });
+          if (!cancelled && identityRef.current === identity && !activeRef.current && !newChatRef.current) {
+            const generalSession = session?.agentId ? undefined : session;
+            setActiveSession(generalSession?.id ?? null);
+            if (!generalSession) setEmptyNavigationIdentity(identity);
+          }
+          return;
+        }
         setActiveSession(historySessions[0]?.id ?? null);
         return;
       }
@@ -269,7 +284,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       }
     });
     return () => { cancelled = true; };
-  }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt, taskId, isTaskScoped, selectionScope.initialTaskId]);
+  }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt, taskId, isTaskScoped, selectionScope.initialTaskId, navigationKey, navigationBoardId]);
 
   const addMessageToSessionQuery = useCallback((sessionId: string, message: IChatMessage, queryOnly = false, updateLastMessage = false, projectId?: number) => {
     if (!ready || !queryClient.getQueryData<Transcript>(transcriptKey(sessionId))) return false;
@@ -352,7 +367,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
 
   }, [ready, queryClient, user?.uid, user?.id]);
 
-  const isSessionPending = ready && !currentSession && !initializationError && (summaryQuery.isLoading || transcriptQuery.isFetching || creating || (!activeSession && summaryQuery.isSuccess));
+  const isSessionPending = ready && !currentSession && !initializationError && !(navigationKey && emptyNavigationIdentity === identity) && (summaryQuery.isLoading || transcriptQuery.isFetching || creating || (!activeSession && summaryQuery.isSuccess));
   return {
     pagingUnavailable, activeSession, currentSession, setActiveSession, startNewSession, selectSession, addMessageToSessionQuery, updateSessionTitle, deleteSession,
     updateLastMessageInSessionCache: (id: string, message: IChatMessage) => addMessageToSessionQuery(id, message, true, true),
@@ -365,6 +380,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     isLoading: isSessionPending, isSessionPending,
     isError: initializationError || summaryQuery.isError || (!currentSession && transcriptQuery.isError),
     isSuccess: ready && !!currentSession && !creating,
+    isHistoryReady: ready && summaryQuery.isSuccess && !creating,
     showWelcomeScreen: !isSessionPending && !initializationError && !transcriptQuery.isError && (currentSession?.messages.length ?? 0) === 0,
     mounted: !!currentSession, hasRequiredData: !!user?.uid,
   };
