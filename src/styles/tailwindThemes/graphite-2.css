@@ -47,7 +47,7 @@
   --color-text-light-gray: #9a9ca1;
   --color-border: 231 8% 18%;
   --color-border-comment-description: #2a2c31;
-  --bg-newcomment-well: #1f2125;
+  --bg-newcomment-well: var(--bg-pageBackground);
   --color-my-comment: #ececed;
   --color-kanban-column-scrollbar: transparent;
   --em-rgb-color: #ececed;
