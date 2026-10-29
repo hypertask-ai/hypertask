@@ -92,7 +92,7 @@ function fakeRedis() {
         return 1;
       }
       if (script.includes('"SET"')) {
-        values.set(all[1], args[1]); values.set(all[2], args[2]);
+        for (let index = 1; index < count; index++) values.set(all[index], args[index]);
         return 1;
       }
       return Number(values.delete(key));
@@ -149,7 +149,12 @@ test("canary gateway probes use only the internal key, never the trials key", as
 
 test("missing, malformed or trials-reused internal key disables the whole canary until configured", async () => {
   keys.set("openai", BYOK);
-  for (const value of [undefined, "", " ", "sk_not_a_gateway_key", "vck_", "vck_contains whitespace", TRIALS, ` ${TRIALS} `]) {
+  const cases = [
+    [undefined, "missing_internal_gateway_key"], ["", "missing_internal_gateway_key"], [" ", "missing_internal_gateway_key"],
+    ["sk_not_a_gateway_key", "malformed_internal_gateway_key"], ["vck_", "malformed_internal_gateway_key"], ["vck_contains whitespace", "malformed_internal_gateway_key"],
+    [TRIALS, "internal_key_equals_trials_key"], [` ${TRIALS} `, "internal_key_equals_trials_key"],
+  ];
+  for (const [value, reason] of cases) {
     if (value === undefined) delete process.env.MODEL_CANARY_AI_GATEWAY_API_KEY;
     else process.env.MODEL_CANARY_AI_GATEWAY_API_KEY = value;
     redis = fakeRedis(); calls = []; selectedCredentials = [];
@@ -157,15 +162,35 @@ test("missing, malformed or trials-reused internal key disables the whole canary
     assert.deepEqual(result, { checked: 0, pass: 0, fail: 0, skipped: 0, inconclusive: 0 });
     assert.equal(calls.length, 0);
     assert.deepEqual(selectedCredentials, []);
-    assert.equal(redis.values.size, 0);
-    assert.deepEqual(await rows(), []);
+    assert.deepEqual([...redis.values.keys()], ["ai-model-canary:v1:state"]);
+    const state = JSON.parse(redis.values.get("ai-model-canary:v1:state"));
+    assert.equal(state.state, "disabled"); assert.equal(state.reason, reason); assert.equal(state.checkedAt, new Date(now).toISOString());
+    const disabled = await canary.readModelCanaryStatus();
+    assert.equal(disabled.state, "disabled"); assert.equal(disabled.reason, reason); assert.deepEqual(disabled.models, []);
   }
   process.env.MODEL_CANARY_AI_GATEWAY_API_KEY = KEY;
   const result = await canary.runModelCanary();
   assert.ok(result.pass > 0);
+  const enabled = await canary.readModelCanaryStatus();
+  assert.equal(enabled.state, "enabled"); assert.equal(enabled.reason, null); assert.ok(enabled.models.length > 0);
   assert.ok(selectedCredentials.includes(KEY));
   assert.ok(selectedCredentials.includes(BYOK));
   assert.ok(selectedCredentials.every((credential) => credential === KEY || credential === BYOK));
+});
+
+test("status separates never-run from disabled so an empty list never reads as healthy models", async () => {
+  const empty = await canary.readModelCanaryStatus();
+  assert.deepEqual([empty.state, empty.reason, empty.checkedAt, empty.configured, empty.models], ["never_run", null, null, true, []]);
+  delete process.env.MODEL_CANARY_AI_GATEWAY_API_KEY;
+  const unconfigured = await canary.readModelCanaryStatus();
+  assert.deepEqual([unconfigured.state, unconfigured.configured, unconfigured.configuredReason], ["never_run", false, "missing_internal_gateway_key"]);
+  await canary.runModelCanary();
+  const disabled = await canary.readModelCanaryStatus();
+  assert.deepEqual([disabled.state, disabled.reason, disabled.checkedAt, disabled.models], ["disabled", "missing_internal_gateway_key", null, []]);
+  const response = await status.GET(request("Bearer synthetic"));
+  const body = await response.json();
+  assert.equal(body.success, true); assert.equal(body.state, "disabled"); assert.equal(body.reason, "missing_internal_gateway_key");
+  assert.equal(body.configured, false); assert.equal(body.configuredReason, "missing_internal_gateway_key");
 });
 
 test("probe keeps actual provider options and allowance team tags, one prompt, no tools/history/retries", async () => {
