@@ -23,6 +23,14 @@ fallback without creating a chat. Never detach an agent to force this path.
    fixtures. If unavailable, mark live message bump proof UNREACHABLE and
    retain read-only ordering plus targeted send/realtime coverage.
 
+7. Compare each roster row with the owned-agent response: unexpired working
+   tickets are green; out-of-tokens is amber; recent heartbeat/post without
+   work is gray with idle duration; no signal within 24 hours is inactive.
+   External/native labels, unread badges and selection remain unchanged.
+   Roster status is permanent; no status flag is needed. Check the idle clock
+   advances after 30 seconds without reloading, using a recent-signal fixture
+   only if one already exists. Never modify an existing agent to force it.
+
 ## What usually breaks
 
 Board-post ordering returns; missing timestamps lose name ties; revoked or
