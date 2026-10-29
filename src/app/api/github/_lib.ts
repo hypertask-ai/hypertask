@@ -25,11 +25,10 @@ export async function getGithubConnectPrincipal(
   try {
     const session = await getSessionUser(request.headers);
     if (!session || session.agentId) return { status: "unauthorized" };
-    const enabled = await isFeatureEnabled(
-      HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG,
-      session.userId,
-    );
-    return enabled ? { status: "allowed", userId: session.userId, source: session.source } : { status: "disabled" };
+    if (!await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, session.userId)) {
+      return { status: "disabled" };
+    }
+    return { status: "allowed", userId: session.userId, source: session.source };
   } catch (error) {
     console.error(
       "GitHub connect principal lookup failed",
