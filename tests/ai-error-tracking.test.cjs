@@ -66,6 +66,7 @@ test('chat API tracking does not persist provider-echoed prompt or reply bodies'
     '@/lib/api/errorMessage': { toErrorMessage: () => 'private echoed prompt' },
     '@/lib/errors/reportError': { reportError: async (report) => reports.push(report) },
     '@/lib/ai/tools/constants': { SSE_HEADERS: {} },
+    '@/lib/flags/definitions/htpr-7754-deepseek-auth-refusal': load(path.join(root, 'src/lib/flags/definitions/htpr-7754-deepseek-auth-refusal.ts')),
   });
   await reportHandledChatError(Object.assign(new Error('private echoed reply'), { statusCode: 500 }), 'model-stream', { model: 'claude-sonnet-5.5' });
   assert.equal(reports.length, 1);
