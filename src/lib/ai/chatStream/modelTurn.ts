@@ -142,6 +142,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     bulkScopeConfirmationEnabled,
     skillDraftsEnabled,
     ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
+    docsRoutingEnabled,
   );
   const tools = settingsEnabled
     ? Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name === "hypertask_settings"))

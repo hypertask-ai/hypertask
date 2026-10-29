@@ -154,7 +154,7 @@ const RAW_TOOL_METADATA = {
   SEARCH_HELP_DOCS: {
     name: buildToolName('search_help_docs'),
     description:
-      "Searches the Hypertask help center (help.hypertask.ai) for how-to and product-feature articles. Use for questions about how Hypertask itself works — boards, columns/sections, the Command Center (Ctrl+K), keyboard shortcuts, AI features and models, notifications, sharing, pricing, and MCP/CLI setup. Call before answering product, plan, price, limit, shortcut or setup questions; answer briefly with an article link, state only documented claims, and offer a ticket for undocumented items. Do NOT use for questions about the user's own tasks or comments; use hypertask_list_tasks, hypertask_search_tasks, or hypertask_get_comments_for_task for those.",
+      "Searches the Hypertask help center (help.hypertask.ai) for how-to and product-feature articles. Use for questions about how Hypertask itself works — boards, columns/sections, the Command Center (Ctrl+K), keyboard shortcuts, AI features and models, notifications, sharing, pricing, and MCP/CLI setup. Do NOT use for questions about the user's own tasks or comments; use hypertask_list_tasks, hypertask_search_tasks, or hypertask_get_comments_for_task for those.",
   },
 
   FIND_RELATED_TASKS: {
