@@ -10,9 +10,14 @@ navigation link.
 
 1. Run the doctor and core inbox cycle as QA 985.
 2. Read `GET /api/agent-rooms` using the same browser session. Record status and
-   board IDs only, not other users' messages or agent details.
-3. Open the rooms URL on desktop 1440x900 and phone 390x844. Check **Board rooms**
-   remains visible after reload.
+   board IDs and room presence only, not other users' messages or agent details.
+3. Select a disposable QA-only board from the returned IDs. Open
+   `/agents/chat?view=rooms&board=<boardId>` on desktop 1440x900 and phone
+   390x844. Without a valid positive `board` parameter, the first returned board
+   is selected. Opening a selected board without a room automatically POSTs to
+   create one. For a read-only check, block POST `/api/agent-rooms` before
+   opening the page; use a board with an existing room for room details. Check
+   **Board rooms** remains visible after reload.
 4. Verify an unauthenticated rooms request is refused. MCP pending requests at
    `/api/mcp/chat/rooms/pending` require an authenticated agent, not a human token.
 5. Do not send room messages without disposable non-billing fixtures: replies
@@ -32,4 +37,5 @@ unauthenticated refusal and agent membership scope.
 
 ## Cleanup
 
-Read-only room checks create no fixtures. Clean up only core inbox fixtures.
+Record any room created, including its board and room IDs. Clean up core inbox
+fixtures.
