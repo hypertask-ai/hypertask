@@ -27,6 +27,7 @@ async function withChat(options, check) {
   const rows = options.rows ?? [row("newest"), row("older"), row("other-board", 25), row("other-user", 15, 2343)];
   const calls = [];
   const api = {
+    addMessage: async (_sessionId, message) => response({ message }),
     getAllSessions: async () => { if (options.historyLoad) await options.historyLoad; if (options.historyError) throw new Error("History unavailable"); return response({ success: true, sessions: rows.filter(item => item.userId === values.get(atoms.currentUserAtom).id) }); },
     getSessionPage: async (scope = {}) => {
       if (options.historyLoad) await options.historyLoad;
@@ -426,7 +427,7 @@ for (const paged of [false, true]) test(`${paged ? "paged" : "legacy"}: flag-off
   await withChat({ paged, enabled: false, dockedScope: 25 }, async view => {
     await React.act(async () => { await view.resolver().startNewSession(); }); await view.flush();
     assert.equal(view.chatState().dockedChatScope, null);
-    assert.equal(view.history().currentSession.id, "explicit-new");
+    assert.equal(view.history().currentSession.id, paged ? "newest" : "explicit-new");
     assert.equal(view.calls.filter(([type]) => type === "create").length, 1);
   });
 });

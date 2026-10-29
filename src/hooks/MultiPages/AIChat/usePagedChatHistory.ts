@@ -165,7 +165,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       do {
         const page = await queryClient.fetchQuery({
           queryKey: [...summaryKey, "scope", scope?.taskId ?? null, scope?.projectId ?? null, emptyOnly, cursor ?? null],
-          queryFn: ({ signal }) => AI_Chat_API.getSessionPage({ ...scope, ...(emptyOnly ? { emptyOnly: true } : {}), ...(cursor ? { cursor } : {}), limit: 30 }, signal),
+          queryFn: ({ signal }) => AI_Chat_API.getSessionPage({ ...scope, ...(emptyOnly ? { emptyOnly: true } : {}), ...(cursor ? { cursor } : {}), limit: emptyOnly ? 1 : 30 }, signal),
           staleTime: 0,
         });
         if (!page.data.success) throw new Error("Could not resolve chat session");

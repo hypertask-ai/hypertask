@@ -13,7 +13,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
 import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sessionMessageQueue";
 
-type Context = { navigationKey?: string | null; parallelStreams?: SessionStreams; agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "manualChat" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
+type Context = { navigationKey?: string | null; parallelStreams?: SessionStreams; agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "scopedProjectId" | "previousProjectIdRef" | "deleteSessionInHistory" | "manualChat" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
 
 export function useAiChatSessions(context: Context) {
   const followsTaskNavigation = useFlag(HTPR_7736_CHAT_FOLLOWS_TASK_FLAG);
@@ -22,7 +22,7 @@ export function useAiChatSessions(context: Context) {
   navigationKey, parallelStreams, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
   createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
   deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
-  currentAiOption, pathname, currentUser, taskId, manualChat, sessionsRef,
+  currentAiOption, pathname, currentUser, scopedProjectId, taskId, manualChat, sessionsRef,
   dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
   setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession,
   sessionPagingEnabled,
@@ -245,7 +245,16 @@ export function useAiChatSessions(context: Context) {
       );
       if (navigationKey) {
         const selected = getDisplayedSession();
-        if (selected) return selected.userId === userId && !selected.agentId ? selected : undefined;
+        if (selected && selected.userId !== userId) return undefined;
+        if (selected && !selected.agentId) return selected;
+        if (selected?.agentId) {
+          const general = await resolveHistorySession(undefined, scopedProjectId === undefined ? undefined : { projectId: scopedProjectId });
+          if (!isCurrentIntent()) return undefined;
+          if (general && general.userId === userId && !general.agentId) {
+            await selectSessionInHistory(general.id);
+            return isCurrentIntent() ? general : undefined;
+          }
+        }
         const created = await createSession(isCurrentIntent);
         return isCurrentIntent() ? created : undefined;
       }
@@ -369,6 +378,7 @@ export function useAiChatSessions(context: Context) {
   }, [
     aiChatBoardSessionMap,
     navigationKey,
+    scopedProjectId,
     context.agentSidebarChatsEnabled,
     createSession,
     currentProject?.id,
@@ -397,7 +407,8 @@ export function useAiChatSessions(context: Context) {
   }, [currentProject?.id, setRecentChatBoardIds]);
 
   useEffect(() => {
-    if (!shouldLoadChatHistory || manualChat || navigationKey) return;
+    if (!shouldLoadChatHistory || manualChat) return;
+    if (navigationKey) return;
     if (sessionPagingEnabled) void ensureSessionForCurrentBoard().catch((error) => console.error("Error resolving chat session:", error));
     else void ensureSessionForCurrentBoard();
   }, [ensureSessionForCurrentBoard, shouldLoadChatHistory, sessionPagingEnabled, manualChat, navigationKey]);
