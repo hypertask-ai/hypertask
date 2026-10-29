@@ -59,14 +59,14 @@ export function labelClassifierPrompt(
 export const ERROR_LOG_LABEL = "Error Log";
 export const BUG_LABEL = "Bug";
 
-function sameLabel(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.toLowerCase();
+function sameLabel(a: string | null, b: string): boolean {
+  return (a ?? "").trim().toLowerCase() === b.toLowerCase();
 }
 
 export function withholdBugFromErrorLog(
   labelIdsToAdd: string[],
-  labelValueById: ReadonlyMap<string, string>,
-  taskLabelValues: readonly string[],
+  labelValueById: ReadonlyMap<string, string | null>,
+  taskLabelValues: readonly (string | null)[],
 ): string[] {
   if (!taskLabelValues.some((value) => sameLabel(value, ERROR_LOG_LABEL))) return labelIdsToAdd;
   return labelIdsToAdd.filter((id) => !sameLabel(labelValueById.get(id) ?? "", BUG_LABEL));
