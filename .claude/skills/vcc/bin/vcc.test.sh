@@ -346,7 +346,7 @@ for detail in 'tmux attach -t runner-8' 'claude --resume session' 'codex resume 
   done
   agent_detail_refused comment add X-1 --text "<span data-type=\"mention\">Valentin Yeo</span> $detail"
   agent_detail_refused comment add X-1 --mentions 6 --body "$detail"
-  allowed bash "$vcc" comment add X-1 --text "$detail"
+  allowed env VCC_TEST_ACTIVITY=1 bash "$vcc" comment add X-1 --text "$detail"
 done
 allowed bash "$vcc" comment add X-1 --kind question --text "$plain"
 allowed bash "$vcc" task update X-1 --description '<p>Settings now works.</p>'
