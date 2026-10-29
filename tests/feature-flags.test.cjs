@@ -503,15 +503,11 @@ test("permanent assignee preservation is absent from the flag registry", async (
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6962-keep-assignee"), false);
 });
 
-test("back-first-open bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_6991_BACK_FIRST_OPEN_FLAG: key } = flags;
-  assert.equal(key, "htpr-6991-back-first-open");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("permanent back-first-open behavior is absent from the flag registry", async () => {
+  assert.equal("HTPR_6991_BACK_FIRST_OPEN_FLAG" in flags, false);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6991-back-first-open"), false);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6991-back-first-open"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6991-back-first-open"), false);
 });
 
 test("board-back is no longer registered", async () => {
