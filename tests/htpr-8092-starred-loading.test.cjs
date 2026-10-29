@@ -1,12 +1,10 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const test = require('node:test');
 const React = require('react');
 const { createRoot } = require('react-dom/client');
 const { QueryClient, QueryClientProvider } = require('@tanstack/react-query');
 const { JSDOM } = require('jsdom');
-const ts = require('typescript');
+const { loadModule } = require('./helpers/loadModule.cjs');
 
 async function withStarredQuery(run) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://app.hypertask.ai/starred' });
@@ -14,18 +12,14 @@ async function withStarredQuery(run) {
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
   let resolve;
   const pending = new Promise(done => { resolve = done; });
-  const source = fs.readFileSync(path.join(__dirname, '../src/hooks/General/useGetStarredContent.ts'), 'utf8');
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const mod = { exports: {} };
-  new Function('require', 'module', 'exports', compiled)((name) => {
-    if (name === '../Task Detail/useStarAndPin') return { useStarAndPin: () => ({ getAllStarred: () => pending }) };
-    return require(name);
-  }, mod, mod.exports);
+  const { useGetStarredContent } = loadModule('src/hooks/General/useGetStarredContent.ts', {
+    '../Task Detail/useStarAndPin': { useStarAndPin: () => ({ getAllStarred: () => pending }) },
+  });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const root = createRoot(document.getElementById('root'));
   let data;
   function StarredLists() {
-    data = mod.exports.useGetStarredContent(985).data;
+    data = useGetStarredContent(985).data;
     return React.createElement('div', null,
       React.createElement('span', { id: 'tasks' }, data.starredTasks.map(item => item.task.title).join(', ')),
       React.createElement('span', { id: 'comments' }, data.pinnedComments.map(item => item.comment.text).join(', ')));
