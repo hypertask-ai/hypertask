@@ -130,7 +130,9 @@
           "^POST /api/mcp/admin/tokens$",
           "^DELETE /api/mcp/admin/tokens$",
           "^GET /api/mcp/admin/connections$",
-          "^POST /api/mcp/agents/runs/\\[id\\]/stop$"
+          "^POST /api/mcp/agents/runs/\\[id\\]/stop$",
+          "^POST /api/mcp/agents/board-access-requests$",
+          "^GET /api/mcp/agents/board-access-requests/\\[requestId\\]$"
         ],
         "mcp": [
           "^hypertask_create_agent$",
@@ -139,7 +141,9 @@
           "^hypertask_delete_agent$",
           "^hypertask_mint_token$",
           "^hypertask_revoke_token$",
-          "^hypertask_list_connections$"
+          "^hypertask_list_connections$",
+          "^hypertask_request_board_access$",
+          "^hypertask_get_board_access_request$"
         ],
         "cli": [
           "^(admin keys (create|list|revoke)|agents (create|rename|revoke|rotate-token)|token set-management-key)$",
@@ -168,8 +172,30 @@
           "^hypertask_delete_agent$",
           "^hypertask_mint_token$",
           "^hypertask_revoke_token$",
-          "^hypertask_list_connections$"
+          "^hypertask_list_connections$",
+          "^hypertask_request_board_access$",
+          "^hypertask_get_board_access_request$"
         ]
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7582",
+          "expires": "2026-11-27",
+          "entries": [
+            "POST /api/mcp/agents/board-access-requests",
+            "GET /api/mcp/agents/board-access-requests/[requestId]"
+          ]
+        },
+        "mcp": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7582",
+          "expires": "2026-11-27",
+          "entries": ["hypertask_request_board_access", "hypertask_get_board_access_request"]
+        },
+        "hyperai": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7582",
+          "expires": "2026-11-27",
+          "entries": ["hypertask_request_board_access", "hypertask_get_board_access_request"]
+        }
       }
     },
     {
