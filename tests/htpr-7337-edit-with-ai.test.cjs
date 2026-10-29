@@ -46,6 +46,7 @@ function summaryButton(enabled, comments, flaggedIncomplete = false) {
     "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
+    "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
     "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({ editTicketWithAi: (id) => actions.push(["chat", id]) }) },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ currentTask: { id: 123, description_: { flaggedIncomplete } }, comments, setEditMode: (mode) => actions.push(["mode", mode]) }) },
   });

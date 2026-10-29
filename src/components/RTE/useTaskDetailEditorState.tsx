@@ -1,3 +1,4 @@
+import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
 import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7659_ARCHIVE_EVERY_SEND_FLAG } from "@/lib/flags/keys";
 import { Dispatch, SetStateAction, useState, useRef } from "react";
 import { IAttachment, IEditorAttachmentFile, IUser, RedirectAPIParams, RedirectMode } from "@/models/model";
@@ -150,7 +151,8 @@ export function useTaskDetailEditorState({
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const commentSkillRun = useFlag(HTPR_7480_COMMENT_SKILL_RUN_FLAG) && commentInlineAi;
-  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
+  const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
+  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const [writerOpen, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);
@@ -161,7 +163,7 @@ export function useTaskDetailEditorState({
   });
   let shouldShowAiTaskWriter = writerOpen;
   if (sidebarEditWithAi) shouldShowAiTaskWriter = false;
-  if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag && !(aiTriggerData.autoTrigger && aiTriggerData.initialPrompt)) shouldShowAiTaskWriter = false;
+  if (mode === "read-edit-description" && !descriptionInlineDrafts && composeEnabled && newTaskWindowFlag && !(aiTriggerData.autoTrigger && aiTriggerData.initialPrompt)) shouldShowAiTaskWriter = false;
   const suggestReplyAbortRef = useRef<AbortController | null>(null);
   const shouldShowInlineDraftAiRef = useRef(false);
   const [showSetLinkModal, setShowSetLinkModal] = useRecoilState(showSetLinkModalAtom);
@@ -211,7 +213,7 @@ export function useTaskDetailEditorState({
     editorId: id,
     popoverTriggerButtonId: "popover-button-" + id,
   };
-  return { commentSkillRun, allowPerks, defaultContent, createdAt, user, attachments, carouselAttachments, creatorname, isSelected, id, allowEdit, stack, reply, mode, handleSave, commentId, isMbl, shouldTriggerAiTaskWriter, setLoading, createNewComment, handleTaskOptions, taskFromServer, focusOn, setEditMode, setEditState, hasDraft, hasDraftInit, setHasDraftInit, editMode, currentId, descriptionFocusRequest, hasCommentDraft, defaultCommentFocus, isRecording, toggleRecording, scrollVirtualize, draftsFromTQ, setCarousalItems, uploadingDescription, resetDraft, setResetDraft, isApple, queryClient, currentUser, inViewObject, router, searchParams, inboxFlow, currentTask, inInbox, isInboxFlow, isReadEditMode, isReadOnlyContent, userPreferences, advanceOnSend, draftQueryKey, editor, editorContent, setEditorContent, scrolledOnMobile, setScrolledOnMobile, toggleHighlight, setToggleHighlight, trigger, setTrigger, filesDropped, setFilesDropped, shouldShowAiTaskWriter, setShouldShowAITaskWriter, chatHandoffOpen, setChatHandoffOpen, aiTriggerData, setAiTriggerData, suggestReplyAbortRef, shouldShowInlineDraftAiRef, showSetLinkModal, setShowSetLinkModal, pendingGuestDescriptionFocusTaskRef, handledDescriptionFocusNonceRef, emojiGifPicker, setEmojiGifPicker, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, setMobileEditSaving, saveInFlight, setSaveInFlight, mobileEditSavingRef, saveInFlightRef, mobileEditSessionActiveRef, cancelMobileExistingEditRef, mobileEditSnapshotRef, newCommentAttachments, setNewCommentAttachments, divIds };
+  return { descriptionInlineDrafts, commentSkillRun, allowPerks, defaultContent, createdAt, user, attachments, carouselAttachments, creatorname, isSelected, id, allowEdit, stack, reply, mode, handleSave, commentId, isMbl, shouldTriggerAiTaskWriter, setLoading, createNewComment, handleTaskOptions, taskFromServer, focusOn, setEditMode, setEditState, hasDraft, hasDraftInit, setHasDraftInit, editMode, currentId, descriptionFocusRequest, hasCommentDraft, defaultCommentFocus, isRecording, toggleRecording, scrollVirtualize, draftsFromTQ, setCarousalItems, uploadingDescription, resetDraft, setResetDraft, isApple, queryClient, currentUser, inViewObject, router, searchParams, inboxFlow, currentTask, inInbox, isInboxFlow, isReadEditMode, isReadOnlyContent, userPreferences, advanceOnSend, draftQueryKey, editor, editorContent, setEditorContent, scrolledOnMobile, setScrolledOnMobile, toggleHighlight, setToggleHighlight, trigger, setTrigger, filesDropped, setFilesDropped, shouldShowAiTaskWriter, setShouldShowAITaskWriter, chatHandoffOpen, setChatHandoffOpen, aiTriggerData, setAiTriggerData, suggestReplyAbortRef, shouldShowInlineDraftAiRef, showSetLinkModal, setShowSetLinkModal, pendingGuestDescriptionFocusTaskRef, handledDescriptionFocusNonceRef, emojiGifPicker, setEmojiGifPicker, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, setMobileEditSaving, saveInFlight, setSaveInFlight, mobileEditSavingRef, saveInFlightRef, mobileEditSessionActiveRef, cancelMobileExistingEditRef, mobileEditSnapshotRef, newCommentAttachments, setNewCommentAttachments, divIds };
 }
 
 export type useTaskDetailEditorStateValue = ReturnType<typeof useTaskDetailEditorState>;

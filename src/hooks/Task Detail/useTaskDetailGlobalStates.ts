@@ -1,4 +1,5 @@
 "use client";
+import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
 import {
   IAllCommands,
   IAttachment,
@@ -96,6 +97,7 @@ const useTaskDetailGlobalStates = (
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+  const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
   const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   let blockerCommentEnabled = false;
   if (blockerCommentFlag) blockerCommentEnabled = true;
@@ -446,7 +448,7 @@ const useTaskDetailGlobalStates = (
   };
 
   const refocusAndOpenTaskWriter = (prevActive: string) => {
-    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (prevActive === "comment" || prevActive.startsWith("comment-")));
+    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (prevActive === "comment" || prevActive.startsWith("comment-"))) && !(descriptionInlineDrafts && prevActive === descriptionContainerId);
     if (sidebarEditWithAi) {
       void editTicketWithAi(currentTask!.id);
       return;
@@ -457,7 +459,7 @@ const useTaskDetailGlobalStates = (
 
   const CTRL_J_ENTER_Handler = (shouldTriggerAi: boolean = false) => {
     const currentFocusedType = returnCurrentFocusedType();
-    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (currentFocusedType === "Edit-Comment" || currentFocusedType === "New-Comment"));
+    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (currentFocusedType === "Edit-Comment" || currentFocusedType === "New-Comment")) && !(descriptionInlineDrafts && currentFocusedType === "Description");
     if (shouldTriggerAi && sidebarEditWithAi) {
       setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;
