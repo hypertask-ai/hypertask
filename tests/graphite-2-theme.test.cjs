@@ -138,6 +138,8 @@ test("Graphite 2 CSS is isolated and carries the approved palette", () => {
   const element = dom.window.document.documentElement;
   const style = () => dom.window.getComputedStyle(element);
   element.className = "graphite-2";
+  assert.equal(style().getPropertyValue("--bg-newcomment-well"), "var(--bg-pageBackground)");
+  assert.notEqual(style().getPropertyValue("--bg-pageBackground"), style().getPropertyValue("--bg-cardBackground"));
   for (const [property, expected] of Object.entries({ "--bg-pageBackground": "#17181b", "--bg-sidebar": "#17181b", "--bg-cardBackground": "#1f2125", "--bg-hover-active": "#26282d", "--color-border-comment-description": "#2a2c31", "--color-white-black": "#ececed", "--color-text-light-gray": "#9a9ca1", "--color-text-quiet": "#6c6f74", "--bg-label-span": "transparent" })) {
     assert.equal(style().getPropertyValue(property), expected, property);
     for (const theme of ["graphite", "porcelain", "amoled", "dia"]) {
