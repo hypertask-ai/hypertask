@@ -13,7 +13,7 @@ QUESTION = {
     "id": 42,
     "text": "<p>Question: <strong>Keep it?</strong></p><p>My recommendation: Yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>",
     "createdAt": "2026-10-29T00:00:00Z",
-    "reactions": [{"userId": 6, "emoji": "👍", "createdAt": "2026-10-29T00:01:00Z"}],
+    "reactions": [{"id": "human-yes", "userId": 6, "emoji": "👍", "createdAt": "2026-10-29T00:01:00Z"}],
 }
 
 
@@ -41,6 +41,12 @@ elif args[:2] == ["comments", "list"]:
     print(json.dumps({"success":True,"comments":comments}))
 elif args[:2] == ["task", "waiting-on"]:
     assert args[3:5] == ["--user", "none"]
+    proof = json.loads(pathlib.Path(args[args.index("--approval-file") + 1]).read_text())
+    assert proof == {"commentId":42,"text":data["comments"][-1]["text"],"editedAt":None,"reactionId":"human-yes"}
+    if os.environ.get("FIXTURE_RACE") == "1":
+        data["task"]["blockerCommentId"] = 43
+        state.write_text(json.dumps(data))
+        sys.exit(5)
     data["task"]["blockerCommentId"] = None
     data["task"]["waitingOnUserId"] = None
     state.write_text(json.dumps(data))
@@ -129,6 +135,16 @@ else:
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not a Question", result.stderr)
         self.assert_no_writes()
+
+    def test_concurrent_marker_change_uses_conditional_clear_and_stays(self):
+        self.env["FIXTURE_RACE"] = "1"
+        result = self.run_sweep("sweep", "15", "--apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("CLEARED", result.stdout)
+        task = json.loads(self.state.read_text())["task"]
+        self.assertEqual(task["blockerCommentId"], 43)
+        self.assertEqual(task["waitingOnUserId"], 6)
+        self.assertFalse(any(call[:2] == ["activity", "add"] for call in self.calls()))
 
     def test_shared_scan_failure_never_writes(self):
         Path(self.env["VCC_BLOCKER_SOURCE"]).write_text("raise RuntimeError('fixture scan failure')\n")

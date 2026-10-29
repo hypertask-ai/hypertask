@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 def cli(*args):
@@ -50,14 +51,13 @@ def plain(text):
 def approved(question):
     if not re.search(r"\bMy recommendation:\s*Yes\b", plain(question.get("text", "")), re.I):
         return False
-    return any(
-        (reaction.get("userId") or (reaction.get("user") or {}).get("id")) == 6
+    return next((reaction for reaction in question.get("reactions") or [] if
+        reaction.get("id") and (reaction.get("userId") or (reaction.get("user") or {}).get("id")) == 6
         and not any(reaction.get(key) for key in ("agent", "agentId", "agentDisplayName", "isAgent", "isDeleted"))
         and re.fullmatch("👍[\U0001f3fb-\U0001f3ff]?", reaction.get("emoji", ""))
         and reaction.get("createdAt", "") > question.get("createdAt", "")
         and reaction.get("createdAt", "") > (question.get("editedAt") or "")
-        for reaction in question.get("reactions") or []
-    )
+    ), None)
 
 
 def install():
@@ -116,7 +116,17 @@ def main():
         if question is None or str(task["blockerCommentId"]) != parts[3].removeprefix("comment ") or not approved(question):
             continue
         if args.apply:
-            subprocess.run([os.environ.get("VCC_BIN", "vcc"), "task", "waiting-on", ticket, "--user", "none"], check=True, timeout=60)
+            reaction = approved(question)
+            with tempfile.NamedTemporaryFile(mode="w+", suffix=".json") as snapshot:
+                json.dump({
+                    "commentId": question["id"], "text": question["text"],
+                    "editedAt": question.get("editedAt"), "reactionId": reaction["id"],
+                }, snapshot)
+                snapshot.flush()
+                subprocess.run([
+                    os.environ.get("VCC_BIN", "vcc"), "task", "waiting-on", ticket,
+                    "--user", "none", "--approval-file", snapshot.name,
+                ], check=True, timeout=60)
             after = cli("task", "get", ticket)["tasks"][0]
             if after.get("blockerCommentId") is not None:
                 raise ValueError(f"{ticket}: blocker was not cleared")

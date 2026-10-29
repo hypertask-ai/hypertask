@@ -5,7 +5,7 @@ vcc=$(cd "$(dirname "$0")" && pwd)/vcc
 ship_check=$(cd "$(dirname "$vcc")/../../ship/scripts" && pwd)/ship-check
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/bin" "$T/home/.config/hypertask-agents/credentials" "$T/proc"
+mkdir -p "$T/tmp" "$T/bin" "$T/home/.config/hypertask-agents/credentials" "$T/proc"
 if [ -z "${VCC_TICKET_LINT:-}" ]; then
   export VCC_TICKET_LINT="$T/ticket-lint"
   cat > "$VCC_TICKET_LINT" <<'STUB'
@@ -18,6 +18,7 @@ for marker in ("Next:", "src/app/page.tsx", "new_code", "thirteen.", "Plain vers
         sys.exit(1)
 STUB
 fi
+export TMPDIR="$T/tmp"
 export HOME="$T/home" PATH="$T/bin:$PATH" VCC_HELPER_PROC_ROOT="$T/proc"
 export VCC_TEST_BIN="$vcc" VCC_TEST_TRACE="$T/trace"
 unset VCC_HELPER HAX_TRANSCRIPT HAX_SUBAGENT_DEPTH
@@ -55,7 +56,7 @@ case "$url" in
   */agents/runs) printf '{"success":true,"run":{"id":"fixture-run"}}' > "$out" ;;
   */agents/runs/fixture-run) printf '{"success":true,"run":{"status":"active"}}' > "$out" ;;
   */activities) printf '{"success":true,"activity":{"id":"stub:activity"}}' > "$out" ;;
-  */tasks/waiting-on) printf '{"success":true,"task":{"waitingOnUserId":null,"blockerCommentId":null}}' > "$out" ;;
+  */tasks/waiting-on|*/tasks/clear-approved-blocker) printf '{"success":true,"task":{"waitingOnUserId":null,"blockerCommentId":null}}' > "$out" ;;
   *) exit 92 ;;
 esac
 printf '200'
@@ -209,6 +210,7 @@ allowed bash "$vcc" task move YPER4-512 --section 'In Progress'
 [[ $(< "$VCC_TEST_TRACE") != *'hypertask comments list'* ]] || fail 'unrelated move read comments'
 allowed bash "$vcc" task get YPER4-512 --section 'Valentin Review'
 [[ $(< "$VCC_TEST_TRACE") != *'hypertask comments list'* ]] || fail 'unrelated call read comments'
+[ -z "$(find "$TMPDIR" -type f -print -quit)" ] || fail 'passthrough leaked a response file'
 printf 'ok other moves and non-move calls never read comments\n'
 
 fixture '<p>A plain status note.</p>'
@@ -440,6 +442,11 @@ run bash "$vcc" task waiting-on X-1 --user 6
 run bash "$vcc" task waiting-on X-1 --user none
 [ "$status" = 0 ] || fail 'clear failed'
 [[ $(< "$VCC_TEST_TRACE") == *'"userId":null,"blockerCommentId":null'* ]] || fail 'clear did not clear both blocker fields'
+printf '{"commentId":42,"text":"Question","editedAt":null,"reactionId":"human-yes"}' > "$T/approval.json"
+run bash "$vcc" task waiting-on X-1 --user none --approval-file "$T/approval.json"
+[ "$status" = 0 ] || fail 'conditional clear failed'
+[[ $(< "$VCC_TEST_TRACE") == *'/tasks/clear-approved-blocker'* ]] || fail 'conditional clear used unsafe old endpoint'
+[[ $(< "$VCC_TEST_TRACE") == *'"approvedClear":{"commentId":42'* ]] || fail 'approval snapshot missing'
 unset VCC_TEST_ACTIVITY VCC_TEST_TASK
 question_refused 'shared ticket-lint' --json comment add X-1 --kind qa --text 'Next: src/app/page.tsx'
 question_refused 'shared ticket-lint' --human task create --description 'Next: src/app/page.tsx'
