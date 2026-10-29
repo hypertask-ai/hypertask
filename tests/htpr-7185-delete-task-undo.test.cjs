@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { QueryClient } = require("@tanstack/react-query");
+const { refreshTaskDetailReadAfterWrite } = require("jiti")(__filename, { alias: { "@": path.resolve(__dirname, "../src") }, interopDefault: true })(path.resolve(__dirname, "../src/lib/taskDetailReads.ts"));
 const test = require("node:test");
 const ts = require("typescript");
 const React = require("react");
@@ -150,7 +152,7 @@ async function fixture(t, flagOn, failDelete = false) {
     undo = useUndoContext();
     shared = boardActions({
       ...undo, toast: hotToast.toast,
-      globalAPIHandlers, queryClient, dedupe: false,
+      globalAPIHandlers, queryClient: Object.assign(new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } }), queryClient), refreshTaskDetailReadAfterWrite,
       _currentProject: { id: 42 }, _currentUser: { id: 985 }, router: { replace: url => navigate("Replace", url) },
       reconcileActiveBoardTasks,
       getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [project] }, projectToUpdateIndex: 0 }),

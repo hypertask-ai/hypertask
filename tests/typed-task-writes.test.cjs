@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { QueryClient } = require("@tanstack/react-query");
+const { refreshTaskDetailReadAfterWrite } = require("jiti")(__filename, { alias: { "@": path.resolve(__dirname, "../src") }, interopDefault: true })(path.resolve(__dirname, "../src/lib/taskDetailReads.ts"));
 const test = require("node:test");
 const ts = require("typescript");
 const axios = require("axios");
@@ -334,7 +336,8 @@ test("move navigation preserves activity metadata and completes moves without a 
         setCurrentTask: (update) => calls.push(["task", update(currentTask)]),
         setMovingItem: (moving) => calls.push(["moving", moving]),
         moveTask: async (body) => { calls.push(["write", body]); return { status: 200 }; },
-        taskDetailConfig: { httpStatus: { ok: 200 } }, dedupe: false,
+        taskDetailConfig: { httpStatus: { ok: 200 } }, refreshTaskDetailReadAfterWrite,
+        currentUser: { id: 985 }, queryClient: new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } }),
         readMoveTaskResponse: async () => data,
         taskUpdateCommentsInCache: (comment) => calls.push(["comment", comment]),
         moveItem: async (input) => calls.push(["move", input]),

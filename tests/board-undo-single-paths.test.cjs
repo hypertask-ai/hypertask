@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { QueryClient } = require("@tanstack/react-query");
+const { refreshTaskDetailReadAfterWrite } = require("jiti")(__filename, { alias: { "@": path.resolve(__dirname, "../src") }, interopDefault: true })(path.resolve(__dirname, "../src/lib/taskDetailReads.ts"));
 const ts = require("typescript");
 const React = require("react");
 const { JSDOM } = require("jsdom");
@@ -84,12 +86,12 @@ function boardRemoval(f, subtasks = false) {
   const project = { sections: [section], filteredSections: [section], tasks: [task] };
   const env = {
     toast: hotToast.toast,
-    _currentProject: { id: 2 }, _currentUser: { id: 985 }, dedupe: false,
+    _currentProject: { id: 2 }, _currentUser: { id: 985 }, refreshTaskDetailReadAfterWrite,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [project] }, projectToUpdateIndex: 0 }),
     reAdjustFocusFromCurrContext() {}, returnSortedItems: (items) => items, mutationHandler() {},
     globalAPIHandlers: { deleteTaskAPI: async () => {}, archiveTask: async () => {} },
     deleteTodo: (text, data) => f.register(data, text),
-    queryClient: { refetchQueries: async () => {} },
+    queryClient: new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } }),
   };
   return load(boardFile, ["removeFromListWithStatus"], env).removeFromListWithStatus;
 }
