@@ -235,6 +235,7 @@ test('moving a task synchronizes pages for its entire subtask tree inside each t
 
 test('page indexing uses the owning page board and selects it on upsert', async () => {
   const helper = loadModule('src/utils/controllers/turbopuffer/turbopufferHelper.ts', {
+    '@/app/api/ai/_lib/aiUsage': { logAiUsage: async () => {} },
     '@/lib/prisma': { __esModule: true, default: {} },
     '@/lib/turbopuffer': { __esModule: true, default: {}, turbopufferNamespaces: {} },
     crypto: require('node:crypto'), 'node-html-parser': require('node-html-parser'),
