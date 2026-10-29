@@ -6,6 +6,8 @@ const POSTHOG = "https://eu.posthog.com";
 const PROJECT = "236160";
 // Tests that throw an error on purpose put this marker in its message (YPER4-384).
 export const FORCED_TEST = /\[ht-forced-test\]/i;
+// QA intake sends one disposable production error to prove routing; it must never open a real ticket (HTPR-8184).
+export const DISPOSABLE_FIXTURE = /QA intake [0-9a-f]{8} disposable error routing fixture/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function rateIssue(message, users, source) {
@@ -83,6 +85,9 @@ export async function readProductionIssue(fetchImpl, apiKey, issueId, { wait = s
     const message = String(exceptions?.[0]?.value || issue.description || "Unknown production error").slice(0, 1000);
     if (FORCED_TEST.test(`${issue.name}\n${issue.description}\n${message}`)) {
       return { action: "skip", reason: "Forced test error marked [ht-forced-test]" };
+    }
+    if (DISPOSABLE_FIXTURE.test(`${issue.name}\n${issue.description}\n${message}`)) {
+      return { action: "skip", reason: "Disposable QA intake routing fixture error" };
     }
     return {
       issue_id: issueId, name: String(issue.name || "Error").slice(0, 120), message,

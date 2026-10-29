@@ -248,6 +248,23 @@ test("forced test errors marked [ht-forced-test] are skipped without board write
   assert.equal(real.message, "Error: YPER4-377 forced browser test 1");
 });
 
+test("disposable QA intake fixture errors are skipped without board writes; unmarked errors still file (HTPR-8184)", async () => {
+  const { readProductionIssue } = await import(script);
+  const fetchFor = (message, calls) => async (url) => {
+    calls.push(url);
+    if (url.includes("/issues/")) return response({ id: ID, name: "Error" });
+    if (url.includes("/query/")) return response({ results: [row(1, 0, message)] });
+    throw new Error(`unexpected write ${url}`);
+  };
+  const calls = [];
+  const fixture = await readProductionIssue(fetchFor("Error. YPER4-922 QA intake d5e54343 disposable error routing fixture", calls), "fixture", ID, { wait: async () => {} });
+  assert.equal(fixture.action, "skip");
+  assert.match(fixture.reason, /disposable QA intake/i);
+  assert.ok(calls.every((url) => !/\/tasks\//.test(url)));
+  const real = await readProductionIssue(fetchFor("Error. QA intake review did not finish", []), "fixture", ID, { wait: async () => {} });
+  assert.equal(real.action, undefined);
+});
+
 test("lag dispatches attempts 2 and 3 with the unchanged signed payload and no ticket", async () => {
   const { handlePostHogAlert, verifyPostHogPayloadSignature } = await import("../.github/scripts/posthog-error-alert.mjs");
   const payload = signedPayload();
