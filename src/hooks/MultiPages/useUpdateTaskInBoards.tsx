@@ -25,7 +25,7 @@ import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/c
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG } from "@/lib/flags/definitions/htpr-8039-archive-column-boundary";
@@ -182,7 +182,6 @@ const UpdateKanban = () => {
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const queryClient = useQueryClient();
   const archiveColumnBoundary = useFlag(HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG);
-  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
@@ -340,7 +339,7 @@ const UpdateKanban = () => {
     sectionId: number | null | undefined,
     _currentProject?: IProject | null,
   ) {
-    if (dedupe && _currentUser?.id && taskId) refreshTaskDetailReadAfterWrite(queryClient, _currentUser.id, taskId, taskToReturn);
+    if (_currentUser?.id && taskId) refreshTaskDetailReadAfterWrite(queryClient, _currentUser.id, taskId, taskToReturn);
 
     if (!taskId || !projectId || !sectionId) return;
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(projectId)
@@ -523,7 +522,7 @@ const UpdateKanban = () => {
   
       console.time("refetchProject")
       await handleStatus();
-      if (dedupe && _currentUser?.id) {
+      if (_currentUser?.id) {
         for (const id of tasksToDelete?.length ? tasksToDelete : [taskId]) {
           refreshTaskDetailReadAfterWrite(queryClient, _currentUser.id, id, status === "Move" ? {} : { status });
         }
@@ -603,7 +602,7 @@ const UpdateKanban = () => {
     if (destinationSecIdx === -1) return;
 
     const destinationSection = sectionsToUpdate[destinationSecIdx];
-    if (dedupe && _currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, _currentUser.id, itemId, { sectionId: destinationSectionId, section: destinationSection.section_title });
+    if (_currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, _currentUser.id, itemId, { sectionId: destinationSectionId, section: destinationSection.section_title });
     ranking = options.insertAtEnd
       ? generateRanking(
           destinationSection.items[destinationSection.items.length - 1]?.ranking,

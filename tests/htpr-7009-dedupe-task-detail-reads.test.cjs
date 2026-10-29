@@ -213,14 +213,6 @@ test("cancelled metadata listener cannot cancel a newer read when the old transp
   assert.deepEqual(h.client.getQueryData(reads.taskDetailMetaKey(42)), h.meta());
 });
 
-test("flag-off local edits leave the shared read untouched", t => {
-  const h = harness(t, false), key = reads.taskDetailReadKey(985, 42), previous = h.task();
-  h.client.setQueryData(key, previous);
-  localTaskWrites(h).updateTaskInCache({ title: "Local edit" }, 42, 15, null);
-  assert.equal(h.client.getQueryData(key), previous);
-  assert.equal(h.client.getQueryState(key).isInvalidated, false);
-});
-
 test("shared task fetcher uses explicit cache options and rejects invalid responses without replacing cached data", async t => {
   const h = harness(t);
   const signal = new AbortController().signal;
@@ -261,8 +253,8 @@ test("shared task fetcher cache-busts only when requested and keeps the option o
   }
 });
 
-for (const enabled of [false, true]) {
-  test(`realtime task reads retain timestamp cache-busting with dedupe ${enabled ? "on" : "off"}`, async t => {
+for (const enabled of [true]) {
+  test("realtime task reads retain timestamp cache-busting", async t => {
     const h = harness(t, enabled), handlers = new Map(), requests = [];
     t.mock.method(Date, "now", () => 1_800_000_000_000);
     global.fetch = async (url, init) => { requests.push({ url, init }); return { ok: true, status: 200, json: async () => h.task() }; };
@@ -287,31 +279,8 @@ for (const enabled of [false, true]) {
   });
 }
 
-test("flag-off detail query keeps legacy options, fetch results and default cache behavior", async t => {
-  const h = harness(t, false), captured = [];
-  h.mocks["@tanstack/react-query"].useQuery = options => { captured.push(options); return { data: options.initialData }; };
-  h.embedded();
-  const { queryFn, ...options } = captured[0];
-  assert.deepEqual(options, {
-    queryKey: ["cached-task-detail", 985, 42], initialData: h.task(), retry: false, refetchOnMount: "always",
-  });
-  const signal = new AbortController().signal;
-  for (const [response, expectedError] of [
-    [{ ok: true, status: 200, json: async () => h.task() }, null],
-    [{ ok: false, status: 500 }, { name: "Error", message: "Unable to load task" }],
-    [{ ok: false, status: 403 }, { name: "Error", message: "" }],
-    [{ ok: true, status: 200, json: async () => null }, { name: "Error", message: "" }],
-  ]) {
-    const requests = [];
-    global.fetch = async (...args) => { requests.push(args); return response; };
-    if (expectedError) await assert.rejects(queryFn({ signal }), expectedError);
-    else assert.deepEqual(await queryFn({ signal }), h.task());
-    assert.deepEqual(requests, [["/api/tasks/getTask?project=project-15&uniqueIndex=42", { signal }]]);
-  }
-});
-
 test("board prefetch and detail mount share full task, existing comments and metadata reads, including late field mounts", async t => {
-  const h = harness(t, process.env.HTPR_7009_NEGATIVE_CONTROL !== "1");
+  const h = harness(t, true);
   h.prefetch([{ id: 42, projectId: 15, uniqueIndex: 42 }, { id: 43, projectId: 15, uniqueIndex: 43 }]);
   await settle();
   h.embedded();
@@ -419,16 +388,20 @@ test("realtime events, same-user multi-tab edits, reconnect and PR subscription 
   assert.equal(current.title, "Task 4");
 });
 
-test("cached detail mount refresh stays suppressed when dedupe is off", () => {
-  const source = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/useTaskDetailReadiness.tsx"), "utf8");
-  const refreshDecision = new Function("flagReady", "dedupe", "cachedLayout", "window", "_parsedTask",
-    `return ${source.match(/getTask\(([^;]+)\);/)[1]}`);
-  for (const cachedLayout of [false, true]) for (const cachedTaskId of [undefined, 42, 43]) {
-    const args = [cachedLayout, { history: { state: { cachedTaskDetail: { taskId: cachedTaskId } } } }, { id: 42 }];
-    assert.equal(refreshDecision(true, false, ...args), !cachedLayout && cachedTaskId !== 42);
-    assert.equal(refreshDecision(true, true, ...args), false);
-    assert.equal(refreshDecision(false, false, ...args), false);
-  }
+test("detail mount suppresses duplicate route refresh without consulting flags", () => {
+  const effects = [], refreshes = [];
+  const { useTaskDetailReadiness } = load("src/app/detail/[...slug]/useTaskDetailReadiness.tsx", {
+    react: { useEffect: effect => effects.push(effect), useLayoutEffect: () => {} },
+    "@tanstack/react-query": { focusManager: { setEventListener() {} } },
+    "@/lib/analytics/productPerformance": {},
+    "@/lib/analytics/appPerformanceScope": {},
+    "@/lib/analytics/taskDetailReadiness": {},
+    "@/lib/analytics/taskDetailPhaseTimings": {},
+  });
+  useTaskDetailReadiness({ _parsedTask: { id: 42, projectId: 15 }, currentUser: { id: 985 },
+    getTask: refresh => refreshes.push(refresh) });
+  effects[1]();
+  assert.deepEqual(refreshes, [false]);
 });
 
 for (const pending of [false, true]) {
@@ -514,11 +487,11 @@ for (const entry of ["direct", "stale", "invalidated", "off"]) {
   });
 }
 
-test("resolved flag-off metadata keeps legacy query options and fetch results", async () => {
+test("public metadata keeps legacy query options and fetch results", async () => {
   const mocks = {
     "@tanstack/react-query": { useQuery: options => options, useQueryClient: () => ({}) },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
-    "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: 985 }) },
+    "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/utils/api/global": { __esModule: true, default: { getPriorityForTask: async () => "priority", getEstimateForTask: async () => "estimate", getAllTaskLabels: async () => ["label"] } },
     "@/utils/api/Task Detail": { getAllFollowers: async () => ["follower"] },
@@ -537,16 +510,6 @@ test("resolved flag-off metadata keeps legacy query options and fetch results", 
       assert.deepEqual(await actualFn(), result);
     }
   }
-});
-
-test("flag off keeps legacy task prefetch and repeated metadata mount reads", async t => {
-  const h = harness(t, false);
-  h.prefetch([{ id: 42, projectId: 15, uniqueIndex: 42 }]); await settle();
-  h.field("followers"); await settle();
-  assert.equal(h.counts.single, 1);
-  assert.equal(h.client.getQueryData(reads.taskDetailReadKey(985, 42)), undefined);
-  assert.deepEqual(h.client.getQueryData([constants.CommentsTQPrefixKey, 42]).comments, [1]);
-  assert.ok(h.counts.meta >= 2);
 });
 
 test("prefetch and mount share a still-pending task read, not only a completed cache entry", async t => {
@@ -583,47 +546,12 @@ test("a real metadata refresh aborts a pre-write request before caching the chan
 });
 
 
-test("unresolved metadata flags do not seed fake-fresh legacy arrays before a flag-on mount", async t => {
-  const h = harness(t);
-  h.ready(false);
-  h.mocks["@/hooks/useFlag"].useFlag = () => false;
-  for (const field of ["labels", "followers"]) assert.deepEqual(h.field(field).data, []);
-  await settle();
-  assert.equal(h.counts.meta, 0);
-  for (const prefix of ["taskLabels", "followersFor:"]) {
-    assert.deepEqual(h.client.getQueryData([prefix, 42]), []);
-    assert.equal(h.client.getQueryState([prefix, 42]).status, "success");
-    assert.equal(h.client.getQueryState([prefix, 42]).dataUpdatedAt, 0);
-  }
-  h.ready(true);
-  h.mocks["@/hooks/useFlag"].useFlag = () => true;
-  for (const field of ["labels", "followers"]) h.field(field);
-  await settle();
-  assert.equal(h.counts.meta, 1);
-  assert.deepEqual(h.client.getQueryData(["taskLabels", 42]), [1]);
-  assert.deepEqual(h.client.getQueryData(["followersFor:", 42]), [1]);
-});
-
-test("initial reads wait for the flag decision instead of fetching under the temporary Off key", async t => {
-  const h = harness(t);
-  h.ready(false);
-  h.prefetch([{ id: 42, projectId: 15, uniqueIndex: 42 }]);
-  h.embedded(); h.field("followers");
-  await settle();
-  assert.deepEqual(h.counts, { task: 0, comments: 0, meta: 0, single: 0 });
-  h.ready(true);
-  h.prefetch([{ id: 42, projectId: 15, uniqueIndex: 42 }]);
-  h.embedded(); h.comments(); h.field("followers");
-  await settle();
-  assert.deepEqual(h.counts, { task: 1, comments: 1, meta: 1, single: 0 });
-});
-
 
 for (const [state, expected] of [[undefined, "false:false"], [false, "true:false"], [true, "true:true"], ["failure", "true:false"]]) {
   test(`actual flag readiness distinguishes unresolved, Off, On and failed flags (${state})`, () => {
     const React = require("react");
     const { renderToString } = require("react-dom/server");
-    const key = "htpr-7009-dedupe-task-detail-reads";
+    const key = "test-readiness";
     const flags = load("src/hooks/useFlag.tsx", {
       "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: () => ({ data: typeof state === "boolean" ? { [key]: state } : undefined, isError: state === "failure" }) },
       "@/hooks/General/useHydrated": { useHydrated: () => true },
@@ -635,3 +563,17 @@ for (const [state, expected] of [[undefined, "false:false"], [false, "true:false
     assert.equal(renderToString(React.createElement(View)), "<span>true:false</span>", "public/share has no flag provider and must retain legacy reads");
   });
 }
+
+
+test("retired switch cannot delay shared reads or disable post-write refresh", async t => {
+  const h = harness(t, false);
+  h.ready(false);
+  h.prefetch([{ id: 42, projectId: 15, uniqueIndex: 42 }]);
+  h.embedded(); h.comments(); h.field("followers");
+  await settle();
+  assert.deepEqual(h.counts, { task: 1, comments: 1, meta: 1, single: 0 });
+  const key = reads.taskDetailReadKey(985, 42);
+  localTaskWrites(h).updateTaskInCache({ title: "Local edit" }, 42, 15, null);
+  assert.equal(h.client.getQueryData(key).title, "Local edit");
+  assert.equal(h.client.getQueryState(key).isInvalidated, true);
+});

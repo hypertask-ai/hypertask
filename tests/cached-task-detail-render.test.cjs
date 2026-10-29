@@ -93,7 +93,7 @@ test("server permission denials remove cached content, while a network outage re
     const client = new query.QueryClient();
     const render = () => renderToString(React.createElement(query.QueryClientProvider, { client }, React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false })));
     render();
-    const key = ["cached-task-detail", 2343, 42];
+    const key = ["cached-task-detail", 2343, 42, "read"];
     const queryFn = client.getQueryCache().find({ queryKey: key }).options.queryFn;
     global.fetch = async () => response;
     await assert.rejects(client.fetchQuery({ queryKey: key, queryFn, retry: false }));

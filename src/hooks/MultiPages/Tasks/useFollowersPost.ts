@@ -4,8 +4,6 @@ import { currentUserAtom } from "@/store";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilState } from "@/lib/state";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
 const useFollowers = (task: ITask) => {
@@ -15,7 +13,6 @@ const useFollowers = (task: ITask) => {
     task.id,
   );
   const queryClient = useQueryClient();
-  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const path = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
   const PostFollower = async (userId: number, taskId: number) => {
@@ -33,7 +30,7 @@ const useFollowers = (task: ITask) => {
       });
 
       if (response.status === 200) {
-        if (dedupe && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, taskId);
+        if (currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, taskId);
         queryClient.refetchQueries({
           queryKey: ["followersFor:", task.id],
         });
@@ -82,7 +79,7 @@ const useFollowers = (task: ITask) => {
         taskId,
         mentionById: currentUser.id,
       });
-      if (response.status === 200 && dedupe && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, taskId);
+      if (response.status === 200 && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, taskId);
     } catch (error) {
       console.log("🚀 ~ handleAgentMention ~ error:", error);
     }

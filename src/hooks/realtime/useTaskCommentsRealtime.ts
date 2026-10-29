@@ -18,8 +18,6 @@ import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import type { IAttachment, ITask } from "@/models/model";
 
 import { fetchScopedTaskDetail, taskDetailReadKey, shouldRefetchDetailOnMount } from "@/lib/taskDetailReads";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 
 export const TASK_COMMENTS_RECONCILE_INTERVAL_MS = 10_000;
 
@@ -60,8 +58,6 @@ export function useTaskCommentsRealtime(
   options: UseTaskCommentsRealtimeOptions = {}
 ): void {
   const queryClient = useQueryClient();
-  const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
-  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const wasConnected = useRef(false);
   const shouldRefetchTask = useRef(false);
   const shouldSyncTaskContent = useRef(false);
@@ -81,7 +77,7 @@ export function useTaskCommentsRealtime(
   currentTaskAssigneesRef.current = options.currentTaskAssignees;
 
   useEffect(() => {
-    if (taskId == null || !flagReady) return;
+    if (taskId == null) return;
     const activeTaskId = taskId;
 
     let cancelled = false;
@@ -126,9 +122,9 @@ export function useTaskCommentsRealtime(
           const task = await refreshTaskDetailQueryCache({
             queryClient,
             taskId,
-            readQueryKey: dedupe && currentUserId ? taskDetailReadKey(currentUserId, taskId) : undefined,
+            readQueryKey: currentUserId ? taskDetailReadKey(currentUserId, taskId) : undefined,
             ...(refreshSatellites ? {} : { refreshSatellites: false }),
-            fetchTask: (signal) => dedupe && currentUserId
+            fetchTask: (signal) => currentUserId
               ? fetchScopedTaskDetail(taskId, taskProjectId, Number(taskUniqueIndex), signal, { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin", cacheBust: true })
               : fetchTaskDetailForRealtime(taskProjectId, taskUniqueIndex, signal),
           });
@@ -223,11 +219,11 @@ export function useTaskCommentsRealtime(
         );
         fallbackWarningLogged = true;
       }
-      const initialRead = dedupe && !wasConnected.current && reason === "unavailable" && currentUserId
+      const initialRead = !wasConnected.current && reason === "unavailable" && currentUserId
         ? queryClient.getQueryState(taskDetailReadKey(currentUserId, activeTaskId)) : undefined;
       if (!initialRead || !(initialRead.fetchStatus === "fetching" ||
         (initialRead.status === "success" && !shouldRefetchDetailOnMount({ state: initialRead })))) {
-        skipInitialSatelliteRefresh = dedupe && !wasConnected.current && reason === "unavailable" && canReconcile();
+        skipInitialSatelliteRefresh = !wasConnected.current && reason === "unavailable" && canReconcile();
         runFallbackCycle();
       }
       fallbackTimer = setInterval(
@@ -381,7 +377,5 @@ export function useTaskCommentsRealtime(
     setDescriptionAttachments,
     preserveEditorContent,
     hasPullRequests,
-    dedupe,
-    flagReady,
   ]);
 }

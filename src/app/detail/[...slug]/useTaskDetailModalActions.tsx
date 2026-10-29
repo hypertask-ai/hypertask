@@ -4,7 +4,6 @@ import globalAPIHandlers from "@/utils/api/global";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import type { TaskDetailContext } from "./TaskDetailContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { HTPR_7185_DELETE_TASK_UNDO_FLAG } from "@/lib/flags/definitions/htpr-7185-delete-task-undo";
@@ -13,7 +12,6 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   const deleteTaskUndo = useFlag(HTPR_7185_DELETE_TASK_UNDO_FLAG);
   const deleteCancelCloses = useFlag(HTPR_7473_DELETE_CANCEL_CLOSES_FLAG);
   const { deleteTodo } = UpdateKanban();
-  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { showPriorityModal, currentTask, setShowPriorityModal, queryClient, activeItem, setShowRemindMeModal, searchParams, navigateToNextTask, showEstimateModal, setShowEstimateModal, setCurrentTask, setShowDueDateModal, setShowRemoveSubtaskModal, onGoback, navigate, _parsedTask, setCurrentProject, followers, currentUser, followerKeyPrefix, removeRelation } = getContext();
 
   const togglePriorityModal = (refresh?: boolean) => {
@@ -22,7 +20,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
       updateActiveItemAndItemInView(currentTask.id);
     setShowPriorityModal((prev) => !prev);
     if (refresh) {
-      if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
+      if (currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
       queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.priority, activeItem] });
     }
   };
@@ -41,7 +39,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
       updateActiveItemAndItemInView(currentTask.id);
     setShowEstimateModal((prev) => !prev);
     if (refresh) {
-      if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
+      if (currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
       queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.estimate, activeItem] });
     }
   };
@@ -75,7 +73,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
           status: "Deleted",
         });
       }
-      if (dedupe && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { status: taskDetailConfig.taskStatus.deleted });
+      if (currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { status: taskDetailConfig.taskStatus.deleted });
       console.log("🚀 ~ deleteTask ~ response:", response);
       // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
       setCurrentTask((old) => ({ ...old, status: taskDetailConfig.taskStatus.deleted }));
@@ -117,7 +115,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
           })
           .then((response) => {
             if (response.status === taskDetailConfig.httpStatus.ok) {
-              if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
+              if (currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
               queryClient.refetchQueries({
                 queryKey: [followerKeyPrefix, currentTask?.id],
               });

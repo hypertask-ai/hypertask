@@ -26,7 +26,7 @@ const { useTaskDetailMetaField } = load("src/lib/useTaskDetailMetaField.ts", {
   "@/hooks/General/useHydrated": hydrated,
   "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
   "@/lib/flags/keys": { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009" },
-  "@/lib/taskDetailReads": { fetchTaskDetailMeta: async () => ({}), shouldRefetchDetailOnMount: true },
+  "@/lib/taskDetailReads": { fetchTaskDetailMeta: async () => ({ labels: serverLabels }), shouldRefetchDetailOnMount: true },
 });
 const { shouldDehydratePersistedQuery } = load("src/utils/queryPersistence.ts", {});
 
@@ -51,7 +51,7 @@ test("ticket labels hydrate from the server copy even when the saved browser cac
   delete global.document;
   const serverClient = new QueryClient();
   const serverHtml = renderToString(React.createElement(QueryClientProvider, { client: serverClient }, React.createElement(Labels)));
-  assert.equal(serverHtml, "<ul><li>Bug</li></ul>");
+  assert.equal(serverHtml, "<ul></ul>");
 
   const dom = new JSDOM(`<div id="root">${serverHtml}</div>`, { url: "https://app.hypertask.ai/detail/project-15/7382" });
   t.after(() => dom.window.close());
