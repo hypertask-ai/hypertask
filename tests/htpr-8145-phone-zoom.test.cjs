@@ -1,9 +1,6 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
-const vm = require("node:vm");
 const test = require("node:test");
-const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
@@ -23,13 +20,21 @@ function viewport({ mobile, enabled, userId = 985 }) {
     } },
     "@/lib/flags/definitions/htpr-8145-phone-zoom": { HTPR_8145_PHONE_ZOOM_FLAG: key },
   };
-  const exports = {};
-  const source = fs.readFileSync(path.join(__dirname, "../src/app/layout.tsx"), "utf8");
-  const code = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText;
-  vm.runInNewContext(code, { exports, require: name => dependencies[name] ?? {} });
-  return exports.generateViewport();
+  const unusedImports = [
+    "@/styles/globals.scss", "@/styles/tailwindThemes/rounded.css", "../../tokens.css",
+    "@/utils/Providers", "@/hooks/useFlag", "@/components/Analytics/PostHogAnalytics",
+    "@vercel/speed-insights/next", "@/components/ErrorBoundary/ClientErrorReporter",
+    "@/lib/ai/AiChipEventRecorder", "@/components/System/DeploySkewGuard",
+    "@/components/FilesImageFallback", "@/lib/configs/auth.config", "@/lib/configs/general.config",
+    "@/lib/fonts/inter", "@/lib/fonts/newsreader", "@/lib/fonts/ibmPlexSans",
+    "@/lib/themePreferences", "@/lib/themeBootScript", "@/lib/appShellBootstrap/client",
+    "@/lib/firstScreen/serverBoardDocument", "@/lib/firstScreen/serverInboxDocument",
+    "@/lib/firstScreen/serverTicketShell", "@/lib/ticketSidebarBoot",
+  ];
+  return loadModule("src/app/layout.tsx", {
+    ...Object.fromEntries(unusedImports.map(name => [name, {}])),
+    ...dependencies,
+  }).generateViewport();
 }
 
 for (const userId of [985, null]) {
