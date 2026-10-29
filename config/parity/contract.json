@@ -169,7 +169,14 @@
       "id": "flags.manage",
       "title": "Owner-approved feature flag changes by agent sessions",
       "matches": {
-        "api": ["^(GET|PATCH) /api/mcp/flags$", "^POST /api/mcp/flags/reviews$"]
+        "api": ["^(GET|PATCH) /api/mcp/flags$", "^POST /api/mcp/flags/reviews$", "^POST /api/mcp/manager-leases$"]
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-4060/801",
+          "expires": "2026-11-12",
+          "entries": ["POST /api/mcp/manager-leases"]
+        }
       },
       "exclusions": {
         "mcp": "Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags.",
