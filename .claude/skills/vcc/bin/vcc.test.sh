@@ -346,7 +346,6 @@ for detail in 'tmux attach -t runner-8' 'claude --resume session' 'codex resume 
   done
   agent_detail_refused comment add X-1 --text "<span data-type=\"mention\">Valentin Yeo</span> $detail"
   agent_detail_refused comment add X-1 --mentions 6 --body "$detail"
-  allowed env VCC_TEST_ACTIVITY=1 bash "$vcc" comment add X-1 --text "$detail"
 done
 allowed bash "$vcc" comment add X-1 --kind question --text "$plain"
 allowed bash "$vcc" task update X-1 --description '<p>Settings now works.</p>'
@@ -452,6 +451,10 @@ rerouted() {
   grep -qF "curl POST agents/runs/run-1/activities" "$VCC_TEST_TRACE" || fail 'no activity write'
   [ "$(jq -r .text "$T/activity.json")" = "$expected" ] || fail "activity text changed: $(cat "$T/activity.json")"
 }
+for detail in 'tmux attach -t runner-8' 'claude --resume session' 'codex resume session' 'hax --resume=session' \
+  'Helpers: none' 'Branch/PR: none' 'Outputs: evidence' 'Gates: 3 met' 'GATES.md' '.unlazy/session' '/home/valentin/file' '~/notes'; do
+  rerouted "$detail" bash "$vcc" comment add X-1 --text "$detail"
+done
 rm -rf "$HOME/.local/state/vcc-runs"
 for option in --dry-run --improve --improve=polish --project=15; do
   run env VCC_TEST_ACTIVITY=1 bash "$vcc" comment add X-1 --text hi "$option"
