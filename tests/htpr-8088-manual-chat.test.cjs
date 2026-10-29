@@ -50,11 +50,11 @@ test("navigation never starts a chat session", () => {
 
 test("one conversation follows the user instead of the ticket", () => {
   const history = read("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts");
-  assert.match(history, /const selectionScope = manualChat \? "manual"/);
+  assert.match(history, /const selectionScope = manualChat \? `manual:\$\{teamKey \?\? "none"\}`/);
   assert.match(history, /const taskScopedHistory = isTaskScoped && !manualChat;/);
   const state = read("src/hooks/MultiPages/AIChat/useAiChatState.ts");
   assert.match(state, /if \(manualChat\) historyTaskId = undefined;/);
-  assert.match(state, /useSessionAndChatHistory\(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat \|\| parallelChatsEnabled, manualDockedChat\)/);
+  assert.match(state, /useSessionAndChatHistory\(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat \|\| parallelChatsEnabled, manualDockedChat, modelTeamId\)/);
 });
 
 test("the new-ticket greeting lands in the conversation that is open, not a new thread", () => {

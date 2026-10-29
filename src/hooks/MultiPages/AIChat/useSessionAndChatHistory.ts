@@ -35,7 +35,8 @@ export const useSessionAndChatHistory = (
   historyEnabled = true,
   isTaskScoped = false,
   preserveSessionSelection = false,
-  manualChat = false
+  manualChat = false,
+  teamKey?: string | null
 ) => {
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
@@ -61,7 +62,7 @@ export const useSessionAndChatHistory = (
   const hasExplicitTask = taskId !== undefined && (composeIntro?.taskId === taskId || pendingFollowup?.taskId === taskId);
   if (hasExplicitTask && explicitTaskRef.current.taskId !== taskId) explicitTaskRef.current.generation += 1;
   explicitTaskRef.current.taskId = hasExplicitTask ? taskId : undefined;
-  const selectionScope = manualChat ? "manual" : followsTaskNavigation ? `following:${explicitTaskRef.current.generation}` : taskId;
+  const selectionScope = manualChat ? `manual:${teamKey ?? "none"}` : followsTaskNavigation ? `following:${explicitTaskRef.current.generation}` : taskId;
   const taskScopedHistory = isTaskScoped && !manualChat;
   const currentProject = useRecoilValue(currentProjectAtom);
   const [dockedScope] = useDockedChatScope();
@@ -75,6 +76,9 @@ export const useSessionAndChatHistory = (
   if (chatNames) nameBoardRef.current = scopedBoardId;
   else nameBoardRef.current = undefined;
   const [activeSession, setActiveSession] = useState<string | null>(null);
+  useEffect(() => {
+    if (manualChat) setActiveSession(null);
+  }, [manualChat, teamKey]);
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);
   const queryClient = useQueryClient();

@@ -231,7 +231,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat || parallelChatsEnabled, manualDockedChat);
+  } = useSessionAndChatHistory(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat || parallelChatsEnabled, manualDockedChat, modelTeamId);
   useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {

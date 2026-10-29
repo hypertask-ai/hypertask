@@ -19,6 +19,7 @@ function load(file, mocks = {}) {
     if (name === "@/lib/flags/definitions/htpr-8052-fullscreen-chat-return") return { HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG: "htpr-8052-fullscreen-chat-return" };
     if (name === flagFile) return { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag };
     if (name === "@/lib/flags/definitions/htpr-8038-chat-opener-ready") return { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" };
+    if (name === "@/lib/flags/definitions/htpr-8088-manual-chat") return { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" };
     if (name === policyFile) return policy;
     assert.ok(name.startsWith("react"), `Unexpected dependency ${name} in ${file}`);
     return require(name);
@@ -433,14 +434,15 @@ test("a successful copy refetches the saved switches instead of guessing them", 
   assert.deepEqual(h.invalidated, [["user-preferences", "ai-chat-auto-open", "7"]]);
 });
 
-function toggles(enabled, keepClosedFlag = true) {
+function toggles(enabled, keepClosedFlag = true, manualChat = false) {
   const Toggle = () => null, inert = { default: () => null };
   const changes = [];
   const { default: Section } = load("src/components/Modals/Settings/TaskPageSection.tsx", {
     "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, values: defaults, setPreference: (key, value) => changes.push([key, value]) }) },
     "@/components/sidebars/RightSidebar/UserPreference": inert,
     "@/lib/state": { useRecoilState: () => [false, () => {}] }, "@/store": {},
-    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : keepClosedFlag },
+    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === "htpr-8088-manual-chat" ? manualChat : keepClosedFlag },
+    "@/lib/flags/definitions/htpr-8088-manual-chat": { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" },
     "@/lib/flags/keys": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
     "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert, "./SettingsToggle": { __esModule: true, default: Toggle },
   });
@@ -455,6 +457,11 @@ test("settings replaces old controls only with flag on, reuses SettingsToggle, a
   assert.deepEqual(changes, [["aiChatOpenNewTickets", false], ["aiChatOpenTickets", true], ["aiChatOpenBoards", true]]);
   assert.deepEqual(toggles(false).rows.map((row) => row.label), ["Open AI chat by default", "Keep AI chat closed always"]);
   assert.deepEqual(toggles(false, false).rows.map((row) => row.label), ["Open AI chat by default"]);
+});
+
+test("manual chat hides the two automatic switches and keeps the new-ticket one", () => {
+  const { rows } = toggles(true, true, true);
+  assert.deepEqual(rows.map((row) => row.label), ["Open AI chat on newly created tickets"]);
 });
 test("flag is an Everyone feature with release risk and production smoke mode", () => {
   const definition = load(`src/lib/flags/definitions/${flag}.ts`).default;
