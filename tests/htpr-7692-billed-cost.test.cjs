@@ -51,6 +51,7 @@ stub("src/lib/prisma.ts", { default: {
 stub("node_modules/next/server.js", { NextResponse: { json: (body, init) => Response.json(body, init) } });
 const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true, fsCache: false });
 const allowance = load(path.join(root, "src/app/api/ai/_lib/sharedAllowance.ts"));
+const { GET: settings } = load(path.join(root, "src/app/api/settings/ai-usage/route.ts"));
 
 function fakeRedis() {
   const values = new Map(), hashes = new Map(), sorted = new Map(), sets = new Map(), expirations = new Map();

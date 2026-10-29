@@ -40,7 +40,7 @@ Sources: `src/lib/ai/dailyAiSpend.ts`,
 `src/app/api/cron/ai-spend/route.ts` and `vercel.json`.
 
 The paid allowance drift checker and background billed-snapshot refresh are
-removed by YPER4-873. The old `/api/cron/ai-allowance-drift` endpoint and
+removed by YPER4-873. The old allowance-drift endpoint and
 five-minute schedule no longer exist. Do not turn on either existing
 HTPR-7692 switch for verification.
 
