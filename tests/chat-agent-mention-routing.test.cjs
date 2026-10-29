@@ -47,7 +47,6 @@ test("extractMentionedAgentIds keeps first-mention order and dedupes", () => {
 
 test("decideAgentMentionRouting routes only a clean single mention", () => {
   const base = {
-    routingEnabled: true,
     mentionedAgentIds: ["agent-1"],
     hasAttachments: false,
     hasBoardContext: true,
@@ -59,7 +58,6 @@ test("decideAgentMentionRouting routes only a clean single mention", () => {
   });
 
   const cases = [
-    [{ ...base, routingEnabled: false }, "flag-off"],
     [{ ...base, mentionedAgentIds: [] }, "no-mention"],
     [{ ...base, mentionedAgentIds: ["a", "b"] }, "multiple-mentions"],
     [{ ...base, hasAttachments: true }, "attachments"],
