@@ -14,16 +14,16 @@ const genericMessage = "Sorry, something went wrong while generating a response.
 function load(file, stubs, globals = {}) {
   const filename = path.join(root, file);
   const code = jiti.transform({ source: fs.readFileSync(filename, "utf8"), filename, ts: true });
-  const module = { exports: {} };
+  const loaded = { exports: {} };
   const resolve = (id) => {
     if (Object.hasOwn(stubs, id)) return stubs[id];
     throw new Error(`Unexpected import: ${id}`);
   };
   vm.runInNewContext(code, {
-    module, exports: module.exports, require: resolve, jitiImport: async (id) => resolve(id),
+    module: loaded, exports: loaded.exports, require: resolve, jitiImport: async (id) => resolve(id),
     Error, Set, console, ...globals,
   }, { filename });
-  return module.exports;
+  return loaded.exports;
 }
 
 function authError(overrides = {}) {
