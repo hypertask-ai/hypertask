@@ -241,7 +241,7 @@ jq -s '.[0] + {activities: .[1].activities}' "$W" "$LOG" > "$MERGED" && mv "$MER
 agent_idle() {
   local line when
   if [ "$2" = 1 ]; then
-    line=$(jq -r --arg agent "$1" --arg rid "$RID" '[.activities[] | select(.agentId == $agent) | select((.text | contains("Claimed.") and contains($rid)) | not)] | max_by(.createdAt) | .createdAt // ""' "$LOG") || return 1
+    line=$(jq -r --arg agent "$1" --arg rid "$RID" '[.activities[] | select(.agentId == $agent) | select(.text | contains($rid) | not)] | max_by(.createdAt) | .createdAt // ""' "$LOG") || return 1
   else
     line=$(VCC_ACTIVITY_AGENT_ID="$1" "$VCC" activity last "$T" 2>/dev/null) || return 1
   fi

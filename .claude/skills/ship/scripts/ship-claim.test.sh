@@ -94,8 +94,8 @@ cat > "$D/vcc" <<'EOF'
 echo "$*" >> "$FAKE_LOG"
 if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
-if [ "$1 $2" = "activity add" ] && [[ "$4" == Claimed.* ]] && [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
-  jq --arg id "new-claim-$(jq '.activities | length' "$FAKE_AGENT_LOG")" --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:$id,createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
+if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
+  jq --arg id "new-activity-$(jq '.activities | length' "$FAKE_AGENT_LOG")" --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:$id,createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
   mv "$FAKE_AGENT_LOG.next" "$FAKE_AGENT_LOG"
   jq -r '.activities[-1].id' "$FAKE_AGENT_LOG"
 fi
@@ -198,10 +198,18 @@ for age in 9 1; do
     eq "flow: own new claim does not revive an idle shared session" "$rc" 0
     FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1
     eq "flow: retry claims do not revive an idle shared session" "$?" 0
+    jq -e '.activities | any(.[]; .text | startswith("Takeover:"))' "$D/shared.json" >/dev/null \
+      && ok "flow: takeover records persist across retries" || bad "takeover record not persisted"
   else
     eq "flow: active shared session remains protected" "$rc" 3
     FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1
     eq "flow: retries still protect an active shared session" "$?" 3
+    jq -e '.activities | any(.[]; .text | startswith("Stepping back:"))' "$D/shared.json" >/dev/null \
+      && ok "flow: step-back records persist across retries" || bad "step-back record not persisted"
+    jq --arg last "$(date -u -d '-9 hours' +%FT%TZ)" '(.activities[] | select(.id == "heartbeat").createdAt) = $last' "$D/shared.json" > "$D/shared.next"
+    mv "$D/shared.next" "$D/shared.json"
+    FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1
+    eq "flow: own step-backs do not revive a now-idle shared session" "$?" 0
   fi
   grep -q unassign "$D/log" && bad "shared identity recovery called unassign" || ok "shared identity recovery preserves assignment"
 done
