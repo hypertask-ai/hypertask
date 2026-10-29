@@ -2,6 +2,7 @@ import { LinkableMention } from "@/components/RTE/Extensions/LinkableMention";
 import { createMentionData } from "@/components/RTE/Components/AI_Chat/MentionData";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { SuggestionPluginKey } from "@tiptap/suggestion";
 import Placeholder from "@tiptap/extension-placeholder";
 import styles from "@/styles/tiptap.module.scss";
 import {
@@ -78,7 +79,8 @@ export function ControlledComposerEditor({
         role: "textbox",
         class: "outline-none py-2 text-dense",
       },
-      handleKeyDown: (_view, event) => {
+      handleKeyDown: (view, event) => {
+        if (SuggestionPluginKey.getState(view.state)?.active) return false;
         onKeyDownRef.current(
           event as unknown as ReactKeyboardEvent<HTMLTextAreaElement>,
         );

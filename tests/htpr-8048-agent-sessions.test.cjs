@@ -356,3 +356,45 @@ for (const runtimeType of ["NATIVE", "EXTERNAL"]) {
     } finally { view.close(); global.fetch = originalFetch; }
   });
 }
+
+
+test("Enter selects the active agent mention before send; ordinary Enter still sends", async () => {
+  const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+  const { Editor } = require("@tiptap/core");
+  const { SuggestionPluginKey } = require("@tiptap/suggestion");
+  let options, selected = 0, sent = 0;
+  const source = loader({
+    "@tiptap/react": { useEditor: value => { options = value; return null; }, EditorContent: () => null },
+    "@/components/RTE/Components/AI_Chat/MentionData": { createMentionData: () => ({
+      items: () => [{ id: "agent", label: "Runner" }],
+      render: () => ({ onKeyDown: ({ event }) => {
+        if (event.key !== "Enter") return false;
+        selected++;
+        return true;
+      } }),
+    }) },
+  });
+  const ControlledComposerEditor = source("src/lib/controlledComposerEditor.tsx").ControlledComposerEditor;
+  const view = mount();
+  let editor;
+  try {
+    view.render(React.createElement(ControlledComposerEditor, { value: "", agentMentionProjectId: 15,
+      onChange() {}, onKeyDown(event) { if (event.key === "Enter") { sent++; event.preventDefault(); } },
+      onEditor() {}, placeholder: "Message", ariaLabel: "Message" }));
+    const element = document.createElement("div");
+    document.body.append(element);
+    editor = new Editor({ ...options, element, content: "<p></p>" });
+    editor.commands.insertContent("@Run");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(SuggestionPluginKey.getState(editor.state).active, true);
+    editor.view.dom.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
+    assert.equal(selected, 1);
+    assert.equal(sent, 0);
+    assert.equal(editor.getText(), "@Run");
+    editor.commands.setContent("<p>Ordinary message</p>");
+    assert.equal(SuggestionPluginKey.getState(editor.state).active, false);
+    editor.view.dom.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
+    assert.equal(sent, 1);
+    assert.equal(selected, 1);
+  } finally { editor?.destroy(); view.close(); }
+});
