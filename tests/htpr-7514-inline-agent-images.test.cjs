@@ -167,7 +167,7 @@ for (const enabled of [false, true]) {
           text: `Compare this screenshot ${image}${optOut ? ". Link only." : ""}`,
           files: attached ? [{ name: "Screenshot.png", type: "image/png" }] : [],
           project: { id: 15, uniqueIdentifier: "HTPR" }, userId: 985,
-          inlineAgentImages: enabled, unfurlImageUrls: true,
+          inlineAgentImages: enabled,
         });
         assert.equal(saved.length, 1);
         assert.equal(count(saved[0].description), attached ? enabled && optOut ? 0 : 1 : enabled && !optOut ? 1 : 0);

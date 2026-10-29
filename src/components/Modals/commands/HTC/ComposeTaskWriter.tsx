@@ -34,7 +34,7 @@ import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
@@ -76,7 +76,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const splitTasksEnabled = useFlag(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const inlineAgentImages = useFlag(HTPR_7514_INLINE_AGENT_IMAGES_FLAG);
-  const unfurlImageUrls = useFlag(HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
@@ -319,7 +318,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = await createComposedTask({
-        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, unfurlImageUrls, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
+        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
