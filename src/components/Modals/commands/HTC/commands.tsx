@@ -186,11 +186,11 @@ const Commands = (props: Props) => {
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels).map((group) => removeImageGeneration ? { ...group, commandLists: group.commandLists.filter((command) => command.key !== "settingsAiFeaturesImageGeneration") } : group),
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration),
     [isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels).map((group) => removeImageGeneration ? { ...group, commandLists: group.commandLists.filter((command) => command.key !== "settingsAiFeaturesImageGeneration") } : group),
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration),
     [keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration]
   );
   let getCommands = getLegacyCommands;

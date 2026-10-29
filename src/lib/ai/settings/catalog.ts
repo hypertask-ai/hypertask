@@ -32,7 +32,6 @@ export const settingsPages = {
   "board-skills": "Board skills",
   "board-files": "Board files",
   "developer-access": "Developer access and tokens",
-  github: "GitHub integration",
   slack: "Slack integration",
   github: "GitHub repositories connected to a board",
   webhooks: "Webhooks",

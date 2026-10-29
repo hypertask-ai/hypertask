@@ -164,6 +164,14 @@ test("New Task shortcut label requires both task writer flags", () => {
   }
 });
 
+test("shared commands default to showing image settings", () => {
+  for (const removeImageGeneration of [undefined, false, true]) {
+    const commands = getAllCommands(undefined, undefined, false, "", "", false, false, removeImageGeneration)
+      .flatMap((group) => group.commandLists);
+    assert.equal(commands.some((command) => command.key === "settingsAiFeaturesImageGeneration"), !removeImageGeneration);
+  }
+});
+
 test("image settings command follows removal in both palette modes", () => {
   for (const roundedEnabled of [false, true]) {
     for (const removeImageGeneration of [false, true]) {
