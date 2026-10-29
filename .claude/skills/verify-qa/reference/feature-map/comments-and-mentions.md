@@ -52,6 +52,22 @@ Run the same draft checks in the AI chat composer, which uses the shared
 writing extension. Clear drafts without sending them. For flag-off checks,
 use the plain QA account and confirm typing remains unchanged.
 
+## Comment dictation shortcuts
+
+On a long QA Sandbox ticket, scroll to the top and blur any text field.
+Press Ctrl+Shift+D (Cmd+Shift+D on macOS): the existing comment box and
+recording Cancel/Send controls must enter the viewport. Cancel with Escape;
+the draft must remain unchanged. Repeat with Ctrl+Shift+F for dictation with
+improvement. Starting from another focused text field must not move the page
+or start the comment recorder. Repeat after reload. Mobile keeps its existing
+fixed comment composer and microphone behavior.
+
+For `htpr-8139-comment-dictation-scroll` Off, starting the recorder keeps the
+previous scroll position. Do not switch a production flag to test this;
+exercise flag Off with the component test instead.
+
+Targeted regression: `npm run test:file -- tests/htpr-8139-comment-dictation-scroll.test.cjs`.
+
 ## Durable agent attribution
 
 Agent comments keep the name stored when written. Removing the acting agent
