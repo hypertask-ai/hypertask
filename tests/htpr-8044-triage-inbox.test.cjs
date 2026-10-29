@@ -71,7 +71,9 @@ test("choosing triage closes palette and hands the exact preset to a fresh full-
   const handler = productionNode(node => ts.isFunctionDeclaration(node) && node.name?.text === "updateCommandFrequency");
   const calls = [];
   const command = rows(true).find(row => row.key === "triageInbox");
-  let enabled = true;
+  let triageInboxFlag = true;
+  let safeInboxBatches = true;
+  let freshChatHandoff = true;
   let groups = [{ group: "Inbox", commandLists: [command] }];
   const choose = () => evaluate(handler, {
     writing: false, findCommandPosition, filterCommands: groups, INBOX_TRIAGE_PROMPT,
@@ -79,7 +81,7 @@ test("choosing triage closes palette and hands the exact preset to a fresh full-
     setFrequentlyUsed: () => {}, recordHTCCommandUsage: () => {},
     document: { activeElement: { blur() {} } },
     pagesEnabled: false, standalonePages: false,
-    triageInboxFlag: enabled, safeInboxBatches: true, freshChatHandoff: true,
+    triageInboxFlag, safeInboxBatches, freshChatHandoff,
     resetShowCommands: () => calls.push("close"),
     setAiChatPendingPrompt: prompt => calls.push(prompt),
     buildFullScreenChatPath: load(path.join(root, "src/lib/aiChatDisplayMode.ts")).buildFullScreenChatPath,
@@ -88,11 +90,13 @@ test("choosing triage closes palette and hands the exact preset to a fresh full-
   })(command);
   choose();
   assert.deepEqual(calls, ["close", { query: INBOX_TRIAGE_PROMPT, fullScreen: true }, "/chat?return_to=%2Finbox%3Fsplit%3Dagents"]);
-  enabled = false;
-  calls.length = 0;
-  choose();
-  assert.deepEqual(calls, [], "a stale click after flag revocation must not launch triage");
-  enabled = true;
+  for (const flags of [[false, true, true], [true, false, true], [true, true, false]]) {
+    [triageInboxFlag, safeInboxBatches, freshChatHandoff] = flags;
+    calls.length = 0;
+    choose();
+    assert.deepEqual(calls, [], "a stale click after any prerequisite is revoked must not launch triage");
+  }
+  triageInboxFlag = safeInboxBatches = freshChatHandoff = true;
   groups = [];
   choose();
   assert.deepEqual(calls, [], "a command removed from the palette must not launch");

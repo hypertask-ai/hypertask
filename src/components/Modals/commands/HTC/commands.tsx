@@ -689,10 +689,11 @@ const Commands = (props: Props) => {
         return;
       }
       if (command.key === "triageInbox") {
-        if (!triageInboxFlag || !safeInboxBatches || !freshChatHandoff) return;
-        resetShowCommands();
-        setAiChatPendingPrompt({ query: INBOX_TRIAGE_PROMPT, fullScreen: true });
-        router.push(buildFullScreenChatPath(`${window.location.pathname}${window.location.search}${window.location.hash}`));
+        if (triageInboxFlag && safeInboxBatches && freshChatHandoff) {
+          resetShowCommands();
+          setAiChatPendingPrompt({ query: INBOX_TRIAGE_PROMPT, fullScreen: true });
+          router.push(buildFullScreenChatPath(`${window.location.pathname}${window.location.search}${window.location.hash}`));
+        }
         return;
       }
       if (command.key === "deletePage") {
