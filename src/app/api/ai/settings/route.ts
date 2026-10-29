@@ -3,7 +3,9 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { browserMutationIsSameOrigin } from "@/lib/agentRuns/service";
 import { normalizeThemePreference } from "@/lib/themePreferences";
-import { actOnSettingProposal, assertSettingsEnabled, loadSettingProposal } from "@/lib/ai/settings/proposals";
+import { actOnSettingProposal, loadSettingProposal } from "@/lib/ai/settings/proposals";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { settingProposalCard, settingsScopeSchema, type SettingsScope } from "@/lib/ai/settings/catalog";
 
 export const runtime = "nodejs";
@@ -13,7 +15,8 @@ const actionSchema = z.object({ id: idSchema, action: z.enum(["apply", "cancel",
 async function settingsUser(request: NextRequest) {
   const session = await getSessionUser(request.headers);
   if (!session || session.agentId) throw new Error("Sign in as yourself to review settings changes.");
-  await assertSettingsEnabled(session.userId, session.agentId);
+  // Server-side gate: the flag is checked at the entry point as well as inside the proposal store.
+  if (!(await isFeatureEnabled(HTPR_7622_AI_SETTINGS_FLAG, session.userId))) throw new Error("AI settings changes are not available for this account.");
   return session.userId;
 }
 
