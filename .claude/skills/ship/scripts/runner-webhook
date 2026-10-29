@@ -604,7 +604,7 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             secret = b""
         signature = "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
-        if not secret or not hmac.compare_digest(signature, self.headers.get("X-Hub-Signature-256", "")):
+        if not secret or not hmac.compare_digest(signature.encode(), self.headers.get("X-Hub-Signature-256", "").encode()):
             return self._reply(401)
         kind = self.headers.get("X-GitHub-Event", "")
         if kind not in GH_EVENTS:
