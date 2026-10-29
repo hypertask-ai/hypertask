@@ -28,7 +28,7 @@ topology:
   repository_default_branch: production
   production_target: "Vercel project hypertasks-prod"
   # Housekeeping workflows (PR guards, push gitleaks, vercel-deploy-log,
-  # app-smoke-request, parity-contract-trusted) also run on
+  # app-smoke-request, parity-contract-trusted, ai-review-mirror) also run on
   # ubuntu-latest; their implementation lives in .github/workflows/ and is not
   # duplicated here.
 

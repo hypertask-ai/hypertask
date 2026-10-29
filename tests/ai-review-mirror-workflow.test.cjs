@@ -1,0 +1,235 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { readFile } = require("node:fs/promises");
+const yaml = require("js-yaml");
+
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const SHA = "b".repeat(40);
+const WORKFLOW = ".github/workflows/ai-review-mirror.yml";
+const REVIEWER = { login: "hypertask-ai-review" };
+const REVIEW = `APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**
+
+- **MINOR** — a note
+
+<!-- reviewed-commit: ${SHA} -->
+<!-- ai-review-signature: ${"c".repeat(64)} -->`;
+
+const loadScript = async () => yaml.load(await readFile(WORKFLOW, "utf8")).jobs.mirror.steps[0].with.script;
+
+async function runMirror({
+  eventName = "issue_comment",
+  comment = { user: REVIEWER, body: REVIEW },
+  issue = { number: 43, pull_request: { url: "https://api.github.com/repos/hypertask-ai/hypertask/pulls/43" } },
+  inputs = {},
+  pr = productionPr(),
+  ticketComments = [],
+  postResponse = { status: 200, body: { success: true, url: "https://app.hypertask.ai/detail/project-15/1234" } },
+  token = "test-token",
+} = {}) {
+  const calls = [];
+  const failures = [];
+  const infos = [];
+
+  const fetchStub = async (url, init = {}) => {
+    const method = init.method ?? "GET";
+    calls.push({ url, method, init });
+    if (method === "GET") {
+      return { ok: true, status: 200, json: async () => ({ success: true, comments: ticketComments }) };
+    }
+    return { ok: postResponse.status < 400, status: postResponse.status, json: async () => postResponse.body };
+  };
+
+  const github = {
+    rest: {
+      pulls: { get: async () => ({ data: pr }) },
+      issues: { listComments: async () => ({ data: [] }) },
+    },
+    paginate: async () => pr.comments ?? [{ user: REVIEWER, body: REVIEW }],
+  };
+
+  const savedFetch = globalThis.fetch;
+  const savedToken = process.env.HYPERTASK_MCP_TOKEN;
+  const savedAuthor = process.env.REVIEW_COMMENT_AUTHOR;
+  globalThis.fetch = fetchStub;
+  if (token === null) delete process.env.HYPERTASK_MCP_TOKEN;
+  else process.env.HYPERTASK_MCP_TOKEN = token;
+  // The step reads this from the workflow env; without it no comment is the
+  // reviewer's and every path here would skip.
+  process.env.REVIEW_COMMENT_AUTHOR = REVIEWER.login;
+  try {
+    await new AsyncFunction("github", "context", "core", await loadScript())(
+      github,
+      { eventName, payload: { issue, comment, inputs }, repo: { owner: "hypertask-ai", repo: "hypertask" } },
+      { info(message) { infos.push(message); }, setFailed(message) { failures.push(message); } },
+    );
+  } finally {
+    globalThis.fetch = savedFetch;
+    if (savedToken === undefined) delete process.env.HYPERTASK_MCP_TOKEN;
+    else process.env.HYPERTASK_MCP_TOKEN = savedToken;
+    if (savedAuthor === undefined) delete process.env.REVIEW_COMMENT_AUTHOR;
+    else process.env.REVIEW_COMMENT_AUTHOR = savedAuthor;
+  }
+
+  return { calls, failures, infos, posts: calls.filter(call => call.method === "POST") };
+}
+
+function productionPr(overrides = {}) {
+  return {
+    number: 43,
+    html_url: "https://github.com/hypertask-ai/hypertask/pull/43",
+    base: { ref: "production", repo: { full_name: "hypertask-ai/hypertask" } },
+    head: { sha: SHA, ref: "runner3/htpr-1234-something", repo: { full_name: "hypertask-ai/hypertask" } },
+    ...overrides,
+  };
+}
+
+test("the review verdict lands in the ticket thread with the reviewed commit", async () => {
+  const { posts, failures } = await runMirror();
+
+  assert.deepEqual(failures, []);
+  assert.equal(posts.length, 1);
+  assert.match(posts[0].url, /\/api\/mcp\/comments$/);
+  assert.equal(posts[0].init.headers["Idempotency-Key"], `ai-review-mirror-43-${SHA}`);
+  const body = JSON.parse(posts[0].init.body);
+  assert.equal(body.ticket_number, "HTPR-1234");
+  // Without a kind, an agent comment is filed in the hidden agent log.
+  assert.equal(body.kind, "qa");
+  assert.match(body.text, /APPROVE \(minors only: 1\)/);
+  assert.match(body.text, /MINOR/);
+  assert.ok(body.text.includes(`reviewed-commit: ${SHA}`));
+  // Signature and provider comment tags are not findings.
+  assert.doesNotMatch(body.text, /ai-review-signature/);
+});
+
+test("only the reviewer's comment wakes the mirror and only production PRs are mirrored", async () => {
+  const other = await runMirror({ comment: { user: { login: "someone" }, body: REVIEW } });
+  assert.deepEqual(other.calls, []);
+  assert.match(other.infos.join("\n"), /not hypertask-ai-review/);
+
+  const notProduction = await runMirror({
+    pr: productionPr({ base: { ref: "main", repo: { full_name: "hypertask-ai/hypertask" } } }),
+  });
+  assert.deepEqual(notProduction.posts, []);
+  assert.deepEqual(notProduction.failures, []);
+});
+
+test("a comment on an issue that is not a pull request costs no API call", async () => {
+  const { calls, failures } = await runMirror({ issue: { number: 43 } });
+  assert.deepEqual(calls, []);
+  assert.deepEqual(failures, []);
+});
+
+test("a fork or foreign PR is never mirrored", async () => {
+  const forked = await runMirror({
+    pr: productionPr({ head: { sha: SHA, ref: "htpr-1234-fix", repo: { full_name: "fork/hypertask" } } }),
+  });
+  assert.deepEqual(forked.posts, []);
+  assert.deepEqual(forked.failures, []);
+});
+
+test("a branch that names no ticket is not mirrored", async () => {
+  const { posts, failures } = await runMirror({
+    pr: productionPr({ head: { sha: SHA, ref: "chore/cleanup", repo: { full_name: "hypertask-ai/hypertask" } } }),
+  });
+  assert.deepEqual(posts, []);
+  assert.deepEqual(failures, []);
+});
+
+test("the same reviewed commit is not posted to the ticket twice", async () => {
+  const { posts, infos } = await runMirror({
+    ticketComments: [{ text: `<p><code>reviewed-commit: ${SHA}</code></p>` }],
+  });
+  assert.deepEqual(posts, []);
+  assert.match(infos.join("\n"), /already carries the verdict/);
+});
+
+test("YPER4 branches keep their own ticket and a missing marker is not guessed", async () => {
+  const yper = await runMirror({
+    pr: productionPr({ head: { sha: SHA, ref: "runner3/yper4-675-ticket-mirror", repo: { full_name: "hypertask-ai/hypertask" } } }),
+  });
+  assert.equal(JSON.parse(yper.posts[0].init.body).ticket_number, "YPER4-675");
+
+  const unmarked = await runMirror({
+    pr: productionPr({ comments: [{ user: REVIEWER, body: "APPROVE — no marker" }] }),
+  });
+  assert.deepEqual(unmarked.posts, []);
+  assert.deepEqual(unmarked.failures, []);
+});
+
+test("a verdict for an older head never reaches the ticket as the current one", async () => {
+  const older = "d".repeat(40);
+  const { posts, infos } = await runMirror({
+    pr: productionPr({
+      comments: [{
+        user: REVIEWER,
+        body: `APPROVE — reviewed by **gpt-6.1-sol**\n\n- ok\n<!-- reviewed-commit: ${older} -->`,
+      }],
+    }),
+  });
+  assert.deepEqual(posts, []);
+  assert.match(infos.join("\n"), /no verdict for head/);
+});
+
+test("a PR with no verdict comment yet posts nothing", async () => {
+  const { posts, failures } = await runMirror({
+    pr: productionPr({ comments: [{ user: REVIEWER, body: "AI review infrastructure failure" }] }),
+  });
+  assert.deepEqual(posts, []);
+  assert.deepEqual(failures, []);
+});
+
+test("findings are escaped so the ticket renders them as text", async () => {
+  const { posts } = await runMirror({
+    pr: productionPr({
+      comments: [{
+        user: REVIEWER,
+        body: `CONCERNS — <script>x</script>\n\n- a & b <b>\n<!-- reviewed-commit: ${SHA} -->`,
+      }],
+    }),
+  });
+  const text = JSON.parse(posts[0].init.body).text;
+  assert.equal(text.includes("<script>"), false, "raw markup must never survive");
+  assert.match(text, /&lt;script&gt;x&lt;\/script&gt;/);
+  assert.match(text, /a &amp; b &lt;b&gt;/);
+});
+
+test("a rejected post fails the run instead of hiding behind continue-on-error (YPER4-675)", async () => {
+  const { failures } = await runMirror({
+    postResponse: { status: 401, body: { success: false, error: "Unauthorized" } },
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /HTTP 401/);
+  assert.match(failures[0], /Unauthorized/);
+});
+
+test("a read the app does not confirm fails the run", async () => {
+  const { failures } = await runMirror({ postResponse: { status: 500, body: { success: false } } });
+  const readFailure = await runMirror({ ticketComments: null });
+  assert.equal(failures.length, 1);
+  // null comments is not an array, so the run must stop before posting.
+  assert.match(readFailure.failures[0], /was not confirmed by the app/);
+  assert.deepEqual(readFailure.posts, []);
+});
+
+test("a missing board token fails the run, never a silent skip", async () => {
+  const { failures, calls } = await runMirror({ token: null });
+  assert.deepEqual(calls, []);
+  assert.match(failures[0], /HYPERTASK_MCP_TOKEN is missing/);
+});
+
+test("the workflow neither checks out nor executes candidate code", async () => {
+  const workflow = yaml.load(await readFile(WORKFLOW, "utf8"));
+  assert.deepEqual(workflow.jobs.mirror.steps.map(step => step.uses), [
+    "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+  ]);
+  assert.deepEqual(workflow.permissions, { contents: "read", "pull-requests": "read" });
+  for (const step of workflow.jobs.mirror.steps) {
+    assert.equal(step.run, undefined, "no shell step may run candidate input");
+  }
+  assert.deepEqual(workflow.on.issue_comment.types, ["created", "edited"]);
+  assert.equal(workflow.on.workflow_dispatch.inputs.pr.required, true);
+  // An ordinary comment must not cancel the reviewer's delivery.
+  assert.equal(workflow.concurrency["cancel-in-progress"], false);
+  assert.match(workflow.concurrency.group, /github\.event\.comment\.user\.login/);
+  assert.ok(workflow.jobs.mirror.steps[0].env.REVIEW_COMMENT_AUTHOR);
+});
