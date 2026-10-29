@@ -361,11 +361,17 @@ export default function PostHogAnalytics({
       try {
         if (getCookieConsent() === "essential") return;
 
-        const [{ default: posthog }, { ErrorTrackingExtensions }] =
-          await Promise.all([
-            import("posthog-js/dist/module.slim"),
-            import("posthog-js/dist/extension-bundles"),
-          ]);
+        const [
+          { default: posthog },
+          {
+            AnalyticsExtensions,
+            ErrorTrackingExtensions,
+            SessionReplayExtensions,
+          },
+        ] = await Promise.all([
+          import("posthog-js/dist/module.slim"),
+          import("posthog-js/dist/extension-bundles"),
+        ]);
         if (cancelled) return;
         const identity = latestIdentityRef.current;
         posthog.init(key, {
@@ -377,7 +383,11 @@ export default function PostHogAnalytics({
           persistence_name: "posthog_hypertask",
           cross_subdomain_cookie: true,
           autocapture: true,
-          __extensionClasses: ErrorTrackingExtensions,
+          __extensionClasses: {
+            ...ErrorTrackingExtensions,
+            ...AnalyticsExtensions,
+            ...SessionReplayExtensions,
+          },
           capture_exceptions: true,
           disable_session_recording: !recordsSessions(identity, persistenceRef.current),
           capture_performance: false,
