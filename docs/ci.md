@@ -187,9 +187,10 @@ copy was rejected ("Unauthorized") and the failure was hidden by
 
 - Wakes on `created` and `edited` pull request comments, and on a manual
   `workflow_dispatch` with a PR number for a missed round or a backfill.
-- Mirrors only a comment written by the reviewer account
-  (`hypertask-ai-review`) that starts with `APPROVE` or `CONCERNS`, on a
-  same-repository PR to `production`. Everything else costs no API call.
+- Mirrors only a comment written by the reviewer App account that starts with
+  `APPROVE` or `CONCERNS`, on a same-repository PR to `production`. That account
+  is `hypertask-ai-review[bot]` on a comment event and `hypertask-ai-review` in
+  the REST payload, so both spellings match and nothing else does.
 - Copies only the verdict whose `reviewed-commit` marker equals the current PR
   head, so a review of an older commit never reaches the ticket as the verdict
   for what will merge.

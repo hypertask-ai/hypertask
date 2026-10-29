@@ -135,6 +135,26 @@ test("a branch that names no ticket is not mirrored", async () => {
   assert.deepEqual(failures, []);
 });
 
+test("the [bot] spelling of the same reviewer account is mirrored too", async () => {
+  // GitHub names one App account hypertask-ai-review[bot] on a comment event and
+  // hypertask-ai-review in the REST payload. The live run mirrored nothing
+  // because only one spelling matched.
+  const event = await runMirror({ comment: { user: { login: "hypertask-ai-review[bot]" }, body: REVIEW } });
+  assert.equal(event.posts.length, 1);
+
+  const rest = await runMirror({
+    pr: productionPr({ comments: [{ user: { login: "hypertask-ai-review[bot]" }, body: REVIEW }] }),
+  });
+  assert.equal(rest.posts.length, 1);
+});
+
+test("a lookalike account name is still refused", async () => {
+  const impostor = await runMirror({
+    pr: productionPr({ comments: [{ user: { login: "hypertask-ai-review-fake" }, body: REVIEW }] }),
+  });
+  assert.deepEqual(impostor.posts, []);
+});
+
 test("the same reviewed commit is not posted to the ticket twice", async () => {
   const { posts, infos } = await runMirror({
     ticketComments: [{ text: `<p><code>reviewed-commit: ${SHA}</code></p>` }],

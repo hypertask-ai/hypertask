@@ -37,12 +37,19 @@ jobs:
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
-          # Machine account that writes the review comment. Only its comment is
-          # mirrored, so a comment by anyone else never reaches a ticket.
+          # Machine account that writes the review comment, with or without the
+          # [bot] suffix the same account carries in each API. Only its comment
+          # is mirrored, so a comment by anyone else never reaches a ticket.
           REVIEW_COMMENT_AUTHOR: hypertask-ai-review
         with:
           script: |
             const REVIEW_AUTHOR = process.env.REVIEW_COMMENT_AUTHOR;
+            // The event payload and the REST API name the same GitHub App
+            // account differently: hypertask-ai-review[bot] arrives on a comment
+            // event, hypertask-ai-review comes back from the API. Comparing the
+            // raw logins skipped every real comment and mirrored nothing.
+            const isReviewer = login =>
+              String(login ?? '').replace(/\[bot\]$/, '') === REVIEW_AUTHOR;
             const APP = 'https://app.hypertask.ai';
             const repository = `${context.repo.owner}/${context.repo.repo}`;
             const token = process.env.HYPERTASK_MCP_TOKEN;
@@ -61,7 +68,7 @@ jobs:
                 return;
               }
               const author = context.payload.comment?.user?.login;
-              if (author !== REVIEW_AUTHOR) {
+              if (!isReviewer(author)) {
                 core.info(`Comment author ${author} is not ${REVIEW_AUTHOR}; nothing to mirror.`);
                 return;
               }
@@ -105,7 +112,7 @@ jobs:
               issue_number: prNumber,
               per_page: 100,
             })).filter(comment =>
-              comment.user?.login === REVIEW_AUTHOR &&
+              isReviewer(comment.user?.login) &&
               /^(APPROVE|CONCERNS)\b/.test(comment.body ?? ''));
             const headSha = pr.head?.sha;
             const review = verdicts.findLast(comment =>
