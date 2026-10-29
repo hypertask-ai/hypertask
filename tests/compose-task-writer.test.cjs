@@ -147,7 +147,7 @@ for (const url of ['https://screencast2.com/hCUBu.png', 'https://cdn.example.com
     await withWriter({ html: '<h1 id="ai-generated-task-title">Screenshot</h1><p>[[HT_MEDIA_1]]</p>' }, async ({ createComposedTask, project, writes, creates }) => {
       const manual = manualImagePaste(url);
       try {
-        const result = await createComposedTask({ text: url, files: [], project, userId: 985, unfurlImageUrls: true });
+        const result = await createComposedTask({ text: url, files: [], project, userId: 985 });
         assert.equal(result.writerFailed, false);
         assert.equal(writes[0].body.taskDescription, '<p>[[HT_MEDIA_1]]</p>');
         assert.equal(manual.normalize(creates[0].description), manual.html);
@@ -162,7 +162,7 @@ test('HTPR-7051 a media token the writer puts in the title is removed, and the i
   const url = 'https://screencast2.com/hCUBu.png';
   for (const [writerTitle, savedTitle] of [['Review image [[HT_MEDIA_1]]', 'Review image'], ['[[HT_MEDIA_1]]', url]]) {
     await withWriter({ html: `<h1 id="ai-generated-task-title">${writerTitle}</h1><p>[[HT_MEDIA_1]]</p>` }, async ({ createComposedTask, project, creates }) => {
-      const result = await createComposedTask({ text: url, files: [], project, userId: 985, unfurlImageUrls: true });
+      const result = await createComposedTask({ text: url, files: [], project, userId: 985 });
       assert.equal(result.writerFailed, false);
       assert.equal(creates[0].title, savedTitle);
       assert.doesNotMatch(creates[0].description, /HT_MEDIA/);
@@ -175,7 +175,7 @@ test('compose fallback retains the unfurled image URL and uploaded images use di
   for (const writerThrows of [false, true]) {
     await withWriter({ writerThrows }, async ({ createComposedTask, project, creates, writes }) => {
       const url = 'https://screencast2.com/hCUBu.png';
-      const result = await createComposedTask({ text: url, files: [{ name: 'attached.png', type: 'image/png' }], project, userId: 985, unfurlImageUrls: true });
+      const result = await createComposedTask({ text: url, files: [{ name: 'attached.png', type: 'image/png' }], project, userId: 985 });
       assert.equal(result.writerFailed, writerThrows);
       const body = new JSDOM(creates[0].description);
       try {
@@ -191,23 +191,14 @@ test('compose keeps non-image URLs as plain links and does not unfurl image URLs
   for (const url of ['https://example.com/docs', 'https://example.com/file.heic', 'https://example.com/page?image=photo.png']) {
     const html = `<p><a href="${url}">${url}</a></p>`;
     await withWriter({ html: `<h1 id="ai-generated-task-title">Reference</h1>${html}` }, async ({ createComposedTask, project, creates, writes }) => {
-      await createComposedTask({ text: url, files: [], project, userId: 985, unfurlImageUrls: true });
+      await createComposedTask({ text: url, files: [], project, userId: 985 });
       assert.equal(creates[0].description, html);
       assert.equal(writes[0].body.taskDescription, `<p>${url}</p>`);
     });
   }
   await withWriter({ writerThrows: true }, async ({ createComposedTask, project, creates }) => {
-    await createComposedTask({ text: 'Use https://example.com/photo.png as context', files: [], project, userId: 985, unfurlImageUrls: true });
+    await createComposedTask({ text: 'Use https://example.com/photo.png as context', files: [], project, userId: 985 });
     assert.equal(creates[0].description, '<p>Use https://example.com/photo.png as context</p>');
-  });
-});
-
-test('with the HTPR-7051 bugfix flag off, compose keeps the pasted image URL as plain text', async () => {
-  const url = 'https://screencast2.com/hCUBu.png';
-  await withWriter({ html: `<h1 id="ai-generated-task-title">Screenshot</h1><p>${url}</p>` }, async ({ createComposedTask, project, writes, creates }) => {
-    await createComposedTask({ text: url, files: [], project, userId: 985 });
-    assert.equal(writes[0].body.taskDescription, `<p>${url}</p>`);
-    assert.doesNotMatch(creates[0].description, /<img /);
   });
 });
 
