@@ -439,7 +439,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           continue;
         }
         if (state.created.length >= cap) { held++; continue; }
-        const column = group.board === 15 ? 'Bugs' : (section ??= intake(env));
+        const column = group.board === 15 ? '4389' : (section ??= intake(env));
         const text = description(group, fp);
         let temp;
         const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);

@@ -3,10 +3,6 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { NextRequest } = require('next/server')
 
-// HTPR-5646: in-app feedback must land on the product board (15), section
-// "Bugs", labeled user-feedback, priority Urgent - not the retired feedback
-// board (2101), whose drain agent no longer exists.
-
 const root = path.resolve(__dirname, '..')
 
 function stubModule(relativePath, exports) {
@@ -28,10 +24,12 @@ stubModule('src/lib/prisma.ts', {
     project: {
       findFirst: async (args) => {
         calls.sectionWhere = args.select.section.where
+        assert.equal(calls.sectionWhere.id, 4389)
+        assert.equal(calls.sectionWhere.section_title, undefined)
         return {
           uniqueIdentifier: 'HTPR',
           ownerId: 6,
-          section: [{ id: 111, section_title: 'Bugs' }],
+          section: [{ id: 4389, section_title: 'Backlog' }],
         }
       },
     },
@@ -84,7 +82,7 @@ function feedbackRequest(body) {
   })
 }
 
-test('feedback submission routes to board 15, section Bugs, labeled user-feedback, priority Urgent', async () => {
+test('feedback submission routes to board 15, renamed Backlog, labeled user-feedback, priority Urgent', async () => {
   const response = await POST(feedbackRequest({ text: 'Something is broken', kind: 'Bug' }))
   const body = await response.json()
 
@@ -94,14 +92,14 @@ test('feedback submission routes to board 15, section Bugs, labeled user-feedbac
   assert.deepEqual(calls.sectionWhere, {
     deleted: false,
     visibility: true,
-    section_title: 'Bugs',
+    id: 4389,
   })
   assert.deepEqual(calls.labelFindWhere, { projectId: 15, value: 'user-feedback' })
   assert.equal(calls.labelCreates.length, 0)
 
   assert.ok(calls.createTaskCoreArgs)
   assert.equal(calls.createTaskCoreArgs.projectId, 15)
-  assert.equal(calls.createTaskCoreArgs.sectionId, 111)
+  assert.equal(calls.createTaskCoreArgs.sectionId, 4389)
   assert.deepEqual(calls.createTaskCoreArgs.labelIds, ['label-user-feedback'])
   assert.equal(calls.createTaskCoreArgs.priorityIndex, 1)
 })

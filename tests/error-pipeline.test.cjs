@@ -76,16 +76,28 @@ test("auto-error routing selects Bugs independently of board column order", () =
     { id: 30, section_title: "Features" },
   ];
 
-  assert.deepEqual(selectErrorBoardSection(sections), sections[1]);
-  assert.deepEqual(selectErrorBoardSection(sections, "Features"), sections[2]);
+  assert.deepEqual(selectErrorBoardSection(15, sections), sections[1]);
+  assert.deepEqual(selectErrorBoardSection(15, sections, "Features"), sections[2]);
   assert.throws(
-    () => selectErrorBoardSection(sections, "Missing"),
+    () => selectErrorBoardSection(15, sections, "Missing"),
     /exactly one visible section named "Missing"; found 0/,
   );
   assert.throws(
-    () => selectErrorBoardSection([...sections, sections[1]]),
+    () => selectErrorBoardSection(15, [...sections, sections[1]]),
     /exactly one visible section named "Bugs"; found 2/,
   );
+});
+
+test("auto-error routing prefers Backlog while preserving legacy and configured destinations", () => {
+  const bugs = { id: 4389, section_title: "Bugs" };
+  const backlog = { id: 4389, section_title: "Backlog" };
+  const other = { id: 5000, section_title: "Custom intake" };
+  assert.deepEqual(selectErrorBoardSection(15, [other, bugs]), bugs);
+  assert.deepEqual(selectErrorBoardSection(15, [other, backlog]), backlog);
+  assert.deepEqual(selectErrorBoardSection(15, [bugs, backlog]), backlog);
+  assert.deepEqual(selectErrorBoardSection(15, [other, backlog], "Custom intake"), other);
+  assert.throws(() => selectErrorBoardSection(15, [backlog, backlog]), /found 2/);
+  assert.deepEqual(selectErrorBoardSection(99, [bugs, backlog]), bugs);
 });
 
 test("auto-error routing is revalidated for every ticket", () => {

@@ -314,7 +314,7 @@ check('tickets', 'creation options, redacted escaped HTML, atomic private state 
   h.events([event({ message: `Checkout failed ${unsafe}`, stack: Array.from({ length: 50 }, (_, i) => `${i}: ${unsafe}`).join('\n') })]);
   await h.run();
   const call = creates(h)[0];
-  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', 'Bugs', '--labels', 'Error Log', '--priority', 'high', '--title']);
+  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log', '--priority', 'high', '--title']);
   assert.match(call.description, /^<p><strong>/);
   assert.match(call.description, /error-fingerprint:[a-f0-9]{16}<\/p>$/);
   assert.ok(!call.description.includes('<script>'));

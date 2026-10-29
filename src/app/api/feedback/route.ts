@@ -9,7 +9,7 @@ import { HYPERTASKS_STORAGE_PUBLIC_BASE_URL } from "@/lib/storage/hypertasksS3";
 import { NextRequest, NextResponse } from "next/server";
 
 const FEEDBACK_PROJECT_ID = 15;
-const FEEDBACK_SECTION_TITLE = "Bugs";
+const FEEDBACK_SECTION_ID = 4389;
 const FEEDBACK_LABEL_VALUE = "user-feedback";
 const FEEDBACK_PRIORITY_INDEX = 1;
 const MAX_FEEDBACK_LENGTH = 5000;
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
             where: {
               deleted: false,
               visibility: true,
-              section_title: FEEDBACK_SECTION_TITLE,
+              id: FEEDBACK_SECTION_ID,
             },
             take: 1,
             select: { id: true, section_title: true },

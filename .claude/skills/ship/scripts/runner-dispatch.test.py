@@ -74,6 +74,13 @@ class DispatchTests(unittest.TestCase):
         self.metrics_reader = m.session_metrics
         self.metrics = patch.object(m, "session_metrics", return_value=None).start()
 
+    def test_backlog_rename_keeps_free_product_work_and_excludes_claimed_work(self):
+        self.boards[15][0]["section"] = "Backlog"
+        self.boards[15][1]["section"] = "Backlog"
+        self.comments["HTPR-2"] = [claim("RUNNER 2")]
+        self.assertEqual(m.free_tickets(self.boards, self.comments, self.claim_dir),
+                         ["HTPR-1", "HTPR-3", "YPER4-1"])
+
     def dispatch(self, rows=None, load=1, go=False):
         return m.dispatch(self.rows if rows is None else rows, self.boards, self.comments,
                           load, self.now, go=go, claim_dir=self.claim_dir, loop=self.loop, state=self.state)

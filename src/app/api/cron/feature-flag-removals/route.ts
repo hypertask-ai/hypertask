@@ -18,7 +18,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const REMOVAL_PROJECT_ID = FEATURE_FLAG_TICKET_PROJECT_ID;
-const REMOVAL_SECTION_TITLE = "Bugs";
+const REMOVAL_SECTION_ID = 4389;
 const REMOVAL_LABEL_VALUE = "Bug";
 const REMOVAL_SWEEP_LOCK_NAMESPACE = 1_179_207_763;
 const REMOVAL_SWEEP_LOCK_KEY = 1;
@@ -102,7 +102,7 @@ async function sweep() {
     select: {
       uniqueIdentifier: true,
       section: {
-        where: { deleted: false, visibility: true, section_title: REMOVAL_SECTION_TITLE },
+        where: { deleted: false, visibility: true, id: REMOVAL_SECTION_ID },
         orderBy: { id: "asc" },
         take: 1,
         select: { id: true, section_title: true },

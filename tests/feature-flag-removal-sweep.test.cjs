@@ -46,7 +46,10 @@ const prisma = {
       return extraCandidate ? [...candidates, extraCandidate] : candidates;
     },
   },
-  project: { findFirst: async () => ({ uniqueIdentifier: "HTPR", section: [{ id: 1, section_title: "Bugs" }] }) },
+  project: { findFirst: async (query) => {
+    assert.deepEqual(query.select.section.where, { deleted: false, visibility: true, id: 4389 });
+    return { uniqueIdentifier: "HTPR", section: [{ id: 4389, section_title: "Backlog" }] };
+  } },
   label: { findFirst: async () => null },
   task: { findFirst: async () => null },
   $transaction: async (callback) => callback(prisma),
@@ -99,6 +102,8 @@ test("the removal sweep skips the legacy shallow-switch flag without blocking ot
   assert.deepEqual(candidates.map(({ key }) => key), [registeredKey]);
   assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
   assert.equal(filed[0].userId, 6);
+  assert.equal(filed[0].sectionId, 4389);
+  assert.equal(filed[0].sectionTitle, "Backlog");
   assert.equal(filed[0].agentId, "85b985ac-afe8-41a3-a1ac-d9549a9310c7");
   assert.equal(filed[0].assignees, undefined);
   assert.equal(filed[0].assigneeId, undefined);

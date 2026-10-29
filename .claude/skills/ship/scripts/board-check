@@ -147,10 +147,10 @@ action() {
   if jq -e '(.section // "" | test("^bugs?$"; "i")) or
     any(.labels[]?; (.name // .value // "") | test("\\bbug(s|fix)?\\b"; "i"))' "$task" >/dev/null \
     || [[ $title == *'[BUGFIX]'* ]]; then
-    echo 'move back to Bugs'
+    echo 'move back to Backlog'
   elif jq -e 'any(.labels[]?; (.name // .value // "") | test("\\bfeature\\b"; "i"))' "$task" >/dev/null \
     || [[ $title == *'[FEATURE]'* ]]; then
-    echo 'move back to Todo'
+    echo 'move back to Backlog'
   else echo 'ask Valentin'; fi
 }
 report() {

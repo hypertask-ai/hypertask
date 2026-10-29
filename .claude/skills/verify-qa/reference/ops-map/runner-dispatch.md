@@ -135,3 +135,19 @@ branch each refuse until removed. Missing ownership must refuse, not pass.
 Save production source/deploy metadata, CI fixture output, read-only
 column-check output and cleanup results outside the worktree. A single
 snapshot does not prove the ticket's separate 24-hour observation.
+
+## Product intake rename
+
+Board 15 intake keeps section ID 4389 through the Bugs-to-Backlog rename.
+Feedback POST, automatic AI feedback, flag-removal GET, the error collector
+and MCP contract watcher must keep filing there. The fallback error reporter
+prefers Backlog only on board 15; explicitly configured titles and other
+boards keep their current routing. The dispatcher reads Backlog alongside
+legacy intake columns while tickets move.
+
+After deploy, read board 15 sections and confirm the same section ID. File
+clearly marked feedback and error fixtures through their real entry points,
+read their section and labels through the CLI, then remove only those fixtures.
+Run the installed dispatcher without `--go` and retain its read-only plan.
+Never inject an outage into production or run the real flag-removal cron for
+QA. Its renamed-column and lease behavior is proven in CI fixtures instead.
