@@ -59,7 +59,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     });
     return NextResponse.json({ skill: updated });
   } catch (error) {
-    if (error instanceof SkillMarkdownError) return skillErrorResponse(error);
+    if (error instanceof SkillMarkdownError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,
