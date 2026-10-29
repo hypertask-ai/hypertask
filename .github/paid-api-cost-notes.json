@@ -1,1 +1,12 @@
-{}
+{
+  "src/lib/ai/settings/client.ts:bdcc43a13da053bda1fd6d5e204100c0a3b4f56f76083078ad24cb821936111f": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7622 reads one setting-change card from Hypertask's own /api/ai/settings route; no third-party paid API is called.",
+    "source": "https://app.hypertask.ai/detail/project-15/7622"
+  },
+  "src/lib/ai/settings/client.ts:850ee8f73ae0d52168361a36282c8a0b72a8b59ffeb805fc5fb8c95f25ff6d7a": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7622 posts Apply, Cancel or Undo for one setting change to Hypertask's own /api/ai/settings route; no third-party paid API is called.",
+    "source": "https://app.hypertask.ai/detail/project-15/7622"
+  }
+}
