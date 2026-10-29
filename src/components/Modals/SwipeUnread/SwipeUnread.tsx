@@ -1,5 +1,8 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8145_PHONE_ZOOM_FLAG } from "@/lib/flags/definitions/htpr-8145-phone-zoom";
+
 import {
   useCallback,
   useContext,
@@ -41,6 +44,7 @@ const isEditorElement = (element: EventTarget | null) =>
   Boolean(element.closest('input, textarea, [contenteditable="true"]'));
 
 const SwipeUnread = ({ userId, onClose }: SwipeUnreadProps) => {
+  const phoneZoom = useFlag(HTPR_8145_PHONE_ZOOM_FLAG);
   const isMobile = useContext(MobileViewContext);
   const queryClient = useQueryClient();
   const { bulkArchiveHandler } = useGlobalFocusHandler();
@@ -417,7 +421,7 @@ const SwipeUnread = ({ userId, onClose }: SwipeUnreadProps) => {
               !isMobile && "md:mx-8"
             )}
             style={{
-              touchAction: "pan-y",
+              touchAction: phoneZoom ? "pan-y pinch-zoom" : "pan-y",
               transform: `translateX(${dragX}px) rotate(${rotation}deg)`,
               opacity,
               transition: transitioning
