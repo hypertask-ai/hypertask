@@ -135,6 +135,7 @@ async function withReminder(options, check) {
     Sidebar = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
       ...mocks,
       "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
+      "@/lib/flags/definitions/htpr-7737-agent-hover-chat": { HTPR_7737_AGENT_HOVER_CHAT_FLAG: "htpr-7737-agent-hover-chat" },
       "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: skillFlag },
       "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "past-chats" },
       "@/app/agents/chat/AgentChatClient": { default: () => React.createElement("div", { "data-external-chat": true }) },
