@@ -1,5 +1,5 @@
-version: 10
-last_updated: 2026-10-27
+version: 11
+last_updated: 2026-10-28
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -32,23 +32,36 @@ topology:
   # ubuntu-latest; their implementation lives in .github/workflows/ and is not
   # duplicated here.
 
+runner_policy:
+  ticket: https://app.hypertask.ai/detail/project-4060/844
+  script: .github/scripts/ci-runner-policy.cjs
+  enforcement: trusted_production_code_against_candidate_git_objects
+  required_context: pr-title
+  visibility_source: live_github_repository_api
+  public_runner: ubuntu-latest
+  private_hosted_approval: null
+
 pr_job_budget:
   parallel_job_limit: 20
   normal_synchronize_before: 17
-  normal_synchronize_after: 16
+  normal_synchronize_after: 17
   opened_before: 18
-  opened_after: 16
+  opened_after: 17
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
     workflow: .github/workflows/pr-guards.yml
-    jobs: 1
-    published_statuses: [secret-scan, next-public-secrets]
-    read_only_pr_tokens: trusted_workflow_run_status_only_pass
+    jobs: 2
+    native_checks: [secret-scan, next-public-secrets]
+    github_status_api_calls: 0
+    read_only_pr_tokens: native_job_checks
   trusted_pull_request_guards:
     workflow: .github/workflows/pr-guards-trusted.yml
     jobs: 1
-    published_statuses: [outside-pr-guard, pr-size, pr-title]
+    published_statuses: [pr-title]
+    metadata_reads: 1
+    publication_freshness_reads: 2
+    status_writes: 2
     checkout: production_only
     candidate_code_execution: false
   serialized_reconciliation_guards:
@@ -56,13 +69,14 @@ pr_job_budget:
       jobs: 2
       published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
       concurrency_group: feature-flag-gate-production
+      queue: max
       cancel_in_progress: false
     - workflow: .github/workflows/ux-signoff-gate.yml
       jobs: 1
       published_statuses: [ux-signoff-gate, ux-signoff]
       concurrency_group: ux-signoff-gate
       cancel_in_progress: false
-  context_publication: commit_status_per_guard_and_fail_closed_aggregate_job
+  context_publication: native_scanner_checks_and_combined_trusted_commit_status
   isolated_guards:
     node_version: vercel_secret_runner_separate_from_candidate_scripts
     parity_contract: candidate_data_checkout_keeps_read_only_token_and_no_mcp_secret
@@ -139,17 +153,20 @@ ship_scripts_tests:
   runs_on: ubuntu-latest
   required: false
   pull_request_base: production
-  paths: [".claude/skills/ship/scripts/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml"]
+  paths: [".claude/skills/ship/scripts/**", ".claude/skills/vcc/bin/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs"]
   node_major: 24
   commands:
+    - node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs
+    - bash .claude/skills/vcc/bin/vcc.test.sh
     - bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
     - python3 .claude/skills/ship/scripts/premerge-evidence.test.py
     - python3 .claude/skills/ship/scripts/ci-why.test.py
     - bash .claude/skills/ship/scripts/board-check.test.sh
     - bash .claude/skills/ship/scripts/user-unit-check.test.sh
     - python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
+    - python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py
     - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
-    - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
+    - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
     - bash .claude/skills/ship/scripts/error-collector.test.sh
     - node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
     - bash .claude/skills/ship/scripts/ship-claim.test.sh
@@ -163,7 +180,7 @@ feature_map_weekly:
   cron_utc: "37 3 * * 1"
   triggers: [schedule, workflow_dispatch, pull_request]
   pull_request_base: production
-  paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-qa/reference/feature-map/**", ".github/workflows/feature-map-weekly.yml"]
+  paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-qa/reference/feature-map/**", ".claude/skills/verify-qa/reference/ops-map/**", ".github/workflows/feature-map-weekly.yml"]
   node_major: 24
   permissions: [contents_read]
   commands:
@@ -185,6 +202,28 @@ premerge_verify_qa:
   tagged_journeys: e2e/smoke/journeys.spec.ts
   tagged_journeys_opt_in: HT_QA_JOURNEYS=1
   app_smoke_build_reuse: deferred
+
+on_demand_verify_qa:
+  ticket: https://app.hypertask.ai/detail/project-4060/697
+  workflow: .github/workflows/visual-regression.yml
+  job: verify-qa
+  trigger: workflow_dispatch
+  input_ref: head
+  input_journey: journey
+  journeys: [inbox-cycle, inbox-cycle-broken]
+  helper: scripts/verify-qa
+  runner: scripts/verify-qa-run.mjs
+  runs_on: ubuntu-latest
+  required: false
+  report_only: false
+  builds_per_run: 1
+  concurrency_group: verify-qa
+  cancel_in_progress: false
+  timeout_minutes: 25
+  artifact: verify-qa-<run-id>-<attempt>
+  retention_days: 7
+  production_data: false
+  repository_secrets: false
 
 ai_model_watch:
   workflow: .github/workflows/ai-model-watch.yml
@@ -241,7 +280,9 @@ feature_flag_gate:
   parser_path_env: FEATURE_FLAG_TYPESCRIPT_PATH
   missing_parser_exit_code: 2
   required_for_ui_changes: true
-  api_only_changes: outside_ui_gate_scope
+  server_change_paths: [src/lib/mcp, src/lib/mcp-server, src/lib/api, src/app/api, src/pages/api, src/utils/controllers]
+  server_gate: changed_ticket_specific_isFeatureEnabled_controlling_runtime_behavior
+  server_owner_review_routing: feature-gated-ui
   owner_merge_for_flagged_ui: true
   owner_merge_for_exempt_ui: true
   exemptions: [BUGFIX, INFRA, AI_CHAT, verified_auto_revert, REFACTOR]
@@ -256,13 +297,16 @@ feature_flag_gate:
   default_mode_for_new_flags: EVERYONE
   new_flag_default_mode_exceptions: [bugfix, internal, releaseRisk.highRisk]
   everyone_default_forbidden_for: [internal, releaseRisk.highRisk]
+  new_money_flag_default_mode: OWNER_AND_QA
+  existing_money_flag_modes: unchanged
   registry_validation_before_ui_title_and_label_exemptions: true
   default_mode_for_bugfix_flags: EVERYONE
   registry_kind: optional_feature_bugfix_improvement_default_feature
   bugfix_flag_exemptions: [saved_data, security, crashes]
   # BUGFIX remains only a mechanical exemption; review enforces bugfix flags.
   # Bugfix flags share ticket naming. /api/cron/feature-flag-removals files cleanup after 7 days on Everyone; money, access and data-deletion stay at 14 days.
-  open_pull_request_reconciliation: production_push_and_all_pull_request_events
+  open_pull_request_reconciliation: scheduled_every_15_minutes
+  pull_request_event_evaluation: changed_pr_only
 
 policies:
   previews:
@@ -272,6 +316,7 @@ policies:
     repository_creation_setting: enabled
   concurrency:
     cancel_superseded_pull_request_runs: true
+    trusted_guard_event_isolation: github.run_id
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
@@ -312,6 +357,19 @@ policies:
     producer_hold_requires_independent_release_session: true
   deploys:
     merge_to_production_deploys_via_vercel: true
+    ignored_build_step:
+      ticket: https://app.hypertask.ai/detail/project-4060/871
+      command: node scripts/vercel-ignore-build.cjs
+      baseline: VERCEL_GIT_PREVIOUS_SHA
+      candidate: VERCEL_GIT_COMMIT_SHA
+      skip_exit_code: 0
+      build_exit_code: 1
+      skip_paths: ["docs/**", ".claude/**", ".agents/skills/**", "skills/**", ".github/**", "tests/**", "e2e/**", "root Markdown"]
+      unknown_or_empty_comparison: build
+      rename_detection: disabled
+      health_comparison: same_script_between_live_and_tip
+      health_empty_tree_comparison: skip
+      scheduled_health_checks: unchanged
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
     automatic_rollback:
@@ -333,7 +391,7 @@ policies:
       recovery:
         owner: trusted_claude_session
         prerequisites: "Investigate the incident, repair any failed rollback, verify the live production SHA and passing health/core-action/browser checks that can run. Do not clear just because a rollback was requested. Session merges must respect MERGE_FREEZE too."
-        clear_command: "gh variable delete MERGE_FREEZE --repo hypertask-ai/hypertask"
+        clear_command: "gh variable delete MERGE_FREEZE --repo hypertask-ai/hypertask && ~/.local/lib/hypertask/runner-pickup/runner-pickup record-lift"
         human_github_action_required: false
         note: "The next automatic merge sweep re-evaluates health. Green monitoring alone never clears the freeze; if the restored workflow is disabled or red, repair it before resuming merges."
   production_ruleset:
@@ -355,7 +413,7 @@ ci_tests:
     paths: ["docs/**", ".claude/**", "scripts/self_hosted_agent/**", ".github/**", "*.md"]
     always_run_paths: [".github/workflows/ci-tests.yml", ".github/scripts/**"]
     markdown_matches_at_any_depth: false
-    diff: exact_pr_base_sha_to_head_sha_no_renames_nul_delimited
+    diff: merge_base_to_head_sha_no_renames_nul_delimited
     detection_before: [setup-node, dependencies, caches, docker]
     unknown_or_empty_diff: run_everything
     detector_failure: run_everything
@@ -372,7 +430,7 @@ ci_tests:
     job: ci-checks
     needs: ci-prepare
     parallel_with: ci-test
-    checks: [agent-board-scope, typescript, lint]
+    checks: [agent-board-scope, typescript, lint, changed-style-tokens]
     required_summary: ci-tests
     summary_needs: [ci-prepare, ci-checks, ci-test]
     docs_only: explicit_skipped_producers
@@ -473,3 +531,23 @@ task_writer_quality_eval:
   timeout_minutes: 20
   artifacts: [scores, pending_fixture_ids]
   excluded_artifacts: [cookies, authentication_traffic, raw_drafts]
+
+changed_style_tokens:
+  ticket: https://app.hypertask.ai/detail/project-4060/714
+  job: ci-checks
+  command: npm run lint:styles -- <base-sha> <head-sha>
+  scope: pull_request_added_lines
+  parsers: [eslint, postcss-scss]
+  baseline: unchanged_lines_only
+  additional_jobs: false
+
+paid_api_cost_notes:
+  ticket: https://app.hypertask.ai/detail/project-4060/873
+  required_context: ci-tests
+  job: ci-checks
+  pull_requests_only: true
+  script: .github/scripts/paid-api-cost-notes.mjs
+  notes: .github/paid-api-cost-notes.json
+  detection: changed_src_typescript_ast_named_network_calls
+  semantic_review_required: [aliases, other_sdks, cost_estimates]
+  paid_requests_from_check: 0

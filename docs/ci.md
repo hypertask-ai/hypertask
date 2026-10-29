@@ -4,22 +4,49 @@ _Last updated: 2026-10-27._
 
 **Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), uses a provider-neutral AI review gate, and deploys production directly from the `production` branch.** The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
 
+## Runner policy enforcement (YPER4-844)
+
+`PR Guards Trusted` folds runner enforcement into required `pr-title`. It installs
+only the locked workflow parser and executes production code against fetched PR
+Git objects, never candidate code or candidate policy. Unknown visibility,
+expressions, remote reusable workflows and nonstandard public runners fail closed.
+The first deployment bootstraps enforcement for subsequent PRs; it cannot protect
+itself retroactively or prevent an unmerged branch job from starting.
+
+Before runner or cost claims, run from the target repository checkout:
+`NODE_PATH=.github/scripts/node-version-guard/node_modules node .github/scripts/ci-runner-policy.cjs --repo owner/name`.
+It reads live GitHub visibility, trusted `docs/ci-policy.yml` and committed workflow
+files. `--ref <full SHA>` selects candidate Git data; `--policy <file>` selects the
+local policy. The requested repository must match checkout origin. Standard
+public hosted minutes are free; private hosted minutes can be charged, and
+self-hosted infrastructure still costs money. Larger hosted runners are not free.
+
+Private hosted workflows require `runner_policy.private_hosted_approval` pointing
+to an unedited GitHub issue comment on that repository from Valentin (immutable
+GitHub user ID 3296316). Its entire text must be
+`Approve GitHub-hosted runners for owner/name with workflow digest <digest>.`
+The refusal prints the digest. Approval stops matching when workflow content or
+paths change. No other administrator can approve. Public app runner policy has
+no approval override. Results log the workflow digest and approval identity/link;
+API errors refuse verification. This command reads credentials through `gh`
+without printing them and performs no GitHub writes.
+
 ## PR job budget (YPER4-663)
 
 The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jobs.
-Small guards share runners, not verdicts:
+Small guards share scanner work and trusted metadata:
 
 - `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
 - `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code.
-- Dependabot/fork scans use a trusted completion pass to publish statuses because their PR tokens are read-only. It reads GitHub step conclusions only; it never checks out candidate code. Ordinary same-repo PRs need no extra runner.
-- Each folded guard context is still published through commit statuses. Independent steps continue after a failure; the original context and aggregate job both fail. Trusted publishers skip cancellation, re-read the current head before each status, and also compare the evaluated title for `pr-title`.
+- Scanner checks are native job conclusions for all PRs, including Dependabot and forks. Their read-only tokens need no trusted status-publication pass.
+- The trusted guard publishes one existing required `pr-title` context for outside and title results. Size stays advisory. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
-- Feature-flag evaluation and all-open reconciliation stay in the original two-job `feature-flag-gate.yml`, globally serialized by `feature-flag-gate-production` with cancellation off. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group. Their original semantic statuses and flag fingerprints are unchanged.
+- `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. PR runs and fleet sweeps share the non-cancelling `feature-flag-gate-production` group, so an old sweep cannot overwrite a newer PR verdict. The shared group uses `queue: max`, preserving up to 100 pending runs instead of replacing the previous pending PR event. GitHub cancels new arrivals beyond that documented limit; scheduled sweeps recover missed events. See [GitHub concurrency syntax](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency). The single-PR path still lists open heads to reject shared commits, but never reads or posts unrelated verdicts. Policy changes and closed/shared-head recovery reach other PRs at the next scheduled sweep; GitHub scheduling can delay that sweep. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group. Their original semantic statuses and flag fingerprints are unchanged.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
-Static normal non-draft app PR budget: **16 jobs** per synchronize and opening event
-(YPER4-555 adds one parallel static-check job to the previous 15-job budget). Path-specific evals,
-visual checks, preview deployments and external review are extra. Docs-only PRs start 14 jobs; Dependabot/fork app PRs add one trusted scan-publication job (17 total). Snapshot actual
+Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
+(YPER4-721 adds one tiny native scanner summary job). Path-specific evals,
+visual checks, preview deployments and external review are extra. Docs-only PRs start 15 jobs; Dependabot/fork PRs no longer add a trusted scan-publication job. Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
 runs stay attached to their old commit; record both snapshots for comparison.
@@ -66,6 +93,7 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - App CI (CI Tests, App Smoke, Secret Guard, Gitleaks, Revert Guard, PR checks, Auto-merge, Production Health) runs on GitHub-hosted `ubuntu-latest` runners; review discovery is a local 30-second systemd timer and occupies no Actions runner. AI review runs from the private reviewer repository on that repo's own `[self-hosted, ai-review]` runner.
 - CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. ESLint still covers the full repository, but unchanged file results are restored through its content-validated cache; a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
 - TypeScript and the selected PR tests (full suite on production pushes) remain correctness checks on every non-docs CI Tests run. The Test step is `CI_TEST_SHARDS` jobs (2) that split that same file list by count. One aggregate job is still named `ci-tests`, and it is green only after every shard succeeds and the uploaded file lists union to the full set with no duplicate. Dependency installation and test selection stay in `ci-prepare`. `ci-checks` restores dependencies and runs the board-scope guard, typecheck and lint beside the two test shards, not before them. The required `ci-tests` aggregate waits for successful preparation, static checks, both shards and the exact-file execution proof. Docs-only runs require both heavy jobs to be skipped explicitly. Only production pushes save caches; each job uses its own workspace. The shard count is the workflow env `CI_TEST_SHARDS`.
+- Production-push CI Tests publishes each shard’s `test-durations.json` in the **test-durations** artifact (14-day retention) and lists each shard’s slowest 20 files in its job summary, including ordinary test failures. Cancellation or abrupt termination may leave incomplete or missing timing evidence. Whole-file process wall times include startup and teardown, not summed nested-test time; serial TypeScript invocations are timed around `tsx`. The JSON and summary compare summed file time / worker concurrency with elapsed runner time and also account for the existing serial lanes. Compare with the **Test full suite** step timestamps for end-to-end timing; npm/heavy-job startup lies outside the runner measurement.
 - PR and production-push CI Tests runs do not collect or publish V8 coverage. The separate non-required [`Coverage Nightly`](../.github/workflows/coverage-nightly.yml) workflow runs the full suite with coverage at **02:17 UTC daily**, or via `workflow_dispatch` on `production` only. It checks out the event's exact production SHA and reports as `coverage-nightly`, never `ci-tests`, so diagnostics cannot supersede a required correctness result. Its 60-minute timeout gives the covered suite more room than the unchanged 40-minute CI Tests gate.
 - Coverage remains report-only (`continue-on-error` on reporting). The nightly job keeps `npm run coverage:report`, the job summary, `automated-test-coverage-<commit>`, the report/critical-domain paths, and 30-day retention. Download coverage from **Coverage Nightly**, not CI Tests. No required check or runtime script consumes the uploaded coverage; `scripts/coverage-summary.mjs` reads the nightly `coverage/report/coverage-summary.json` within that job. See [testing](testing.md#coverage-baseline).
 - Dependabot still applies informational `full-ci` and lane labels; neither starts nor changes CI Tests or test selection. The `major-upgrade` label still starts its separate ticket workflow. No job-level label skip is added: normal PR events continue reporting both `ci-tests` and `browser-smoke`, including the existing docs-only scope path. Adding approval text after a failed agent-scope approval guard now requires a new commit to produce a fresh PR event; editing the body alone does not rerun that guard, and rerunning the old event retains its old body.
@@ -76,8 +104,30 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.
-- Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live.
+- Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live. Non-app-only merges use the ignored build step below.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
+
+## Vercel ignored builds
+
+`vercel.json` runs `node scripts/vercel-ignore-build.cjs` before dependency installation.
+Exit 0 cancels the build; exit 1 continues it. The comparison uses
+`VERCEL_GIT_PREVIOUS_SHA`, the last successful deployment for this project and branch,
+and `VERCEL_GIT_COMMIT_SHA`. It never substitutes `HEAD^`, so app changes earlier in
+a batch still deploy. Vercel's [turbo-ignore implementation](https://github.com/vercel/turborepo/blob/main/packages/turbo-ignore/src/get-comparison.ts)
+uses the same previous-deployment variable.
+
+Only documentation, skills, CI and tests can skip: `docs/`, `.claude/`,
+`.agents/skills/`, `skills/`, `.github/`, `tests/`, `e2e/`, and root Markdown files.
+Everything else builds, including source Markdown, assets, Prisma, package files,
+`vercel.json`, build scripts, packages, types and build configuration. Unknown,
+missing, shallow, divergent or empty deployment comparisons build rather than skip.
+Renames include the removed path, preventing a source-to-docs move from hiding app changes.
+
+Production health and drift checks use the same command with `--between <live> <tip>`.
+This mode accepts identical trees: a live build needs no replacement after an empty
+commit. Canceled deployments retain the existing push-health behavior; scheduled
+core-action, drift and Pusher checks keep running. The cron definitions are unchanged.
+No workflow, preview or required-check gate is disabled.
 
 ## Live required-check settings
 
@@ -92,6 +142,9 @@ the monitor; this is not a required PR context. Detection can lag until the next
 hourly run, plus GitHub scheduling and any rate-limit wait.
 
 CI Tests no longer reads repository settings on PRs or production pushes.
+Its optional review precheck reads commit statuses once. Read failures warn
+and let tests run; an observed failed review still stops tests. Independent
+required review contexts continue to block merging without approval.
 Previously every production push and CI-policy PR made three settings API calls.
 The hourly monitor makes three on a successful first attempt: repository
 metadata, ruleset list, and one full ruleset read. Retries add calls.
@@ -156,7 +209,9 @@ in their current GitHub title through the existing MCP task-update API. It uses
 `HYPERTASK_MCP_TOKEN`, not a runner-local binding file. The app checks permission,
 verifies the GitHub PR and returns the saved link. Missing credentials, rejected
 updates or an unconfirmed link fail the guard. Forks, bot titles and generated
-revert titles retain their existing handling. Delayed runs can link merged PRs.
+revert titles retain their existing handling. Ticketed runner bots also bind.
+The production-only manual `pr_number` input executes the same trusted title
+entry for live QA and recovery. Delayed runs can link merged PRs.
 
 ## Premerge evidence
 
@@ -169,6 +224,37 @@ The publisher still holds its shared lock from validation through the status pos
 The `premerge-evidence.timer` reconciles all open production PRs every two minutes. Each sweep fetches the production checker and includes its SHA-256 bytes digest in every cached verdict fingerprint, so merged rule changes recheck every waiting PR in the first successful sweep, without waiting for the ten-minute unchanged-verdict refresh. Rule-fetch failures fail closed.
 
 Light gate jobs without a root repository install must install their own non-builtin dependencies. `tests/light-gate-dependencies.test.cjs` parses workflow jobs and follows relative script imports (including parity and the offline workflow tests); the Node version guard runs it with only its pinned `js-yaml` and TypeScript parser installs, independently of app CI's scope selection. The visual runner installs full dependencies itself; private scheduled speed measurements are not a PR gate. A missing-install negative control covers both feature-flag jobs and a new light gate. The feature-flag registry requires an explicit `FEATURE_FLAG_TYPESCRIPT_PATH`: an unset or unloadable parser prints one diagnostic and exits 2 (infrastructure error), never 0 (pass) or 1 (policy refusal). Auto-merge refuses an error; the feature-flag workflow publishes an error status. Local tests explicitly resolve the repo's TypeScript, and the repo-local flag generator and snapshot runner set that path before importing the registry.
+
+## Resuming runners after a freeze
+
+After verifying recovery, clear `MERGE_FREEZE` and record the lift together:
+
+```bash
+gh variable delete MERGE_FREEZE --repo hypertask-ai/hypertask && ~/.local/lib/hypertask/runner-pickup/runner-pickup record-lift
+```
+
+`record-lift` records the current epoch in `~/.local/state/runner-inbox/freeze-lift`.
+Do not run it for an old release or merely green checks.
+Without that record, blocked tickets remain blocked.
+Pickup queues an older same-runner freeze or GitHub-limit block.
+Before starting hax, the keeper drains one eligible ticket: moves it to
+In Progress, reads it back, records an agent activity, and names it in the brief.
+The move uses `vcc raw POST /mcp/tasks/update` with `expected_section_id` and
+`expected_updated_at`. Both are checked under the existing mutation fence and
+in the final database update: a newer section or revision returns 409 without
+changing the ticket. Conditional updates accept only one section mutation.
+A per-runner recovery intent is saved before the write; failed confirmation
+is retried without repeating a completed move. Definitively changed holds retire
+the intent without a move. A ready handoff stays durable until the keeper sees
+the launched session complete and acknowledges that exact ticket; failed startup
+and timeout do not acknowledge it. Recovery accepts only an
+unambiguous freeze-only or GitHub-limit-only block, never mixed failures.
+The blocked-section entry must also predate the lift; unknown entry age
+refuses recovery. Fresh blocks, explicit blocker comments, questions, human
+blocks and unrelated failures remain untouched. Incomplete reads cannot authorize a clear.
+Install the merged pickup version before the keeper version; existing runner
+processes are not restarted. Targeted offline recovery fixtures run as
+`runner-pickup.recovery.test.py` in `ship-scripts-tests`.
 
 ## Daily AI model watch
 
@@ -214,7 +300,7 @@ Daily live cleanup is separately installed by the runner; see
 The non-required `feature-map-check` job in
 [feature-map-weekly.yml](../.github/workflows/feature-map-weekly.yml) runs Mondays
 at 03:37 UTC, on manual dispatch and on production PRs changing the maintenance
-skill, feature-map pages or that workflow. It runs only the tiny offline fixture
+skill, feature-map or ops-map pages, or that workflow. It runs only the tiny offline fixture
 test and dependency-free checker with Node 24 on free GitHub-hosted Ubuntu,
 pinned actions, `contents: read`, no installs, secrets or paid AI calls.
 It checks index completeness, repository-path citations and API-route resolution;
@@ -252,8 +338,12 @@ unit tests still run. Its legacy docs-only exclusions remain `docs/`, `.claude/`
 `.github/workflows/ci-tests.yml` and `.github/scripts/` always exercise CI. Live
 settings, review and approval guards remain mandatory. No detector job is added.
 
-The detector fetches exact base/head SHAs and uses NUL-delimited
-`git diff --no-renames --name-only`; moving source into docs cannot hide a
+The detector fetches the base/head SHAs, deepens the shallow fetch (50, 200,
+1000) until `git merge-base` is visible, and diffs merge base to head with
+NUL-delimited `git diff --no-renames --name-only`. Diffing the moving
+production tip instead counted every later production commit as changed and
+sent skill-only PRs down the full lane (YPER4 fast lane). No merge base found
+means run everything; moving source into docs cannot hide a
 removed source file. Its self-check covers both outputs and fail-closed cases:
 `node .github/scripts/ci-change-scope.cjs --self-check` (run in CI, not here).
 
@@ -261,8 +351,21 @@ removed source file. Its self-check covers both outputs and fail-closed cases:
 
 `Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on non-draft production PRs touching screen or harness files; manual runs accept `base` and `head` refs.
 It builds base then head on one GitHub-hosted runner, each with a fresh disposable database; base creates temporary expected PNGs and head compares against them.
+Each build restores the production browser-smoke Next.js incremental cache using that checkout's lockfile/config hash and resolved commit, with the same compatible-hash fallback. Restore uses the producer's `.next/cache` archive path, then moves only that directory into the matching checkout before building. Visual runs never publish shared build caches; successful production browser-smoke pushes remain the only producer. A screenshot-cache hit skips the unused base restore, and production baseline-only runs skip the unused head restore. Cold misses still build and compare normally.
+The job summary reports five phase timings and one matching log line: base build, base seed+capture, head build, head seed+capture and compare. Build rows measure only `next build`; seed+capture includes setup, readiness and teardown. Head capture and comparison share one Playwright command, charged to compare. Partial failures retain elapsed timings and mark unreached phases explicitly.
 Chromium 1.64.0 captures board, task detail, the scrolled comment-box scene, Ctrl+J and inbox in Porcelain at 1440×900 and 390×844.
 On failure, download `visual-regression-diffs` (7-day retention) and compare each screen's expected, actual and diff PNGs; the step summary lists failed screens or setup failures.
+Production pushes capture the ten base PNGs once and save them with `actions/cache`.
+PRs and manual comparisons restore only the exact key: base SHA, OS/architecture,
+runner image version, and the head visual harness, seed, search stub, paired runner
+and workflow hashes. There are no fallback keys; changed harnesses miss the cache.
+Only successful production pushes save; PR-created caches cannot supply production
+baselines. A hit validates all ten PNG signatures and viewport dimensions, skips
+the base lifecycle, and still seeds, builds and compares the head. A miss retains
+the existing paired lifecycle. Missing or malformed cached screenshots fail closed.
+Phase timings mark skipped base work as `not reached`; summaries name cache reuse.
+Only PNGs are cached, never databases, auth state or browser traces.
+
 An intended visual change is approved by a human in the PR description with `Visual change approved: <ticket URL>`; the job still shows the diff and does not auto-approve it.
 This v1 signal is not required by a ruleset and does not replace existing browser-smoke, layout locks or premerge evidence. No committed PNG baselines or storage-state artifacts are used.
 
@@ -288,6 +391,60 @@ Changes to the dispatcher or its tests also run an explicitly synthetic login ma
 Screenshots, `result.json` and `summary.md` upload as `verify-qa-premerge` for 7 days. The job summary names the journey, the feature-map page and the artifact URL. The step is report-only: `VERIFY_QA_REPORT_ONLY=1` and a non-zero exit become a warning, not a failed `browser-smoke`. It is not a ruleset context and does not block merges. A later unit can make it required after a clean week.
 
 Sharing that `.next` build with app-smoke is deferred. `app-smoke.yml` is loaded from `production`, and its build runs inside a locked-down container with `CORE_APP_SMOKE`, a mocked Google font file and a docker-network callback URL. browser-smoke bakes different `NEXT_PUBLIC_*` values, including `NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100`. The two workflows also run in parallel, so waiting on a large `.next` upload would slow a required check. The container build at `scripts/run-app-smoke-isolated.sh` stays.
+
+## On-demand pre-PR verification (YPER4-697)
+
+Before a PR exists, push a branch and run:
+
+```bash
+scripts/verify-qa <branch> inbox-cycle
+# Direct equivalent (helper resolves the pushed branch to an immutable SHA):
+token=$(gh-app-token) && test -n "$token" || exit 1
+GH_TOKEN="$token" gh workflow run visual-regression.yml -f head=<branch-or-sha> -f journey=inbox-cycle
+GH_TOKEN="$token" gh run watch <run-id> --exit-status --interval 300
+GH_TOKEN="$token" gh run download <run-id> --dir <evidence-dir>
+```
+
+The helper requires a freshly minted Runner App token. Failed or empty token
+responses stop dispatch; saved human logins are never a fallback. Refresh the
+App token before later status/download commands. Keep one watcher per run and
+stop it within 30 minutes.
+
+This reuses the existing Visual Regression dispatch, selecting its independent
+`verify-qa` job instead of the two-build visual comparison. Omitting `journey`
+(or choosing `visual`) preserves the existing visual workflow. PR visual checks
+are unchanged. When testing changes to the workflow itself before merge, use
+`scripts/verify-qa <branch> inbox-cycle <workflow-branch>` to load that pushed
+workflow version; ordinary app candidates use the production workflow.
+
+One free GitHub-hosted `ubuntu-latest` job installs dependencies, migrates and
+seeds loopback PostgreSQL/Redis/Soketi fixtures, builds once, launches the app
+and fixture search, checks the authenticated bootstrap identity and inbox, and
+runs the existing seeded inbox cycle. The doctor rejects reserved production
+identities. It never uses a Vercel preview, live customer data or repository
+secrets; checkout does not persist its read-only token. Services disappear with
+the runner, and an EXIT trap stops the app/search. AI/search/queue behavior is
+fixture-based, not proof of real model quality, ranking or delivery.
+
+Only `inbox-cycle` is supported initially. `inbox-cycle-broken` deliberately
+changes the expected reminder title after the doctor passes, proving that a real
+browser assertion fails and propagates a failed job. Unknown journeys fail
+closed, never silently fall back. Failures do not use report-only mode.
+
+The `verify-qa-<run-id>-<attempt>` artifact is uploaded on success and failure,
+with doctor results/screenshot, journey results/screenshots, sanitized build,
+server and journey logs, and `run.json`/`summary.md`. Auth state and environment
+files are never uploaded. Setup failures report FAIL even if no browser ran.
+Retention is 7 days. The summary reports doctor/journey seconds and candidate
+SHA; Actions job timings include install, build, upload and queue time.
+
+All on-demand journeys share the non-cancelling `verify-qa` concurrency group:
+at most one hosted job runs at a time (of the plan's 20 parallel slots), bounded
+at 25 minutes. GitHub may replace an older pending dispatch with a newer one;
+do not launch a batch and assume every pending run will execute. Launch, await,
+inspect artifacts, then run the next journey. VPS work is dispatch/status calls
+and artifact download only. This is optional: no required contexts, rulesets,
+PR gates, flags or deployment behavior change.
 
 ## Action archive cache operations
 
@@ -363,6 +520,19 @@ The sole no-contract exception is a successful docs-only browser job with an exp
 Activate the new production ruleset context in coordination with this policy update:
 The hourly `Required Check Settings` monitor compares the live ruleset's exact
 context set against the workflow expectation. This change does not modify that ruleset.
+
+## Server feature-flag coverage (YPER4-713)
+
+Server changes under `src/lib/mcp/`, `src/lib/mcp-server/`, `src/lib/api/`,
+`src/app/api/`, `src/pages/api/` and `src/utils/controllers/` also enter the
+feature-flag gate. Non-exempt changes need a ticket-specific `isFeatureEnabled`
+call on an added or modified server line controlling runtime behavior. A client
+`useFlag` call cannot satisfy server coverage. Re-export routes and their gated
+operations need no duplicate reads. UI coverage stays independent. Existing title, label, registry
+and refactor exemptions remain unchanged. Passing server features reuse the
+`feature-gated-ui` owner-review routing token; no auto-merge route changes.
+This bounded syntax check supplements review; it does not prove authorization or
+cover every server service directory.
 
 ## Agent board scope guard (HTPR-7496)
 
@@ -440,3 +610,84 @@ The offline replay binds the complete corpus hash and recomputes every score.
 `ship-scripts-tests` runs the collector's supported offline runner and claim
 checks: four Vercel reports join the original MCP report with five activities.
 Different roots/routes stay separate. All board commands are private fakes.
+
+## Guard API budget (YPER4-721)
+
+The scanner workflow reports GitHub-native `secret-scan` and
+`next-public-secrets` jobs. It makes no commit-status API calls, including
+for fork and Dependabot PRs. Both scanners remain mandatory; the public-secret
+summary fails unless its scan step explicitly succeeded. One additional tiny
+summary job replaces the old status publisher and trusted completion workflow.
+
+The trusted workflow reads PR metadata once for outside, size and title
+checks. It publishes only the existing required `pr-title` status, combining
+outside and title outcomes. Size remains advisory. A fresh pending status
+invalidates an earlier same-head success before metadata reevaluation, so an
+invalid title cannot keep its prior approval during later quota retries.
+Publication rereads the open PR, production base, exact head, event title
+and evaluated title. A rate-limit refusal
+waits until the supplied reset and retries that whole fresh-read/publication
+operation. Ordinary authorization errors remain failures. The retry wait is
+bounded to one hour; an unavailable required result never becomes green.
+No required ruleset context changes.
+
+Trusted guard concurrency includes the workflow run ID.
+Older event reruns cannot cancel newer evaluations.
+Reruns still share their original event's group.
+
+`node tests/guard-quota.test.cjs` executes the saved production scripts and
+candidate workflow entry points with isolated GitHub responses. For a small,
+same-repository PR without an existing size comment, the two guard workflows
+use 22 explicit GitHub REST calls before and six after; writes fall from ten
+to two. These are instrumented fixture counts, not network telemetry or
+whole-fleet savings. Checkout, Actions internals, ticket binding, other
+workflows and exceptional comment writes are excluded. The immutable fixture
+records its production source SHA. Ten simulated pushes recover both a read
+and publication 403 each; a real ten-push burst still requires separate logs.
+
+App-smoke discovery uses the same reset-aware callback retry. Each replay
+starts by rechecking the live head before cancelling older runs. This covers
+the observed discovery-step refusal; the workflow's separate initial shell
+lookups and final report remain separate API consumers.
+
+## Provider-neutral Done enforcement
+
+`vcc` checks section changes through the installed `ship-check move` entry point.
+Completed columns require the same merged PR, deployment, documentation and
+app QA evidence as the Claude hook. Numeric references, section IDs and renamed
+completed columns use board reads. Failed reads or a missing checker refuse writes.
+The checker comes from the installed production skill, never the caller's worktree.
+Protected wrapper and guard changes require an independent lead merge.
+This is workflow enforcement, not an OS sandbox against same-user file edits.
+
+`ship-scripts-tests` runs the offline wrapper fixtures. They cover refusal before
+the board write and successful forwarding with completed proof, without real
+credentials or live board mutations. No new required check is added.
+
+## Added-line style tokens (YPER4-714)
+
+The existing `ci-checks` job runs `npm run lint:styles -- <base-sha> <head-sha>`
+on PRs, using the merge base and exact head with full Git history.
+Production-only edits are excluded. ESLint parses component attributes;
+PostCSS SCSS parses stylesheets. Only added lines fail for literal colors,
+raw Tailwind palette classes or arbitrary typography. Theme custom-property
+owners may define raw tokens. Existing debt and deletions remain allowed,
+without borrowing per-file suppression counts. No job or status is added.
+
+## Metered API cost notes (YPER4-873)
+
+The existing required `ci-tests` job checks added network calls in `src/`
+with `.github/scripts/paid-api-cost-notes.mjs <base-sha> <head-sha>`.
+The TypeScript AST inventory covers `fetch`, `globalThis.fetch`, Axios calls,
+and the named AI SDK generation, embedding and credit-metadata calls. It is
+not whole-program network discovery: aliases, other SDKs and cost estimates
+still need semantic review. New or changed calls need a source-bound entry in
+`.github/paid-api-cost-notes.json`: maximum estimated dollars per day, reason,
+and an HTTPS pricing or measurement source. Identical moved calls are not new;
+additional copies are. Parse and Git failures stop the check. No paid request
+is made by this check, and no new required status is added.
+
+New flags declaring `releaseRisk.highRisk: "money"` must explicitly default
+to `OWNER_AND_QA`; Valentin approves release through the existing flag-switch path.
+Existing flag definitions and live modes are unchanged. Other high-risk
+classes retain their existing default rules.
