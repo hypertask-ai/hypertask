@@ -118,7 +118,6 @@
     "tests/htpr-7097-deleted-view-leaves-tabs.test.cjs",
     "tests/htpr-7116-ticket-stays-open.test.cjs",
     "tests/htpr-7122-agent-reactions.test.cjs",
-    "tests/htpr-7124-phone-double-tap-description.test.cjs",
     "tests/htpr-7129-board-card-fresh-after-escape.test.cjs",
     "tests/htpr-7174-domain-share-access.test.cjs",
     "tests/htpr-7217-create-ranking.test.cjs",

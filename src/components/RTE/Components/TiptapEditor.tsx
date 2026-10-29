@@ -4,8 +4,6 @@ import styles from "@/styles/tiptap.module.scss";
 import { EditorContent } from "@tiptap/react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import DragHandleTiptap from "./DragHandleTiptap";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7124_PHONE_DOUBLE_TAP_DESCRIPTION_FLAG } from "@/lib/flags/keys";
 
 const TiptapEditor = () => {
   const {
@@ -19,8 +17,7 @@ const TiptapEditor = () => {
     isEditable,
   } = useTiptapGlobalContext();
   const isMbl = useContext(MobileViewContext);
-  const phoneDoubleTapDescription = useFlag(HTPR_7124_PHONE_DOUBLE_TAP_DESCRIPTION_FLAG);
-  const passTapsUp = phoneDoubleTapDescription && mode === "read-edit-description" && !isEditable;
+  const passTapsUp = mode === "read-edit-description" && !isEditable;
 
   const addImage = (data: DataTransfer) => {
     const { files } = data;
