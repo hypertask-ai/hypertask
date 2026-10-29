@@ -10,7 +10,7 @@
   },
   {
     "path": "src/app/api/feedback/route.ts",
-    "call": "prisma.project.findFirst({ where: { id: FEEDBACK_PROJECT_ID, status: \"Normal\" }, select: { uniqueIdentifier: true, ownerId: true, section: { where: { deleted: false, visibility: true, section_title: FEEDBACK_SECTION_TITLE, }, take: 1, select: { id: true, section_title: true }, }, }, })",
+    "call": "prisma.project.findFirst({ where: { id: FEEDBACK_PROJECT_ID, status: \"Normal\" }, select: { uniqueIdentifier: true, ownerId: true, section: { where: { deleted: false, visibility: true, id: FEEDBACK_SECTION_ID, }, take: 1, select: { id: true, section_title: true }, }, }, })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
     "ticket": "https://app.hypertask.ai/detail/project-15/7508",
