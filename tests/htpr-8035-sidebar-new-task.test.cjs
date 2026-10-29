@@ -23,7 +23,7 @@ const flagPath = "src/lib/flags/definitions/htpr-8035-sidebar-new-task.ts";
 const flag = load(flagPath, {}).default;
 const { CommandMode } = load("src/models/enums.ts", {});
 
-function renderRail({ enabled = true, compose = true, wide = false, apple = false, pathname = "/my-tasks" } = {}) {
+function renderRail({ enabled = true, compose = true, wide = false, apple = false, settingsNamed = true, pathname = "/my-tasks" } = {}) {
   const updates = [];
   const navigation = [];
   const icon = (props) => React.createElement("svg", props);
@@ -54,9 +54,10 @@ function renderRail({ enabled = true, compose = true, wide = false, apple = fals
     "@/components/Modals/Settings/settingsNavigation": { useSettingsNavigation: () => ({ openSettings: () => navigation.push("settings") }) },
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "@/store/currentPageActions": { currentPageActionsAtom: "page-actions" },
-    "@/hooks/useFlag": { useFlag: (key) => key === flag.key ? enabled : key === "htpr-6929-compose-task-writer" ? compose : false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : key === "htpr-6929-compose-task-writer" ? compose : false },
     "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "pages" },
     "@/lib/flags/definitions/htpr-7309-pages-screens": { HTPR_7309_PAGES_SCREENS_FLAG: "screens" },
+    "@/lib/flags/definitions/htpr-8146-settings-name": { HTPR_8146_SETTINGS_NAME_FLAG: "htpr-8146-settings-name" },
     "@/lib/flags/definitions/htpr-8035-sidebar-new-task": { HTPR_8035_SIDEBAR_NEW_TASK_FLAG: flag.key },
     "@/lib/flags/definitions/htpr-6929-compose-task-writer": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "htpr-6929-compose-task-writer" },
     "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: () => {} },
@@ -116,3 +117,20 @@ test("the improvement ships to Everyone with a small reversible risk", () => {
   assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.releaseRisk.risk, "small");
 });
+
+for (const wide of [false, true]) {
+  test(`Settings has its accessible name and still opens (${wide ? "expanded" : "collapsed"})`, () => {
+    const on = renderRail({ wide });
+    const off = renderRail({ wide, settingsNamed: false });
+    const trigger = (rail) => rail.nodes.find((node) => node.props["data-testid"] === "app-shell-settings");
+    assert.equal(trigger(on).props["aria-label"], "Settings");
+    assert.equal(trigger(off).props["aria-label"], undefined);
+    assert.equal(trigger(on).props.className, trigger(off).props.className);
+    assert.equal(trigger(on).props.tabIndex, trigger(off).props.tabIndex);
+    trigger(on).props.onClick();
+    trigger(off).props.onClick();
+    assert.deepEqual(on.navigation, ["settings"]);
+    assert.deepEqual(off.navigation, ["settings"]);
+    assert.equal(on.html.replace(' aria-label="Settings"', ""), off.html);
+  });
+}

@@ -42,3 +42,13 @@ C shortcut eligibility without the retired shortcuts/width flag.
 ## Cleanup
 
 Nothing to clean up for a look-only check. Hard-delete any task you created.
+
+## Settings button accessible name
+
+With `htpr-8146-settings-name` on, the desktop rail gear is named Settings
+without hovering. From My Tasks, Inbox and a board, locate
+`[data-testid="app-shell-settings"]`, inspect its accessible name, click it,
+and confirm Settings opens. Reload and repeat with the rail expanded.
+The button's size, position and tooltip must stay unchanged. Flag Off
+restores the original unnamed button. On phones, check the existing
+Settings top-bar button remains named and opens Settings.
