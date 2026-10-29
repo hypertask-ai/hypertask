@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 REPO = "hypertask-ai/hypertask"
 CLAIMS = Path.home() / ".local/state/pr-drain/claims"
@@ -76,10 +77,15 @@ def main():
             if not mine and now - parse(pr["updatedAt"]) < ACTIVE_WINDOW:
                 continue
             if not dry_run:
-                if path.exists():
-                    shutil.rmtree(path)
-                path.mkdir()
-                owner_file.write_text(f"{runner}\t{now.isoformat()}")
+                staged = Path(tempfile.mkdtemp(prefix=".claim-", dir=CLAIMS))
+                try:
+                    (staged / "owner").write_text(f"{runner}\t{now.isoformat()}")
+                    if path.exists():
+                        os.replace(staged / "owner", owner_file)
+                    else:
+                        os.replace(staged, path)
+                finally:
+                    shutil.rmtree(staged, ignore_errors=True)
             ticket = re.search(r"\b(?:HTPR|YPER4|HYFA)-\d+\b", pr["title"])
             title = " ".join(pr["title"].split())
             print(f"PR {pr['number']} {pr['headRefName']} {ticket.group(0) if ticket else '-'} {title}")

@@ -143,6 +143,39 @@ cat "$HOME/prs.json"
         owners = {(self.claims / str(number) / 'owner').read_text().split('\t')[0] for number in [1, 2]}
         self.assertEqual(owners, {'RUNNER 16', 'RUNNER 17'})
 
+    def test_interrupted_publication_never_exposes_partial_owner(self):
+        self.prs = [self.pr(1)]
+        (self.home / 'prs.json').write_text(json.dumps(self.prs))
+        for existing in [False, True]:
+            with self.subTest(existing=existing):
+                owner = self.owner(1, hours=4) if existing else self.claims / '1/owner'
+                before = owner.read_text() if existing else None
+                injection = """
+from pathlib import Path
+import runpy
+import sys
+original = Path.write_text
+def broken(self, text, *args, **kwargs):
+    if self.name == 'owner':
+        original(self, 'partial')
+        raise OSError('fixture interrupted write')
+    return original(self, text, *args, **kwargs)
+Path.write_text = broken
+script = sys.argv[1]
+sys.argv = [script]
+runpy.run_path(script, run_name='__main__')
+"""
+                result = subprocess.run(['python3', '-c', injection, str(SCRIPT)], env=self.env,
+                                        capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                if existing:
+                    self.assertEqual(owner.read_text(), before)
+                else:
+                    self.assertFalse(owner.parent.exists())
+                self.assertEqual(list(self.claims.glob('.claim-*')), [])
+                self.assertTrue(self.pick().stdout.startswith('PR 1 '))
+                self.assertTrue(owner.read_text().startswith('RUNNER 16\t'))
+
     def test_identity_and_arguments_are_required(self):
         self.assertNotEqual(self.pick('--unknown').returncode, 0)
         self.env.pop('SHIP_SESSION_NAME')
