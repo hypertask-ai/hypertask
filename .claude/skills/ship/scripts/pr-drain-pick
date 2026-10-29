@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+import datetime as dt
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+REPO = "hypertask-ai/hypertask"
+CLAIMS = Path.home() / ".local/state/pr-drain/claims"
+CLAIM_TTL = dt.timedelta(hours=3)
+ACTIVE_WINDOW = dt.timedelta(hours=2)
+RED_IDLE = dt.timedelta(hours=6)
+
+
+def parse(timestamp):
+    return dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
+
+def rank(pr, now):
+    idle = now - parse(pr["updatedAt"])
+    if pr["isDraft"]:
+        return (1 if pr["headRefName"].startswith("dependabot/") else 0, pr["updatedAt"], pr["number"])
+    red = any(check.get("conclusion") in ("FAILURE", "TIMED_OUT") or
+              check.get("state") in ("FAILURE", "ERROR")
+              for check in pr.get("statusCheckRollup") or [])
+    if red and idle > RED_IDLE:
+        return (2, pr["updatedAt"], pr["number"])
+    return None
+
+
+def main():
+    dry_run = sys.argv[1:] == ["--dry-run"]
+    if sys.argv[1:] and not dry_run:
+        sys.exit("usage: pr-drain-pick [--dry-run]")
+    runner = os.environ.get("SHIP_SESSION_NAME", "")
+    if not runner:
+        sys.exit("pr-drain-pick: set SHIP_SESSION_NAME")
+    token = subprocess.run(["gh-app-token"], capture_output=True, text=True, check=True).stdout.strip()
+    if not token:
+        sys.exit("pr-drain-pick: empty GitHub App token")
+    output = subprocess.run([
+        "gh", "pr", "list", "--repo", REPO, "--base", "production", "--state", "open",
+        "--limit", "1000", "--json", "number,title,isDraft,headRefName,updatedAt,statusCheckRollup",
+    ], env=dict(os.environ, GH_TOKEN=token), capture_output=True, text=True, check=True).stdout
+    prs = json.loads(output)
+    if not isinstance(prs, list) or len(prs) >= 1000:
+        sys.exit("pr-drain-pick: incomplete PR list")
+    now = dt.datetime.now(dt.timezone.utc)
+    CLAIMS.mkdir(parents=True, exist_ok=True)
+    with (CLAIMS / ".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        candidates = []
+        for pr in prs:
+            key = rank(pr, now)
+            path = CLAIMS / str(pr["number"])
+            owner_file = path / "owner"
+            owner = None
+            if path.exists():
+                owner = owner_file.read_text().split("\t")
+                if len(owner) != 2:
+                    sys.exit("pr-drain-pick: invalid claim record")
+                parse(owner[1])
+            mine = owner is not None and owner[0] == runner
+            if mine:
+                key = (-1, pr["updatedAt"], pr["number"])
+            if key is not None:
+                candidates.append((key, pr, owner))
+        if not candidates:
+            print("NONE")
+            return
+        for _, pr, owner in sorted(candidates):
+            path = CLAIMS / str(pr["number"])
+            owner_file = path / "owner"
+            mine = owner is not None and owner[0] == runner
+            if owner is not None and not mine and now - parse(owner[1]) < CLAIM_TTL:
+                continue
+            if not mine and now - parse(pr["updatedAt"]) < ACTIVE_WINDOW:
+                continue
+            if not dry_run:
+                staged = Path(tempfile.mkdtemp(prefix=".claim-", dir=CLAIMS))
+                try:
+                    (staged / "owner").write_text(f"{runner}\t{now.isoformat()}")
+                    if path.exists():
+                        os.replace(staged / "owner", owner_file)
+                    else:
+                        os.replace(staged, path)
+                finally:
+                    shutil.rmtree(staged, ignore_errors=True)
+            ticket = re.search(r"\b(?:HTPR|YPER4|HYFA)-\d+\b", pr["title"])
+            title = " ".join(pr["title"].split())
+            print(f"PR {pr['number']} {pr['headRefName']} {ticket.group(0) if ticket else '-'} {title}")
+            return
+    print("WAIT")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError):
+        sys.exit("pr-drain-pick: PR queue or claims unreadable; do not pick new work")
