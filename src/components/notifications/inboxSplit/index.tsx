@@ -204,6 +204,7 @@ const InboxSplit = ({
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
   const boardAccessDecisions = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
+  const boardAccessDecisionCard = boardAccessDecisions ? <AgentBoardAccessDecision /> : null;
   const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
   const tabScopedSelection = useFlag(HTPR_8148_INBOX_TAB_SELECTION_FLAG);
   const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
@@ -1168,8 +1169,8 @@ const InboxSplit = ({
                                 ))}
                               <Seen notification={notification} />
                             </div>
-                            {boardAccessDecisions && notification.type === "AgentBoardAccessRequest" ? (
-                              <AgentBoardAccessDecision />
+                            {notification.type === "AgentBoardAccessRequest" && boardAccessDecisionCard ? (
+                              boardAccessDecisionCard
                             ) : notification.type === "AgentMessage" ? (
                               <div
                                 className={

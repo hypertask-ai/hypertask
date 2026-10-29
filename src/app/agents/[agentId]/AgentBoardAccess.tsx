@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 
@@ -50,9 +50,15 @@ export function AgentBoardAccess({
   const accessRequestsEnabled = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
   const rawBoardId = Number(params?.get("boardAccess"));
   const requestedBoardId = Number.isSafeInteger(rawBoardId) && rawBoardId > 0 && agent.boardAccess.some(board => board.id === rawBoardId) ? rawBoardId : null;
+  const [openedRequestedBoard, setOpenedRequestedBoard] = useState<number | null>(null);
+  // Adjust this component's own state during render (React's documented pattern), then open the panel once
+  // from an effect so the parent is never updated while rendering.
+  if (accessRequestsEnabled && requestedBoardId !== null && requestedBoardId !== openedRequestedBoard) {
+    setOpenedRequestedBoard(requestedBoardId);
+  }
   useEffect(() => {
-    if (accessRequestsEnabled && requestedBoardId !== null) setBoardAccessOpen(true);
-  }, [accessRequestsEnabled, requestedBoardId, setBoardAccessOpen]);
+    if (openedRequestedBoard !== null) setBoardAccessOpen(true);
+  }, [openedRequestedBoard, setBoardAccessOpen]);
   return (
     <>
             <div className="mt-6 bg-cardBackground rounded-[4px] shadow-md">
