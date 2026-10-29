@@ -80,7 +80,7 @@ export const useSessionAndChatHistory = (
   else nameBoardRef.current = undefined;
   const navigationScope = chatNavigationKey(currentUser?.id, manualChat ? undefined : scopedBoardId, followsTaskNavigation ? undefined : taskId, pathname?.startsWith("/chat"));
   const navigationKey = rememberChat && !isDemo && navigationScope ? `${navigationScope}${manualChat ? `.team.${teamKey ?? "none"}` : ""}` : null;
-  const [activeSession, setActiveSession] = useChatSessionSelection(navigationKey ?? "legacy", navigationKey);
+  const [activeSession, setActiveSession] = useChatSessionSelection(`${navigationKey ?? "legacy"}:${followsTaskNavigation ? selectionScope : ""}`, navigationKey);
   useEffect(() => {
     if (manualChat && !navigationKey) setActiveSession(null);
   }, [manualChat, teamKey, navigationKey, setActiveSession]);
