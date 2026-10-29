@@ -398,6 +398,20 @@ policies:
   production_ruleset:
     required_status_checks: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan, premerge-evidence]
 
+ci_app_api_pool:
+  ticket: https://app.hypertask.ai/detail/project-4060/881
+  app: hypertask-ci
+  purpose: separate_installation_pool_for_selected_reads_and_app_smoke_cancellations
+  scopes:
+    app_smoke_validation_recheck: [actions_write, pull_requests_read]
+    feature_flag_evaluation_and_reconciliation: [contents_read, pull_requests_read, statuses_read]
+    ux_signoff_reconciliation: [contents_read, pull_requests_read, statuses_read]
+  fallback: github_token_on_missing_secret_failed_mint_or_app_request
+  fallback_is_pool_migration_proof: false
+  ci_tests_review_precheck: github_token_no_app_private_key_in_pr_workflow
+  status_writes: github_token_for_required_status_author_integration_pin
+  repository_settings_runners_required_checks: unchanged
+
 ci_tests:
   # .github/workflows/ci-tests.yml; the file remains the implementation source.
   file: .github/workflows/ci-tests.yml

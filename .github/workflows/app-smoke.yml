@@ -170,6 +170,16 @@ jobs:
             echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Mint the hypertask-ci read token
+        id: ci-token
+        if: steps.request.outputs.superseded != 'true'
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          permission-actions: write
+          permission-pull-requests: read
       - name: Recheck the head and cancel only older requests
         id: current-request
         if: steps.request.outputs.superseded != 'true'
@@ -177,13 +187,17 @@ jobs:
         env:
           PR: ${{ steps.request.outputs.pr }}
           HEAD_SHA: ${{ steps.request.outputs.head-sha }}
+          GH_FALLBACK_TOKEN: ${{ github.token }}
+          CI_TOKEN_MINTED: ${{ steps.ci-token.outputs.token != '' }}
         with:
+          github-token: ${{ steps.ci-token.outputs.token || github.token }}
           script: |
             const { retryGithubRequest } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/github-rate-limit.mjs`);
-            await retryGithubRequest(async () => {
+            let client = github;
+            const discover = async () => {
               const request = context.payload.workflow_run;
               const currentHead = async () => {
-                const { data: pr } = await github.rest.pulls.get({
+                const { data: pr } = await client.rest.pulls.get({
                   ...context.repo, pull_number: Number(process.env.PR),
                 });
                 if (pr.state === 'open' && pr.head.sha === process.env.HEAD_SHA) return true;
@@ -193,7 +207,7 @@ jobs:
               };
               if (!await currentHead()) return;
               const runs = (await Promise.all(['queued', 'in_progress', 'waiting', 'pending', 'requested'].map(status =>
-                github.paginate(github.rest.actions.listWorkflowRuns, {
+                client.paginate(client.rest.actions.listWorkflowRuns, {
                   ...context.repo, workflow_id: 'app-smoke.yml', event: 'workflow_run', status, per_page: 100,
                 }),
               ))).flat();
@@ -207,13 +221,23 @@ jobs:
                 if (!(requestNumber < request.run_number || (requestNumber === request.run_number && run.run_number < context.runNumber))) continue;
                 if (!await currentHead()) return;
                 try {
-                  await github.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: run.id });
+                  await client.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: run.id });
                 } catch (error) {
                   if (error.status !== 409) throw error;
                   core.info(`App Smoke run ${run.id} already finished cancelling or completed.`);
                 }
               }
               await currentHead();
+            };
+            await retryGithubRequest(async () => {
+              try {
+                await discover();
+              } catch (error) {
+                if (client !== github || process.env.CI_TOKEN_MINTED !== 'true') throw error;
+                core.warning('hypertask-ci token failed; retrying with github.token');
+                client = new github.constructor({ auth: process.env.GH_FALLBACK_TOKEN });
+                await discover();
+              }
             }, { log: core.warning });
 
   app-smoke:

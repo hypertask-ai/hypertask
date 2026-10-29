@@ -119,7 +119,8 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(recheck.with.script, /if \(!await currentHead\(\)\) return;/);
   assert.match(recheck.with.script, /requestNumber < request\.run_number/);
   assert.match(recheck.with.script, /requestNumber === request\.run_number && run\.run_number < context\.runNumber/);
-  assert.ok(recheck.with.script.lastIndexOf("if (!await currentHead()) return;") < recheck.with.script.indexOf("await github.rest.actions.cancelWorkflowRun("));
+  assert.ok(recheck.with.script.lastIndexOf("if (!await currentHead()) return;") < recheck.with.script.indexOf("await client.rest.actions.cancelWorkflowRun("));
+  assert.match(recheck.with.script, /new github.constructor\(\{ auth: process.env.GH_FALLBACK_TOKEN \}\)/);
   assert.equal(parsedWorkflow.jobs.validate.concurrency, undefined);
   assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(
@@ -194,7 +195,17 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(workflow, /PR: \$\{\{ needs\.validate\.outputs\.pr \}\}/);
   assert.match(workflow, /-f context=app-smoke/);
   assert.match(workflow, /gh workflow run automerge\.yml .* -f pr="\$PR"/);
-  assert.doesNotMatch(workflowJson, /\"secrets\"\s*:|\bsecrets\s*(?:\.|\[)/);
+  const parsedSmoke = JSON.parse(workflowJson);
+  for (const [id, job] of Object.entries(parsedSmoke.jobs)) {
+    const steps = id === "validate" ? job.steps.filter((step) => step.id !== "ci-token") : job.steps;
+    assert.doesNotMatch(JSON.stringify({ ...job, steps }), /\"secrets\"\s*:|\bsecrets\s*(?:\.|\[)/, id);
+  }
+  const ciToken = parsedSmoke.jobs.validate.steps.find((step) => step.id === "ci-token");
+  assert.match(ciToken.uses, /^actions\/create-github-app-token@[0-9a-f]{40}$/);
+  assert.deepEqual(Object.keys(ciToken.with).filter((key) => /secrets/.test(ciToken.with[key])), ["app-id", "private-key"]);
+  assert.equal(ciToken.with["app-id"], "${{ secrets.CI_APP_ID }}");
+  assert.equal(ciToken.with["private-key"], "${{ secrets.CI_APP_PRIVATE_KEY }}");
+  assert.equal(parsedSmoke.jobs.validate.steps.some((step) => step.with?.repository || /candidate/.test(step.with?.path || "")), false);
 
   assert.match(isolated, /docker network create --internal/);
   assert.match(isolated, /docker network create "\$egress_network"/);
@@ -368,6 +379,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
 test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
   const ciWorkflow = await readFile(".github/workflows/ci-tests.yml", "utf8");
   const ciSteps = yaml.load(ciWorkflow).jobs["ci-prepare"].steps;
+  assert.doesNotMatch(JSON.stringify(ciSteps), /secrets\.CI_APP_(?:ID|PRIVATE_KEY)/);
   assert.equal(ciSteps.some((step) => step.run?.includes("verify-required-check-settings.mjs")), false);
   const settingsWorkflow = yaml.load(await readFile(".github/workflows/required-check-settings.yml", "utf8"));
   assert.deepEqual(Object.keys(settingsWorkflow.on).sort(), ["schedule", "workflow_dispatch"]);

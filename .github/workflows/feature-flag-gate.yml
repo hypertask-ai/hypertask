@@ -41,9 +41,21 @@ jobs:
           cache: npm
           cache-dependency-path: .github/scripts/feature-flag-parser/package-lock.json
 
+      - name: Mint the hypertask-ci read token
+        id: ci-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: read
+          permission-statuses: read
       - name: Evaluate the current pull-request head with trusted code
         env:
+          # Required status authorship is pinned to GitHub Actions.
           GH_TOKEN: ${{ github.token }}
+          GH_READ_TOKEN: ${{ steps.ci-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
@@ -266,9 +278,20 @@ jobs:
           cache: npm
           cache-dependency-path: .github/scripts/feature-flag-parser/package-lock.json
 
+      - name: Mint the hypertask-ci read token
+        id: ci-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: read
+          permission-statuses: read
       - name: Reconcile every open production pull request
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_READ_TOKEN: ${{ steps.ci-token.outputs.token }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
