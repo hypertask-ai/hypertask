@@ -55,14 +55,14 @@ export function ControlledComposerEditor({
       ...(agentMentionProjectId ? [LinkableMention.configure({
         HTMLAttributes: { class: "mention" },
         renderText: ({ node }) => `@${node.attrs.text || node.attrs.id}`,
-        suggestion: createMentionData((item: { type: string; id: string | number }) => {
+        suggestion: { ...createMentionData((item: { type: string; id: string | number }) => {
           if (item.type === "agent" && activeEditor.current) {
             const sourceEditor = activeEditor.current;
             window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: {
               agentId: item.id, getDraft: () => ({ html: sourceEditor.getHTML(), text: sourceEditor.getText() }),
             } }));
           }
-        }, () => projectIdRef.current),
+        }, () => projectIdRef.current), pluginKey: SuggestionPluginKey },
       })] : []),
       SafeSplitBlock,
       Placeholder.configure({
