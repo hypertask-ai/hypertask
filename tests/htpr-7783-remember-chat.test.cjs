@@ -45,7 +45,7 @@ async function withChat(options, check) {
     "@tiptap/pm/state": { EditorState: { create: value => value } },
     "@/store": atoms, "@/lib/state": state,
     "@/hooks/useFlag": { useFlag: key => key === "htpr-6929-compose-task-writer" ? !!options.compose : key === "htpr-8088-manual-chat" ? !!options.manualChat : key === "htpr-7736-chat-follows-task" ? !!options.followsTask : key === flag ? options.enabled !== false : key === "htpr-6971-chat-history-paging" ? options.paged : key === "htpr-7518-agent-sidebar-chats" ? !!options.agentSidebar : ["htpr-7052-chat-names", "htpr-6936-ask-ai-fullscreen"].includes(key), useFlagReady: () => true },
-    "@/lib/flags/keys": { HTPR_7783_REMEMBER_CHAT_FLAG: flag, HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "htpr-6971-chat-history-paging", HTPR_7052_CHAT_NAMES_FLAG: "htpr-7052-chat-names", HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats", HTPR_6936_ASK_AI_FULLSCREEN_FLAG: "htpr-6936-ask-ai-fullscreen" },
+    "@/lib/flags/keys": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "htpr-6929-compose-task-writer", HTPR_7783_REMEMBER_CHAT_FLAG: flag, HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "htpr-6971-chat-history-paging", HTPR_7052_CHAT_NAMES_FLAG: "htpr-7052-chat-names", HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats", HTPR_6936_ASK_AI_FULLSCREEN_FLAG: "htpr-6936-ask-ai-fullscreen" },
     "@/lib/aiChat/chatNavigationState": navigation,
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => nativeSidebar },
     "next/dynamic": { default: () => () => null },
@@ -474,11 +474,10 @@ test("restored closed board does not bypass auto-open policy on later visits", a
 
 
 for (const paged of [false, true]) test(`${paged ? "paged" : "legacy"}: an explicit compose intent replaces the following conversation`, async () => {
-  await withChat({ paged, followsTask: true, compose: true }, async view => {
+  await withChat({ paged, followsTask: true, compose: true, rows: [row("newest"), row("older"), { ...row("compose-target"), taskId: 44 }] }, async view => {
     await view.set(atoms.inViewObjectAtom, { taskId: 43 });
     await view.visit("/detail/project-15/43");
     await React.act(async () => { await view.history().selectSession("older"); }); await view.flush();
-    view.rows.unshift({ ...row("compose-target"), taskId: 44 });
     await view.set(atoms.composeTaskChatIntroAtom, { taskId: 44, content: "Task intro" });
     await view.set(atoms.inViewObjectAtom, { taskId: 44 });
     await view.visit("/detail/project-15/44");
