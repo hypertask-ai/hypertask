@@ -206,8 +206,8 @@ if [[ $T == HTPR-* ]]; then
 fi
 
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
-"$VCC" activity add "$T" "Claimed. Session working it now.
-Next: I examine and fix it. Resume: $RESUME" >/dev/null \
+claim_id=$("$VCC" activity add "$T" "Claimed. Session working it now.
+Next: I examine and fix it. Resume: $RESUME") \
   || { echo "ship-claim: claim activity failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
 
@@ -240,7 +240,12 @@ jq -s '.[0] + {activities: .[1].activities}' "$W" "$LOG" > "$MERGED" && mv "$MER
 # An old competing claim is ignored only when its agent shows no activity in the last 6 h. Read failure = still active.
 agent_idle() {
   local line when
-  line=$(VCC_ACTIVITY_AGENT_ID="$1" "$VCC" activity last "$T" 2>/dev/null) || return 1
+  if [ "$2" = 1 ]; then
+    [ -n "$claim_id" ] || return 1
+    line=$(jq -r --arg agent "$1" --arg claim "$claim_id" '[.activities[] | select(.agentId == $agent and .id != $claim)] | max_by(.createdAt) | .createdAt // ""' "$LOG") || return 1
+  else
+    line=$(VCC_ACTIVITY_AGENT_ID="$1" "$VCC" activity last "$T" 2>/dev/null) || return 1
+  fi
   [ -n "$line" ] || return 0
   when=$(date -d "$(cut -f1 <<< "$line")" +%s 2>/dev/null) || return 1
   [ $(( $(date +%s) - when )) -gt 21600 ]
@@ -252,7 +257,7 @@ for _ in 1 2 3 4 5 6 7 8; do
   case "$res" in
     LOSE*)
       IFS=$'\t' read -r _ other oid old same <<< "$res"
-      if [ "$old" = 1 ] && agent_idle "$oid"; then echo "$oid" >> "$IDLE"; continue; fi ;;
+      if [ "$old" = 1 ] && agent_idle "$oid" "$same"; then echo "$oid" >> "$IDLE"; continue; fi ;;
   esac
   break
 done

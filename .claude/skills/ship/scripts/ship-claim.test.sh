@@ -94,8 +94,16 @@ cat > "$D/vcc" <<'EOF'
 echo "$*" >> "$FAKE_LOG"
 if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
+if [ "$1 $2" = "activity add" ] && [[ "$4" == Claimed.* ]] && [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
+  jq --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:"new-claim",createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
+  mv "$FAKE_AGENT_LOG.next" "$FAKE_AGENT_LOG"
+  echo new-claim
+fi
 if [ "$1 $2" = "activity last" ]; then
   [ -z "${FAKE_ACTIVITY_FAIL:-}" ] || exit 1
+  if [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
+    jq -r '.activities | max_by(.createdAt) | [.createdAt, .agentName] | @tsv' "$FAKE_AGENT_LOG"; exit
+  fi
   [ -z "${FAKE_ACTIVITY:-}" ] || printf '%s\tx\n' "$FAKE_ACTIVITY"
 fi
 exit 0
@@ -181,6 +189,19 @@ mk "$(c 10 2026-10-11T00:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 1
 FAKE_ACTIVITY=$(date -u -d '-1 hour' +%FT%TZ) ./ship-claim YPER4-999 >/dev/null; eq "flow: old claim with recent activity -> step back" "$?" 3
 FAKE_ACTIVITY=$(date -u -d '-9 hours' +%FT%TZ) ./ship-claim YPER4-999 >/dev/null; eq "flow: old claim, idle claimant -> proceed" "$?" 0
 FAKE_ACTIVITY_FAIL=1 ./ship-claim YPER4-999 >/dev/null; eq "flow: activity read failure -> step back" "$?" 3
+for age in 9 1; do
+  mk
+  jq -n --arg old "$(date -u -d '-10 hours' +%FT%TZ)" --arg last "$(date -u -d "-$age hours" +%FT%TZ)" --arg text "$(claim other-sess)" '{success:true,activities:[{id:"old-claim",createdAt:$old,agentId:"a2",agentName:"RUNNER 3",text:$text},{id:"heartbeat",createdAt:$last,agentId:"a2",agentName:"RUNNER 3",text:"Working."}]}' > "$D/shared.json"
+  : > "$D/log"
+  FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1; rc=$?
+  if [ "$age" = 9 ]; then
+    eq "flow: own new claim does not revive an idle shared session" "$rc" 0
+  else
+    eq "flow: active shared session remains protected" "$rc" 3
+  fi
+  grep -q unassign "$D/log" && bad "shared identity recovery called unassign" || ok "shared identity recovery preserves assignment"
+done
+
 # Same agent identity, different session: lose without unassigning.
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 : > "$D/log"; ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: same-agent loss exits 3" "$?" 3
