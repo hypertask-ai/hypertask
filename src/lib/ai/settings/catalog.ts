@@ -27,6 +27,7 @@ export const settingsPages = {
   "board-members": "People and their roles on the selected board",
   "board-agents": "Agents with access to the board",
   "board-ai": "Board custom AI instructions",
+  "board-task-templates": "Task templates for this board, used by the task writer",
   "board-memory": "Board AI memory",
   "board-skills": "Board skills",
   "board-files": "Board files",
