@@ -70,7 +70,7 @@ for (const file of [
       }).default;
       const html = renderToStaticMarkup(React.createElement(Row, { onArchive() {}, onSnooze() {}, onMore() {} }, "Existing row"));
       const row = new JSDOM(html).window.document.body.firstElementChild;
-      assert.equal(row.getAttribute("style").includes(`touch-action:${enabled ? "pan-y pinch-zoom" : "pan-y"};`), true);
+      assert.match(row.getAttribute("style"), new RegExp(`(?:^|;)touch-action:${enabled ? "pan-y pinch-zoom" : "pan-y"}(?:;|$)`));
       assert.equal(row.textContent, "Existing row");
     }
   });
