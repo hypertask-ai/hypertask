@@ -79,8 +79,9 @@ export function useAiChatAutoOpen(mobile: boolean) {
     setOpen(true);
   }, [enabled, ready, pathname, pageKey, page, manualChat, newTicketPath, manualOpen, allowed, mobile, user?.id, stableDefaultView, preserveFullScreenReturn, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
 
+  if (manualChat) return { reserve: false };
   const active = enabled || !flagReady;
   const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);
-  const reserve = !manualChat && active && !mobile && allowed && !(suppressed && !pageChanged);
+  const reserve = active && !mobile && allowed && !(suppressed && !pageChanged);
   return { reserve };
 }

@@ -51,7 +51,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const pathname = usePathname();
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
-  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG) && !isFullScreenChat && !(pathname?.startsWith("/demo") ?? false);
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
+  const manualDockedChat = manualChat && !isFullScreenChat && !(pathname?.startsWith("/demo") ?? false);
   const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const ticketScopeSelected =
     ticketScopeEnabled && !isFullScreenChat && isDetailPage &&
@@ -212,6 +213,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
     isDetailPage && inViewObject?.taskId ? inViewObject.taskId : undefined;
   const shouldLoadChatHistory =
     isFullScreenChat || showAiChatInterface || chatMounted;
+  let historyTaskId = taskId;
+  if (manualChat) historyTaskId = undefined;
 
   const {
     startNewSession: createSession,
@@ -227,7 +230,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(manualChat ? undefined : taskId, shouldLoadChatHistory, isDetailPage, manualChat || parallelChatsEnabled, manualChat);
+  } = useSessionAndChatHistory(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat || parallelChatsEnabled, manualDockedChat);
   useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {
@@ -254,7 +257,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     scopedProjectId ?? "all",
     currentProject?.id ?? "no-board",
     currentUser?.id ?? "anonymous",
-    manualChat ? "manual" : taskId ?? "no-task",
+    manualDockedChat ? "manual" : taskId ?? "no-task",
     ...(ticketScopeSelected ? ["ticket-scope"] : []),
     ...(sessionPagingEnabled ? ["htpr-6971-chat-history-paging"] : []),
   ].join(":");
