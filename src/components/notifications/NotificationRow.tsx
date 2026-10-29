@@ -458,6 +458,7 @@ export function AgentBoardAccessDecision() {
     const current = result ?? request;
     if (!enabled || !request || !current) return null;
 
+
     const decide = async (decision: "approve" | "decline") => {
         if (submitting.current) return;
         submitting.current = true;
@@ -482,7 +483,7 @@ export function AgentBoardAccessDecision() {
     };
     const expired = current.status === "pending" && new Date(current.expiresAt).getTime() <= clock;
     const pending = current.status === "pending" && !expired;
-    return (
+    return !enabled ? null : (
         <div className="min-w-0 flex-1 py-2" data-inbox-decision-control="true" onClick={(event) => event.stopPropagation()}>
             <div className="flex flex-wrap items-center justify-between gap-2 text-dense">
                 <span>{request.agentName}</span>

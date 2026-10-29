@@ -49,10 +49,10 @@ export function AgentBoardAccess({
   const params = useSearchParams();
   const accessRequestsEnabled = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
   const rawBoardId = Number(params?.get("boardAccess"));
-  const requestedBoardId = accessRequestsEnabled && Number.isSafeInteger(rawBoardId) && rawBoardId > 0 && agent.boardAccess.some(board => board.id === rawBoardId) ? rawBoardId : null;
+  const requestedBoardId = Number.isSafeInteger(rawBoardId) && rawBoardId > 0 && agent.boardAccess.some(board => board.id === rawBoardId) ? rawBoardId : null;
   useEffect(() => {
-    if (requestedBoardId !== null) setBoardAccessOpen(true);
-  }, [requestedBoardId, setBoardAccessOpen]);
+    if (accessRequestsEnabled && requestedBoardId !== null) setBoardAccessOpen(true);
+  }, [accessRequestsEnabled, requestedBoardId, setBoardAccessOpen]);
   return (
     <>
             <div className="mt-6 bg-cardBackground rounded-[4px] shadow-md">
