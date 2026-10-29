@@ -129,6 +129,7 @@ This mode accepts identical trees: a live build needs no replacement after an em
 commit. Canceled deployments retain the existing push-health behavior; scheduled
 core-action, drift and Pusher checks keep running. The cron definitions are unchanged.
 No workflow, preview or required-check gate is disabled.
+
 ## Browser smoke retries (YPER4-696)
 
 `playwright.config.smoke.ts` uses **zero retries** when `BROWSER_SMOKE_PR` is set.
