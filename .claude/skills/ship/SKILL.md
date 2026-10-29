@@ -93,7 +93,7 @@ For any flagged failure, a flag-owner write/admin agent uses the emergency Off p
 ## Handle exceptions without inventing completion
 
 - **Blocked after two attempts:** record what failed and why on the ticket; mark it blocked on HT Product Lead. Keep evidence and a resumable state. Follow the current dispatch limit before choosing more work.
-- **Human decision:** use Valentin Review only for a real decision about money, access, security, or irreversible actions. One Question gives relevant product precedents with sources, a recommendation and reason, and a yes/no choice. Preserve any existing question instead of reposting it.
+- **Human decision:** use Valentin Review only for a real decision about money, access, security, or irreversible actions. Write the Question exactly in the house-rules tickets skill format (`~/.local/share/house-rules/skills/tickets/SKILL.md`): max 3 plain bullets of context, then Question, My recommendation and Why right under it, then Yes and No, a blank line between each. No outside links or product precedents. Preserve any existing question instead of reposting it.
 - **Already fixed:** use `ship-check duplicate` to bind the fixing ticket's merged PR. Record this session's branch, or none. Prove the result live before closing. A partial fix is not a duplicate.
 - **No change needed:** use `ship-check nochange` only after a `Resolved without a change:` comment with evidence. No open/bound PR or unmerged ticket branch may remain.
 - **Decided against:** quote Valentin's dated decision in the required `Decided against: Valentin, YYYY-MM-DD:` comment, close the PR unmerged, and use `ship-check dropped`. Never claim it deployed.
