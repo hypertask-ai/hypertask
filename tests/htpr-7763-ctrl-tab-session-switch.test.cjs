@@ -167,6 +167,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       render();
     },
     get location() { return dom.window.location.pathname + dom.window.location.search; },
+    get pendingTimers() { return timers.length; },
     remountComposer,
     drainTimers() {
       for (let pass = 0; pass < 5 && timers.length; pass++) {
@@ -182,6 +183,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       render();
       if (selections.length > previousSelections) {
         assert.equal(document.activeElement.id, "search", "composer focus waits until after selection renders");
+        assert.ok(this.pendingTimers > 0, "the session change keeps the pending caret restore");
       }
       beforeTimers?.();
       this.drainTimers();
