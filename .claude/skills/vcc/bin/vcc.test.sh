@@ -431,6 +431,8 @@ for subcommand in comment comments; do
   [[ $(< "$VCC_TEST_TRACE") == *'"text":"Next: src/app/page.tsx"'* ]] || fail 'agent content changed'
 done
 question_refused 'attachments need' comment add X-1 --text 'Agent note.' --attach screenshot.png
+question_refused 'replies need' comment add X-1 --text 'A reply.' --reply-to-comment-id 123
+question_refused 'human mentions need' comment add X-1 --text "$question"
 run bash "$vcc" task waiting-on X-1 --user 6
 [ "$status" = 5 ] || fail 'waiting without marked Question was accepted'
 printf '{"success":true,"tasks":[{"id":123,"blockerCommentId":"new"}]}' > "$VCC_TEST_TASK"

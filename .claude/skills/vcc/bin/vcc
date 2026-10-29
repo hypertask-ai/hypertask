@@ -86,7 +86,7 @@ human_lint() {
   [ "$rc" = 0 ] || question_refuse 'human text failed shared ticket-lint'
 }
 content_write() {
-  local action="${1:-} ${2:-}" kind='' text='' file='' markdown=false reason title='' description='' description_file='' ticket='' attached=false old='' project=''
+  local action="${1:-} ${2:-}" kind='' text='' file='' markdown=false reason title='' description='' description_file='' ticket='' attached=false replied=false old='' project=''
   local -a scope=()
   case "$action" in 'comment add'|'comments add'|'task create'|'tasks create'|'task update'|'tasks update') ;; *) return 0 ;; esac
   shift 2
@@ -111,6 +111,8 @@ content_write() {
       --description=*) description=${1#*=} ;;
       --description-file=*) description_file=${1#*=} ;;
       --markdown) markdown=true ;;
+      --reply-to-comment-id|--reply-to-invocation-id) replied=true; shift; [ "$#" -gt 0 ] || break ;;
+      --reply-to-comment-id=*|--reply-to-invocation-id=*) replied=true ;;
       --attach) attached=true; shift; [ "$#" -gt 0 ] || break ;;
       --attach=*) attached=true ;;
       -*) if [[ $1 != *=* ]] && [ "$#" -gt 1 ]; then shift; fi ;;
@@ -123,6 +125,10 @@ content_write() {
     if [ -n "$file" ]; then text=$(cat -- "$file" 2>/dev/null) || question_refuse 'cannot read --file'; fi
     if [ -z "$kind" ]; then
       [ "$attached" = false ] || question_refuse 'attachments need --kind qa, question or done'
+      [ "$replied" = false ] || question_refuse 'replies need --kind qa, question or done'
+      if printf '%s' "$text" | jq -eRs 'test("data-label=[\"\u0027]name-[0-9]+[\"\u0027]"; "i")' >/dev/null; then
+        question_refuse 'human mentions need --kind qa, question or done'
+      fi
       if [[ $ticket =~ ^[0-9]+$ ]]; then
         ticket=$(hypertask tasks get "$ticket" "${scope[@]}" --json | jq -er '.tasks[0].ticketNumber') || question_refuse 'cannot resolve agent comment ticket'
       fi
