@@ -273,11 +273,11 @@ export async function prepareTaskWriterRun(
     usageTaskId,
   ] = await Promise.all([
     loadCurrentTaskContext(primaryTaskIds, userId, agentId, {
-      projectId: body.projectId, teamScope,
+      projectId: body.projectId, teamScope, fullTicketContext: true,
     }),
     loadCurrentTaskContext(relatedTaskIds, userId, agentId, {
       role: "related",
-      projectId: body.projectId, teamScope,
+      projectId: body.projectId, teamScope, fullTicketContext: true,
     }),
     retrieveTaskWriterContext({
       principal: { userId, agentId, teamScope },

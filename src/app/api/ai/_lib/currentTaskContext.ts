@@ -1,4 +1,6 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7856_SUMMARY_CONTEXT_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
@@ -7,7 +9,7 @@ export async function loadCurrentTaskContext(
   taskIds: Array<number | null | undefined>,
   userId: number | null | undefined,
   agentId?: string | null,
-  options?: { role?: "primary" | "related"; projectId?: number | null; teamScope?: AgentTokenTeamScope | null }
+  options?: { role?: "primary" | "related"; projectId?: number | null; teamScope?: AgentTokenTeamScope | null; fullTicketContext?: boolean }
 ): Promise<string> {
   const ids = Array.from(
     new Set(
@@ -17,6 +19,11 @@ export async function loadCurrentTaskContext(
     )
   );
   if (ids.length === 0 || !userId) return "";
+
+  let compact = false;
+  if (await isFeatureEnabled(HTPR_7856_SUMMARY_CONTEXT_FLAG, userId)) {
+    compact = !options?.fullTicketContext;
+  }
 
   const tasks = await prisma.task.findMany({
     where: {
@@ -31,9 +38,10 @@ export async function loadCurrentTaskContext(
       title: true,
       ticketNumber: true,
       description_: { select: { content: true } },
+      ...(compact ? { Task_Summary: { take: 1, select: { content: true } } } : {}),
       comments: {
         orderBy: { createdAt: "desc" },
-        take: 200,
+        take: compact ? 20 : 200,
         select: {
           text: true,
           activity: true,
@@ -48,7 +56,7 @@ export async function loadCurrentTaskContext(
   if (tasks.length === 0) return "";
 
   return tasks
-    .map((task) => formatTaskContext(task, options?.role ?? "primary"))
+    .map((task) => formatTaskContext(task, options?.role ?? "primary", compact))
     .join("\n\n");
 }
 
@@ -156,6 +164,7 @@ export function formatTaskContext(
     title: string;
     ticketNumber: string | null;
     description_: { content: string | null } | null;
+    Task_Summary?: Array<{ content: string | null }>;
     comments: Array<{
       text: string | null;
       activity: unknown;
@@ -165,10 +174,15 @@ export function formatTaskContext(
       creator: { displayName: string | null; email: string | null } | null;
     }>;
   },
-  role: "primary" | "related" = "primary"
+  role: "primary" | "related" = "primary",
+  compact = false
 ): string {
   const description = task.description_?.content?.trim() ?? "";
-  const comments = task.comments
+  const summary = task.Task_Summary?.[0]?.content?.replace(
+    /\n*\[hypertask-summary-fingerprint\]: # \([a-f0-9]{64}\)\s*$/,
+    ""
+  ).trim();
+  const comments = (compact ? task.comments.slice(0, 20) : task.comments)
     .map((c) => {
       const text = htmlToText(
         c.text || (c.activity ? JSON.stringify(c.activity) : "")
@@ -195,9 +209,11 @@ export function formatTaskContext(
   return [
     heading,
     `Title: ${task.title}`,
-    `Description HTML (preserve this block structure when editing): ${description || "(empty)"}`,
+    compact
+      ? `Ticket ${summary ? "summary" : "description"} (fetch full ticket before editing): ${summary || htmlToText(description) || "(empty)"}`
+      : `Description HTML (preserve this block structure when editing): ${description || "(empty)"}`,
     "",
-    "Comments (oldest first):",
+    compact ? "Latest 20 comments (oldest first):" : "Comments (oldest first):",
     comments.length ? comments.join("\n") : "(no comments)",
   ].join("\n");
 }
