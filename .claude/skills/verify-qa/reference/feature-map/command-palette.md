@@ -103,3 +103,14 @@ empty search and clear it. No task needs creating. Repeat at 1440x900 and
 390x844 in all four themes. Compare picker bounds against the before capture.
 Flag Off preserves API order; the move-existing-task picker stays unchanged
 in either mode. Do not modify shared QA history outside your browser context.
+
+## New Task dictation shortcut
+
+With `htpr-8140-ctrlj-dictation-shortcut` on, open Ctrl+J and type a draft.
+Ctrl+Shift+D (Cmd+Shift+D on Apple) starts the existing New Task microphone.
+Mouse activation must still work. Repeated keydown, IME composition, extra
+Alt, and the Search tab must not start dictation. Escape cancels recording;
+Enter uses the existing transcription action. Confirm the original draft
+remains, reopening the writer still works, and no background comment or chat
+recorder starts. Flag Off restores mouse-only activation in this writer.
+Use a permitted test microphone; physical sound quality needs real hardware.

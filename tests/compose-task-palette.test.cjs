@@ -1751,3 +1751,40 @@ for (const modeOutline of [false, true]) for (const mobile of [false, true]) {
     });
   });
 }
+
+test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and keeps click and draft', async (t) => {
+  for (const apple of [false, true]) {
+    let starts = 0;
+    const AudioButton = (props) => React.createElement('button', {
+      id: props.id, 'aria-label': props.ariaLabel, onClick: () => { starts++; },
+    }, 'Mic');
+    await withPalette(t, { newWindow: true, tab: 'compose', apple, AudioButton }, async ({ flags, rerender, type, press, input, requests }) => {
+      flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
+      await rerender();
+      await type('Keep this draft');
+      const modifiers = apple ? { metaKey: true } : { ctrlKey: true };
+      const event = await press('D', { ...modifiers, shiftKey: true });
+      assert.equal(starts, 1);
+      assert.equal(event.defaultPrevented, true);
+      assert.equal(input().value, 'Keep this draft');
+      await React.act(async () => document.getElementById('compose-task-audio-button').click());
+      assert.equal(starts, 2);
+      for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { ctrlKey: true, metaKey: true }, { shiftKey: false }]) {
+        const ignored = await press('D', { ...modifiers, shiftKey: true, ...extra });
+        assert.equal(ignored.defaultPrevented, false);
+      }
+      assert.equal(starts, 2);
+      await press('k', modifiers);
+      await press('D', { ...modifiers, shiftKey: true });
+      assert.equal(starts, 2);
+      await press('j', modifiers);
+      assert.equal(input().value, 'Keep this draft');
+      flags['htpr-8140-ctrlj-dictation-shortcut'] = false;
+      await rerender();
+      const off = await press('D', { ...modifiers, shiftKey: true });
+      assert.equal(off.defaultPrevented, false);
+      assert.equal(starts, 2);
+      assert.equal(requests.length, 0);
+    });
+  }
+});
