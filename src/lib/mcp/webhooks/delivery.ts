@@ -52,8 +52,6 @@ export async function postSignedWebhook(input: {
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const signature = signWebhookBody(secret, `${timestamp}.${input.body}`)
 
-  // undici 8 turns HTTP/2 on by default (allowH2); keep webhook delivery on
-  // HTTP/1.1 like undici 7 did.
   const agent = new Agent({
     allowH2: false,
     connect: {
