@@ -41,6 +41,45 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     ? `${instructions}\n\nOnly the listed tools are immediately available. For other actions, find the tool with hypertask_search_tools, then call hypertask_describe_tool with its exact name before calling it. Describing a tool does not execute the requested action.`
     : instructions;
 
+  const handleModelError = async (error: unknown) => {
+    error = await normalizeProviderAuthError(error, dbUser.id);
+    state.recordTurnOutcome(state.cancelled ? "cancelled" : "failed", error);
+    if (state.errorSent) return;
+    state.errorSent = true;
+    if (state.cancelled) {
+      if (heartbeatExecutionId) {
+        await failHeartbeatExecution(
+          heartbeatExecutionId,
+          "AI reply cancelled",
+        );
+        state.heartbeatExecutionTerminal = true;
+      }
+      state.finish("error", { cancelled: true, content: "Stream cancelled." });
+      return;
+    }
+    if (state.turnDeadlineHit) {
+      await state.endDeadlineTurn();
+      return;
+    }
+    state.send("error", {
+      content: userFacingErrorMessage(error, "model-stream"),
+      toolsExecuted: toolExecutions.length > 0,
+      ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
+    });
+    state.finish("error");
+    if (heartbeatExecutionId) {
+      await failHeartbeatExecution(
+        heartbeatExecutionId,
+        errorMessage(error)
+      );
+      state.heartbeatExecutionTerminal = true;
+    }
+    await reportHandledChatError(error, "model-stream", {
+      model: state.selected.resolvedModelId,
+      provider: state.selected.usageProvider,
+    });
+  };
+
   const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
   const sameModelRetry = await backgroundClaudeModelEnabled?.(dbUser.id) ?? false;
   state.selected.resolvedModelId = resolveHaikuModelId(state.selected.resolvedModelId, haiku55Enabled);
@@ -99,42 +138,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           fallbackError = error;
           return;
         }
-        error = await normalizeProviderAuthError(error, dbUser.id);
-        state.recordTurnOutcome(state.cancelled ? "cancelled" : "failed", error);
-        if (state.errorSent) return;
-        state.errorSent = true;
-        if (state.cancelled) {
-          if (heartbeatExecutionId) {
-            await failHeartbeatExecution(
-              heartbeatExecutionId,
-              "AI reply cancelled",
-            );
-            state.heartbeatExecutionTerminal = true;
-          }
-          state.finish("error", { cancelled: true, content: "Stream cancelled." });
-          return;
-        }
-        if (state.turnDeadlineHit) {
-          await state.endDeadlineTurn();
-          return;
-        }
-        state.send("error", {
-          content: userFacingErrorMessage(error, "model-stream"),
-          toolsExecuted: toolExecutions.length > 0,
-          ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
-        });
-        state.finish("error");
-        if (heartbeatExecutionId) {
-          await failHeartbeatExecution(
-            heartbeatExecutionId,
-            errorMessage(error)
-          );
-          state.heartbeatExecutionTerminal = true;
-        }
-        await reportHandledChatError(error, "model-stream", {
-          model: state.selected.resolvedModelId,
-          provider: state.selected.usageProvider,
-        });
+        await handleModelError(error);
       },
       providerOptions: state.selected.providerOptions,
       ...state.selected.settings,
@@ -230,6 +234,11 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           state.send("content", { content: retryText });
         }
       } catch (retryError) {
+        const normalized = await normalizeProviderAuthError(retryError, dbUser.id);
+        if (normalized instanceof Error && normalized.name === "AiProviderAuthenticationError") {
+          await handleModelError(normalized);
+          return;
+        }
         emptyCompletionError = retryError;
         emptyCompletionRetryFailed = true;
         console.error(

@@ -33,7 +33,7 @@ function authError(overrides = {}) {
   });
 }
 
-function harness({ enabled = true, flagError = false, failure = authError() } = {}) {
+function harness({ enabled = true, flagError = false, failure = authError(), retryFailure } = {}) {
   const logs = { warn: [], error: [], info: [] };
   const reports = [], checks = [], events = [], outcomes = [];
   const flag = load("src/lib/flags/definitions/htpr-7754-deepseek-auth-refusal.ts", {});
@@ -58,17 +58,20 @@ function harness({ enabled = true, flagError = false, failure = authError() } = 
     "@/lib/aiProviders": {},
     "@/app/api/ai/_lib/heartbeatExecution": {},
     "@/app/api/ai/chat/stream/modelFallback": { previousModelForFailedStream: () => null },
-    "@/app/api/ai/chat/stream/bulkTools": { hasVisibleCompletion: (chunks) => chunks.join("").trim().length > 0 },
+    "@/app/api/ai/chat/stream/bulkTools": { hasVisibleCompletion: (chunks) => chunks.join("").trim().length > 0, buildEmptyCompletionSummary: () => "No reply" },
     "@/lib/ai/chatStream/errors": errors,
     "@/lib/ai/tools/constants": { MAX_TOOL_STEPS: 1 },
+    "@/lib/ai/tools/deferredTools": {},
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags/keys": {},
     "@/lib/ai/chatStream/models": {},
-    "@/lib/ai/chatStream/content": {},
+    "@/lib/ai/chatStream/content": { withHigherEffort: (options) => options },
     "@/lib/ai/tools/metadata": {},
     ai: { stepCountIs: () => ({}), streamText: ({ onError }) => ({ textStream: (async function* () {
       if (failure) await onError({ error: failure });
-      else yield "DeepSeek reply";
-    })() }) },
-  });
+      else if (!retryFailure) yield "DeepSeek reply";
+    })() }), generateText: async () => { throw retryFailure; } },
+  }, { console: Object.fromEntries(Object.keys(logs).map((level) => [level, (...args) => logs[level].push(args)])) });
   const state = {
     dbUser: { id: 123 }, gatewayTags: { teamId: "team-fixture" },
     selected: { model: {}, resolvedModelId: "deepseek-flash", settings: {} },
@@ -166,4 +169,106 @@ test("the rollback flag is a low-risk Everyone bugfix", () => {
   assert.equal(flag.default.defaultMode, "EVERYONE");
   assert.equal(flag.default.releaseRisk.risk, "small");
   assert.equal(flag.default.releaseRisk.highRisk, undefined);
+});
+
+test("empty completion retry surfaces a rejected key without an incident", async () => {
+  const h = harness({ failure: null, retryFailure: authError() });
+  await h.run();
+  assert.equal(h.events[0][1].content, safeMessage);
+  assert.equal(h.events[1][0], "finish");
+  assert.equal(h.logs.warn.length, 1);
+  assert.equal(h.logs.error.length, 0);
+  assert.equal(h.reports.length, 0);
+});
+
+function tracingHarness(options = {}) {
+  const h = harness(options);
+  const pending = [], rows = [], reports = [];
+  const stubs = {
+    "node:crypto": require("node:crypto"),
+    "@/lib/net/fetchWithoutBrotli": {},
+    "@vercel/functions": { waitUntil: (promise) => pending.push(promise) },
+    "./aiUsage": { logAiUsage: async (row) => rows.push(row) },
+    "@/lib/ai/prompts/registry": { identifyPrompt: () => ({}) },
+    "@/lib/telemetry/aiChatObservability": { recordAiChatTurn: async () => {} },
+    "@/lib/errors/reportError": { reportError: async (report) => reports.push(report) },
+    "@/lib/ai/chatStream/errors": h.errors,
+    "@ai-sdk/anthropic": {}, "@ai-sdk/openai": {}, "@openrouter/ai-sdk-provider": {}, ai: {},
+    "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: () => null },
+    "@/lib/aiModelOptions": {}, "@/lib/aiProviders": {},
+    "@/lib/aiAllowancePolicy": {}, "@/lib/aiUsageClassification": {}, "@/lib/ai/customEndpoint": {},
+  };
+  const api = load("src/app/api/ai/_lib/modelProvider.ts", stubs, {
+    performance, setTimeout, clearTimeout, ReadableStream, process,
+  });
+  return { ...h, api, rows, tracingReports: reports, flush: async () => Promise.all(pending) };
+}
+
+test("tracing retains failed attempts without incidents for direct rejected keys", async () => {
+  for (const method of ["generate", "stream", "stream-chunk"]) {
+    const h = tracingHarness();
+    const middleware = h.api.createUsageTracingMiddleware({ userId: 123, provider: "byok:deepseek", feature: "chat" }, "deepseek-flash");
+    const failure = authError();
+    const params = { prompt: [] };
+    if (method === "stream-chunk") {
+      const result = await middleware.wrapStream({ params, doStream: async () => ({ stream: new ReadableStream({ start(controller) {
+        controller.enqueue({ type: "error", error: failure }); controller.close();
+      } }) }) });
+      for await (const chunk of result.stream) assert.equal(chunk.error, failure);
+    } else {
+      const invoke = async () => { throw failure; };
+      await assert.rejects(method === "generate" ? middleware.wrapGenerate({ params, doGenerate: invoke }) : middleware.wrapStream({ params, doStream: invoke }), (error) => error === failure);
+    }
+    await h.flush();
+    assert.equal(h.rows.length, 1);
+    assert.equal(h.rows[0].outcome, "failed");
+    assert.equal(h.tracingReports.length, 0);
+    assert.deepEqual(h.checks, [[flagKey, 123]]);
+  }
+});
+
+test("tracing preserves incidents for disabled flags and gateway failures", async () => {
+  for (const scenario of [{ enabled: false }, { flagError: true }, { failure: authError({ url: "https://ai-gateway.vercel.sh/v1/chat/completions" }) }]) {
+    const h = tracingHarness(scenario);
+    const middleware = h.api.createUsageTracingMiddleware({ userId: 123, provider: "byok:deepseek", feature: "chat" }, "deepseek-flash");
+    const failure = scenario.failure ?? authError();
+    await assert.rejects(middleware.wrapGenerate({ params: { prompt: [] }, doGenerate: async () => { throw failure; } }));
+    await h.flush();
+    assert.equal(h.rows.length, 1);
+    assert.equal(h.tracingReports.length, 1);
+  }
+});
+
+
+test("successful traced generation remains unchanged", async () => {
+  const h = tracingHarness();
+  const middleware = h.api.createUsageTracingMiddleware({ userId: 123, provider: "byok:deepseek", feature: "chat" }, "deepseek-flash");
+  const result = { finishReason: { unified: "stop" }, usage: { inputTokens: {}, outputTokens: {} } };
+  assert.equal(await middleware.wrapGenerate({ params: { prompt: [] }, doGenerate: async () => result }), result);
+  await h.flush();
+  assert.equal(h.rows[0].outcome, "ok");
+  assert.equal(h.tracingReports.length, 0);
+  assert.deepEqual(h.checks, []);
+});
+
+test("tracing does not suppress other providers or non-chat failures", async () => {
+  for (const context of [{ provider: "gateway", feature: "chat" }, { provider: "byok:deepseek", feature: "summary" }]) {
+    const h = tracingHarness();
+    const middleware = h.api.createUsageTracingMiddleware({ userId: 123, ...context }, "deepseek-flash");
+    await assert.rejects(middleware.wrapGenerate({ params: { prompt: [] }, doGenerate: async () => { throw authError(); } }));
+    await h.flush();
+    assert.equal(h.tracingReports.length, 1);
+    assert.deepEqual(h.checks, []);
+  }
+});
+
+
+test("empty completion retry preserves gateway and rollback handling", async () => {
+  for (const options of [{ enabled: false }, { retryFailure: authError({ url: "https://ai-gateway.vercel.sh/v1/chat/completions" }) }]) {
+    const h = harness({ failure: null, retryFailure: authError(), ...options });
+    const reply = await h.run();
+    assert.equal(reply.chunks.join(""), "No reply");
+    assert.equal(h.reports.length, 1);
+    assert.equal(h.logs.error.length, 1);
+  }
 });

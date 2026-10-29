@@ -491,6 +491,9 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         } finally {
           if (timer) clearTimeout(timer);
         }
+        const authError = outcome === "failed" && attribution.feature === "chat" && row.provider === "byok:deepseek" && typeof attribution.userId === "number"
+          ? await import("@/lib/ai/chatStream/errors").then(({ normalizeProviderAuthError }) => normalizeProviderAuthError(error, attribution.userId!)).catch(() => error)
+          : error;
         await Promise.allSettled([
           logAiUsage(row),
           recordAiChatTurn({
@@ -500,7 +503,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
             teamAllowanceUsedUsd: allowanceSnapshot?.usedUsd ?? null,
             error: outcome === "failed" ? "AI model generation failed" : undefined,
           }),
-          ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) ? [reportError({
+          ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) && !(authError instanceof Error && authError.name === "AiProviderAuthenticationError") ? [reportError({
             message: "AI model generation failed",
             source: "server",
             fingerprintKey: `ai-generation:${row.provider}:${modelId}:${errorName}:${statusCode}`,

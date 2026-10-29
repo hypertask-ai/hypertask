@@ -13,7 +13,7 @@ import { waitUntil } from "@vercel/functions";
 import { recordAiChatAlertSample } from "@/lib/ai/chatAlerts/service";
 import { resolveSkillsForAiRequest } from "@/app/api/ai/_lib/chatSkillResolution";
 
-import { reportHandledChatError, errorMessage, sseFrame, userFacingErrorMessage, userFacingErrorDetails, includedAllowanceError } from "@/lib/ai/chatStream/errors";
+import { reportHandledChatError, errorMessage, sseFrame, userFacingErrorMessage, userFacingErrorDetails, includedAllowanceError, normalizeProviderAuthError } from "@/lib/ai/chatStream/errors";
 
 import type { StreamState } from "./streamState";
 
@@ -216,7 +216,8 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     };
     if (await routeAgentMention(state, resolvedBody)) return;
     await runModelTurn(state, resolvedBody, skillResolution);
-  } catch (error) {
+  } catch (caughtError) {
+    const error = await normalizeProviderAuthError(caughtError, dbUser.id);
     state.recordTurnOutcome(state.cancelled ? "cancelled" : "failed", error);
     if (state.cancelled) {
       if (!state.doneSent) {
@@ -231,7 +232,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       }
       return;
     }
-    if (!includedAllowanceError(error)) console.error("[ai/chat/stream] stream error", error);
+    if (!includedAllowanceError(error) && !(error instanceof Error && error.name === "AiProviderAuthenticationError")) console.error("[ai/chat/stream] stream error", error);
     await reportHandledChatError(error, "stream-handler", {
       model: state.selected.resolvedModelId,
       provider: state.selected.usageProvider,
