@@ -1,5 +1,6 @@
 "use client";
 
+import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 
@@ -42,6 +43,7 @@ export const AI_Chat_Sidebar = ({
   const chat = useAiChatContext();
   const { showWelcomeScreen, minimized } = chat;
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+  const agentHoverChat = useFlag(HTPR_7737_AGENT_HOVER_CHAT_FLAG);
   const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
@@ -225,17 +227,19 @@ export const AI_Chat_Sidebar = ({
       }
     } catch {}
   }, [agentSessionsEnabled, sidebarEnabled, agents, currentUser?.id, projectId]);
-  useEffect(() => {
-    if (!agentSessionsEnabled || !sidebarEnabled) return;
+  useEffect(agentSessionsEnabled || agentHoverChat ? () => {
+    if (!sidebarEnabled) return;
     const choose = (event: Event) => {
       const detail = (event as CustomEvent<{ agentId: string | null; getDraft?: () => { html: string; text: string } }>).detail;
       if (detail.agentId === null) { void selectTargetRef.current({ kind: "ai" }); return; }
       const agent = agents.find((item) => item.id === detail.agentId);
-      if (agent) void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId: lastAgentSessions.current.get(agent.id), getMentionDraft: detail.getDraft });
+      if (agent) {
+        void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId: lastAgentSessions.current.get(agent.id), getMentionDraft: detail.getDraft });
+      }
     };
     window.addEventListener("ht-sidebar-agent-selected", choose);
     return () => window.removeEventListener("ht-sidebar-agent-selected", choose);
-  }, [agentSessionsEnabled, sidebarEnabled, agents]);
+  } : () => {}, [agentSessionsEnabled, agentHoverChat, sidebarEnabled, agents]);
   const shortcuts = useChatShortcuts({
     enabled: sharedShortcutsEnabled,
     active: target.kind !== "external-agent",
