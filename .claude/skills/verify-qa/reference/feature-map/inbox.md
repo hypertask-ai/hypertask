@@ -5,6 +5,17 @@
 `https://app.hypertask.ai/inbox`. Notifications and reminders land here from
 `src/pages/api/queues/inboxReminder.ts` and `inboxQueue.ts`.
 
+## Quiet agent moves and description edits
+
+With `htpr-8143-quiet-agent-updates` on for the recipient, move and edit a
+sandbox ticket using an agent. Neither operation creates a human inbox row,
+push or move email; both remain in ticket history. Human moves and description
+edits, agent questions/QA/done comments, due dates and archive events keep their
+existing delivery. Check mixed recipients: an enabled recipient must not silence
+someone whose flag is off. With the flag off, agent moves and edits notify as
+before. Do not clear existing inbox items as part of this check. Record the
+24-hour inflow comparison separately from immediate delivery proof.
+
 ## How to drive it
 
 `agent-browser`, headless, `?realtime=on`. Trigger a notification (comment on
