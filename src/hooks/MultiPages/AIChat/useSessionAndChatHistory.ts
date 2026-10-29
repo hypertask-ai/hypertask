@@ -80,7 +80,7 @@ export const useSessionAndChatHistory = (
   else nameBoardRef.current = undefined;
   const navigationScope = chatNavigationKey(currentUser?.id, manualChat ? undefined : scopedBoardId, followsTaskNavigation ? undefined : taskId, pathname?.startsWith("/chat"));
   const navigationKey = rememberChat && !isDemo && navigationScope ? `${navigationScope}${manualChat ? `.team.${teamKey ?? "none"}` : ""}` : null;
-  const [activeSession, setActiveSession] = useChatSessionSelection(`${navigationKey ?? "legacy"}:${followsTaskNavigation ? selectionScope : ""}`, navigationKey);
+  const [activeSession, setActiveSession] = useChatSessionSelection(`${navigationKey ?? "legacy"}:${followsTaskNavigation ? selectionScope : ""}`, navigationKey, !hasExplicitTask);
   useEffect(() => {
     if (manualChat && !navigationKey) setActiveSession(null);
   }, [manualChat, teamKey, navigationKey, setActiveSession]);
@@ -92,7 +92,7 @@ export const useSessionAndChatHistory = (
   currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
-  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, taskScopedHistory, nameBoardRef, { key: selectionScope, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId }, navigationKey, scopedBoardId);
+  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, taskScopedHistory, nameBoardRef, { key: selectionScope, restoreSelection: !hasExplicitTask, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId }, navigationKey, scopedBoardId);
   const paged = pagingRequested && !isDemo && !pagedHistory.pagingUnavailable;
 
   const {

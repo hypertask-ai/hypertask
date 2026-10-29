@@ -32,7 +32,7 @@ async function withChat(options, check) {
       if (options.historyLoad) await options.historyLoad;
       if (options.historyError) throw new Error("History unavailable");
       calls.push(["page", scope]);
-      const visible = rows.filter(item => item.userId === values.get(atoms.currentUserAtom).id && (!scope.projectId || (item.projectId === scope.projectId && item.taskId === null)));
+      const visible = rows.filter(item => item.userId === values.get(atoms.currentUserAtom).id && (scope.taskId === undefined || item.taskId === scope.taskId) && (!scope.projectId || (item.projectId === scope.projectId && item.taskId === null)));
       const offset = Number(scope.cursor ?? 0), limit = scope.limit ?? 30;
       return response({ success: true, sessions: visible.slice(offset, offset + limit).map(({ messages, ...item }) => ({ ...item, hasMessages: messages.length > 0 })), nextCursor: offset + limit < visible.length ? String(offset + limit) : null });
     },
@@ -481,6 +481,21 @@ for (const paged of [false, true]) test(`${paged ? "paged" : "legacy"}: an expli
     await view.set(atoms.composeTaskChatIntroAtom, { taskId: 44, content: "Task intro" });
     await view.set(atoms.inViewObjectAtom, { taskId: 44 });
     await view.visit("/detail/project-15/44");
+    assert.equal(view.history().currentSession.id, "compose-target");
+    assert.equal((await view.resolver().ensureSessionForCurrentBoard(0)).id, "compose-target");
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+  });
+});
+
+
+for (const paged of [false, true]) test(`${paged ? "paged" : "legacy"}: explicit task intent wins over saved selection on remount`, async () => {
+  await withChat({ paged, followsTask: true, compose: true, rows: [row("newest"), row("older"), { ...row("compose-target"), taskId: 43 }] }, async view => {
+    await view.set(atoms.inViewObjectAtom, { taskId: 43 });
+    await view.visit("/detail/project-15/43");
+    await React.act(async () => { await view.history().selectSession("older"); }); await view.flush();
+    await view.settings();
+    await view.set(atoms.composeTaskChatIntroAtom, { taskId: 43, content: "Task intro" });
+    await view.returnToChat("/detail/project-15/43");
     assert.equal(view.history().currentSession.id, "compose-target");
     assert.equal((await view.resolver().ensureSessionForCurrentBoard(0)).id, "compose-target");
     assert.equal(view.calls.filter(([type]) => type === "create").length, 0);

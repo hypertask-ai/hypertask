@@ -17,7 +17,7 @@ const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSumma
 };
 const staleTime = 1000 * 60 * 3;
 
-export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined }, navigationKey?: string | null, navigationBoardId?: number) {
+export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined; restoreSelection?: boolean }, navigationKey?: string | null, navigationBoardId?: number) {
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
   const queryClient = useQueryClient();
@@ -27,7 +27,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   const identity = `${user?.uid}:${user?.id}:${selectionScope.key}:${enabled}:${navigationKey ?? ""}`;
   const identityRef = useRef(identity);
   identityRef.current = identity;
-  const [activeSession, selectActiveSession] = useChatSessionSelection(identity, navigationKey);
+  const [activeSession, selectActiveSession] = useChatSessionSelection(identity, navigationKey, selectionScope.restoreSelection);
   const activeRef = useRef(activeSession);
   activeRef.current = activeSession;
   const [creating, setCreating] = useState(false);
