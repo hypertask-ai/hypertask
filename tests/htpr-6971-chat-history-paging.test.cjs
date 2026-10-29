@@ -1244,7 +1244,7 @@ test('flag-off session setup identity is exactly the production key without a pa
   const fs = require('node:fs');
   const filename = 'src/hooks/MultiPages/AIChat/useAiChatState.ts';
   const changed = fs.readFileSync(filename, 'utf8').match(/const sessionContextKey = (\[[\s\S]*?\]\.join\(":"\))/)[1];
-  const context = { surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, ticketScopeSelected: false, sessionPagingEnabled: false };
+  const context = { surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, ticketScopeSelected: false, sessionPagingEnabled: false, manualDockedChat: false };
   const evaluate = (expression, values) => new Function(...Object.keys(values), `return ${expression}`)(...Object.values(values));
   for (const taskId of [undefined, 91]) {
     context.taskId = taskId;

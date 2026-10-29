@@ -508,12 +508,11 @@ export default function GlobalProvider({
     }
     hasAttemptedChatRestoreRef.current = true;
     if (!manualChat && window.innerWidth < 768) return;
-    const restoreOpen = manualChat ? readChatOpenForSession() : !keepAiChatClosed && !aiChatAutoOpenSuppressed && readChatOpenForSession();
-    if (restoreOpen) {
-      setChatRuntimeMounted(true);
-      setShowAiChatInterface(true);
-      setAiChatExplicitOpenAt(null);
-    }
+    if (!manualChat && (keepAiChatClosed || aiChatAutoOpenSuppressed)) return;
+    if (!readChatOpenForSession()) return;
+    setChatRuntimeMounted(true);
+    setShowAiChatInterface(true);
+    setAiChatExplicitOpenAt(null);
   }, [currentUser?.id, aiChatOpenSwitchesEnabled, manualChat, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
