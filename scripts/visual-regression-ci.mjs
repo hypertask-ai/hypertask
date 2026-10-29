@@ -36,6 +36,12 @@ export function failedScreens(report) {
   return failed;
 }
 
+export function assertSamePlaywright(baseVersion, headVersion) {
+  if (baseVersion !== headVersion) {
+    throw new Error(`base and head must capture with one Playwright version so the pixels compare: base has ${baseVersion}, head has ${headVersion}. A Playwright change needs new production baselines.`);
+  }
+}
+
 export async function validateBaseline(directory) {
   for (const [project, width, height] of [["desktop", 1440, 900], ["phone", 390, 844]]) {
     for (const screen of ["board", "task-detail", "comment-box", "ctrl-j", "inbox"]) {
@@ -138,6 +144,7 @@ async function main() {
     currentPhase = nextPhase;
     phaseStarted = now;
   };
+  let basePlaywright;
   try {
     const head = path.join(workspace, "head");
     const base = path.join(workspace, "base");
@@ -168,7 +175,9 @@ async function main() {
       };
       command(root, env, ["npm", "ci", "--prefer-offline", "--no-audit", "--no-fund"]);
       const require = createRequire(path.join(root, "package.json"));
-      if (require("@playwright/test/package.json").version !== "1.64.0") throw new Error("Visual captures require Playwright 1.64.0");
+      const playwright = require("@playwright/test/package.json").version;
+      if (phase === "base") basePlaywright = playwright;
+      else if (basePlaywright) assertSamePlaywright(basePlaywright, playwright);
       command(root, env, ["npx", "prisma", "generate"]);
       command(root, env, ["npx", "prisma", "db", "execute", "--stdin"], "DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
       const Redis = require("ioredis");

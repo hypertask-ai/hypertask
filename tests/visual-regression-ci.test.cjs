@@ -5,7 +5,7 @@ const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseOnly = false, corruptBaseline = false } = {}) {
+function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseOnly = false, corruptBaseline = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" } } = {}) {
   const filename = path.join(__dirname, "../scripts/visual-regression-ci.mjs");
   const code = readFileSync(filename, "utf8").replace(/^import .*;\n/gm, "").replace(/^export /gm, "").replaceAll("import.meta.url", JSON.stringify(pathToFileURL(filename).href));
   const calls = [];
@@ -43,8 +43,8 @@ function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cache
       elapsed += 100;
       return JSON.stringify({ stats: { expected: 10 }, suites: [] });
     },
-    createRequire: () => name => {
-      if (name === "@playwright/test/package.json") return { version: "1.64.0" };
+    createRequire: root => name => {
+      if (name === "@playwright/test/package.json") return { version: playwrightVersions[path.basename(path.dirname(root))] };
       if (name === "ioredis") return class {
         async flushdb() { elapsed += 1000; calls.push("flushdb"); }
         disconnect() { calls.push("disconnect"); }
@@ -171,6 +171,12 @@ test("production warming captures base only; an ordinary miss still runs both li
   const miss = fixture();
   await miss.main();
   assert.deepEqual(miss.calls, [...commands("base"), ...commands("head")]);
+});
+
+test("base and head must install one Playwright version so the screenshots compare", async () => {
+  const run = fixture({ playwrightVersions: { base: "1.64.1", head: "1.64.2" } });
+  await assert.rejects(run.main(), /base and head must capture with one Playwright version .*base has 1\.64\.1, head has 1\.64\.2/);
+  assert.deepEqual(run.calls, [...commands("base"), `${commands("head")[0]}`]);
 });
 
 test("invalid cached PNG dimensions fail closed before any builds or comparisons", async () => {
