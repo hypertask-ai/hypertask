@@ -242,7 +242,7 @@ async function generateStatusUpdate(request: NextRequest) {
       teamId: project.team?.id ?? null,
       projectId,
       provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
-      feature: "summary",
+      feature: "status-update",
     });
     const result = await generateText({
       experimental_download: downloadWithoutBrotli,

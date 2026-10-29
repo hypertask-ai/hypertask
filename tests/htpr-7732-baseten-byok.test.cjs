@@ -129,6 +129,8 @@ function testKeyHarness({ enabled = true, paid = true, gdpr = false, allowed = t
   const calls = { keys: 0, network: [], settings: 0 };
   let settings = { gdprSafeMode: gdpr };
   const api = loadModule("src/app/api/settings/byok-test/route.ts", {
+    zod: require("zod"),
+    "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
     "@/lib/flags": { isFeatureEnabled: async () => enabled },
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
     "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async (url, init) => {

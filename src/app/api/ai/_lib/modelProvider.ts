@@ -81,7 +81,8 @@ export type AiGatewayFeature =
   | "custom-instructions"
   | "smart-label"
   | "onboarding-board"
-  | "status-update";
+  | "status-update"
+  | "suggest-reply";
 
 export type AiProviderOptions = TAiProviderOptions;
 

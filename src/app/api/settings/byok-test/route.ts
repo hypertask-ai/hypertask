@@ -3,6 +3,8 @@ import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-b
 import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { randomUUID } from "node:crypto";
 import {
   resolveTeamByokApiKey,
@@ -28,6 +30,15 @@ import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/update
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const testUsageSchema = z.object({
+  usage: z.object({
+    prompt_tokens: z.number().int().nonnegative().optional(),
+    completion_tokens: z.number().int().nonnegative().optional(),
+    input_tokens: z.number().int().nonnegative().optional(),
+    output_tokens: z.number().int().nonnegative().optional(),
+  }),
+});
 
 const TEST_TIMEOUT_MS = 20_000;
 const TEST_LEASE_MS = TEST_TIMEOUT_MS + 5_000;
@@ -162,6 +173,9 @@ export async function POST(request: Request) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
     const startedAt = Date.now();
+    let outcome = "failed";
+    let inputTokens: number | undefined;
+    let outputTokens: number | undefined;
 
     try {
       const response = await fetchWithoutBrotli(testRequest.url, {
@@ -169,6 +183,17 @@ export async function POST(request: Request) {
         signal: controller.signal,
       });
       const responseBody = await response.text();
+      outcome = response.ok ? "ok" : "failed";
+      try {
+        const parsed = testUsageSchema.safeParse(JSON.parse(responseBody));
+        if (parsed.success) {
+          inputTokens = parsed.data.usage.input_tokens ?? parsed.data.usage.prompt_tokens;
+          outputTokens = parsed.data.usage.output_tokens ?? parsed.data.usage.completion_tokens;
+        }
+      } catch {
+        inputTokens = undefined;
+        outputTokens = undefined;
+      }
       return NextResponse.json({
         result: classifyByokTestResponse(response.status, responseBody),
         status: response.status,
@@ -184,6 +209,12 @@ export async function POST(request: Request) {
       });
     } finally {
       clearTimeout(timeout);
+      await logAiUsage({
+        userId: user.id, teamId, provider: `byok:${body.provider}`, model: testRequest.modelId,
+        feature: "byok-test", outcome, inputTokens, outputTokens,
+        totalTokens: inputTokens !== undefined && outputTokens !== undefined ? inputTokens + outputTokens : undefined,
+        costUsd: null, latencyMs: Date.now() - startedAt,
+      });
     }
   };
 

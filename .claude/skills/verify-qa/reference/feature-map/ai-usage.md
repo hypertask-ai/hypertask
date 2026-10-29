@@ -64,3 +64,11 @@ Rows without pricing are not included.
   remain unchanged. Their existing tests must pass in hosted CI.
 - Save actual provider funding history over the required 24-hour window before
   claiming no top-up. Local token costs do not prove funding history.
+
+## Usage attribution (HTPR-7851)
+
+Check the persisted feature breakdown after ordinary use, without generating paid calls solely for QA. Status updates use `status-update`; suggested replies use `suggest-reply` and retain their ticket. Native image calls use `generate-image`; demo boards use `demo-board`; search indexing uses `embeddings`; transcription uses `dictation`; key checks use `byok-test`. Failed batch items retain their terminal outcome before instant fallback.
+
+Dedicated system credentials are identified by route: `gateway-demo`, `gateway-embeddings`, and `deepgram`. Key tests use `byok:<provider>`. No secret, transcript, input text, provider error body or key fingerprint belongs in the record. Unknown prices stay null, not zero. Embeddings run globally, so absent team/user IDs are intentional; transcription retains the authorized board and account.
+
+Read the usage API and reload its existing screen as QA 985. Compare only records produced after the deployed merge. Do not test saved keys, generate images, build demo boards, transcribe audio or trigger AI inference without spending approval. Mark absent live paths UNREACHABLE and retain the isolated entry-point test evidence; never present mocks as live proof. Billing, provider choices, allowance limits and output must remain unchanged.

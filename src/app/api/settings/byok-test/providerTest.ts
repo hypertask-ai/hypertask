@@ -29,6 +29,7 @@ const TEST_MODEL_KEYS: Partial<Record<TByokProviderKey, TAiModelKey>> = {
 type TestRequest = {
   init: RequestInit;
   modelLabel: string;
+  modelId: string;
   url: string;
 };
 
@@ -60,6 +61,7 @@ function jsonRequest(
   return {
     url,
     modelLabel: model.label,
+    modelId: model.id,
     init: {
       method: "POST",
       headers: {
@@ -143,6 +145,7 @@ export function buildByokTestRequest(
     return {
       url: "https://api.anthropic.com/v1/messages",
       modelLabel: model.label,
+      modelId: model.id,
       init: {
         method: "POST",
         headers: {

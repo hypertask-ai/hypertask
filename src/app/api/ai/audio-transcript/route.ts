@@ -52,7 +52,7 @@ function parseAudioDataUrl(audioFile: string) {
 
 async function transcribeAudio(
   audioFile: string,
-  context: { settings: unknown; teamId: string | null; userId?: number },
+  context: { settings: unknown; teamId: string | null; userId: number; projectId: number },
 ) {
   const { mediaType, base64 } = parseAudioDataUrl(audioFile);
   const bytes = Buffer.from(base64, "base64");
@@ -71,7 +71,10 @@ async function transcribeAudio(
     : null;
   const language = resolveDictationLanguage(prefs?.dictationLanguage);
 
-  return transcribeAudioFile(provider, file, { language, tags });
+  return transcribeAudioFile(provider, file, {
+    language, tags,
+    usage: { userId: context.userId, teamId: context.teamId, projectId: context.projectId },
+  });
 }
 
 async function improveTranscript(
@@ -157,6 +160,7 @@ export async function POST(request: NextRequest) {
       settings: teamContext.settings,
       teamId: teamContext.teamId,
       userId: session.userId,
+      projectId: body.projectId,
     });
 
     if (body.improve) {

@@ -304,6 +304,7 @@ test("page index includes, rows, schema and namespace contain only page-owned me
     "./configs/search.config": { searchConfig: { collections: { task: {}, comment: {} } } },
   }).turbopufferNamespaces;
   const index = load("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {
+    "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
     "@/lib/prisma": { default: { page: { findFirst: async (args) => {
       query = args;
       return { ...page, contentText: "Page text", project: { title: "Page board" }, task: null, taskId: null };

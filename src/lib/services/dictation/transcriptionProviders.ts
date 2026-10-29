@@ -1,3 +1,4 @@
+import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { dictationConfig } from "@/lib/configs/dictation.config";
 import { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 
@@ -7,6 +8,7 @@ export { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 export type TranscribeOptions = {
   language?: string;
   tags?: string[];
+  usage?: { userId: number; teamId: string | null; projectId: number };
 };
 
 export class DictationAudioTooLargeError extends Error {
@@ -49,34 +51,50 @@ export async function transcribeWithDeepgram(
   }
 
   const buffer = await audioFile.arrayBuffer();
-  const response = await fetch(
-    `${dictationConfig.api.deepgram.endpoint}?${params.toString()}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${apiKey}`,
-        "Content-Type": audioFile.type || "audio/webm",
+  const startedAt = Date.now();
+  let succeeded = false;
+  try {
+    const response = await fetch(
+      `${dictationConfig.api.deepgram.endpoint}?${params.toString()}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${apiKey}`,
+          "Content-Type": audioFile.type || "audio/webm",
+        },
+        body: buffer,
       },
-      body: buffer,
-    },
-  );
+    );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    let message = `Deepgram error: ${response.status}`;
-    try {
-      const parsed = JSON.parse(errorText);
-      message = parsed.err_msg || parsed.error || message;
-    } catch {
-      if (errorText) message = errorText;
+    if (!response.ok) {
+      const errorText = await response.text();
+      let message = `Deepgram error: ${response.status}`;
+      try {
+        const parsed = JSON.parse(errorText);
+        message = parsed.err_msg || parsed.error || message;
+      } catch {
+        if (errorText) message = errorText;
+      }
+      throw new Error(message);
     }
-    throw new Error(message);
-  }
 
-  const result = await response.json();
-  const transcript =
-    result?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
-  return String(transcript ?? "").trim();
+    const result = await response.json();
+    const transcript =
+      result?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
+    succeeded = true;
+    return String(transcript ?? "").trim();
+  } finally {
+    await logAiUsage({
+      ...options.usage,
+      userId: options.usage?.userId ?? null,
+      provider: "deepgram",
+      model: dictationConfig.api.deepgram.model,
+      feature: "dictation",
+      outcome: succeeded ? "ok" : "failed",
+      costUsd: null,
+      latencyMs: Date.now() - startedAt,
+    });
+  }
 }
 
 export async function transcribeAudioFile(
