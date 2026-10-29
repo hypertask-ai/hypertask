@@ -17,6 +17,8 @@ import { AttachmentButton } from "@/components/AI_CHAT/AttachmentButton";
 import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 import { AiComposerTextarea } from "@/components/AI_CHAT/AiComposerTextarea";
 import FullScreenChatLoading from "@/components/AI_CHAT/FullScreenChatLoading";
+import Tooltip from "@/components/Common/Tooltip";
+import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG } from "@/lib/flags/definitions/htpr-8141-board-shortcut-tooltip";
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, requestComposeSkillFollowup, type ComposeTaskStage } from "@/lib/ai/composeTask";
@@ -56,6 +58,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const chatAutoOpenAllowed = useRef(false);
   chatAutoOpenAllowed.current = false;
   if (!aiChatOpenSwitchesEnabled) chatAutoOpenAllowed.current = aiChatOpenSwitchesReady && chatAutoOpenReady && !keepAiChatClosed;
+  const boardShortcutTooltip = useFlag(HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG);
   const dictationShortcutEnabled = useFlag(HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG);
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
   const skillFollowupFlag = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
@@ -513,6 +516,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                     } else setText((previous) => previous + transcript);
                   }} />}
                 {boardChipEnabled && showBoardChip && <div className="min-w-0 max-w-full">
+                  {boardShortcutTooltip && <Tooltip portal bottom={0} left={0} text="Change board" keyCombination={boardShortcut.split("+")} />}
                   <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
                     aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
                     aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
