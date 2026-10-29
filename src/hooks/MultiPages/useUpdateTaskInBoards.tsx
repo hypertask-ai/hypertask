@@ -42,6 +42,7 @@ type UpdateOptions = {
 type RemoveFromListOptions = {
   undoRedirectPath?: string;
   suppressUndo?: boolean;
+  focusSections?: ISection[];
 }
 
 const getSectionCacheKey = (section: ISection) => section.sectionId ?? section.id;
@@ -381,6 +382,7 @@ const UpdateKanban = () => {
       sectionId,
       itemIndex,
       scope = "board",
+      keepColumnFocus = false,
     }: {
       sections: ISection[],
       sectionIndex: number,
@@ -388,15 +390,20 @@ const UpdateKanban = () => {
       itemIndex: number,
       sectionId: number,
       scope?: "board" | "column",
+      keepColumnFocus?: boolean,
     }
   ) => {
     const nextId = nextFocusAfterRemoval(
       sections,
       sectionIndex,
       itemIndex,
-      archiveColumnBoundary ? scope : "board",
+      archiveColumnBoundary || keepColumnFocus ? scope : "board",
     );
     updateActiveItemAndItemInView(nextId, projectId, sectionId);
+    if (keepColumnFocus && nextId === null) {
+      document.getElementById(`droppable-section-container-${sectionId}`)
+        ?.closest<HTMLElement>(".section-container")?.focus({ preventScroll: true });
+    }
   }
   async function removeFromListWithStatus(
     sectionId: number | undefined,
@@ -428,8 +435,9 @@ const UpdateKanban = () => {
       }
       else updatedTasksArray=projectToUpdate.tasks?.filter((i) => !taskIdsToRemove.has(i.id));
       
+      const focusSections = options.focusSections ?? filteredSections;
       let fsecIndex;
-      filteredSections?.forEach((fsection:ISection, fsectionIndex:number)=>{
+      focusSections?.forEach((fsection:ISection, fsectionIndex:number)=>{
         if(fsection.sectionId === sectionId || fsection.id === sectionId){
           fsecIndex = fsectionIndex
           fsection.items.forEach((item, index)=>{
@@ -458,12 +466,13 @@ const UpdateKanban = () => {
       }
   
       reAdjustFocusFromCurrContext({
-        sections: filteredSections,
+        sections: focusSections,
         sectionIndex: fsecIndex ?? 0,
         sectionId,
         itemIndex,
         projectId,
         scope: status === "Archive" ? "column" : "board",
+        keepColumnFocus: status === "Archive" && options.focusSections !== undefined,
       });
   
       mutationHandler(projectToUpdateIndex, updatedSections, allData, updatedTasksArray);
