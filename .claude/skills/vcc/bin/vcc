@@ -76,34 +76,110 @@ question_refuse() {
   printf 'vcc: Question refused: %s; rewrite it for a product owner (pospeak)\n' "$1" >&2
   exit 5
 }
-question_comment() {
-  case "${1:-} ${2:-}" in 'comment add'|'comments add') ;; *) return 0 ;; esac
-  local kind='' text='' file='' markdown=false reason
+human_lint() {
+  local lint=${VCC_TICKET_LINT:-$HOME/.local/share/house-rules/skills/tickets/scripts/ticket-lint} old_file rc=0
+  [ -f "$lint" ] || question_refuse 'shared ticket-lint is unavailable'
+  old_file=$(mktemp)
+  printf '%s' "${2:-}" > "$old_file"
+  printf '%s' "$1" | python3 "$lint" --old "$old_file" - || rc=$?
+  rm -f "$old_file"
+  [ "$rc" = 0 ] || question_refuse 'human text failed shared ticket-lint'
+}
+content_write() {
+  local action="${1:-} ${2:-}" kind='' text='' file='' markdown=false reason title='' description='' description_file='' ticket='' attached=false old='' project=''
+  local -a scope=()
+  case "$action" in 'comment add'|'comments add'|'task create'|'tasks create'|'task update'|'tasks update') ;; *) return 0 ;; esac
   shift 2
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --kind|--text|--body|--file)
+      --kind|--text|--body|--file|--title|--description|--description-file|--project)
         case "$1" in
           --kind) kind=${2:-} ;;
+          --project) project=${2:-} ;;
           --text|--body) text=${2:-}; file='' ;;
           --file) file=${2:-}; text='' ;;
+          --title) title=${2:-} ;;
+          --description) description=${2:-} ;;
+          --description-file) description_file=${2:-} ;;
         esac
         shift; [ "$#" -gt 0 ] || break ;;
       --kind=*) kind=${1#*=} ;;
+      --project=*) project=${1#*=} ;;
       --text=*|--body=*) text=${1#*=}; file='' ;;
       --file=*) file=${1#*=}; text='' ;;
+      --title=*) title=${1#*=} ;;
+      --description=*) description=${1#*=} ;;
+      --description-file=*) description_file=${1#*=} ;;
       --markdown) markdown=true ;;
+      --attach) attached=true; shift; [ "$#" -gt 0 ] || break ;;
+      --attach=*) attached=true ;;
+      -*) if [[ $1 != *=* ]] && [ "$#" -gt 1 ]; then shift; fi ;;
+      *) [ -n "$ticket" ] || ticket=$1 ;;
     esac
     shift
   done
-  [ "$kind" = question ] || return 0
-  if [ -n "$file" ]; then
-    text=$(cat -- "$file" 2>/dev/null) || question_refuse 'cannot read --file'
+  [ -z "$project" ] || scope=(--project "$project")
+  if [[ $action == comment* ]]; then
+    if [ -n "$file" ]; then text=$(cat -- "$file" 2>/dev/null) || question_refuse 'cannot read --file'; fi
+    if [ -z "$kind" ]; then
+      [ "$attached" = false ] || question_refuse 'attachments need --kind qa, question or done'
+      if [[ $ticket =~ ^[0-9]+$ ]]; then
+        ticket=$(hypertask tasks get "$ticket" "${scope[@]}" --json | jq -er '.tasks[0].ticketNumber') || question_refuse 'cannot resolve agent comment ticket'
+      fi
+      ROUTE_TICKET=$ticket; ROUTE_TEXT=$text
+      return 0
+    fi
+    case "$kind" in question|qa|done) ;; *) question_refuse 'unknown human comment kind' ;; esac
+    if [ "$kind" = question ]; then
+      reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
+      [ -z "$reason" ] || question_refuse "$reason"
+    fi
+    human_lint "$text"
+    return 0
   fi
-  reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
-  [ -z "$reason" ] || question_refuse "$reason"
+  [ -z "$title" ] || human_lint "$title"
+  if [ -n "$description_file" ]; then
+    description=$(cat -- "$description_file" 2>/dev/null) || question_refuse 'cannot read --description-file'
+  fi
+  [ -n "$description" ] || return 0
+  if [[ $action == *update ]]; then
+    old=$(hypertask tasks get "$ticket" "${scope[@]}" --json | jq -er '.tasks[0].description // ""') || question_refuse 'cannot read previous description'
+  fi
+  human_lint "$description" "$old"
 }
-question_comment "$@"
+# Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
+TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+IDENTITY="Valentins Claude Code"
+if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
+  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
+fi
+HT_TOKEN="$(cat "$TOKEN_FILE")"
+export HT_TOKEN
+
+guard_args() {
+  local arg
+  local -a positional=() options=()
+  while [ "$#" -gt 0 ]; do
+    arg=$1
+    [[ $arg != -?* || $arg == --* ]] || arg="-$arg"
+    case "$arg" in
+      --) shift; positional+=("$@"); break ;;
+      --*=*|--markdown) options+=("$arg") ;;
+      --help|--h|--version|--V|--json|--human|--force|--all|--all-boards|--enabled|--disabled|--confirm|--clear|--restore|--stdin|--off|--has-due-date|--summary|--markdown|--clear-due|--clear-parent|--comment|--html|--canvas|--dry-run|--apply|--clear-description|--running|--default|--clear-labels|--clear-assignees|--add|--self) ;;
+      -*) options+=("$arg" "${2:-}"); shift; [ "$#" -gt 0 ] || break ;;
+      *) positional+=("$arg") ;;
+    esac
+    shift
+  done
+  CHECK_ARGS=("${positional[@]}" "${options[@]}")
+}
+guard_args "$@"
+ROUTE_TICKET=''; ROUTE_TEXT=''
+content_write "${CHECK_ARGS[@]}"
+if [ -n "$ROUTE_TICKET" ]; then
+  set -- activity add "$ROUTE_TICKET" "$ROUTE_TEXT"
+  CHECK_ARGS=("$@")
+fi
 
 completion_move() {
   local section='' project='' destination='' target_section='' out arg checker="$HOME/.agents/skills/ship/scripts/ship-check"
@@ -140,14 +216,55 @@ completion_move() {
   out=$("$checker" move "${positional[2]:-}" "$section" "$project" "$destination") || { printf '%s\n' "$out" >&2; exit 2; }
 }
 
-# Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
-TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
-IDENTITY="Valentins Claude Code"
-if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
-  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
-fi
-HT_TOKEN="$(cat "$TOKEN_FILE")"
-export HT_TOKEN
+fail() { echo "vcc: $*" >&2; exit 1; }
+body=$(mktemp)
+trap 'rm -f "$body"' EXIT
+# Keep the token out of curl's arguments and logs.
+request() {
+  local method=$1 path=$2 data=${3:-}
+  code=$(printf 'header = "Authorization: Bearer %s"\n' "$HT_TOKEN" |
+    curl --config - --silent --show-error --connect-timeout 10 --max-time 30 \
+      --request "$method" --header 'Content-Type: application/json' \
+      ${activity_key:+--header "Idempotency-Key: $activity_key"} \
+      --data "$data" --output "$body" --write-out '%{http_code}' \
+      "https://app.hypertask.ai/api/mcp/$path") || fail 'request failed'
+}
+success() {
+  [[ $code == 2?? ]] && jq -e '.success == true' "$body" >/dev/null 2>&1 \
+    || fail "HTTP $code: $(jq -r '.error // .message // "request failed"' "$body" 2>/dev/null || echo 'request failed')"
+}
+
+waiting_on() {
+  case "${1:-} ${2:-}" in 'task waiting-on'|'tasks waiting-on') ;; *) return 0 ;; esac
+  local ticket='' user='' task reason question project=''
+  local -a scope=()
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --user) user=${2:-}; shift; [ "$#" -gt 0 ] || break ;;
+      --project) project=${2:-}; shift; [ "$#" -gt 0 ] || break ;;
+      --project=*) project=${1#*=} ;;
+      --user=*) user=${1#*=} ;;
+      -*) if [[ $1 != *=* ]] && [ "$#" -gt 1 ]; then shift; fi ;;
+      *) [ -n "$ticket" ] || ticket=$1 ;;
+    esac
+    shift
+  done
+  [ -n "$ticket" ] && [ -n "$user" ] || question_refuse 'waiting-on needs a ticket and --user'
+  [ -z "$project" ] || scope=(--project "$project")
+  if [ "$user" = none ]; then
+    task=$(hypertask tasks get "$ticket" "${scope[@]}" --json | jq -er '.tasks[0].id') || question_refuse 'cannot read blocked ticket'
+    request POST tasks/waiting-on "$(jq -nc --argjson id "$task" '{taskId:$id,userId:null,blockerCommentId:null}')"
+    success
+    jq -e '.task | has("waitingOnUserId") and has("blockerCommentId") and .waitingOnUserId == null and .blockerCommentId == null' "$body" >/dev/null || fail 'blocker clear was not confirmed'
+    cat "$body"
+    exit 0
+  fi
+  question=$(VCC_BIN="$0" python3 "$(dirname "$(readlink -f "$0")")/blocker-sweep.py" check "$ticket" "${scope[@]}") || question_refuse 'waiting-on needs a marked Question on this ticket'
+  reason=$(question_check "$question") || question_refuse 'cannot check marked Question'
+  [ -z "$reason" ] || question_refuse "$reason"
+}
+waiting_on "${CHECK_ARGS[@]}"
 completion_move "$@"
 review_refuse() {
   printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", "Yes:", "No:", "My recommendation:" and "Why:" paragraphs. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
@@ -180,7 +297,7 @@ review_move() {
   [ -z "$reason" ] || review_refuse "$ticket" "$reason; rewrite it for a product owner (pospeak)"
 }
 if [ "${1:-}" != activity ]; then
-  review_move "$@"
+  review_move "${CHECK_ARGS[@]}"
   exec /usr/bin/env -S hypertask "$@"
 fi
 
@@ -195,22 +312,6 @@ case "$command" in
   *) fail "unknown activity command: $command" ;;
 esac
 
-body=$(mktemp)
-trap 'rm -f "$body"' EXIT
-# Keep the token out of curl's arguments and logs.
-request() {
-  local method=$1 path=$2 data=${3:-}
-  code=$(printf 'header = "Authorization: Bearer %s"\n' "$HT_TOKEN" |
-    curl --config - --silent --show-error --connect-timeout 10 --max-time 30 \
-      --request "$method" --header 'Content-Type: application/json' \
-      ${activity_key:+--header "Idempotency-Key: $activity_key"} \
-      --data "$data" --output "$body" --write-out '%{http_code}' \
-      "https://app.hypertask.ai/api/mcp/$path") || fail 'request failed'
-}
-success() {
-  [[ $code == 2?? ]] && jq -e '.success == true' "$body" >/dev/null 2>&1 \
-    || fail "HTTP $code: $(jq -r '.error // .message // "request failed"' "$body" 2>/dev/null || echo 'request failed')"
-}
 
 if [ "$command" = last ]; then
   path="tasks/$ticket/agent-activity?limit=1"

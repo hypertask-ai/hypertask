@@ -41,3 +41,11 @@ Store proof, checklist, captures, and the self-contained HTML report in the tick
 - FAIL: keep In Progress. For flagged behavior, use the emergency Off path before repairs. Re-run deployment and live verification after repair. After two failed attempts, record the blocker and hand off; do not claim completion.
 
 A real human decision uses one Question in the house-rules tickets skill format: max 3 plain bullets, then Question, My recommendation, Why, Yes, No. No outside links or product precedents. Never use Valentin Review simply to ask for a flag switch. Keep decisions, flags, and follow-up work on their existing product surfaces; never build another decision inbox. Finish with /ship's session-scoped cleanup and proof.
+
+## Enforced writing and answered questions
+
+Human comments and new task text use the shared house-rules `skills/tickets/scripts/ticket-lint`; a missing lint refuses the write. Description edits check new lines against existing text. Question structure is checked before posting. Untyped comments go directly to agent activity, independent of server flags; attachments require an explicit human kind.
+
+`vcc task waiting-on` requires a marked Question before naming a person. `--user none` clears both the waiting name and marked comment in one product API call.
+
+After the protected wrapper is merged, run `python3 .claude/skills/vcc/bin/blocker-sweep.py install` from the merged checkout, under your existing `SHIP_SESSION_NAME`. It validates units before enabling and verifies the first real run. The five-minute timer uses that same identity through `vcc`, never a copied token. It reuses the shared read-only blocker scan, then rereads marked Questions and their comment pages. Only Valentin's human thumbs-up on an unchanged Yes recommendation clears the blocker. Agent reactions, other people, No recommendations and edited-after-approval questions stay untouched. This clears a question, never releases code or changes a flag.

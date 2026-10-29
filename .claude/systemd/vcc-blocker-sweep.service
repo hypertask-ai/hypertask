@@ -1,0 +1,11 @@
+[Unit]
+Description=Clear answered ticket questions and their waiting names
+
+[Service]
+Type=oneshot
+Environment=HOME=%h
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=%h/.config/hypertask-agents/blocker-sweep.env
+ExecStart=/usr/bin/python3 %h/.local/lib/hypertask/blocker-sweep.py sweep 15 4060 --apply
+TimeoutStartSec=10min
+UMask=0077

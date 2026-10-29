@@ -6,6 +6,18 @@ ship_check=$(cd "$(dirname "$vcc")/../../ship/scripts" && pwd)/ship-check
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/home/.config/hypertask-agents/credentials" "$T/proc"
+if [ -z "${VCC_TICKET_LINT:-}" ]; then
+  export VCC_TICKET_LINT="$T/ticket-lint"
+  cat > "$VCC_TICKET_LINT" <<'STUB'
+import pathlib, sys
+text = sys.stdin.read()
+old = pathlib.Path(sys.argv[sys.argv.index("--old") + 1]).read_text()
+for marker in ("Next:", "src/app/page.tsx", "new_code", "thirteen.", "Plain version:"):
+    if marker in text and marker not in old:
+        print("ticket-lint: rejected fixture", file=sys.stderr)
+        sys.exit(1)
+STUB
+fi
 export HOME="$T/home" PATH="$T/bin:$PATH" VCC_HELPER_PROC_ROOT="$T/proc"
 export VCC_TEST_BIN="$vcc" VCC_TEST_TRACE="$T/trace"
 unset VCC_HELPER HAX_TRANSCRIPT HAX_SUBAGENT_DEPTH
@@ -17,6 +29,9 @@ printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
 if [ "${1:-} ${2:-}" = 'comments list' ]; then
   exec /bin/cat "${VCC_TEST_COMMENTS:-/missing-comments-fixture}"
 fi
+if [[ "${1:-} ${2:-}" = 'tasks get' || "${1:-} ${2:-}" = 'task get' ]] && [ -n "${VCC_TEST_TASK:-}" ]; then
+  exec /bin/cat "$VCC_TEST_TASK"
+fi
 printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
 STUB
 cat > "$T/bin/cat" <<'STUB'
@@ -26,8 +41,24 @@ exec /bin/cat "$@"
 STUB
 cat > "$T/bin/curl" <<'STUB'
 #!/usr/bin/env bash
-printf 'unexpected network request\n' >&2
-exit 92
+if [ "${VCC_TEST_ACTIVITY:-0}" != 1 ]; then
+  printf 'unexpected network request\n' >&2
+  exit 92
+fi
+out='' data='' url=${!#}
+while [ "$#" -gt 0 ]; do
+  case "$1" in --output) out=$2; shift ;; --data) data=$2; shift ;; esac
+  shift
+done
+printf '%s\t%s\n' "$url" "$data" >> "$VCC_TEST_TRACE"
+case "$url" in
+  */agents/runs) printf '{"success":true,"run":{"id":"fixture-run"}}' > "$out" ;;
+  */agents/runs/fixture-run) printf '{"success":true,"run":{"status":"active"}}' > "$out" ;;
+  */activities) printf '{"success":true,"activity":{"id":"stub:activity"}}' > "$out" ;;
+  */tasks/waiting-on) printf '{"success":true,"task":{"waitingOnUserId":null,"blockerCommentId":null}}' > "$out" ;;
+  *) exit 92 ;;
+esac
+printf '200'
 STUB
 mkdir -p "$HOME/.agents/skills/ship/scripts"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'STUB'
@@ -65,12 +96,12 @@ allowed() {
   [[ $(< "$VCC_TEST_TRACE") == *hypertask* ]] || fail "CLI trace missing: $*"
 }
 
-refused env VCC_HELPER=1 bash "$vcc" comment add X-1 --text hi
+refused env VCC_HELPER=1 bash "$vcc" comment add X-1 --kind qa --text hi
 refused env VCC_HELPER=1 bash "$vcc" task move X-1 --section Done
 refused env VCC_HELPER=1 bash "$vcc" activity add X-1 x
 refused env VCC_HELPER=1 bash "$vcc" task assign X-1 --self
 refused env VCC_HELPER=1 bash "$vcc" pages create --task X-1
-refused env VCC_HELPER=1 bash "$vcc" comment add X-1 --text hi --help
+refused env VCC_HELPER=1 bash "$vcc" comment add X-1 --kind qa --text hi --help
 refused env VCC_HELPER=1 bash "$vcc" --project 15 task move X-1 --section Done
 refused env VCC_HELPER=1 bash "$vcc"
 printf 'ok explicit helper writes blocked before credentials\n'
@@ -84,8 +115,8 @@ for command in --help help --version; do
 done
 printf 'ok helper reads and help reach stub\n'
 
-allowed env HAX_PROVIDER=codex HAX_MODEL=gpt-6.1-sol HAX_EFFORT=high bash "$vcc" comment add X-1 --text hi
-[[ $(< "$T/out") == 'stub: <comment> <add> <X-1> <--text> <hi>' ]] || fail 'write arguments changed'
+allowed env HAX_PROVIDER=codex HAX_MODEL=gpt-6.1-sol HAX_EFFORT=high bash "$vcc" comment add X-1 --kind qa --text hi
+[[ $(< "$T/out") == 'stub: <comment> <add> <X-1> <--kind> <qa> <--text> <hi>' ]] || fail 'write arguments changed'
 printf 'ok runner write reaches stub without helper markers or ancestors\n'
 
 # A copied Bash binary retains comm=hax; only these live proc entries are exposed.
@@ -113,7 +144,7 @@ launch_hax() {
   ' "$marker" "$@"
 }
 for marker in -p --prompt --print; do
-  refused launch_hax "$marker" comment add X-1 --text hi
+  refused launch_hax "$marker" comment add X-1 --kind qa --text hi
   allowed launch_hax "$marker" tasks get X-1
   printf 'ok live hax ancestor %s blocks writes and allows reads\n' "$marker"
 done
@@ -122,7 +153,7 @@ refused env -u VCC_HELPER_PROC_ROOT "$T/bin/hax" -p -c '
   [ "$comm" = hax ] || exit 93
   /bin/bash "$VCC_TEST_BIN" "$@"
   exit $?
-' hax comment add X-1 --text hi
+' hax comment add X-1 --kind qa --text hi
 printf 'ok default /proc ancestry blocks helper writes\n'
 export VCC_TEST_NESTED=1
 refused launch_hax -p activity add X-1 x
@@ -130,8 +161,8 @@ unset VCC_TEST_NESTED
 printf 'ok hax grandparent blocks activity writes\n'
 
 # Prompt text containing -p is not a separate helper argument.
-allowed launch_hax 'prompt containing -p' comment add X-1 --text hi
-allowed launch_hax interactive comment add X-1 --text hi
+allowed launch_hax 'prompt containing -p' comment add X-1 --kind qa --text hi
+allowed launch_hax interactive comment add X-1 --kind qa --text hi
 printf 'ok hax without an exact prompt argument remains a runner\n'
 
 # Unknown activity subcommands stop in vcc with its usage, never reach the CLI.
@@ -146,12 +177,12 @@ printf 'ok unknown activity subcommands fail in vcc\n'
 question='<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>My recommendation: yes.</p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
 export VCC_TEST_COMMENTS="$T/comments.json"
 fixture() {
-  jq -n --arg text "$1" '{comments:[{id:"new",text:$text,createdAt:"2026-10-20T12:00:00Z"}]}' > "$VCC_TEST_COMMENTS"
+  jq -n --arg text "$1" '{success:true,comments:[{id:"new",text:$text,createdAt:"2026-10-20T12:00:00Z"}]}' > "$VCC_TEST_COMMENTS"
 }
 review_refused() {
   local reason=$1; shift
   run bash "$vcc" "$@"
-  [ "$status" = 5 ] || fail "expected exit 5, got $status: $*"
+  [ "$status" = 5 ] || fail "expected exit 5, got $status: $*: $(cat "$T/err")"
   [[ $(< "$T/err") == 'vcc: Valentin Review needs one plain Question comment first:'* ]] || fail "wrong review refusal: $*"
   [ -z "$reason" ] || [[ $(< "$T/err") == *"$reason"* ]] || fail "missing review refusal reason: $reason"
   [ ! -s "$T/out" ] || fail "review refusal produced stdout: $*"
@@ -215,11 +246,11 @@ printf 'ok unreadable or malformed comments fail closed\n'
 question_refused() {
   local reason=$1; shift
   run bash "$vcc" "$@"
-  [ "$status" = 5 ] || fail "expected exit 5, got $status: $*"
+  [ "$status" = 5 ] || fail "expected exit 5, got $status: $*: $(cat "$T/err")"
   [ ! -s "$T/out" ] || fail 'Question refusal produced stdout'
   [[ $(< "$T/err") == *"$reason"* ]] || fail "missing Question refusal reason: $reason"
   [[ $(< "$T/err") == *'rewrite it for a product owner (pospeak)'* ]] || fail 'missing product-owner guidance'
-  [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'refused Question reached CLI'
+  [[ ! $(< "$VCC_TEST_TRACE") =~ hypertask\ (comment|comments|task|tasks)\ (add|create|update) ]] || fail 'refused human write reached CLI'
 }
 plain='<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
 inline_why='<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes. Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
@@ -343,19 +374,14 @@ question_refused 'links' comment add X-1 --kind question --markdown --text "$mar
 [Details](https://example.test/help)"
 printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n'
 
-for kind in qa done ''; do
+for kind in qa done; do
   for subcommand in comment comments; do
-    args=("$subcommand" add X-1 --text 'src/app/page.tsx /api/ CI OAuth PR #123')
-    [ -z "$kind" ] || args+=(--kind "$kind")
-    allowed bash "$vcc" "${args[@]}"
-    expected='stub:'
-    printf -v expected '%s <%s>' "$expected" "${args[0]}"
-    for arg in "${args[@]:1}"; do expected+=" <$arg>"; done
-    [[ $(< "$T/out") == "$expected" ]] || fail 'non-question arguments changed'
+    question_refused 'shared ticket-lint' "$subcommand" add X-1 --kind "$kind" --text 'Next: src/app/page.tsx'
+    allowed bash "$vcc" "$subcommand" add X-1 --kind "$kind" --text '<p>Ready to try.</p>'
   done
 done
-allowed bash "$vcc" comment add X-1 --kind=qa --file "$T/missing.html"
-printf 'ok qa, done, and untyped comments forward code words unchanged\n'
+question_refused 'cannot read --file' comment add X-1 --kind=qa --file "$T/missing.html"
+printf 'ok human comments share ticket-lint\n'
 
 old_question_7508_295851=$(cat <<'FIXTURE'
 <p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Should HT Product Lead check and approve the agent-access exceptions, with you deciding only the changes that hide data from people?</strong></p><p>Why: some of the 81 agent board reads here are already protected by a check just above them; marking them reviewed changes nothing in the app.</p><p>Yes: HT Product Lead reviews those code checks; changes that hide a board, ticket or comment from a person still come to you, one question per batch.</p><p>No: each batch of them comes to you too.</p><p>Next: claude --resume ce05d8aa-af47-49c9-8593-c7d186e29d77</p>
@@ -376,10 +402,51 @@ FIXTURE
 question_refused 'My recommendation:' comment add X-1 --kind question --text "$old_question_7508_295851"
 fixture "$old_question_7508_295851"
 review_refused 'My recommendation:' task move X-1 --section 'Valentin Review'
-allowed bash "$vcc" comment add X-1 --kind question --text "$rewrite_7508_303933"
+question_refused 'shared ticket-lint' comment add X-1 --kind question --text "$rewrite_7508_303933"
 fixture "$rewrite_7508_303933"
 allowed bash "$vcc" task move X-1 --section 'Valentin Review'
-printf 'ok verbatim old Question refuses and real rewrite passes comment add and newest review\n'
+printf 'ok historical long rewrite refuses shared lint\n'
+
+for action in 'task create' 'tasks create' 'task update' 'tasks update'; do
+  read -r noun verb <<< "$action"
+  question_refused 'shared ticket-lint' "$noun" "$verb" X-1 --title 'src/app/page.tsx'
+  question_refused 'shared ticket-lint' "$noun" create --description 'One two three four five six seven eight nine ten eleven twelve thirteen.'
+done
+printf '<p>Ready to try.</p>' > "$T/description.html"
+allowed bash "$vcc" task create --title 'Readable questions' --description-file "$T/description.html"
+question_refused 'cannot read --description-file' task create --description-file "$T/missing.html"
+export VCC_TEST_TASK="$T/task.json"
+printf '{"success":true,"tasks":[{"id":123,"description":"<p>old_code</p>","blockerCommentId":null}]}' > "$VCC_TEST_TASK"
+allowed bash "$vcc" task update X-1 --description '<p>old_code</p><p>Ready to try.</p>'
+question_refused 'shared ticket-lint' task update X-1 --description '<p>old_code</p><p>new_code</p>'
+question_refused 'shared ticket-lint' comment add X-1 --kind qa --text 'One two three four five six seven eight nine ten eleven twelve thirteen.'
+export VCC_TEST_ACTIVITY=1
+for subcommand in comment comments; do
+  run bash "$vcc" "$subcommand" add X-1 --text 'Next: src/app/page.tsx' --json
+  [ "$status" = 0 ] || fail 'agent comment did not route'
+  [[ $(< "$T/out") == 'stub:activity' ]] || fail 'agent activity was not saved'
+  [[ $(< "$VCC_TEST_TRACE") != *'hypertask comment'* ]] || fail 'agent note reached people comments'
+  [[ $(< "$VCC_TEST_TRACE") == *'"text":"Next: src/app/page.tsx"'* ]] || fail 'agent content changed'
+done
+question_refused 'attachments need' comment add X-1 --text 'Agent note.' --attach screenshot.png
+run bash "$vcc" task waiting-on X-1 --user 6
+[ "$status" = 5 ] || fail 'waiting without marked Question was accepted'
+printf '{"success":true,"tasks":[{"id":123,"blockerCommentId":"new"}]}' > "$VCC_TEST_TASK"
+fixture "$plain"
+allowed bash "$vcc" task waiting-on X-1 --user 6
+fixture '<p>Ready to try.</p>'
+run bash "$vcc" task waiting-on X-1 --user 6
+[ "$status" = 5 ] || fail 'marked non-Question accepted'
+run bash "$vcc" task waiting-on X-1 --user none
+[ "$status" = 0 ] || fail 'clear failed'
+[[ $(< "$VCC_TEST_TRACE") == *'"userId":null,"blockerCommentId":null'* ]] || fail 'clear did not clear both blocker fields'
+unset VCC_TEST_ACTIVITY VCC_TEST_TASK
+question_refused 'shared ticket-lint' --json comment add X-1 --kind qa --text 'Next: src/app/page.tsx'
+question_refused 'shared ticket-lint' --human task create --description 'Next: src/app/page.tsx'
+question_refused 'shared ticket-lint' --project 15 --json comment --kind qa add X-1 --text 'Next: src/app/page.tsx'
+question_refused 'shared ticket-lint' comment -kind qa add X-1 -text 'Next: src/app/page.tsx'
+question_refused 'shared ticket-lint' --description 'Next: src/app/page.tsx' task create
+printf 'ok shared human lint and agent routing\n'
 cat > "$HOME/.agents/skills/ship/scripts/ship-check" <<'STUB'
 #!/usr/bin/env bash
 printf 'completion %s\n' "$*" >> "$VCC_TEST_TRACE"
@@ -464,4 +531,5 @@ mkdir -p "$VCC_EVIDENCE_DIR/HTPR-999"
 printf '1\n' > "$VCC_EVIDENCE_DIR/HTPR-999/pr"
 completion_refused env VCC_TEST_TICKET=HTPR-999 bash "$vcc" task move HTPR-999 --section Done
 printf 'ok real checker requires merged PR, successful deploy, and app QA proof\n'
+python3 "$(dirname "$vcc")/blocker-sweep.test.py"
 printf 'vcc helper guard tests passed\n'
