@@ -9,7 +9,7 @@ description: After deployment, verify real production behavior and record proof 
 
 Verify your change on `https://app.hypertask.ai` after deployment. Drive real entry points and prove saved results survive reload. Mocks, previews, passing tests and merged PRs are not live proof. Follow [Lauren Tan's verification pattern](https://github.com/poteto/verification-skill-example).
 
-Never use Valentin's login or browser. Use headless Playwright. Never print credentials. Never build or install app packages on the VPS.
+Never use Valentin's login or browser. Use headless Playwright. Never print credentials. Never build, install app packages or run test suites on the VPS; CI runs them, and a killed local run is not a blocker.
 
 ## Optional pre-PR check
 
