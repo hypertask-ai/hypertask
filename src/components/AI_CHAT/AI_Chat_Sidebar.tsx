@@ -229,8 +229,8 @@ export const AI_Chat_Sidebar = ({
   }, [agentSessionsEnabled, sidebarEnabled, agents, currentUser?.id, projectId]);
   const deepLink = searchParams?.get("sidebarAgent");
   const handledDeepLink = useRef<string | null>(null);
-  useEffect(() => {
-    if ((!agentSessionsEnabled && !agentHoverChat) || !sidebarEnabled) return;
+  useEffect(agentSessionsEnabled || agentHoverChat ? () => {
+    if (!sidebarEnabled) return;
     const choose = (event: Event) => {
       const detail = (event as CustomEvent<{ agentId: string | null; getDraft?: () => { html: string; text: string } }>).detail;
       if (detail.agentId === null) { void selectTargetRef.current({ kind: "ai" }); return; }
@@ -242,7 +242,7 @@ export const AI_Chat_Sidebar = ({
     };
     window.addEventListener("ht-sidebar-agent-selected", choose);
     return () => window.removeEventListener("ht-sidebar-agent-selected", choose);
-  }, [agentSessionsEnabled, agentHoverChat, sidebarEnabled, agents]);
+  } : () => {}, [agentSessionsEnabled, agentHoverChat, sidebarEnabled, agents]);
   const shortcuts = useChatShortcuts({
     enabled: sharedShortcutsEnabled,
     active: target.kind !== "external-agent",
