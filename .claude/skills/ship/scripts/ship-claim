@@ -206,8 +206,8 @@ if [[ $T == HTPR-* ]]; then
 fi
 
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
-claim_id=$("$VCC" activity add "$T" "Claimed. Session working it now.
-Next: I examine and fix it. Resume: $RESUME") \
+"$VCC" activity add "$T" "Claimed. Session working it now.
+Next: I examine and fix it. Resume: $RESUME" >/dev/null \
   || { echo "ship-claim: claim activity failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
 
@@ -241,8 +241,7 @@ jq -s '.[0] + {activities: .[1].activities}' "$W" "$LOG" > "$MERGED" && mv "$MER
 agent_idle() {
   local line when
   if [ "$2" = 1 ]; then
-    [ -n "$claim_id" ] || return 1
-    line=$(jq -r --arg agent "$1" --arg claim "$claim_id" '[.activities[] | select(.agentId == $agent and .id != $claim)] | max_by(.createdAt) | .createdAt // ""' "$LOG") || return 1
+    line=$(jq -r --arg agent "$1" --arg rid "$RID" '[.activities[] | select(.agentId == $agent) | select((.text | contains("Claimed.") and contains($rid)) | not)] | max_by(.createdAt) | .createdAt // ""' "$LOG") || return 1
   else
     line=$(VCC_ACTIVITY_AGENT_ID="$1" "$VCC" activity last "$T" 2>/dev/null) || return 1
   fi

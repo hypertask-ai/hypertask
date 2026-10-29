@@ -95,9 +95,9 @@ echo "$*" >> "$FAKE_LOG"
 if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "activity add" ] && [[ "$4" == Claimed.* ]] && [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
-  jq --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:"new-claim",createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
+  jq --arg id "new-claim-$(jq '.activities | length' "$FAKE_AGENT_LOG")" --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:$id,createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
   mv "$FAKE_AGENT_LOG.next" "$FAKE_AGENT_LOG"
-  echo new-claim
+  jq -r '.activities[-1].id' "$FAKE_AGENT_LOG"
 fi
 if [ "$1 $2" = "activity last" ]; then
   [ -z "${FAKE_ACTIVITY_FAIL:-}" ] || exit 1
@@ -196,8 +196,12 @@ for age in 9 1; do
   FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1; rc=$?
   if [ "$age" = 9 ]; then
     eq "flow: own new claim does not revive an idle shared session" "$rc" 0
+    FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1
+    eq "flow: retry claims do not revive an idle shared session" "$?" 0
   else
     eq "flow: active shared session remains protected" "$rc" 3
+    FAKE_SHARED_ACTIVITY=1 FAKE_AGENT_LOG=$D/shared.json ./ship-claim YPER4-999 >/dev/null 2>&1
+    eq "flow: retries still protect an active shared session" "$?" 3
   fi
   grep -q unassign "$D/log" && bad "shared identity recovery called unassign" || ok "shared identity recovery preserves assignment"
 done
