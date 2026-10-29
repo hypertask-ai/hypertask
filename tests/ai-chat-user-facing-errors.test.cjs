@@ -4,6 +4,7 @@ const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 const ts = require("typescript");
 const z = require("zod");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const routeSource = fs.readFileSync(
   path.join(__dirname, "../src/app/api/ai/chat/stream/route.ts"),
@@ -33,7 +34,7 @@ function loadErrorFormatters(logs = []) {
     "console",
     "z",
     "toErrorMessage",
-    `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage, includedAllowanceError, handledErrorExtra };`
+    `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage };`
   )(logger, z, loadToErrorMessage());
 }
 
@@ -201,24 +202,12 @@ test("model-selection errors remain user-actionable and pass through unchanged",
 });
 
 test("expected plan-access guidance is not reported as a product bug", async () => {
-  const source = ts.createSourceFile("errors.ts", fs.readFileSync(
-    path.join(__dirname, "../src/lib/ai/chatStream/errors.ts"), "utf8"
-  ), ts.ScriptTarget.Latest, true);
-  const declaration = source.statements.find(node =>
-    ts.isFunctionDeclaration(node) && node.name?.text === "reportHandledChatError"
-  );
-  assert.ok(declaration, "reportHandledChatError must exist");
-  const javascript = ts.transpileModule(declaration.getText(source).replace(/^export\s+/, ""), {
-    compilerOptions: { target: ts.ScriptTarget.ES2020 },
-  }).outputText;
   const reports = [];
-  const { includedAllowanceError, handledErrorExtra } = loadErrorFormatters();
-  const reportHandledChatError = new Function(
-    "includedAllowanceError",
-    "handledErrorExtra",
-    "reportError",
-    `${javascript}; return reportHandledChatError;`
-  )(includedAllowanceError, handledErrorExtra, async report => reports.push(report));
+  const { reportHandledChatError } = loadModule("src/lib/ai/chatStream/errors.ts", {
+    "@/lib/api/errorMessage": { toErrorMessage: loadToErrorMessage() },
+    "@/lib/ai/tools/constants": { SSE_HEADERS: {} },
+    "@/lib/errors/reportError": { reportError: async report => reports.push(report) },
+  });
 
   for (const name of ["AiPlanAccessError", "AiGatewayKeyRequiredError", "AiProviderAuthenticationError"]) {
     await reportHandledChatError(Object.assign(new Error(name), { name }), "select-model");
