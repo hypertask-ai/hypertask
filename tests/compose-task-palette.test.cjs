@@ -850,6 +850,7 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
     const Detail = jiti(path.join(root, 'src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx')).default;
     const { taskDetailReadKey, TASK_DETAIL_READ_FRESH_MS } = jiti(path.join(root, 'src/lib/taskDetailReads.ts'));
     const key = taskDetailReadKey(985, 52);
+    queryClient.setQueryData(['cached-task-detail', 985, 52], targetTask);
     queryClient.setQueryData(key, targetTask, { updatedAt: Date.now() - TASK_DETAIL_READ_FRESH_MS });
     await mountProbe(() => React.createElement(Detail, { taskId: 52, projectId: 7, uniqueIndex: 4, initialTask: targetTask, embedded: false }));
     assert.equal(document.querySelector('[data-task-title]').textContent, targetTask.title);
