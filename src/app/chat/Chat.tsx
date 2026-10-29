@@ -344,21 +344,29 @@ function ChatRailFilterRow({
   );
 }
 
+function focusChatComposer(editor: ChatContextType["editor"]) {
+  const dom = editor?.view?.dom as HTMLElement | undefined;
+  if (!dom || !document.contains(dom)) return false;
+  try { dom.focus({ preventScroll: true }); } catch {}
+  return document.activeElement === dom;
+}
+
 function CtrlTabSessionSwitch({
   groups,
   currentSessionId,
   onSelect,
-  router,
   returnPath,
   editor,
 }: {
   groups: { title: string; sessions: { id: string }[] }[];
   currentSessionId?: string;
   onSelect: (sessionId: string) => void;
-  router: ReturnType<typeof useRouter>;
   returnPath: string;
   editor: ChatContextType["editor"];
 }) {
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const liveEditor = useRef(editor);
+  liveEditor.current = editor;
   useEffect(() => {
     const handleSessionKeydown = (event: KeyboardEvent) => {
       if (
@@ -380,13 +388,30 @@ function CtrlTabSessionSwitch({
       if (!nextSession) return;
 
       onSelect(nextSession.id);
-      router.replace(buildFullScreenChatPath(returnPath, nextSession.id));
-      setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
+      window.history.replaceState(
+        null,
+        "",
+        buildFullScreenChatPath(returnPath, nextSession.id)
+      );
+      timers.current.forEach(clearTimeout);
+      timers.current = [
+        setTimeout(() => { focusChatComposer(liveEditor.current); }, 0),
+        setTimeout(() => {
+          if (!(liveEditor.current?.view.hasFocus?.() ?? false)) {
+            focusChatComposer(liveEditor.current);
+          }
+        }, 120),
+      ];
     };
 
     document.addEventListener("keydown", handleSessionKeydown);
     return () => document.removeEventListener("keydown", handleSessionKeydown);
-  }, [groups, currentSessionId, onSelect, router, returnPath, editor]);
+  }, [groups, currentSessionId, onSelect, returnPath]);
+
+  useEffect(() => () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  }, []);
   return null;
 }
 
@@ -604,7 +629,6 @@ export default function Chat({ initialSessionId }: ChatProps) {
           groups={displayedSessionGroups}
           currentSessionId={currentSession?.id}
           onSelect={selectSession}
-          router={router}
           returnPath={returnPath}
           editor={editor}
         />

@@ -52,14 +52,23 @@ function fixture() {
 function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE", paging = true, width = 1440, current = "today", rows = fixture() } = {}) {
   const dom = new JSDOM('<input id="search"><textarea id="composer"></textarea>', { url: "https://app.hypertask.ai/chat" });
   dom.window.innerWidth = width;
-  const savedGlobals = ["window", "document", "setTimeout"].map(key => [key, Object.getOwnPropertyDescriptor(global, key)]);
+  const savedGlobals = ["window", "document", "setTimeout", "clearTimeout"].map(key => [key, Object.getOwnPropertyDescriptor(global, key)]);
   global.window = dom.window;
   global.document = dom.window.document;
   const timers = [];
-  global.setTimeout = callback => { timers.push(callback); return timers.length; };
+  let nextTimerId = 0;
+  global.setTimeout = callback => {
+    const id = ++nextTimerId;
+    timers.push({ id, callback });
+    return id;
+  };
+  global.clearTimeout = id => {
+    const index = timers.findIndex(timer => timer.id === id);
+    if (index >= 0) timers.splice(index, 1);
+  };
   const composer = document.getElementById("composer");
-  const slots = [], effects = [], routes = [], selections = [];
-  let cursor = 0, cleanups = [], tree, activeSlots = slots;
+  const slots = [], effects = [], routes = [], selections = [], mounted = [];
+  let cursor = 0, tree, activeSlots = slots;
   const react = {
     useMemo: callback => callback(),
     useRef: current => activeSlots[cursor++] ??= { current },
@@ -68,7 +77,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       if (!(index in activeSlots)) activeSlots[index] = initial;
       return [activeSlots[index], next => { activeSlots[index] = typeof next === "function" ? next(activeSlots[index]) : next; }];
     },
-    useEffect: callback => { effects.push(callback); },
+    useEffect: (callback, deps) => { effects.push({ callback, deps }); },
   };
   const context = {
     activeSession: current,
@@ -84,7 +93,13 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       context.currentSession = rows.find(row => row.id === id);
     },
   };
-  const router = { replace: route => routes.push(route) };
+  const remountComposer = () => {
+    document.activeElement?.blur?.();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    container.appendChild(composer);
+  };
+  const router = { replace: route => { routes.push(route); remountComposer(); } };
   const { default: Chat } = load("src/app/chat/Chat.tsx", {
     react,
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: shared }) },
@@ -113,14 +128,16 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     "lucide-react": Object.fromEntries(["Check", "ChevronDown", "Minimize2", "Pin", "Search", "Sparkles", "SquarePen", "Trash2"].map(name => [name, name])),
     "next/navigation": { useRouter: () => router, useSearchParams: () => new URLSearchParams("return_to=%2Fmy-tasks") },
   });
+  const componentSlots = new Map();
   function renderChildren(node) {
     if (!node || typeof node !== "object") return;
     const props = node.props ?? {};
     if (typeof node.type === "function") {
       const savedCursor = cursor;
       const savedSlots = activeSlots;
+      if (!componentSlots.has(node.type)) componentSlots.set(node.type, []);
       cursor = 0;
-      activeSlots = [];
+      activeSlots = componentSlots.get(node.type);
       renderChildren(node.type({ ...props, children: undefined }));
       activeSlots = savedSlots;
       cursor = savedCursor;
@@ -128,13 +145,27 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     [props.children].flat(Infinity).forEach(renderChildren);
   }
   function render() {
-    cleanups.forEach(cleanup => cleanup?.());
-    cleanups = [];
     cursor = 0;
     activeSlots = slots;
     tree = Chat({});
     renderChildren(tree);
-    cleanups = effects.splice(0).map(effect => effect());
+    const seen = new Set();
+    effects.splice(0).forEach((effect, index) => {
+      seen.add(index);
+      const previous = mounted[index];
+      if (previous && sameDeps(previous.deps, effect.deps)) return;
+      previous?.cleanup?.();
+      mounted[index] = { deps: effect.deps, cleanup: effect.callback() };
+    });
+    mounted.forEach((slot, index) => {
+      if (!slot || seen.has(index)) return;
+      slot.cleanup?.();
+      mounted[index] = undefined;
+    });
+  }
+  function sameDeps(previous, next) {
+    if (!previous || !next || previous.length !== next.length) return false;
+    return previous.every((value, index) => value === next[index]);
   }
   render();
   return {
@@ -151,7 +182,15 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       elements(tree, node => node.type === "input")[0].props.onChange({ target: { value } });
       render();
     },
-    press(overrides = {}) {
+    get location() { return dom.window.location.pathname + dom.window.location.search; },
+    get pendingTimers() { return timers.length; },
+    remountComposer,
+    drainTimers() {
+      for (let pass = 0; pass < 5 && timers.length; pass++) {
+        timers.splice(0).forEach(timer => timer.callback());
+      }
+    },
+    press(overrides = {}, { beforeTimers } = {}) {
       const event = new dom.window.KeyboardEvent("keydown", { key: "Tab", ctrlKey: true, bubbles: true, cancelable: true, ...overrides });
       if (overrides.defaultPrevented) event.preventDefault();
       document.getElementById("search").focus();
@@ -160,12 +199,14 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
       render();
       if (selections.length > previousSelections) {
         assert.equal(document.activeElement.id, "search", "composer focus waits until after selection renders");
+        assert.ok(this.pendingTimers > 0, "the session change keeps the pending caret restore");
       }
-      timers.splice(0).forEach(callback => callback());
+      beforeTimers?.();
+      this.drainTimers();
       return event;
     },
     close() {
-      cleanups.forEach(cleanup => cleanup?.());
+      mounted.splice(0).forEach(slot => slot?.cleanup?.());
       dom.window.close();
       for (const [key, descriptor] of savedGlobals) {
         if (descriptor) Object.defineProperty(global, key, descriptor);
@@ -176,7 +217,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
 }
 
 for (const paging of [false, true]) {
-  test(`${paging ? "paged" : "legacy"} rail order drives both directions, routes and deferred composer focus`, () => {
+  test(`${paging ? "paged" : "legacy"} rail order drives both directions, updates the address without navigating and keeps the caret in the composer`, () => {
     const view = chat({ paging });
     try {
       assert.deepEqual(view.groups, ["Pinned", "Today", "Previous 7 days", "Older"]);
@@ -193,10 +234,28 @@ for (const paging of [false, true]) {
       assert.equal(view.context.currentSession.id, "pinned");
       assert.equal(document.activeElement, view.composer);
       assert.deepEqual(view.selections, ["hidden", "week", "hidden", "today", "pinned"]);
-      assert.deepEqual(view.routes, ["hidden", "week", "hidden", "today", "pinned"].map(id => `/chat/${id}?return_to=%2Fmy-tasks`));
+      assert.deepEqual(view.routes, []);
+      assert.equal(view.location, "/chat/pinned?return_to=%2Fmy-tasks");
+      assert.equal(document.activeElement, view.composer);
     } finally { view.close(); }
   });
 }
+
+test("switching chats updates the address without navigating and keeps the caret when the composer re-renders", () => {
+  const view = chat();
+  try {
+    view.press();
+    assert.equal(view.context.currentSession.id, "hidden");
+    assert.deepEqual(view.routes, []);
+    assert.equal(view.location, "/chat/hidden?return_to=%2Fmy-tasks");
+    assert.equal(document.activeElement, view.composer);
+    view.remountComposer();
+    assert.notEqual(document.activeElement, view.composer);
+    view.press();
+    assert.equal(view.context.currentSession.id, "week");
+    assert.equal(document.activeElement, view.composer);
+  } finally { view.close(); }
+});
 
 test("search uses only displayed matches and stops at both ends without wrapping", () => {
   const view = chat({ current: "pinned" });
@@ -209,7 +268,8 @@ test("search uses only displayed matches and stops at both ends without wrapping
     for (let i = 0; i < 4; i++) view.press();
     assert.equal(view.context.currentSession.id, "older");
     assert.deepEqual(view.selections, ["today", "week", "older"]);
-    assert.equal(view.routes.at(-1), "/chat/older?return_to=%2Fmy-tasks");
+    assert.deepEqual(view.routes, []);
+    assert.equal(view.location, "/chat/older?return_to=%2Fmy-tasks");
     view.press({ shiftKey: true });
     assert.equal(view.context.currentSession.id, "week");
     assert.equal(document.activeElement, view.composer);
