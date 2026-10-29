@@ -184,7 +184,7 @@ export function useAiChatSessions(context: Context) {
         : sessionsRef.current.find((session) => session.id === sidebarNative.sessionId);
     }
 
-    if (taskId !== undefined && !manualChat) {
+    if (taskId !== undefined && (!manualChat || !navigationKey)) {
       if (sessionPagingEnabled || navigationKey) {
         const generation = sessionIntentGenerationRef.current;
         const deadline = Date.now() + timeoutMs;

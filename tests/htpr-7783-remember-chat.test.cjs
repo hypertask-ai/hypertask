@@ -465,6 +465,19 @@ test("following tickets keeps the chosen conversation with remembered navigation
   });
 });
 
+for (const hasTicketSession of [false, true]) test(`flag-off manual ticket chat ${hasTicketSession ? "uses its ticket conversation" : "does not substitute a general conversation"}`, async () => {
+  const rows = [row("newest"), ...(hasTicketSession ? [{ ...row("older"), taskId: 43 }] : [])];
+  await withChat({ paged: false, enabled: false, manualChat: true, rows }, async view => {
+    await view.set(atoms.inViewObjectAtom, { taskId: 43 });
+    await view.visit("/detail/project-15/43");
+    assert.equal(view.chatState().navigationKey, null);
+    assert.equal(view.chatState().taskId, 43);
+    const session = await view.resolver().ensureSessionForCurrentBoard(0);
+    assert.equal(session?.id, hasTicketSession ? "older" : undefined);
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+  });
+});
+
 test("first manual send from a ticket creates a general conversation", async () => {
   await withChat({ paged: true, manualChat: true, rows: [] }, async view => {
     await view.set(atoms.inViewObjectAtom, { taskId: 43 });
