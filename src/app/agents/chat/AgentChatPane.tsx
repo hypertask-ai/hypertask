@@ -41,7 +41,6 @@ type Props = { embedded?: boolean; active?: boolean } & Pick<
   | "setFeedFilter"
   | "showScrollToBottom"
   | "isMbl"
-  | "mobileLayoutEnabled"
   | "messageListRef"
   | "messagesError"
   | "sessionLoading"
@@ -107,7 +106,7 @@ export function AgentChatPane({
   embedded, active = true, selectedAgent, isNarrow, backToRoster, mobileFullscreenChrome, deliveryMode,
   toggleDetails, detailsCollapsed, setDetailsSheetOpen, isExternal, openingFullChat,
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
-  mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
+  scrollMessagesToBottom, messageListRef, handleMessageListScroll,
   messagesError, sessionLoading, messages, visibleFeed, activeFeedFilter, projectIdForPrefix,
   handleProposalAction, sending, queuedMessages, removeQueuedMessage,
   awaiting, deliveryNotice, replyTimedOut, handleStop, stopping, reuseAiComposer, mentionOpen,
@@ -197,7 +196,7 @@ export function AgentChatPane({
             </div>
           )}
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-            {showScrollToBottom && !(isMbl && mobileLayoutEnabled) && (
+            {showScrollToBottom && !isMbl && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
               />
@@ -207,7 +206,7 @@ export function AgentChatPane({
             onScroll={handleMessageListScroll}
             className={cn(
               "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-y-contain px-4 py-4",
-              isMbl && mobileLayoutEnabled && showScrollToBottom && "pb-12",
+              isMbl && showScrollToBottom && "pb-12",
             )}
           >
             {messagesError && (
@@ -234,7 +233,7 @@ export function AgentChatPane({
                 <ActivityGroup
                   key={item.id}
                   group={item}
-                  constrainRows={isMbl && mobileLayoutEnabled}
+                  constrainRows={isMbl}
                 />
               ),
             )}
@@ -281,7 +280,7 @@ export function AgentChatPane({
               !reuseAiComposer && "bg-cardBackground px-4 pb-4 pt-1",
             )}
           >
-            {showScrollToBottom && isMbl && mobileLayoutEnabled && (
+            {showScrollToBottom && isMbl && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
                 className="-top-12 z-50"
@@ -391,10 +390,10 @@ export function AgentChatPane({
                     onProcessingChange={setIsDictationProcessing}
                     disabled={
                       sending ||
-                      (isMbl && mobileLayoutEnabled && dictationProjectId === null)
+                      (isMbl && dictationProjectId === null)
                     }
                     projectId={
-                      isMbl && mobileLayoutEnabled ? dictationProjectId : undefined
+                      isMbl ? dictationProjectId : undefined
                     }
                     ariaLabel="Dictate message"
                     className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"

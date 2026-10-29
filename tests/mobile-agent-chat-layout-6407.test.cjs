@@ -1,5 +1,4 @@
 const { readAgentChatSource } = require("./helpers/agent-chat-source.cjs");
-// HTPR-6407 redeploy marker: keep prod health from rolling back a no-diff empty commit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -19,8 +18,6 @@ const messagesRoute = fs.readFileSync(
   path.join(root, "src/app/api/agent-chat/[sessionId]/messages/route.ts"),
   "utf8",
 );
-const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
-const keys = require("./helpers/flag-files.cjs").source();
 const events = fs.readFileSync(
   path.join(root, "src/lib/agentWebhooks/events.ts"),
   "utf8",
@@ -36,22 +33,10 @@ const narrowLayout = chat.slice(
 );
 const desktopLayout = chat.slice(chat.indexOf("const content ="));
 
-test("HTPR-6407 flag is registered", () => {
-  assert.match(keys, /HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG/);
-  assert.match(keys, /htpr-6407-mobile-agent-chat-layout/);
-  assert.match(fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8"), /AGENT_CHAT_ADHD_REPLY_GUIDANCE/);
-  assert.match(
-    flags,
-    /key:\s*HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG[\s\S]*?Pins the Agent Chat composer on mobile/,
-  );
-});
-
-test("flagged mobile shell drops h-screen and uses chrome-aware classes", () => {
-  assert.match(chat, /HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG/);
-  assert.match(chat, /mobileLayoutEnabled/);
+test("mobile shell drops h-screen and uses chrome-aware classes", () => {
   assert.match(
     narrowLayout,
-    /!\(isMbl && \(mobileLayoutEnabled \|\| mobileFullscreenChrome\)\) &&\s*\n\s*"h-screen"/,
+    /!isMbl && "h-screen"/,
   );
   assert.match(narrowLayout, /mobile-agent-chat/);
   assert.match(narrowLayout, /overscroll-y-none/);
@@ -67,28 +52,28 @@ test("desktop Agent Chat height stays h-screen", () => {
   assert.doesNotMatch(desktopLayout, /mobile-agent-chat/);
 });
 
-test("scroll button can sit above the composer when flagged", () => {
+test("scroll button can sit above the composer on mobile", () => {
   assert.match(chat, /className="-top-12 z-50"/);
-  assert.match(chat, /showScrollToBottom && isMbl && mobileLayoutEnabled/);
+  assert.match(chat, /showScrollToBottom && isMbl/);
   assert.match(chat, /pb-12/);
 });
 
 test("activity rows keep a truncating text column", () => {
   assert.match(chat, /constrainRows/);
-  assert.match(chat, /constrainRows=\{isMbl && mobileLayoutEnabled\}/);
+  assert.match(chat, /constrainRows=\{isMbl\}/);
   assert.match(chat, /block w-full/);
   assert.match(chat, /min-w-0 flex-1">\{eventContent\}/);
 });
 
-test("dictation uses an explicit agent board id behind the flag", () => {
+test("dictation uses an explicit agent board id on mobile", () => {
   assert.match(chat, /function agentDictationProjectId/);
   assert.match(
     chat,
-    /projectId=\{\s*isMbl && mobileLayoutEnabled \? dictationProjectId : undefined\s*\}/,
+    /projectId=\{\s*isMbl \? dictationProjectId : undefined\s*\}/,
   );
   assert.match(
     chat,
-    /isMbl && mobileLayoutEnabled && dictationProjectId === null/,
+    /isMbl && dictationProjectId === null/,
   );
   assert.match(audio, /projectId\?: number \| null/);
   assert.match(audio, /projectIdProp === undefined \? currentProject\?\.id/);
@@ -101,20 +86,17 @@ test("mobile top bar reads the published agent title on agent chat", () => {
   assert.match(chat, /mobileTopBarTitleAtom/);
 });
 
-test("chat.message can carry ADHD reply guidance behind the flag", () => {
+test("chat.message carries ADHD reply guidance permanently", () => {
   assert.match(events, /replyGuidance\?: string/);
-  assert.match(messagesRoute, /HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG/);
   assert.match(messagesRoute, /AGENT_CHAT_ADHD_REPLY_GUIDANCE/);
   assert.match(messagesRoute, /replyGuidance: AGENT_CHAT_ADHD_REPLY_GUIDANCE/);
 });
 
 test("closed AI layout does not double-pad /agents/chat", () => {
-  // The closed layout is also the frame once chat loads (HTPR-6751).
   assert.match(
     closedLayout,
     /pathname\?\.startsWith\(\s*["']\/settings["']\s*\)\s*\|\|\s*pathname\?\.startsWith\(\s*["']\/agents\/chat["']\s*\)/,
   );
-  // Agent Chat keeps its own chrome insets when the parent bails.
   assert.match(
     narrowLayout,
     /mobile-tab-bar-content pt-\[var\(--mobile-top-bar-h\)\] pb-\[max\(var\(--mobile-dock-h,64px\),64px\)\]/,

@@ -17,10 +17,7 @@ import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
 import { isFeatureEnabled } from "@/lib/flags";
-import {
-  AGENT_CHAT_ADHD_REPLY_GUIDANCE,
-  HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
-} from "@/lib/flags/keys";
+import { AGENT_CHAT_ADHD_REPLY_GUIDANCE } from "@/lib/flags/keys";
 import { hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
 import { defaultContextSchema } from "@/lib/ai/chatStream/request";
@@ -142,11 +139,6 @@ export async function POST(
       console.error("Failed to enrich Agent Chat with work context", error);
     }
 
-    const adhdReplyEnabled = await isFeatureEnabled(
-      HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
-      userId,
-    );
-
     const { message, deliveryIds, pollingChatEnabled } =
       await prisma.$transaction(async (tx) => {
       const [agent] = await tx.$queryRaw<Array<{ heartbeatAt: Date | null }>>`
@@ -197,9 +189,7 @@ export async function POST(
           messageId: message.id,
           ...(messageContext ? agentChatContextPayload(text, messageContext) : { text }),
           userName: sender?.displayName ?? null,
-          ...(adhdReplyEnabled
-            ? { replyGuidance: AGENT_CHAT_ADHD_REPLY_GUIDANCE }
-            : {}),
+          replyGuidance: AGENT_CHAT_ADHD_REPLY_GUIDANCE,
         },
         ...(agentBrief ? { agentBrief } : {}),
       });
