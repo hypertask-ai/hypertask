@@ -59,7 +59,7 @@ function navigation(overrides = {}) {
     isMbl: true, mobileLayoutEnabled: false, teamId: "qa-team",
     setAgentChatMobileFullscreen: (value) => fullscreen.push(value),
     setMobileTopBarTitle: (value) => titles.push(value), setTeamId() {},
-    search: "", liveSortEnabled: false, ...overrides,
+    search: "", ...overrides,
   });
   return { value, fullscreen, titles, selectedAgent, dictationCalls,
     cleanup: effects.map((effect) => effect()).filter(Boolean) };
