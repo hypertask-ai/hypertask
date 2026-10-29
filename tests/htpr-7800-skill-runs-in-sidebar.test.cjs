@@ -152,6 +152,7 @@ test("flag off preserves the purple skill writer and ordinary comment AI prompts
 test("chat context includes full ticket description and comments and resolves the selected skill for this board", async () => {
   const description = "<p>Full description</p>".repeat(1000);
   const { loadCurrentTaskContext } = loader({
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/prisma": { default: { task: { findMany: async query => {
       assert.deepEqual(query.where.id, { in: [123] });
       return [{ id: 123, ticketNumber: "HTPR-123", title: "Ticket title", description_: { content: description },
