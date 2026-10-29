@@ -188,16 +188,16 @@ const Commands = (props: Props) => {
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
-  const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration, graphite2Enabled),
-    [isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration, graphite2Enabled]
+  const getThemeCommands = useCallback(
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, roundedEnabled && !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration, graphite2Enabled),
+    [roundedEnabled, isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration, graphite2Enabled]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration, graphite2Enabled),
-    [keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration, graphite2Enabled]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration),
+    [keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration]
   );
   let getCommands = getLegacyCommands;
-  if (roundedEnabled) getCommands = getRoundedCommands;
+  if (roundedEnabled || graphite2Enabled) getCommands = getThemeCommands;
   const excludeTicketPrefixCommand = useCallback(
     (command: ICommandList) => command.key !== "settingsBoardTicketPrefix",
     []
