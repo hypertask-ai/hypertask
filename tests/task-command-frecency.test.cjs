@@ -163,6 +163,7 @@ test("task comment commands remember usage without changing their pinned order",
           return [value, setPersistedValue];
         },
         useRecoilValue: (atom) => atom.default,
+        useSetRecoilState: () => () => {},
       }),
       setMock(require.resolve("next/navigation"), {
         useRouter: () => ({ push() {} }),

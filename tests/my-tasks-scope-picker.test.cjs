@@ -20,6 +20,7 @@ const members = { members: [], owner: null };
 stub("src/hooks/useFlag.tsx", { useFlag: (key) => key !== "htpr-6938-my-tasks-icon-controls" });
 stub("src/lib/state.tsx", {
   useRecoilValue: (atom) => atom?.default ?? null,
+  useSetRecoilState: () => noop,
   useRecoilState: (atom) => React.useState(atom?.default ?? {}),
 });
 stub("src/store/index.ts", {
