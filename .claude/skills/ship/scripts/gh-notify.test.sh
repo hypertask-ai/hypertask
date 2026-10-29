@@ -11,22 +11,27 @@ trap 'kill $PIDS 2>/dev/null; rm -rf "$T"' EXIT
 mkdir -p "$T/claims" "$T/inbox" "$T/notify"
 printf '111 hypertask-ai/hypertask\n112 valentinyeo/postbox\n' > "$T/hooks"
 mkdir -p "$T/truth"
+printf fixture-secret > "$T/secret"
+printf 100 > "$T/run-id"
 # Fake gh for the receiver's read-back: answers from $T/truth/<api path with / as _>, else fails.
-printf '#!/bin/sh\nf="%s/truth/$(echo "$2" | tr / _)"\n[ -f "$f" ] && cat "$f" || exit 1\n' "$T" > "$T/srvgh"
+printf '#!/bin/sh\necho read >> "%s/readbacks"\nf="%s/truth/$(echo "$2" | tr / _)"\n[ -f "$f" ] && cat "$f" || exit 1\n' "$T" "$T" > "$T/srvgh"
 printf '#!/bin/sh\n[ -f "%s/deliver.fail" ] && { rm -f "%s/deliver.fail"; cat >/dev/null; exit 1; }\nprintf "%%s|%%s|%%s\\n" "$1" "$RUNNER_DELIVER_ID" "$(cat)" >> "%s/deliver.log"\n' "$T" "$T" "$T" > "$T/deliver"
 printf '#!/bin/sh\nprintf "%%s|%%s|%%s\\n" "$1" "$4" "$2" >> "%s/say.log"\n' "$T" > "$T/say"
 chmod +x "$T/deliver" "$T/say" "$T/srvgh"
 PORT=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
-RUNNER_INBOX_DIR=$T/inbox RUNNER_DELIVER=$T/deliver GH_NOTIFY_DIR=$T/notify GH_NOTIFY_HOOKS=$T/hooks GH_NOTIFY_CLAIMS=$T/claims \
+RUNNER_INBOX_DIR=$T/inbox RUNNER_DELIVER=$T/deliver GH_NOTIFY_DIR=$T/notify GH_NOTIFY_HOOKS=$T/hooks GH_NOTIFY_CLAIMS=$T/claims GH_NOTIFY_SECRET=$T/secret \
   GH_NOTIFY_SESSION_SAY=$T/say GH_NOTIFY_GH=$T/srvgh RUNNER_WEBHOOK_PORT=$PORT RUNNER_WEBHOOK_FALLBACK_PORT=1 python3 ./runner-webhook 2>"$T/server.log" & PIDS="$PIDS $!"
 for _ in $(seq 50); do curl -fs "http://127.0.0.1:$PORT/runner-webhook/healthz" >/dev/null 2>&1 && break; sleep 0.1; done
 post() { # hook-id event delivery body
+  local signature
+  signature=$(printf '%s' "$4" | openssl dgst -sha256 -hmac fixture-secret | awk '{print $NF}')
   curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/github/notify" -H "X-GitHub-Hook-ID: $1" \
-    -H "X-GitHub-Event: $2" -H "X-GitHub-Delivery: $3" -H 'Content-Type: application/json' --data "$4"
+    -H "X-GitHub-Event: $2" -H "X-Hub-Signature-256: sha256=$signature" -H "X-GitHub-Delivery: $3" -H 'Content-Type: application/json' --data "$4"
 }
-RUNID=100
 run() { # repo branch workflow conclusion pr sha [forged]; GitHub agrees unless forged
-  RUNID=$((RUNID + 1))
+  local RUNID
+  RUNID=$(($(cat "$T/run-id") + 1))
+  printf '%s' "$RUNID" > "$T/run-id"
   [ -n "${7:-}" ] || jq -nc --arg b "$2" --arg c "$4" --arg w "$3" --arg s "$6" --argjson p "$5" '[$b, $c, $w, $s, $p] | @json' | jq -r . > "$T/truth/repos_$(echo "$1" | tr / _)_actions_runs_$RUNID"
   jq -nc --arg r "$1" --arg b "$2" --arg w "$3" --arg c "$4" --argjson p "$5" --arg s "$6" --argjson id "$RUNID" \
     '{action:"completed", repository:{full_name:$r}, workflow_run:{id:$id, name:$w, head_branch:$b, conclusion:$c, head_sha:$s, html_url:"https://evil.example", pull_requests:[{number:$p}]}}'
@@ -38,6 +43,9 @@ closed() { # repo branch pr
 lines() { [ -f "$1" ] && wc -l < "$1" | tr -d ' ' || echo 0; }
 settle() { for _ in $(seq 30); do [ "$(lines "$1")" -ge "$2" ] && return; sleep 0.1; done; }
 
+unsigned=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/github/notify" -H 'X-GitHub-Hook-ID: 111' --data '{}')
+eq "unsigned allowed hook gets 401" "$unsigned" 401
+[ ! -f "$T/notify/events.log" ] && ok "unsigned request writes no state" || bad "unsigned request wrote state"
 eq "unknown hook id gets 404" "$(post 999 workflow_run d0 "$(run hypertask-ai/hypertask runner7/yper4-1 'CI Tests' failure 5 a1)")" 404
 eq "missing hook id gets 404" "$(post '' workflow_run d0 '{}')" 404
 eq "other events are ignored" "$(post 111 push d1 '{}')" 202
@@ -53,7 +61,12 @@ grep -q 'evil.example' "$T/deliver.log" && bad "payload URL reached the message"
 eq "message is one line" "$(lines "$T/deliver.log")" 1
 post 111 workflow_run d4 "$(run hypertask-ai/hypertask runner7/yper4-1 'Lint' failure 5 a1)" >/dev/null
 sleep 0.5; eq "second failure on the same commit does not wake again" "$(lines "$T/deliver.log")" 1
-replay=$(jq -nc '{action:"completed", repository:{full_name:"hypertask-ai/hypertask"}, workflow_run:{id:101, name:"CI Tests", head_branch:"runner7/yper4-1", conclusion:"failure", head_sha:"zz", pull_requests:[{number:99}]}}')
+replay_id=$(jq -r .run "$f")
+replay=$(jq -nc --argjson run "$replay_id" '{action:"completed", repository:{full_name:"hypertask-ai/hypertask"}, workflow_run:{id:$run, name:"CI Tests", head_branch:"runner7/yper4-1", conclusion:"failure", head_sha:"zz", pull_requests:[{number:99}]}}')
+original=$(jq '.workflow_run.head_sha="a1" | .workflow_run.pull_requests[0].number=5' <<<"$replay")
+reads_before=$(lines "$T/readbacks")
+post 111 workflow_run d4original "$original" >/dev/null
+sleep 0.5; eq "verified duplicate consumes no read-back capacity" "$(lines "$T/readbacks")" "$reads_before"
 post 111 workflow_run d4b "$replay" >/dev/null
 sleep 0.5; eq "replayed run with a forged sha and PR does not wake again" "$(lines "$T/deliver.log")" 1
 post 111 workflow_run d5 "$(run hypertask-ai/hypertask runner7/yper4-1 'Lint' success 5 a2)" >/dev/null

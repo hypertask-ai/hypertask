@@ -291,15 +291,10 @@ def handle(n, p, delivery_id):
             return ok
 
 
-# GitHub notify (YPER4-881): GitHub tells the fleet when CI finishes or a PR closes, so runners stop polling with gh --watch.
-# Repo webhooks POST /github/notify with no secret (no new secret exists for this), so the payload is never trusted on its own:
-# - Only "<hook id> <owner/repo>" pairs listed in $GH_NOTIFY_HOOKS are accepted (else 404), and the payload repo must match.
-# - The state file only makes ci-wait re-read the checks with gh (at most once a minute), so a forged event costs one read.
-# - Before any runner gets a message, the event is read back from GitHub with one gh call and must match; messages are built
-#   only from validated fields (repo, branch, PR number, a cleaned workflow name) and a URL we construct.
 GH_NOTIFY_PATH = "/github/notify"
 GH_NOTIFY_DIR = os.environ.get("GH_NOTIFY_DIR", f"{HOME}/.local/state/gh-notify")
 GH_NOTIFY_HOOKS = os.environ.get("GH_NOTIFY_HOOKS", f"{HOME}/.config/hypertask-agents/github-notify-hooks")
+GH_NOTIFY_SECRET = os.environ.get("GH_NOTIFY_SECRET", f"{HOME}/.config/hypertask-agents/github-notify-secret")
 GH_NOTIFY_CLAIMS = os.environ.get("GH_NOTIFY_CLAIMS", f"{HOME}/.local/state/runner-queue/claims")
 SESSION_SAY = os.environ.get("GH_NOTIFY_SESSION_SAY", f"{HOME}/.local/bin/session-say")
 GH_BIN = os.environ.get("GH_NOTIFY_GH", f"{HOME}/.local/bin/gh")
@@ -496,7 +491,7 @@ def gh_wake(ev, delivery):
     if not gh_message(ev) or gh_waiting(ev):
         return
     owner = gh_owner(ev)
-    if not owner or not gh_verify(ev):
+    if not owner:
         return
     msg = gh_message(ev)
     key = "gh|" + "|".join(str(ev.get(k) or "") for k in ("repo", "branch", "kind", "sha")) + ("|fail" if ev["conclusion"] in GH_FAIL else "|" + ev["workflow"])
@@ -508,7 +503,8 @@ def gh_wake(ev, delivery):
                 return
         GH_INFLIGHT.add(key)
     try:
-        gh_send(ev, owner, msg, key, delivery)
+        if gh_verify(ev):
+            gh_send(ev, owner, gh_message(ev), key, delivery)
     finally:
         with GH_LOCK:
             GH_INFLIGHT.discard(key)
@@ -598,6 +594,14 @@ class Handler(BaseHTTPRequestHandler):
         if length < 0 or length > MAX_BODY:
             return self._reply(413)
         body = self.rfile.read(length)
+        try:
+            with open(GH_NOTIFY_SECRET, "rb") as fh:
+                secret = fh.read().strip()
+        except OSError:
+            secret = b""
+        signature = "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
+        if not secret or not hmac.compare_digest(signature, self.headers.get("X-Hub-Signature-256", "")):
+            return self._reply(401)
         kind = self.headers.get("X-GitHub-Event", "")
         if kind not in GH_EVENTS:
             return self._reply(202, b"ignored")
