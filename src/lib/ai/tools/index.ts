@@ -92,6 +92,7 @@ import { createRagRetrievalTool } from "./ragRetrieval";
 import { createWebSearchTool } from "./webSearch";
 import { createSearchHelpDocsTool } from "./searchHelpDocs";
 import { createToolContext } from "./context";
+import { createSettingsTool } from "./settings";
 
 export function buildTools(
   user: AuthedUser,
@@ -196,6 +197,7 @@ export function buildTools(
     web_search: createWebSearchTool(context).web_search,
     search_help_docs: createSearchHelpDocsTool(context).search_help_docs,
     hypertask_show_ticket_rows: createShowTicketRowsTool(context).hypertask_show_ticket_rows,
+    hypertask_settings: createSettingsTool(context).hypertask_settings,
   };
 
   Object.seal(tools);

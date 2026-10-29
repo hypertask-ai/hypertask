@@ -15,6 +15,7 @@ import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
@@ -50,6 +51,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const fullScreenChatScope = useRecoilValue(fullScreenChatScopeAtom);
   const [dockedChatScope, setDockedChatScope] = useDockedChatScope();
   const pathname = usePathname();
+  const settingsEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
+  const isSettingsPage = settingsEnabled && (pathname === "/settings" || pathname?.startsWith("/settings/"));
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
@@ -81,6 +84,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   }, []);
   const surface = !pathname
     ? "unknown"
+    : isSettingsPage ? "settings"
     : pathname.startsWith("/my-tasks")
       ? "my_tasks"
       : pathname.startsWith("/inbox")

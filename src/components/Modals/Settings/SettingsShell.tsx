@@ -1,6 +1,9 @@
 "use client";
 
 import { SettingsScopeTabs } from "./SettingsScopeTabs";
+import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
+import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
+import { subscribeAiSettingsEvents } from "@/lib/ai/settings/client";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import dynamic from "next/dynamic";
@@ -19,6 +22,9 @@ import {
   Search,
 } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
+import AIWriterButton from "@/components/Common/AIWriterButton";
+import { useUIStateManager } from "@/hooks/General/useUIStateManager";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
 import { useMobileView } from "@/lib/contexts/mobileContext";
 import { SidebarContextProvider } from "@/lib/contexts/Sidebars/SidebarProvider";
@@ -272,11 +278,14 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
 
 const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const aiSettingsEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
+  const [settingsRevision, setSettingsRevision] = useState(0);
   const taskTemplatesEnabled = useFlag(HTPR_7472_TASK_TEMPLATES_FLAG);
   const activeSection = section === "board-task-templates" && !taskTemplatesEnabled
     ? "board-ai" : normalizeSettingsSection(section);
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
+  const { open: openAiChat, close: closeAiChat } = useUIStateManager("aiChatInterface");
   const currentUser = useRecoilValue(currentUserAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const { data: announcementsData } = useGetAnnouncements(
@@ -309,6 +318,20 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const [showFeedback, setShowFeedback] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [mobileTabId, setMobileTabId] = useState<SettingsTabId>(activeTab.id);
+
+  useEffect(() => {
+    if (!aiSettingsEnabled) return;
+    return subscribeAiSettingsEvents({
+      openSettings: (path) => {
+        const scope = settingsScopeFromPath(path);
+        if (!scope) return;
+        setSettingsSection(scope.section);
+        if (mbl) closeAiChat();
+      },
+      changed: () => setSettingsRevision((revision) => revision + 1),
+      shortcut: openAiChat,
+    });
+  }, [aiSettingsEnabled, setSettingsSection, mbl, closeAiChat, openAiChat]);
 
   const hasSelectedSection = Boolean(section);
   const navigationTab =
@@ -508,6 +531,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
           </nav>
           <div className="flex shrink-0 items-center justify-between border-t border-border-light-gray-thin px-3 py-2 text-text-light-gray">
             <div className="flex items-center gap-1">
+              {mbl && aiSettingsEnabled && <AIWriterButton onToggle={openAiChat} tooltipText="AI Chat" className={`inline-flex items-center justify-center ${MOBILE_TARGET}`} />}
               <button
                 type="button"
                 aria-label="Send feedback"
@@ -560,9 +584,10 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
               >
                 <ArrowLeft strokeWidth={1.75} className="h-4 w-4" />
               </button>
-              <h1 className="truncate text-emphasis font-semibold text-white-black">
+              <h1 className={cn("truncate text-emphasis font-semibold text-white-black", aiSettingsEnabled && "min-w-0 flex-1")}>
                 {activeSectionTitle}
               </h1>
+              {aiSettingsEnabled && <AIWriterButton onToggle={openAiChat} tooltipText="AI Chat" className={`inline-flex items-center justify-center ${MOBILE_TARGET}`} />}
             </div>
           ) : (
             <div className="w-full shrink-0">
@@ -609,7 +634,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
                   mbl ? "px-4 pt-2" : "px-6 pt-5",
                 )}
               >
-                {currentUser ? <ActiveSection /> : <SettingsSectionLoading />}
+                {currentUser ? <ActiveSection key={settingsRevision} /> : <SettingsSectionLoading />}
               </div>
             </SidebarContextProvider>
           </div>

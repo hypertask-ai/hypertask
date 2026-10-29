@@ -95,7 +95,7 @@ test("chat.message carries ADHD reply guidance permanently", () => {
 test("closed AI layout does not double-pad /agents/chat", () => {
   assert.match(
     closedLayout,
-    /pathname\?\.startsWith\(\s*["']\/settings["']\s*\)\s*\|\|\s*pathname\?\.startsWith\(\s*["']\/agents\/chat["']\s*\)/,
+    /\(pathname\?\.startsWith\(\s*["']\/settings["']\s*\)\s*&&\s*!settingsChatEnabled\)\s*\|\|\s*pathname\?\.startsWith\(\s*["']\/agents\/chat["']\s*\)/,
   );
   assert.match(
     narrowLayout,

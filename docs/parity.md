@@ -4,12 +4,12 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 177, mcp: 77, cli: 156, ai_chat: 85, hyperai: 77. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 177, mcp: 77, cli: 156, ai_chat: 86, hyperai: 77. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
 | **Discover identity and accessible workspace context** | ✅ 4 | ✅ 3 | ✅ 2 | ✅ 1 | ✅ 3 |
-| **Update the human profile** | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 (transition) | ✅ 1 |
+| **Update the human profile** | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 2 | ✅ 1 |
 | **List, inspect, and contact board agents** | ✅ 7 | ✅ 2 | ✅ 4 | ✅ 3 | ✅ 2 |
 | **Agent Chat: an agent runtime reads and answers its owner's chat** | ✅ 10 (transition) | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 | ↪ Agent Chat is the surface itself; native agents answer in-process without this route. | 🛠 https://app.hypertask.ai/detail/project-15/7742 by 2026-11-13 |
 | **Create, revoke, and rotate managed agents or keys** | ✅ 20 (transition) | ✅ 7 (transition) | ✅ 18 | ✅ 5 | ✅ 7 (transition) |

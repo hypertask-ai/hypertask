@@ -96,6 +96,7 @@ function fixture(endpoint, scenario = {}) {
       // Task 44 moved out of accessible scope between grouping and lookup.
       return [{ id: 42, projectId: 15, project: { title: "Alpha", name: "old" } }, { id: 43, projectId: 16, project: scenario.noProjectName ? null : { title: null, name: "Beta" } }];
     } },
+    $transaction: async (callback) => callback(db),
     $executeRaw: async (strings, ...values) => {
       step("splits-atomic-update", [...strings], values);
       if (!state.setting) return 0;

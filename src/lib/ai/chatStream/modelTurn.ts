@@ -5,6 +5,8 @@ import type { ChatTicketGroupReferences } from "@/models/model";
 
 
 import { renderPrompt } from "@/lib/ai/prompts/registry";
+import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
+import { settingsPages, type SettingProposalCard } from "@/lib/ai/settings/catalog";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
@@ -47,6 +49,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
     : null;
   const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
+  const settingsEnabled = !actingAgent && !!resolvedBody.settings_context && await isFeatureEnabled(HTPR_7622_AI_SETTINGS_FLAG, dbUser.id);
+  const settingsScope = settingsEnabled ? resolvedBody.settings_context : undefined;
   const chatOpensTaskEnabled = await isFeatureEnabled(HTPR_7756_CHAT_OPENS_TASK_FLAG, dbUser.id);
   const bulkScopeConfirmationEnabled = await isFeatureEnabled(HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, dbUser.id);
   const skillDraftsEnabled = await isFeatureEnabled(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG, dbUser.id);
@@ -56,6 +60,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     AGENT_SYSTEM_PROMPT,
     skillDraftsEnabled ? renderPrompt("chat-skill-drafts") : null,
     chatOpensTaskEnabled ? "When the user asks to open a task, including one from a previous list, call hypertask_get_tasks with open=true and exactly that task. This is navigation, not detail enrichment. Do not say Opened or claim navigation happened before the tool returns navigation_emitted=true. If it fails or no navigation was emitted, say you could not open the task." : null,
+    settingsScope ? `The person is in Settings, section ${settingsScope.section}: ${settingsPages[settingsScope.section]}. Use hypertask_settings to read current values before proposing one change. You can propose theme, notification category/channel and board roles only on their open page. Every change requires the app's Apply/Cancel card; never apply through any other action or claim it is done. The app renders the real card; do not fabricate buttons or review links. For unsupported changes, explain the location and use open. The page catalog covers nearby settings, but other pages' values and actions require navigating there first. This Settings scope overrides unrelated board/task instructions.` : null,
     resolvedBody.surface && await isFeatureEnabled(HTPR_7760_CHAT_SURFACE_FLAG, dbUser.id)
       ? chatSurfacePrompt(resolvedBody.surface)
       : null,
@@ -133,8 +138,10 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     skillDraftsEnabled,
     ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
   );
-  const tools = ticketRowsEnabled ? catalogTools
-    : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
+  const tools = settingsEnabled
+    ? Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name === "hypertask_settings"))
+    : ticketRowsEnabled ? catalogTools
+      : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
   if (
     heartbeatExecutionId &&
     body.session_id &&
@@ -166,6 +173,14 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   if (!reply && !taskProgress.length) return;
   const chunks = taskProgress.length ? streamedContent : reply?.chunks ?? [];
   if (!reply) chunks.push("<p>Reply stopped. Your saved ticket remains.</p>");
+  if (settingsEnabled) {
+    const result = toolExecutions.find((execution) => execution.name === "hypertask_settings" && (execution.result as { proposal?: SettingProposalCard })?.proposal)?.result as { proposal: SettingProposalCard } | undefined;
+    if (result?.proposal) {
+      const card = `<p><a href="/settings/ai-change/${result.proposal.id}">Review setting change</a></p>`;
+      chunks.push(card);
+      state.send("content", { content: card });
+    }
+  }
 
   const ticketRowsAllowed = reply?.ticketRowsAllowed ?? false;
   state.turnDeadline?.clear();

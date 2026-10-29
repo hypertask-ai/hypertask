@@ -602,6 +602,9 @@ test("flag definition and generated registry use the designed Owner + QA rollout
 async function sendAfterIntro(session, question) {
   const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
     "@/lib/agents/chatViewerState": { sidebarChatHeaders: () => ({}) },
+    "@/lib/ai/settings/catalog": { settingsScopeFromPath: () => undefined },
+    "@/lib/themePreferences": { normalizeThemePreference: () => undefined },
+    "nookies": { parseCookies: () => ({}) },
     "./aiChatStream": { consumeAiChatStream: async () => {} },
     "@/lib/ai/ticketRowsHistory": { historyContent: (message) => message.content },
     "react-hot-toast": { default: { error: assert.fail } },

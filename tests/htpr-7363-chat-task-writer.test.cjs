@@ -357,6 +357,8 @@ test("chat turn resolves the server flag once for the authenticated user and for
   const checks = [], toolArgs = [];
   const { runModelTurn } = moduleWithStubs("src/lib/ai/chatStream/modelTurn.ts", {
     "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
+    "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
+    "@/lib/ai/settings/catalog": { settingsPages: {}, settingProposalCard: () => ({}) },
     "./ticketGroups": {},
     "@/lib/ai/tools/showTicketRows": { TICKET_ROWS_PROMPT: "Ticket rows prompt" },
     "@/lib/prisma": {},

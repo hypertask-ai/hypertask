@@ -1,5 +1,8 @@
 import type { SessionStreams } from "@/lib/aiChat/sessionStreams";
 import { sidebarChatHeaders } from "@/lib/agents/chatViewerState";
+import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
+import { normalizeThemePreference } from "@/lib/themePreferences";
+import { parseCookies } from "nookies";
 import { consumeAiChatStream } from "./aiChatStream";
 import { IChatMessage, IAttachment } from "@/models/model";
 import toast from "react-hot-toast";
@@ -244,10 +247,11 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       assistant_message_id: assistantMessageId,
       stream_id: streamId,
       context_list: contextList,
+      ...(surface === "settings" && !session.agentId ? { settings_context: settingsScopeFromPath(pathname, currentProject?.id, normalizeThemePreference(parseCookies().theme, true) ?? "system") } : {}),
       ...chatModelRequestFields({ currentOption: currentAiOption, agentSessionOption: agentSessionAiOption, usesPlanDefault }, session.agentId),
       default_context: {
         project_id:
-          spansAllBoards && !boardScopeIsExplicit ? undefined : scopedProjectId,
+          surface === "settings" ? currentProject?.id : spansAllBoards && !boardScopeIsExplicit ? undefined : scopedProjectId,
         surface,
         surface_path: pathname,
         view_id: currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id,

@@ -660,6 +660,19 @@ model UserSetting {
   calendarViews            Json?
 }
 
+// HTPR-7622: one row per setting change written to the database, created inside the same
+// transaction as the change itself. When the Redis proposal record cannot record the commit,
+// Apply/Undo reconcile from this row instead of guessing whether the write was theirs.
+model AiSettingOperation {
+  id         String   @id
+  userId     Int
+  proposalId String
+  action     String
+  createdAt  DateTime @default(now())
+
+  @@index([proposalId])
+}
+
 // Retain the one-time reset backup even after undo or user deletion.
 model Htpr7038ModelChoiceBackup {
   userId        Int      @map("user_id")

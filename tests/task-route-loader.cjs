@@ -28,7 +28,7 @@ function load(file, mocks) {
     cache.set(filename, loadedModule);
     const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-      fileName: filename,
+      fileName: filename.endsWith(".mjs") ? filename.replace(/\.mjs$/, ".ts") : filename,
     }).outputText;
     new Function("require", "module", "exports", compiled)(
       (next) => requireSource(next, path.dirname(filename)), loadedModule, loadedModule.exports,

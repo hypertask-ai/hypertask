@@ -22,6 +22,7 @@ test("phone cached composer keeps its draft and focus when Next publishes the de
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
     "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true, useFlagReady: () => true },
     "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
+    "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
     "@/lib/flags/keys": {
       HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket",
     },

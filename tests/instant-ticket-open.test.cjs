@@ -16,6 +16,7 @@ const mocks = {
   "@/store": { currentUserAtom: {} },
   "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true, useFlagReady: () => true },
   "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
+  "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
   "@/lib/flags/keys": {},
   "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
