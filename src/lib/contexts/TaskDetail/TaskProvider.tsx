@@ -30,8 +30,6 @@ import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import type { TaskThreadFeedItem } from "@/lib/agentRuns/taskActivityFeed";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/General/useAuth";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { adoptTaskDetailServerSeed, type TaskDetailServerSeed } from "@/lib/taskDetailReads";
 
@@ -208,10 +206,9 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
   const initialTask = useMemo(() => JSON.parse(props.parsedTask), [props.parsedTask]);
   const queryClient = useQueryClient();
   const { authenticatedUserId } = useAuth();
-  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   useMemo(() => {
-    if (dedupe && !props.embedded && !props.isShareView) adoptTaskDetailServerSeed(queryClient, authenticatedUserId, initialTask, props.serverTaskSeed);
-  }, [dedupe, props.embedded, props.isShareView, props.serverTaskSeed, authenticatedUserId, initialTask, queryClient]);
+    if (!props.embedded && !props.isShareView) adoptTaskDetailServerSeed(queryClient, authenticatedUserId, initialTask, props.serverTaskSeed);
+  }, [props.embedded, props.isShareView, props.serverTaskSeed, authenticatedUserId, initialTask, queryClient]);
   const taskGlobalStates = useTaskDetailGlobalStates(
     initialTask,
     props._comments,

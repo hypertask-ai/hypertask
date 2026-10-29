@@ -2,6 +2,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
+const { QueryClient } = require("@tanstack/react-query");
+const { refreshTaskDetailReadAfterWrite } = require("jiti")(__filename, { alias: { "@": path.resolve(__dirname, "../src") }, interopDefault: true })(path.resolve(__dirname, "../src/lib/taskDetailReads.ts"));
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const jiti = require('jiti')(__filename);
@@ -32,12 +34,12 @@ function fixture(enabled = true) {
   const env = {
     archiveColumnBoundary: enabled, nextFocusAfterRemoval,
     updateActiveItemAndItemInView: id => { active = id; },
-    _currentProject: { id: 15 }, _currentUser: { id: 985 }, dedupe: false,
+    _currentProject: { id: 15 }, _currentUser: { id: 985 }, refreshTaskDetailReadAfterWrite,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [{ sections, filteredSections: sections, tasks: sections.flatMap(s => s.items) }] }, projectToUpdateIndex: 0 }),
     returnSortedItems: items => items,
     mutationHandler: (_index, updated) => { sections = updated; },
     globalAPIHandlers: { archiveTask: async id => archived.push(id), deleteTaskAPI: async () => {} },
-    deleteTodo: (_message, data) => undo.push(data), toast() {}, queryClient: { refetchQueries: async () => {} },
+    deleteTodo: (_message, data) => undo.push(data), toast() {}, queryClient: new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } }),
   };
   const { removeFromListWithStatus, reAdjustFocusFromCurrContext } = handlers(env);
   return {

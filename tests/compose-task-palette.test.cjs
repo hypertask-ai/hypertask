@@ -105,7 +105,10 @@ async function withPalette(t, config, check) {
     source('src/utils/api/global/index.ts', { default: { getAllProjectsMinimal: async () => { loadedBoards.push(true); return config.boards ?? [project, { ...project, id: 8 }]; } } });
     source('src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx', { default: () => ({ createTaskGlobally: (body) => cacheAdds.push(body) }) });
     source('src/hooks/General/useProjectQuery.ts', { useProjectQuery: () => ({ updateActiveItemAndItemInView: (task) => viewedTasks.push(task) }) });
-    source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => cacheUpdates.push(args) }) });
+    source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => {
+      jiti(path.join(root, 'src/lib/taskDetailReads.ts')).refreshTaskDetailReadAfterWrite(queryClient, 985, args[1], args[0]);
+      cacheUpdates.push(args);
+    } }) });
     // Exercise the real greeting/board resolution, but defer the network workflow
     // (covered independently in compose-task-writer.test.cjs) to inspect UI state.
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
@@ -845,9 +848,10 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
     source('src/app/unauthorized/page.tsx', { default: () => null });
     source('src/utils/api/Task Detail/index.ts', { fetchCommentsHelper: () => assert.fail('cached detail must not block on comments') });
     const Detail = jiti(path.join(root, 'src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx')).default;
-    const { cachedTaskDetailKey } = jiti(path.join(root, 'src/lib/navigation/cachedTaskDetail.ts'));
-    const key = cachedTaskDetailKey(985, 52);
-    queryClient.setQueryData(key, targetTask);
+    const { taskDetailReadKey, TASK_DETAIL_READ_FRESH_MS } = jiti(path.join(root, 'src/lib/taskDetailReads.ts'));
+    const key = taskDetailReadKey(985, 52);
+    queryClient.setQueryData(['cached-task-detail', 985, 52], targetTask);
+    queryClient.setQueryData(key, targetTask, { updatedAt: Date.now() - TASK_DETAIL_READ_FRESH_MS });
     await mountProbe(() => React.createElement(Detail, { taskId: 52, projectId: 7, uniqueIndex: 4, initialTask: targetTask, embedded: false }));
     assert.equal(document.querySelector('[data-task-title]').textContent, targetTask.title);
     assert.ok(pendingFetch, 'the old detail fetch is in flight');

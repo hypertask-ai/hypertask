@@ -92,22 +92,16 @@ test("stale server seed refetches within the existing freshness policy", async t
 for (const [name, options] of [
   ["different user", { userId: 986 }],
   ["missing seed", { serverTaskSeed: null }],
-  ["flag off", { enabled: false }],
 ]) test(`${name} cannot suppress the original mount refetch`, async t => {
   const h = await mount(t, options);
   assert.equal(h.requests(), 1);
-  if (name === "different user" || name === "flag off") assert.equal(h.client.getQueryData(reads.taskDetailReadKey(985, 42)), undefined);
+  if (name === "different user") assert.equal(h.client.getQueryData(reads.taskDetailReadKey(985, 42)), undefined);
   else assert.equal(h.client.getQueryData(reads.taskDetailReadKey(985, 42)).title, "Refetched copy");
 });
 
-test("an unresolved flag cannot adopt a server seed until flag-on resolves", async t => {
+test("server seed adoption no longer depends on retired flag resolution", async t => {
   const serverTaskSeed = seed(Date.now() - 1000);
   const h = await mount(t, { enabled: false, ready: false, serverTaskSeed });
-  assert.equal(h.requests(), 0);
-  assert.equal(h.client.getQueryState(reads.taskDetailReadKey(985, 42)), undefined);
-  h.flags.enabled = true;
-  h.flags.ready = true;
-  await h.render();
   assert.equal(h.requests(), 0);
   assert.equal(h.client.getQueryState(reads.taskDetailReadKey(985, 42)).dataUpdatedAt, serverTaskSeed.updatedAt);
 });

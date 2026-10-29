@@ -1,6 +1,9 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { load } = require("./task-route-loader.cjs");
+const { QueryClient } = require("@tanstack/react-query");
+const path = require("node:path");
+const readsModule = require("jiti")(__filename, { alias: { "@": path.resolve(__dirname, "../src") }, interopDefault: true })(path.resolve(__dirname, "../src/lib/taskDetailReads.ts"));
 
 const TASK_ID = 42;
 const PROJECT_ID = 15;
@@ -17,7 +20,7 @@ async function runTurn({ attachments = [], enabled = true, preserveEditorContent
   let currentTask = { id: activeTaskId, projectId: PROJECT_ID, uniqueIndex: 7049, title: "Before", description_: { content: "Local content", attachments: [] } };
   const updatedTask = { ...currentTask, title: "After", description_: { content: "AI edited description", attachments: [] } };
   let description = "Local content";
-  const queryClient = { refetchQueries: async () => {}, cancelQueries: async () => {}, setQueryData: () => {}, invalidateQueries: async () => {} };
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   global.window = {
     addEventListener(name, callback) { listeners.set(name, callback); },
     removeEventListener(name, callback) { if (listeners.get(name) === callback) listeners.delete(name); },
@@ -56,7 +59,7 @@ async function runTurn({ attachments = [], enabled = true, preserveEditorContent
       "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
       "@/lib/ai/chipEvents": { signalAiChip: () => {} },
       "@/lib/flags/keys": {},
-      "@/lib/taskDetailReads": {},
+      "@/lib/taskDetailReads": readsModule,
       "@/lib/realtime/client": { connectRealtimeClient: async () => client, releaseRealtimeClientIfIdle() {} },
       "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
     });
@@ -80,6 +83,7 @@ async function runTurn({ attachments = [], enabled = true, preserveEditorContent
     await settle();
     return { reads, payloads, currentTask, description, listeners };
   } finally {
+    queryClient.clear();
     cleanups.forEach((cleanup) => cleanup?.());
     Object.assign(global, { window: original.window, document: original.document, fetch: original.fetch });
     console.log = original.log;

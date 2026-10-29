@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { QueryClient } = require("@tanstack/react-query");
+const { refreshTaskDetailReadAfterWrite } = require("jiti")(__filename, { alias: { "@": path.resolve(__dirname, "../src") }, interopDefault: true })(path.resolve(__dirname, "../src/lib/taskDetailReads.ts"));
 const test = require("node:test");
 const ts = require("typescript");
 
@@ -40,10 +42,10 @@ function fixture(enabled = true, { archiveFailure, restoreFailure, subtasks = fa
   const env = {
     useCallback: fn => fn, isProcessing: false, selectedTasks: tasks,
     useFlag: key => { assert.equal(key, "htpr-7137-bulk-archive-undo-all"); return enabled; },
-    HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG: "htpr-7137-bulk-archive-undo-all", dedupe: false,
+    HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG: "htpr-7137-bulk-archive-undo-all", refreshTaskDetailReadAfterWrite,
     _currentProject: project, _currentUser: { id: 985 },
     toast: Object.assign(() => {}, { dismiss() {}, success: text => messages.push(text), error: text => messages.push(text) }),
-    queryClient: { refetchQueries: async () => {} },
+    queryClient: new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } }),
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [project] }, projectToUpdateIndex: 0 }),
     returnSortedItems: items => items, reAdjustFocusFromCurrContext() {},
     mutationHandler: (_index, nextSections, _data, nextTasks) => { project.sections = nextSections; project.filteredSections = nextSections; project.tasks = nextTasks; },

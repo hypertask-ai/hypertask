@@ -3,14 +3,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import Unauthorized from "@/app/unauthorized/page";
-import { cachedTaskDetailKey, TaskAccessDeniedError } from "@/lib/navigation/cachedTaskDetail";
+import { TaskAccessDeniedError } from "@/lib/navigation/cachedTaskDetail";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 
 import TaskDetail from "@/app/detail/[...slug]/TaskDetailComp";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7395_CACHED_STATIC_FIRST_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7395_CACHED_STATIC_FIRST_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 import globalConstants from "@/lib/constants";
 import { FollowersProvider } from "@/lib/contexts/TaskDetail/FollowersProvider";
 import { TasksProvider } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -31,10 +31,9 @@ type EmbeddedTaskDetailProps = {
 };
 
 function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef, assigneeSnapshotRef, children }: { task: ITask; dataUpdatedAt: number; error: Error | null; refetch: () => Promise<unknown>; currentTaskRef: RefObject<ITask | null>; assigneeSnapshotRef: RefObject<{ assignees: ITask["assignees"] } | null>; children: ReactNode }) {
-  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { currentTask, setCurrentTask, setDescription, editMode, hasDraft, hasDraftInit, uploadingDescription } = useTaskContext();
   currentTaskRef.current = currentTask;
-  if (dedupe && assigneeSnapshotRef.current === null) {
+  if (assigneeSnapshotRef.current === null) {
     assigneeSnapshotRef.current = { assignees: currentTask?.assignees };
   }
   const previousTask = useRef(task);
@@ -87,25 +86,21 @@ const EmbeddedTaskDetail = ({
   const currentUser = useRecoilValue(currentUserAtom);
   const queryClient = useQueryClient();
   const { data: preferences } = useGetUserPreferences();
-  const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
-  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
   const currentTaskRef = useRef<ITask | null>(initialTask ?? null);
   const assigneeSnapshotRef = useRef<{ assignees: ITask["assignees"] } | null>(null);
   const taskQuery = useQuery({
-    queryKey: dedupe ? taskDetailReadKey(currentUser?.id, taskId) : embedded ? ["swipe-unread-task-detail", taskId] : cachedTaskDetailKey(currentUser?.id, taskId),
+    queryKey: taskDetailReadKey(currentUser?.id, taskId),
     queryFn: async ({ signal }) => {
       assigneeSnapshotRef.current = { assignees: currentTaskRef.current?.assignees };
-      return fetchScopedTaskDetail(taskId, projectId, uniqueIndex, signal, dedupe ? { cache: "no-store", credentials: "same-origin" } : {});
+      return fetchScopedTaskDetail(taskId, projectId, uniqueIndex, signal, { cache: "no-store", credentials: "same-origin" });
     },
     initialData: initialTask,
-    ...(flagReady && !dedupe ? {} : { enabled: flagReady && Boolean(currentUser?.id) }),
-    ...(dedupe ? {
-      initialDataUpdatedAt: 0, staleTime: TASK_DETAIL_READ_FRESH_MS, refetchOnMount: shouldRefetchDetailOnMount,
-      refetchOnReconnect: "always" as const, refetchOnWindowFocus: "always" as const,
-    } : {}),
-    ...(embedded ? {} : { retry: false, ...(dedupe ? {} : { refetchOnMount: "always" as const }) }),
+    enabled: Boolean(currentUser?.id),
+    initialDataUpdatedAt: 0, staleTime: TASK_DETAIL_READ_FRESH_MS, refetchOnMount: shouldRefetchDetailOnMount,
+    refetchOnReconnect: "always" as const, refetchOnWindowFocus: "always" as const,
+    ...(embedded ? {} : { retry: false }),
   });
   const commentsQuery = useQuery({
     queryKey: [globalConstants.CommentsTQPrefixKey, taskId],

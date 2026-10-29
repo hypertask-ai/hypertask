@@ -134,7 +134,7 @@ async function fixture(t, { enabled = true, stable = false, legacyStatic = false
     "@/store": { currentUserAtom: {} },
     "@/lib/constants": { default: { CommentsTQPrefixKey: "comments" } },
     "@/utils/api/Task Detail": { fetchCommentsHelper: () => new Promise(noop) },
-    "@/lib/taskDetailReads": { fetchScopedTaskDetail: () => new Promise(noop) },
+    "@/lib/taskDetailReads": { ...require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/taskDetailReads.ts")), fetchScopedTaskDetail: () => new Promise(noop) },
     "@/app/detail/[...slug]/TaskDetailComp": { default: () => React.createElement("article", null, React.createElement("h1", { id: "title-input" }, initialTask.title), React.createElement(Body, { draftTQ: draft ? [draft] : [] })) },
   }, baseline).default;
   const container = document.getElementById("root");

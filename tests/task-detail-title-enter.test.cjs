@@ -19,7 +19,7 @@ function load(relative, dependencies, exportName = "default") {
     if (dependency && "default" in dependency) dependency.__esModule = true;
   }
   new Function("require", "exports", js)((name) => {
-    if (name === "@/lib/taskDetailReads" && !(name in dependencies)) return {};
+    if (name === "@/lib/taskDetailReads" && !(name in dependencies)) return require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/taskDetailReads.ts"));
     if (name === "@/hooks/useFlag" && name in dependencies) return { ...dependencies[name], useFlagReady: () => true, useFlag: key => key === "htpr-7009-dedupe-task-detail-reads" ? false : dependencies[name].useFlag(key) };
     if (name === "react" || name === "react/jsx-runtime") return require(name);
     if (name === "@/hooks/useFlag" && !(name in dependencies)) return { useFlag: () => false, useFlagReady: () => true };
