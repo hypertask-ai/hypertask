@@ -35,3 +35,10 @@ export const dropSelfRecoveringChunkLoadException = (
   dropWhenEveryException(event, (entry) =>
     isChunkLoadError({ name: entry?.type, message: entry?.value }),
   );
+
+const isNetworkBlipException = (entry: ExceptionEntry | undefined): boolean =>
+  entry?.type === "AxiosError" && entry?.value === "Network Error";
+
+export const dropNetworkBlipException = (
+  event: CaptureResult | null,
+): CaptureResult | null => dropWhenEveryException(event, isNetworkBlipException);
