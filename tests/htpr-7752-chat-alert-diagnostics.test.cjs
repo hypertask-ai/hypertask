@@ -1,28 +1,14 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
-const ts = require("typescript");
-const { test } = require("node:test");
-const root = path.resolve(__dirname, "..");
+const { after, before, test } = require("node:test");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 const diagnosticsFlag = "htpr-7752-chat-alert-diagnostics";
+const originalEnvironment = process.env.VERCEL_ENV;
 
-function load(file, modules = {}) {
-  const loaded = { exports: {} };
-  const code = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  vm.runInNewContext(code, {
-    module: loaded, exports: loaded.exports,
-    require: (name) => {
-      assert.ok(Object.hasOwn(modules, name), `Unexpected runtime dependency: ${name}`);
-      return modules[name];
-    },
-    process: { env: { VERCEL_ENV: "production" } },
-    console: { warn() {} },
-  }, { filename: file });
-  return loaded.exports;
-}
+before(() => { process.env.VERCEL_ENV = "production"; });
+after(() => {
+  if (originalEnvironment === undefined) delete process.env.VERCEL_ENV;
+  else process.env.VERCEL_ENV = originalEnvironment;
+});
 
 const policy = load("src/lib/ai/chatAlerts/policy.ts");
 const delivery = {
