@@ -33,7 +33,7 @@ function loadErrorFormatters(logs = []) {
     "console",
     "z",
     "toErrorMessage",
-    `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage };`
+    `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage, includedAllowanceError, handledErrorExtra };`
   )(logger, z, loadToErrorMessage());
 }
 
@@ -200,11 +200,33 @@ test("model-selection errors remain user-actionable and pass through unchanged",
   );
 });
 
-test("expected plan-access guidance is not reported as a product bug", () => {
-  assert.match(
-    routeSource,
-    /if \(\s*error instanceof Error &&\s*\(error\.name === "AiPlanAccessError" \|\|\s*error\.name === "AiGatewayKeyRequiredError"\)\s*\) \{\s*return;\s*\}/
+test("expected plan-access guidance is not reported as a product bug", async () => {
+  const source = ts.createSourceFile("errors.ts", fs.readFileSync(
+    path.join(__dirname, "../src/lib/ai/chatStream/errors.ts"), "utf8"
+  ), ts.ScriptTarget.Latest, true);
+  const declaration = source.statements.find(node =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "reportHandledChatError"
   );
+  assert.ok(declaration, "reportHandledChatError must exist");
+  const javascript = ts.transpileModule(declaration.getText(source).replace(/^export\s+/, ""), {
+    compilerOptions: { target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const reports = [];
+  const { includedAllowanceError, handledErrorExtra } = loadErrorFormatters();
+  const reportHandledChatError = new Function(
+    "includedAllowanceError",
+    "handledErrorExtra",
+    "reportError",
+    `${javascript}; return reportHandledChatError;`
+  )(includedAllowanceError, handledErrorExtra, async report => reports.push(report));
+
+  for (const name of ["AiPlanAccessError", "AiGatewayKeyRequiredError", "AiProviderAuthenticationError"]) {
+    await reportHandledChatError(Object.assign(new Error(name), { name }), "select-model");
+    assert.equal(reports.length, 0, `${name} must not be reported`);
+  }
+  await reportHandledChatError(Object.assign(new Error("unexpected"), { statusCode: 500 }), "model-stream");
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].extra.statusCode, 500);
 
   const planGateSource = fs.readFileSync(
     path.join(__dirname, "../src/app/api/ai/_lib/planGate.ts"),
