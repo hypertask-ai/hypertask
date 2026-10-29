@@ -1,4 +1,3 @@
-import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 import type {
   FeatureFlagMode as PrismaFeatureFlagMode,
   PrismaClient,
@@ -458,7 +457,8 @@ export async function setFeatureFlagMode(
       : null;
 
     if (change) await recordChange?.(tx, change.id);
-    if (key === HTPR_7582_AGENT_ACCESS_REQUEST_FLAG && mode === "OFF") {
+    // Literal key: the registry fixture tests load this module with a stub definitions module only.
+    if (key === "htpr-7582-agent-access-request" && mode === "OFF") {
       await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: actor?.userId ?? null, log: "agent_board_access_requests_disabled" } });
       const pending = await tx.agentBoardAccessRequest.findMany({ where: { status: "pending" } });
       for (const request of pending) {

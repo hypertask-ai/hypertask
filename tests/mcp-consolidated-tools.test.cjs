@@ -145,14 +145,15 @@ test('scope filtering advertises only callable actions for management, agent and
   }
   const agent = visible(selectMcpTools(legacy, true, { agent: true }))
   assert.equal(agent.some((tool) => tool.name === 'hypertask_tokens'), false)
-  assert.deepEqual(toolNamed(agent, 'hypertask_agents').parameters.shape.action.options, ['presence'])
+  assert.deepEqual(toolNamed(agent, 'hypertask_agents').parameters.shape.action.options, ['presence', 'request_board_access', 'get_board_access_request'])
   const scoped = visible(selectMcpTools(legacy, true, { teamScoped: true, managementPermissions: { management: ['read', 'write'] } }))
   assert.deepEqual(scoped.map((tool) => tool.name), ['hypertask_report_feedback', 'hypertask_agents'])
 })
 
+const agentOnlyTools = new Set(['hypertask_request_board_access', 'hypertask_get_board_access_request'])
 test('legacy dispatch keeps every existing name callable and forwards credentials and invocation identity', async () => {
   const { calls, tools } = spyTools()
-  for (const tool of legacy) {
+  for (const tool of legacy.filter((candidate) => !agentOnlyTools.has(candidate.name))) {
     const args = sample(z.toJSONSchema(tool.parameters, { unrepresentable: 'any' }))
     if (tool.name === 'hypertask_time') args.action = 'running'
     const result = await rpc(tools, 'tools/call', { name: tool.name, arguments: args })
@@ -183,8 +184,9 @@ test('action dispatch covers every consolidated operation with action-specific p
   const { calls, tools } = spyTools()
   for (const definition of definitions) {
     const tool = toolNamed(tools, definition.name)
-    for (const [index, [name, action]] of Object.entries(definition.actions).entries()) {
-      const input = sample(tool.inputSchema.oneOf[index].properties.input)
+    for (const name of tool.inputSchema.properties.action.enum) {
+      const action = definition.actions[name]
+      const input = sample(tool.inputSchema.oneOf.find((variant) => variant.properties.action.const === name).properties.input)
       const result = await executeToolResult(tool, { action: name, input }, 'fixture-token')
       assert.notEqual(result.isError, true, `${definition.name}/${name}: ${result.content[0].text}`)
       assert.equal(calls.at(-1).name, action.tool)
