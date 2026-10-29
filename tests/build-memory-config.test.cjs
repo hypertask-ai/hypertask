@@ -31,7 +31,10 @@ for (const smoke of [false, true]) {
           withPostHogConfig(config, options) {
             wrapped = true;
             assert.equal(options.sourcemaps.enabled, true);
-            return require("@posthog/nextjs-config").withPostHogConfig(config, options);
+            return require("@posthog/nextjs-config").withPostHogConfig({
+              ...config,
+              env: { ...config.env, POSTHOG_RELEASE_ID: "build-memory-test-release" },
+            }, options);
           },
         };
       };
@@ -42,6 +45,7 @@ for (const smoke of [false, true]) {
         ? await configModule.exports("phase-production-build", { defaultConfig: {} })
         : configModule.exports;
       assert.equal(wrapped, posthog);
+      if (posthog) assert.equal(config.env.POSTHOG_RELEASE_ID, "build-memory-test-release");
       assert.equal(config.experimental.webpackBuildWorker, true);
       assert.equal(config.experimental.webpackMemoryOptimizations, true);
       assert.equal(config.experimental.cpus, 1);

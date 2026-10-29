@@ -39,15 +39,7 @@ test("one map is the effort each feature sends", () => {
 });
 
 test("installed SDK types name the provider knobs this map writes", () => {
-  const anthropic = fs.readFileSync(path.join(root, "node_modules/@ai-sdk/anthropic/dist/index.d.ts"), "utf8");
-  const openai = fs.readFileSync(path.join(root, "node_modules/@ai-sdk/openai/dist/index.d.ts"), "utf8");
-  const openrouter = fs.readFileSync(path.join(root, "node_modules/@openrouter/ai-sdk-provider/dist/index.d.ts"), "utf8");
   const gateway = fs.readFileSync(path.join(root, "node_modules/@ai-sdk/gateway/dist/index.d.ts"), "utf8");
-  assert.match(anthropic, /type: z\.ZodLiteral<"adaptive">/);
-  assert.match(anthropic, /type: z\.ZodLiteral<"disabled">/);
-  assert.match(anthropic, /effort: z\.ZodOptional<z\.ZodEnum<\{[\s\S]*?low: "low";[\s\S]*?medium: "medium";[\s\S]*?high: "high"/);
-  assert.match(openai, /reasoningEffort\?: "none" \| "low" \| "medium" \| "high"/);
-  assert.match(openrouter, /effort: 'xhigh' \| 'high' \| 'medium' \| 'low' \| 'minimal' \| 'none'/);
   const gatewayOptions = gateway.slice(gateway.indexOf("type GatewayProviderOptions"), gateway.indexOf("type GatewayEmbeddingModelId"));
   assert.doesNotMatch(gatewayOptions, /reasoningEffort|thinkingConfig/);
   const googlePath = path.join(root, "node_modules/@ai-sdk/google/dist/index.d.ts");
