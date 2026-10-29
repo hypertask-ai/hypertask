@@ -60,12 +60,12 @@ async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSa
   const task = { id: 55840, projectId: 6859, uniqueIndex: 61, title: "HTPR-6962 QA", sectionId: 1,
     assignees: initialAssignees, project: { id: 6859 }, description_: { id: 1 } };
   const reactQuery = require("@tanstack/react-query");
-  const cachedQueryKey = loadPath === "shared" ? reads.taskDetailReadKey(user.id, task.id) : ["cached-task-detail", user.id, task.id];
+  const cachedQueryKey = reads.taskDetailReadKey(user.id, task.id);
   const cachedQueryClient = new reactQuery.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   t.after(() => cachedQueryClient.clear());
   let resolveReaction, pendingReaction, resolveSave;
   const requests = [], handlers = new Map();
-  const queryClient = loadPath === "shared" ? cachedQueryClient : { cancelQueries: async () => {}, setQueryData: noop, invalidateQueries: async () => {}, refetchQueries: noop };
+  const queryClient = cachedQueryClient;
   const shared = { COMMENT_EVENT: "comment:changed", TASK_EVENT: "task:changed", taskChannel: id => `private-task-${id}` };
   const refresh = load("src/lib/realtime/taskDetailRefresh.ts", { "./shared": shared }, null);
   const channel = { subscribed: true, bind: (event, handler) => handlers.set(event, handler), unbind: event => handlers.delete(event) };
