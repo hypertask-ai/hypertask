@@ -128,14 +128,16 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     "lucide-react": Object.fromEntries(["Check", "ChevronDown", "Minimize2", "Pin", "Search", "Sparkles", "SquarePen", "Trash2"].map(name => [name, name])),
     "next/navigation": { useRouter: () => router, useSearchParams: () => new URLSearchParams("return_to=%2Fmy-tasks") },
   });
+  const componentSlots = new Map();
   function renderChildren(node) {
     if (!node || typeof node !== "object") return;
     const props = node.props ?? {};
     if (typeof node.type === "function") {
       const savedCursor = cursor;
       const savedSlots = activeSlots;
+      if (!componentSlots.has(node.type)) componentSlots.set(node.type, []);
       cursor = 0;
-      activeSlots = [];
+      activeSlots = componentSlots.get(node.type);
       renderChildren(node.type({ ...props, children: undefined }));
       activeSlots = savedSlots;
       cursor = savedCursor;
@@ -147,12 +149,18 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     activeSlots = slots;
     tree = Chat({});
     renderChildren(tree);
+    const seen = new Set();
     effects.splice(0).forEach((effect, index) => {
+      seen.add(index);
       const previous = mounted[index];
-      const changed = !previous || !sameDeps(previous.deps, effect.deps);
-      if (!changed) return;
+      if (previous && sameDeps(previous.deps, effect.deps)) return;
       previous?.cleanup?.();
       mounted[index] = { deps: effect.deps, cleanup: effect.callback() };
+    });
+    mounted.forEach((slot, index) => {
+      if (!slot || seen.has(index)) return;
+      slot.cleanup?.();
+      mounted[index] = undefined;
     });
   }
   function sameDeps(previous, next) {
