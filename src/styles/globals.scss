@@ -898,7 +898,7 @@ svg.lucide.fill-current {
     input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]),
     textarea,
     [contenteditable="true"] {
-      font-size: max(16px, 1em) !important;
+      @apply text-emphasis !important;
     }
   }
 }
