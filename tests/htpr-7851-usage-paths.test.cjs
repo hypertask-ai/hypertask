@@ -258,3 +258,13 @@ test('BYOK provider request keeps its real model ID apart from the display label
     assert.ok(!result.modelId.includes('private'));
   }
 });
+
+
+for (const invalid of ['count', 'dimensions']) test(`invalid embedding ${invalid} records failure while retaining billed tokens`, async () => {
+  const h = harness();
+  process.env.TURBOPUFFER_EMBEDDINGS_API_KEY = 'private-embedding-key';
+  h.fetch = async () => Response.json({ data: invalid === 'count' ? [] : [{ index: 0, embedding: [0.5] }], usage: { prompt_tokens: 12, total_tokens: 12 } });
+  await assert.rejects(h.load('src/utils/controllers/turbopuffer/turbopufferHelper.ts').embedTexts(['private']), /embeddings returned/);
+  assertRow(h, { feature: 'embeddings', provider: 'gateway-embeddings', outcome: 'failed', inputTokens: 12, totalTokens: 12 });
+  delete process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
+});

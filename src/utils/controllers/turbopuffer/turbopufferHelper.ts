@@ -477,7 +477,6 @@ async function embedBatchWithRetry(
 
       const json = (await response.json()) as OpenAIEmbeddingResponse;
       usage = json.usage;
-      succeeded = true;
       const batchEmbeddings = json.data
         .slice()
         .sort((a, b) => a.index - b.index)
@@ -498,6 +497,7 @@ async function embedBatchWithRetry(
         );
       }
 
+      succeeded = true;
       return batchEmbeddings;
     } finally {
       await logAiUsage({
