@@ -171,3 +171,59 @@ test("Graphite 2 stylesheet compiles its title size with the installed Tailwind 
   assert.deepEqual(declarations.get("font-size"), { value: "24px", important: true });
   assert.equal(declarations.get("font-weight").value, "600");
 });
+
+test("server document gates Graphite 2 without changing other saved themes", async () => {
+  const unused = [
+    "@/styles/globals.scss", "@/styles/tailwindThemes/rounded.css", "@/styles/tailwindThemes/graphite-2.css", "../../tokens.css",
+    "@/utils/Providers", "@/hooks/useFlag", "@/components/Analytics/PostHogAnalytics", "@vercel/speed-insights/next",
+    "@/components/ErrorBoundary/ClientErrorReporter", "@/lib/ai/AiChipEventRecorder", "@/components/System/DeploySkewGuard",
+    "@/components/FilesImageFallback", "@/lib/ticketSidebarBoot",
+  ];
+  for (const enabled of [false, true]) for (const theme of ["graphite-2", "graphite", "porcelain", "amoled", "dia"]) {
+    const { default: RootLayout } = load("src/app/layout.tsx", {
+      ...Object.fromEntries(unused.map(name => [name, {}])),
+      "next/headers": { cookies: async () => ({ get: name => name === "theme" ? { value: theme } : undefined }) },
+      "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 985 }) },
+      "@/lib/flags": { isFeatureEnabled: async key => key === flag && enabled },
+      "@/utils/serverActions": { isMobileDevice: async () => ({ isMobile: false, isApple: false }) },
+      "@/lib/configs/auth.config": { default: { cookies: { theme: "theme", defaultTheme: "system" } } },
+      "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { bodyLayout: "body-layout" } },
+      "@/lib/fonts/inter": { inter: { variable: "inter", className: "inter" } },
+      "@/lib/fonts/newsreader": { newsreader: { variable: "newsreader" }, NEWSREADER_LATIN_FONT_HREFS: [] },
+      "@/lib/fonts/ibmPlexSans": { ibmPlexSans: { variable: "plex" } },
+      "@/lib/themePreferences": preferences,
+      "@/lib/themeBootScript": { buildThemeBootScript },
+      "@/lib/appShellBootstrap/client": { buildEarlyAppShellBootstrapScript: () => "" },
+      "@/lib/firstScreen/serverBoardDocument": { getServerBoardDocument: async () => null },
+      "@/lib/firstScreen/serverInboxDocument": { getServerInboxDocument: async () => null },
+      "@/lib/firstScreen/serverTicketShell": { getServerTicketShell: async () => null },
+    });
+    const document = await RootLayout({ children: "Existing page" });
+    const expected = theme === "graphite-2" && !enabled ? "system" : theme;
+    assert.equal(document.props["data-theme"], expected);
+    assert.equal(document.props.className.split(" ")[0], expected === "system" ? "system" : ["porcelain", "dia"].includes(theme) ? "light" : "dark");
+  }
+});
+
+test("command entry refuses disabled themes while preserving every allowed choice", () => {
+  for (const enabled of [false, true]) for (const rounded of [false, true]) {
+    const writes = [];
+    let dispatch;
+    const { default: Commands } = load("src/components/commands.tsx", {
+      "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === "rounded" && rounded },
+      "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "rounded" },
+      react: { useEffect() {} },
+      "./useCommandsState": { useCommandsState: () => ({ showCommands: { show: false }, currentUser: { id: 985 }, switchToTheme: theme => writes.push(theme) }) },
+      "./boardCommandActions": { createBoardCommandActions: () => ({}) },
+      "./generalCommandActions": { createGeneralCommandActions: () => ({}) },
+      "./commandModalCallbacks": { createCommandModalCallbacks: () => ({}) },
+      "./commandDispatcher": { createCommandDispatcher: context => { dispatch = context; return {}; } },
+      "@/hooks/Kanban/useArchiveColumn": { useArchiveColumn: () => ({}) },
+      "./commandModalPanels1": {}, "./commandModalPanels2": {}, "./commandModals": {},
+      "./Modals/Common Modals/ConfirmDialog": {}, "./Modals/commands/HTC/AllCommands": {},
+    });
+    Commands({});
+    for (const theme of ["graphite-2", "rounded", "graphite", "porcelain", "amoled", "dia", "system"]) dispatch.switchToTheme(theme);
+    assert.deepEqual(writes, [enabled ? "graphite-2" : "system", rounded ? "rounded" : "system", "graphite", "porcelain", "amoled", "dia", "system"]);
+  }
+});
