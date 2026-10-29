@@ -218,12 +218,12 @@ function draftHandoff(enabled, create, calls, dom, apple = false, options = {}) 
   visit(file);
   assert.ok(effect);
   const compiled = ts.transpileModule(`const effect = ${effect};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", "_mbl", "closeBackDismissBeforeNavigation", "PlanLimitRefusal", `${compiled}; return effect();`)(
+  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", "_mbl", "closeBackDismissBeforeNavigation", "PlanLimitRefusal", "keepTaskAiNavigation", `${compiled}; return effect();`)(
     enabled, dom.window, dom.window.document, apple, false, false, false, { current: false }, false,
     options.formValues ?? { currentProject: { id: 6859 }, status: { sectionId: 7 }, title: "" },
     (value) => calls.push(["busy", value]), create, options.router ?? { push: (url) => calls.push(["navigate", url]) },
     options.closeHandler ?? ((save) => calls.push(["close", save])), { error: () => calls.push(["error"]) },
-    options.mobile ?? false, load("src/lib/mobile/backDismiss.ts").closeBackDismissBeforeNavigation, load("src/lib/planLimitsClient.ts").PlanLimitRefusal,
+    options.mobile ?? false, load("src/lib/mobile/backDismiss.ts").closeBackDismissBeforeNavigation, load("src/lib/planLimitsClient.ts").PlanLimitRefusal, options.keepTaskAiNavigation ?? true,
   );
 }
 
@@ -391,6 +391,43 @@ test("C form Ctrl+J wins over both compose listeners with the flag on, regardles
             dom.window.close();
           }
         }
+      }
+    }
+  }
+});
+
+
+test("/new keyboard handoff keeps the saved ticket instead of closing back to its board", async () => {
+  for (const enabled of [false, true]) {
+    for (const apple of [false, true]) {
+      for (const mobile of [false, true]) {
+        const dom = new JSDOM("<div id='createTaskModal'><textarea></textarea></div>", { url: "https://app.hypertask.ai/new?board=7049" });
+        const calls = [];
+        const file = ts.createSourceFile("useCreateTaskModalStates.ts", read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts"), ts.ScriptTarget.Latest, true);
+        let callback;
+        function visit(node) {
+          if (ts.isVariableDeclaration(node) && node.name.getText(file) === "closeHandler") callback = node.initializer.arguments[0].getText(file);
+          ts.forEachChild(node, visit);
+        }
+        visit(file);
+        assert.ok(callback);
+        const compiled = ts.transpileModule(`const callback = ${callback};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+        const closeHandler = new Function("pathname", "formValues", "hasUnsavedChanges", "saveEpochRef", "autoTitleCoordinator", "setIsGeneratingTitle", "setUploadingStateCreateTaskModal", "goToProjectShortcut", `${compiled}; return callback;`)(
+          "/new", { currentProject: { id: 7049 } }, () => false, { current: 0 }, { cancelPending() {} }, () => {}, () => {},
+          (id) => dom.window.history.pushState({}, "", `/project?id=${id}`),
+        );
+        const cleanup = draftHandoff(true, async () => { calls.push("save"); return "/detail/project-7049/43"; }, calls, dom, apple, {
+          mobile, keepTaskAiNavigation: enabled, closeHandler,
+          router: { push: (url) => dom.window.history.pushState({}, "", url) },
+        });
+        try {
+          const press = () => dom.window.document.querySelector("textarea").dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "j", ctrlKey: !apple, metaKey: apple, bubbles: true, cancelable: true }));
+          press();
+          press();
+          await new Promise((resolve) => setImmediate(resolve));
+          assert.equal(calls.filter((call) => call === "save").length, 1);
+          assert.equal(dom.window.location.pathname + dom.window.location.search, enabled ? "/detail/project-7049/43?newTaskAi=1" : "/project?id=7049");
+        } finally { cleanup(); dom.window.close(); }
       }
     }
   }
