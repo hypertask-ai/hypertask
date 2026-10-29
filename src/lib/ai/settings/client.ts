@@ -1,6 +1,5 @@
 import { themeOptions } from "@/lib/themePreferences";
-import type { SettingsScope } from "./catalog";
-import type { SettingProposalCard } from "./catalog";
+import type { SettingProposalCard, SettingsScope } from "./catalog";
 
 // Client-side calls for a setting change card. No React here, so the card keeps only rendering.
 
