@@ -682,13 +682,6 @@ export interface ISection {
   items: ITask[];
 }
 
-export interface IBoardAccessRequestNotification extends Omit<INotification, "type" | "task" | "taskId"> {
-  type: "AgentBoardAccessRequest";
-  task: null;
-  taskId: null;
-  boardAccessRequest: BoardAccessSummary;
-}
-
 export interface INotification {
   boardAccessRequest?: BoardAccessSummary;
   id: string;

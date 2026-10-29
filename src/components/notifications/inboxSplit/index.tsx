@@ -1,5 +1,6 @@
-import { AgentBoardAccessDecision } from "../NotificationRow";
 "use client";
+
+import { AgentBoardAccessDecision } from "../NotificationRow";
 
 import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
 import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
@@ -487,7 +488,8 @@ const InboxSplit = ({
     if (value !== index) return;
     if (
       e.target instanceof Element &&
-      e.target.closest('[data-inbox-draft-control="true"]')
+      (e.target.closest('[data-inbox-draft-control="true"]') ||
+        e.target.closest('[data-inbox-decision-control="true"]'))
     ) {
       return;
     }

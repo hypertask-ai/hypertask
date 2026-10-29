@@ -462,7 +462,12 @@ export async function setFeatureFlagMode(
       await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: actor?.userId ?? null, log: "agent_board_access_requests_disabled" } });
       const pending = await tx.agentBoardAccessRequest.findMany({ where: { status: "pending" } });
       for (const request of pending) {
-        await tx.agentBoardAccessRequest.update({ where: { id: request.id }, data: { status: "cancelled", resolvedAt: new Date(), resolutionReason: "feature_disabled" } });
+        // Conditional update: an approval that committed in between keeps its grant and its terminal state.
+        const cancelled = await tx.agentBoardAccessRequest.updateMany({
+          where: { id: request.id, status: "pending" },
+          data: { status: "cancelled", resolvedAt: new Date(), resolutionReason: "feature_disabled" },
+        });
+        if (cancelled.count !== 1) continue;
         await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: actor?.userId ?? request.ownerUserIdAtRequest,
           log: JSON.stringify({ event: "agent_board_access_request", operation: "cancelled", outcome: "terminal", reason: "feature_disabled", requestId: request.id,
             agentId: request.agentIdAtRequest, ownerId: request.ownerUserIdAtRequest, projectId: request.projectIdAtRequest, credential: "flag_transition" }) } });

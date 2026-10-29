@@ -135,7 +135,6 @@ async function addAgentToBoardTransaction(
   agentId: string,
   requestingUserId: number,
   actingAgentId?: string | null,
-  database?: Prisma.TransactionClient,
 ): Promise<AddAgentToBoardResult> {
   const enabled = await crossTeamAgentsEnabled(requestingUserId);
   const project = await database.project.findFirst({

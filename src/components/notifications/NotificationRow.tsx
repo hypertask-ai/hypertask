@@ -483,15 +483,15 @@ export function AgentBoardAccessDecision() {
     const expired = current.status === "pending" && new Date(current.expiresAt).getTime() <= clock;
     const pending = current.status === "pending" && !expired;
     return (
-        <div className="min-w-0 flex-1 py-2" onClick={(event) => event.stopPropagation()}>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+        <div className="min-w-0 flex-1 py-2" data-inbox-decision-control="true" onClick={(event) => event.stopPropagation()}>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-dense">
                 <span>{request.agentName}</span>
                 <span className="text-text-light-gray">Board access · {request.boardName}</span>
                 <CreatedAtDesktop />
                 <CreatedAtMobile />
             </div>
-            <article aria-label="Board access decision" className="border-l-4 rounded shadow-md bg-comment-description border-comment-description-border text-white-black comment-container comment-separation-card my-[8px] p-4">
-                <header className="mb-3 flex items-center justify-between gap-2 text-[13px]">
+            <article aria-label="Board access decision" className="rounded border border-comment-description-border shadow-md bg-comment-description text-white-black comment-container comment-separation-card my-[8px] p-4">
+                <header className="mb-3 flex items-center justify-between gap-2 text-dense">
                     <span>{request.agentName}</span>
                     <CreatedAtDesktop />
                     <CreatedAtMobile />
@@ -499,15 +499,15 @@ export function AgentBoardAccessDecision() {
                 <div className="space-y-3 text-content">
                     <p><strong>{request.agentName} asks to join {request.boardName} as a member</strong></p>
                     <p className="whitespace-pre-wrap break-words">Question: {request.reason}</p>
-                    <p className="text-[13px] text-text-light-gray">
+                    <p className="text-dense text-text-light-gray">
                         {request.sameTeam
                             ? `Only you, this agent’s owner, can approve. ${request.boardName} is in the same team. Adds a plain member, exactly like ticking Board access; no role changes.`
                             : `Agent belongs to another team. ${request.boardName} is in a different team from this agent. This request cannot be approved.`}
                     </p>
-                    {(!pending || error) && <p role="status" className="text-[13px] text-text-light-gray">{error ?? (expired ? "This request has expired. No access was added." : current.status === "approved" && current.accessPresent
+                    {(!pending || error) && <p role="status" className="text-dense text-text-light-gray">{error ?? (expired ? "This request has expired. No access was added." : current.status === "approved" && current.accessPresent
                         ? `Approved · ${request.agentName} added to ${request.boardName} as a member. No role changed.`
                         : current.status === "declined" ? `Declined · No access added. ${request.agentName} has been told.` : current.nextStep)}</p>}
-                    <Link className="text-[13px] text-hypertasks-purple" href={`/agents/${request.agentId}?boardAccess=${request.projectId}`}>Board access →</Link>
+                    <Link className="text-dense text-hypertasks-purple" href={`/agents/${request.agentId}?boardAccess=${request.projectId}`}>Board access →</Link>
                 </div>
                 {pending && <div className="mt-3 flex justify-end gap-2">
                     <button type="button" disabled={busy} onClick={() => void decide("decline")} className="rounded-[4px] px-3 py-1.5 text-dense text-text-light-gray hover:bg-hoverCardBackground disabled:opacity-50">Decline</button>

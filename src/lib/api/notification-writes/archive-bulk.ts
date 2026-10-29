@@ -47,12 +47,24 @@ const route = taskWriteRoute({
       if (archiveStatus !== "Normal" && archiveStatus !== "Archive") return NextResponse.json({ message: "Invalid status" }, { status: 400 });
       if (session.agentId || session.source === "cli-bearer" || entry.taskId != null) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
+    const committedAccessIds: number[] = [];
     for (const id of accessIds) {
       try {
         await mutateBoardAccessNotification(session, id, null, { status: archiveStatus as "Normal" | "Archive" });
+        committedAccessIds.push(id);
       } catch (error) {
         if (!(error instanceof BoardAccessError)) throw error;
-        return NextResponse.json({ message: error.message }, { status: error.status });
+        // Earlier access rows already committed, so report the partial result and
+        // broadcast it instead of leaving other tabs showing stale unarchived rows.
+        if (committedAccessIds.length > 0) {
+          void broadcastInboxChange(session.userId, { originUserId: session.userId },
+            socketIdFromHeader(request.rawHeaders ? request.rawHeaders["x-socket-id"] : request.headers.get("x-socket-id")));
+        }
+        return NextResponse.json({
+          message: error.message,
+          archivedCount: committedAccessIds.length,
+          partial: committedAccessIds.length > 0,
+        }, { status: error.status });
       }
     }
     const restoreInbox = archiveStatus === "Normal";
