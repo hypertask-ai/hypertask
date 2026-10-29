@@ -28,6 +28,7 @@ function load(file, mocks = {}) {
 const policy = load("src/lib/aiChat/autoOpenPreferences.ts");
 const defaults = policy.AI_CHAT_AUTO_OPEN_DEFAULTS;
 const allOff = Object.fromEntries(policy.AI_CHAT_AUTO_OPEN_KEYS.map((key) => [key, false]));
+const settings = (extra = {}) => ({ ...defaults, ...extra });
 
 function hooks() {
   const slots = [], effects = [];
@@ -538,4 +539,42 @@ test("fullscreen return flag Off retains the saved automatic-opening choice", ()
     h.navigate("/my-tasks", phone);
     assert.equal(h.values.showAIChatInterfaceAtom, false);
   }
+});
+
+// HTPR-8088: with manual chat on, only the new-ticket switch still opens the chat by itself.
+const manual = (values, options = {}) => pageHarness(values, { ...options, manualChat: true });
+
+test("manual chat: no switch opens the chat on a ticket, a board or My Tasks", () => {
+  const h = manual(settings({ aiChatOpenTickets: true, aiChatOpenBoards: true, aiChatOpenNewTickets: true }));
+  for (const url of ["/detail/project-15/2", "/project?id=15", "/my-tasks", "/inbox"]) {
+    h.navigate(url);
+    assert.equal(h.values.showAIChatInterfaceAtom, false, `${url} must not open the chat`);
+  }
+});
+
+test("manual chat: navigation never closes an open chat, on desktop and phone", () => {
+  for (const phone of [false, true]) {
+    const h = manual(allOff);
+    h.navigate("/detail/project-15/2", phone);
+    h.manualOpen();
+    for (const url of ["/detail/project-15/3", "/project?id=15", "/my-tasks", "/detail/project-15/4"]) {
+      h.navigate(url, phone);
+      assert.equal(h.values.showAIChatInterfaceAtom, true, `${url} must not close the chat`);
+    }
+  }
+});
+
+test("manual chat: the new-ticket exception follows its own switch", () => {
+  const on = manual(settings({ aiChatOpenNewTickets: true }));
+  on.navigate("/detail/project-15/1");
+  assert.equal(on.values.showAIChatInterfaceAtom, true);
+  const off = manual(settings({ aiChatOpenNewTickets: false }));
+  off.navigate("/detail/project-15/1");
+  assert.equal(off.values.showAIChatInterfaceAtom, false);
+});
+
+test("manual chat: no width is reserved for a chat the user did not open", () => {
+  const h = manual(settings({ aiChatOpenTickets: true }));
+  h.navigate("/detail/project-15/2");
+  assert.equal(h.render().reserve, false);
 });
