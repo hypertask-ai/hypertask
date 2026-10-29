@@ -45,6 +45,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   const ready = enabled && !pagingUnavailable && historyEnabled && !!user?.uid;
   const setActiveSession = useCallback((id: string | null) => {
     activeRef.current = id;
+    setEmptyNavigationIdentity(null);
     selectActiveSession(id);
   }, [selectActiveSession]);
 
@@ -242,7 +243,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     const initialize = async () => {
       if (initialTaskId === undefined) {
         if (navigationKey) {
-          const session = await resolveHistorySession(undefined, navigationBoardId === undefined ? undefined : { projectId: navigationBoardId });
+          const session = await resolveHistorySession(undefined, isTaskScoped || navigationBoardId === undefined ? undefined : { projectId: navigationBoardId });
           if (!cancelled && identityRef.current === identity && !activeRef.current && !newChatRef.current) {
             const generalSession = session?.agentId ? undefined : session;
             setActiveSession(generalSession?.id ?? null);
@@ -367,7 +368,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
 
   }, [ready, queryClient, user?.uid, user?.id]);
 
-  const isSessionPending = ready && !currentSession && !initializationError && !(navigationKey && emptyNavigationIdentity === identity) && (summaryQuery.isLoading || transcriptQuery.isFetching || creating || (!activeSession && summaryQuery.isSuccess));
+  const isSessionPending = ready && !currentSession && !initializationError && !(navigationKey && emptyNavigationIdentity === identity && !activeSession && !creating) && (summaryQuery.isLoading || transcriptQuery.isFetching || creating || (!activeSession && summaryQuery.isSuccess));
   return {
     pagingUnavailable, activeSession, currentSession, setActiveSession, startNewSession, selectSession, addMessageToSessionQuery, updateSessionTitle, deleteSession,
     updateLastMessageInSessionCache: (id: string, message: IChatMessage) => addMessageToSessionQuery(id, message, true, true),

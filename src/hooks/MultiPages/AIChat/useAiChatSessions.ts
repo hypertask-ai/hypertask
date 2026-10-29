@@ -194,7 +194,9 @@ export function useAiChatSessions(context: Context) {
         }
         if (!chatHistoryReadyRef.current || sessionIntentGenerationRef.current !== generation) return undefined;
         const selected = getDisplayedSession();
-        return selected?.userId === userId ? selected : undefined;
+        if (selected) return selected.userId === userId ? selected : undefined;
+        const created = await createSession(() => sessionIntentGenerationRef.current === generation);
+        return sessionIntentGenerationRef.current === generation ? created : undefined;
       }
       if (followsTaskNavigation && !isFullScreenChat) {
         const selected = getDisplayedSession();

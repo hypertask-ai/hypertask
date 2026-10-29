@@ -36,7 +36,7 @@ async function withChat(options, check) {
       const offset = Number(scope.cursor ?? 0), limit = scope.limit ?? 30;
       return response({ success: true, sessions: visible.slice(offset, offset + limit).map(({ messages, ...item }) => ({ ...item, hasMessages: messages.length > 0 })), nextCursor: offset + limit < visible.length ? String(offset + limit) : null });
     },
-    getSessionTranscript: async id => { calls.push(["transcript", id]); return rows.find(item => item.id === id && item.userId === values.get(atoms.currentUserAtom).id) ?? null; },
+    getSessionTranscript: async id => { calls.push(["transcript", id]); if (options.transcriptLoad) await options.transcriptLoad; return rows.find(item => item.id === id && item.userId === values.get(atoms.currentUserAtom).id) ?? null; },
     createSessionNext: async (taskId, projectId) => { calls.push(["create", taskId, projectId]); const session = { ...row("explicit-new"), taskId: taskId ?? null, projectId: projectId ?? null, messages: [] }; rows.unshift(session); return response({ success: true, session }); },
   };
   const wire = load("src/utils/api/ai_chat/aiChatHelpers.ts", { "@/lib/constants": { default: {} }, "@/utils/axiosClient": { default: {} } });
@@ -499,5 +499,34 @@ for (const paged of [false, true]) test(`${paged ? "paged" : "legacy"}: explicit
     assert.equal(view.history().currentSession.id, "compose-target");
     assert.equal((await view.resolver().ensureSessionForCurrentBoard(0)).id, "compose-target");
     assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+  });
+});
+
+
+test("following tickets reuses task-only history without creating a replacement", async () => {
+  await withChat({ paged: true, followsTask: true, rows: [{ ...row("older"), taskId: 43 }] }, async view => {
+    await view.set(atoms.inViewObjectAtom, { taskId: 44 });
+    await view.visit("/detail/project-15/44");
+    assert.equal(view.history().currentSession.id, "older");
+    assert.equal((await view.resolver().ensureSessionForCurrentBoard(0)).id, "older");
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+  });
+});
+
+test("selecting a transcript after empty initialization waits without replacing it", async () => {
+  let finishTranscript;
+  const transcriptLoad = new Promise(resolve => { finishTranscript = resolve; });
+  await withChat({ paged: true, rows: [], transcriptLoad }, async view => {
+    assert.equal(view.chatState().chatHistoryReady, true);
+    view.rows.push(row("older"));
+    let selection;
+    await React.act(async () => { selection = view.history().selectSession("older"); }); await view.flush();
+    assert.equal(view.chatState().isSessionPending, true);
+    assert.equal(view.chatState().chatHistoryReady, false);
+    assert.equal(await view.resolver().ensureSessionForCurrentBoard(0), undefined);
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+    await React.act(async () => { finishTranscript(); await selection; }); await view.flush();
+    assert.equal(view.history().currentSession.id, "older");
+    assert.equal((await view.resolver().ensureSessionForCurrentBoard(0)).id, "older");
   });
 });
