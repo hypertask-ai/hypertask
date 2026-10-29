@@ -1,3 +1,4 @@
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { renderCommandModals1 } from "./commandModalPanels1";
 import { renderCommandModals2 } from "./commandModalPanels2";
@@ -71,6 +72,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   let agentSidebarChatsEnabled = false;
   if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
@@ -139,8 +141,12 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     ...(ticketPrefixEnabled ? { ticketPrefixEnabled: true } : {}),
   });
   let switchCommandTheme = switchToTheme;
-  if (!roundedEnabled) {
-    switchCommandTheme = (theme) => switchToTheme(theme === "rounded" ? "system" : theme);
+  if (!roundedEnabled || !graphite2Enabled) {
+    switchCommandTheme = (theme) => switchToTheme(
+      (theme === "rounded" && !roundedEnabled) || (theme === "graphite-2" && !graphite2Enabled)
+        ? "system"
+        : theme
+    );
   }
   let dispatchCommentFunction = commentFunctionHandler;
   if (!blockerCommentEnabled) {
