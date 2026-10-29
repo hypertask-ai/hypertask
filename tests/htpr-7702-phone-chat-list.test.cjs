@@ -31,6 +31,7 @@ function view({ mobile = true, enabled = true, agentsOnly = false, composerTop =
   const editor = document.getElementById("editor");
   const rect = (top, width = 339, height = 37) => ({ top, bottom: top + height, left: 58, right: 58 + width, width, height });
   const geometry = { composerTop, listTop };
+  document.querySelector('[data-testid="ai-sidebar"]').getBoundingClientRect = () => ({ ...rect(0), right: 390 });
   host.getBoundingClientRect = () => rect(geometry.listTop, 288, 326);
   anchor.getBoundingClientRect = () => rect(geometry.listTop - 48, 180, 44);
   document.getElementById("inactive").getBoundingClientRect = () => rect(100);
@@ -57,13 +58,26 @@ test("phone max height uses active same-sidebar composer top minus actual list t
   } finally { chat.dispose(); }
 });
 
-test("agent picker caps its width against its right-aligned anchor", () => {
+test("agent picker stays inside its sidebar instead of crossing into the board", () => {
   const chat = view({ agentsOnly: true });
   try {
-    assert.equal(chat.host.style.maxWidth, "230px");
+    assert.equal(chat.host.style.maxWidth, "324px");
     assert.equal(chat.host.style.maxHeight, "216px");
   } finally { chat.dispose(); }
 });
+
+
+for (const mobile of [false, true]) {
+  test(`${mobile ? "phone" : "desktop"} agent picker stops above composer without the phone-list flag`, () => {
+    const chat = view({ mobile, enabled: false, agentsOnly: true });
+    try {
+      assert.equal(chat.host.style.maxHeight, "216px");
+      chat.geometry.composerTop = 470;
+      chat.window.visualViewport.dispatchEvent(new chat.window.Event("resize"));
+      assert.equal(chat.host.style.maxHeight, "128px");
+    } finally { chat.dispose(); }
+  });
+}
 
 test("phone composer cap clamps at zero and cannot exceed the viewport cap", () => {
   for (const [composerTop, expected] of [[335, "0px"], [300, "0px"], [900, "322px"]]) {
@@ -133,7 +147,6 @@ test("composer pointerdown closes the list without preventing default focus or s
 
 test("placement follows phone context and flag changes; existing list styles and shared rows stay intact", () => {
   assert.equal(placement.arguments[1].getText(parsed), "[anchorRef, onClose, isMobile, phoneChatList, agentsOnly]");
-  assert.match(source, /className=\{`absolute \$\{agentsOnly \? "right-0" : "left-0"\} top-full z-\[1200\] mt-1 w-72 overflow-y-auto \$\{agentsOnly \? "rounded-\[5px\]" : "rounded-md"\} bg-modalBackground py-1 text-white-black shadow-md outline-none`\}/);
   assert.match(source, /<CommandList\s+isMobile=\{isMobile\}\s+inline/);
 });
 

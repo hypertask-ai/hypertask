@@ -357,7 +357,6 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
         className={isMbl ? "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black" : "text-icon-dark-gray hover:text-white-black"}>
         <Bot size={isMbl ? 20 : 16} strokeWidth={1.75} />
       </button>
-      {agentsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={agentButtonRef} onClose={closeAgents} agentsOnly />}
     </div>
   ) : null;
 
@@ -379,11 +378,12 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
           {sidebarChats ? (
             <div className="relative">
               <button ref={titleRef} type="button" aria-label="Switch conversation" aria-expanded={conversationsOpen}
-                aria-controls="agent-sidebar-conversations" onClick={() => { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }}
+                aria-controls="agent-sidebar-conversations" onClick={() => { closeAgents(); setIsDropdownOpen(false); setConversationsOpen((open) => !open); }}
                 className={cn(MOBILE_TARGET, "max-w-full gap-1 truncate px-2 text-modalSmall font-semibold leading-5")}>
                 <span className="truncate">{sidebarTitle}</span>{runningIndicator}<ChevronDown size={18} aria-hidden />
               </button>
               {conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
+              {agentsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={agentButtonRef} onClose={closeAgents} agentsOnly />}
             </div>
           ) : (
           <div
@@ -437,7 +437,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
           aria-expanded={sidebarChats ? conversationsOpen : isDropdownOpen}
           aria-controls={sidebarChats ? "agent-sidebar-conversations" : "ai-chat-session-history"}
           onClick={() => {
-            if (sidebarChats) { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
+            if (sidebarChats) { closeAgents(); setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
             else setIsDropdownOpen((prev) => !prev);
           }}
           className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
@@ -468,6 +468,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
         </button>
 
         {sidebarChats && conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
+        {sidebarChats && agentsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={agentButtonRef} onClose={closeAgents} agentsOnly />}
         {renderSessionMenu("left-0")}
       </div>
 

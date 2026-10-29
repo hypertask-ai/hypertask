@@ -94,6 +94,7 @@ function picker({ agentsOnly = true, agents = [{ id: "agent", displayName: "Runn
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const mocks = {
     react, "react/jsx-runtime": require("react/jsx-runtime"),
+    "lucide-react": require("lucide-react"),
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/components/Modals/commands/HTC/CommandList": { default: "CommandList" },
     "@/components/Modals/commands/HTC/commandSelection": { findCommandPosition: noop },
