@@ -59,10 +59,11 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             try {
                 const taskUrl = await CreateTaskAndDescription(undefined, formValues.title.trim() || "New Task")
                 if (!taskUrl) throw new Error("Task could not be created")
-                const closeBeforeNavigation = _mbl && window.location.pathname !== "/new"
+                const newTaskPage = window.location.pathname === "/new"
+                const closeBeforeNavigation = _mbl && !newTaskPage
                 if (closeBeforeNavigation) await closeBackDismissBeforeNavigation(window, "createTaskModal", () => closeHandler(true))
                 router.push(`${taskUrl}?newTaskAi=1`)
-                if (!closeBeforeNavigation && (!keepTaskAiNavigation || window.location.pathname !== "/new")) closeHandler(true)
+                if (!closeBeforeNavigation && (!keepTaskAiNavigation || !newTaskPage)) closeHandler(true)
             } catch (error) {
                 sidebarHandoffPending.current = false
                 toast.error(error instanceof PlanLimitRefusal ? error.message : "Could not open AI chat. Your task draft is still here.")
