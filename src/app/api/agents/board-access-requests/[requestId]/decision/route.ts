@@ -3,10 +3,15 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isGuestUserId } from "@/lib/demo/guestGuard";
 import { decideBoardAccessRequestSchema, getBoardAccessRequestSchema } from "@/lib/agents/boardAccessRequests/contracts";
 import { BoardAccessError, decideBoardAccessRequest, recordBoardAccessDenial } from "@/lib/agents/boardAccessRequests/service";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ requestId: string }> }) {
   const session = await getSessionUser(request.headers);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isFeatureEnabled(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG, session.userId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const id = getBoardAccessRequestSchema.safeParse({ request_id: (await context.params).requestId });
   const actor = { userId: session.userId, agentId: session.agentId,
     credential: session.agentId ? "agent_cookie" as const : session.source === "cli-bearer" ? "cli_bearer" as const : "human_cookie" as const };
