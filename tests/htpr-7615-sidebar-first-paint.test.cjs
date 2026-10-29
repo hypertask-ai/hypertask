@@ -37,6 +37,7 @@ function firstPaint(saved, { viewport = 1440, pathname = "/detail/project-8190/2
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
     "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => false, useFlagReady: () => true },
     "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
+    "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
     "@/lib/flags/keys": {},
   });
   const html = renderToString(React.createElement(Frame, { onOpenAIChat: noop, sidebarWidthPx: 420 },

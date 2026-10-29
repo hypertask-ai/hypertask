@@ -37,6 +37,15 @@ function loadErrorFormatters(logs = []) {
   )(logger, z, loadToErrorMessage());
 }
 
+function loadSettingsScopeSchema() {
+  const jiti = require("jiti")(__filename, {
+    interopDefault: true,
+    alias: { "@": path.join(__dirname, "..", "src") },
+  });
+  return jiti(path.join(__dirname, "../src/lib/ai/settings/catalog.ts"))
+    .settingsScopeSchema;
+}
+
 function loadChatRequestSchema() {
   const start = routeSource.indexOf("const attachmentSchema");
   assert.notEqual(start, -1, "attachmentSchema must exist in the chat route");
@@ -46,7 +55,7 @@ function loadChatRequestSchema() {
   const javascript = ts.transpileModule(routeSource.slice(start, end), {
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  return new Function("z", `${javascript}; return chatRequestSchema;`)(z);
+  return new Function("z", "settingsScopeSchema", `${javascript}; return chatRequestSchema;`)(z, loadSettingsScopeSchema());
 }
 
 test("LangChain-style streaming errors are replaced with safe retry copy", () => {
