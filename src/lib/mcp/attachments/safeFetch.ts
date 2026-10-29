@@ -216,7 +216,9 @@ function pinnedDispatcher(pinned: PinnedAddress): Agent {
       callback(null, pinned.address, pinned.family);
     }
   };
-  return new Agent({ connect: { lookup } });
+  // undici 8 turns HTTP/2 on by default (allowH2); keep the pinned fetch on
+  // HTTP/1.1 like undici 7 did.
+  return new Agent({ connect: { lookup }, allowH2: false });
 }
 
 export async function publicAddressDispatcher(url: URL, signal: AbortSignal): Promise<Agent> {
