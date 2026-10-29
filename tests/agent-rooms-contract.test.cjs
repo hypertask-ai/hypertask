@@ -46,12 +46,9 @@ test("room runtime APIs expose poll, transcript reply, and handled acknowledgeme
   assert.match(handled, /markAgentRoomMessageHandled/);
 });
 
-test("the flagged room screen reuses the existing composer and shows safeguards", () => {
-  const page = read("src/app/agents/chat/page.tsx");
+test("the room screen reuses the existing composer and shows safeguards", () => {
   const directChat = readAgentChatSource();
   const room = read("src/app/agents/chat/AgentRoomClient.tsx");
-  assert.match(page, /isFeatureEnabled/);
-  assert.match(page, /HTPR_6557_AGENT_ROOMS_FLAG/);
   assert.match(directChat, /Board rooms/);
   assert.match(room, /AI_Tiptap_Container/);
   assert.match(room, /turns today/);

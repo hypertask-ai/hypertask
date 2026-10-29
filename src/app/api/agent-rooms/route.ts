@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { HTPR_6557_AGENT_ROOMS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { AGENT_ROOM_DAILY_TURN_BUDGET } from "@/lib/agents/roomPolicy";
 
 export const runtime = "nodejs";
 
 async function roomUser(request: NextRequest) {
-  const userId = (await getSessionUser(request.headers))?.userId;
-  if (
-    !userId ||
-    !(await isFeatureEnabled(HTPR_6557_AGENT_ROOMS_FLAG, userId))
-  ) {
-    return null;
-  }
-  return userId;
+  return (await getSessionUser(request.headers))?.userId ?? null;
 }
 
 export async function GET(request: NextRequest) {

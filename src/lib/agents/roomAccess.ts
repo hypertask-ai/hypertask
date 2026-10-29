@@ -1,15 +1,8 @@
 import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
 import prisma from "@/lib/prisma";
-import { HTPR_6557_AGENT_ROOMS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-export const agentRoomsEnabled = (userId: number) =>
-  isFeatureEnabled(HTPR_6557_AGENT_ROOMS_FLAG, userId);
-
 export async function loadUserAgentRoom(roomId: string, userId: number) {
-  if (!(await agentRoomsEnabled(userId))) {
-    return null;
-  }
   return prisma.agentRoom.findFirst({
     where: {
       id: roomId,
@@ -26,10 +19,7 @@ export async function loadAgentTokenRoom(roomId: string, agentId: string, princi
     where: { id: agentId, revokedAt: null, archivedAt: null },
     select: { id: true, userId: true },
   });
-  if (
-    !agent ||
-    !(await agentRoomsEnabled(agent.userId))
-  ) {
+  if (!agent) {
     return null;
   }
   return prisma.agentRoom.findFirst({
