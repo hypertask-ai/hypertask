@@ -1,3 +1,4 @@
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import "server-only";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
@@ -48,6 +49,7 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   if (payload.project?.id !== projectId) return null;
   const viewSlug = url.searchParams.get("view");
   const runtimeContext = {
+    agentCreatorFilterEnabled: flags[HTPR_7865_AGENT_CREATOR_FILTER_FLAG] === true,
     legacyAgentAssigneeMatch: flags[HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG] === false,
     legacyMissingPersonalViewFilters: flags[HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG] === false,
   };

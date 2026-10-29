@@ -52,6 +52,7 @@ async function fixture(run) {
 
 function commonMocks(calls) {
   return {
+    "@/lib/flags/definitions/htpr-7865-agent-creator-filter": load("src/lib/flags/definitions/htpr-7865-agent-creator-filter.ts"),
     "@/hooks/useFlag": { useFlag: (key) => {
       if (key === "htpr-6175-quick-entry-cards") throw new Error("Removed flag must not be read");
       return false;

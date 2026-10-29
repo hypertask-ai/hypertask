@@ -97,6 +97,7 @@ test("flag off removes only the new view and clears only its selected board", ()
 test("empty Blocked by me remains discoverable without changing other empty tabs", () => {
   const orderedViews = orderedHarness(true).hook(project(15));
   const hook = loadHook("src/hooks/Homepage/Views/useRenderedViews.ts", {
+    "@/lib/flags/definitions/htpr-7865-agent-creator-filter": jiti(path.join(root, "src/lib/flags/definitions/htpr-7865-agent-creator-filter.ts")),
     react: { useMemo: (fn) => fn() },
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? { id: 985 } : atom === "showEmpty" ? false : {} },
     "@/store": { currentUserAtom: "user", showEmptyViewTabsAtom: "showEmpty" },

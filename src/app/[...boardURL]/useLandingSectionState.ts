@@ -1,3 +1,4 @@
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { IFavorites, IProject, ISection } from "@/models/model";
 import { activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -28,6 +29,7 @@ export function useLandingSectionState(context: Context) {
   } = context;
 
 
+const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
 const router = useRouter();
@@ -69,13 +71,14 @@ const { timers: runningTimers, timerDataReady } = useBoardRunningTimers(
 );
 const filterRuntimeContext = useMemo(() => ({
   legacyAgentAssigneeMatch: !assigneeFixEnabled,
+  agentCreatorFilterEnabled,
   legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
   runningTaskIds: timerDataReady
     ? new Set(runningTimers.keys())
     : new Set(sections.flatMap((section) =>
         (section.items ?? []).map((task) => task.id)
       )),
-}), [assigneeFixEnabled, defaultFiltersFixEnabled, runningTimers, sections, timerDataReady]);
+}), [agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, runningTimers, sections, timerDataReady]);
 
 useEffect(() => {
   const project = _allProjects?.[_projectIndex]

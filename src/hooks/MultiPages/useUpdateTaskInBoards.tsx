@@ -1,3 +1,4 @@
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 
 import { useRef } from "react";
 import { IAiCustomInstructions, IProject, IProjectsAll, IProjectView, ISection, ITask } from "@/models/model";
@@ -181,6 +182,7 @@ const UpdateKanban = () => {
   const queryClient = useQueryClient();
   const archiveColumnBoundary = useFlag(HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
+  const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
   const setactiveitem = useSetRecoilState(activeItemAtom);
@@ -260,6 +262,7 @@ const UpdateKanban = () => {
     ]);
     const filterRuntimeContext = {
       legacyAgentAssigneeMatch: !assigneeFixEnabled,
+      agentCreatorFilterEnabled,
       legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
       ...(Array.isArray(runningTimers)
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }

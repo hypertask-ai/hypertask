@@ -288,7 +288,7 @@ const AllFilterHTC: React.FC<Props> = ({
     setCommandMode(FilterCommandMode.ShowAllFilters);
   };
 
-  const createdByHandler = async (param?: IUser | CalendarUserSummary) => {
+  const createdByHandler = async (param?: IUser | CalendarUserSummary | IAgent) => {
     addFilterElseClose("CreatedBy", param);
     setCommandMode(FilterCommandMode.ShowAllFilters);
   };
