@@ -85,3 +85,21 @@ Never save credentials, credential-bearing responses, traces, or token screens.
 
 Targeted dispatch and privacy coverage:
 `npm run test:file -- tests/htpr-8114-agent-attribution-removal.test.cjs tests/mcp-comments-cross-team-agent-visibility.test.cjs tests/mcp-task-context-agent-visibility.test.cjs tests/mcp-comment-reactions.test.cjs`.
+
+## Retired image generation
+
+With `htpr-7859-remove-image-generation` enabled, Settings > Team > Default
+models and AI features have no Image generation row. Ctrl+K has no image
+feature shortcut, and image model names no longer appear in ticket mention
+search. Ordinary people, agents and language-model mentions remain available.
+An authenticated POST to `/api/ai/generate-image` returns HTTP 404 before
+provider access or attachment/comment writes, including for stale saved image
+mentions. Existing uploaded images still render after reloading a ticket.
+
+Use QA 985 and an existing QA Sandbox image attachment. Capture the settings
+rows and attachment on desktop and phone in Porcelain, Graphite, AMOLED and
+Dia. Never generate an image or run a paid provider solely for verification.
+Do not switch production flags for the rollback check: hosted route-entry
+tests prove flag Off restores creation and its attachment/comment writes,
+while the removal path performs none. Record absent attachment fixtures as
+UNREACHABLE rather than claiming rendering proof.
