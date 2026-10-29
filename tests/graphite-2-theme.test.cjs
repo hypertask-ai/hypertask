@@ -155,3 +155,19 @@ test("flag ships for Everyone with small reversible risk", () => {
   assert.equal(definition.kind, "feature");
   assert.equal(definition.releaseRisk.risk, "small");
 });
+
+
+test("Graphite 2 stylesheet compiles its title size with the installed Tailwind version", async () => {
+  const { compile } = require("@tailwindcss/node");
+  const compiler = await compile('@import "./src/styles/tailwindThemes/graphite-2.css";', {
+    base: root,
+    onDependency() {},
+  });
+  const css = require("postcss").parse(compiler.build([]));
+  const declarations = new Map();
+  css.walkRules(".graphite-2 #title-input", rule => {
+    rule.walkDecls(decl => declarations.set(decl.prop, { value: decl.value, important: decl.important }));
+  });
+  assert.deepEqual(declarations.get("font-size"), { value: "24px", important: true });
+  assert.equal(declarations.get("font-weight").value, "600");
+});
