@@ -56,7 +56,7 @@ function navigation(overrides = {}) {
   });
   const value = useAgentChatNavigation({
     embedded: undefined, agents: [selectedAgent], selectedId: selectedAgent.id,
-    isMbl: true, mobileLayoutEnabled: false, teamId: "qa-team",
+    isMbl: true, teamId: "qa-team",
     setAgentChatMobileFullscreen: (value) => fullscreen.push(value),
     setMobileTopBarTitle: (value) => titles.push(value), setTeamId() {},
     search: "", ...overrides,
@@ -92,7 +92,7 @@ test("desktop and embedded chat keep their existing composer and shell behavior"
 });
 
 test("mobile roster keeps its normal shell when no agent is selected", () => {
-  const view = navigation({ selectedId: null, mobileLayoutEnabled: true });
+  const view = navigation({ selectedId: null });
   assert.equal(view.value.selectedAgent, null);
   assert.equal(view.value.mobileFullscreenChrome, false);
   assert.equal(view.value.reuseAiComposer, true);
@@ -146,7 +146,7 @@ test("6476 fullscreen chrome applies only while an agent is open", () => {
   assert.match(chat, /const mobileChromeAwareHeight = isMbl;/);
   assert.match(
     chat,
-    /\(mobileLayoutEnabled \|\| mobileFullscreenChrome\) &&\s*\n\s*"mobile-agent-chat/,
+    /isMbl &&\s*\n\s*"mobile-agent-chat/,
   );
 });
 
