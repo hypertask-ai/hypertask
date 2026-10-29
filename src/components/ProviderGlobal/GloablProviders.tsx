@@ -187,6 +187,7 @@ import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -452,6 +453,7 @@ export default function GlobalProvider({
   const shouldMountAgentChatRuntime =
     isAgentChatPage && mbl;
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const [sidebarRequested, setSidebarRequested] = useState(false);
   const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
@@ -495,7 +497,7 @@ export default function GlobalProvider({
 
   useEffect(() => {
     if (
-      aiChatOpenSwitchesEnabled ||
+      (aiChatOpenSwitchesEnabled && !manualChat) ||
       !chatAutoOpenReady ||
       hasAttemptedChatRestoreRef.current ||
       !currentUser?.id ||
@@ -505,13 +507,13 @@ export default function GlobalProvider({
       return;
     }
     hasAttemptedChatRestoreRef.current = true;
-    if (window.innerWidth < 768) return;
-    if (!keepAiChatClosed && !aiChatAutoOpenSuppressed && readChatOpenForSession()) {
-      setChatRuntimeMounted(true);
-      setShowAiChatInterface(true);
-      setAiChatExplicitOpenAt(null);
-    }
-  }, [currentUser?.id, aiChatOpenSwitchesEnabled, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
+    if (!manualChat && window.innerWidth < 768) return;
+    if (!manualChat && (keepAiChatClosed || aiChatAutoOpenSuppressed)) return;
+    if (!readChatOpenForSession()) return;
+    setChatRuntimeMounted(true);
+    setShowAiChatInterface(true);
+    setAiChatExplicitOpenAt(null);
+  }, [currentUser?.id, aiChatOpenSwitchesEnabled, manualChat, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
     if (!hasAttemptedChatRestoreRef.current) return;

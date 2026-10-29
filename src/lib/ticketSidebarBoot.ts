@@ -24,11 +24,13 @@ export function buildTicketSidebarBootScript({
   keepClosed,
   overlayTicket,
   autoOpenSwitches = false,
+  manualChat = false,
   userId = null,
 }: {
   keepClosed: boolean;
   overlayTicket: boolean;
   autoOpenSwitches?: boolean;
+  manualChat?: boolean;
   userId?: number | null;
 }): string {
   return `(function(){try{
@@ -37,7 +39,9 @@ export function buildTicketSidebarBootScript({
     if(!s||typeof s!=='object'||Array.isArray(s))return;
     var open=s.isAiChatSidebarMode!==false&&!(${keepClosed}&&s.keepAiChatClosed===true)&&
       (s.aiChatPinned===true||(s.openAiChatByDefault!==false&&s.aiChatAutoOpenSuppressed!==true));
-    if(${autoOpenSwitches}){
+    if(${manualChat}){
+      try{open=s.isAiChatSidebarMode!==false&&sessionStorage.getItem('ht:aiChatOpen')==='1';}catch(e){open=false;}
+    } else if(${autoOpenSwitches}){
       var prefs=(s.aiChatAutoOpenPreferences||{})[${userId}];
       var enabled=prefs&&typeof prefs.aiChatOpenTickets==='boolean'?prefs.aiChatOpenTickets:
         s.keepAiChatClosed!==true&&Object.prototype.hasOwnProperty.call(s,'openAiChatByDefault')&&s.openAiChatByDefault===true;

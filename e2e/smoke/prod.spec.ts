@@ -237,9 +237,16 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   }, b.id)
   const sidebar = page.getByTestId('ai-sidebar')
   const chip = sidebar.locator('[data-ai-chat-scope]:visible > button').first()
+  const openChat = async () => {
+    if (await sidebar.isVisible()) return
+    await page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true }).click()
+    await expect(sidebar).toBeVisible()
+  }
   const assertScope = async (title: string) => {
     await expect(page.locator('.kanban-column-title').first()).toBeVisible()
     await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
+    // htpr-8088-manual-chat: the docked chat opens only when the user opens it.
+    await openChat()
     await expect(sidebar).toBeVisible()
     await expect(chip).toBeVisible()
     await expect(chip).toHaveAttribute('title', title)
