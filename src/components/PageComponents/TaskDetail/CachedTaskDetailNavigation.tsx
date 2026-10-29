@@ -8,7 +8,7 @@ import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
 import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
@@ -45,7 +45,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   children: ReactNode;
   accountId: number | null;
 }) {
-  const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
   const queryClient = useQueryClient();
   const [protectedSource, setProtectedSource] = useState<HTMLDivElement | null>(null);
   const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
@@ -86,12 +85,12 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
       if (!task) {
-        if (backFirstOpen && route) flushSync(() => setHistoryDestination({ pathname: window.location.pathname }));
+        if (route) flushSync(() => setHistoryDestination({ pathname: window.location.pathname }));
         return;
       }
       (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
       flushSync(() => {
-        if (backFirstOpen) setHistoryDestination({ pathname: window.location.pathname });
+        setHistoryDestination({ pathname: window.location.pathname });
         openCachedTaskDetail({
           queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
           task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
@@ -100,11 +99,11 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     };
     window.addEventListener("cached-task-detail-popstate", restoreCachedTask);
     return () => window.removeEventListener("cached-task-detail-popstate", restoreCachedTask);
-  }, [backFirstOpen, accountId, currentUser?.id, queryClient, router]);
+  }, [accountId, currentUser?.id, queryClient, router]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
-      if (backFirstOpen && /^\/detail\/project-\d+\/\d+$/.test(window.location.pathname)) return;
+      if (/^\/detail\/project-\d+\/\d+$/.test(window.location.pathname)) return;
       if (!event.state?.__NA || !event.state?.__PRIVATE_NEXTJS_INTERNALS_TREE ||
           cachedTaskDetailLocation(window.location.pathname, accountId, {
             cachedTaskDetail: event.state?.cachedTaskDetail ?? previousLocation.current,
@@ -116,7 +115,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     };
     window.addEventListener("popstate", restoreSourceRoute, true);
     return () => window.removeEventListener("popstate", restoreSourceRoute, true);
-  }, [location, accountId, router, backFirstOpen]);
+  }, [location, accountId, router]);
   useEffect(() => {
     if (accountId === null || currentUser?.id !== accountId ||
         !pathname || !["/project", "/my-tasks", "/inbox"].includes(pathname)) return;
@@ -157,7 +156,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   }, [location, task, router]);
   const showDetail = !!location && !!task && task.projectId === location.projectId && task.uniqueIndex === location.uniqueIndex;
   useEffect(() => {
-    const nativeDetail = backFirstOpen && accountId !== null && currentUser?.id === accountId && pathname?.startsWith("/detail/project-");
+    const nativeDetail = accountId !== null && currentUser?.id === accountId && pathname?.startsWith("/detail/project-");
     if ((!showDetail && !nativeDetail) || EmbeddedTaskDetail) return;
     let cancelled = false;
     void loadTaskDetail().then(({ default: Detail }) => {
@@ -168,7 +167,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (!cancelled) router.replace(window.location.pathname + window.location.search + window.location.hash);
     });
     return () => { cancelled = true; };
-  }, [showDetail, EmbeddedTaskDetail, router, backFirstOpen, accountId, currentUser?.id, pathname]);
+  }, [showDetail, EmbeddedTaskDetail, router, accountId, currentUser?.id, pathname]);
   useEffect(() => {
     if (!historyDestination || showDetail || accountId === null || currentUser?.id !== accountId) return;
     let restored = false;
@@ -230,7 +229,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       observer.disconnect();
     };
   }, [historyDestination, protectedSource]);
-  const suppressPreviousTask = (backFirstOpen || historyDestination?.pathname === "/project") && currentUser?.id === accountId &&
+  const suppressPreviousTask = currentUser?.id === accountId &&
     historyDestination?.pathname === nativePathname;
   if (!showDetail && suppressPreviousTask) {
     return (
@@ -262,5 +261,5 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       embedded={false}
     />
   );
-  return backFirstOpen ? <Suspense key={`${location.accountId}:${location.taskId}`} fallback={suppressPreviousTask ? null : children}>{detail}</Suspense> : detail;
+  return <Suspense key={`${location.accountId}:${location.taskId}`} fallback={suppressPreviousTask ? null : children}>{detail}</Suspense>;
 }
