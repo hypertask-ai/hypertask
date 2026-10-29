@@ -1,30 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
-const fs = require("node:fs");
-const path = require("node:path");
-const ts = require("typescript");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 const nextServer = require("next/server");
 
-const root = path.resolve(__dirname, "..");
 const ORIGIN = "https://app.hypertask.ai";
 const FLAG = "htpr-7515-connect-github-per-board";
 const keys = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" });
 const world = {};
 
-function load(file, stubs) {
-  const javascript = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
-    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function("module", "exports", "require", javascript)(mod, mod.exports, (name) => {
-    if (name in stubs) return stubs[name];
-    if (name.startsWith("node:")) return require(name);
-    throw new Error(`Unexpected import in ${file}: ${name}`);
-  });
-  return mod.exports;
-}
 
 function installation(overrides = {}) {
   return { id: "123", accountId: "321", accountLogin: "acme", accountType: "Organization", teamId: "team-a", installedByUserId: 10, revokedAt: null, ...overrides };

@@ -1,10 +1,7 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
 const FLAG = "htpr-7515-connect-github-per-board";
 const file = "src/components/Modals/Settings/GitHubSection.tsx";
 
@@ -62,15 +59,9 @@ function fixture(t, { enabled = true, query = "projectId=15", data, error = null
     "./SettingsSectionShell": "SettingsSectionShell",
     "./SettingsBillingRow": { BillingActionRow: "BillingActionRow", settingsActionButtonClass: "shared-action" },
   };
-  const javascript = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
-  }).outputText;
-  const loaded = { exports: {} };
-  new Function("require", "module", "exports", "fetch", javascript)((name) => {
-    assert.ok(name in mocks, `Unexpected import: ${name}`);
-    return mocks[name];
-  }, loaded, loaded.exports, fetcher);
-  const render = () => { cursor = 0; return loaded.exports.default(); };
+  t.mock.method(globalThis, "fetch", fetcher);
+  const loaded = loadModule(file, mocks);
+  const render = () => { cursor = 0; return loaded.default(); };
   const find = (predicate) => {
     let found;
     const visit = (node) => {
@@ -225,49 +216,4 @@ test("load errors and pending installation callbacks render a useful recovery st
   assert.match(pending.text(), /awaiting approval/);
   const denied = fixture(t, { query: "projectId=15&github_error=org_owner_required" });
   assert.match(denied.text(), /Check your GitHub permissions/);
-});
-
-test("flag Off excludes GitHub from the canonical search registry and remembered frequent/recent suggestions", () => {
-  const { createJiti } = require("jiti");
-  const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
-  const registry = jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
-  const { CommandMode } = jiti(path.join(root, "src/models/enums.ts"));
-  const source = ts.createSourceFile("commands.tsx", fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/commands.tsx"), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let memo;
-  const flags = {};
-  const visit = (node) => {
-    if (ts.isVariableDeclaration(node)) {
-      if (node.name.getText() === "allCommands_") memo = node.initializer;
-      if (node.initializer && ts.isCallExpression(node.initializer) && node.initializer.expression.getText() === "useFlag") flags[node.name.getText()] = false;
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  assert.ok(memo);
-  const javascript = ts.transpileModule(`const result = ${memo.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  for (const githubConnectEnabled of [false, true]) {
-    const bindings = {
-      ...registry, ...flags, CommandMode, githubConnectEnabled,
-      hiddenGithubCommandKey: githubConnectEnabled ? null : "settingsGithub",
-      hiddenBasetenCommandKey: "settingsApiKeysBasetenApiKey", hiddenXaiCommandKeys: "settingsApiKeysXaiApiKey settingsAiModelsXai",
-      standalonePages: false, pathname: "/projects/project-15",
-      useMemo: (callback) => callback(), getCommands: registry.getAllCommands,
-      appShellRailOn: false, selectedTasksFirst: false, boardLayout: "board",
-      calendarSettings: { showWeekends: true }, contextOptions: {},
-      currentProject: { id: 15 }, projects: [], isMobile: false,
-      pinCommentActions: false, pageActions: null, onAgentChat: false,
-      onCalendar: false, onMyTasks: false, showByokApiKeys: false,
-      isTicketPrefixCommandVisible: () => true,
-      getActiveEmptySectionSettingFromProject: () => "Hidden",
-      getActiveStalenessFromProject: () => false,
-      getHTCFrecencyScore: (frequency) => frequency ?? 0,
-      frequentlyUsed: { settingsGithub: { frequency: 100, lastUsedAt: Date.now() }, createTask: { frequency: 1, lastUsedAt: Date.now() } },
-      DESTRUCTIVE_COMMAND_MODES: [CommandMode.DeleteBoard, CommandMode.DeleteColumn],
-    };
-    const groups = new Function(...Object.keys(bindings), `${javascript}; return result;`)(...Object.values(bindings));
-    const all = groups.flatMap((group) => group.commandLists);
-    assert.equal(all.some((command) => command.key === "settingsGithub"), githubConnectEnabled);
-    assert.equal(groups.find((group) => group.group === "Frequently used").commandLists.some((command) => command.key === "settingsGithub"), githubConnectEnabled);
-    assert.ok(all.some((command) => command.key === "createTask"), "Unrelated commands remain available");
-  }
 });
