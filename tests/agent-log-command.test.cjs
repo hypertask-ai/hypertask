@@ -173,3 +173,33 @@ test("image settings command follows removal in both palette modes", () => {
     }
   }
 });
+
+test("stale image results are hidden and cannot dispatch when removal turns on", () => {
+  const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let displayed, dispatch;
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.getText(source) === "filterCommands") displayed = node.initializer.expression.getText(source);
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "updateCommandFrequency") dispatch = node.getText(source);
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(displayed);
+  assert.ok(dispatch);
+  const image = { key: "settingsAiFeaturesImageGeneration" };
+  const other = { key: "other" };
+  const myTasks = { key: "myTasksSort" };
+  const filterCommands = [{ commandLists: [image, other, myTasks] }];
+  for (const removeImageGeneration of [false, true]) for (const onMyTasks of [false, true]) {
+    const visible = evaluate(displayed, { filterCommands, removeImageGeneration, onMyTasks })[0].commandLists;
+    assert.deepEqual(visible, [...(!removeImageGeneration ? [image] : []), other, ...(onMyTasks ? [myTasks] : [])]);
+    const called = [];
+    const run = evaluate(dispatch, {
+      writing: false, removeImageGeneration, filterCommands,
+      findCommandPosition: (groups, command) => groups.some((group) => group.commandLists.includes(command)),
+      isDemo: false, isInteractive: true, callback: (command) => called.push(command),
+    });
+    run(image);
+    run(other);
+    assert.deepEqual(called, [...(!removeImageGeneration ? [image] : []), other]);
+  }
+});

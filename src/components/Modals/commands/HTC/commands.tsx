@@ -659,6 +659,7 @@ const Commands = (props: Props) => {
     
     function updateCommandFrequency(command: ICommandList) {
       if (writing) return;
+      if (removeImageGeneration && command.key === "settingsAiFeaturesImageGeneration") return;
       if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()
       if(isInteractive) return callback(command)
@@ -838,7 +839,8 @@ const Commands = (props: Props) => {
       filterCommands={filterCommands.map((paletteGroup) => ({
         ...paletteGroup,
         commandLists: paletteGroup.commandLists.filter((paletteRow) =>
-          !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(paletteRow.key) || onMyTasks
+          (!removeImageGeneration || paletteRow.key !== "settingsAiFeaturesImageGeneration") &&
+          (!["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(paletteRow.key) || onMyTasks)
         ),
       }))}
       selectedCommand={removeImageGeneration && selectedCommand?.key === "settingsAiFeaturesImageGeneration" ? null : selectedCommand}
