@@ -49,12 +49,12 @@ export const settingsPageSchema = z.enum(Object.keys(settingsPages) as [keyof ty
 export const settingsScopeSchema = z.object({
   section: settingsPageSchema,
   projectId: z.number().int().positive().optional(),
-  theme: z.enum(["system", "porcelain", "graphite", "amoled", "dia", "rounded"]).optional(),
+  theme: z.enum(["system", "porcelain", "graphite", "graphite-2", "amoled", "dia", "rounded"]).optional(),
 }).strict();
 export type SettingsScope = z.infer<typeof settingsScopeSchema>;
 
 export const settingChangeSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("theme"), value: z.enum(["system", "porcelain", "graphite", "amoled", "dia", "rounded"]) }).strict(),
+  z.object({ kind: z.literal("theme"), value: z.enum(["system", "porcelain", "graphite", "graphite-2", "amoled", "dia", "rounded"]) }).strict(),
   z.object({
     kind: z.literal("notification"),
     category: z.enum(["mentions", "comments", "assignments", "moves", "dueDates"]),
