@@ -5,7 +5,7 @@ export const YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG = "yper4-801-manager-lease
 export default {
   key: YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG,
   kind: "feature",
-  defaultMode: "OFF",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-10-26",
   description: "Manager agents must show proof of the current manager lease before they can switch a feature flag; former managers are refused.",
   releaseRisk: {

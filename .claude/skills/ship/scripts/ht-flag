@@ -111,7 +111,8 @@ token=$(cat "$TOKEN_FILE")
 response=$(mktemp)
 trap 'rm -f "$response"' EXIT
 grant_config=''
-if [ -n "${HT_MANAGER_GRANT_FILE:-}" ]; then
+# Only a switch carries the manager receipt, so a broken receipt never blocks a state read.
+if [ "$method" = PATCH ] && [ -n "${HT_MANAGER_GRANT_FILE:-}" ]; then
   [ -r "$HT_MANAGER_GRANT_FILE" ] || fail 'manager grant receipt is unreadable'
   grant=$(jq -er '.token' "$HT_MANAGER_GRANT_FILE") || fail 'manager grant receipt has no token'
   [[ $grant =~ ^[A-Za-z0-9_-]{32,128}$ ]] || fail 'manager grant receipt token is malformed'

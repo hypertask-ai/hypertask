@@ -50,8 +50,9 @@ export async function applyManagerLeaseAction(
   tx: Prisma.TransactionClient,
   input: { agentId: string; action: ManagerLeaseAction; session?: string; grantHash?: string; grant?: string; ttlMinutes?: number; now?: Date },
 ): Promise<{ expiresAt: Date | null }> {
-  const now = input.now ?? new Date();
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(CAST(${MANAGER_LEASE_LOCK_NAMESPACE} AS integer), 0)`;
+  // Sample time only after the lock: a request that queued before expiry must not revive a dead grant.
+  const now = input.now ?? new Date();
 
   if (input.action === "take") {
     const ttl = input.ttlMinutes;
@@ -79,15 +80,17 @@ export async function applyManagerLeaseAction(
     throw new ManagerLeaseError(`${input.action} needs the grant from your take receipt`, 400);
   }
   const tokenHash = hashManagerGrant(input.grant);
+  await tx.$queryRaw`SELECT id FROM "ManagerLeaseGrant" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
   const row = await tx.managerLeaseGrant.findUnique({ where: { tokenHash } });
-  if (!row || row.agentId !== input.agentId || row.releasedAt || row.replacedAt || row.expiresAt.getTime() <= now.getTime()) {
+  const at = input.now ?? new Date();
+  if (!row || row.agentId !== input.agentId || row.releasedAt || row.replacedAt || row.expiresAt.getTime() <= at.getTime()) {
     throw new ManagerLeaseError("grant is unknown, replaced, released or expired", 403);
   }
   if (input.action === "renew") {
-    const expiresAt = new Date(now.getTime() + row.ttlMinutes * 60_000);
-    await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { expiresAt, renewedAt: now } });
+    const expiresAt = new Date(at.getTime() + row.ttlMinutes * 60_000);
+    await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { expiresAt, renewedAt: at } });
     return { expiresAt };
   }
-  await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { releasedAt: now, endedReason: input.action } });
+  await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { releasedAt: at, endedReason: input.action } });
   return { expiresAt: null };
 }

@@ -25,11 +25,13 @@ let grants;
 let setCalls;
 let lookups;
 let registryBroken;
+let readOnly;
+let duringLock;
 
 function fakeTx() {
   return {
     $queryRaw: async () => { lookups.push("lock"); return []; },
-    $executeRaw: async () => { lookups.push("advisory"); return 0; },
+    $executeRaw: async () => { lookups.push("advisory"); duringLock?.(); return 0; },
     comment: {
       findFirst: async () => null,
       findMany: async () => [],
@@ -59,7 +61,7 @@ stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => null,
   validateMcpAuth: async () => ctx,
 });
-stubModule("src/lib/mcp/agents/readRoleGuard.ts", { requireAgentWriteRole: async () => null });
+stubModule("src/lib/mcp/agents/readRoleGuard.ts", { requireAgentWriteRole: async () => (readOnly ? NextResponse.json({ error: "write role required" }, { status: 403 }) : null) });
 stubModule("src/lib/mcp/routeWrapper.ts", { wrapMcpRoute: (callback) => callback });
 stubModule("src/lib/realtime/server.ts", { broadcastFeatureFlagsChange: async () => {} });
 stubModule("src/lib/flags.ts", {
@@ -129,6 +131,8 @@ test.beforeEach(() => {
   setCalls = [];
   lookups = [];
   registryBroken = false;
+  readOnly = false;
+  duringLock = null;
 });
 
 test("class of manager agents comes from the stored agent name", () => {
@@ -226,6 +230,24 @@ test("an expired holder cannot renew, release or hand off, and a takeover replac
   const takeover = await post({ action: "take", session: "ht-design-lead", grantHash: hashManagerGrant(otherToken), ttlMinutes: 30 });
   assert.equal(takeover.status, 200);
   assert.notEqual(grants[0].replacedAt, null);
+});
+
+test("a grant that expires while a renewal waits for the lock is refused", async () => {
+  const live = grants[0].expiresAt;
+  duringLock = () => { grants[0].expiresAt = new Date(Date.now() - 1000); };
+  assert.equal((await post({ action: "renew", grant: token })).status, 403);
+  duringLock = null;
+  grants[0].expiresAt = live;
+  assert.equal((await post({ action: "renew", grant: token })).status, 200);
+});
+
+test("read-only agents cannot take, renew, release or hand off the lease", async () => {
+  readOnly = true;
+  for (const body of [{ action: "take", session: "ht-product-lead", grantHash: hashManagerGrant(token), ttlMinutes: 30 }, { action: "renew", grant: token }]) {
+    const response = await post(body);
+    assert.equal(response.status, 403, body.action);
+  }
+  assert.equal(grants[0].renewedAt, null);
 });
 
 test("registry refuses non managers and malformed requests", async () => {

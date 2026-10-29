@@ -157,6 +157,8 @@ if HT_MANAGER_GRANT_FILE="$tmp/receipt.json" "$script" set "$key" off --reason "
   exit 1
 fi
 grep -q 'malformed' "$tmp/output"
+HT_MANAGER_GRANT_FILE="$tmp/receipt.json" "$script" get "$key" > "$tmp/output" 2>&1
+jq -e '.flag.mode == "OFF"' "$tmp/output" >/dev/null
 if TEST_TIMEOUT=1 TEST_STATE="$(jq -nc --arg key "$key" '{flags:[{key:$key,mode:"OFF"}]}')" "$script" set "$key" off --reason "$reason" > "$tmp/output" 2>&1; then
   printf 'timeout must fail\n' >&2
   exit 1
