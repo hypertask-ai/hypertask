@@ -346,16 +346,9 @@ function ChatRailFilterRow({
 
 function focusChatComposer(editor: ChatContextType["editor"]) {
   const dom = editor?.view?.dom as HTMLElement | undefined;
-  if (dom && document.contains(dom)) {
-    try { dom.focus({ preventScroll: true }); } catch {}
-    if (document.activeElement === dom) return true;
-  }
-  const composer = document.querySelector<HTMLElement>(
-    ".ProseMirror[contenteditable='true']"
-  );
-  if (!composer) return false;
-  composer.focus({ preventScroll: true });
-  return document.activeElement === composer;
+  if (!dom || !document.contains(dom)) return false;
+  try { dom.focus({ preventScroll: true }); } catch {}
+  return document.activeElement === dom;
 }
 
 function CtrlTabSessionSwitch({
@@ -371,8 +364,10 @@ function CtrlTabSessionSwitch({
   returnPath: string;
   editor: ChatContextType["editor"];
 }) {
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const liveEditor = useRef(editor);
+  liveEditor.current = editor;
   useEffect(() => {
-    let timers: ReturnType<typeof setTimeout>[] = [];
     const handleSessionKeydown = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
@@ -398,21 +393,20 @@ function CtrlTabSessionSwitch({
         "",
         buildFullScreenChatPath(returnPath, nextSession.id)
       );
-      timers.forEach(clearTimeout);
-      timers = [
-        setTimeout(() => { focusChatComposer(editor); }, 0),
+      timers.current.forEach(clearTimeout);
+      timers.current = [
+        setTimeout(() => { focusChatComposer(liveEditor.current); }, 0),
         setTimeout(() => {
-          if (!(editor?.view.hasFocus?.() ?? false)) focusChatComposer(editor);
+          if (!(liveEditor.current?.view.hasFocus?.() ?? false)) {
+            focusChatComposer(liveEditor.current);
+          }
         }, 120),
       ];
     };
 
     document.addEventListener("keydown", handleSessionKeydown);
-    return () => {
-      document.removeEventListener("keydown", handleSessionKeydown);
-      timers.forEach(clearTimeout);
-    };
-  }, [groups, currentSessionId, onSelect, returnPath, editor]);
+    return () => document.removeEventListener("keydown", handleSessionKeydown);
+  }, [groups, currentSessionId, onSelect, returnPath]);
   return null;
 }
 

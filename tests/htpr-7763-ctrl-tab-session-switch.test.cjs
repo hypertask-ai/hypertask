@@ -52,11 +52,20 @@ function fixture() {
 function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE", paging = true, width = 1440, current = "today", rows = fixture() } = {}) {
   const dom = new JSDOM('<input id="search"><textarea id="composer"></textarea>', { url: "https://app.hypertask.ai/chat" });
   dom.window.innerWidth = width;
-  const savedGlobals = ["window", "document", "setTimeout"].map(key => [key, Object.getOwnPropertyDescriptor(global, key)]);
+  const savedGlobals = ["window", "document", "setTimeout", "clearTimeout"].map(key => [key, Object.getOwnPropertyDescriptor(global, key)]);
   global.window = dom.window;
   global.document = dom.window.document;
   const timers = [];
-  global.setTimeout = callback => { timers.push(callback); return timers.length; };
+  let nextTimerId = 0;
+  global.setTimeout = callback => {
+    const id = ++nextTimerId;
+    timers.push({ id, callback });
+    return id;
+  };
+  global.clearTimeout = id => {
+    const index = timers.findIndex(timer => timer.id === id);
+    if (index >= 0) timers.splice(index, 1);
+  };
   const composer = document.getElementById("composer");
   const slots = [], effects = [], routes = [], selections = [];
   let cursor = 0, cleanups = [], tree, activeSlots = slots;
@@ -160,7 +169,9 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     get location() { return dom.window.location.pathname + dom.window.location.search; },
     remountComposer,
     drainTimers() {
-      for (let pass = 0; pass < 5 && timers.length; pass++) timers.splice(0).forEach(callback => callback());
+      for (let pass = 0; pass < 5 && timers.length; pass++) {
+        timers.splice(0).forEach(timer => timer.callback());
+      }
     },
     press(overrides = {}, { beforeTimers } = {}) {
       const event = new dom.window.KeyboardEvent("keydown", { key: "Tab", ctrlKey: true, bubbles: true, cancelable: true, ...overrides });
