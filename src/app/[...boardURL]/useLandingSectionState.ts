@@ -87,7 +87,7 @@ useEffect(() => {
 }, [_allProjects, _projectIndex])
 
 const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
-const filteredSectionsForActiveView = useMemo(() => {
+const subtaskSectionsForActiveView = useMemo(() => {
   const persistedFilteredSections = _allProjects?.[_projectIndex]?.filteredSections ?? [];
   if (!_currentProject) return persistedFilteredSections;
 
@@ -99,10 +99,7 @@ const filteredSectionsForActiveView = useMemo(() => {
     buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
     filterRuntimeContext,
   );
-  const subtaskSections = getAppliedSubtaskSections(filtered, _currentProject);
-  return showEmptyViewColumns
-    ? getFilteredEmptySections(subtaskSections, _currentProject, true)
-    : getFilteredEmptySections(subtaskSections, _currentProject);
+  return getAppliedSubtaskSections(filtered, _currentProject);
 }, [
   _allProjects,
   _currentProject,
@@ -111,8 +108,13 @@ const filteredSectionsForActiveView = useMemo(() => {
   activeBuiltinViews,
   filterRuntimeContext,
   sections,
-  showEmptyViewColumns,
 ]);
+let filteredSectionsForActiveView = subtaskSectionsForActiveView;
+if (_currentProject) {
+  filteredSectionsForActiveView = showEmptyViewColumns
+    ? getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject, true)
+    : getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject);
+}
 
 const [favorites, setFavorites] = useState<IFavorites[]>([]);
 const [hasHorizontalScrollbar, setHasHorizontalScrollbar] = useRecoilState(isXScrollOnKanbanAtom);

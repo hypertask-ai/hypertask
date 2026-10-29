@@ -150,7 +150,7 @@ export function useTableState(context: Context) {
     myTasksSortKey,
     _currentProject?.showTimeTotals,
   ]);
-  const sections = useMemo(() => {
+  const sortedSections = useMemo(() => {
     const base = filteredSections ?? _sections ?? [];
     const withoutExcluded =
       excludedTaskIds.size === 0
@@ -160,14 +160,17 @@ export function useTableState(context: Context) {
             items: (section.items || []).filter((task) => !excludedTaskIds.has(task.id)),
           }));
     if (!_currentProject) return withoutExcluded;
-    const emptyFiltered = showEmptyViewColumns
-      ? getFilteredEmptySections(withoutExcluded, _currentProject, true)
-      : getFilteredEmptySections(withoutExcluded, _currentProject);
-    return emptyFiltered.map((section) => ({
+    return withoutExcluded.map((section) => ({
       ...section,
       items: returnSortedItems([...(section.items || [])], _currentProject),
     }));
-  }, [filteredSections, _sections, _currentProject, excludedTaskIds, showEmptyViewColumns]);
+  }, [filteredSections, _sections, _currentProject, excludedTaskIds]);
+  let sections = sortedSections;
+  if (_currentProject) {
+    sections = showEmptyViewColumns
+      ? getFilteredEmptySections(sortedSections, _currentProject, true)
+      : getFilteredEmptySections(sortedSections, _currentProject);
+  }
 
   useEffect(() => {
     if (excludedTaskIds.size === 0) return;
