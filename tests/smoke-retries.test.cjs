@@ -4,24 +4,21 @@ const { readFileSync, mkdtempSync, writeFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const ts = require('typescript');
 const yaml = require('js-yaml');
 
 function runFailOnceProbe(mode) {
-  const source = readFileSync('playwright.config.smoke.ts', 'utf8');
   const directory = mkdtempSync(path.join(tmpdir(), 'smoke-retries-'));
   try {
-    const code = ts.transpileModule(source, {
-      compilerOptions: { module: ts.ModuleKind.CommonJS },
-    }).outputText.replaceAll('require("@playwright/test")', `require(${JSON.stringify(require.resolve('@playwright/test'))})`);
-    writeFileSync(path.join(directory, 'playwright.config.cjs'), `${code}
+    writeFileSync(path.join(directory, 'playwright.config.cjs'), `
+const { loadModule } = require(${JSON.stringify(path.resolve('tests/helpers/loadModule.cjs'))});
+const config = loadModule(${JSON.stringify(path.resolve('playwright.config.smoke.ts'))}).default;
 exports.default = {
-  ...exports.default,
+  ...config,
   testDir: __dirname,
   globalSetup: undefined,
   workers: 1,
   reporter: [['json']],
-  projects: exports.default.projects.map(project => ({
+  projects: config.projects.map(project => ({
     ...project, testMatch: /retry.spec.cjs/, dependencies: [], grep: undefined,
   })),
 };
