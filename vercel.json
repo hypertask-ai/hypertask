@@ -6,8 +6,8 @@
       "schedule": "40 4 * * *"
     },
     {
-      "path": "/api/cron/ai-allowance-drift",
-      "schedule": "*/5 * * * *"
+      "path": "/api/cron/ai-spend",
+      "schedule": "7 * * * *"
     },
     {
       "path": "/api/cron/cleanup-guests",

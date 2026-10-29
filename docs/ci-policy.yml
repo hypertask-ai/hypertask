@@ -1,5 +1,5 @@
 version: 11
-last_updated: 2026-10-27
+last_updated: 2026-10-28
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -297,6 +297,8 @@ feature_flag_gate:
   default_mode_for_new_flags: EVERYONE
   new_flag_default_mode_exceptions: [bugfix, internal, releaseRisk.highRisk]
   everyone_default_forbidden_for: [internal, releaseRisk.highRisk]
+  new_money_flag_default_mode: OWNER_AND_QA
+  existing_money_flag_modes: unchanged
   registry_validation_before_ui_title_and_label_exemptions: true
   default_mode_for_bugfix_flags: EVERYONE
   registry_kind: optional_feature_bugfix_improvement_default_feature
@@ -538,3 +540,14 @@ changed_style_tokens:
   parsers: [eslint, postcss-scss]
   baseline: unchanged_lines_only
   additional_jobs: false
+
+paid_api_cost_notes:
+  ticket: https://app.hypertask.ai/detail/project-4060/873
+  required_context: ci-tests
+  job: ci-checks
+  pull_requests_only: true
+  script: .github/scripts/paid-api-cost-notes.mjs
+  notes: .github/paid-api-cost-notes.json
+  detection: changed_src_typescript_ast_named_network_calls
+  semantic_review_required: [aliases, other_sdks, cost_estimates]
+  paid_requests_from_check: 0

@@ -51,10 +51,7 @@ stub("src/lib/prisma.ts", { default: {
 stub("node_modules/next/server.js", { NextResponse: { json: (body, init) => Response.json(body, init) } });
 const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true, fsCache: false });
 const allowance = load(path.join(root, "src/app/api/ai/_lib/sharedAllowance.ts"));
-const { refreshActiveBilledAllowances: drain } = load(path.join(root, "src/lib/ai/billedAllowanceRefresh.ts"));
-const { checkActiveTeamAllowanceDrift: checkDrift } = load(path.join(root, "src/lib/ai/allowanceDriftCheck.ts"));
 const { GET: settings } = load(path.join(root, "src/app/api/settings/ai-usage/route.ts"));
-const { GET: cron } = load(path.join(root, "src/app/api/cron/ai-allowance-drift/route.ts"));
 
 function fakeRedis() {
   const values = new Map(), hashes = new Map(), sorted = new Map(), sets = new Map(), expirations = new Map();
@@ -300,7 +297,7 @@ for (const backend of ["fake", "real Redis"]) {
       failReport = false; reportHook = null; evalHook = null;
       console.info = (line) => logs.push(JSON.parse(line));
       process.env.DEMO_AI_GATEWAY_API_KEY = "fixture-private-demo-credential";
-      const originalEval = backend === "fake" ? redis.eval.bind(redis) : connection.constructor.prototype.eval.bind(redis);
+      const originalEval = backend === "fake" ? redis.eval.bind(redis) : Object.getPrototypeOf(connection).eval.bind(redis);
       redis.eval = async (script, ...args) => {
         const entry = { script, args }; evals.push(entry);
         if (evalHook) await evalHook(script, ...args);
@@ -315,24 +312,6 @@ for (const backend of ["fake", "real Redis"]) {
     test.afterEach(() => {
       global.Date = NativeDate; global.fetch = nativeFetch; console.info = nativeInfo;
       if (nativeDemoKey === undefined) delete process.env.DEMO_AI_GATEWAY_API_KEY; else process.env.DEMO_AI_GATEWAY_API_KEY = nativeDemoKey;
-    });
-
-    test("F1: refresh cursor uses string Redis bounds including wraparound", async () => {
-      await redis.zadd(INDEX, String(now), `${TEAM}|${MONTH}|${DAY}`);
-      await redis.set(`${INDEX}:cursor`, "100");
-      const zrange = redis.zrange.bind(redis), bounds = [];
-      redis.zrange = async (key, start, end) => {
-        if (key === INDEX) {
-          assert.equal(typeof start, "string"); assert.equal(typeof end, "string");
-          bounds.push([start, end]);
-        }
-        return zrange(key, start, end);
-      };
-      try {
-        await drain();
-        assert.deepEqual(bounds, [["100", "199"], ["0", "99"]]);
-        assert.equal(await redis.hget(BILLED, "total"), "100000");
-      } finally { redis.zrange = zrange; }
     });
 
     for (const rollover of ["month", "day", "legacy month"]) {
@@ -542,26 +521,6 @@ for (const backend of ["fake", "real Redis"]) {
       assert.equal(await redis.hget(BILLED, "total"), "113000");
     });
 
-    test("T4/V1: racing refresh and crons are absolute/idempotent; index is atomic without drift flag; resync cannot change billed admission", async () => {
-      const first = await plan(20_000);
-      await allowance.settlePlanAllowance(first, 0.06);
-      assert.deepEqual(await redis.zrange(INDEX, 0, -1), [`${TEAM}|${MONTH}|${DAY}`]);
-      assert.ok(evals.some(({ script }) => script.includes("local details = {}") && script.includes('redis.call("ZADD", ARGV[6]')));
-      const before = reports.length; now += 60_001; spend = 121_000;
-      await Promise.all([effective(), effective()]);
-      assert.equal(reports.length - before, 1); assert.equal(await redis.hget(BILLED, "total"), "121000");
-      now += 60_001; await Promise.all([drain(), drain()]);
-      assert.equal(await redis.hget(BILLED, "total"), "121000");
-      resync = true; enabled = false;
-      await redis.set(`${PREFIX}:committed`, "990000");
-      await redis.set(`${PREFIX}:recent-settled-since`, String(now - 26 * 60_000));
-      await redis.del(`${PREFIX}:recent-settled`);
-      const shadow = await plan(20_000); await allowance.settlePlanAllowance(shadow, 0);
-      assert.equal(await redis.get(`${PREFIX}:committed`), "121000");
-      enabled = true; await plan(20_000);
-      assert.equal(decisions().at(-1).billed, 121_000); assert.equal(await redis.hget(BILLED, "total"), "121000");
-    });
-
     test("T5/V3: outage retains valid snapshot; missing/Redis-lost snapshot selects v1, not holds-only, with deduped alert", async () => {
       await effective(); failReport = true; now += 60_001;
       assert.equal((await effective()).total, 100_000);
@@ -632,9 +591,6 @@ for (const backend of ["fake", "real Redis"]) {
       const qa = await plan(20_000); assert.ok(qa.billedCall); assert.ok(flagActors.includes(985));
       enabled = false; await allowance.settlePlanAllowance(qa, 0.01);
       assert.ok(releases().some((entry) => entry.reservationId === qa.billedCall.reservationId));
-      const keysBefore = (await redis.keys("*")).sort(), evaluationsBefore = evals.length;
-      await drain();
-      assert.deepEqual((await redis.keys("*")).sort(), keysBefore); assert.equal(evals.length, evaluationsBefore);
     });
 
     test("T9/V4: source, managed row and updatedAt changes pin original period to v1; never overwrite retained billed baseline", async () => {
@@ -662,7 +618,7 @@ for (const backend of ["fake", "real Redis"]) {
       assert.ok(fundingReads.some((value) => value?.includeProvenance));
     });
 
-    test("T10/V8: disconnect continues inference with hold; explicit stop before doStream resolves releases immediately and once", async () => {
+    test("T10/V8: disconnect continues inference with hold; explicit stop before doStream resolves releases immediately and once", { timeout: 5000 }, async () => {
       let source;
       const result = await middleware().wrapStream({ params: params(), model: {}, doStream: async () => ({ stream: new ReadableStream({ start(controller) { source = controller; } }) }) });
       // runStream keeps consuming the provider after the client send path disconnects.
@@ -679,33 +635,20 @@ for (const backend of ["fake", "real Redis"]) {
       const pending = middleware().wrapStream({ params: params(abort.signal, 986), model: {}, doStream: () => new Promise((resolve) => { complete = resolve; started(); }) });
       await ready;
       const member = (await redis.zrange(`${PREFIX}:reservations`, 0, -1))[0];
-      abort.abort("PRIVATE before first token"); await turn();
+      const released = new Promise((resolve) => {
+        console.info = (line) => {
+          const entry = JSON.parse(line);
+          logs.push(entry);
+          if (entry.event === "ai-allowance-billed-release" && entry.reason === "stop") resolve();
+        };
+      });
+      abort.abort("PRIVATE before first token"); await released;
       assert.deepEqual(await redis.zrange(`${PREFIX}:reservations`, 0, -1), []);
       assert.ok(releases().some((entry) => entry.reservationId === member.split("|")[0] && entry.userId === 986 && entry.reason === "stop"));
       complete({ stream: new ReadableStream({ start(controller) { controller.close(); } }) });
       const stopped = await pending; await stopped.stream.getReader().read();
       assert.equal(releases().length, 2);
       assert.ok(!JSON.stringify(logs).includes("PRIVATE"));
-    });
-
-    test("V2/V10: day-four late bills refresh their original day/month, closed holds do not gate new periods, discovery ends at +8 days", async () => {
-      now = new NativeDate("2026-10-31T23:59:00Z").getTime(); await warm();
-      await plan(800_000, { policy: { ...policy, dailyUsd: null } });
-      const oldDayKey = `ai-allowance-billed:v1:day:2026-10-31:${TEAM}`;
-      await allowance.effectiveAccountingSource({ teamId: TEAM, kind: "day", period: "2026-10-31", funding: await allowance.resolveBilledFunding({ teamId: TEAM }) });
-      const ttl = await redis.ttl(BILLED);
-      assert.ok(Math.abs(ttl - (new NativeDate("2026-11-09T00:00:00Z").getTime() - now) / 1000) <= 1);
-      now = new NativeDate("2026-11-04T12:00:00Z").getTime(); spend = 113_000; daySpend = 13_000;
-      await drain();
-      assert.equal(await redis.hget(BILLED, "total"), "113000"); assert.equal(await redis.hget(oldDayKey, "total"), "13000");
-      assert.ok(reports.some((entry) => entry.start === "2026-10-01" && entry.end === "2026-10-31"));
-      assert.ok(reports.some((entry) => entry.start === "2026-10-31" && entry.end === "2026-10-31"));
-      await warm(TEAM, "2026-11", 0); spend = 0; daySpend = 0;
-      const current = await plan(900_000); assert.ok(current.id.includes("2026-11"));
-      assert.equal(decisions().at(-1).billed, 0); assert.equal(decisions().at(-1).holds, 0);
-      now = new NativeDate("2026-11-09T00:00:00Z").getTime(); await drain();
-      assert.ok(!(await redis.zrange(INDEX, 0, -1)).includes(`${TEAM}|2026-10|2026-10-31`));
-      assert.equal(await redis.hget(BILLED, "total"), "113000");
     });
 
     test("V7: report owns 3000ms signal, keeps retained snapshot on timeout, releases lease, and cannot commit with stale lease/revision", async () => {
@@ -801,58 +744,6 @@ for (const backend of ["fake", "real Redis"]) {
       assert.equal(releases().length, 1); assert.equal(releases()[0].reason, "expiry");
       assert.equal(releases()[0].userId, 985); assert.equal(releases()[0].reservationId, reservation.billedCall.reservationId);
       assert.equal(await redis.get(`${PREFIX}:committed`), "920000");
-    });
-
-    test("demo admission and cron use report-only global totals, independent of team estimates", async () => {
-      await redis.set(`ai-allowance:demo:${MONTH}:seeded`, "1");
-      await redis.set(`ai-allowance:demo:${MONTH}:committed`, "15000000");
-      const reservation = await plan(800_000, { policy: { ...policy, demoGlobal: true } });
-      assert.equal(decisions().at(-1).billed, 100_000); assert.equal(decisions().at(-1).cap, 15_000_000);
-      await allowance.settlePlanAllowance(reservation, 0.06);
-      assert.ok((await redis.zrange(INDEX, 0, -1)).includes(`demo|${MONTH}|${DAY}`));
-      now += 60_001; demoSpend = 121_000; await drain();
-      assert.equal(await redis.hget(`ai-allowance-billed:v1:month:${MONTH}:demo`, "total"), "121000");
-    });
-
-    test("drift observes billed snapshot rather than inflated shadow and never mutates either", async () => {
-      await plan();
-      drift = true;
-      const context = `ai-allowance-drift:${MONTH}:${TEAM}`;
-      await redis.sadd(`ai-allowance-drift:${MONTH}:active`, TEAM);
-      await redis.set(`${context}:context`, JSON.stringify({ mode: "plan", monthlyUsd: 1, fundingSource: "managed" }));
-      await checkDrift(); now += 31 * 60_000; await effective();
-      const result = await checkDrift();
-      assert.equal(result.drift, 0); assert.equal(result.unknown, 0);
-      assert.equal(await redis.get(`${PREFIX}:committed`), "900000"); assert.equal(await redis.hget(BILLED, "total"), "100000");
-    });
-
-    test("V1/V7: cron budget visits at most 100 scopes with four reports in flight and resumes; refresh failure cannot suppress drift", async () => {
-      for (let i = 0; i < 105; i++) {
-        const team = `indexed-${String(i).padStart(3, "0")}`;
-        await redis.zadd(INDEX, now + i, `${team}|${MONTH}|${DAY}`);
-        await redis.set(`ai-allowance-billed:v1:month:${MONTH}:${team}:actor`, "985");
-      }
-      let active = 0, peak = 0;
-      reportHook = async () => { active++; peak = Math.max(peak, active); await turn(); active--; };
-      await drain(); assert.equal(reports.length, 200); assert.equal(peak, 4);
-      await drain(); assert.equal(reports.length, 210);
-      assert.equal(await redis.get(`${INDEX}:lease`), null);
-      reports.length = 0; now += 60_001;
-      let advanced = false;
-      reportHook = () => { if (!advanced) { now += 25_000; advanced = true; } };
-      await drain(); assert.ok(reports.length <= 8); assert.ok(Number(await redis.get(`${INDEX}:cursor`)) > 0);
-      const get = redis.get.bind(redis);
-      redis.get = async (key) => { if (key === `${INDEX}:cursor`) throw new Error("fixture drain failure"); return get(key); };
-      const env = [process.env.NODE_ENV, process.env.VERCEL_ENV, process.env.CRON_SECRET];
-      try {
-        process.env.NODE_ENV = "production"; process.env.VERCEL_ENV = "production"; process.env.CRON_SECRET = "fixture-cron-secret";
-        drift = true;
-        const response = await cron({ headers: new Headers({ authorization: "Bearer fixture-cron-secret" }) });
-        assert.equal(response.status, 200); assert.equal((await response.json()).unknown, 0);
-      } finally {
-        redis.get = get;
-        for (const [index, key] of ["NODE_ENV", "VERCEL_ENV", "CRON_SECRET"].entries()) if (env[index] === undefined) delete process.env[key]; else process.env[key] = env[index];
-      }
     });
   });
 }

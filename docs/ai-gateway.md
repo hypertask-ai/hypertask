@@ -255,3 +255,22 @@ team by title, only by teamId or owner email.
 **Business model context:** there is NO free tier. Users get a 14-day trial,
 then must be Premium or BYOK. Trial expiry is currently enforced only by a
 root-route redirect; server-side AI entitlement is HTPR-4130.
+
+## Local daily usage alarm
+
+Valentin approved deleting the paid background reporting checker on
+[YPER4-873](https://app.hypertask.ai/detail/project-4060/873#comment-329354).
+The allowance-drift cron and its background billed refresh are removed.
+There is no hourly paid-report replacement and no provider-credit polling.
+
+The replacement hourly `/api/cron/ai-spend` reads existing `AiUsage.costUsd`
+rows for the current and previous UTC days. Explicit `byok:` providers and negative costs are
+excluded. Missing prices are not included. Recorded usage over $5 raises the
+existing daily-spend alert fingerprint through the error-ticket pipeline.
+These are saved token-cost estimates, not a provider invoice or a guarantee
+that every billable event is recorded. Failed database reads return 503.
+
+Foreground allowance initialization, recovery, settlement and explicit Settings
+reports remain unchanged. Neither existing HTPR-7692 flag is switched by this
+change. Provider funding history is still needed to prove no top-up across
+24 hours; local token costs cannot establish that fact.

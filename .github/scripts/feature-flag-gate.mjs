@@ -1891,8 +1891,11 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
       if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
       const baseFiles = new Set(flagDefinitionPaths(mergeBase));
       for (const path of flagDefinitionPaths(headSha)) {
-        if (baseFiles.has(path)) continue;
         const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
+        if (added.has(definition.key) && definition.releaseRisk?.highRisk === "money" && definition.defaultMode !== "OWNER_AND_QA") {
+          throw new Error(`new money flag ${definition.key} must set defaultMode: "OWNER_AND_QA"; Valentin approves release`);
+        }
+        if (baseFiles.has(path)) continue;
         if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
             definition.defaultMode !== "EVERYONE" &&
             !(definition.defaultMode === "OWNER_ONLY" && definition.releaseRisk?.ownerRequest)) {

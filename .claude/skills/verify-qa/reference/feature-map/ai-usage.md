@@ -33,3 +33,34 @@ Save before/after response status and safe payload, the selected team, productio
 ## Cleanup
 
 Read-only checks need no cleanup. Never reveal saved keys or authentication state. Key replacement costs money and belongs to Valentin.
+
+## Local daily usage check
+
+Sources: `src/lib/ai/dailyAiSpend.ts`,
+`src/app/api/cron/ai-spend/route.ts` and `vercel.json`.
+
+The paid allowance drift checker and background billed-snapshot refresh are
+removed by YPER4-873. The old allowance-drift endpoint and
+five-minute schedule no longer exist. Do not turn on either existing
+HTPR-7692 switch for verification.
+
+The hourly `/api/cron/ai-spend` endpoint requires the existing cron authority.
+It sums today's and yesterday's non-BYOK, nonnegative saved `AiUsage.costUsd` records in UTC.
+The previous day is checked too, so late usage is not lost at midnight.
+An estimate over $5 raises the existing daily-spend incident fingerprint.
+Empty priced usage is zero; database failures return 503, not a clean result.
+This check makes no provider requests. It is an estimate from saved token
+usage, not invoice reconciliation or proof that every provider cost is logged.
+Rows without pricing are not included.
+
+- Doctor: successful Production deployment for this PR and signed-in QA985.
+- Require HTTP401 from the new cron without authority, before any usage read.
+- Verify the retired endpoint is absent on the merged deployment.
+- Verify the authenticated new cron returns a local recorded-usage result.
+  Never buy provider reports or change production flags to create a fixture.
+- Hosted tests exercise the real cron dispatch with a provider-network trap,
+  the $5 boundary, UTC day bounds, empty usage and fail-closed reads.
+- Foreground allowance admission, settlement and on-demand Settings reports
+  remain unchanged. Their existing tests must pass in hosted CI.
+- Save actual provider funding history over the required 24-hour window before
+  claiming no top-up. Local token costs do not prove funding history.
