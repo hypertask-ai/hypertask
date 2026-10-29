@@ -7,9 +7,9 @@ description: After deployment, verify real production behavior and record proof 
 
 ## Goal and proof bar
 
-Verify deployed changes on `https://app.hypertask.ai`. Drive real entry points; prove saved results survive reload. Mocks, previews, tests and merged PRs aren't live proof. Follow [Lauren Tan's verification pattern](https://github.com/poteto/verification-skill-example).
+Verify `https://app.hypertask.ai` after deployment. Drive entry points; prove saved results survive reload. Mocks, previews, tests and merged PRs aren't live proof. Follow [Lauren Tan's verification pattern](https://github.com/poteto/verification-skill-example).
 
-Never use Valentin's login or browser. Use headless Playwright. Never print credentials. Never build, install app packages or run tests on the VPS; use CI. A killed local run isn't a blocker.
+Never use Valentin's login or browser. Use headless Playwright. Never print credentials. Never build, install app packages or run tests on the VPS; use CI. Killed local runs aren't blockers.
 
 ## Optional pre-PR check
 
