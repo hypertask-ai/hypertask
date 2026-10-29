@@ -68,16 +68,15 @@ const postRoute = taskWriteRoute({
       return notificationWriteJson({ message: "Invalid notification matrix" }, 400);
     }
 
-    const current = await prisma.userSetting.findUnique({
-      where: { userId: session.userId },
-      select: { notificationMatrix: true },
-    });
-    if (!current) {
-      return notificationWriteJson({ message: "User settings not found" }, 404);
+    try {
+      const updated = await updateNotificationMatrix(session.userId, { matrix });
+      return notificationWriteJson({ matrix: updated }, 200);
+    } catch (error) {
+      if (error instanceof Error && error.message === "User settings not found") {
+        return notificationWriteJson({ message: "User settings not found" }, 404);
+      }
+      throw error;
     }
-
-    const updated = await updateNotificationMatrix(session.userId, { matrix });
-    return notificationWriteJson({ matrix: updated }, 200);
   },
 });
 

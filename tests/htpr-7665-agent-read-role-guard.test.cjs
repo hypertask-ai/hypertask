@@ -478,16 +478,16 @@ const HYBRID_INPUTS = {
   hypertask_draft: { read: { action: "list" }, write: { action: "publish" } },
 };
 
-test("7673 native tools: the tool list has 85 tools and every one is classified", () => {
+test("7673 native tools: the tool list has 86 tools and every one is classified", () => {
   const names = nativeToolNames();
-  assert.equal(names.length, 85);
+  assert.equal(names.length, 86);
   const { gate } = nativeWorld(READ_REFUSED);
   const read = names.filter((name) => gate.NATIVE_READ_ONLY_TOOLS.has(name));
   const hybrid = names.filter((name) => gate.NATIVE_READ_ACTIONS.has(name));
   assert.equal(read.length, gate.NATIVE_READ_ONLY_TOOLS.size, "every read-only entry names a native tool");
   assert.deepEqual([...gate.NATIVE_READ_ACTIONS.keys()].sort(), Object.keys(HYBRID_INPUTS).sort());
   assert.equal(hybrid.length, Object.keys(HYBRID_INPUTS).length);
-  assert.equal(names.length - read.length - hybrid.length, 43);
+  assert.equal(names.length - read.length - hybrid.length, 44);
 });
 
 test("7673 native tools: no read tool of the HyperAI read-only list is lost", () => {
@@ -536,7 +536,7 @@ test("7673 native tools: a read agent with the flag on is refused every write to
       refused.push(name);
     }
   }
-  assert.equal(refused.length, 43 + Object.keys(HYBRID_INPUTS).length);
+  assert.equal(refused.length, 44 + Object.keys(HYBRID_INPUTS).length);
   assert.ok(!n.executed.some((name) => refused.includes(name) && !HYBRID_INPUTS[name]), "no refused tool ran");
   assert.ok(n.recorded.some((entry) => entry.result?.code === "insufficient_scope"), "the refusal is recorded as the tool result");
   assert.equal(n.w.counters.agentReads, refused.length, "only the refused calls read the agent row; read tools read nothing");
@@ -556,7 +556,7 @@ test("7673 native tools: the refused tool list is the reviewed one", () => {
     "hypertask_inbox_unarchive", "hypertask_create_view", "hypertask_update_view", "hypertask_switch_view",
     "hypertask_delete_view", "hypertask_create_skill", "hypertask_update_skill", "hypertask_delete_skill",
     "hypertask_import_skills", "hypertask_start_timer", "hypertask_stop_timer", "hypertask_pause_timer",
-    "hypertask_resume_timer", "hypertask_log_time",
+    "hypertask_resume_timer", "hypertask_log_time", "hypertask_settings",
   ]);
 });
 
