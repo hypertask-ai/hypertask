@@ -54,7 +54,7 @@ function stubPlan(plan = "Pro") {
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
-    haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => false,
+    haiku55ModelEnabled: async () => false,
     storePlanIdForProject: async () =>
       typeof plan === "function" ? plan() : plan,
   });
@@ -797,11 +797,8 @@ test("task writer option ids map to provider options and legacy model strings fa
     byokProviderFlags: [],
     teamContext,
   });
-  assert.equal(paidDefault.provider, "openai");
-  assert.equal(paidDefault.modelId, "gpt-6-luna");
-  assert.deepEqual(paidDefault.providerOptions?.openai, {
-    reasoningEffort: "medium",
-  });
+  assert.equal(paidDefault.provider, "claude");
+  assert.equal(paidDefault.modelId, "claude-haiku-5.5");
 
   for (const modelId of ["gpt-5.6-terra", "gpt-6.1-terra"]) {
     const terra = await selectTaskWriterModel({
@@ -893,11 +890,8 @@ test("task writer option ids map to provider options and legacy model strings fa
     byokProviderFlags: [],
     teamContext,
   });
-  assert.equal(legacySelection.provider, "openai");
-  assert.equal(legacySelection.modelId, "gpt-6-luna");
-  assert.deepEqual(legacySelection.providerOptions?.openai, {
-    reasoningEffort: "medium",
-  });
+  assert.equal(legacySelection.provider, "claude");
+  assert.equal(legacySelection.modelId, "claude-sonnet-5.5");
 });
 
 async function selectFreeTeamDefault() {
@@ -938,10 +932,10 @@ async function selectFreeTeamDefault() {
   });
 }
 
-test("a Free editor request defaults to Luna and may use it", async () => {
+test("a Free editor request defaults to Haiku", async () => {
   const selected = await selectFreeTeamDefault();
-  assert.equal(selected.provider, "openai");
-  assert.equal(selected.modelId, "gpt-6-luna");
+  assert.equal(selected.provider, "claude");
+  assert.equal(selected.modelId, "claude-haiku-5.5");
 });
 
 test("a saved GPT 5.4 Mini on a Free team resolves to Luna", async () => {

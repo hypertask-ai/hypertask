@@ -1,7 +1,7 @@
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
-import { useAiDefaultModelContext, useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
@@ -105,11 +105,9 @@ const AIModelDropDownList = ({
   onKeyboardClose?: () => void;
   shortcutHint?: string;
 }) => {
-  const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
   const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const grokGemini4Loaded = useFlagLoaded(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
-  const modelFlagsLoaded = haikuDefaultLoaded &&
-    (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded) &&
+  const modelFlagsLoaded = (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded) &&
     (!isGrokGemini4ModelKey(aiSelected?.id) || grokGemini4Loaded);
   const quickModelIds = haiku55Enabled
     ? ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS]
@@ -860,7 +858,7 @@ const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const flagModelOptions = deepseekFlashFastEnabled
     ? aiModelOptions
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
   const gatedModelOptions = grokGemini4Enabled
     ? flagModelOptions

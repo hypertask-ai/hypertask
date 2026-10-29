@@ -58,9 +58,7 @@ for (const filename of Object.keys(require.cache)) {
 }
 for (const [filename, cached] of originalCache) require.cache[filename] = cached;
 
-const flagValues = (haiku) => ({
-  "htpr-7038-haiku-default": haiku,
-});
+const flagValues = (haiku) => ({});
 
 async function withPicker(run, { preferenceHook = false, initialFlags, mobile = false, selectedId = "claude-haiku-5-5" } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://fixture.invalid/chat" });
@@ -208,7 +206,7 @@ for (const mobile of [false, true]) {
       await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": true });
       assert.deepEqual(chosen, []);
       await update({ ...flagValues(false), "htpr-7730-deepseek-flash-fast": false });
-      assert.deepEqual(chosen, ["gpt-6-luna"]);
+      assert.deepEqual(chosen, ["claude-haiku-5-5"]);
     }, { mobile, selectedId: "deepseek-v4.1-flash-fast" });
   });
 }

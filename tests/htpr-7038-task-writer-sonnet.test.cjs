@@ -45,7 +45,7 @@ function harness({ plan = "Free", saved = null, teamByok = false, agentByok = fa
     checks.push([key, id]);
     assert.notEqual(key, "htpr-7038-task-writer-sonnet");
     if (key === keys.HTPR_7075_BACKGROUND_CLAUDE_FLAG) return background;
-    return haiku && key === keys.HTPR_7038_HAIKU_DEFAULT_FLAG;
+    return false;
   } };
   const prisma = { __esModule: true, default: {
     project: {

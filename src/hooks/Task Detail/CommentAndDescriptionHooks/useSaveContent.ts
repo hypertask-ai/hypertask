@@ -2,7 +2,7 @@ import { PlanLimitRefusal, planLimitRefusalMessage } from "@/lib/planLimitsClien
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useFlag } from "@/hooks/useFlag";
-import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measuredSize";
 import {
@@ -90,7 +90,7 @@ export default function useSaveContent() {
   const { postHyperMention, postImageGeneration } = useHyperMention();
   const currentBoardBilling = useCurrentBoardBilling();
   const { data: userPreferences } = useGetUserPreferences();
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
   const defaultBilling = currentBoardBilling;
   const defaultContext = useAiDefaultModelContext(defaultBilling?.teamId);

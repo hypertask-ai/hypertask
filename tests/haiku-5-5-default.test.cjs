@@ -147,10 +147,10 @@ test("Free plan gate admits Haiku and server availability preserves user checks"
   });
   await api.assertModelAllowedForPlan(null, haiku, null, undefined);
   assert.equal(await api.haiku55ModelEnabled(985), true);
-  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985]]);
+  assert.deepEqual(checks, []);
   fail = true;
   assert.equal(await api.haiku55ModelEnabled(985), true);
-  assert.equal(await api.haiku55ModelEnabled(null), false);
+  assert.equal(await api.haiku55ModelEnabled(null), true);
 });
 
 test("Haiku gateway pricing remains included and raw gateway aliases use the catalog slug", async () => {
@@ -233,7 +233,7 @@ test("Haiku 5.5 keeps the free price tier and stays visible on every plan withou
 });
 
 test("server BYOK eligibility preserves Free-plan BYOK restrictions and skips unknown plans", async () => {
-  for (const enabled of [false, true]) {
+  for (const enabled of [true]) {
     for (const plan of ["Free", undefined, "Pro", "AI", "BYOK"]) {
       for (const provider of [null, "claude", "gateway", "openrouter", "openai", "managed_gateway"]) {
         for (const keyEnabled of [false, true]) {
@@ -254,14 +254,14 @@ test("server BYOK eligibility preserves Free-plan BYOK restrictions and skips un
             "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
             "@/lib/ai/customEndpoint": {},
             "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
-            "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, storePlanIdForProject: async () => plan },
+            "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled, storePlanIdForProject: async () => plan },
             "@/app/api/ai/chat/stream/modelFallback": fallback,
           });
           const context = await api.getAiDefaultModelContext({ userId: 985, trustedTeamId: "fixture-team" });
           const canUseByok = enabled && Boolean(plan) && plan !== "Free";
           const eligible = canUseByok && keyEnabled && ["claude", "gateway", "openrouter"].includes(provider);
           assert.equal(context.hasByok, eligible);
-          assert.equal(catalog.defaultModelKeyFor(context), enabled && ["Pro", "AI", "BYOK"].includes(plan) ? haiku.id : "gpt-6-luna");
+          assert.equal(catalog.defaultModelKeyFor(context), haiku.id);
           assert.equal(context.byok?.provider, eligible ? provider : undefined);
           assert.equal(lookedUp.length > 0, canUseByok);
         }

@@ -35,10 +35,11 @@ function fixture({ error, failAt = "generate", enabled = true, flagError = false
     "@/lib/net/downloadWithoutBrotli": {},
     "@/app/api/ai/_lib/planAllowancePolicy": {},
     "@/app/api/ai/_lib/byokKeys": {
+      resolveAutomaticAiModel: () => ({}),
       getTeamGatewayApiKey: async () => { if (error && failAt === "funding") throw error; return "vck_fixture"; },
     },
-    "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, batchBackgroundAiEnabled: async () => false },
-    "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, resolveGatewayModel: () => ({}), gatewayProviderOptionsForModel: () => ({}) },
+    "@/app/api/ai/_lib/planGate": { batchBackgroundAiEnabled: async () => false },
+    "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {}, gatewayProviderOptionsForModel: () => ({}) },
     "@/app/api/ai/_lib/sharedAllowance": {},
     "@/app/api/ai/_lib/allowanceError": allowanceError,
     "@/app/api/ai/_lib/taskContent": { convertHtmlToText: (value) => value },

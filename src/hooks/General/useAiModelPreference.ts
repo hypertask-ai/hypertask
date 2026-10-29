@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
-import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import {
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
@@ -42,7 +42,7 @@ export function useAiModelPreference(
   } = {},
 ) {
   const currentProject = useRecoilValue(currentProjectAtom);
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
   const boardBilling = useCurrentBoardBilling();
   const billing = billingOverride === undefined ? boardBilling : billingOverride;

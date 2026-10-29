@@ -341,12 +341,12 @@ for (const kind of ["app", "mcp"]) {
     }
   });
 
-  test(`${kind}: Free default remains Luna on the shared pool`, async () => {
+  test(`${kind}: Free default is Haiku on the shared pool`, async () => {
     for (const enabled of [false, true]) {
       const h = harness({ enabled, plan: "Free", openai: true, teamByok: true });
       const result = await h.post(kind);
       assert.equal(result.status, 200, result.content);
-      assert.equal(h.calls[0].modelId, "openai/gpt-6-luna");
+      assert.equal(h.calls[0].modelId, "anthropic/claude-haiku-5.5");
       assert.equal(h.calls[0].credential, sharedKey);
     }
   });
@@ -630,7 +630,7 @@ test("picker hook consumes only the scoped server classification and obeys the c
   let enabled = true;
   const scopes = [];
   const context = { openaiOnlyDefaultEnabled: true, hasClaudeRoute: false, hasDirectOpenAiKey: true };
-  const hook = moduleWithStubs("src/hooks/useHaikuDefaultFlag.ts", {
+  const hook = moduleWithStubs("src/hooks/useAiDefaultModelContext.ts", {
     "@/hooks/useFlag": { useFlag: (key) => enabled && key === flag.HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG },
     "@/hooks/useTeamAiProviders": { useTeamAiProviders: (id) => { scopes.push(id); return { defaultModelContext: context }; } },
   });

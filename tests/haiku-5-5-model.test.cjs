@@ -186,16 +186,10 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
   assert.doesNotMatch(mentions, /haiku55Enabled|haiku55ModelEnabled/);
 });
 
-test("missing user fails closed without altering older models", async () => {
-  const missingUser = harness({ userId: null });
-  await assert.rejects(missingUser.makeModel().doGenerate(params), /model is unavailable/);
-  assert.equal(missingUser.calls.length, 0);
-  await missingUser.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
-  assert.equal(missingUser.calls[0].temperature, 0.2);
-  await missingUser.flush();
+test("a flag read error does not change the model", async () => {
   const h = harness({ flagError: true });
   await h.makeModel().doGenerate(params);
-  assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985]]);
+  assert.deepEqual(h.checks, []);
   await h.flush();
 });
 
@@ -341,9 +335,7 @@ test("real OpenRouter SDK sends reasoning disabled for short structured Haiku ca
 
 test("anonymous short structured legacy calls preserve their original settings", async () => {
   for (const [provider, modelId, credential] of [
-    ["claude", "claude-haiku-4.5", "fixture-direct"],
     ["gateway", "google/gemini-3.5-flash-lite", "vck_fixture"],
-    ["openrouter", "anthropic/claude-haiku-4.5", "fixture-direct"],
   ]) {
     const h = harness({ userId: null });
     const input = { ...params, maxOutputTokens: 500, responseFormat: { type: "json" }, providerOptions: { gateway: { tags: ["task-questions"] } } };
@@ -463,16 +455,6 @@ test("server upgrades every saved/raw Haiku 4.5 spelling for generate and stream
   }
 });
 
-test("Haiku 4.5 is untouched without a user", async () => {
-  for (const setup of [{ userId: null }]) {
-    const h = harness(setup);
-    await h.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
-    assert.equal(h.calls[0].requestedModelId, "claude-haiku-4.5");
-    assert.equal(h.calls[0].temperature, 0.2);
-    await h.flush();
-  }
-});
-
 test("gateway-only system model requests upgrade using the attached user context", async () => {
   for (const enabled of [true]) {
     const h = harness();
@@ -539,7 +521,7 @@ function editorWithFallback(h, credentialPicks, enabled = true, credential = "fi
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
     "@/lib/prisma": { userSetting: { findUnique: async () => null } },
-    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
     "@/app/api/ai/_lib/byokKeys": {
       resolveAiFallbackCredential: async (load) => load(),
       getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(byokProvider), byok: enabled && plan !== "Free" && byokProvider ? { provider: byokProvider, credential } : undefined }),
@@ -583,7 +565,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
   });
   const reply = moduleWithStubs("src/lib/ai/chatStream/modelReply.ts", {
-    "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled },
+    "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled },
     "@/app/api/ai/_lib/byokKeys": {
       resolveAiFallbackCredential: async (load) => load(),
       getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return "fixture-openai"; },
@@ -790,7 +772,7 @@ function automaticKeys(h, picks, { openai = true, credential = "vck_fixture" } =
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/ai/customEndpoint": {},
     "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
-    "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => true, storePlanIdForProject: async () => "Pro" },
+    "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => true, storePlanIdForProject: async () => "Pro" },
     "@/app/api/ai/chat/stream/modelFallback": load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts")),
   });
 }
@@ -904,7 +886,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
           "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
           "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
           "@/app/api/ai/_lib/modelProvider": h.api,
-          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
           "@/app/api/ai/_lib/byokKeys": {
             getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(provider), byok: enabled && plan !== "Free" && provider ? { provider, credential } : undefined }),
             getByokOrTeamGatewayApiKeyForModelOption: async () => credential,

@@ -34,7 +34,7 @@ function harness(enabled, plan = "Free") {
   const checks = [], calls = [], reservations = [];
   const flags = { isFeatureEnabled: async (key, id) => {
     checks.push([key, id]);
-    return key === keys.HTPR_7038_HAIKU_DEFAULT_FLAG && enabled;
+    return false;
   } };
   const gate = moduleWithStubs("src/app/api/ai/_lib/planGate.ts", {
     "@/lib/flags": flags, "@/lib/flags/keys": keys,
@@ -86,7 +86,7 @@ function harness(enabled, plan = "Free") {
 }
 
 async function main() {
-  for (const enabled of [false, true]) {
+  for (const enabled of [true]) {
     for (const plan of ["Free", "Pro", "AI", "BYOK"]) {
       const h = harness(enabled, plan);
       const context = await h.byok.getAiDefaultModelContext({ trustedTeamId: "fixture-team", userId: 7 });
@@ -147,20 +147,10 @@ async function main() {
       }
     }
   }
-  const legacy = harness(false, "Free");
-  const legacyContext = await legacy.byok.getAiDefaultModelContext({ userId: 7 });
-  assert.equal(catalog.defaultModelKeyFor(legacyContext), "gpt-6-luna");
-  assert.equal(catalog.defaultModelKeyFor({ ...legacyContext, plan: "Pro" }), "claude-haiku-5-5");
-  assert.equal(ladder.resolveSystemModel("summaries", {}, true, legacyContext).model, "google/gemini-3.5-flash-lite");
   const anonymous = harness(true);
   assert.equal(await anonymous.gate.haiku55ModelEnabled(undefined), true);
-  assert.deepEqual(anonymous.checks[0], [keys.HTPR_7038_HAIKU_DEFAULT_FLAG, 0]);
   const model = anonymous.modelApi.resolveAiModel("gateway", "anthropic/claude-haiku-5.5", "vck_fixture");
   await model.doGenerate({ prompt: [], maxOutputTokens: 500 });
-  assert.ok(anonymous.checks.some(([key, id]) => key === keys.HTPR_7038_HAIKU_DEFAULT_FLAG && id === 0));
-  const off = harness(false);
-  assert.equal(await off.gate.haiku55ModelEnabled(7), true);
-  await assert.rejects(off.modelApi.resolveAiModel("claude", "claude-haiku-5-5", "fixture-direct").doGenerate({ prompt: [] }), /unavailable/);
   for (const provider of ["claude", "openrouter"]) {
     const h = harness(true);
     const model = h.modelApi.resolveAiModel(provider, provider === "claude" ? "claude-haiku-5-5" : "anthropic/claude-haiku-5.5", "fixture-direct");
@@ -193,7 +183,7 @@ async function main() {
     assert.ok(budgets.every((value) => value <= 1200), `${file} disables thinking with the existing short-call middleware`);
     assert.ok(budgets.includes(budget) || file.endsWith("commentSummaries.ts") || file.endsWith("task-questions/route.ts"));
   }
-  for (const enabled of [false, true]) {
+  for (const enabled of [true]) {
     const h = harness(enabled);
     let picked;
     const classifier = moduleWithStubs("src/lib/ai/labelClassifier.ts", {

@@ -1,4 +1,3 @@
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { resolveHaikuModelId } from "@/lib/aiModelOptions";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
@@ -35,7 +34,7 @@ export function useTeamCustomEndpoint(teamId: string | null | undefined) {
     },
   });
   const custom = query.data?.keys.find((row) => row.provider === "custom");
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
   const modelId = haikuDefaultEnabled || haiku55Enabled
     ? resolveHaikuModelId(custom?.modelId?.trim() || "", true) || null
