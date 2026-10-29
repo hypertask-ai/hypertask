@@ -31,6 +31,7 @@ function harness(kind, { markdown, failure } = {}) {
       assertProjectAccess: async () => {},
       ProjectAccessError: class extends Error {},
     },
+    "./customInstructions": { assertProjectAccess: async () => {} },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/utils/controllers/teams/hasTeamMembershipAccess": { hasTeamMembershipAccess: async () => true },
   };
