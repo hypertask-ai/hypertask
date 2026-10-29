@@ -330,8 +330,16 @@ printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n
 agent_detail_refused() {
   run bash "$vcc" "$@"
   [ "$status" = 5 ] || fail "agent detail not refused: $*: $status"
+  [ ! -s "$T/out" ] || fail 'agent detail refusal produced stdout'
   [[ $(< "$T/err") == 'vcc: agent detail belongs in vcc activity add' ]] || fail "wrong agent detail refusal: $*"
   [[ $(< "$VCC_TEST_TRACE") != *hypertask* && $(< "$VCC_TEST_TRACE") != *'identity lookup'* ]] || fail 'agent detail reached identity or board'
+}
+people_file_refused() {
+  run bash "$vcc" "$@"
+  [ "$status" = 5 ] || fail "people file not refused: $*: $status"
+  [ ! -s "$T/out" ] || fail 'people file refusal produced stdout'
+  [[ $(< "$T/err") == 'vcc: cannot read people content file' ]] || fail "wrong people file refusal: $*"
+  [[ $(< "$VCC_TEST_TRACE") != *hypertask* && $(< "$VCC_TEST_TRACE") != *'identity lookup'* ]] || fail 'people file reached identity or board'
 }
 for detail in 'tmux attach -t runner-8' 'claude --resume session' 'codex resume session' 'hax --resume=session' \
   'Helpers: none' 'Branch/PR: none' 'Outputs: evidence' 'Gates: 3 met' 'GATES.md' '.unlazy/session' '/home/valentin/file' '~/notes'; do
@@ -399,13 +407,14 @@ voice_refused 'over 8 words' bash "$vcc" comment add X-1 --markdown --text '@Val
 voice_refused 'over 8 words' bash "$vcc" comment add X-1 --reply-to-comment-id 9 --text "$long"
 voice_refused 'over 8 words' bash "$vcc" comment add X-1 --attach shot.png --text "$long"
 voice_refused 'over 8 words' bash "$vcc" --json comment add X-1 --kind=done "--text=$long"
-for word in 'src/app/page.tsx' '/api/boards' 'OAuth' 'CI' 'PR #123' 'use_board_tabs' 'boardTabs' 'render()' '~/projects/app/x' 'config.json'; do
+for word in 'src/app/page.tsx' '/api/boards' 'OAuth' 'CI' 'PR #123' 'use_board_tabs' 'boardTabs' 'render()' 'config.json'; do
   voice_refused "$word" bash "$vcc" comment add X-1 --kind qa --text "<p>Fixed. See $word now.</p>"
 done
+agent_detail_refused comment add X-1 --kind qa --text '<p>Fixed. See ~/projects/app/x now.</p>'
 voice_refused 'code formatting' bash "$vcc" comment add X-1 --kind done --text '<p>Fixed <code>it</code>.</p>'
 printf '%s\n' "$long" > "$T/long.html"
 voice_refused 'over 8 words' bash "$vcc" comment add X-1 --kind qa --file "$T/long.html"
-voice_refused 'cannot read --file' bash "$vcc" comment add X-1 --kind=qa --file "$T/missing.html"
+people_file_refused comment add X-1 --kind=qa --file "$T/missing.html"
 printf 'ok qa, done, question, mention, reply and attach comments refuse long sentences and code words\n'
 
 ok_done='<p>Done: board loads fast now.</p><p>Live: yes, for everyone. Proof: <a href="https://app.hypertask.ai/project-15/7852">YPER4-7852 screenshot of the board loading fast today</a>.</p><ul><li>Tested on phone and laptop.</li></ul>'
@@ -422,7 +431,7 @@ voice_refused 'use_board_tabs' bash "$vcc" task create --project 15 --title 'Fix
 voice_refused 'over 8 words' bash "$vcc" task create --project 15 --title 'Board loads slowly' --description "$long"
 voice_refused 'over 8 words' bash "$vcc" tasks update X-1 "--description=$long"
 voice_refused 'over 8 words' bash "$vcc" task update X-1 --title 'Board loads slowly' --description-file "$T/long.html"
-voice_refused 'cannot read --description-file' bash "$vcc" task create --project 15 --title 'Board loads slowly' --description-file "$T/missing.html"
+people_file_refused task create --project 15 --title 'Board loads slowly' --description-file "$T/missing.html"
 voice_refused 'src/app/page.tsx' bash "$vcc" --json task create --project 15 --title 'Board loads slowly' --markdown --description 'Problem: slow in src/app/page.tsx.'
 desc='<p>Problem: board loads slowly.</p><p>Fix: load less at start.</p><p>Done when: board opens in one second.</p><p>Risk: low.</p><p>Decision: none.</p>'
 allowed bash "$vcc" task create --project 15 --title 'Board loads slowly on phone' --description "$desc"
