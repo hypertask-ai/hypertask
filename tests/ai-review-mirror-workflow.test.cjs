@@ -168,7 +168,7 @@ test("findings are escaped so the ticket renders them as text", async () => {
     }),
   });
   const text = JSON.parse(posts[0].init.body).text;
-  assert.doesNotMatch(text, /<script>/);
+  assert.equal(text.includes("<script>"), false, "raw markup must never survive");
   assert.match(text, /&lt;script&gt;x&lt;\/script&gt;/);
   assert.match(text, /a &amp; b &lt;b&gt;/);
 });
