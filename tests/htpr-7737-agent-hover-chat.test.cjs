@@ -117,6 +117,6 @@ for (const deepLink of [null, "agent-other"]) for (const sessions of [false, tru
     await React.act(async () => document.dispatchEvent(new window.Event("visibilitychange")));
     assert.equal(header.target.agent.id, agent.id, "roster refresh must not replay the old URL agent");
     assert.equal(opened.length, sessions ? (deepLink ? 3 : 2) : 0);
-    if (sessions) assert.deepEqual(opened.at(-1), { projectId: 7049, agentId: agent.id });
+    if (sessions) assert.deepEqual(opened.at(-1), { projectId: 7049, agentId: agent.id, sessionId: "agent-session" });
   } finally { view.close(); global.fetch = originalFetch; }
 });
