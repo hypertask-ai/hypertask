@@ -14,6 +14,7 @@ function server({ enabled = true, readable = true } = {}) {
   const started = [], queries = [], writes = [], flags = [];
   const access = { OR: [{ creatorId: user.id }, { members: { some: { userId: user.id } } }] };
   const currentTask = load("src/app/api/ai/_lib/currentTaskContext.ts", {
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/prisma": { default: { task: {
       findFirst: async (query) => { queries.push(query); return readable && query.where.id === ticket.id && query.where.projectId === 15 ? { id: ticket.id } : null; },
       findMany: async (query) => { queries.push(query); return readable && query.where.id.in.includes(ticket.id) ? [ticket] : []; },

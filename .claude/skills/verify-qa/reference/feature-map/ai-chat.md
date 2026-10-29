@@ -464,3 +464,17 @@ The answer should link `https://docs.hypertask.ai/features/ai-chat-capabilities/
 Check MCP tool guidance through `tools/list` and describe-tool when deferred;
 check CLI help search against the same service. Connected clients decide
 whether to follow guidance; the server cannot guarantee external model choices.
+
+## Compact automatic ticket context
+
+With `htpr-7856-summary-context`, Current ticket chat and `/api/ai/hyper-mentioned`
+use the stored ticket summary plus the newest 20 comments, in chronological
+order. Missing summaries fall back to description text. Ask a read-only question
+about a recent comment and an older decision retained in the summary; compare
+the answer with the ticket. Full-ticket tools remain available for detail and
+edits. Task Writer retains its full description HTML and 200-comment context.
+The flag-off path retains previous automatic chat context. Use
+`tests/htpr-7856-summary-context.test.cjs` for exact provider-message assertions
+with 200-comment fixtures, both entry points and rollback. A live answer alone
+does not prove the token reduction; compare recorded input usage on equivalent
+workloads before claiming savings.
